@@ -238,6 +238,38 @@ frozen revision, same `capturedAt`, every other artifact byte-identical). `CliTu
 replays the family through the Pike parser, the settings manager and `select_tui_mode`, comparing a
 frozen diagnostic as the failed parse that carries the frozen message text.
 
+For #1036, the named runner appended one more family and re-captured nothing else:
+`chat-viewport.json` records ten scenarios of the product two-region fullscreen viewport through the
+frozen `createChatViewport`
+(`packages/coding-agent/src/modes/interactive/chat-viewport.ts:22`), composed from plain
+`Container`/`Text` regions and driven through the frozen `TuiAltScreen` and the frozen
+`VirtualTerminal`: a short document whose free rows return to the dock, an overflowing document
+pinned to its end, an append that keeps following, a narrow terminal whose long editor line wraps
+inside the dock while the transcript keeps its own rows, a resize smaller and larger with both
+footer rows surviving, a one-line editor floored at the dock's `minSize: 3` beside a seven-row
+editor that takes the rows the document yields, a wheel scroll that moves the transcript window
+while every dock row stays, the frozen arbiter pair (the scrollbar defaults to `auto` and an
+explicit `hidden` override is honoured, with the automatic bar's styled cells recorded), and the
+optional widget regions keeping their frozen dock order (pending, status, widgets above, editor,
+widgets below, footer). Every step records the complete frame rows, cursor position, cursor
+visibility and the transcript's `scrollTop`/`viewportHeight`/`isFollowingEnd`/`scrollbar`/
+`isScrollbarVisible`, and a step whose frame draws any styled cell fails the capture unless it also
+records the complete styled grid — so a style cannot hide in an unrecorded frame and the replay
+compares every attribute of every frame that has one. The product call site
+(`interactive-mode.ts:961-980`, `:868-875`) and the `setLayoutRoot`-over-mounted-children alias need
+the full interactive runtime, so they are recorded as cited source endpoints and are not executed
+here. `capture/chat-viewport-scenarios.mts` holds the scenario bodies and is emitted by the main
+generator; `capture/recapture-chat-viewport.mts` is the append recipe (same frozen revision, same
+`capturedAt`, every other artifact byte-identical). `ChatViewportEvidenceTest` replays the family
+through Pike's `create_chat_viewport`, `AltScreen::set_layout_root` and `ScrollView`. Two
+divergences are recorded rather than assumed. Frozen's call site passes both `scrollbarTrackStyle` and
+`scrollbarThumbStyle` while Pike's live theme carries no `scrollbarTrack` token yet, so the product
+assembly supplies only the thumb hook and the track keeps the toolkit's pi dim-gray default. And frozen
+passes `widgetContainerAbove`/`widgetContainerBelow` into the dock (fed from `extensionWidgetsAbove` /
+`extensionWidgetsBelow`, `interactive-mode.ts:2483-2484`), while this product has no widget containers at
+all, so the assembly passes no widget entry; `create_chat_viewport` itself accepts both optional entries
+and the captured scenarios record the frozen dock order they take.
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

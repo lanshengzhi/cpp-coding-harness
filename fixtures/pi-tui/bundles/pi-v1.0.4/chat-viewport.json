@@ -1,0 +1,985 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+    "packages/coding-agent/test/chat-viewport.test.ts:createChatViewport",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:setLayoutRoot,document,pendingMessages,status,editor,footer,widgetsAbove,widgetsBelow",
+    "packages/tui/src/components/scroll-view.ts:ScrollView,scrollTop,viewportHeight,isFollowingEnd,scrollbar,isScrollbarVisible",
+    "packages/tui/src/components/v-stack.ts:VStack",
+    "packages/tui/src/components/stack.ts:allocateStackSizes,visibleStackEntries",
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen,setLayoutRoot,viewportTop,isFollowingOutput",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.getViewport,VirtualTerminal.sendInput,VirtualTerminal.resize,VirtualTerminal.waitForRender"
+  ],
+  "scenarios": [
+    {
+      "name": "viewport-short-content-keeps-dock-at-bottom",
+      "dimensions": {
+        "columns": 24,
+        "rows": 9
+      },
+      "inputs": {
+        "columns": 24,
+        "rows": 9,
+        "document": [
+          "one",
+          "two"
+        ],
+        "pending": "pending-1",
+        "status": "status-1",
+        "editor": "editor-1",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "one",
+              "two",
+              "pending-1",
+              "status-1",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 24,
+              "row": 8
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 0,
+              "viewportHeight": 2,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 0,
+              "isFollowingOutput": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-overflowing-document-follows-end",
+      "dimensions": {
+        "columns": 20,
+        "rows": 8
+      },
+      "inputs": {
+        "columns": 20,
+        "rows": 8,
+        "document": [
+          "doc-01",
+          "doc-02",
+          "doc-03",
+          "doc-04",
+          "doc-05",
+          "doc-06",
+          "doc-07",
+          "doc-08",
+          "doc-09",
+          "doc-10",
+          "doc-11",
+          "doc-12"
+        ],
+        "status": "status-1",
+        "editor": "editor-1",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-11",
+              "doc-12",
+              "status-1",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 7
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 10,
+              "viewportHeight": 2,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 10,
+              "isFollowingOutput": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-append-while-following-pins-end",
+      "dimensions": {
+        "columns": 20,
+        "rows": 8
+      },
+      "inputs": {
+        "columns": 20,
+        "rows": 8,
+        "document": [
+          "doc-01",
+          "doc-02",
+          "doc-03",
+          "doc-04",
+          "doc-05",
+          "doc-06",
+          "doc-07",
+          "doc-08",
+          "doc-09",
+          "doc-10",
+          "doc-11",
+          "doc-12"
+        ],
+        "editor": "editor-1",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          },
+          {
+            "name": "after-append",
+            "document": [
+              "doc-01",
+              "doc-02",
+              "doc-03",
+              "doc-04",
+              "doc-05",
+              "doc-06",
+              "doc-07",
+              "doc-08",
+              "doc-09",
+              "doc-10",
+              "doc-11",
+              "doc-12",
+              "doc-13",
+              "doc-14",
+              "doc-15",
+              "doc-16"
+            ]
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-10",
+              "doc-11",
+              "doc-12",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 7
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 9,
+              "viewportHeight": 3,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 9,
+              "isFollowingOutput": true
+            }
+          },
+          {
+            "action": "after-append",
+            "screen": [
+              "doc-14",
+              "doc-15",
+              "doc-16",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 2
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 13,
+              "viewportHeight": 3,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 13,
+              "isFollowingOutput": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-narrow-editor-wraps-inside-dock",
+      "dimensions": {
+        "columns": 16,
+        "rows": 8
+      },
+      "inputs": {
+        "columns": 16,
+        "rows": 8,
+        "document": [
+          "doc-1",
+          "doc-2",
+          "doc-3",
+          "doc-4",
+          "doc-5",
+          "doc-6"
+        ],
+        "editor": "a long editor line that must wrap",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-4",
+              "doc-5",
+              "doc-6",
+              "a long editor",
+              "line that must",
+              "wrap",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 16,
+              "row": 7
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 3,
+              "viewportHeight": 3,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 3,
+              "isFollowingOutput": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-resize-keeps-both-footer-rows",
+      "dimensions": {
+        "columns": 24,
+        "rows": 10
+      },
+      "inputs": {
+        "columns": 24,
+        "rows": 10,
+        "document": [
+          "doc-1",
+          "doc-2",
+          "doc-3",
+          "doc-4",
+          "doc-5",
+          "doc-6"
+        ],
+        "editor": "editor-1",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          },
+          {
+            "name": "smaller",
+            "resize": {
+              "columns": 14,
+              "rows": 7
+            }
+          },
+          {
+            "name": "larger",
+            "resize": {
+              "columns": 30,
+              "rows": 12
+            }
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-2",
+              "doc-3",
+              "doc-4",
+              "doc-5",
+              "doc-6",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 24,
+              "row": 9
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 1,
+              "viewportHeight": 5,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 1,
+              "isFollowingOutput": true
+            }
+          },
+          {
+            "action": "smaller",
+            "screen": [
+              "doc-5",
+              "doc-6",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 14,
+              "row": 6
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 4,
+              "viewportHeight": 2,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 4,
+              "isFollowingOutput": true
+            }
+          },
+          {
+            "action": "larger",
+            "screen": [
+              "doc-1",
+              "doc-2",
+              "doc-3",
+              "doc-4",
+              "doc-5",
+              "doc-6",
+              "",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 30,
+              "row": 11
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 0,
+              "viewportHeight": 7,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 0,
+              "isFollowingOutput": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-editor-min-size-floor-and-growth",
+      "dimensions": {
+        "columns": 20,
+        "rows": 12
+      },
+      "inputs": {
+        "columns": 20,
+        "rows": 12,
+        "document": [
+          "doc-1",
+          "doc-2"
+        ],
+        "editor": "prompt",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "steps": [
+          {
+            "name": "one-line-editor"
+          },
+          {
+            "name": "seven-line-editor",
+            "editor": "prompt-1\nprompt-2\nprompt-3\nprompt-4\nprompt-5\nprompt-6\nprompt-7"
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "one-line-editor",
+            "screen": [
+              "doc-1",
+              "doc-2",
+              "",
+              "",
+              "",
+              "",
+              "",
+              "prompt",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 11
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 0,
+              "viewportHeight": 7,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 0,
+              "isFollowingOutput": true
+            }
+          },
+          {
+            "action": "seven-line-editor",
+            "screen": [
+              "doc-1",
+              "doc-2",
+              "",
+              "prompt-1",
+              "prompt-2",
+              "prompt-3",
+              "prompt-4",
+              "prompt-5",
+              "prompt-6",
+              "prompt-7",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 9
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 0,
+              "viewportHeight": 3,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 0,
+              "isFollowingOutput": true
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-wheel-scroll-keeps-dock-fixed",
+      "dimensions": {
+        "columns": 20,
+        "rows": 8
+      },
+      "inputs": {
+        "columns": 20,
+        "rows": 8,
+        "document": [
+          "doc-01",
+          "doc-02",
+          "doc-03",
+          "doc-04",
+          "doc-05",
+          "doc-06",
+          "doc-07",
+          "doc-08",
+          "doc-09",
+          "doc-10",
+          "doc-11",
+          "doc-12",
+          "doc-13",
+          "doc-14",
+          "doc-15",
+          "doc-16",
+          "doc-17",
+          "doc-18",
+          "doc-19",
+          "doc-20"
+        ],
+        "pending": "pending-1",
+        "status": "status-1",
+        "editor": "editor-1",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          },
+          {
+            "name": "wheel-up",
+            "inputs": [
+              "\u001b[<64;1;1M",
+              "\u001b[<64;1;1M"
+            ],
+            "cells": true
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-20",
+              "pending-1",
+              "status-1",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 7
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 19,
+              "viewportHeight": 1,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 19,
+              "isFollowingOutput": true
+            }
+          },
+          {
+            "action": "wheel-up",
+            "screen": [
+              "doc-18             ┃",
+              "pending-1",
+              "status-1",
+              "editor-1",
+              "",
+              "",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 0
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 17,
+              "viewportHeight": 1,
+              "isFollowingEnd": false,
+              "scrollbar": "auto",
+              "isScrollbarVisible": true
+            },
+            "tui": {
+              "viewportTop": 17,
+              "isFollowingOutput": false
+            },
+            "cells": [[{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"c","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"8","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"┃","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"37","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"p","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"n","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"i","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"n","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"g","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"s","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"a","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"u","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"s","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"i","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"r","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"f","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"r","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"f","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"r","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"2","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}]],
+            "scrollback": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-scrollbar-defaults-to-auto",
+      "dimensions": {
+        "columns": 20,
+        "rows": 6
+      },
+      "inputs": {
+        "columns": 20,
+        "rows": 6,
+        "document": [
+          "doc-01",
+          "doc-02",
+          "doc-03",
+          "doc-04",
+          "doc-05",
+          "doc-06",
+          "doc-07",
+          "doc-08",
+          "doc-09",
+          "doc-10",
+          "doc-11",
+          "doc-12",
+          "doc-13",
+          "doc-14"
+        ],
+        "editor": "editor-1",
+        "footer": [
+          "footer-1"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          },
+          {
+            "name": "wheel-up",
+            "inputs": [
+              "\u001b[<64;1;1M"
+            ],
+            "cells": true
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-13",
+              "doc-14",
+              "editor-1",
+              "",
+              "",
+              "footer-1"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 5
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 12,
+              "viewportHeight": 2,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 12,
+              "isFollowingOutput": true
+            }
+          },
+          {
+            "action": "wheel-up",
+            "screen": [
+              "doc-12             ┃",
+              "doc-13             ┃",
+              "editor-1",
+              "",
+              "",
+              "footer-1"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 1
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 11,
+              "viewportHeight": 2,
+              "isFollowingEnd": false,
+              "scrollbar": "auto",
+              "isScrollbarVisible": true
+            },
+            "tui": {
+              "viewportTop": 11,
+              "isFollowingOutput": false
+            },
+            "cells": [[{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"c","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"2","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"┃","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"37","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"c","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"3","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"┃","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"37","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"i","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"r","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"f","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"r","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}]],
+            "scrollback": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-scrollbar-hidden-override",
+      "dimensions": {
+        "columns": 20,
+        "rows": 6
+      },
+      "inputs": {
+        "columns": 20,
+        "rows": 6,
+        "document": [
+          "doc-01",
+          "doc-02",
+          "doc-03",
+          "doc-04",
+          "doc-05",
+          "doc-06",
+          "doc-07",
+          "doc-08",
+          "doc-09",
+          "doc-10",
+          "doc-11",
+          "doc-12",
+          "doc-13",
+          "doc-14"
+        ],
+        "editor": "editor-1",
+        "footer": [
+          "footer-1"
+        ],
+        "scrollbar": "hidden",
+        "steps": [
+          {
+            "name": "initial"
+          },
+          {
+            "name": "wheel-up",
+            "inputs": [
+              "\u001b[<64;1;1M"
+            ],
+            "cells": true
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-13",
+              "doc-14",
+              "editor-1",
+              "",
+              "",
+              "footer-1"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 5
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 12,
+              "viewportHeight": 2,
+              "isFollowingEnd": true,
+              "scrollbar": "hidden",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 12,
+              "isFollowingOutput": true
+            }
+          },
+          {
+            "action": "wheel-up",
+            "screen": [
+              "doc-12",
+              "doc-13",
+              "editor-1",
+              "",
+              "",
+              "footer-1"
+            ],
+            "cursor": {
+              "column": 20,
+              "row": 1
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 11,
+              "viewportHeight": 2,
+              "isFollowingEnd": false,
+              "scrollbar": "hidden",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 11,
+              "isFollowingOutput": false
+            },
+            "cells": [[{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"c","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"2","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"c","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"3","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"d","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"i","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"r","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}],[{"grapheme":"f","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"o","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"t","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"e","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"r","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"-","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":"1","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}},{"grapheme":" ","continuation":false,"style":{"bold":false,"dim":false,"italic":false,"underline":false,"blink":false,"inverse":false,"hidden":false,"strikethrough":false,"fg_color":"","bg_color":"","hyperlink":"","hyperlink_params":""}}]],
+            "scrollback": []
+          }
+        ]
+      }
+    },
+    {
+      "name": "viewport-widget-regions-keep-dock-order",
+      "dimensions": {
+        "columns": 24,
+        "rows": 10
+      },
+      "inputs": {
+        "columns": 24,
+        "rows": 10,
+        "document": [
+          "doc-1",
+          "doc-2",
+          "doc-3",
+          "doc-4",
+          "doc-5",
+          "doc-6"
+        ],
+        "pending": "pending-1",
+        "status": "status-1",
+        "editor": "editor-1",
+        "footer": [
+          "footer-1",
+          "footer-2"
+        ],
+        "widgetsAbove": [
+          "above-1"
+        ],
+        "widgetsBelow": [
+          "below-1"
+        ],
+        "steps": [
+          {
+            "name": "initial"
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "action": "initial",
+            "screen": [
+              "doc-6",
+              "pending-1",
+              "status-1",
+              "above-1",
+              "editor-1",
+              "",
+              "",
+              "below-1",
+              "footer-1",
+              "footer-2"
+            ],
+            "cursor": {
+              "column": 24,
+              "row": 9
+            },
+            "cursorVisible": false,
+            "transcript": {
+              "scrollTop": 5,
+              "viewportHeight": 1,
+              "isFollowingEnd": true,
+              "scrollbar": "auto",
+              "isScrollbarVisible": false
+            },
+            "tui": {
+              "viewportTop": 5,
+              "isFollowingOutput": true
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

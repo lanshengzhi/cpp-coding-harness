@@ -165,6 +165,8 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/AltScreenHostTest.cpp
         tests/coding_agent/tui/BootTrustInteractiveTest.cpp
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
+        tests/coding_agent/tui/ChatViewportEvidenceTest.cpp
+        tests/coding_agent/tui/ChatViewportTest.cpp
         tests/coding_agent/tui/ClipboardInteractiveTest.cpp
         tests/coding_agent/tui/ClipboardProcessTest.cpp
         tests/coding_agent/tui/ClipboardWriteTest.cpp
@@ -220,6 +222,7 @@ include_guard(GLOBAL)
 )
     target_compile_definitions(cch_tests_coding_agent_interactive PRIVATE
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        CCH_PYTHON3="${Python3_EXECUTABLE}"
 )
     target_compile_options(cch_tests_coding_agent_interactive PRIVATE ${CCH_WARNING_OPTIONS})
     # The four InteractiveBootE2ETest cases share the fixed byte-stable

@@ -112,6 +112,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/AuthFlowController.cpp
         src/coding_agent/tui/BashExecutionComponent.cpp
         src/coding_agent/tui/ChatContainer.cpp
+        src/coding_agent/tui/ChatViewport.cpp
         src/coding_agent/tui/ClipboardPaste.cpp
         src/coding_agent/tui/ClipboardProcess.cpp
         src/coding_agent/tui/ClipboardWrite.cpp

@@ -1890,6 +1890,75 @@ TEST_CASE("Native TUI fullscreen selection launches the assembled AltScreen root
     }
 }
 
+TEST_CASE("Native TUI fullscreen dock stays fixed while the transcript scrolls independently",
+        "[coding_agent][tui][fullscreen][issue1036][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 48, .rows = 20});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Fullscreen})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    REQUIRE(terminal.modes().alternate_screen);
+
+    // Enough rounds that the transcript overflows its viewport, with the dock
+    // (empty status block, editor, footer) below it.
+    for (const std::string prompt : {"one", "two", "three", "four", "five", "six"}) {
+        REQUIRE(terminal.inject_input(prompt + "\r"));
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: " + prompt) != std::string::npos; }));
+    }
+
+    // Prompt text typed here lands in the dock's editor, the one instance the
+    // engine focuses: the root delegates into the view rather than cloning it,
+    // and Enter still submits through that instance.
+    REQUIRE(terminal.inject_input("draft"));
+    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("draft") != std::string::npos; }));
+    REQUIRE(terminal.inject_input("\r"));
+    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: draft") != std::string::npos; }));
+
+    // The dock sits under the transcript and covers the last seven rows.
+    const auto before = terminal.screen();
+    REQUIRE(before.size() == 20);
+    const std::vector<std::string> dock{before.end() - 7, before.end()};
+
+    // Wheel over the transcript: the frozen viewport scrolls its own window
+    // while every dock row keeps its place.
+    REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    drain_ready(io);
+
+    const auto after = terminal.screen();
+    REQUIRE(after.size() == 20);
+    CHECK(after.front() != before.front());
+    const std::vector<std::string> dock_after{after.end() - 7, after.end()};
+    {
+        std::string rows;
+        for (const auto& row : dock)
+            rows += row + "\n";
+        INFO(rows);
+        CHECK(dock_after == dock);
+    }
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
 TEST_CASE("Native TUI fullscreen right-click paste composes through the engine, not the run sink",
         "[coding_agent][tui][clipboard][fullscreen][issue1017][spec]") {
     tests::RuntimeFixture runtime;

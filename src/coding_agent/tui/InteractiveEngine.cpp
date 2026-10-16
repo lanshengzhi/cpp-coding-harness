@@ -277,7 +277,17 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     const auto weak = weak_from_this();
     auto view = make_interactive_view(weak);
     view_ = view.get();
-    if (auto attached = tui_.add_child(std::move(view)); !attached) {
+    if (fullscreen_host_ != nullptr) {
+        // Fullscreen composes the frozen two-region viewport as the layout
+        // root (`chat-viewport.ts:22`, installed at `interactive-mode.ts:961`):
+        // the transcript viewport over the fixed dock, with this one view as
+        // the dock's editor entry. Installing the root here, before any
+        // `set_focus` below, keeps `AltScreen::set_layout_root`'s fallback
+        // focus (`AltScreen.cpp:311-330`) from landing on a mounted child.
+        auto root = InteractiveView::make_fullscreen_root(std::move(view), cch::tui::ScrollbarMode::Auto);
+        if (!root) return fail_start(root.error());
+        fullscreen_host_->alt_screen().set_layout_root(std::move(*root));
+    } else if (auto attached = tui_.add_child(std::move(view)); !attached) {
         return fail_start(attached.error());
     }
     if (!booting) {
@@ -594,6 +604,10 @@ support::Expected<InteractiveStartupDiagnostics> InteractiveEngine::load_startup
 std::unique_ptr<InteractiveView> InteractiveEngine::make_interactive_view(std::weak_ptr<InteractiveEngine> weak) {
     InteractiveViewOptions options;
     options.keybindings = keybindings_;
+    // The view's top-level composition: Regular renders the whole main-screen
+    // transcript, Fullscreen renders only the dock's editor region of the
+    // layout root installed in `start`.
+    options.fullscreen = fullscreen_host_ != nullptr;
     // Preserve the existing production hint: the application supplies
     // the clipboard action path even when the clipboard reader is
     // unavailable, so the hint remains part of the assembled Native TUI.
@@ -934,6 +948,13 @@ void InteractiveEngine::invalidate() { invalidate_frame(); }
 support::Expected<bool> InteractiveEngine::prepare_frame() {
     if (!running_) return false;
     prepared_counted_frame_ = false;
+    if (fullscreen_host_ != nullptr && view_ != nullptr) {
+        // A layout-root child is never pushed `set_available_height` (the frame
+        // allocation is its bound), so the dock's editor needs its own terminal
+        // bound before this frame paints, exactly as the frozen editor reads
+        // `tui.terminal.rows` at render time.
+        view_->set_fullscreen_terminal_rows(terminal_.dimensions().rows);
+    }
     if (session_ui_ == nullptr || view_ == nullptr) return true;
 
     (void)session_ui_->drain_composed_snapshot();
