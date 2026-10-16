@@ -735,6 +735,69 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
     CHECK(WEXITSTATUS(status) == 0);
 }
 
+TEST_CASE("CLI --tui-mode launches the requested Native TUI root on a real terminal",
+        "[cli][tui-mode][fullscreen][issue1017][spec]") {
+    cch::tests::TempWorkspace workspace;
+    // A fresh HOME keeps ambient user configuration out of the run: the boot
+    // settles on pi's no-models warning screen, whose footer carries the
+    // workspace path in either root.
+    cch::tests::TempWorkspace home;
+
+    // Boot the real binary on a pseudo terminal, wait for the settled boot
+    // screen (the footer's workspace path, pi footer.ts order), then leave
+    // through Ctrl+D. Returns everything the child wrote.
+    const auto boot_and_exit = [&](const std::vector<std::string>& extra_args) {
+        auto pty = cch::tests::open_pseudo_terminal(100, 40);
+        REQUIRE(pty);
+        const auto pid = ::fork();
+        REQUIRE(pid >= 0);
+        if (pid == 0) {
+            (void)::dup2(pty->slave.get(), STDIN_FILENO);
+            (void)::dup2(pty->slave.get(), STDOUT_FILENO);
+            (void)::dup2(pty->slave.get(), STDERR_FILENO);
+            (void)::setenv("HOME", home.path().string().c_str(), 1);
+            (void)::chdir(workspace.path().string().c_str());
+            std::vector<char*> child_argv{const_cast<char*>("pike")};
+            for (const auto& arg : extra_args)
+                child_argv.push_back(const_cast<char*>(arg.c_str()));
+            child_argv.push_back(nullptr);
+            ::execv(PIKE_EXECUTABLE, child_argv.data());
+            ::_exit(127);
+        }
+        const ChildReapGuard reap_child{pid};
+        std::string output;
+        REQUIRE(drain_pty_until_all(pty->master.get(), output, {workspace.path().string()}));
+        REQUIRE(::write(pty->master.get(), "\x04", 1) == 1);
+        int status = 0;
+        REQUIRE(cch::tests::wait_until(
+                [&] {
+                    output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return ::waitpid(pid, &status, WNOHANG) == pid;
+                },
+                std::chrono::seconds(10)));
+        REQUIRE(WIFEXITED(status));
+        CHECK(WEXITSTATUS(status) == 0);
+        return output;
+    };
+
+    {
+        // pi `createInteractiveTui` fullscreen branch: the assembled Native TUI
+        // root owns the terminal's alternate buffer (AltScreen start) before it
+        // paints the boot screen.
+        const auto output = boot_and_exit({"--tui-mode", "fullscreen"});
+        const auto enter_alternate = output.find("\x1b[?1049h");
+        REQUIRE(enter_alternate != std::string::npos);
+        CHECK(enter_alternate < output.find(workspace.path().string()));
+    }
+    {
+        // The regular branch keeps the main screen: the alternate buffer is
+        // never entered, while the identical boot screen still renders.
+        const auto output = boot_and_exit({"--tui-mode", "regular"});
+        CHECK(output.find("\x1b[?1049h") == std::string::npos);
+        CHECK(output.find(workspace.path().string()) != std::string::npos);
+    }
+}
+
 TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",
         "[cli][startup-tui][issue417][issue528][spec][issue626]") {
     cch::tests::TempWorkspace workspace;

@@ -28,4 +28,12 @@ struct FrontendEnvironment {
 /// text` leaves it unchanged).
 [[nodiscard]] support::Expected<Frontend> select_frontend(const CliConfig& config, FrontendEnvironment environment);
 
+/// Resolve the Native TUI root for one interactive run (pi
+/// interactive-mode.ts `const tuiMode = options.tuiMode ??
+/// this.settingsManager.getTuiMode()`): the explicit `--tui-mode` wins, then
+/// the stored `tuiMode` setting with its product default (regular; #1024
+/// flips it).
+[[nodiscard]] coding_agent::TuiMode select_tui_mode(
+        const CliConfig& config, const coding_agent::SettingsManager& settings);
+
 } // namespace cch::cli

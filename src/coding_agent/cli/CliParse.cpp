@@ -124,6 +124,7 @@ struct NormalizedArgv {
                        "                                 high, xhigh, max\n"
                        "  --print, -p                    Non-interactive mode: process prompt and exit\n"
                        "  --mode <mode>                  Output mode: text (default)\n"
+                       "  --tui-mode <mode>              TUI mode: fullscreen (default) or regular\n"
                        "  --continue, -c                 Continue previous session\n"
                        "  --resume, -r                   Select a session to resume\n"
                        "  --session <path|id>            Use specific session file or partial UUID\n"
@@ -709,6 +710,33 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
                 mode_seen = true;
             }
             continue;
+        }
+        if (option.name == "tui-mode") {
+            // pi args.ts:219-235 verbatim semantics: `regular`/`fullscreen`
+            // set the mode and consume the value, a missing or `-`-prefixed
+            // value is diagnosed *without* consuming it, and any other value
+            // is consumed and then diagnosed. pi collects that diagnostic and
+            // keeps parsing; Pike's parser has no diagnostic channel (a parse
+            // error is fatal), so a rejected mode fails the parse with the
+            // frozen message text.
+            const bool has_next = !option.has_inline_value && index + 1 < normalized.tokens.size();
+            const std::string value = option.has_inline_value
+                                              ? std::string{option.inline_value}
+                                              : (has_next ? normalized.tokens[index + 1] : std::string{});
+            if (!option.has_inline_value && !has_next) {
+                return std::unexpected(cli_error("--tui-mode requires regular or fullscreen"));
+            }
+            if (value.starts_with('-')) {
+                return std::unexpected(cli_error("--tui-mode requires regular or fullscreen"));
+            }
+            if (!option.has_inline_value) ++index;
+            if (value == "regular" || value == "fullscreen") {
+                config.tui_mode =
+                        value == "regular" ? coding_agent::TuiMode::Regular : coding_agent::TuiMode::Fullscreen;
+                continue;
+            }
+            return std::unexpected(
+                    cli_error(std::format("Invalid TUI mode \"{}\". Valid values: regular, fullscreen", value)));
         }
 
         unknown_options.push_back(token);

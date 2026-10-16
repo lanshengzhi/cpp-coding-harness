@@ -167,11 +167,23 @@ using interactive_view_detail::queued_editor_texts;
 InteractiveEngine::~InteractiveEngine() = default;
 
 InteractiveEngine::InteractiveEngine(cch::tui::Terminal& terminal, boost::asio::any_io_executor executor)
-    : session_(nullptr), terminal_(terminal), tui_scheduler_(std::make_unique<AsioTuiScheduler>(executor)),
-      main_screen_(terminal), tui_(main_screen_), executor_(std::move(executor)), exit_wait_(executor_),
-      flows_settled_(executor_) {
+    : InteractiveEngine(terminal, std::move(executor), coding_agent::TuiMode::Regular) {}
+
+InteractiveEngine::InteractiveEngine(
+        cch::tui::Terminal& terminal, boost::asio::any_io_executor executor, coding_agent::TuiMode tui_mode)
+    : session_(nullptr), terminal_(terminal),
+      fullscreen_host_(tui_mode == coding_agent::TuiMode::Fullscreen
+                               ? std::make_unique<AltScreenHost>(terminal, action_sink_, action_generation_)
+                               : nullptr),
+      tui_scheduler_(std::make_unique<AsioTuiScheduler>(executor)), main_screen_(terminal),
+      tui_(fullscreen_host_ != nullptr ? fullscreen_host_->tui() : static_cast<cch::tui::ITui&>(main_screen_)),
+      executor_(std::move(executor)), exit_wait_(executor_), flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
+    // The owned fullscreen root registers the same platform-action adapter an
+    // externally hosted fullscreen consumer uses (#1006): selection copies, OSC
+    // 8 link opens, and right-click paste all cross the closed action seam.
+    if (fullscreen_host_ != nullptr) set_alt_screen_host(fullscreen_host_.get());
     tui_.set_scheduler(tui_scheduler_.get());
 }
 
@@ -216,7 +228,26 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     }
     stop_source_ = std::stop_source{};
     model_fallback_message_ = run.model_fallback_message();
-    action_sink_ = run.make_action_sink();
+    // The fullscreen root's right-click paste performs the native clipboard read
+    // and editor insert through this engine (#1017), which owns the reader, the
+    // editor, and the read flow; every other action still crosses to the run's
+    // composition host. A run without a fullscreen host keeps that host's
+    // acknowledge-only fallback: no regular-mode root dispatches a paste.
+    auto run_action_sink = run.make_action_sink();
+    if (fullscreen_host_ != nullptr) {
+        const auto host_weak = weak_from_this();
+        action_sink_ = [host_weak, run_action_sink = std::move(run_action_sink)](std::size_t generation,
+                               TuiActionVariant action) mutable -> support::Expected<TuiActionResultVariant> {
+            if (std::holds_alternative<PasteClipboardAction>(action)) {
+                if (const auto self = host_weak.lock()) self->paste_clipboard();
+                return TuiActionResultVariant{std::monostate{}};
+            }
+            if (!run_action_sink) return TuiActionResultVariant{std::monostate{}};
+            return run_action_sink(generation, std::move(action));
+        };
+    } else {
+        action_sink_ = std::move(run_action_sink);
+    }
     async_session_replacement_sink_ = run.make_async_session_replacement_sink();
     extension_ui_registration_factory_ = run.take_extension_ui_registration_factory();
     session_facts_ = run.session_facts();

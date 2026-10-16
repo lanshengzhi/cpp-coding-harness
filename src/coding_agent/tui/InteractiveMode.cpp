@@ -489,7 +489,7 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
         cch::tui::Terminal& terminal, InteractiveSessionRun run) {
     const auto executor = co_await boost::asio::this_coro::executor;
     const bool is_boot = std::holds_alternative<DeferBoot>(run.session_intent());
-    auto engine = std::make_shared<InteractiveEngine>(terminal, executor);
+    auto engine = std::make_shared<InteractiveEngine>(terminal, executor, run.tui_mode());
     if (auto started = engine->start(std::move(run)); !started) {
         co_return std::unexpected(started.error());
     }

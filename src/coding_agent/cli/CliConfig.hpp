@@ -65,6 +65,12 @@ struct CliConfig {
     /// pi `--list-models [search]`: has_value() when requested; an empty
     /// string is the bare flag, a non-empty string the fuzzy search pattern.
     std::optional<std::string> list_models;
+    /// pi `--tui-mode <regular|fullscreen>` (pi args.ts `tuiMode?`): the
+    /// explicit Native TUI root for this run. Unset means the flag was absent,
+    /// so the stored `tuiMode` setting and then the product default decide
+    /// (pi interactive-mode.ts `options.tuiMode ??
+    /// settingsManager.getTuiMode()`; `cch::cli::select_tui_mode`).
+    std::optional<coding_agent::TuiMode> tui_mode;
     std::vector<std::string> file_arguments;
     /// Positional messages in CLI order (pi `parsed.messages`): the first
     /// merges into the initial prompt, the rest prompt sequentially.

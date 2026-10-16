@@ -54,6 +54,10 @@ const runtime::InteractiveSessionFacts& InteractiveSessionRun::session_facts() c
     return state_ ? state_->session_facts : kEmptyFacts;
 }
 
+coding_agent::TuiMode InteractiveSessionRun::tui_mode() const noexcept {
+    return state_ ? state_->tui_mode : coding_agent::TuiMode::Regular;
+}
+
 const std::filesystem::path& InteractiveSessionRun::agent_config_directory() const noexcept {
     static const std::filesystem::path kEmptyPath{};
     return state_ ? state_->agent_config_directory : kEmptyPath;
@@ -220,8 +224,11 @@ support::Expected<TuiActionResultVariant> InteractiveSessionRun::dispatch_action
                     report_boot_creation_failure(payload.error);
                     return TuiActionResultVariant{std::monostate{}};
                 } else if constexpr (std::is_same_v<T, PasteClipboardAction>) {
-                    // Production paste composition belongs to T71 fullscreen CLI reachability; until then the default
-                    // run sink acknowledges this action without performing the native clipboard read and editor insert.
+                    // Fullscreen production composition intercepts this action
+                    // in the engine, which owns the clipboard reader, the
+                    // editor, and the read flow (#1017); this branch is the
+                    // no-fullscreen-host fallback, where no root can dispatch
+                    // a right-click paste.
                     return TuiActionResultVariant{std::monostate{}};
                 } else {
                     return TuiActionResultVariant{std::monostate{}};
@@ -283,6 +290,11 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_defer_boot(
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_session_facts(
         runtime::InteractiveSessionFacts facts) noexcept {
     state_->session_facts = std::move(facts);
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_tui_mode(coding_agent::TuiMode mode) noexcept {
+    state_->tui_mode = mode;
     return *this;
 }
 

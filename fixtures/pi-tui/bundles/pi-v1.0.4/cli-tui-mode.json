@@ -1,0 +1,467 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/cli/args.ts:219",
+    "packages/coding-agent/src/cli/args.ts:333",
+    "packages/coding-agent/src/core/settings-manager.ts:1348",
+    "packages/coding-agent/src/core/settings-manager.ts:1352",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:604"
+  ],
+  "scenarios": [
+    {
+      "name": "tui-mode-flag-accepts-the-two-roots",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "cases": [
+          [
+            "--tui-mode",
+            "regular",
+            "hello"
+          ],
+          [
+            "--tui-mode",
+            "fullscreen"
+          ],
+          [
+            "--tui-mode=regular"
+          ],
+          []
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "regular-then-message",
+            "argv": [
+              "--tui-mode",
+              "regular",
+              "hello"
+            ],
+            "expected": {
+              "tuiMode": "regular",
+              "messages": [
+                "hello"
+              ],
+              "print": false,
+              "diagnostics": [],
+              "unknownFlags": {}
+            }
+          },
+          {
+            "name": "fullscreen-alone",
+            "argv": [
+              "--tui-mode",
+              "fullscreen"
+            ],
+            "expected": {
+              "tuiMode": "fullscreen",
+              "messages": [],
+              "print": false,
+              "diagnostics": [],
+              "unknownFlags": {}
+            }
+          },
+          {
+            "name": "inline-regular-lands-in-unknown-flags",
+            "argv": [
+              "--tui-mode=regular"
+            ],
+            "expected": {
+              "tuiMode": null,
+              "messages": [],
+              "print": false,
+              "diagnostics": [],
+              "unknownFlags": {
+                "tui-mode": "regular"
+              }
+            }
+          },
+          {
+            "name": "absent-flag",
+            "argv": [],
+            "expected": {
+              "tuiMode": null,
+              "messages": [],
+              "print": false,
+              "diagnostics": [],
+              "unknownFlags": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tui-mode-flag-rejects-a-missing-value-without-consuming",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "cases": [
+          [
+            "--tui-mode"
+          ],
+          [
+            "--tui-mode",
+            "--print",
+            "hello"
+          ],
+          [
+            "--tui-mode",
+            "--tui-mode",
+            "regular"
+          ]
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "bare-flag",
+            "argv": [
+              "--tui-mode"
+            ],
+            "expected": {
+              "tuiMode": null,
+              "messages": [],
+              "print": false,
+              "diagnostics": [
+                {
+                  "type": "error",
+                  "message": "--tui-mode requires regular or fullscreen"
+                }
+              ],
+              "unknownFlags": {}
+            }
+          },
+          {
+            "name": "option-like-value-stays-an-option",
+            "argv": [
+              "--tui-mode",
+              "--print",
+              "hello"
+            ],
+            "expected": {
+              "tuiMode": null,
+              "messages": [
+                "hello"
+              ],
+              "print": true,
+              "diagnostics": [
+                {
+                  "type": "error",
+                  "message": "--tui-mode requires regular or fullscreen"
+                }
+              ],
+              "unknownFlags": {}
+            }
+          },
+          {
+            "name": "repeat-after-rejection",
+            "argv": [
+              "--tui-mode",
+              "--tui-mode",
+              "regular"
+            ],
+            "expected": {
+              "tuiMode": "regular",
+              "messages": [],
+              "print": false,
+              "diagnostics": [
+                {
+                  "type": "error",
+                  "message": "--tui-mode requires regular or fullscreen"
+                }
+              ],
+              "unknownFlags": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tui-mode-flag-rejects-an-unknown-mode-after-consuming-it",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "cases": [
+          [
+            "--tui-mode",
+            "bogus"
+          ],
+          [
+            "--tui-mode",
+            "bogus",
+            "hello"
+          ],
+          [
+            "--tui-mode",
+            "regular",
+            "--tui-mode",
+            "bogus"
+          ]
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "unknown-mode",
+            "argv": [
+              "--tui-mode",
+              "bogus"
+            ],
+            "expected": {
+              "tuiMode": null,
+              "messages": [],
+              "print": false,
+              "diagnostics": [
+                {
+                  "type": "error",
+                  "message": "Invalid TUI mode \"bogus\". Valid values: regular, fullscreen"
+                }
+              ],
+              "unknownFlags": {}
+            }
+          },
+          {
+            "name": "unknown-mode-then-message",
+            "argv": [
+              "--tui-mode",
+              "bogus",
+              "hello"
+            ],
+            "expected": {
+              "tuiMode": null,
+              "messages": [
+                "hello"
+              ],
+              "print": false,
+              "diagnostics": [
+                {
+                  "type": "error",
+                  "message": "Invalid TUI mode \"bogus\". Valid values: regular, fullscreen"
+                }
+              ],
+              "unknownFlags": {}
+            }
+          },
+          {
+            "name": "accepted-then-rejected",
+            "argv": [
+              "--tui-mode",
+              "regular",
+              "--tui-mode",
+              "bogus"
+            ],
+            "expected": {
+              "tuiMode": "regular",
+              "messages": [],
+              "print": false,
+              "diagnostics": [
+                {
+                  "type": "error",
+                  "message": "Invalid TUI mode \"bogus\". Valid values: regular, fullscreen"
+                }
+              ],
+              "unknownFlags": {}
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "tui-mode-help-line",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "helpCapture": "process.stdout printHelp()"
+      },
+      "expected": {
+        "lines": [
+          "  --tui-mode <mode>              TUI mode: fullscreen (default) or regular"
+        ]
+      }
+    },
+    {
+      "name": "settings-tui-mode-read-normalization",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "storedFiles": [
+          null,
+          "{\"tuiMode\":\"regular\"}",
+          "{\"tuiMode\":\"fullscreen\"}",
+          "{\"tuiMode\":\"bogus\"}"
+        ]
+      },
+      "expected": {
+        "reads": [
+          {
+            "storedFile": null,
+            "storedValue": null,
+            "resolved": "fullscreen"
+          },
+          {
+            "storedFile": "{\"tuiMode\":\"regular\"}",
+            "storedValue": "regular",
+            "resolved": "regular"
+          },
+          {
+            "storedFile": "{\"tuiMode\":\"fullscreen\"}",
+            "storedValue": "fullscreen",
+            "resolved": "fullscreen"
+          },
+          {
+            "storedFile": "{\"tuiMode\":\"bogus\"}",
+            "storedValue": "bogus",
+            "resolved": "fullscreen"
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-tui-mode-write-persists-the-global-key",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "initialGlobal": "{\"theme\":\"dark\"}",
+        "setTuiMode": "regular"
+      },
+      "expected": {
+        "persistedGlobal": {
+          "theme": "dark",
+          "tuiMode": "regular"
+        },
+        "resolved": "regular",
+        "errors": []
+      }
+    },
+    {
+      "name": "tui-mode-flag-over-settings-precedence",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "expression": "options.tuiMode ?? this.settingsManager.getTuiMode()",
+        "expressionEndpoint": "packages/coding-agent/src/modes/interactive/interactive-mode.ts:604",
+        "note": "operands observed from frozen parseArgs/getTuiMode; the expression itself is not executable without the full interactive runtime",
+        "cases": [
+          {
+            "argv": [
+              "--tui-mode",
+              "regular"
+            ],
+            "storedFile": "{\"tuiMode\":\"fullscreen\"}"
+          },
+          {
+            "argv": [
+              "--tui-mode",
+              "fullscreen"
+            ],
+            "storedFile": "{\"tuiMode\":\"regular\"}"
+          },
+          {
+            "argv": [],
+            "storedFile": "{\"tuiMode\":\"regular\"}"
+          },
+          {
+            "argv": [],
+            "storedFile": null
+          },
+          {
+            "argv": [
+              "--tui-mode",
+              "bogus"
+            ],
+            "storedFile": "{\"tuiMode\":\"bogus\"}"
+          }
+        ]
+      },
+      "expected": {
+        "resolutions": [
+          {
+            "argv": [
+              "--tui-mode",
+              "regular"
+            ],
+            "storedFile": "{\"tuiMode\":\"fullscreen\"}",
+            "cliTuiMode": "regular",
+            "settingsTuiMode": "fullscreen",
+            "resolved": "regular"
+          },
+          {
+            "argv": [
+              "--tui-mode",
+              "fullscreen"
+            ],
+            "storedFile": "{\"tuiMode\":\"regular\"}",
+            "cliTuiMode": "fullscreen",
+            "settingsTuiMode": "regular",
+            "resolved": "fullscreen"
+          },
+          {
+            "argv": [],
+            "storedFile": "{\"tuiMode\":\"regular\"}",
+            "cliTuiMode": null,
+            "settingsTuiMode": "regular",
+            "resolved": "regular"
+          },
+          {
+            "argv": [],
+            "storedFile": null,
+            "cliTuiMode": null,
+            "settingsTuiMode": "fullscreen",
+            "resolved": "fullscreen"
+          },
+          {
+            "argv": [
+              "--tui-mode",
+              "bogus"
+            ],
+            "storedFile": "{\"tuiMode\":\"bogus\"}",
+            "cliTuiMode": null,
+            "settingsTuiMode": "fullscreen",
+            "resolved": "fullscreen"
+          }
+        ]
+      }
+    }
+  ]
+}

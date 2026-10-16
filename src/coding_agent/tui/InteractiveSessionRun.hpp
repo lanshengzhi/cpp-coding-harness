@@ -8,6 +8,7 @@
 #include "agent/harness/RuntimeRoot.hpp"
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
+#include <cch/coding_agent/Settings.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/tui/NativeClipboard.hpp>
@@ -77,9 +78,10 @@ struct DeferBoot {
 using SessionIntentVariant = std::variant<BindExistingSession, DeferBoot>;
 
 /// InteractiveSessionRun: The Native TUI's intake composition object (#517).
-/// Carries CLI-owned facts, session intent (BindExistingSession vs DeferBoot),
-/// run-intent values (initial prompt with options, model-fallback warning), and
-/// capability injections (clipboard reader).
+/// Carries CLI-owned facts, the resolved Native TUI root mode, session intent
+/// (BindExistingSession vs DeferBoot), run-intent values (initial prompt with
+/// options, model-fallback warning), and capability injections (clipboard
+/// reader).
 /// Owns the host effects for the closed application action seam (browser,
 /// clipboard, process suspend, session replacement, boot diagnostics/failure
 /// reporting) so host effects live beside the values they capture.
@@ -94,6 +96,9 @@ public:
     // ── Carried facts, intent, and capabilities ──────────────────────────
 
     [[nodiscard]] const runtime::InteractiveSessionFacts& session_facts() const noexcept;
+    /// The resolved Native TUI root for this run (`cch::cli::select_tui_mode`:
+    /// `--tui-mode`, then the stored setting, then the product default).
+    [[nodiscard]] coding_agent::TuiMode tui_mode() const noexcept;
     [[nodiscard]] const std::filesystem::path& agent_config_directory() const noexcept;
     [[nodiscard]] std::shared_ptr<harness::RuntimeRoot> runtime_root() const noexcept;
     [[nodiscard]] ProjectResourceFileSystems take_project_resource_filesystems() noexcept;
@@ -135,6 +140,10 @@ private:
 
     struct State {
         runtime::InteractiveSessionFacts session_facts{};
+        /// pi interactive-mode.ts:604 resolution result; defaults to the
+        /// product default (regular; #1024 flips it) for a run assembled
+        /// without an explicit choice.
+        coding_agent::TuiMode tui_mode{coding_agent::TuiMode::Regular};
         std::filesystem::path agent_config_directory{};
         std::optional<std::string> initial_prompt{std::nullopt};
         PromptOptions initial_prompt_options{};
@@ -175,6 +184,7 @@ public:
     InteractiveSessionRunBuilder& with_session(AgentSession* session) noexcept;
     InteractiveSessionRunBuilder& with_defer_boot(runtime::AgentSessionCreationRequest request) noexcept;
     InteractiveSessionRunBuilder& with_session_facts(runtime::InteractiveSessionFacts facts) noexcept;
+    InteractiveSessionRunBuilder& with_tui_mode(coding_agent::TuiMode mode) noexcept;
     InteractiveSessionRunBuilder& with_agent_config_directory(std::filesystem::path dir) noexcept;
     InteractiveSessionRunBuilder& with_initial_prompt(std::optional<std::string> prompt) noexcept;
     InteractiveSessionRunBuilder& with_initial_prompt_options(PromptOptions options) noexcept;

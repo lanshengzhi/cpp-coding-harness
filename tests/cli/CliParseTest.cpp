@@ -320,6 +320,97 @@ TEST_CASE("parse_args keeps --mode text as the pi-default spelling", "[cli][pars
     CHECK(parsed->messages[0] == "hello");
 }
 
+TEST_CASE("parse_args accepts the two --tui-mode roots", "[cli][parse][issue1017][spec]") {
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode", "regular", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->tui_mode.has_value());
+        CHECK(*parsed->tui_mode == cch::coding_agent::TuiMode::Regular);
+        REQUIRE(parsed->messages.size() == 1);
+        CHECK(parsed->messages[0] == "hello");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode", "fullscreen"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->tui_mode.has_value());
+        CHECK(*parsed->tui_mode == cch::coding_agent::TuiMode::Fullscreen);
+        // The value is consumed, so nothing leaks into the message position.
+        CHECK(parsed->messages.empty());
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode=regular"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE(parsed);
+        REQUIRE(parsed->tui_mode.has_value());
+        CHECK(*parsed->tui_mode == cch::coding_agent::TuiMode::Regular);
+    }
+    // Absent flag: the setting (then the product default) decides.
+    std::vector<std::string> bare{"cpp-harness", "hello"};
+    auto bare_argv = argv_from_strings(bare);
+    auto bare_parsed = cch::cli::parse_args(static_cast<int>(bare_argv.size()), bare_argv.data());
+    REQUIRE(bare_parsed);
+    CHECK_FALSE(bare_parsed->tui_mode.has_value());
+}
+
+TEST_CASE("parse_args rejects --tui-mode values outside the two roots", "[cli][parse][issue1017][spec]") {
+    // pi `args.ts` pushes `Invalid TUI mode "<mode>". Valid values: regular,
+    // fullscreen`; Pike's parser has no diagnostic channel, so the rejected
+    // value fails the parse with the frozen text. A `-`-prefixed token is the
+    // other frozen branch: it is never taken as the mode and reports the
+    // missing-value message instead.
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode", "bogus"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message == "Invalid TUI mode \"bogus\". Valid values: regular, fullscreen");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode=bogus"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message == "Invalid TUI mode \"bogus\". Valid values: regular, fullscreen");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message == "--tui-mode requires regular or fullscreen");
+    }
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode", "--print"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message == "--tui-mode requires regular or fullscreen");
+    }
+    // A rejected mode is never accepted-but-ignored: the error fires with no
+    // prompt too.
+    {
+        std::vector<std::string> args{"cpp-harness", "--tui-mode", "bogus", "hello"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message == "Invalid TUI mode \"bogus\". Valid values: regular, fullscreen");
+    }
+}
+
+TEST_CASE("parse_args documents --tui-mode in the help text", "[cli][parse][issue1017][spec]") {
+    std::vector<std::string> args{"cpp-harness", "--help"};
+    auto argv = argv_from_strings(args);
+    auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+    REQUIRE(parsed);
+    CHECK(parsed->help_text.find("  --tui-mode <mode>              TUI mode: fullscreen (default) or regular") !=
+            std::string::npos);
+}
+
 TEST_CASE("parse_args normalizes unknown options", "[cli][parse][spec]") {
     std::vector<std::string> args{"cpp-harness", "--not-a-flag", "hello"};
     auto argv = argv_from_strings(args);
