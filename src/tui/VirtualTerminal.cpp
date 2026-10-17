@@ -472,8 +472,8 @@ template <typename T> support::ExpectedVoid require_started(const T& impl) {
 
 template <typename T> support::ExpectedVoid require_output_admission(const T& impl) {
     if (impl.modes.started || impl.output_only) return {};
-    return std::unexpected(support::make_error(support::ErrorCode::Validation,
-            "Virtual Terminal must be started or in output-only mode for presentation output"));
+    return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "Virtual Terminal must be started before terminal operations"));
 }
 
 } // namespace
@@ -495,6 +495,11 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
     if (impl_->output_only) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "Virtual Terminal cannot start while in output-only mode"));
+    }
+    if (impl_->sync_depth > 0 || impl_->progress_active || impl_->margins_active || !impl_->modes.cursor_visible ||
+            !impl_->modes.autowrap) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, "Virtual Terminal has unrestored state from a previous stop"));
     }
     if (impl_->dimensions.columns == 0 || impl_->dimensions.rows == 0) {
         return std::unexpected(
@@ -623,7 +628,8 @@ support::ExpectedVoid VirtualTerminal::enter_output_only() {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 "Virtual Terminal must complete start/stop lifetime before output-only presentation"));
     }
-    if (impl_->modes.raw_input || impl_->sync_depth > 0 || impl_->progress_active || impl_->margins_active) {
+    if (impl_->modes.raw_input || impl_->sync_depth > 0 || impl_->progress_active || impl_->margins_active ||
+            !impl_->modes.cursor_visible || !impl_->modes.autowrap) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 "Virtual Terminal cannot enter output-only mode while terminal modes remain unrestored"));
     }
@@ -650,6 +656,14 @@ support::ExpectedVoid VirtualTerminal::leave_output_only() {
         impl_->margins_active = false;
         impl_->margin_top = 0;
         impl_->margin_bottom = 0;
+    }
+    if (!impl_->modes.autowrap) {
+        impl_->output.push_back("\x1b[?7h");
+        impl_->modes.autowrap = true;
+    }
+    if (!impl_->modes.cursor_visible) {
+        impl_->output.push_back("\x1b[?25h");
+        impl_->modes.cursor_visible = true;
     }
     return {};
 }
@@ -828,7 +842,7 @@ support::ExpectedVoid VirtualTerminal::set_alternate_screen(bool enabled) {
 }
 
 support::ExpectedVoid VirtualTerminal::set_autowrap(bool enabled) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (impl_->modes.autowrap == enabled) return {};
     impl_->modes.autowrap = enabled;
     impl_->output.push_back(enabled ? "\x1b[?7h" : "\x1b[?7l");

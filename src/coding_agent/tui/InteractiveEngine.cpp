@@ -703,6 +703,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     }
     if (tui_ != nullptr) {
         tui_->clear_overlays();
+        tui_->set_scheduler(nullptr);
     }
     if (view_ != nullptr) {
         view_->set_editor_replacement(nullptr);
@@ -747,10 +748,27 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
                     "Native TUI exit switch failed",
                     "TUI mode switch to regular was refused"));
         } else {
+            if (view_ != nullptr && session_ != nullptr && session_ui_ != nullptr) {
+                (void)session_ui_->drain_composed_snapshot();
+                (void)session_ui_->reconcile_snapshot(session_ui_->composed_snapshot());
+            }
+            rendering_final_presentation_ = true;
             auto rendered = tui_->render_final_presentation();
+            rendering_final_presentation_ = false;
             if (!rendered) {
                 record_completion_error(presentation_error(rendered.error(), "Native TUI exit render failed"));
             }
+        }
+    } else if (tui_started_ && !was_fullscreen) {
+        if (view_ != nullptr && session_ != nullptr && session_ui_ != nullptr) {
+            (void)session_ui_->drain_composed_snapshot();
+            (void)session_ui_->reconcile_snapshot(session_ui_->composed_snapshot());
+        }
+        rendering_final_presentation_ = true;
+        auto rendered = tui_->render();
+        rendering_final_presentation_ = false;
+        if (!rendered) {
+            record_completion_error(presentation_error(rendered.error(), "Native TUI exit render failed"));
         }
     }
 
@@ -786,9 +804,19 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
         if (output_stream_ != nullptr) {
             *output_stream_ << kResumeNoticePrefix << *resume_cmd << '\n';
             output_stream_->flush();
+            if (!*output_stream_) {
+                co_return std::unexpected(support::make_error(support::ErrorCode::Process,
+                        "Native TUI failed to write resume notice to output stream",
+                        "stream state failure after flush"));
+            }
         } else if (stdout_is_tty_) {
             std::cout << kResumeNoticePrefix << *resume_cmd << '\n';
             std::cout.flush();
+            if (!std::cout) {
+                co_return std::unexpected(support::make_error(support::ErrorCode::Process,
+                        "Native TUI failed to write resume notice to standard output",
+                        "stream state failure after flush"));
+            }
         }
     }
     co_return support::ExpectedVoid{};
@@ -1281,6 +1309,7 @@ void InteractiveEngine::invalidate() { invalidate_frame(); }
 
 support::Expected<bool> InteractiveEngine::prepare_frame() {
     if (!running_) return false;
+    if (exit_requested_ && !rendering_final_presentation_) return false;
     prepared_counted_frame_ = false;
     if (tui_ == &fullscreen_host_->tui() && view_ != nullptr) {
         // A layout-root child is never pushed `set_available_height` (the frame

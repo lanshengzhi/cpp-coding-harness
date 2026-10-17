@@ -398,8 +398,8 @@ template <typename T> [[nodiscard]] support::ExpectedVoid require_started(const 
 
 template <typename T> [[nodiscard]] support::ExpectedVoid require_output_admission(const T& impl) {
     if (impl.modes.started || impl.output_only) return {};
-    return std::unexpected(support::make_error(support::ErrorCode::Validation,
-            "Process Terminal must be started or in output-only mode for presentation output"));
+    return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "Process Terminal must be started before terminal operations"));
 }
 
 /// Append admitted output to the `PI_TUI_WRITE_LOG` diagnostic file
@@ -1195,31 +1195,29 @@ template <typename T> [[nodiscard]] support::ExpectedVoid leave_output_only_lock
                 support::make_error(support::ErrorCode::Validation, "Process Terminal is not in output-only mode"));
     }
     impl.output_only = false;
-
-    drain_output_locked(impl, true);
-
     support::ExpectedVoid result;
-    if (impl.worker_error) {
-        result = std::unexpected(std::move(*impl.worker_error));
-        impl.worker_error.reset();
-    } else if (!impl.output_queue.empty()) {
-        result = std::unexpected(support::make_error(support::ErrorCode::Busy,
-                "Process Terminal output is backed up",
-                std::format("the output queue ({} bytes remaining) could not be drained", impl.output_queued_bytes)));
-    }
-    impl.output_queue.clear();
-    impl.output_queued_bytes = 0;
-    impl.output_draining = false;
 
     if (impl.synchronized_update_depth > 0) {
+        impl.synchronized_output.append(kEndSynchronizedUpdate);
         impl.synchronized_update_depth = 0;
+        auto frame = std::move(impl.synchronized_output);
         impl.synchronized_output.clear();
+        auto frame_res = enqueue_output(impl, frame);
+        if (!frame_res && impl.synchronized_output_state) {
+            impl.cursor = impl.synchronized_output_state->cursor;
+            impl.scroll_origin = impl.synchronized_output_state->scroll_origin;
+            impl.viewport_top = impl.synchronized_output_state->viewport_top;
+            impl.next_image_handle = impl.synchronized_output_state->next_image_handle;
+            impl.margin_top = impl.synchronized_output_state->margin_top;
+            impl.margin_bottom = impl.synchronized_output_state->margin_bottom;
+            impl.margins_active = impl.synchronized_output_state->margins_active;
+        }
         impl.synchronized_output_state.reset();
-        auto end_sync = write_all(impl.options.output_fd, kEndSynchronizedUpdate);
-        retain_error(result, std::move(end_sync));
+        retain_error(result, std::move(frame_res));
     }
+
     if (impl.margins_active) {
-        auto reset_margins = write_all(impl.options.output_fd, "\x1b[r");
+        auto reset_margins = enqueue_output(impl, "\x1b[r");
         if (reset_margins) {
             impl.margins_active = false;
             impl.margin_top = 0;
@@ -1228,14 +1226,47 @@ template <typename T> [[nodiscard]] support::ExpectedVoid leave_output_only_lock
         retain_error(result, std::move(reset_margins));
     }
 
+    if (!impl.modes.autowrap) {
+        auto enable_autowrap = enqueue_output(impl, kEnableAutowrap);
+        if (enable_autowrap) {
+            impl.modes.autowrap = true;
+        }
+        retain_error(result, std::move(enable_autowrap));
+    }
+
+    if (!impl.modes.cursor_visible) {
+        auto show_cursor = enqueue_output(impl, kCursorShow);
+        if (show_cursor) {
+            impl.modes.cursor_visible = true;
+        }
+        retain_error(result, std::move(show_cursor));
+    }
+
+    drain_output_locked(impl, true);
+
+    if (impl.worker_error) {
+        retain_error(result, std::unexpected(std::move(*impl.worker_error)));
+        impl.worker_error.reset();
+    } else if (!impl.output_queue.empty()) {
+        retain_error(result,
+                std::unexpected(support::make_error(support::ErrorCode::Busy,
+                        "Process Terminal output is backed up",
+                        std::format("the output queue ({} bytes remaining) could not be drained",
+                                impl.output_queued_bytes))));
+    }
+    impl.output_queue.clear();
+    impl.output_queued_bytes = 0;
+    impl.output_draining = false;
+
     if (impl.original_output_only_flags >= 0) {
         if (::fcntl(impl.options.output_fd, F_SETFL, impl.original_output_only_flags) != 0) {
             retain_error(result,
                     std::unexpected(process_error(
                             "Process Terminal could not restore output descriptor flags", "fcntl(F_SETFL)", errno)));
+        } else {
+            impl.original_output_only_flags = -1;
+            impl.output_nonblock = false;
         }
-        impl.original_output_only_flags = -1;
-        impl.output_nonblock = false;
     }
     return result;
 }
@@ -1268,9 +1299,11 @@ support::ExpectedVoid ProcessTerminal::enter_output_only() {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 "Process Terminal must complete start/stop lifetime before output-only presentation"));
     }
-    if (impl_->has_original_termios || impl_->input_nonblock || impl_->modes.raw_input ||
-            impl_->modes.bracketed_paste || impl_->keyboard_protocol_pushed || impl_->modify_other_keys_active ||
-            impl_->synchronized_update_depth > 0 || impl_->progress_active || impl_->margins_active) {
+    if (impl_->has_original_termios || impl_->input_nonblock || impl_->output_nonblock ||
+            impl_->original_output_only_flags >= 0 || impl_->modes.raw_input || impl_->modes.bracketed_paste ||
+            !impl_->modes.cursor_visible || !impl_->modes.autowrap || impl_->keyboard_protocol_pushed ||
+            impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 || impl_->progress_active ||
+            impl_->margins_active) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 "Process Terminal cannot enter output-only mode while terminal modes or input state remain "
                 "unrestored"));
@@ -1313,8 +1346,10 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
                 support::ErrorCode::Validation, "Process Terminal cannot start while in output-only mode"));
     }
     if (impl_->has_original_termios || impl_->modes.bracketed_paste || !impl_->modes.cursor_visible ||
-            impl_->keyboard_protocol_pushed || impl_->modify_other_keys_active ||
-            impl_->synchronized_update_depth > 0 || impl_->progress_active) {
+            !impl_->modes.autowrap || impl_->input_nonblock || impl_->output_nonblock ||
+            impl_->original_output_only_flags >= 0 || impl_->keyboard_protocol_pushed ||
+            impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 || impl_->progress_active ||
+            impl_->margins_active) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Process, "Process Terminal has unrestored state from a previous stop"));
     }
@@ -1704,7 +1739,7 @@ support::ExpectedVoid ProcessTerminal::set_alternate_screen(bool enabled) {
 
 support::ExpectedVoid ProcessTerminal::set_autowrap(bool enabled) {
     std::lock_guard lock(impl_->mutex);
-    if (auto started = require_started(*impl_); !started) return std::unexpected(started.error());
+    if (auto started = require_output_admission(*impl_); !started) return std::unexpected(started.error());
     if (impl_->modes.autowrap == enabled) return {};
     auto result = enqueue_output(*impl_, enabled ? kEnableAutowrap : kDisableAutowrap);
     if (result) impl_->modes.autowrap = enabled;

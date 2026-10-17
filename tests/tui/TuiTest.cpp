@@ -1305,6 +1305,27 @@ TEST_CASE("MainScreen and VirtualTerminal output-only presentation lifecycle and
                                 [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; })
                         .has_value());
         REQUIRE(terminal.stop().has_value());
+
+        // Output-only cursor visibility and autowrap state restoration
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.set_cursor_visible(false).has_value());
+        REQUIRE(terminal.set_autowrap(false).has_value());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK_FALSE(terminal.modes().autowrap);
+
+        REQUIRE(terminal.leave_output_only().has_value());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.modes().autowrap);
+        REQUIRE_FALSE(terminal.output().empty());
+        CHECK(terminal.output().back().find("\x1b[?25h") != std::string::npos);
+
+        // stop() in output-only restores cursor and autowrap as well
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.set_cursor_visible(false).has_value());
+        REQUIRE(terminal.set_autowrap(false).has_value());
+        REQUIRE(terminal.stop().has_value());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.modes().autowrap);
     }
 
     SECTION("MainScreen render_final_presentation and error aggregation on stop") {

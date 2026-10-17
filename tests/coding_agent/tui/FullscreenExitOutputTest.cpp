@@ -961,7 +961,7 @@ TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and 
         CHECK_FALSE(terminal2.modes().raw_input);
     }
 
-    SECTION("ProcessTerminal output-only synchronized update restored on stop") {
+    SECTION("ProcessTerminal output-only synchronized update payload preservation, nested depth, and backpressure") {
         auto pty = tests::open_pseudo_terminal(40, 10);
         REQUIRE(pty);
 
@@ -978,19 +978,111 @@ TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and 
         REQUIRE(terminal.stop().has_value());
         (void)cch::tests::read_available(pty->master.get());
 
+        // Case A: begin_sync + write unique payload + stop(): payload delivered in order
         REQUIRE(terminal.enter_output_only().has_value());
         REQUIRE(terminal.begin_synchronized_update().has_value());
-
-        // Stop in output-only mode while synchronized update is active
+        REQUIRE(terminal.write("UNIQUE_SYNC_PAYLOAD_ABC").has_value());
         REQUIRE(terminal.stop().has_value());
 
-        // Verify kEndSync sequence was emitted and fcntl flags restored
-        const auto received = cch::tests::read_available(pty->master.get());
-        CHECK(received.find("\x1b[?2026l") != std::string::npos);
+        const auto received_a = cch::tests::read_available(pty->master.get());
+        CHECK(received_a.find("UNIQUE_SYNC_PAYLOAD_ABC") != std::string::npos);
+        CHECK(received_a.find("\x1b[?2026l") != std::string::npos);
+        CHECK((::fcntl(pty->slave.get(), F_GETFL, 0) & O_NONBLOCK) == 0);
 
-        const auto restored_flags = ::fcntl(pty->slave.get(), F_GETFL, 0);
-        CHECK((restored_flags & O_NONBLOCK) == 0);
-        CHECK_FALSE(terminal.modes().started);
+        // Case B: nested begin_sync + write unique payload + leave_output_only(): payload delivered
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.begin_synchronized_update().has_value());
+        REQUIRE(terminal.begin_synchronized_update().has_value());
+        REQUIRE(terminal.write("NESTED_PAYLOAD_XYZ").has_value());
+        REQUIRE(terminal.leave_output_only().has_value());
+
+        const auto received_b = cch::tests::read_available(pty->master.get());
+        CHECK(received_b.find("NESTED_PAYLOAD_XYZ") != std::string::npos);
+        CHECK(received_b.find("\x1b[?2026l") != std::string::npos);
+        CHECK((::fcntl(pty->slave.get(), F_GETFL, 0) & O_NONBLOCK) == 0);
+
+        // Case C: begin_sync + saturated PTY + leave_output_only(): reports Busy with remaining bytes
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.begin_synchronized_update().has_value());
+        std::string chunk(4096, 'K');
+        for (int i = 0; i < 16; ++i) {
+            auto write_res = terminal.write(chunk);
+            if (!write_res) break;
+        }
+        auto leave_res = terminal.leave_output_only();
+        CHECK_FALSE(leave_res.has_value());
+        CHECK(leave_res.error().code == cch::support::ErrorCode::Busy);
+        CHECK(leave_res.error().detail.find("bytes remaining") != std::string::npos);
+        CHECK((::fcntl(pty->slave.get(), F_GETFL, 0) & O_NONBLOCK) == 0);
+    }
+
+    SECTION("ProcessTerminal output-only cursor visibility, autowrap, and F_SETFL failure preservation") {
+        auto pty = tests::open_pseudo_terminal(40, 10);
+        REQUIRE(pty);
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+
+        REQUIRE(terminal.start([](std::string) { return cch::support::ExpectedVoid{}; },
+                                [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; })
+                        .has_value());
+        REQUIRE(terminal.stop().has_value());
+        (void)cch::tests::read_available(pty->master.get());
+
+        // 1. Output-only mode hides cursor and disables autowrap
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.set_cursor_visible(false).has_value());
+        REQUIRE(terminal.set_autowrap(false).has_value());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK_FALSE(terminal.modes().autowrap);
+
+        // leave_output_only restores cursor visibility and autowrap
+        REQUIRE(terminal.leave_output_only().has_value());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.modes().autowrap);
+
+        const auto received = cch::tests::read_available(pty->master.get());
+        CHECK(received.find("\x1b[?7h") != std::string::npos);
+        CHECK(received.find("\x1b[?25h") != std::string::npos);
+
+        // 2. F_SETFL failure preservation
+        auto pty_fail = tests::open_pseudo_terminal(40, 10);
+        REQUIRE(pty_fail);
+
+        cch::tui::ProcessTerminal fail_term({
+                .input_fd = pty_fail->slave.get(),
+                .output_fd = pty_fail->slave.get(),
+                .executor = io.get_executor(),
+        });
+        REQUIRE(fail_term
+                        .start([](std::string) { return cch::support::ExpectedVoid{}; },
+                                [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; })
+                        .has_value());
+        REQUIRE(fail_term.stop().has_value());
+
+        REQUIRE(fail_term.enter_output_only().has_value());
+
+        // Close slave descriptor directly to induce fcntl(F_SETFL) failure during leave
+        ::close(pty_fail->slave.get());
+        (void)pty_fail->slave.release();
+
+        auto leave_fail = fail_term.leave_output_only();
+        CHECK_FALSE(leave_fail.has_value());
+        CHECK(leave_fail.error().message.find("could not restore output descriptor flags") != std::string::npos);
+
+        // Unrestored record is preserved: subsequent enter_output_only and start must reject
+        auto reenter = fail_term.enter_output_only();
+        CHECK_FALSE(reenter.has_value());
+        CHECK(reenter.error().code == cch::support::ErrorCode::Validation);
+
+        auto restart = fail_term.start([](std::string) { return cch::support::ExpectedVoid{}; },
+                [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; });
+        CHECK_FALSE(restart.has_value());
+        CHECK(restart.error().code == cch::support::ErrorCode::Process);
     }
 
     SECTION("ProcessTerminal broken descriptor error propagation and flag cleanup") {
@@ -1200,5 +1292,150 @@ TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and 
             // Resume notice must be COMPLETELY SUPPRESSED (zero bytes emitted)
             CHECK(out_stream.str().empty());
         }
+
+        // 3. Paired Failure Case: Persistent session with failing ostream streambuf returns error
+        {
+            tests::RuntimeFixture runtime;
+            boost::asio::io_context io;
+
+            const auto session_file = temp.path() / "persistent-streambuf-failure.jsonl";
+            auto opts = session_options(temp, tests::make_scripted_fake_provider());
+            opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+
+            auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+            REQUIRE(created.has_value());
+            tests::RuntimeLoopDriver runtime_driver(runtime);
+            auto& session = *created->session;
+
+            tui::VirtualTerminal terminal({.columns = 40, .rows = 10});
+            auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                    terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+            class FailingStreamBuf final : public std::streambuf {
+            protected:
+                int_type overflow(int_type) override { return traits_type::eof(); }
+                int sync() override { return -1; }
+            };
+
+            FailingStreamBuf bad_buf;
+            std::ostream bad_stream(&bad_buf);
+            bad_stream.setstate(std::ios_base::badbit);
+
+            auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                               .with_session(session)
+                               .with_agent_config_directory(temp.path())
+                               .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                               .with_output_stream(&bad_stream)
+                               .with_stdout_is_tty(true)
+                               .build();
+
+            std::optional<support::ExpectedVoid> run_result;
+            boost::asio::co_spawn(
+                    io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                        CHECK(ex == nullptr);
+                        run_result.emplace(std::move(result));
+                    });
+            drain_ready(io);
+            const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+            // Send user prompt to flush session to disk (ADR 0064)
+            REQUIRE(terminal.inject_input("prompt text\r"));
+            REQUIRE(pump_until(
+                    io, [&] { return visible_screen(terminal).find("fake: prompt text") != std::string::npos; }));
+
+            // Exit cleanly
+            REQUIRE(terminal.inject_input("\x04"));
+            REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+            REQUIRE(run_result.has_value());
+
+            // Because bad_stream failed on flush/failbit, finish() must report an error!
+            CHECK_FALSE(run_result->has_value());
+            CHECK(run_result->error().code == support::ErrorCode::Process);
+            CHECK(run_result->error().message.find("Native TUI failed to write resume notice") != std::string::npos);
+        }
+    }
+
+    SECTION("Native TUI fullscreen exit delayed flow quiescence gates pending paint") {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+
+        tests::RuntimeFixture runtime;
+        boost::asio::io_context io;
+
+        CallCountingTerminal terminal({.columns = 40, .rows = 10});
+        auto created =
+                runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        class DelayedClipboard final : public cch::tui::NativeClipboard {
+        public:
+            DelayedClipboard(boost::asio::io_context& io_ctx, std::chrono::milliseconds delay)
+                : io_(io_ctx), delay_(delay) {}
+
+            support::AsyncResult<cch::tui::NativeClipboardTextReadVariant> get_text(std::stop_token) override {
+                auto timer = std::make_shared<boost::asio::steady_timer>(io_, delay_);
+                return support::detail::make_async_result_on(io_.get_executor(),
+                        [timer]()
+                                -> boost::asio::awaitable<support::Expected<cch::tui::NativeClipboardTextReadVariant>> {
+                            boost::system::error_code ec;
+                            co_await timer->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, ec));
+                            co_return cch::tui::NativeClipboardTextReadVariant{
+                                    std::optional<std::string>{"delayed paste"}};
+                        });
+            }
+
+            support::AsyncResult<cch::tui::NativeClipboardImageReadVariant> get_image(std::stop_token) override {
+                return support::detail::make_async_result_on(io_.get_executor(),
+                        []() -> boost::asio::awaitable<support::Expected<cch::tui::NativeClipboardImageReadVariant>> {
+                            co_return cch::tui::NativeClipboardImageReadVariant{cch::tui::NativeClipboardUnavailable{}};
+                        });
+            }
+
+        private:
+            boost::asio::io_context& io_;
+            std::chrono::milliseconds delay_;
+        };
+
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(temp.path())
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .with_native_clipboard(std::make_unique<DelayedClipboard>(io, std::chrono::milliseconds{40}))
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                    CHECK(ex == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Trigger paste: spawns flow that runs for 40ms
+        REQUIRE(terminal.inner().inject_input("\x16"));
+
+        // While flow is in flight, request exit
+        REQUIRE(terminal.inner().inject_input("\x04"));
+
+        // During the delay before flow quiesces, trigger an input event that would normally invalidate
+        REQUIRE(terminal.inner().inject_input("x"));
+        drain_ready(io);
+
+        // During flow wait: enter_output_only must NOT have been called yet (0 final presentation frames)
+        CHECK(terminal.enter_output_only_calls == 0);
+
+        // Wait for complete quiescence and exit
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result.has_value());
+        CHECK(run_result->has_value());
+
+        // After quiescence: exactly ONE final presentation frame rendered
+        CHECK(terminal.enter_output_only_calls == 1);
     }
 }

@@ -728,6 +728,7 @@ private:
     std::optional<std::size_t> cleared_editor_revision_;
     bool tui_started_{false};
     bool exit_requested_{false};
+    bool rendering_final_presentation_{false};
     bool clipboard_read_active_{false};
     std::optional<support::ExpectedVoid> completion_result_;
 };
