@@ -527,7 +527,11 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
 namespace {
 
 std::string quote_if_needed(std::string_view value) {
-    if (value.find_first_of(" \t\n\r\"'") == std::string_view::npos) {
+    auto is_allowed = [](char c) noexcept {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' ||
+               c == '.' || c == '/' || c == '~' || c == ':' || c == '@';
+    };
+    if (!value.empty() && std::all_of(value.begin(), value.end(), is_allowed)) {
         return std::string{value};
     }
     std::string result = "'";

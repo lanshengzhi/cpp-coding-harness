@@ -449,8 +449,11 @@ std::vector<std::unique_ptr<Component>> AltScreen::take_children() {
 bool AltScreen::has_overlay_entries() const noexcept { return compositor_->has_overlay_entries(); }
 
 void AltScreen::clear_overlays() {
-    compositor_->clear_overlays();
-    detail::TuiHost::overlay_focus_restore_ = {};
+    while (compositor_->has_overlay_entries()) {
+        auto* overlay = compositor_->topmost_overlay();
+        if (overlay == nullptr) break;
+        remove_overlay_internal(overlay);
+    }
 }
 
 bool AltScreen::focus_target_available(Component* component) const {

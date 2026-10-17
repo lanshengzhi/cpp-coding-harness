@@ -91,7 +91,10 @@ public:
     [[nodiscard]] bool has_overlay_entries() const noexcept { return !overlays_.empty(); }
 
     /// Clear all overlay entries.
-    void clear_overlays();
+    /// Topmost overlay in the compositor's entries (draw order).
+    [[nodiscard]] Overlay* topmost_overlay() const noexcept {
+        return overlays_.empty() ? nullptr : overlays_.back().overlay.get();
+    }
 
     // --- Input ---
 

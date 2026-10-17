@@ -543,11 +543,6 @@ void OverlayCompositor::forget_focus(Overlay* overlay, Component* replacement) {
 
 void OverlayCompositor::clear_focus_history() { focus_history_.clear(); }
 
-void OverlayCompositor::clear_overlays() {
-    overlays_.clear();
-    focus_history_.clear();
-}
-
 void OverlayCompositor::forget_component(Component* component) {
     for (auto& entry : overlays_) {
         if (entry.pre_focus == component) entry.pre_focus = nullptr;

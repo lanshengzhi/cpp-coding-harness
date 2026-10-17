@@ -194,8 +194,11 @@ std::vector<std::unique_ptr<Component>> MainScreen::take_children() {
 bool MainScreen::has_overlay_entries() const noexcept { return compositor_->has_overlay_entries(); }
 
 void MainScreen::clear_overlays() {
-    compositor_->clear_overlays();
-    overlay_focus_restore_ = {};
+    while (compositor_->has_overlay_entries()) {
+        auto* overlay = compositor_->topmost_overlay();
+        if (overlay == nullptr) break;
+        remove_overlay_internal(overlay);
+    }
 }
 
 support::Expected<OverlayHandle> MainScreen::show_overlay(std::unique_ptr<Overlay> overlay) {

@@ -107,7 +107,8 @@ namespace {
 
 // ── 1. SettingsManager Tests ─────────────────────────────────────────────────
 
-TEST_CASE("SettingsManager parses and persists fullscreenExitOutput", "[coding_agent][settings][exit][issue1019][spec]") {
+TEST_CASE(
+        "SettingsManager parses and persists fullscreenExitOutput", "[coding_agent][settings][exit][issue1019][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
 
@@ -209,10 +210,48 @@ TEST_CASE("Native TUI format_resume_command characterizes the frozen resume comm
         std::string expected_escaped = custom_dir.string();
         std::string replaced;
         for (char c : expected_escaped) {
-            if (c == '\'') replaced += "'\\''";
-            else replaced += c;
+            if (c == '\'')
+                replaced += "'\\''";
+            else
+                replaced += c;
         }
         CHECK(*cmd == "pike --session-dir '" + replaced + "' --session quotes-id");
+    }
+
+    SECTION("custom session dir with shell metacharacters is strictly quoted") {
+        // Frozen interactive-mode.ts:332: only /^[a-zA-Z0-9_\-./~:@]+$/ is unquoted.
+        // Paths containing $, ;, (), backticks, wildcard, backslash, etc. MUST be quoted.
+        const std::vector<std::string> metachar_dir_names = {"sessions;echo",
+                "sessions$var",
+                "sessions(1)",
+                "sessions`id`",
+                "sessions*star",
+                "sessions&and",
+                "sessions|pipe"};
+        for (const auto& dir_name : metachar_dir_names) {
+            const auto custom_dir = temp.path() / dir_name;
+            std::filesystem::create_directories(custom_dir);
+            const auto custom_session_file = custom_dir / "test.json";
+            std::ofstream(custom_session_file) << "{}\n";
+
+            auto cmd = coding_agent::tui::format_resume_command(
+                    "meta-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+            REQUIRE(cmd.has_value());
+            CHECK(*cmd == "pike --session-dir '" + custom_dir.string() + "' --session meta-id");
+        }
+    }
+
+    SECTION("custom session dir with allowed whitelist characters is unquoted") {
+        // Whitelist: a-zA-Z0-9 _ - . / ~ : @
+        const auto custom_dir = temp.path() / "dir-123_abc.XYZ~:@";
+        std::filesystem::create_directories(custom_dir);
+        const auto custom_session_file = custom_dir / "test.json";
+        std::ofstream(custom_session_file) << "{}\n";
+
+        auto cmd = coding_agent::tui::format_resume_command(
+                "whitelist-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+        REQUIRE(cmd.has_value());
+        CHECK(*cmd == "pike --session-dir " + custom_dir.string() + " --session whitelist-id");
     }
 
     SECTION("non-existent session file returns nullopt") {
@@ -250,9 +289,11 @@ TEST_CASE("Native TUI fullscreen exit output policy switches to regular and rend
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
     REQUIRE(terminal.seed_shell_content(
-            {"Existing main buffer line 1", "Existing main buffer line 2"}, {.column = 0, .row = 2}).has_value());
+                            {"Existing main buffer line 1", "Existing main buffer line 2"}, {.column = 0, .row = 2})
+                    .has_value());
 
-    auto created = runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+    auto created =
+            runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
     REQUIRE(created.has_value());
     tests::RuntimeLoopDriver runtime_driver(runtime);
     auto& session = *created->session;
@@ -262,12 +303,12 @@ TEST_CASE("Native TUI fullscreen exit output policy switches to regular and rend
 
     std::ostringstream out_stream;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_session(session)
-            .with_agent_config_directory(temp.path())
-            .with_tui_mode(coding_agent::TuiMode::Fullscreen)
-            .with_output_stream(&out_stream)
-            .with_stdout_is_tty(true)
-            .build();
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
 
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -282,9 +323,8 @@ TEST_CASE("Native TUI fullscreen exit output policy switches to regular and rend
 
     // Send user prompt and wait for assistant reply
     REQUIRE(terminal.inject_input("Hello from user prompt\r"));
-    REQUIRE(pump_until(io, [&] {
-        return visible_screen(terminal).find("fake: Hello from user prompt") != std::string::npos;
-    }));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("fake: Hello from user prompt") != std::string::npos; }));
 
     // Request clean exit via Ctrl+D on empty prompt
     REQUIRE(terminal.inject_input("\x04"));
@@ -319,9 +359,11 @@ TEST_CASE("Native TUI fullscreen exit output policy resume-hint preserves main b
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
     REQUIRE(terminal.seed_shell_content(
-            {"Existing main buffer line 1", "Existing main buffer line 2"}, {.column = 0, .row = 2}).has_value());
+                            {"Existing main buffer line 1", "Existing main buffer line 2"}, {.column = 0, .row = 2})
+                    .has_value());
 
-    auto created = runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+    auto created =
+            runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
     REQUIRE(created.has_value());
     tests::RuntimeLoopDriver runtime_driver(runtime);
     auto& session = *created->session;
@@ -331,12 +373,12 @@ TEST_CASE("Native TUI fullscreen exit output policy resume-hint preserves main b
 
     std::ostringstream out_stream;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_session(session)
-            .with_agent_config_directory(temp.path())
-            .with_tui_mode(coding_agent::TuiMode::Fullscreen)
-            .with_output_stream(&out_stream)
-            .with_stdout_is_tty(true)
-            .build();
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
 
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -350,9 +392,8 @@ TEST_CASE("Native TUI fullscreen exit output policy resume-hint preserves main b
     REQUIRE(terminal.modes().alternate_screen);
 
     REQUIRE(terminal.inject_input("Secret user message\r"));
-    REQUIRE(pump_until(io, [&] {
-        return visible_screen(terminal).find("fake: Secret user message") != std::string::npos;
-    }));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("fake: Secret user message") != std::string::npos; }));
 
     REQUIRE(terminal.inject_input("\x04"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -383,10 +424,10 @@ TEST_CASE("Native TUI regular mode exit retains incremental output regardless of
     boost::asio::io_context io;
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
-    REQUIRE(terminal.seed_shell_content(
-            {"Existing regular line 1"}, {.column = 0, .row = 1}).has_value());
+    REQUIRE(terminal.seed_shell_content({"Existing regular line 1"}, {.column = 0, .row = 1}).has_value());
 
-    auto created = runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+    auto created =
+            runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
     REQUIRE(created.has_value());
     tests::RuntimeLoopDriver runtime_driver(runtime);
     auto& session = *created->session;
@@ -396,12 +437,12 @@ TEST_CASE("Native TUI regular mode exit retains incremental output regardless of
 
     std::ostringstream out_stream;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_session(session)
-            .with_agent_config_directory(temp.path())
-            .with_tui_mode(coding_agent::TuiMode::Regular)
-            .with_output_stream(&out_stream)
-            .with_stdout_is_tty(true)
-            .build();
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Regular)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
 
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -415,9 +456,8 @@ TEST_CASE("Native TUI regular mode exit retains incremental output regardless of
     CHECK_FALSE(terminal.modes().alternate_screen);
 
     REQUIRE(terminal.inject_input("Regular mode prompt\r"));
-    REQUIRE(pump_until(io, [&] {
-        return visible_screen(terminal).find("fake: Regular mode prompt") != std::string::npos;
-    }));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("fake: Regular mode prompt") != std::string::npos; }));
 
     REQUIRE(terminal.inject_input("\x04"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
@@ -443,10 +483,10 @@ TEST_CASE("Native TUI fullscreen exit dismisses active overlays before stop",
     boost::asio::io_context io;
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
-    REQUIRE(terminal.seed_shell_content(
-            {"Existing line"}, {.column = 0, .row = 1}).has_value());
+    REQUIRE(terminal.seed_shell_content({"Existing line"}, {.column = 0, .row = 1}).has_value());
 
-    auto created = runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+    auto created =
+            runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
     REQUIRE(created.has_value());
     tests::RuntimeLoopDriver runtime_driver(runtime);
     auto& session = *created->session;
@@ -456,12 +496,12 @@ TEST_CASE("Native TUI fullscreen exit dismisses active overlays before stop",
 
     std::ostringstream out_stream;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_session(session)
-            .with_agent_config_directory(temp.path())
-            .with_tui_mode(coding_agent::TuiMode::Fullscreen)
-            .with_output_stream(&out_stream)
-            .with_stdout_is_tty(true)
-            .build();
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
 
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -475,9 +515,8 @@ TEST_CASE("Native TUI fullscreen exit dismisses active overlays before stop",
     REQUIRE(terminal.modes().alternate_screen);
 
     REQUIRE(terminal.inject_input("Conversation before overlay\r"));
-    REQUIRE(pump_until(io, [&] {
-        return visible_screen(terminal).find("fake: Conversation before overlay") != std::string::npos;
-    }));
+    REQUIRE(pump_until(io,
+            [&] { return visible_screen(terminal).find("fake: Conversation before overlay") != std::string::npos; }));
 
     // Open settings overlay
     REQUIRE(terminal.inject_input("/settings\r"));
@@ -511,10 +550,10 @@ TEST_CASE("Native TUI fullscreen exit with empty transcript renders clean dock t
     boost::asio::io_context io;
 
     tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
-    REQUIRE(terminal.seed_shell_content(
-            {"Pre-existing shell prompt"}, {.column = 0, .row = 1}).has_value());
+    REQUIRE(terminal.seed_shell_content({"Pre-existing shell prompt"}, {.column = 0, .row = 1}).has_value());
 
-    auto created = runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+    auto created =
+            runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
     REQUIRE(created.has_value());
     tests::RuntimeLoopDriver runtime_driver(runtime);
     auto& session = *created->session;
@@ -524,12 +563,12 @@ TEST_CASE("Native TUI fullscreen exit with empty transcript renders clean dock t
 
     std::ostringstream out_stream;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_session(session)
-            .with_agent_config_directory(temp.path())
-            .with_tui_mode(coding_agent::TuiMode::Fullscreen)
-            .with_output_stream(&out_stream)
-            .with_stdout_is_tty(true)
-            .build();
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
 
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -566,10 +605,10 @@ TEST_CASE("Native TUI fullscreen long transcript exit outputs complete history i
 
     // Small terminal height: 10 rows
     tui::VirtualTerminal terminal({.columns = 80, .rows = 10});
-    REQUIRE(terminal.seed_shell_content(
-            {"Pre-existing line"}, {.column = 0, .row = 1}).has_value());
+    REQUIRE(terminal.seed_shell_content({"Pre-existing line"}, {.column = 0, .row = 1}).has_value());
 
-    auto created = runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+    auto created =
+            runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
     REQUIRE(created.has_value());
     tests::RuntimeLoopDriver runtime_driver(runtime);
     auto& session = *created->session;
@@ -579,12 +618,12 @@ TEST_CASE("Native TUI fullscreen long transcript exit outputs complete history i
 
     std::ostringstream out_stream;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-            .with_session(session)
-            .with_agent_config_directory(temp.path())
-            .with_tui_mode(coding_agent::TuiMode::Fullscreen)
-            .with_output_stream(&out_stream)
-            .with_stdout_is_tty(true)
-            .build();
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
 
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(
@@ -600,9 +639,7 @@ TEST_CASE("Native TUI fullscreen long transcript exit outputs complete history i
     // Send 3 conversation turns, exceeding 10 rows
     for (const std::string prompt : {"turn alpha", "turn beta", "turn gamma"}) {
         REQUIRE(terminal.inject_input(prompt + "\r"));
-        REQUIRE(pump_until(io, [&] {
-            return visible_screen(terminal).find("fake: " + prompt) != std::string::npos;
-        }));
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: " + prompt) != std::string::npos; }));
     }
 
     REQUIRE(terminal.inject_input("\x04"));
