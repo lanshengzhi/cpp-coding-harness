@@ -673,6 +673,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     stop_source_.request_stop();
+    exit_requested_ = true;
 
     if (session_ != nullptr) {
         last_session_id_ = session_->session_id();
@@ -684,14 +685,15 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     // is settled (`beforeSessionInvalidate` -> `resetExtensionUI`) while the
     // terminal is still owned by the run.
     dispose_extension_ui();
-    tui_->set_render_prepare_sink(nullptr);
-    tui_->set_render_complete_sink(nullptr);
 
     // Cancel extracted modal/session flows before terminal restoration;
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
     if (auth_flows_) auth_flows_->close();
     if (session_flows_) session_flows_->close();
+
+    // Suppress theme dispatch and unregister listeners before quiescence and final presentation:
+    if (theme_controller_) theme_controller_->dispose();
 
     // pi `stopInteractiveTui`: pop all active overlays before stopping
     if (active_overlay_ != nullptr) {
@@ -720,6 +722,15 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
         (void)terminal_.set_progress(false);
     }
 
+    auto record_completion_error = [&](support::Error error) {
+        if (!completion_result_ || completion_result_->has_value()) {
+            completion_result_ = std::unexpected(std::move(error));
+        } else {
+            completion_result_ = std::unexpected(aggregate_presentation_errors(
+                    completion_result_->error(), error, "Native TUI exit encountered multiple failures"));
+        }
+    };
+
     const auto exit_output = settings_manager_.has_value() ? settings_manager_->get_fullscreen_exit_output()
                                                            : FullscreenExitOutput::Transcript;
     const bool was_fullscreen = (tui_ == &fullscreen_host_->tui());
@@ -730,12 +741,15 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
         auto switched =
                 switch_tui_mode(coding_agent::TuiMode::Regular, /*restore_progress=*/false, /*start_renderer=*/false);
         if (!switched) {
-            completion_result_ = std::unexpected(presentation_error(switched.error(), "Native TUI exit switch failed"));
+            record_completion_error(presentation_error(switched.error(), "Native TUI exit switch failed"));
+        } else if (!*switched) {
+            record_completion_error(support::make_error(support::ErrorCode::Validation,
+                    "Native TUI exit switch failed",
+                    "TUI mode switch to regular was refused"));
         } else {
             auto rendered = tui_->render_final_presentation();
             if (!rendered) {
-                completion_result_ =
-                        std::unexpected(presentation_error(rendered.error(), "Native TUI exit render failed"));
+                record_completion_error(presentation_error(rendered.error(), "Native TUI exit render failed"));
             }
         }
     }
@@ -749,21 +763,11 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     tui_->set_render_complete_sink(nullptr);
 
     running_ = false;
-    if (theme_controller_) theme_controller_->dispose();
 
     // Retire the action generation so late deliveries from captured
     // hooks are rejected after Close (ADR 0040).
     retire_current_session();
 
-    if (auto resume_cmd = format_resume_command(stdout_is_tty_)) {
-        if (output_stream_ != nullptr) {
-            *output_stream_ << kResumeNoticePrefix << *resume_cmd << '\n';
-            output_stream_->flush();
-        } else if (stdout_is_tty_) {
-            std::cout << kResumeNoticePrefix << *resume_cmd << '\n';
-            std::cout.flush();
-        }
-    }
     if (!completion_result_) completion_result_.emplace();
     if (!*completion_result_) {
         if (!stopped) {
@@ -776,6 +780,16 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     }
     if (!stopped) {
         co_return std::unexpected(presentation_error(stopped.error(), "Native TUI terminal restoration failed"));
+    }
+
+    if (auto resume_cmd = format_resume_command(stdout_is_tty_)) {
+        if (output_stream_ != nullptr) {
+            *output_stream_ << kResumeNoticePrefix << *resume_cmd << '\n';
+            output_stream_->flush();
+        } else if (stdout_is_tty_) {
+            std::cout << kResumeNoticePrefix << *resume_cmd << '\n';
+            std::cout.flush();
+        }
     }
     co_return support::ExpectedVoid{};
 }
@@ -1119,11 +1133,11 @@ void InteractiveEngine::unbind_session_progress() noexcept {
 }
 
 void InteractiveEngine::post_invalidate() {
-    if (!running_) return;
+    if (!running_ || exit_requested_) return;
     prompt_presentation_dirty_.store(true, std::memory_order_release);
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak] {
-        if (const auto self = weak.lock(); self && self->running_) {
+        if (const auto self = weak.lock(); self && self->running_ && !self->exit_requested_) {
             self->prompt_presentation_dirty_.store(true, std::memory_order_release);
             self->tui_->invalidate();
         }
@@ -1184,9 +1198,10 @@ void InteractiveEngine::rebuild_chat() {
 
 /// Post one view-thread action to the executor.
 void InteractiveEngine::post_from_view(std::move_only_function<void(InteractiveEngine&)> action) {
+    if (!running_ || exit_requested_) return;
     const auto weak = weak_from_this();
     boost::asio::post(executor_, [weak, action = std::move(action)]() mutable {
-        if (const auto self = weak.lock(); self && self->running_) action(*self);
+        if (const auto self = weak.lock(); self && self->running_ && !self->exit_requested_) action(*self);
     });
 }
 

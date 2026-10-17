@@ -74,10 +74,12 @@ using interactive_view_detail::trim_editor_submission;
 } // namespace
 
 void InteractiveEngine::post_view_action(ViewAction action) {
+    if (!running_ || exit_requested_) return;
     const auto weak = weak_from_this();
     const auto prompt_generation = generation();
     boost::asio::post(executor_, [weak, prompt_generation, action = std::move(action)]() mutable {
         if (const auto self = weak.lock()) {
+            if (!self->running_ || self->exit_requested_) return;
             self->dispatch_view_action(std::move(action), prompt_generation);
         }
     });

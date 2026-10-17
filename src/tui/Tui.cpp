@@ -390,6 +390,10 @@ support::ExpectedVoid MainScreen::start() {
     if (started_) {
         return {};
     }
+    if (rendered_unstarted_) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Cannot start TUI while in output-only presentation mode"));
+    }
 
     // The latch is armed before the terminal starts: ProcessTerminal
     // forwards startup-preserved input synchronously inside start(), and
@@ -441,7 +445,6 @@ support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
     render_scheduled_ = false;
     ChildOperation operation(*this);
     stopping_ = true;
-    const bool was_unstarted = rendered_unstarted_;
     started_ = false;
     rendered_unstarted_ = false;
     const auto stop_cursor = resolve_cursor_location();
@@ -460,15 +463,28 @@ support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
     pending_render_ = false;
     last_render_at_.reset();
     const auto stop_result = terminal_.stop();
-    if (was_unstarted) {
-        (void)terminal_.leave_output_only();
-    }
     stopping_ = false;
 
-    if (!exit_result) return std::unexpected(exit_result.error());
-    if (!cursor_result) return std::unexpected(cursor_result.error());
-    if (!stop_result) return std::unexpected(stop_result.error());
-    return {};
+    support::ExpectedVoid accumulated_result;
+    auto retain = [&](const support::ExpectedVoid& result) {
+        if (!result) {
+            if (accumulated_result) {
+                accumulated_result = std::unexpected(result.error());
+            } else {
+                accumulated_result = std::unexpected(support::make_error(accumulated_result.error().code,
+                        "MainScreen stop encountered multiple failures",
+                        std::format("primary: {} [{}]; secondary: {} [{}]",
+                                accumulated_result.error().message,
+                                accumulated_result.error().detail,
+                                result.error().message,
+                                result.error().detail)));
+            }
+        }
+    };
+    retain(exit_result);
+    retain(cursor_result);
+    retain(stop_result);
+    return accumulated_result;
 }
 
 support::ExpectedVoid MainScreen::clear_screen() {
@@ -501,31 +517,29 @@ support::ExpectedVoid MainScreen::render_final_presentation() {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "Final presentation is only valid when renderer is unstarted"));
     }
+    if (rendered_unstarted_) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Final presentation is already active"));
+    }
     if (auto entered = terminal_.enter_output_only(); !entered) {
         return entered;
     }
+    rendered_unstarted_ = true;
     cancel_scheduled_render();
     ++render_generation_;
     render_scheduled_ = false;
     if (render_prepare_sink_) {
         auto prepared = render_prepare_sink_();
         if (!prepared) {
-            (void)terminal_.leave_output_only();
             support::ExpectedVoid result = std::unexpected(prepared.error());
             if (render_complete_sink_) render_complete_sink_(result);
             return result;
         }
         if (!*prepared) {
-            (void)terminal_.leave_output_only();
             return {};
         }
     }
     auto result = render_frame();
-    if (!result) {
-        (void)terminal_.leave_output_only();
-    } else {
-        rendered_unstarted_ = true;
-    }
     if (render_complete_sink_) render_complete_sink_(result);
     return result;
 }

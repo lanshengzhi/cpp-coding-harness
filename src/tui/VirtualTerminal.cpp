@@ -65,6 +65,7 @@ struct VirtualTerminal::Impl {
     std::size_t margin_bottom{0};
     bool margins_active{false};
     bool output_only{false};
+    bool was_started{false};
 };
 
 namespace {
@@ -464,9 +465,15 @@ template <typename T> void paint_tokens(T& impl, const std::vector<detail::Termi
 }
 
 template <typename T> support::ExpectedVoid require_started(const T& impl) {
-    if (impl.modes.started || impl.output_only) return {};
+    if (impl.modes.started) return {};
     return std::unexpected(support::make_error(
             support::ErrorCode::Validation, "Virtual Terminal must be started before terminal operations"));
+}
+
+template <typename T> support::ExpectedVoid require_output_admission(const T& impl) {
+    if (impl.modes.started || impl.output_only) return {};
+    return std::unexpected(support::make_error(support::ErrorCode::Validation,
+            "Virtual Terminal must be started or in output-only mode for presentation output"));
 }
 
 } // namespace
@@ -485,6 +492,10 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Virtual Terminal is already started"));
     }
+    if (impl_->output_only) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Virtual Terminal cannot start while in output-only mode"));
+    }
     if (impl_->dimensions.columns == 0 || impl_->dimensions.rows == 0) {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Virtual Terminal requires positive dimensions"));
@@ -501,6 +512,7 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
             .bracketed_paste = true,
             .cursor_visible = true,
     };
+    impl_->was_started = true;
     // Protocol-aware recording of pi's startup cell-size query (tui.ts
     // queryCellSize): emitted only when inline images are supported.
     if (impl_->capabilities.inline_images != InlineImageProtocol::None) {
@@ -510,6 +522,9 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
 }
 
 support::ExpectedVoid VirtualTerminal::stop() {
+    if (impl_->output_only) {
+        return leave_output_only();
+    }
     impl_->output_only = false;
     if (impl_->progress_active) {
         impl_->output.push_back(std::string(kProgressClearSequence));
@@ -538,7 +553,7 @@ TerminalCapabilities VirtualTerminal::capabilities() const { return impl_->capab
 TerminalModeState VirtualTerminal::modes() const { return impl_->modes; }
 
 support::ExpectedVoid VirtualTerminal::clear_screen() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     impl_->clear_screen_called = true;
     // pi's resize full-redraw emits \x1b[2J\x1b[H\x1b[3J: clear screen, home,
     // clear scrollback. The terminal's scroll history is cleared together
@@ -557,7 +572,7 @@ support::ExpectedVoid VirtualTerminal::clear_screen() {
 }
 
 support::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (impl_->sync_depth == 0) {
         impl_->output.push_back(std::string(kBeginSync));
     }
@@ -566,7 +581,7 @@ support::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
 }
 
 support::ExpectedVoid VirtualTerminal::end_synchronized_update() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (impl_->sync_depth == 0) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "Virtual Terminal synchronized update is not active"));
@@ -604,17 +619,43 @@ support::ExpectedVoid VirtualTerminal::enter_output_only() {
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Virtual Terminal is already started"));
     }
+    if (!impl_->was_started) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Virtual Terminal must complete start/stop lifetime before output-only presentation"));
+    }
+    if (impl_->modes.raw_input || impl_->sync_depth > 0 || impl_->progress_active || impl_->margins_active) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Virtual Terminal cannot enter output-only mode while terminal modes remain unrestored"));
+    }
+    if (impl_->output_only) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal is already in output-only mode"));
+    }
     impl_->output_only = true;
     return {};
 }
 
 support::ExpectedVoid VirtualTerminal::leave_output_only() {
+    if (!impl_->output_only) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal is not in output-only mode"));
+    }
     impl_->output_only = false;
+    if (impl_->sync_depth > 0) {
+        impl_->sync_depth = 0;
+        impl_->output.push_back(std::string(kEndSync));
+    }
+    if (impl_->margins_active) {
+        impl_->output.push_back("\x1b[r");
+        impl_->margins_active = false;
+        impl_->margin_top = 0;
+        impl_->margin_bottom = 0;
+    }
     return {};
 }
 
 support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     auto tokens = detail::tokenize_terminal_output(output);
     if (!tokens) return std::unexpected(tokens.error());
 
@@ -663,7 +704,7 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
 }
 
 support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (position.column > impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "Virtual Terminal cursor position is outside its dimensions"));
@@ -705,7 +746,7 @@ support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
 }
 
 support::ExpectedVoid VirtualTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     // An equal top and bottom is a valid one-row scroll region (#611).
     if (bottom_row >= impl_->dimensions.rows || top_row > bottom_row) {
         return std::unexpected(
@@ -719,7 +760,7 @@ support::ExpectedVoid VirtualTerminal::set_scroll_margins(std::size_t top_row, s
 }
 
 support::ExpectedVoid VirtualTerminal::reset_scroll_margins() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (!impl_->margins_active) return {};
     impl_->margins_active = false;
     impl_->margin_top = 0;
@@ -729,7 +770,7 @@ support::ExpectedVoid VirtualTerminal::reset_scroll_margins() {
 }
 
 support::ExpectedVoid VirtualTerminal::set_cursor_visible(bool visible) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     impl_->modes.cursor_visible = visible;
     return {};
 }

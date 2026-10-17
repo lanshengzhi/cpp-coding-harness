@@ -215,9 +215,15 @@ public:
     /// Enter explicit output-only presentation mode (unstarted final render path).
     /// Allows write/cursor output operations without starting raw input, input loop,
     /// resize listening, or keepalive timers.
-    [[nodiscard]] virtual support::ExpectedVoid enter_output_only() { return {}; }
+    [[nodiscard]] virtual support::ExpectedVoid enter_output_only() {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Terminal does not support output-only presentation"));
+    }
     /// Exit output-only presentation mode and restore descriptor flags.
-    [[nodiscard]] virtual support::ExpectedVoid leave_output_only() { return {}; }
+    [[nodiscard]] virtual support::ExpectedVoid leave_output_only() {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Terminal does not support output-only presentation"));
+    }
 };
 
 } // namespace cch::tui
