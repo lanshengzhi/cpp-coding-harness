@@ -1004,7 +1004,13 @@ template <typename T> void arm_readiness_timer_locked(T& impl) {
                 auto decoded = impl.input_state.decoder.flush();
                 responses = std::move(decoded.responses);
                 forwarded_input = std::move(decoded.forwarded_input);
-                needs_input_flush = impl.input_state.needs_input_flush;
+                // pi's contract (stdin-buffer.ts flush + tui.ts handleInput): any
+                // forwarded fragment is followed by an empty-value delivery so the
+                // Tui decoder resolves the fragment it holds itself. Bytes produced
+                // by this decoder flush are forwarded input too — without the
+                // trailing flush a lone ESC stays held downstream until the next
+                // byte frames with it (issue #1038).
+                needs_input_flush = impl.input_state.needs_input_flush || !forwarded_input.empty();
                 impl.input_state.needs_input_flush = false;
                 impl.input_state.negotiation_deadline = std::chrono::steady_clock::time_point::max();
             }
