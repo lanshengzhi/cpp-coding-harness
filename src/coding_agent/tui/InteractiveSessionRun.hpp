@@ -116,6 +116,8 @@ public:
     [[nodiscard]] const SessionIntentVariant& session_intent() const noexcept;
     [[nodiscard]] SessionIntentVariant take_session_intent() noexcept;
     [[nodiscard]] bool creation_failure_reported() const noexcept;
+    [[nodiscard]] std::ostream* output_stream() const noexcept;
+    [[nodiscard]] bool stdout_is_tty() const noexcept;
 
     // ── Owned host effects (closed action seam dispatch) ────────────────
 
@@ -157,6 +159,9 @@ private:
         std::shared_ptr<coding_agent::ModelRuntime> shared_runtime{nullptr};
         bool model_runtime_cli_fake{false};
         std::ostream* error_stream{nullptr}; // borrowed error stream; must outlive run operations when supplied
+        std::ostream* output_stream{nullptr}; // borrowed output stream for post-exit notices
+        bool stdout_is_tty{true};
+        bool stdout_is_tty_configured{false};
         bool is_resume_target{false};
         std::atomic<bool> creation_failure_reported{false};
         std::optional<AsyncSessionReplacementSink> custom_async_session_replacement_sink{std::nullopt};
@@ -198,6 +203,8 @@ public:
             std::shared_ptr<coding_agent::ModelRuntime> shared_runtime) noexcept;
     InteractiveSessionRunBuilder& with_model_runtime_cli_fake(bool model_runtime_cli_fake) noexcept;
     InteractiveSessionRunBuilder& with_error_stream(std::ostream* error_stream) noexcept;
+    InteractiveSessionRunBuilder& with_output_stream(std::ostream* output_stream) noexcept;
+    InteractiveSessionRunBuilder& with_stdout_is_tty(bool stdout_is_tty) noexcept;
     InteractiveSessionRunBuilder& with_is_resume_target(bool is_resume_target) noexcept;
     InteractiveSessionRunBuilder& with_action_sink(TuiActionSink sink) noexcept;
     InteractiveSessionRunBuilder& with_async_session_replacement_sink(AsyncSessionReplacementSink sink) noexcept;

@@ -482,6 +482,115 @@ DA1 is an internal difference from Pike detachment; generated system-theme repai
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact
 byte-identical, manifest 30 → 31).
 
+For the frozen fullscreen exit output policy (#1019, spec #946, group E20),
+`fullscreen-exit-output.json` (artifact 33) records seven scenarios of product exit presentation
+and terminal restoration through frozen `InteractiveMode.prototype.stopInteractiveTui`,
+`formatResumeCommand`, and `VirtualTerminal`:
+- `fullscreen-transcript-exit` observes fullscreen exit under `fullscreenExitOutput = "transcript"`:
+  the alternate buffer is left, `switchTuiMode("regular", false, false)` transfers the mounted regions
+  to a regular `TuiMainScreen` without starting a replacement renderer, `renderNow()` outputs the
+  transcript once to the main buffer, and `MainScreen.stop({ preserveScreen: false })` leaves the cursor
+  below the rendered lines. The terminal start count does not advance; the terminal stop count advances
+  by 2 (once during switch, once on final stop). Trimmed non-empty scrollback lines and mode/buffer
+  transitions are recorded.
+- `fullscreen-resume-hint-exit` observes fullscreen exit under `fullscreenExitOutput = "resume-hint"`:
+  the mode remains fullscreen, the alternate buffer is exited with `preserveScreen: true`, no transcript
+  or document lines are emitted, the main buffer's original content lines are retained in scrollback,
+  and the terminal stop count advances by 1.
+- `regular-mode-exit` observes exit from an explicit regular session: no mode switch occurs,
+  `preserveScreen: false` leaves the incremental conversation lines in place,
+  and `fullscreenExitOutput` setting variations produce identical regular-screen outcomes.
+- `empty-transcript-exit` observes fullscreen transcript exit with an empty conversation document,
+  rendering only the remaining mounted dock/editor rows into the main buffer.
+- `long-transcript-exit` observes fullscreen transcript exit when conversation messages exceed the
+  constrained viewport height (12 message lines in an 8-row terminal): regular line-flow rendering
+  ensures all 12 rows are emitted into the scrollback history rather than clipped to the viewport window.
+- `overlay-dismissal-exit` observes that active overlay entries are dismissed before mode switching and
+  stop, ensuring overlay modals do not leak into the terminal main buffer or transcript.
+- `format-resume-command-matrix` records six distinguishing cases of `formatResumeCommand`:
+  default session directories, custom session directories (unquoted, space-containing, and
+  single-quote-escaped), unpersisted sessions (null), missing session files (null), non-TTY stdout (null),
+  and the exact dimmed notice styling `\x1b[2mTo resume this session:\x1b[22m <command>\n`.
+
+Artifact 33 records high-level scenario summaries with trimmed lines and start/stop counter deltas;
+it does not measure raw escape protocol bytes, phase transitions, cursor coordinates, or un-trimmed full screen lines.
+All prior 32 artifact bytes, baseline metadata, and generator source digests remain immutable.
+`capture/fullscreen-exit-output-scenarios.mts` holds the scenario bodies;
+`capture/recapture-fullscreen-exit-output.mts` is the append recipe (manifest 32 → 33).
+
+To fill measurement gaps for cursor coordinates, escape sequence protocol, and regular exit rendering,
+`fullscreen-exit-protocol.json` (artifact 34) records eight exact scenarios over frozen
+`InteractiveMode.prototype.stopInteractiveTui` and `VirtualTerminal`:
+- `fullscreen-transcript-empty`: fullscreen transcript exit with empty conversation document (40x10).
+- `fullscreen-transcript-short`: fullscreen transcript exit with short conversation document (40x10).
+- `fullscreen-transcript-long`: fullscreen transcript exit with long conversation document (40x8).
+- `fullscreen-resume-hint`: fullscreen exit under `fullscreenExitOutput = "resume-hint"` (40x10).
+- `regular-clean-transcript`: clean regular session exit with transcript setting (40x10).
+- `regular-clean-resume-hint`: clean regular session exit with resume-hint setting (40x10).
+- `regular-pending-mutation-stop`: regular session with pending document mutation before exit, executing
+  frozen source `stopInteractiveTui` without extra render calls; measures that pending mutations remain
+  un-rendered in terminal output because frozen regular exit only executes `ui.stop({ preserveScreen: false })`.
+- `regular-pending-mutation-render-now-stop`: paired contrast case executing `renderer.renderNow()` immediately
+  before `stopInteractiveTui`, verifying that an explicit pre-stop render emits the pending mutation into the main buffer.
+
+Artifact 34 measures and records exact runtime observations at each phase boundary:
+`settledbeforeexit`, `switchstop`, `finalrender`, and `finalstop` (only actual phases present).
+Recorded properties include:
+- Total raw write counts and byte lengths, all raw write chunks, and parsed escape control tokens in order.
+- Headless xterm cursor coordinates (`cursorX`, `cursorY`, `baseY`, `viewportY`) obtained from replay of actual frozen raw writes; cursor visibility uses headless xterm private `_core.coreService.isCursorHidden`, not public API.
+- Screen lines with trailing spaces preserved vs trimmed, and full scrollback lines. Screen line trimming retains rendered spaces within Text spans rather than stripping layout spacing.
+- Final cursor cleanup order (`" "`, `\x1b[1B`, `\r\n`) and newline writes from `TuiMainScreen.prototype.beforeTerminalStop`.
+- Distinction between source logic (inspection of frozen TypeScript source) and measured runtime observations over `VirtualTerminal`. Regular-only exit stop behavior is sourced from `InteractiveMode.prototype.stopInteractiveTui` and observed directly; intentional upstream design is not asserted without proof.
+- Bundle provenance honesty: historical envelope metadata (`revision`, `capturedAt`, `environment`) is preserved for format compatibility, with execution runtime truth recorded in `observationRun` (Node v26.12.0 on Linux x64). Actual artifact 34 digest is SHA-256 `b61392feed4befa812eaf1ecaaa4c3b98cbf05b5d41762d9919daf7072c84eae`, 127239 bytes across 8 scenarios.
+Artifact 34 preserves all prior 33 artifact bytes, baseline metadata, and generator source digests.
+`capture/fullscreen-exit-protocol-scenarios.mts` holds the scenario bodies;
+`capture/recapture-fullscreen-exit-protocol.mts` is the append recipe (manifest 33 → 34).
+
+To correct replay harness artifacts and measure actual live terminal state and dispatch sequences,
+`fullscreen-exit-live.json` (artifact 35) records eight exact scenarios directly observing live
+frozen `VirtualTerminal` and low-level `@xterm/headless` dispatch without synthetic replay reconstruction:
+- Scope correction for artifact 34 replay divergence: Artifact 34's replay harness omitted writes
+  emitted directly by `VirtualTerminal` helper methods to its internal `xterm.write` (`start` emitting `\x1b[?2004h`
+  and `hideCursor` emitting `\x1b[?25l`), causing false replay expectations of `bracketedPasteMode: false` in
+  Phase 0 (`settledbeforeexit`) and `cursorHidden: false` (visible) in Phase 2 (`finalrender`). Live frozen measurement
+  in artifact 35 demonstrates that bracketed paste is `true` in Phase 0, and the cursor is hidden (`cursorHidden: true`)
+  in Phase 2. C++ implementation (`4ebd564`) already matches these live frozen states.
+- Observational boundary: Read-only private xterm headless observation (`xterm._core.coreService.isCursorHidden`)
+  and full byte recording measures in-memory terminal emulation state; it does NOT constitute OS-level PTY/stream proof
+  (kernel syscalls). Unmeasured generalizations across all eight scenarios are stripped; claims are restricted strictly
+  to measured observations.
+- Integrated vs. decomposed crosscheck limitation: The artifact's `fullscreen-transcript-short` integrated run
+  executes frozen `stopInteractiveTui("transcript")`, but its renderer observer closes over the decomposed terminal.
+  The integrated renderer events and render-count delta are therefore invalid, and the decomposed event list is
+  polluted by that later run. Do not use those fields as an event-order or lifecycle oracle. Controlled phase
+  snapshots taken before the integrated run, actual Terminal/xterm byte vectors, and final terminal state remain
+  usable. A separate notes-only rerun with an explicit observer target compared the short case's complete final
+  state, Terminal/xterm byte vectors and normalized event order; it observed exit deltas of zero starts, two stops
+  and one render. That supplemental rerun does not repair the immutable artifact or establish corrected integrated
+  event observations for the other seven cases.
+- Explicit `fullBuffer` naming: Resolves scrollback ambiguity by capturing `fullBufferLinesWithSpaces` and
+  `fullBufferLinesTrimmed` (0 to `buffer.length`), distinguishing full buffer history from viewport `screenLines`.
+- All eight scenarios recorded with identical inputs: `fullscreen-transcript-empty`, `fullscreen-transcript-short`,
+  `fullscreen-transcript-long`, `fullscreen-resume-hint`, `regular-clean-transcript`, `regular-clean-resume-hint`,
+  `regular-pending-mutation-stop`, and `regular-pending-mutation-render-now-stop`. Each records all public frozen
+  Terminal method calls observed before start, all physical `xterm.write` payloads, cumulative and phase byte/chunk
+  counts, and lifecycle deltas from settled setup (`startCountDelta`, `stopCountDelta`, `renderNowCountDelta`).
+- Consumer coverage: Native tests consume all eight controlled phase snapshots and compare complete relevant
+  buffers, cursor coordinates, modes and joined physical PTY exit bytes. Separate actual-engine tests cover
+  persistent transcript/resume notices, physical output failure, pending image reads, durable streaming Close,
+  failed startup and input drain. Existing extension listener/editor disposal and query-cancellation tests retain
+  their contracts. These checks do not turn the defective integrated observer fields into valid evidence or replace
+  final issue acceptance and Full Validation.
+- Bundle provenance honesty: Historical envelope metadata (`revision`, `capturedAt`, `environment`) is preserved
+  for format compatibility, with execution runtime truth recorded in `observationRun` (Node v26.12.0 on Linux x64).
+  Actual artifact 35 digest is SHA-256 `3b922dfd32cc8b5e81343694167ae2de59e7b276e929f25654a36fb871013966`,
+  297073 bytes across 8 scenarios.
+Artifact 35 preserves all prior 34 artifact bytes, baseline metadata, and generator source digests.
+`capture/fullscreen-exit-live-scenarios.mts` holds the scenario bodies;
+`capture/recapture-fullscreen-exit-live.mts` is the append recipe (manifest 34 → 35).
+
+
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

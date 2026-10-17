@@ -172,6 +172,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ClipboardWriteTest.cpp
         tests/coding_agent/tui/FooterStatusInteractiveTest.cpp
         tests/coding_agent/tui/FooterTest.cpp
+        tests/coding_agent/tui/FullscreenExitOutputTest.cpp
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
         tests/coding_agent/tui/InteractiveFrameTickerTest.cpp

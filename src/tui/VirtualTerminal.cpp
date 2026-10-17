@@ -64,6 +64,8 @@ struct VirtualTerminal::Impl {
     std::size_t margin_top{0};
     std::size_t margin_bottom{0};
     bool margins_active{false};
+    bool output_only{false};
+    bool was_started{false};
 };
 
 namespace {
@@ -106,8 +108,7 @@ constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0\x07";
 /// Build the visible text of one cell row: the graphemes up to the last
 /// occupied column (wide-grapheme continuations skipped, empty cells as
 /// spaces), trimming trailing blank columns like `screen()` does.
-template <typename T>
-void append_occupied_line(std::vector<std::string>& destination, const T& cells) {
+template <typename T> void append_occupied_line(std::vector<std::string>& destination, const T& cells) {
     std::size_t occupied = 0;
     for (std::size_t column = 0; column < cells.size(); ++column) {
         if (!cells[column].grapheme.empty() || cells[column].continuation) occupied = column + 1;
@@ -120,8 +121,7 @@ void append_occupied_line(std::vector<std::string>& destination, const T& cells)
     }
 }
 
-template <typename T>
-void refresh_screen(T& impl) {
+template <typename T> void refresh_screen(T& impl) {
     impl.screen.clear();
     impl.screen.reserve(impl.dimensions.rows);
     for (const auto& cells : impl.cells) {
@@ -137,8 +137,7 @@ void refresh_screen(T& impl) {
 /// Scroll the visible viewport up by `count` lines: the top rows move into
 /// the terminal's scrollback (pi `TuiMainScreen` lets overflow advance into
 /// the terminal's native scrollback) and the bottom rows become blank.
-template <typename T>
-void scroll_up(T& impl, std::size_t count) {
+template <typename T> void scroll_up(T& impl, std::size_t count) {
     if (count == 0) return;
     const auto top = impl.margins_active ? impl.margin_top : 0;
     const auto bottom =
@@ -161,11 +160,9 @@ void scroll_up(T& impl, std::size_t count) {
     refresh_screen(impl);
 }
 
-template <typename T>
-void resize_cells(T& impl, TerminalDimensions dimensions) {
+template <typename T> void resize_cells(T& impl, TerminalDimensions dimensions) {
     std::vector<std::vector<VirtualTerminalCell>> resized(
-        dimensions.rows,
-        std::vector<VirtualTerminalCell>(dimensions.columns));
+            dimensions.rows, std::vector<VirtualTerminalCell>(dimensions.columns));
     const auto rows = std::min(dimensions.rows, impl.cells.size());
     for (std::size_t row = 0; row < rows; ++row) {
         for (std::size_t column = 0; column < impl.cells[row].size();) {
@@ -175,8 +172,7 @@ void resize_cells(T& impl, TerminalDimensions dimensions) {
                 continue;
             }
             std::size_t span = 1;
-            while (column + span < impl.cells[row].size() &&
-                   impl.cells[row][column + span].continuation) {
+            while (column + span < impl.cells[row].size() && impl.cells[row][column + span].continuation) {
                 ++span;
             }
             if (column + span <= dimensions.columns) {
@@ -194,9 +190,8 @@ void resize_cells(T& impl, TerminalDimensions dimensions) {
     // the new viewport height are legitimate scrollback placements. The
     // renderer follows every resize with a clear-screen full redraw that
     // removes all placements anyway.
-    std::erase_if(impl.images, [&](const auto& image) {
-        return image.region.column + image.region.columns > dimensions.columns;
-    });
+    std::erase_if(impl.images,
+            [&](const auto& image) { return image.region.column + image.region.columns > dimensions.columns; });
     if (dimensions.rows == 0) {
         impl.cursor = {};
     } else {
@@ -209,14 +204,17 @@ void resize_cells(T& impl, TerminalDimensions dimensions) {
 void clear_grapheme(std::vector<VirtualTerminalCell>& row, std::size_t column) {
     if (column >= row.size()) return;
     auto owner = column;
-    while (owner > 0 && row[owner].continuation) --owner;
+    while (owner > 0 && row[owner].continuation)
+        --owner;
     auto end = owner + 1;
-    while (end < row.size() && row[end].continuation) ++end;
+    while (end < row.size() && row[end].continuation)
+        ++end;
     if (row[owner].grapheme.empty() && !row[column].continuation) {
         row[column] = {};
         return;
     }
-    for (auto index = owner; index < end; ++index) row[index] = {};
+    for (auto index = owner; index < end; ++index)
+        row[index] = {};
 }
 
 /// Apply tokenized output at the current cursor: ANSI tokens update the style
@@ -224,8 +222,7 @@ void clear_grapheme(std::vector<VirtualTerminalCell>& row, std::size_t column) {
 /// raw line flow, e.g. TuiMainScreen beforeTerminalStop's "\r\n") returns to
 /// column 0 and advances one row, scrolling the viewport when the cursor sits
 /// on the bottom row.
-template <typename T>
-void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
+template <typename T> void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
     for (const auto& token : tokens) {
         if (token.kind == detail::TerminalTokenKind::Newline) {
             impl.cursor.column = 0;
@@ -439,7 +436,8 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             if (token.width == 0) {
                 if (impl.cursor.column > 0) {
                     auto owner = impl.cursor.column - 1;
-                    while (owner > 0 && row[owner].continuation) --owner;
+                    while (owner > 0 && row[owner].continuation)
+                        --owner;
                     row[owner].grapheme += token.text;
                 }
                 continue;
@@ -449,15 +447,15 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
             }
             const TerminalStyle style = impl.style;
             row[impl.cursor.column] = {
-                .grapheme = token.text,
-                .continuation = false,
-                .style = style,
+                    .grapheme = token.text,
+                    .continuation = false,
+                    .style = style,
             };
             for (std::size_t offset = 1; offset < token.width; ++offset) {
                 row[impl.cursor.column + offset] = {
-                    .grapheme = {},
-                    .continuation = true,
-                    .style = style,
+                        .grapheme = {},
+                        .continuation = true,
+                        .style = style,
                 };
             }
         }
@@ -466,18 +464,21 @@ void paint_tokens(T& impl, const std::vector<detail::TerminalToken>& tokens) {
     }
 }
 
-template <typename T>
-support::ExpectedVoid require_started(const T& impl) {
+template <typename T> support::ExpectedVoid require_started(const T& impl) {
     if (impl.modes.started) return {};
     return std::unexpected(support::make_error(
-        support::ErrorCode::Validation,
-        "Virtual Terminal must be started before terminal operations"));
+            support::ErrorCode::Validation, "Virtual Terminal must be started before terminal operations"));
+}
+
+template <typename T> support::ExpectedVoid require_output_admission(const T& impl) {
+    if (impl.modes.started || impl.output_only) return {};
+    return std::unexpected(support::make_error(
+            support::ErrorCode::Validation, "Virtual Terminal must be started before terminal operations"));
 }
 
 } // namespace
 
-VirtualTerminal::VirtualTerminal(VirtualTerminalOptions options)
-    : impl_(std::make_unique<Impl>()) {
+VirtualTerminal::VirtualTerminal(VirtualTerminalOptions options) : impl_(std::make_unique<Impl>()) {
     impl_->capabilities = options.capabilities;
     resize_cells(*impl_, {.columns = options.columns, .rows = options.rows});
 }
@@ -488,14 +489,21 @@ VirtualTerminal::~VirtualTerminal() = default;
 
 support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) {
     if (impl_->modes.started) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal is already started"));
+    }
+    if (impl_->output_only) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal is already started"));
+                support::ErrorCode::Validation, "Virtual Terminal cannot start while in output-only mode"));
+    }
+    if (impl_->sync_depth > 0 || impl_->progress_active || impl_->margins_active || !impl_->modes.cursor_visible ||
+            !impl_->modes.autowrap) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, "Virtual Terminal has unrestored state from a previous stop"));
     }
     if (impl_->dimensions.columns == 0 || impl_->dimensions.rows == 0) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal requires positive dimensions"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal requires positive dimensions"));
     }
     impl_->input_sink = std::move(input_sink);
     impl_->resize_sink = std::move(resize_sink);
@@ -504,11 +512,12 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
     // the origin at row 0 and every unseeded scenario byte-identical.
     impl_->scroll_origin = impl_->cursor.row;
     impl_->modes = {
-        .started = true,
-        .raw_input = true,
-        .bracketed_paste = true,
-        .cursor_visible = true,
+            .started = true,
+            .raw_input = true,
+            .bracketed_paste = true,
+            .cursor_visible = true,
     };
+    impl_->was_started = true;
     // Protocol-aware recording of pi's startup cell-size query (tui.ts
     // queryCellSize): emitted only when inline images are supported.
     if (impl_->capabilities.inline_images != InlineImageProtocol::None) {
@@ -517,7 +526,24 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
     return {};
 }
 
-support::ExpectedVoid VirtualTerminal::stop() {
+support::ExpectedVoid VirtualTerminal::stop() { return stop(TerminalStopOptions{}); }
+
+support::ExpectedVoid VirtualTerminal::stop(TerminalStopOptions options) {
+    if (options.final_alternate_restore) {
+        if (!impl_->modes.started) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "Virtual Terminal must be started for final alternate restore stop"));
+        }
+        if (!impl_->modes.alternate_screen) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "Virtual Terminal is not in alternate screen for final alternate restore stop"));
+        }
+    }
+
+    if (impl_->output_only) {
+        return leave_output_only();
+    }
+    impl_->output_only = false;
     if (impl_->progress_active) {
         impl_->output.push_back(std::string(kProgressClearSequence));
         impl_->progress_active = false;
@@ -527,6 +553,37 @@ support::ExpectedVoid VirtualTerminal::stop() {
     impl_->modes.started = false;
     impl_->modes.raw_input = false;
     impl_->modes.bracketed_paste = false;
+
+    if (impl_->sync_depth > 0) {
+        impl_->output.push_back(std::string(kEndSync));
+        impl_->sync_depth = 0;
+    }
+    if (!impl_->modes.autowrap) {
+        impl_->output.push_back("\x1b[?7h");
+        impl_->modes.autowrap = true;
+    }
+
+    if (options.final_alternate_restore) {
+        if (impl_->saved_main_screen) {
+            auto saved = std::move(*impl_->saved_main_screen);
+            impl_->saved_main_screen.reset();
+            impl_->cells = std::move(saved.cells);
+            impl_->scrollback_cells = std::move(saved.scrollback_cells);
+            impl_->viewport_top = saved.viewport_top;
+            impl_->scroll_origin = saved.scroll_origin;
+            impl_->cursor = saved.cursor;
+            impl_->images = std::move(saved.images);
+            impl_->style = saved.style;
+            impl_->next_image_handle = saved.next_image_handle;
+            resize_cells(*impl_, impl_->dimensions);
+        }
+        constexpr std::string_view kFinalAlternateRestoreFrame = "\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l";
+        impl_->output.push_back(std::string(kFinalAlternateRestoreFrame));
+        impl_->modes.alternate_screen = false;
+        impl_->modes.cursor_visible = true;
+        refresh_screen(*impl_);
+    }
+
     impl_->modes.cursor_visible = true;
     impl_->images.clear();
     if (impl_->margins_active) {
@@ -538,29 +595,21 @@ support::ExpectedVoid VirtualTerminal::stop() {
     return {};
 }
 
-TerminalDimensions VirtualTerminal::dimensions() const {
-    return impl_->dimensions;
-}
+TerminalDimensions VirtualTerminal::dimensions() const { return impl_->dimensions; }
 
-TerminalCapabilities VirtualTerminal::capabilities() const {
-    return impl_->capabilities;
-}
+TerminalCapabilities VirtualTerminal::capabilities() const { return impl_->capabilities; }
 
-TerminalModeState VirtualTerminal::modes() const {
-    return impl_->modes;
-}
+TerminalModeState VirtualTerminal::modes() const { return impl_->modes; }
 
 support::ExpectedVoid VirtualTerminal::clear_screen() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     impl_->clear_screen_called = true;
     // pi's resize full-redraw emits \x1b[2J\x1b[H\x1b[3J: clear screen, home,
     // clear scrollback. The terminal's scroll history is cleared together
     // with the screen so reflow starts clean.
     impl_->clear_scrollback_called = true;
     impl_->output.push_back(std::string(kClearScreenSequence));
-    impl_->cells.assign(
-        impl_->dimensions.rows,
-        std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
+    impl_->cells.assign(impl_->dimensions.rows, std::vector<VirtualTerminalCell>(impl_->dimensions.columns));
     impl_->scrollback_cells.clear();
     impl_->viewport_top = 0;
     impl_->scroll_origin = 0;
@@ -572,7 +621,7 @@ support::ExpectedVoid VirtualTerminal::clear_screen() {
 }
 
 support::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (impl_->sync_depth == 0) {
         impl_->output.push_back(std::string(kBeginSync));
     }
@@ -581,11 +630,10 @@ support::ExpectedVoid VirtualTerminal::begin_synchronized_update() {
 }
 
 support::ExpectedVoid VirtualTerminal::end_synchronized_update() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (impl_->sync_depth == 0) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal synchronized update is not active"));
+                support::ErrorCode::Validation, "Virtual Terminal synchronized update is not active"));
     }
     --impl_->sync_depth;
     if (impl_->sync_depth == 0) {
@@ -607,9 +655,7 @@ support::ExpectedVoid VirtualTerminal::set_progress(bool active) {
     return {};
 }
 
-support::ExpectedVoid VirtualTerminal::drain_input(
-    std::chrono::milliseconds,
-    std::chrono::milliseconds) {
+support::ExpectedVoid VirtualTerminal::drain_input(std::chrono::milliseconds, std::chrono::milliseconds) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     // The double delivers input synchronously through inject_input; there is
     // no buffered input to drain. The call is recorded by callers through
@@ -617,8 +663,57 @@ support::ExpectedVoid VirtualTerminal::drain_input(
     return {};
 }
 
+support::ExpectedVoid VirtualTerminal::enter_output_only() {
+    if (impl_->modes.started) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal is already started"));
+    }
+    if (!impl_->was_started) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Virtual Terminal must complete start/stop lifetime before output-only presentation"));
+    }
+    if (impl_->modes.raw_input || impl_->sync_depth > 0 || impl_->progress_active || impl_->margins_active ||
+            !impl_->modes.cursor_visible || !impl_->modes.autowrap) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Virtual Terminal cannot enter output-only mode while terminal modes remain unrestored"));
+    }
+    if (impl_->output_only) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal is already in output-only mode"));
+    }
+    impl_->output_only = true;
+    return {};
+}
+
+support::ExpectedVoid VirtualTerminal::leave_output_only() {
+    if (!impl_->output_only) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Virtual Terminal is not in output-only mode"));
+    }
+    impl_->output_only = false;
+    if (impl_->sync_depth > 0) {
+        impl_->sync_depth = 0;
+        impl_->output.push_back(std::string(kEndSync));
+    }
+    if (impl_->margins_active) {
+        impl_->output.push_back("\x1b[r");
+        impl_->margins_active = false;
+        impl_->margin_top = 0;
+        impl_->margin_bottom = 0;
+    }
+    if (!impl_->modes.autowrap) {
+        impl_->output.push_back("\x1b[?7h");
+        impl_->modes.autowrap = true;
+    }
+    if (!impl_->modes.cursor_visible) {
+        impl_->output.push_back("\x1b[?25h");
+        impl_->modes.cursor_visible = true;
+    }
+    return {};
+}
+
 support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     auto tokens = detail::tokenize_terminal_output(output);
     if (!tokens) return std::unexpected(tokens.error());
 
@@ -650,18 +745,15 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
         }
         line_width += token.width;
         if (line_width > available) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "TUI component rendered a line wider than its width bound",
-                std::format(
-                    "line width {} exceeds visible width {}",
-                    line_width,
-                    available)));
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "TUI component rendered a line wider than its width bound",
+                    std::format("line width {} exceeds visible width {}", line_width, available)));
         }
     }
 
     std::string normalized;
-    for (const auto& token : *tokens) normalized += token.text;
+    for (const auto& token : *tokens)
+        normalized += token.text;
     impl_->output.push_back(std::move(normalized));
 
     paint_tokens(*impl_, *tokens);
@@ -670,11 +762,10 @@ support::ExpectedVoid VirtualTerminal::write(std::string_view output) {
 }
 
 support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (position.column > impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal cursor position is outside its dimensions"));
+                support::ErrorCode::Validation, "Virtual Terminal cursor position is outside its dimensions"));
     }
     // `row` is a buffer row under the main-screen scrollback flow: rows at or
     // past the visible viewport bottom advance the terminal's scrollback so
@@ -683,9 +774,8 @@ support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
     // the anchored absolute flow (ADR 0041) the screen row of buffer row b is
     // `scroll_origin + b - viewport_top`; buffer rows above the first visible
     // row are in scrollback and clamp to screen row 0.
-    const auto first_visible_row = impl_->viewport_top > impl_->scroll_origin
-        ? impl_->viewport_top - impl_->scroll_origin
-        : std::size_t{0};
+    const auto first_visible_row =
+            impl_->viewport_top > impl_->scroll_origin ? impl_->viewport_top - impl_->scroll_origin : std::size_t{0};
     if (position.row < first_visible_row) {
         impl_->cursor.row = impl_->margins_active ? impl_->margin_top : 0;
     } else {
@@ -714,7 +804,7 @@ support::ExpectedVoid VirtualTerminal::set_cursor(CursorPosition position) {
 }
 
 support::ExpectedVoid VirtualTerminal::set_scroll_margins(std::size_t top_row, std::size_t bottom_row) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     // An equal top and bottom is a valid one-row scroll region (#611).
     if (bottom_row >= impl_->dimensions.rows || top_row > bottom_row) {
         return std::unexpected(
@@ -728,7 +818,7 @@ support::ExpectedVoid VirtualTerminal::set_scroll_margins(std::size_t top_row, s
 }
 
 support::ExpectedVoid VirtualTerminal::reset_scroll_margins() {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (!impl_->margins_active) return {};
     impl_->margins_active = false;
     impl_->margin_top = 0;
@@ -738,7 +828,7 @@ support::ExpectedVoid VirtualTerminal::reset_scroll_margins() {
 }
 
 support::ExpectedVoid VirtualTerminal::set_cursor_visible(bool visible) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     impl_->modes.cursor_visible = visible;
     return {};
 }
@@ -796,27 +886,22 @@ support::ExpectedVoid VirtualTerminal::set_alternate_screen(bool enabled) {
 }
 
 support::ExpectedVoid VirtualTerminal::set_autowrap(bool enabled) {
-    if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
+    if (auto result = require_output_admission(*impl_); !result) return std::unexpected(result.error());
     if (impl_->modes.autowrap == enabled) return {};
     impl_->modes.autowrap = enabled;
     impl_->output.push_back(enabled ? "\x1b[?7h" : "\x1b[?7l");
     return {};
 }
 
-support::ExpectedVoid VirtualTerminal::seed_shell_content(
-    std::vector<std::string> lines,
-    CursorPosition cursor) {
+support::ExpectedVoid VirtualTerminal::seed_shell_content(std::vector<std::string> lines, CursorPosition cursor) {
     if (impl_->modes.started) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal shell content must be seeded before start"));
+                support::ErrorCode::Validation, "Virtual Terminal shell content must be seeded before start"));
     }
-    if (lines.size() > impl_->dimensions.rows ||
-        cursor.row >= impl_->dimensions.rows ||
-        cursor.column > impl_->dimensions.columns) {
+    if (lines.size() > impl_->dimensions.rows || cursor.row >= impl_->dimensions.rows ||
+            cursor.column > impl_->dimensions.columns) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Validation,
-            "Virtual Terminal seeded shell content is outside its dimensions"));
+                support::ErrorCode::Validation, "Virtual Terminal seeded shell content is outside its dimensions"));
     }
     // Test scaffolding for the dirty-screen boot scenario (issue #476, ADR
     // 0041): the shell's pre-existing output occupies the top rows and the
@@ -829,16 +914,14 @@ support::ExpectedVoid VirtualTerminal::seed_shell_content(
         std::size_t width = 0;
         for (const auto& token : *tokens) {
             if (token.kind == detail::TerminalTokenKind::Newline) {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Validation,
-                    "Virtual Terminal seeded shell content must be single physical lines"));
+                return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                        "Virtual Terminal seeded shell content must be single physical lines"));
             }
             width += token.width;
         }
         if (width > impl_->dimensions.columns) {
             return std::unexpected(support::make_error(
-                support::ErrorCode::Validation,
-                "Virtual Terminal seeded shell line is wider than its dimensions"));
+                    support::ErrorCode::Validation, "Virtual Terminal seeded shell line is wider than its dimensions"));
         }
         impl_->cursor = {.column = 0, .row = row};
         paint_tokens(*impl_, *tokens);
@@ -878,9 +961,7 @@ support::ExpectedVoid VirtualTerminal::apply_cell_pixel_dimensions(CellPixelDime
     return {};
 }
 
-support::ExpectedVoid VirtualTerminal::flush_input() {
-    return inject_input({});
-}
+support::ExpectedVoid VirtualTerminal::flush_input() { return inject_input({}); }
 
 support::ExpectedVoid VirtualTerminal::inject_resize(TerminalDimensions dimensions) {
     resize_cells(*impl_, dimensions);
@@ -892,39 +973,25 @@ support::ExpectedVoid VirtualTerminal::inject_resize(TerminalDimensions dimensio
     return {};
 }
 
-const std::vector<std::string>& VirtualTerminal::output() const {
-    return impl_->output;
-}
+const std::vector<std::string>& VirtualTerminal::output() const { return impl_->output; }
 
-const std::vector<std::string>& VirtualTerminal::screen() const {
-    return impl_->screen;
-}
+const std::vector<std::string>& VirtualTerminal::screen() const { return impl_->screen; }
 
-const std::vector<std::string>& VirtualTerminal::scrollback() const {
-    return impl_->scrollback;
-}
+const std::vector<std::string>& VirtualTerminal::scrollback() const { return impl_->scrollback; }
 
-std::size_t VirtualTerminal::viewport_top() const {
-    return impl_->viewport_top;
-}
+std::size_t VirtualTerminal::viewport_top() const { return impl_->viewport_top; }
 
-const std::vector<std::vector<VirtualTerminalCell>>& VirtualTerminal::cells() const {
-    return impl_->cells;
-}
+const std::vector<std::vector<VirtualTerminalCell>>& VirtualTerminal::cells() const { return impl_->cells; }
 
 const std::vector<std::vector<VirtualTerminalCell>>& VirtualTerminal::scrollback_cells() const {
     return impl_->scrollback_cells;
 }
 
-const std::vector<VirtualTerminalImage>& VirtualTerminal::images() const {
-    return impl_->images;
-}
+const std::vector<VirtualTerminalImage>& VirtualTerminal::images() const { return impl_->images; }
 
 TerminalStyle VirtualTerminal::final_style() const { return impl_->style; }
 
-CursorPosition VirtualTerminal::cursor() const {
-    return impl_->cursor;
-}
+CursorPosition VirtualTerminal::cursor() const { return impl_->cursor; }
 
 bool VirtualTerminal::check_clear_screen_called() {
     const auto result = impl_->clear_screen_called;

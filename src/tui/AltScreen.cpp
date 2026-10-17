@@ -41,6 +41,28 @@ constexpr std::string_view kDisableMouse = "\x1b[?1006l\x1b[?1004l\x1b[?1003l\x1
 // `DOUBLE_CLICK_INTERVAL_MS`).
 constexpr auto kComponentDoubleClickInterval = std::chrono::milliseconds{500};
 
+[[nodiscard]] std::string describe_error(const support::Error& error) {
+    if (error.detail.empty()) return error.message;
+    return std::format("{} [{}]", error.message, error.detail);
+}
+
+[[nodiscard]] support::Error combine_errors(
+        support::Error primary, const support::Error& secondary, std::string message) {
+    return support::make_error(primary.code,
+            std::move(message),
+            std::format("primary: {}; secondary: {}", describe_error(primary), describe_error(secondary)));
+}
+
+void retain_error(support::ExpectedVoid& accumulated, support::ExpectedVoid candidate) {
+    if (candidate) return;
+    if (accumulated) {
+        accumulated = std::unexpected(candidate.error());
+        return;
+    }
+    accumulated = std::unexpected(combine_errors(
+            std::move(accumulated.error()), candidate.error(), "AltScreen stop encountered multiple failures"));
+}
+
 /// Whether every pointer movement reaches the terminal: never inside the
 /// multiplexers pi reduces to button-motion tracking.
 [[nodiscard]] bool mouse_all_motion_enabled() {
@@ -448,6 +470,14 @@ std::vector<std::unique_ptr<Component>> AltScreen::take_children() {
 
 bool AltScreen::has_overlay_entries() const noexcept { return compositor_->has_overlay_entries(); }
 
+void AltScreen::clear_overlays() {
+    while (compositor_->has_overlay_entries()) {
+        auto* overlay = compositor_->topmost_overlay();
+        if (overlay == nullptr) break;
+        remove_overlay_internal(overlay);
+    }
+}
+
 bool AltScreen::focus_target_available(Component* component) const {
     if (component == nullptr) return false;
     if (owns(component)) return dynamic_cast<Focusable*>(component) != nullptr;
@@ -659,38 +689,63 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     stop_scrollbar_drag();
     stop_scrollbar_hover();
 
+    support::ExpectedVoid first_error;
     if (color_scheme_notifications_enabled_) {
-        (void)terminal_.write("\x1b[?2031l");
+        retain_error(first_error, terminal_.write("\x1b[?2031l"));
     }
+    if (options.preserve_screen) {
+        retain_error(first_error, terminal_.begin_synchronized_update());
+        if (session_image_protocol_ == InlineImageProtocol::Kitty) {
+            retain_error(first_error, terminal_.write(delete_all_kitty_images()));
+        }
+        image_pipeline_->clear_image_placements();
+        retain_error(first_error, terminal_.write(kDisableMouse));
+        retain_error(first_error, terminal_.set_autowrap(true));
+        retain_error(first_error, terminal_.end_synchronized_update());
+
+        cancel_color_queries(options.preserve_pending_color_query_completion);
+
+        retain_error(first_error, terminal_.set_cursor_visible(true));
+        reset_decoder();
+        pending_render_ = false;
+        auto stop_result = terminal_.stop(TerminalStopOptions{.final_alternate_restore = true});
+        if (!stop_result) {
+            retain_error(first_error, std::move(stop_result));
+            retain_error(first_error, terminal_.stop());
+        }
+        stopping_ = false;
+        return first_error;
+    }
+
     // Frozen `beforeTerminalStop`: a Kitty session drops every uploaded image
     // before the alternate buffer is left, and forgets the placements with it.
     if (session_image_protocol_ == InlineImageProtocol::Kitty) {
-        (void)terminal_.write(delete_all_kitty_images());
+        retain_error(first_error, terminal_.write(delete_all_kitty_images()));
     }
     image_pipeline_->clear_image_placements();
     // Give pointer reporting back to the terminal before the alternate buffer
     // is left (pi `beforeTerminalStop`).
-    (void)terminal_.write(kDisableMouse);
+    retain_error(first_error, terminal_.write(kDisableMouse));
 
     cancel_color_queries(options.preserve_pending_color_query_completion);
 
     // Restore the mode stack in reverse order of entry.
-    const auto cursor_result = terminal_.set_cursor_visible(true);
-    const auto autowrap_result = terminal_.set_autowrap(true);
-    const auto exit_result = terminal_.set_alternate_screen(false);
+    retain_error(first_error, terminal_.set_cursor_visible(true));
+    retain_error(first_error, terminal_.set_autowrap(true));
+    retain_error(first_error, terminal_.set_alternate_screen(false));
     reset_decoder();
     pending_render_ = false;
-    const auto stop_result = terminal_.stop();
+    retain_error(first_error, terminal_.stop());
     stopping_ = false;
-
-    if (!cursor_result) return std::unexpected(cursor_result.error());
-    if (!autowrap_result) return std::unexpected(autowrap_result.error());
-    if (!exit_result) return std::unexpected(exit_result.error());
-    if (!stop_result) return std::unexpected(stop_result.error());
-    return {};
+    return first_error;
 }
 
 support::ExpectedVoid AltScreen::render() { return render_now(); }
+
+support::ExpectedVoid AltScreen::render_final_presentation() {
+    return std::unexpected(
+            support::make_error(support::ErrorCode::Validation, "AltScreen does not support final presentation"));
+}
 
 void AltScreen::toggle_search() {
     if (active_search_) {

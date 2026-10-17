@@ -376,3 +376,61 @@ TEST_CASE("Tui starts regular rendering on dirty screens at physical rows 1 and 
     render_from(1, 5);
     render_from(4, 7);
 }
+
+TEST_CASE("VirtualTerminal atomic stop rejects unstarted terminal or non-alternate screen state",
+        "[tui][terminal][atomic][stop][virtual][issue1019][spec]") {
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 10});
+
+    SECTION("rejects unstarted terminal") {
+        auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+        REQUIRE_FALSE(stop_res.has_value());
+        CHECK(stop_res.error().code == cch::support::ErrorCode::Validation);
+        CHECK(stop_res.error().message.find("must be started") != std::string::npos);
+    }
+
+    SECTION("rejects started terminal not in alternate screen") {
+        REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+
+        auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+        REQUIRE_FALSE(stop_res.has_value());
+        CHECK(stop_res.error().code == cch::support::ErrorCode::Validation);
+        CHECK(stop_res.error().message.find("not in alternate screen") != std::string::npos);
+
+        REQUIRE(terminal.stop());
+    }
+}
+
+TEST_CASE("VirtualTerminal atomic stop flushes open synchronized update and restores autowrap",
+        "[tui][terminal][atomic][stop][virtual][issue1019][spec]") {
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 10});
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.set_alternate_screen(true));
+    REQUIRE(terminal.set_autowrap(false));
+    REQUIRE(terminal.begin_synchronized_update());
+    REQUIRE(terminal.write("VIRTUAL_PAYLOAD_TEST"));
+
+    REQUIRE(terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true}));
+
+    auto join_output = [](const std::vector<std::string>& out) {
+        std::string res;
+        for (const auto& s : out)
+            res += s;
+        return res;
+    };
+    const auto full_output = join_output(terminal.output());
+
+    CHECK(full_output.find("\x1b[?2026l") != std::string::npos);
+    CHECK(full_output.find("\x1b[?7h") != std::string::npos);
+    CHECK(full_output.find("\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l") != std::string::npos);
+    CHECK(terminal.modes().autowrap == true);
+    CHECK(terminal.modes().alternate_screen == false);
+    CHECK(terminal.modes().cursor_visible == true);
+
+    // Sync depth and modes restored: subsequent start succeeds
+    auto follow_start = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+    REQUIRE(follow_start.has_value());
+    REQUIRE(terminal.stop());
+}

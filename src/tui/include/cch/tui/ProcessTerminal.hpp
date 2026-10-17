@@ -46,10 +46,10 @@ public:
     ProcessTerminal(const ProcessTerminal&) = delete;
     ProcessTerminal& operator=(const ProcessTerminal&) = delete;
 
-    [[nodiscard]] support::ExpectedVoid start(
-        TerminalInputSink input_sink,
-        TerminalResizeSink resize_sink) override;
+    using Terminal::stop;
+    [[nodiscard]] support::ExpectedVoid start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) override;
     [[nodiscard]] support::ExpectedVoid stop() override;
+    [[nodiscard]] support::ExpectedVoid stop(TerminalStopOptions options) override;
     [[nodiscard]] TerminalDimensions dimensions() const override;
     [[nodiscard]] TerminalCapabilities capabilities() const override;
     [[nodiscard]] TerminalModeState modes() const override;
@@ -71,6 +71,8 @@ public:
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
             std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
+    [[nodiscard]] support::ExpectedVoid enter_output_only() override;
+    [[nodiscard]] support::ExpectedVoid leave_output_only() override;
 
     /// The diagnostic write-log path resolved from `PI_TUI_WRITE_LOG` at
     /// construction (pi `ProcessTerminal.writeLogPath`): empty disables logging,

@@ -61,12 +61,18 @@ public:
     /// `TuiBase.hasOverlayEntries`, `tui.ts:527`).
     [[nodiscard]] virtual bool has_overlay_entries() const noexcept = 0;
 
+    /// Clear all overlay entries, restoring any pre-focus state.
+    virtual void clear_overlays() = 0;
+
     [[nodiscard]] virtual support::ExpectedVoid set_focus(Component* component) = 0;
     [[nodiscard]] virtual Component* focus() const noexcept = 0;
 
     [[nodiscard]] virtual support::ExpectedVoid start() = 0;
     [[nodiscard]] virtual support::ExpectedVoid stop(TuiStopOptions options = {}) = 0;
     [[nodiscard]] virtual support::ExpectedVoid render() = 0;
+    /// Render one final presentation frame while unstarted (exit transcript output).
+    /// Emits rendered components in output-only terminal mode without starting input loops.
+    [[nodiscard]] virtual support::ExpectedVoid render_final_presentation() = 0;
     [[nodiscard]] virtual support::ExpectedVoid clear_screen() = 0;
     virtual void request_render(bool force = false) = 0;
     virtual void request_immediate_render() = 0;

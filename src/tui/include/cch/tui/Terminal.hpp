@@ -147,14 +147,32 @@ constexpr auto kDrainInputIdleMs = std::chrono::milliseconds(50);
 constexpr std::string_view kTerminalEmergencyRestoreSequence =
         "\x1b[?2004l\x1b[<u\x1b[>4;0m\x1b[?2026l\x1b[?1049l\x1b[?7h\x1b[r\x1b[?25h\x1b]9;4;0;\x07";
 
+struct TerminalStopOptions {
+    /// When true, input and raw modes are stopped first, paste mode and keyboard
+    /// extensions are disabled, and the final alternate buffer exit plus cursor show
+    /// sequence is emitted atomically in a synchronized update block
+    /// (\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l) before output descriptors are
+    /// drained and descriptor flags are restored.
+    /// Requires active started alternate screen; unsupported on default terminals.
+    bool final_alternate_restore{false};
+};
+
 class Terminal {
 public:
     virtual ~Terminal() = default;
 
-    [[nodiscard]] virtual support::ExpectedVoid start(
-        TerminalInputSink input_sink,
-        TerminalResizeSink resize_sink) = 0;
+    [[nodiscard]] virtual support::ExpectedVoid start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) = 0;
     [[nodiscard]] virtual support::ExpectedVoid stop() = 0;
+    /// Stop the terminal with options. Default overload delegates to stop()
+    /// when options.final_alternate_restore is false, or returns Validation error
+    /// when unsupported.
+    [[nodiscard]] virtual support::ExpectedVoid stop(TerminalStopOptions options) {
+        if (!options.final_alternate_restore) {
+            return stop();
+        }
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Terminal does not support final alternate restore stop"));
+    }
     [[nodiscard]] virtual TerminalDimensions dimensions() const = 0;
     [[nodiscard]] virtual TerminalCapabilities capabilities() const = 0;
     [[nodiscard]] virtual TerminalModeState modes() const = 0;
@@ -211,9 +229,21 @@ public:
     /// protocol push and modifyOtherKeys are disabled first, then input is
     /// consumed (discarded) until idle_ms passes without data or max_ms
     /// elapses, matching pi's drainInput defaults (1000ms / 50ms).
-    [[nodiscard]] virtual support::ExpectedVoid drain_input(
-        std::chrono::milliseconds max_ms = kDrainInputMaxMs,
-        std::chrono::milliseconds idle_ms = kDrainInputIdleMs) = 0;
+    [[nodiscard]] virtual support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
+            std::chrono::milliseconds idle_ms = kDrainInputIdleMs) = 0;
+
+    /// Enter explicit output-only presentation mode (unstarted final render path).
+    /// Allows write/cursor output operations without starting raw input, input loop,
+    /// resize listening, or keepalive timers.
+    [[nodiscard]] virtual support::ExpectedVoid enter_output_only() {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Terminal does not support output-only presentation"));
+    }
+    /// Exit output-only presentation mode and restore descriptor flags.
+    [[nodiscard]] virtual support::ExpectedVoid leave_output_only() {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Terminal does not support output-only presentation"));
+    }
 };
 
 } // namespace cch::tui

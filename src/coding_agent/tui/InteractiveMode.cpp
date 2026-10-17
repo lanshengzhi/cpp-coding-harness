@@ -6,8 +6,10 @@
 #include "InteractiveMode.hpp"
 
 #include "support/AsyncResultBridge.hpp"
+#include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/InteractiveEngine.hpp"
+#include <cch/coding_agent/AgentConfigDir.hpp>
 
 #include "coding_agent/tui/AltScreenHost.hpp"
 #include "coding_agent/tui/ClipboardPaste.hpp"
@@ -72,10 +74,12 @@ using interactive_view_detail::trim_editor_submission;
 } // namespace
 
 void InteractiveEngine::post_view_action(ViewAction action) {
+    if (!running_ || exit_requested_) return;
     const auto weak = weak_from_this();
     const auto prompt_generation = generation();
     boost::asio::post(executor_, [weak, prompt_generation, action = std::move(action)]() mutable {
         if (const auto self = weak.lock()) {
+            if (!self->running_ || self->exit_requested_) return;
             self->dispatch_view_action(std::move(action), prompt_generation);
         }
     });
@@ -520,6 +524,56 @@ boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
         co_await engine->exit_wait().async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
     }
     co_return co_await engine->finish();
+}
+
+namespace {
+
+std::string quote_if_needed(std::string_view value) {
+    auto is_allowed = [](char c) noexcept {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_' || c == '-' ||
+               c == '.' || c == '/' || c == '~' || c == ':' || c == '@';
+    };
+    if (!value.empty() && std::all_of(value.begin(), value.end(), is_allowed)) {
+        return std::string{value};
+    }
+    std::string result = "'";
+    for (char c : value) {
+        if (c == '\'') {
+            result += "'\\''";
+        } else {
+            result += c;
+        }
+    }
+    result += "'";
+    return result;
+}
+
+} // namespace
+
+std::optional<std::string> format_resume_command(const std::string& session_id,
+        const std::optional<std::filesystem::path>& session_path,
+        const std::filesystem::path& workspace,
+        bool stdout_is_tty,
+        std::string_view app_name) {
+    if (!stdout_is_tty) return std::nullopt;
+    if (!session_path.has_value()) return std::nullopt;
+
+    std::error_code ec;
+    if (!std::filesystem::exists(*session_path, ec)) return std::nullopt;
+
+    const auto sessions_root = coding_agent::sessions_root_path();
+    const auto default_dir = sessions_root / session_paths::encode_workspace_key(workspace);
+    const auto session_dir = session_path->parent_path();
+    const bool uses_default_dir = (session_dir == default_dir);
+
+    std::string cmd{app_name};
+    if (!uses_default_dir) {
+        cmd += " --session-dir ";
+        cmd += quote_if_needed(session_dir.string());
+    }
+    cmd += " --session ";
+    cmd += session_id;
+    return cmd;
 }
 
 } // namespace cch::coding_agent::tui

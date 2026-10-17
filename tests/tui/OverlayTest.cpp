@@ -16,13 +16,11 @@
 
 namespace {
 
-class FocusableInputComponent final
-    : public cch::tui::Component,
-      public cch::tui::InputHandler,
-      public cch::tui::Focusable {
+class FocusableInputComponent final : public cch::tui::Component,
+                                      public cch::tui::InputHandler,
+                                      public cch::tui::Focusable {
 public:
-    explicit FocusableInputComponent(std::string label = "x")
-        : label_(std::move(label)) {}
+    explicit FocusableInputComponent(std::string label = "x") : label_(std::move(label)) {}
 
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
         auto line = label_;
@@ -30,9 +28,7 @@ public:
         return cch::tui::RenderResult{.lines = {std::move(line)}};
     }
 
-    void invalidate() override {
-        ++invalidation_count;
-    }
+    void invalidate() override { ++invalidation_count; }
 
     cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
         const auto* key = std::get_if<cch::tui::KeyEvent>(&input);
@@ -43,13 +39,9 @@ public:
         return cch::tui::InputAdmissionOutcome::Consumed;
     }
 
-    void set_focused(bool focused) override {
-        focused_ = focused;
-    }
+    void set_focused(bool focused) override { focused_ = focused; }
 
-    [[nodiscard]] bool focused() const override {
-        return focused_;
-    }
+    [[nodiscard]] bool focused() const override { return focused_; }
 
     std::optional<cch::tui::CursorPosition> cursor_location() const override {
         if (!focused_) return std::nullopt;
@@ -426,8 +418,7 @@ TEST_CASE("IME cursor location follows focused component", "[tui][overlay][issue
     cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
     cch::tui::Tui tui(terminal);
 
-    auto editor = std::make_unique<cch::tui::Editor>(
-        cch::tui::EditorOptions{.max_visible_lines = 3});
+    auto editor = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{.max_visible_lines = 3});
     auto* editor_ptr = editor.get();
     REQUIRE(tui.add_child(std::move(editor)));
     REQUIRE(tui.start());
@@ -472,8 +463,7 @@ TEST_CASE("Overlay with Editor delegates cursor location", "[tui][overlay][issue
 
     // Create an overlay with an Editor
     auto overlay = std::make_unique<cch::tui::Overlay>();
-    auto editor = std::make_unique<cch::tui::Editor>(
-        cch::tui::EditorOptions{.max_visible_lines = 3});
+    auto editor = std::make_unique<cch::tui::Editor>(cch::tui::EditorOptions{.max_visible_lines = 3});
     auto* editor_ptr = editor.get();
     REQUIRE(overlay->add_child(std::move(editor)));
     REQUIRE(overlay->focus_first());
@@ -775,4 +765,81 @@ TEST_CASE("Overlay rejects a disposed component after removal", "[tui][overlay][
     REQUIRE(tui.remove_overlay(overlay_ptr));
     // Overlay is disposed, focus fallback should not try to access it
     REQUIRE(tui.render());
+}
+
+TEST_CASE("clear_overlays safely removes focused overlays on both MainScreen and AltScreen",
+        "[tui][overlay][clear][spec]") {
+    SECTION("MainScreen clear_overlays with focused overlay") {
+        cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 10});
+        cch::tui::Tui tui(terminal);
+
+        auto base = std::make_unique<FocusableInputComponent>("base");
+        auto* base_ptr = base.get();
+        REQUIRE(tui.add_child(std::move(base)));
+        REQUIRE(tui.start());
+        REQUIRE(tui.set_focus(base_ptr));
+        CHECK(tui.focus() == base_ptr);
+
+        auto overlay = std::make_unique<cch::tui::Overlay>();
+        auto overlay_child = std::make_unique<FocusableInputComponent>("child");
+        auto* child_ptr = overlay_child.get();
+        REQUIRE(overlay->add_child(std::move(overlay_child)));
+        REQUIRE(overlay->focus_first());
+
+        auto overlay_raw = overlay.get();
+        auto handle_result = tui.show_overlay(std::move(overlay));
+        REQUIRE(handle_result);
+        auto handle = std::move(*handle_result);
+        CHECK(handle.is_focused());
+        CHECK((tui.focus() == overlay_raw || tui.focus() == child_ptr));
+
+        // Clearing overlays must restore pre-focus and not leave dangling pointers
+        tui.clear_overlays();
+        CHECK_FALSE(tui.has_overlay_entries());
+        CHECK(tui.focus() == base_ptr);
+        REQUIRE(tui.render());
+        REQUIRE(tui.stop());
+
+        // Stale handle operations are harmless
+        handle.hide();
+        CHECK_FALSE(handle.is_hidden());
+        CHECK_FALSE(handle.is_focused());
+    }
+
+    SECTION("AltScreen clear_overlays with focused overlay") {
+        cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 10});
+        cch::tui::AltScreen alt(terminal);
+
+        auto base = std::make_unique<FocusableInputComponent>("base");
+        auto* base_ptr = base.get();
+        REQUIRE(alt.add_child(std::move(base)));
+        REQUIRE(alt.start());
+        REQUIRE(alt.set_focus(base_ptr));
+        CHECK(alt.focus() == base_ptr);
+
+        auto overlay = std::make_unique<cch::tui::Overlay>();
+        auto overlay_child = std::make_unique<FocusableInputComponent>("child");
+        auto* child_ptr = overlay_child.get();
+        REQUIRE(overlay->add_child(std::move(overlay_child)));
+        REQUIRE(overlay->focus_first());
+
+        auto overlay_raw = overlay.get();
+        auto handle_result = alt.show_overlay(std::move(overlay));
+        REQUIRE(handle_result);
+        auto handle = std::move(*handle_result);
+        CHECK(handle.is_focused());
+        CHECK((alt.focus() == overlay_raw || alt.focus() == child_ptr));
+
+        // Clearing overlays must restore pre-focus and not leave dangling pointers
+        alt.clear_overlays();
+        CHECK_FALSE(alt.has_overlay_entries());
+        CHECK(alt.focus() == base_ptr);
+        REQUIRE(alt.render());
+        REQUIRE(alt.stop());
+
+        // Stale handle operations are harmless
+        handle.hide();
+        CHECK_FALSE(handle.is_hidden());
+        CHECK_FALSE(handle.is_focused());
+    }
 }

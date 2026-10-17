@@ -121,6 +121,30 @@
       {
         "path": "capture/recapture-product-theme-rebind-lifecycle.mts",
         "sha256": "688e9ab1b0653ffabbd6cc327db9d9f5faf1e403cc875c86a70054ea91f2dead"
+      },
+      {
+        "path": "capture/fullscreen-exit-output-scenarios.mts",
+        "sha256": "743e16a5e22acd932d6c7359bc732bafda6b29654d3078de51a23b125841a4bb"
+      },
+      {
+        "path": "capture/recapture-fullscreen-exit-output.mts",
+        "sha256": "9458bbe411224d536645b12e556f3da4be2f8c608270689925250a48539839c1"
+      },
+      {
+        "path": "capture/fullscreen-exit-protocol-scenarios.mts",
+        "sha256": "9e6825021aedae4306d768f4567abdb90f424e3af13246f45e4ecf6f674bbc90"
+      },
+      {
+        "path": "capture/recapture-fullscreen-exit-protocol.mts",
+        "sha256": "635c2b625cc40a7dec916935d6c9bb386699f8e59e1f095999b992196e3f6367"
+      },
+      {
+        "path": "capture/fullscreen-exit-live-scenarios.mts",
+        "sha256": "5344e5216f51127eb4e925a292574d0be5c69ff0dc6df0ab23791b0324329a11"
+      },
+      {
+        "path": "capture/recapture-fullscreen-exit-live.mts",
+        "sha256": "dd463fd5d63d73b90a9210e6b37a441632cd51cab5d9f5f035947e381af21780"
       }
     ]
   },
@@ -517,6 +541,48 @@
         "packages/coding-agent/src/modes/interactive/theme/theme-controller.ts:requestTerminalColors,InteractiveThemeController.applyTerminalColors,waitForTerminalColors,rebindTui",
         "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
         "packages/tui/src/tui.ts:TuiBase.queryTerminalColors,consumeTerminalColorResponse"
+      ]
+    },
+    {
+      "path": "fullscreen-exit-output.json",
+      "family": "fullscreen-exit-output",
+      "bytes": 7458,
+      "sha256": "928e9856f29c06269981336fba4035d7b30fb0126101b1d80a9737b69585e07c",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:338",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:874",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:4284",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:7053",
+        "packages/coding-agent/src/core/settings-manager.ts:55",
+        "packages/coding-agent/src/core/settings-manager.ts:1358",
+        "packages/tui/src/tui.ts:970",
+        "packages/tui/src/tui-main-screen.ts:169",
+        "packages/tui/src/tui-alt-screen.ts:399"
+      ]
+    },
+    {
+      "path": "fullscreen-exit-protocol.json",
+      "family": "fullscreen-exit-protocol",
+      "bytes": 127239,
+      "sha256": "b61392feed4befa812eaf1ecaaa4c3b98cbf05b5d41762d9919daf7072c84eae",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:stopInteractiveTui,switchTuiMode",
+        "packages/tui/src/tui-main-screen.ts:beforeTerminalStop",
+        "packages/tui/src/tui-alt-screen.ts:afterTerminalStop",
+        "packages/tui/src/tui.ts:Tui.stop,Tui.renderNow"
+      ]
+    },
+    {
+      "path": "fullscreen-exit-live.json",
+      "family": "fullscreen-exit-live",
+      "bytes": 297073,
+      "sha256": "3b922dfd32cc8b5e81343694167ae2de59e7b276e929f25654a36fb871013966",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:stopInteractiveTui,switchTuiMode",
+        "packages/tui/src/tui-main-screen.ts:beforeTerminalStop,renderNow",
+        "packages/tui/src/tui-alt-screen.ts:afterTerminalStop,renderNow",
+        "packages/tui/src/tui.ts:Tui.stop,Tui.renderNow",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.start,VirtualTerminal.stop,VirtualTerminal.write,VirtualTerminal.hideCursor,VirtualTerminal.showCursor"
       ]
     }
   ]

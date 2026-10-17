@@ -1210,3 +1210,233 @@ TEST_CASE("Debug hook runs after the raw-input listener stage and survives a res
 
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("MainScreen and VirtualTerminal output-only presentation lifecycle and error aggregation",
+        "[tui][render][issue1019][spec]") {
+    SECTION("Terminal default enter/leave returns Validation error") {
+        class DefaultTerminal final : public cch::tui::Terminal {
+        public:
+            cch::support::ExpectedVoid start(cch::tui::TerminalInputSink, cch::tui::TerminalResizeSink) override {
+                return {};
+            }
+            cch::support::ExpectedVoid stop() override { return {}; }
+            cch::tui::TerminalDimensions dimensions() const override { return {}; }
+            cch::tui::TerminalCapabilities capabilities() const override { return {}; }
+            cch::tui::TerminalModeState modes() const override { return {}; }
+            cch::support::ExpectedVoid clear_screen() override { return {}; }
+            cch::support::ExpectedVoid write(std::string_view) override { return {}; }
+            cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
+            cch::support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+            cch::support::ExpectedVoid set_alternate_screen(bool) override { return {}; }
+            cch::support::ExpectedVoid set_autowrap(bool) override { return {}; }
+            cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+            cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
+            cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
+            cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
+            cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
+            cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+            cch::support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
+                return {};
+            }
+        };
+
+        DefaultTerminal default_term;
+        auto enter_res = default_term.enter_output_only();
+        CHECK_FALSE(enter_res.has_value());
+        CHECK(enter_res.error().code == cch::support::ErrorCode::Validation);
+
+        auto leave_res = default_term.leave_output_only();
+        CHECK_FALSE(leave_res.has_value());
+        CHECK(leave_res.error().code == cch::support::ErrorCode::Validation);
+    }
+
+    SECTION("VirtualTerminal start/stop handoff and gate enforcement") {
+        cch::tui::VirtualTerminal terminal({.columns = 10, .rows = 5});
+
+        // Never-started rejects enter_output_only
+        auto never_started = terminal.enter_output_only();
+        CHECK_FALSE(never_started.has_value());
+        CHECK(never_started.error().code == cch::support::ErrorCode::Validation);
+
+        // Start and stop to complete lifetime
+        REQUIRE(terminal.start([](std::string) { return cch::support::ExpectedVoid{}; },
+                                [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; })
+                        .has_value());
+        REQUIRE(terminal.stop().has_value());
+
+        // Now enter_output_only succeeds
+        REQUIRE(terminal.enter_output_only().has_value());
+
+        // Nested enter_output_only rejects
+        auto nested = terminal.enter_output_only();
+        CHECK_FALSE(nested.has_value());
+        CHECK(nested.error().code == cch::support::ErrorCode::Validation);
+
+        // start() during output_only rejects
+        auto start_during = terminal.start([](std::string) { return cch::support::ExpectedVoid{}; },
+                [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; });
+        CHECK_FALSE(start_during.has_value());
+        CHECK(start_during.error().code == cch::support::ErrorCode::Validation);
+
+        // drain_input and set_progress reject
+        CHECK_FALSE(terminal.drain_input().has_value());
+        CHECK_FALSE(terminal.set_progress(true).has_value());
+
+        // write succeeds
+        REQUIRE(terminal.write("hello").has_value());
+
+        // leave_output_only succeeds
+        REQUIRE(terminal.leave_output_only().has_value());
+
+        // Second leave_output_only rejects
+        CHECK_FALSE(terminal.leave_output_only().has_value());
+
+        // Output-only stop finalizer: enter_output_only, then stop() clears output-only
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.stop().has_value());
+
+        // write is denied when output-only was finalized by stop()
+        auto write_denied = terminal.write("denied");
+        CHECK_FALSE(write_denied.has_value());
+        CHECK(write_denied.error().code == cch::support::ErrorCode::Validation);
+
+        // start is allowed again
+        REQUIRE(terminal.start([](std::string) { return cch::support::ExpectedVoid{}; },
+                                [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; })
+                        .has_value());
+        REQUIRE(terminal.stop().has_value());
+
+        // Output-only cursor visibility and autowrap state restoration
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.set_cursor_visible(false).has_value());
+        REQUIRE(terminal.set_autowrap(false).has_value());
+        CHECK_FALSE(terminal.modes().cursor_visible);
+        CHECK_FALSE(terminal.modes().autowrap);
+
+        REQUIRE(terminal.leave_output_only().has_value());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.modes().autowrap);
+        REQUIRE_FALSE(terminal.output().empty());
+        CHECK(terminal.output().back().find("\x1b[?25h") != std::string::npos);
+
+        // stop() in output-only restores cursor and autowrap as well
+        REQUIRE(terminal.enter_output_only().has_value());
+        REQUIRE(terminal.set_cursor_visible(false).has_value());
+        REQUIRE(terminal.set_autowrap(false).has_value());
+        REQUIRE(terminal.stop().has_value());
+        CHECK(terminal.modes().cursor_visible);
+        CHECK(terminal.modes().autowrap);
+    }
+
+    SECTION("MainScreen render_final_presentation and error aggregation on stop") {
+        class MockTerminal final : public cch::tui::Terminal {
+        public:
+            explicit MockTerminal(cch::tui::VirtualTerminalOptions options) : inner_(std::move(options)) {}
+
+            cch::support::ExpectedVoid start(
+                    cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
+                return inner_.start(std::move(input_sink), std::move(resize_sink));
+            }
+            cch::support::ExpectedVoid stop() override {
+                ++stop_calls;
+                if (fail_stop) {
+                    return std::unexpected(
+                            cch::support::make_error(cch::support::ErrorCode::Busy, "mock terminal stop failed"));
+                }
+                return inner_.stop();
+            }
+            cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+            cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
+            cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+            cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+            cch::support::ExpectedVoid write(std::string_view output) override {
+                if (fail_write) {
+                    return std::unexpected(
+                            cch::support::make_error(cch::support::ErrorCode::Process, "mock terminal write failed"));
+                }
+                return inner_.write(output);
+            }
+            cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
+                return inner_.set_cursor(position);
+            }
+            cch::support::ExpectedVoid set_cursor_visible(bool visible) override {
+                cursor_visible_restored = visible;
+                if (fail_cursor_visible) {
+                    return std::unexpected(
+                            cch::support::make_error(cch::support::ErrorCode::Process, "cursor restoration failed"));
+                }
+                return inner_.set_cursor_visible(visible);
+            }
+            cch::support::ExpectedVoid set_alternate_screen(bool enabled) override {
+                return inner_.set_alternate_screen(enabled);
+            }
+            cch::support::ExpectedVoid set_autowrap(bool enabled) override { return inner_.set_autowrap(enabled); }
+            cch::support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override {
+                return inner_.set_scroll_margins(top_row, bottom_row);
+            }
+            cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+            cch::support::ExpectedVoid begin_synchronized_update() override {
+                return inner_.begin_synchronized_update();
+            }
+            cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+            cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
+            cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+            cch::support::ExpectedVoid drain_input(
+                    std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {
+                return inner_.drain_input(max_ms, idle_ms);
+            }
+            cch::support::ExpectedVoid enter_output_only() override {
+                ++enter_calls;
+                return inner_.enter_output_only();
+            }
+            cch::support::ExpectedVoid leave_output_only() override {
+                ++leave_calls;
+                if (fail_leave) {
+                    return std::unexpected(
+                            cch::support::make_error(cch::support::ErrorCode::Busy, "mock terminal leave failed"));
+                }
+                return inner_.leave_output_only();
+            }
+
+            cch::tui::VirtualTerminal inner_;
+            bool fail_write{false};
+            bool fail_cursor_visible{false};
+            bool fail_stop{false};
+            bool fail_leave{false};
+            bool cursor_visible_restored{false};
+            std::size_t enter_calls{0};
+            std::size_t leave_calls{0};
+            std::size_t stop_calls{0};
+        };
+
+        MockTerminal terminal({.columns = 10, .rows = 5});
+        REQUIRE(terminal.start([](std::string) { return cch::support::ExpectedVoid{}; },
+                                [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; })
+                        .has_value());
+        REQUIRE(terminal.stop().has_value());
+
+        cch::tui::Tui tui(terminal);
+        REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("sample", 0, 0)));
+
+        terminal.fail_write = true;
+        terminal.fail_stop = true;
+        terminal.fail_cursor_visible = true;
+
+        // Final presentation render fails because of write failure
+        auto render_result = tui.render_final_presentation();
+        CHECK_FALSE(render_result.has_value());
+
+        // start() while in output-only presentation rejects
+        auto start_res = tui.start();
+        CHECK_FALSE(start_res.has_value());
+        CHECK(start_res.error().code == cch::support::ErrorCode::Validation);
+
+        // stop() executes cleanup (does not no-op), finalizes via stop(), restores cursor, and aggregates errors
+        auto stop_result = tui.stop();
+        CHECK_FALSE(stop_result.has_value());
+        CHECK(terminal.enter_calls == 1);
+        CHECK(terminal.stop_calls == 2);
+        CHECK(terminal.cursor_visible_restored);
+        CHECK(stop_result.error().message.find("MainScreen stop encountered multiple failures") != std::string::npos);
+    }
+}

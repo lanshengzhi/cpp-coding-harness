@@ -21,7 +21,8 @@ coding_agent::tui::InteractiveSessionRun assemble_interactive_session_run(Initia
         std::ostream& error_stream,
         coding_agent::tui::SessionIntentVariant session_intent,
         InteractiveClipboardInjection clipboard,
-        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory) {
+        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory,
+        std::ostream* output_stream) {
     // One observed environment feeds both halves of the clipboard capability:
     // the reader the run installs as its clipboard and the copy policy the
     // engine runs. Nothing below the composition boundary reads the process
@@ -43,6 +44,7 @@ coding_agent::tui::InteractiveSessionRun assemble_interactive_session_run(Initia
             .with_shared_runtime(std::move(shared_runtime))
             .with_model_runtime_cli_fake(model_runtime_cli_fake)
             .with_error_stream(&error_stream)
+            .with_output_stream(output_stream)
             .with_native_clipboard(
                     coding_agent::tui::make_linux_clipboard_reader(environment, std::move(clipboard.native_helper)))
             .with_clipboard_write_options(coding_agent::tui::ClipboardWriteOptions{.environment = environment})

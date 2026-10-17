@@ -90,6 +90,12 @@ public:
     /// Whether any overlay entry exists (visible or hidden). Used to gate clearOnShrink.
     [[nodiscard]] bool has_overlay_entries() const noexcept { return !overlays_.empty(); }
 
+    /// Clear all overlay entries.
+    /// Topmost overlay in the compositor's entries (draw order).
+    [[nodiscard]] Overlay* topmost_overlay() const noexcept {
+        return overlays_.empty() ? nullptr : overlays_.back().overlay.get();
+    }
+
     // --- Input ---
 
     /// Legacy compositor probe retained for standalone routing tests.

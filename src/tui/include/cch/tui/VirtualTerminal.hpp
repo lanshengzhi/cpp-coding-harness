@@ -53,8 +53,10 @@ public:
     VirtualTerminal(const VirtualTerminal&) = delete;
     VirtualTerminal& operator=(const VirtualTerminal&) = delete;
 
+    using Terminal::stop;
     [[nodiscard]] support::ExpectedVoid start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) override;
     [[nodiscard]] support::ExpectedVoid stop() override;
+    [[nodiscard]] support::ExpectedVoid stop(TerminalStopOptions options) override;
     [[nodiscard]] TerminalDimensions dimensions() const override;
     [[nodiscard]] TerminalCapabilities capabilities() const override;
     [[nodiscard]] TerminalModeState modes() const override;
@@ -74,9 +76,10 @@ public:
     /// reply before this call refines the reported cell pixels (#952).
     [[nodiscard]] support::ExpectedVoid apply_cell_pixel_dimensions(CellPixelDimensions pixels) override;
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
-    [[nodiscard]] support::ExpectedVoid drain_input(
-        std::chrono::milliseconds max_ms = kDrainInputMaxMs,
-        std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
+    [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
+            std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
+    [[nodiscard]] support::ExpectedVoid enter_output_only() override;
+    [[nodiscard]] support::ExpectedVoid leave_output_only() override;
 
     [[nodiscard]] support::ExpectedVoid inject_input(std::string input);
     [[nodiscard]] support::ExpectedVoid flush_input();
@@ -86,9 +89,7 @@ public:
     /// row 0 and leaves the cursor mid-screen where the shell left it, so
     /// regular rendering (#983) flows relative to that cursor instead of
     /// anchoring an absolute origin. Must be called before start().
-    [[nodiscard]] support::ExpectedVoid seed_shell_content(
-        std::vector<std::string> lines,
-        CursorPosition cursor);
+    [[nodiscard]] support::ExpectedVoid seed_shell_content(std::vector<std::string> lines, CursorPosition cursor);
     [[nodiscard]] const std::vector<std::string>& output() const;
     [[nodiscard]] const std::vector<std::string>& screen() const;
     /// The full written buffer as the terminal models it under the

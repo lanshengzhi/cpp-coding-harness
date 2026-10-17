@@ -55,6 +55,7 @@ struct InteractiveClipboardInjection {
         std::ostream& error_stream,
         coding_agent::tui::SessionIntentVariant session_intent,
         InteractiveClipboardInjection clipboard = {},
-        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory = nullptr);
+        coding_agent::tui::ExtensionUiRegistrationFactory extension_ui_registration_factory = nullptr,
+        std::ostream* output_stream = nullptr);
 
 } // namespace cch::cli

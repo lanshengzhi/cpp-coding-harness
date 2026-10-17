@@ -354,6 +354,9 @@ void migrate_settings(JsonObject& settings) {
     if (const auto* value = string_field(object, "tuiMode")) {
         settings.tui_mode = *value;
     }
+    if (const auto* value = string_field(object, "fullscreenExitOutput")) {
+        settings.fullscreen_exit_output = *value;
+    }
     if (const auto found = object.find("compaction"); found != object.end()) {
         if (auto parsed = parse_compaction_settings(found->second); parsed) {
             settings.compaction = std::move(*parsed);
@@ -770,6 +773,9 @@ struct SettingsManager::Impl {
         if (project.tui_mode) {
             merged.tui_mode = project.tui_mode;
         }
+        if (project.fullscreen_exit_output) {
+            merged.fullscreen_exit_output = project.fullscreen_exit_output;
+        }
         if (project.output_pad) {
             merged.output_pad = project.output_pad;
         }
@@ -1046,6 +1052,32 @@ support::ExpectedVoid SettingsManager::set_default_thinking_level(
 
 bool SettingsManager::hide_thinking_block() const noexcept {
     return impl_->merged_settings.hide_thinking_block.value_or(false);
+}
+
+FullscreenExitOutput SettingsManager::get_fullscreen_exit_output() const noexcept {
+    const auto& stored = impl_->merged_settings.fullscreen_exit_output;
+    if (stored && *stored == "resume-hint") {
+        return FullscreenExitOutput::ResumeHint;
+    }
+    return FullscreenExitOutput::Transcript;
+}
+
+support::ExpectedVoid SettingsManager::set_fullscreen_exit_output(FullscreenExitOutput output) {
+    if (impl_->global_write_suppressed()) {
+        return support::ExpectedVoid{};
+    }
+    const std::string value = output == FullscreenExitOutput::ResumeHint ? "resume-hint" : "transcript";
+    auto& target = impl_->global_settings;
+    if (target.fullscreen_exit_output == value) {
+        return support::ExpectedVoid{};
+    }
+
+    if (auto persisted = impl_->persist_global_field("fullscreenExitOutput", support::JsonValue{value}); !persisted) {
+        return persisted;
+    }
+    target.fullscreen_exit_output = value;
+    impl_->recompute_merged();
+    return support::ExpectedVoid{};
 }
 
 TuiMode SettingsManager::get_tui_mode() const noexcept {

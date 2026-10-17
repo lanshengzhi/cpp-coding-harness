@@ -193,6 +193,14 @@ std::vector<std::unique_ptr<Component>> MainScreen::take_children() {
 
 bool MainScreen::has_overlay_entries() const noexcept { return compositor_->has_overlay_entries(); }
 
+void MainScreen::clear_overlays() {
+    while (compositor_->has_overlay_entries()) {
+        auto* overlay = compositor_->topmost_overlay();
+        if (overlay == nullptr) break;
+        remove_overlay_internal(overlay);
+    }
+}
+
 support::Expected<OverlayHandle> MainScreen::show_overlay(std::unique_ptr<Overlay> overlay) {
     if (!overlay) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "TUI cannot attach a null Overlay"));
@@ -382,6 +390,10 @@ support::ExpectedVoid MainScreen::start() {
     if (started_) {
         return {};
     }
+    if (rendered_unstarted_) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Cannot start TUI while in output-only presentation mode"));
+    }
 
     // The latch is armed before the terminal starts: ProcessTerminal
     // forwards startup-preserved input synchronously inside start(), and
@@ -426,7 +438,7 @@ support::ExpectedVoid MainScreen::start() {
 }
 
 support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
-    if (!started_ || stopping_) return {};
+    if ((!started_ && !rendered_unstarted_) || stopping_) return {};
 
     cancel_scheduled_render();
     ++render_generation_;
@@ -434,6 +446,7 @@ support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
     ChildOperation operation(*this);
     stopping_ = true;
     started_ = false;
+    rendered_unstarted_ = false;
     const auto stop_cursor = resolve_cursor_location();
     apply_focus(nullptr);
     overlay_focus_restore_ = {};
@@ -452,10 +465,26 @@ support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
     const auto stop_result = terminal_.stop();
     stopping_ = false;
 
-    if (!exit_result) return std::unexpected(exit_result.error());
-    if (!cursor_result) return std::unexpected(cursor_result.error());
-    if (!stop_result) return std::unexpected(stop_result.error());
-    return {};
+    support::ExpectedVoid accumulated_result;
+    auto retain = [&](const support::ExpectedVoid& result) {
+        if (!result) {
+            if (accumulated_result) {
+                accumulated_result = std::unexpected(result.error());
+            } else {
+                accumulated_result = std::unexpected(support::make_error(accumulated_result.error().code,
+                        "MainScreen stop encountered multiple failures",
+                        std::format("primary: {} [{}]; secondary: {} [{}]",
+                                accumulated_result.error().message,
+                                accumulated_result.error().detail,
+                                result.error().message,
+                                result.error().detail)));
+            }
+        }
+    };
+    retain(exit_result);
+    retain(cursor_result);
+    retain(stop_result);
+    return accumulated_result;
 }
 
 support::ExpectedVoid MainScreen::clear_screen() {
@@ -482,6 +511,38 @@ support::ExpectedVoid MainScreen::restore_render_state(TuiMainScreenRenderState 
 void MainScreen::reset_render_state() noexcept { render_pipeline_->reset_render_state(); }
 
 support::ExpectedVoid MainScreen::render() { return render_now(); }
+
+support::ExpectedVoid MainScreen::render_final_presentation() {
+    if (started_) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Final presentation is only valid when renderer is unstarted"));
+    }
+    if (rendered_unstarted_) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Final presentation is already active"));
+    }
+    if (auto entered = terminal_.enter_output_only(); !entered) {
+        return entered;
+    }
+    rendered_unstarted_ = true;
+    cancel_scheduled_render();
+    ++render_generation_;
+    render_scheduled_ = false;
+    if (render_prepare_sink_) {
+        auto prepared = render_prepare_sink_();
+        if (!prepared) {
+            support::ExpectedVoid result = std::unexpected(prepared.error());
+            if (render_complete_sink_) render_complete_sink_(result);
+            return result;
+        }
+        if (!*prepared) {
+            return {};
+        }
+    }
+    auto result = render_frame();
+    if (render_complete_sink_) render_complete_sink_(result);
+    return result;
+}
 
 support::ExpectedVoid MainScreen::render_now() {
     if (!started_) {

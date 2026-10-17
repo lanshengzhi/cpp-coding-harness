@@ -111,4 +111,16 @@ using TuiActionSink = std::move_only_function<support::Expected<TuiActionResultV
 [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_interactive_mode(
         cch::tui::Terminal& terminal, InteractiveSessionRun run);
 
+/// Format a resume command for a session (pi `formatResumeCommand`).
+/// Returns nullopt if stdout is not a TTY, the session has no persisted file,
+/// or the session file does not exist on disk.
+[[nodiscard]] std::optional<std::string> format_resume_command(const std::string& session_id,
+        const std::optional<std::filesystem::path>& session_path,
+        const std::filesystem::path& workspace,
+        bool stdout_is_tty,
+        std::string_view app_name = "pike");
+
+/// pi `chalk.dim("To resume this session:")` ANSI string prefix.
+inline constexpr std::string_view kResumeNoticePrefix = "\x1b[2mTo resume this session:\x1b[22m ";
+
 } // namespace cch::coding_agent::tui

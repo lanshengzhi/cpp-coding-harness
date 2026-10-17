@@ -25,6 +25,11 @@ public:
         SetCursorVisible,
         BeginSync,
         EndSync,
+        SetAlternateScreen,
+        SetAutowrap,
+        ClearScreen,
+        SetScrollMargins,
+        ResetScrollMargins,
     };
 
     struct ObservedOp {
@@ -32,20 +37,32 @@ public:
         std::string write_bytes{};
         cch::tui::CursorPosition cursor_position{};
         bool visible{false};
+        bool enabled{false};
+        std::size_t margin_top{0};
+        std::size_t margin_bottom{0};
     };
 
     explicit ProtocolRecordingTerminal(cch::tui::VirtualTerminal& inner) : inner_(inner) {}
 
     [[nodiscard]] cch::support::ExpectedVoid start(
             cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
+        ++start_count_;
         return inner_.start(std::move(input_sink), std::move(resize_sink));
     }
 
-    [[nodiscard]] cch::support::ExpectedVoid stop() override { return inner_.stop(); }
+    using Terminal::stop;
+    [[nodiscard]] cch::support::ExpectedVoid stop() override { return stop(cch::tui::TerminalStopOptions{}); }
+    [[nodiscard]] cch::support::ExpectedVoid stop(cch::tui::TerminalStopOptions options) override {
+        ++stop_count_;
+        return inner_.stop(options);
+    }
     [[nodiscard]] cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
     [[nodiscard]] cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
     [[nodiscard]] cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
-    [[nodiscard]] cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+    [[nodiscard]] cch::support::ExpectedVoid clear_screen() override {
+        ops_.push_back(ObservedOp{.kind = OpKind::ClearScreen});
+        return inner_.clear_screen();
+    }
 
     [[nodiscard]] cch::support::ExpectedVoid write(std::string_view output) override {
         ops_.push_back(ObservedOp{
@@ -72,18 +89,28 @@ public:
     }
 
     [[nodiscard]] cch::support::ExpectedVoid set_alternate_screen(bool enabled) override {
+        ops_.push_back(ObservedOp{.kind = OpKind::SetAlternateScreen, .enabled = enabled});
         return inner_.set_alternate_screen(enabled);
     }
 
     [[nodiscard]] cch::support::ExpectedVoid set_autowrap(bool enabled) override {
+        ops_.push_back(ObservedOp{.kind = OpKind::SetAutowrap, .enabled = enabled});
         return inner_.set_autowrap(enabled);
     }
 
     [[nodiscard]] cch::support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override {
+        ops_.push_back(ObservedOp{
+                .kind = OpKind::SetScrollMargins,
+                .margin_top = top_row,
+                .margin_bottom = bottom_row,
+        });
         return inner_.set_scroll_margins(top_row, bottom_row);
     }
 
-    [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+    [[nodiscard]] cch::support::ExpectedVoid reset_scroll_margins() override {
+        ops_.push_back(ObservedOp{.kind = OpKind::ResetScrollMargins});
+        return inner_.reset_scroll_margins();
+    }
 
     [[nodiscard]] cch::support::ExpectedVoid begin_synchronized_update() override {
         ops_.push_back(ObservedOp{.kind = OpKind::BeginSync});
@@ -111,6 +138,9 @@ public:
         return inner_.drain_input(max_ms, idle_ms);
     }
 
+    [[nodiscard]] cch::support::ExpectedVoid enter_output_only() override { return inner_.enter_output_only(); }
+    [[nodiscard]] cch::support::ExpectedVoid leave_output_only() override { return inner_.leave_output_only(); }
+
     [[nodiscard]] cch::support::ExpectedVoid inject_input(std::string input) {
         return inner_.inject_input(std::move(input));
     }
@@ -119,7 +149,13 @@ public:
         return inner_.inject_resize(dimensions);
     }
 
-    void reset_recording() { ops_.clear(); }
+    void reset_recording() {
+        start_count_ = 0;
+        stop_count_ = 0;
+        ops_.clear();
+    }
+    [[nodiscard]] std::size_t start_count() const noexcept { return start_count_; }
+    [[nodiscard]] std::size_t stop_count() const noexcept { return stop_count_; }
     [[nodiscard]] const std::vector<ObservedOp>& ops() const { return ops_; }
     [[nodiscard]] cch::tui::VirtualTerminal& inner() noexcept { return inner_; }
     [[nodiscard]] const cch::tui::VirtualTerminal& inner() const noexcept { return inner_; }
@@ -127,6 +163,8 @@ public:
 private:
     cch::tui::VirtualTerminal& inner_;
     std::vector<ObservedOp> ops_;
+    std::size_t start_count_{0};
+    std::size_t stop_count_{0};
 };
 
 [[nodiscard]] inline bool is_cursor_movement_sequence(std::string_view s) {

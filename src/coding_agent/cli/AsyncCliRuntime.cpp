@@ -210,7 +210,8 @@ void print_session_diagnostics(
             streams.error,
             coding_agent::tui::DeferBoot{std::move(request)},
             InteractiveClipboardInjection{.environment = coding_agent::tui::clipboard_environment_from_process()},
-            std::move(extension_ui_registration_factory));
+            std::move(extension_ui_registration_factory),
+            &streams.output);
 
     auto future = boost::asio::co_spawn(
             *io, coding_agent::tui::run_interactive_mode(terminal, std::move(run)), boost::asio::use_future);
