@@ -2,15 +2,18 @@
 // alternate-buffer restoration (group E20). Aligned against frozen arbiter
 // pi-v1.0.4 (`7c10bd4337495ee613f2224843ecdf349b80d1df`) and evidence artifact 33.
 
+#include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/tui/InteractiveEngine.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
+#include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include "support/EnvVarGuard.hpp"
+#include "support/ImageFixture.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PiTuiEvidence.hpp"
 #include "support/PumpUntil.hpp"
@@ -41,9 +44,11 @@
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <fcntl.h>
 #include <iostream>
+#include <stop_token>
 #include <termios.h>
 #include <thread>
 
@@ -163,6 +168,47 @@ constexpr std::string_view kIndependentResumeNoticePrefix = "\x1b[2mTo resume th
         pos += target.size();
     }
     return count;
+}
+
+/// Every clipboard image temp file currently present; the paste tests compare
+/// the set across a phase so an inserted image path is physically identifiable.
+[[nodiscard]] std::vector<std::filesystem::path> clipboard_image_files() {
+    std::vector<std::filesystem::path> files;
+    std::error_code listing_error;
+    const auto temp_directory = std::filesystem::temp_directory_path(listing_error);
+    if (listing_error) return files;
+    for (const auto& entry : std::filesystem::directory_iterator(temp_directory, listing_error)) {
+        if (entry.path().filename().string().starts_with("pi-clipboard-")) files.push_back(entry.path());
+    }
+    return files;
+}
+
+/// Physical tail probe over a restored PTY slave: a canonical-mode read hides
+/// an incomplete line (a key-release fragment without a newline), so the
+/// pending bytes are read through a temporary bounded noncanonical window
+/// (VMIN/VTIME 0, no echo) and the exact original termios is restored before
+/// the caller re-checks it.
+struct PendingTailProbe {
+    std::string bytes;
+    bool switched{false};
+    bool restored{false};
+    termios before{};
+    termios after{};
+};
+
+[[nodiscard]] PendingTailProbe read_pending_tail_after_restore(int slave_fd) {
+    PendingTailProbe probe;
+    if (tcgetattr(slave_fd, &probe.before) != 0) return probe;
+    termios noncanonical = probe.before;
+    noncanonical.c_lflag &= ~(ICANON | ECHO);
+    noncanonical.c_cc[VMIN] = 0;
+    noncanonical.c_cc[VTIME] = 0;
+    if (tcsetattr(slave_fd, TCSANOW, &noncanonical) != 0) return probe;
+    probe.switched = true;
+    probe.bytes = cch::tests::read_available(slave_fd, std::chrono::milliseconds(50));
+    probe.restored = tcsetattr(slave_fd, TCSANOW, &probe.before) == 0;
+    if (probe.restored) (void)tcgetattr(slave_fd, &probe.after);
+    return probe;
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
@@ -1709,6 +1755,422 @@ TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and 
         // After quiescence: exactly ONE final presentation frame rendered
         CHECK(terminal.enter_output_only_calls == 1);
     }
+}
+
+// ── 4b. In-flight image payload and durable mid-stream Close ─────────────────
+
+TEST_CASE("Native TUI fullscreen exit rejects a late valid clipboard image payload arriving after Close",
+        "[coding_agent][tui][exit][clipboard][issue1019][spec]") {
+    tests::TempWorkspace temp;
+    tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+
+    /// Per-read state of the gated clipboard double: the image read starts on
+    /// the first paste, is intentionally stop-ignorant, and completes only
+    /// when the test releases the gate (with the valid tiny PNG payload).
+    struct ClipboardReadState {
+        bool read_started{false};
+        std::size_t image_reads{0};
+        std::size_t text_reads{0};
+        std::stop_token observed_token{};
+        std::shared_ptr<boost::asio::steady_timer> gate;
+    };
+
+    class GatedImageClipboard final : public cch::tui::NativeClipboard {
+    public:
+        GatedImageClipboard(boost::asio::io_context& io, std::shared_ptr<ClipboardReadState> reads)
+            : io_(io), reads_(std::move(reads)) {}
+
+        support::AsyncResult<cch::tui::NativeClipboardImageReadVariant> get_image(std::stop_token stop_token) override {
+            auto gate = std::make_shared<boost::asio::steady_timer>(io_);
+            gate->expires_at(std::chrono::steady_clock::time_point::max());
+            reads_->observed_token = stop_token;
+            reads_->gate = gate;
+            ++reads_->image_reads;
+            reads_->read_started = true;
+            return support::detail::make_async_result_on(io_.get_executor(),
+                    [gate]() -> boost::asio::awaitable<support::Expected<cch::tui::NativeClipboardImageReadVariant>> {
+                        boost::system::error_code error;
+                        co_await gate->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                        co_return cch::tui::NativeClipboardImageReadVariant{
+                                std::optional<std::vector<std::uint8_t>>{tests::decode_base64(tests::kTinyPngBase64)}};
+                    });
+        }
+
+        support::AsyncResult<cch::tui::NativeClipboardTextReadVariant> get_text(std::stop_token) override {
+            ++reads_->text_reads;
+            return support::AsyncResult<cch::tui::NativeClipboardTextReadVariant>{
+                    cch::tui::NativeClipboardTextReadVariant{std::optional<std::string>{"late text fallback"}}};
+        }
+
+        void release() {
+            auto gate = std::move(reads_->gate);
+            reads_->gate.reset();
+            if (gate) (void)gate->cancel();
+        }
+
+    private:
+        boost::asio::io_context& io_;
+        std::shared_ptr<ClipboardReadState> reads_;
+    };
+
+    const auto before_files = clipboard_image_files();
+
+    // Warm control: the same gated read of the same valid tiny PNG while the
+    // run stays live inserts the image path, so the rejected late payload in
+    // the close case below cannot be an always-rejected image branch.
+    {
+        tests::RuntimeFixture runtime;
+        boost::asio::io_context io;
+        CallCountingTerminal terminal({.columns = 80, .rows = 12});
+        auto created =
+                runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        auto reads = std::make_shared<ClipboardReadState>();
+        auto clipboard = std::make_unique<GatedImageClipboard>(io, reads);
+        auto* clipboard_pointer = clipboard.get();
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(temp.path())
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .with_native_clipboard(std::move(clipboard))
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                    CHECK(ex == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        REQUIRE(terminal.inner().inject_input("\x16"));
+        REQUIRE(pump_until(io, [&] { return reads->read_started; }));
+        CHECK(reads->image_reads == 1);
+        clipboard_pointer->release();
+        REQUIRE(pump_until(
+                io, [&] { return visible_screen(terminal.inner()).find("pi-clipboard-") != std::string::npos; }));
+        CHECK(reads->text_reads == 0);
+
+        // Clear the inserted image path so app.exit sees an empty editor.
+        REQUIRE(terminal.inner().inject_input("\x03"));
+        REQUIRE(terminal.inner().inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result.has_value());
+        CHECK(run_result->has_value());
+        CHECK(terminal.enter_output_only_calls == 1);
+
+        const auto after_files = clipboard_image_files();
+        REQUIRE(after_files.size() == before_files.size() + 1);
+        for (const auto& path : after_files) {
+            if (std::find(before_files.begin(), before_files.end(), path) == before_files.end()) {
+                std::error_code remove_error;
+                CHECK(std::filesystem::remove(path, remove_error));
+                CHECK_FALSE(remove_error);
+            }
+        }
+    }
+
+    // Close while the image read is suspended: the engine's exit requests the
+    // run stop token, quiescence waits for the stop-ignorant read, and the
+    // late valid payload is rejected before any temp file or editor insertion.
+    {
+        tests::RuntimeFixture runtime;
+        boost::asio::io_context io;
+        CallCountingTerminal terminal({.columns = 80, .rows = 12});
+        auto created =
+                runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        auto reads = std::make_shared<ClipboardReadState>();
+        auto clipboard = std::make_unique<GatedImageClipboard>(io, reads);
+        auto* clipboard_pointer = clipboard.get();
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(temp.path())
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .with_native_clipboard(std::move(clipboard))
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                    CHECK(ex == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        REQUIRE(terminal.inner().inject_input("\x16"));
+        REQUIRE(pump_until(io, [&] { return reads->read_started; }));
+
+        REQUIRE(terminal.inner().inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return reads->observed_token.stop_requested(); }));
+        CHECK(reads->image_reads == 1);
+        CHECK(reads->text_reads == 0);
+        // The suspended flow gates the final presentation while Close waits.
+        CHECK(terminal.enter_output_only_calls == 0);
+
+        clipboard_pointer->release();
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result.has_value());
+        CHECK(run_result->has_value());
+        CHECK(terminal.enter_output_only_calls == 1);
+
+        // The late payload was rejected: no temporary image path was created
+        // and the healthy control's editor projection never appeared here.
+        const auto after_files = clipboard_image_files();
+        CHECK(after_files.size() == before_files.size());
+        CHECK(visible_screen(terminal.inner()).find("pi-clipboard-") == std::string::npos);
+        CHECK(reads->image_reads == 1);
+        CHECK(reads->text_reads == 0);
+        CHECK_FALSE(terminal.inner().modes().started);
+        CHECK(terminal.inner().modes().cursor_visible);
+    }
+}
+
+namespace {
+
+/// Mid-stream Close provider: emits a partial assistant text, then holds the
+/// request on a gate. A requested stop (session Close / abort) fires the stop
+/// callback exactly once and releases the gate, and the run settles with the
+/// authoritative aborted Assistant Message carrying the partial content.
+class MidStreamCloseProvider final : public tests::ScriptedProvider {
+public:
+    MidStreamCloseProvider() : ScriptedProvider("sdk-host") {}
+    MidStreamCloseProvider(MidStreamCloseProvider&&) = delete;
+    MidStreamCloseProvider& operator=(MidStreamCloseProvider&&) = delete;
+    ~MidStreamCloseProvider() override = default;
+    MidStreamCloseProvider(const MidStreamCloseProvider&) = delete;
+    MidStreamCloseProvider& operator=(const MidStreamCloseProvider&) = delete;
+
+    [[nodiscard]] ai::ModelStream stream(
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
+        return ai::detail::make_model_stream(
+                [this, model = std::move(model), context = std::move(context), options = std::move(options)](
+                        ai::AssistantEventSink sink) mutable
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    auto partial = ai::assistant_text_message("");
+                    partial.content.clear();
+                    partial.provider = "mid-stream-fake";
+                    partial.api = "fake";
+                    partial.model = model.id;
+                    // The durable store rejects an assistant message without a
+                    // real Unix-epoch timestamp (issue #665), unlike the
+                    // in-memory store the older abort-aware fake feeds.
+                    partial.timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                            std::chrono::system_clock::now().time_since_epoch())
+                                                .count();
+                    if (auto emitted = sink(ai::AssistantStartEvent{partial}); !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    partial.content.emplace_back(ai::text_content(""));
+                    if (auto emitted = sink(ai::TextStartEvent{
+                                .content_index = 0,
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+                    std::get<ai::TextContent>(partial.content[0]).text = "partial assistant output";
+                    if (auto emitted = sink(ai::TextDeltaEvent{
+                                .content_index = 0,
+                                .delta = "partial assistant output",
+                                .partial = partial,
+                        });
+                            !emitted) {
+                        co_return std::unexpected(emitted.error());
+                    }
+
+                    const auto executor = co_await boost::asio::this_coro::executor;
+                    gate_.emplace(executor);
+                    gate_->expires_at(std::chrono::steady_clock::time_point::max());
+                    started = true;
+                    std::stop_callback cancellation{options.stop_token, [this] {
+                                                        ++stop_callback_count;
+                                                        if (gate_) (void)gate_->cancel();
+                                                    }};
+                    boost::system::error_code error;
+                    if (!options.stop_token.stop_requested()) {
+                        co_await gate_->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                    }
+                    // The gate timer is bound to the run's executor; release it
+                    // before that io_context dies so the provider can outlive the
+                    // run (ASan, #473).
+                    gate_.reset();
+
+                    if (options.stop_token.stop_requested()) {
+                        partial.stop_reason = ai::AssistantStopReason::Aborted;
+                        partial.error_message = "prompt aborted";
+                        if (auto emitted = sink(ai::AssistantErrorEvent{
+                                    .reason = ai::AssistantStopReason::Aborted,
+                                    .error = partial,
+                            });
+                                !emitted) {
+                            co_return std::unexpected(emitted.error());
+                        }
+                        co_return partial;
+                    }
+                    co_return std::unexpected(support::make_error(
+                            support::ErrorCode::Unknown, "mid-stream fake released without cancellation"));
+                });
+    }
+
+    bool started{false};
+    std::size_t stop_callback_count{0};
+
+private:
+    std::optional<boost::asio::steady_timer> gate_;
+};
+
+} // namespace
+
+TEST_CASE("Native TUI mid-stream Close persists exactly the user and aborted partial assistant messages",
+        "[coding_agent][tui][exit][session][issue1019][spec]") {
+    tests::TempWorkspace temp;
+    tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.interrupt":"f7","app.exit":"f6"})");
+    const auto session_file = temp.path() / "mid-stream-close.jsonl";
+
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<MidStreamCloseProvider>();
+    auto* provider_pointer = provider.get();
+    auto options = session_options(temp, std::move(provider));
+    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
+    REQUIRE(created.has_value());
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    auto& session = *created->session;
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 12});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    coding_agent::tui::InteractiveSessionRunBuilder{}
+                            .with_session(session)
+                            .with_agent_config_directory(config.path())
+                            .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                            .build()),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.inject_input("persist mid-stream close\r"));
+    REQUIRE(pump_until(io, [&] {
+        return provider_pointer->started &&
+               visible_screen(terminal).find("partial assistant output") != std::string::npos;
+    }));
+
+    // Close while the partial stream is gated: the run's cancellation fires the
+    // request's stop callback exactly once and the gate releases the provider.
+    REQUIRE(terminal.inject_input("\x1b[18~\x1b[18~\x1b[17~\x1b[17~"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result.has_value());
+    CHECK(run_result->has_value());
+    CHECK(provider_pointer->stop_callback_count == 1);
+
+    REQUIRE(session.session_path().has_value());
+    REQUIRE(std::filesystem::exists(*session.session_path()));
+    // Persistence is admitted off the interaction loop (ADR 0064): wait on the
+    // durable typed outcome, not a bare interaction drain.
+    const auto persisted_message_count = [&]() -> std::size_t {
+        const auto persisted = harness::session::SessionStore::load(*session.session_path());
+        return persisted ? persisted->messages.size() : 0;
+    };
+    REQUIRE(pump_until(io, [&] { return persisted_message_count() == 3; }));
+    const auto loaded_result = harness::session::SessionStore::load(*session.session_path());
+    REQUIRE(loaded_result.has_value());
+    const auto& loaded = loaded_result->messages;
+    REQUIRE(loaded.size() == 3);
+    CHECK(std::holds_alternative<ai::SystemMessage>(loaded[0]));
+    const auto* user_message = std::get_if<ai::UserMessage>(&loaded[1]);
+    REQUIRE(user_message != nullptr);
+    CHECK(ai::text_from_user_message(*user_message) == "persist mid-stream close");
+    const auto* assistant_message = std::get_if<ai::AssistantMessage>(&loaded[2]);
+    REQUIRE(assistant_message != nullptr);
+    CHECK(assistant_message->stop_reason == ai::AssistantStopReason::Aborted);
+    // The persisted content is asserted whole: one exact partial text block,
+    // never a first-block projection over ignored extra content.
+    REQUIRE(assistant_message->content.size() == 1);
+    const auto* partial_text = std::get_if<ai::TextContent>(&assistant_message->content.front());
+    REQUIRE(partial_text != nullptr);
+    CHECK(partial_text->text == "partial assistant output");
+}
+
+TEST_CASE("Native TUI deferred boot creation failure writes no output and renders no final presentation",
+        "[coding_agent][tui][exit][boot][issue1019][spec]") {
+    tests::TempWorkspace temp;
+    tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+
+    tests::RuntimeFixture runtime;
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    CallCountingTerminal terminal({.columns = 120, .rows = 30});
+    boost::asio::io_context io;
+
+    coding_agent::runtime::AgentSessionCreationRequest request;
+    // A workspace that does not exist fails deferred boot session creation.
+    request.workspace = temp.path() / "missing-workspace";
+    request.session_target = coding_agent::InMemorySessionTarget{};
+    request.session_facts.no_prompt_templates = true;
+
+    coding_agent::tui::testing::ActionSinkRecorder recorder;
+    recorder.replace_session_async =
+            [models = tests::make_scripted_fake_models(), runtime_target = runtime.make_target()](
+                    std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest req,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        req.provide_user_shell = true;
+        req.execution_runtime_target = runtime_target;
+        return coding_agent::create_agent_session_async(
+                std::move(req), std::nullopt, cch::tests::cli_fake_overrides(models), stop_token);
+    };
+
+    std::ostringstream out_stream;
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_agent_config_directory(temp.path())
+                       .with_action_sink(recorder.make_sink())
+                       .with_async_session_replacement_sink(recorder.make_async_session_replacement_sink())
+                       .with_defer_boot(std::move(request))
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
+
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    REQUIRE(pump_until(io, [&] { return recorder.boot_creation_failure.size() == 1 || run_result.has_value(); }));
+
+    REQUIRE(recorder.boot_creation_failure.size() == 1);
+    CHECK_FALSE(recorder.boot_creation_failure[0].error.message.empty());
+    REQUIRE(run_result.has_value());
+    CHECK_FALSE(run_result->has_value());
+
+    // Failed startup restores the terminal without a final presentation or a
+    // resume notice: the output stream and output-only render stay untouched.
+    CHECK(out_stream.str().empty());
+    CHECK(terminal.enter_output_only_calls == 0);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK_FALSE(terminal.modes().raw_input);
+    CHECK_FALSE(terminal.modes().bracketed_paste);
+    CHECK(terminal.modes().cursor_visible);
 }
 
 // ── 5. Exact Phase Boundary Protocol & Artifact Consumers ────────────────────
@@ -3552,11 +4014,65 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         REQUIRE(stop_it != calls.end());
         CHECK(drain_index < static_cast<std::size_t>(stop_it - calls.begin()));
 
-        // The physical tail is gone: a parent shell reading the slave after the
-        // product exit finds no pending key-release bytes.
-        CHECK(cch::tests::read_available(pty->slave.get(), std::chrono::milliseconds(50)).empty());
+        // The physical tail is gone: a canonical-mode read of the restored
+        // slave would not see an incomplete key-release fragment without a
+        // newline, so probe through a temporary bounded noncanonical window
+        // and re-check the exact restored termios afterwards.
+        const auto tail_probe = read_pending_tail_after_restore(pty->slave.get());
+        REQUIRE(tail_probe.switched);
+        CHECK(tail_probe.restored);
+        CHECK(cch::tests::same_terminal_state(tail_probe.after, tail_probe.before));
+        CHECK(tail_probe.bytes.empty());
         CHECK(!terminal.modes().started);
         CHECK(!terminal.modes().raw_input);
         CHECK(terminal.modes().cursor_visible);
+    }
+}
+
+TEST_CASE("ProcessTerminal PTY drain physically discards the pending keyboard tail before stop",
+        "[coding_agent][tui][exit][pty][issue1019][spec]") {
+    auto pty = tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+
+    boost::asio::io_context io;
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = io.get_executor(),
+    });
+    REQUIRE(terminal.start([](std::string) { return cch::support::ExpectedVoid{}; },
+                            [](cch::tui::TerminalDimensions) { return cch::support::ExpectedVoid{}; })
+                    .has_value());
+    (void)cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
+
+    const std::string late_tail = "\x1b[13;5u";
+
+    SECTION("the probe reads known bytes written through the master after stop") {
+        // Counterfactual for the strengthened physical-tail probe: bytes that
+        // arrive after the product stopped are still readable when the probe
+        // switches the slave noncanonical, so an empty probe result is an
+        // observation about the buffer, not a canonical-mode artifact.
+        REQUIRE(terminal.stop().has_value());
+        REQUIRE(::write(pty->master.get(), late_tail.data(), late_tail.size()) ==
+                static_cast<ssize_t>(late_tail.size()));
+        const auto probe = read_pending_tail_after_restore(pty->slave.get());
+        REQUIRE(probe.switched);
+        REQUIRE(probe.restored);
+        CHECK(probe.bytes == late_tail);
+        CHECK(cch::tests::same_terminal_state(probe.after, probe.before));
+    }
+
+    SECTION("a real drain call discards the same pending tail") {
+        // The io context is not pumped, so only the drain's own physical read
+        // can consume the queued bytes: this isolates discard from the call.
+        REQUIRE(::write(pty->master.get(), late_tail.data(), late_tail.size()) ==
+                static_cast<ssize_t>(late_tail.size()));
+        REQUIRE(terminal.drain_input(std::chrono::milliseconds(1000), std::chrono::milliseconds(50)).has_value());
+        REQUIRE(terminal.stop().has_value());
+        const auto probe = read_pending_tail_after_restore(pty->slave.get());
+        REQUIRE(probe.switched);
+        REQUIRE(probe.restored);
+        CHECK(probe.bytes.empty());
+        CHECK(cch::tests::same_terminal_state(probe.after, probe.before));
     }
 }
