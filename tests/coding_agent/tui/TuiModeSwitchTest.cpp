@@ -2210,6 +2210,15 @@ TEST_CASE("Native TUI InteractiveEngine preserves exact nested and clipped curso
         }
         REQUIRE(pump_until(io, [&] { return engine->focus() != nullptr; }));
 
+        // The startup color query settles at its 100 ms deadline. Complete it
+        // explicitly here so a load-delayed delivery cannot add a post-switch
+        // paint frame to the recorded window; the frozen capture measured the
+        // switch after that query had settled. The later live-preference update
+        // and its render wait flush any resulting coalesced frame before the
+        // recording starts.
+        REQUIRE(terminal.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+
         // 1. Initial phase
         const auto& initial_exp = expected.at("initial");
         CHECK(engine->show_hardware_cursor() == initial_exp.at("showHardwareCursor").get_boolean());
