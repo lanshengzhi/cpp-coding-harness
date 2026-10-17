@@ -434,14 +434,16 @@ support::ExpectedVoid MainScreen::start() {
 }
 
 support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
-    if (!started_ || stopping_) return {};
+    if ((!started_ && !rendered_unstarted_) || stopping_) return {};
 
     cancel_scheduled_render();
     ++render_generation_;
     render_scheduled_ = false;
     ChildOperation operation(*this);
     stopping_ = true;
+    const bool was_unstarted = rendered_unstarted_;
     started_ = false;
+    rendered_unstarted_ = false;
     const auto stop_cursor = resolve_cursor_location();
     apply_focus(nullptr);
     overlay_focus_restore_ = {};
@@ -458,6 +460,9 @@ support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
     pending_render_ = false;
     last_render_at_.reset();
     const auto stop_result = terminal_.stop();
+    if (was_unstarted) {
+        (void)terminal_.leave_output_only();
+    }
     stopping_ = false;
 
     if (!exit_result) return std::unexpected(exit_result.error());
@@ -490,6 +495,40 @@ support::ExpectedVoid MainScreen::restore_render_state(TuiMainScreenRenderState 
 void MainScreen::reset_render_state() noexcept { render_pipeline_->reset_render_state(); }
 
 support::ExpectedVoid MainScreen::render() { return render_now(); }
+
+support::ExpectedVoid MainScreen::render_final_presentation() {
+    if (started_) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "Final presentation is only valid when renderer is unstarted"));
+    }
+    if (auto entered = terminal_.enter_output_only(); !entered) {
+        return entered;
+    }
+    cancel_scheduled_render();
+    ++render_generation_;
+    render_scheduled_ = false;
+    if (render_prepare_sink_) {
+        auto prepared = render_prepare_sink_();
+        if (!prepared) {
+            (void)terminal_.leave_output_only();
+            support::ExpectedVoid result = std::unexpected(prepared.error());
+            if (render_complete_sink_) render_complete_sink_(result);
+            return result;
+        }
+        if (!*prepared) {
+            (void)terminal_.leave_output_only();
+            return {};
+        }
+    }
+    auto result = render_frame();
+    if (!result) {
+        (void)terminal_.leave_output_only();
+    } else {
+        rendered_unstarted_ = true;
+    }
+    if (render_complete_sink_) render_complete_sink_(result);
+    return result;
+}
 
 support::ExpectedVoid MainScreen::render_now() {
     if (!started_) {

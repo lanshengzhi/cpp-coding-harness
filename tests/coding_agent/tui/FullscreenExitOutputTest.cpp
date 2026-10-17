@@ -24,7 +24,9 @@
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
+#include "support/PseudoTerminal.hpp"
 
 #include <catch2/catch_message.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -661,4 +663,201 @@ TEST_CASE("Native TUI fullscreen long transcript exit outputs complete history i
     CHECK(total_output.find("fake: turn beta") != std::string::npos);
     CHECK(total_output.find("turn gamma") != std::string::npos);
     CHECK(total_output.find("fake: turn gamma") != std::string::npos);
+}
+
+class CallCountingTerminal final : public cch::tui::Terminal {
+public:
+    explicit CallCountingTerminal(cch::tui::VirtualTerminalOptions options) : inner_(std::move(options)) {}
+
+    cch::support::ExpectedVoid start(
+            cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
+        ++start_calls;
+        return inner_.start(std::move(input_sink), std::move(resize_sink));
+    }
+
+    cch::support::ExpectedVoid stop() override {
+        ++stop_calls;
+        return inner_.stop();
+    }
+
+    cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+    cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
+    cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+    cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+    cch::support::ExpectedVoid write(std::string_view output) override { return inner_.write(output); }
+    cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
+        return inner_.set_cursor(position);
+    }
+    cch::support::ExpectedVoid set_cursor_visible(bool visible) override { return inner_.set_cursor_visible(visible); }
+    cch::support::ExpectedVoid set_alternate_screen(bool enabled) override {
+        return inner_.set_alternate_screen(enabled);
+    }
+    cch::support::ExpectedVoid set_autowrap(bool enabled) override { return inner_.set_autowrap(enabled); }
+    cch::support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override {
+        return inner_.set_scroll_margins(top_row, bottom_row);
+    }
+    cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+    cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
+    cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+    cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
+    cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    cch::support::ExpectedVoid drain_input(
+            std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {
+        return inner_.drain_input(max_ms, idle_ms);
+    }
+    cch::support::ExpectedVoid enter_output_only() override { return inner_.enter_output_only(); }
+    cch::support::ExpectedVoid leave_output_only() override { return inner_.leave_output_only(); }
+
+    cch::tui::VirtualTerminal& inner() { return inner_; }
+    const cch::tui::VirtualTerminal& inner() const { return inner_; }
+
+    std::size_t start_calls{0};
+    std::size_t stop_calls{0};
+
+private:
+    cch::tui::VirtualTerminal inner_;
+};
+
+TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and PTY contracts",
+        "[coding_agent][tui][exit][probe][spec]") {
+    SECTION("VirtualTerminal start/stop delta and modes during exit") {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+
+        tests::RuntimeFixture runtime;
+        boost::asio::io_context io;
+
+        CallCountingTerminal terminal({.columns = 40, .rows = 10});
+        REQUIRE(terminal.inner().seed_shell_content({"Line 1", "Line 2"}, {.column = 0, .row = 2}).has_value());
+
+        auto created =
+                runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(temp.path())
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                    CHECK(ex == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        REQUIRE(terminal.modes().alternate_screen);
+        CHECK(terminal.start_calls == 1);
+        CHECK(terminal.stop_calls == 0);
+
+        // Send user prompt
+        REQUIRE(terminal.inner().inject_input("prompt text\r"));
+        REQUIRE(pump_until(
+                io, [&] { return visible_screen(terminal.inner()).find("fake: prompt text") != std::string::npos; }));
+
+        const auto start_count_before_exit = terminal.start_calls;
+        const auto stop_count_before_exit = terminal.stop_calls;
+
+        // Request clean exit
+        REQUIRE(terminal.inner().inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result.has_value());
+        CHECK(run_result->has_value());
+
+        // Delta check: startDelta == 0, stopDelta == 2
+        const auto start_delta = terminal.start_calls - start_count_before_exit;
+        const auto stop_delta = terminal.stop_calls - stop_count_before_exit;
+        CHECK(start_delta == 0);
+        CHECK(stop_delta == 2);
+
+        // Terminal modes: raw_input must be false, started must be false
+        CHECK_FALSE(terminal.modes().started);
+        CHECK_FALSE(terminal.modes().raw_input);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+
+        // Final output ordering: verify scrollback + screen contains expected content
+        const auto scrollback = scrollback_text(terminal.inner());
+        const auto screen = visible_screen(terminal.inner());
+        const std::string total_output = scrollback + "\n" + screen;
+        CHECK(total_output.find("Line 1") != std::string::npos);
+        CHECK(total_output.find("prompt text") != std::string::npos);
+        CHECK(total_output.find("fake: prompt text") != std::string::npos);
+
+        // Trailing bytes from stop: last write was newline advance + cursor show
+        REQUIRE_FALSE(terminal.inner().output().empty());
+        const auto& last_output = terminal.inner().output().back();
+        CHECK(last_output.find("\n") != std::string::npos);
+        CHECK(last_output.find("B") != std::string::npos);
+    }
+
+    SECTION("ProcessTerminal output-only mode nonblocking flag management and PTY write") {
+        auto pty = tests::open_pseudo_terminal(40, 10);
+        REQUIRE(pty);
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+
+        // Initially unstarted
+        CHECK_FALSE(terminal.modes().started);
+        const auto initial_flags = ::fcntl(pty->slave.get(), F_GETFL, 0);
+        CHECK(initial_flags >= 0);
+        CHECK((initial_flags & O_NONBLOCK) == 0);
+
+        // Enter output-only presentation mode
+        REQUIRE(terminal.enter_output_only());
+        const auto output_only_flags = ::fcntl(pty->slave.get(), F_GETFL, 0);
+        CHECK((output_only_flags & O_NONBLOCK) != 0);
+
+        // Write output in output-only mode
+        REQUIRE(terminal.write("PTY output test\r\n"));
+
+        // Read from master fd to verify delivery
+        std::array<char, 128> buf{};
+        const auto bytes_read = ::read(pty->master.get(), buf.data(), buf.size());
+        REQUIRE(bytes_read > 0);
+        std::string received(buf.data(), static_cast<std::size_t>(bytes_read));
+        CHECK(received.find("PTY output test") != std::string::npos);
+
+        // Leave output-only mode: flags must be restored
+        REQUIRE(terminal.leave_output_only());
+        const auto restored_flags = ::fcntl(pty->slave.get(), F_GETFL, 0);
+        CHECK((restored_flags & O_NONBLOCK) == 0);
+        CHECK(restored_flags == initial_flags);
+    }
+
+    SECTION("ProcessTerminal broken descriptor error propagation and flag cleanup") {
+        auto pty = tests::open_pseudo_terminal(40, 10);
+        REQUIRE(pty);
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+
+        REQUIRE(terminal.enter_output_only());
+
+        // Close master to break PTY
+        pty->master.reset();
+
+        // Write to broken PTY fails gracefully with EIO
+        auto write_result = terminal.write("should fail on broken pty");
+        CHECK_FALSE(write_result);
+
+        // Leave output-only cleans up without hanging
+        (void)terminal.leave_output_only();
+    }
 }

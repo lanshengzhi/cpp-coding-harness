@@ -151,9 +151,7 @@ class Terminal {
 public:
     virtual ~Terminal() = default;
 
-    [[nodiscard]] virtual support::ExpectedVoid start(
-        TerminalInputSink input_sink,
-        TerminalResizeSink resize_sink) = 0;
+    [[nodiscard]] virtual support::ExpectedVoid start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) = 0;
     [[nodiscard]] virtual support::ExpectedVoid stop() = 0;
     [[nodiscard]] virtual TerminalDimensions dimensions() const = 0;
     [[nodiscard]] virtual TerminalCapabilities capabilities() const = 0;
@@ -211,9 +209,15 @@ public:
     /// protocol push and modifyOtherKeys are disabled first, then input is
     /// consumed (discarded) until idle_ms passes without data or max_ms
     /// elapses, matching pi's drainInput defaults (1000ms / 50ms).
-    [[nodiscard]] virtual support::ExpectedVoid drain_input(
-        std::chrono::milliseconds max_ms = kDrainInputMaxMs,
-        std::chrono::milliseconds idle_ms = kDrainInputIdleMs) = 0;
+    [[nodiscard]] virtual support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
+            std::chrono::milliseconds idle_ms = kDrainInputIdleMs) = 0;
+
+    /// Enter explicit output-only presentation mode (unstarted final render path).
+    /// Allows write/cursor output operations without starting raw input, input loop,
+    /// resize listening, or keepalive timers.
+    [[nodiscard]] virtual support::ExpectedVoid enter_output_only() { return {}; }
+    /// Exit output-only presentation mode and restore descriptor flags.
+    [[nodiscard]] virtual support::ExpectedVoid leave_output_only() { return {}; }
 };
 
 } // namespace cch::tui

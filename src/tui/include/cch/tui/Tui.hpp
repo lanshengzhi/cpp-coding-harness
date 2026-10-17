@@ -71,6 +71,7 @@ public:
     [[nodiscard]] support::ExpectedVoid restore_render_state(TuiMainScreenRenderState state);
     void reset_render_state() noexcept;
     [[nodiscard]] support::ExpectedVoid render() override;
+    [[nodiscard]] support::ExpectedVoid render_final_presentation() override;
     /// Clear the physical screen and reset differential-render state so the
     /// next render repaints its complete current presentation.
     [[nodiscard]] support::ExpectedVoid clear_screen() override;
@@ -167,6 +168,7 @@ private:
     bool clear_on_shrink_{false};
     bool started_{false};
     bool stopping_{false};
+    bool rendered_unstarted_{false};
     bool pending_render_{false};
 };
 

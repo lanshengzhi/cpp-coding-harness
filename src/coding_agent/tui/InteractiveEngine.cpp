@@ -535,11 +535,11 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(
     if (auto wired = wire_selected_root(); !wired) return std::unexpected(wired.error());
     tui_->invalidate();
     if (auto focused = tui_->set_focus(focus); !focused) return std::unexpected(focused.error());
-    if (auto started = tui_->start(); !started) return std::unexpected(started.error());
-    tui_started_ = true;
     if (!start_renderer) {
         return true;
     }
+    if (auto started = tui_->start(); !started) return std::unexpected(started.error());
+    tui_started_ = true;
     // pi rebinds the live consumers after `start()`: the theme's terminal
     // colour-scheme listener, then the extension terminal input listeners
     // (`rebindExtensionTerminalInputListeners`, `interactive-mode.ts:928`).
@@ -729,8 +729,14 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     if (tui_started_ && was_fullscreen && exit_output == FullscreenExitOutput::Transcript) {
         auto switched =
                 switch_tui_mode(coding_agent::TuiMode::Regular, /*restore_progress=*/false, /*start_renderer=*/false);
-        if (switched && *switched) {
-            (void)tui_->render();
+        if (!switched) {
+            completion_result_ = std::unexpected(presentation_error(switched.error(), "Native TUI exit switch failed"));
+        } else {
+            auto rendered = tui_->render_final_presentation();
+            if (!rendered) {
+                completion_result_ =
+                        std::unexpected(presentation_error(rendered.error(), "Native TUI exit render failed"));
+            }
         }
     }
 

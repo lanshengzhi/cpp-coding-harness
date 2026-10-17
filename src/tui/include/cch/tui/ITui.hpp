@@ -70,6 +70,9 @@ public:
     [[nodiscard]] virtual support::ExpectedVoid start() = 0;
     [[nodiscard]] virtual support::ExpectedVoid stop(TuiStopOptions options = {}) = 0;
     [[nodiscard]] virtual support::ExpectedVoid render() = 0;
+    /// Render one final presentation frame while unstarted (exit transcript output).
+    /// Emits rendered components in output-only terminal mode without starting input loops.
+    [[nodiscard]] virtual support::ExpectedVoid render_final_presentation() = 0;
     [[nodiscard]] virtual support::ExpectedVoid clear_screen() = 0;
     virtual void request_render(bool force = false) = 0;
     virtual void request_immediate_render() = 0;

@@ -193,6 +193,7 @@ public:
     [[nodiscard]] support::ExpectedVoid start() override;
     [[nodiscard]] support::ExpectedVoid stop(TuiStopOptions options = {}) override;
     [[nodiscard]] support::ExpectedVoid render() override;
+    [[nodiscard]] support::ExpectedVoid render_final_presentation() override;
     [[nodiscard]] support::ExpectedVoid clear_screen() override;
     void request_render(bool force = false) override;
     void request_immediate_render() override;

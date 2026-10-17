@@ -700,6 +700,11 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
 
 support::ExpectedVoid AltScreen::render() { return render_now(); }
 
+support::ExpectedVoid AltScreen::render_final_presentation() {
+    return std::unexpected(
+            support::make_error(support::ErrorCode::Validation, "AltScreen does not support final presentation"));
+}
+
 void AltScreen::toggle_search() {
     if (active_search_) {
         close_search();

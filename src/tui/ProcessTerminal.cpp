@@ -383,12 +383,14 @@ struct ProcessTerminal::Impl {
     /// loop wakes at least this often to re-read TIOCGWINSZ, so resizes are
     /// detected even without SIGWINCH delivery.
     std::chrono::steady_clock::time_point last_resize_check{};
+    bool output_only{false};
+    int original_output_only_flags{-1};
 };
 
 namespace {
 
 template <typename T> [[nodiscard]] support::ExpectedVoid require_started(const T& impl) {
-    if (impl.modes.started) return {};
+    if (impl.modes.started || impl.output_only) return {};
     return std::unexpected(support::make_error(
             support::ErrorCode::Validation, "Process Terminal must be started before terminal operations"));
 }
@@ -1198,6 +1200,52 @@ ProcessTerminal::ProcessTerminal(ProcessTerminalOptions options) : impl_(std::ma
 
 ProcessTerminal::~ProcessTerminal() { (void)stop(); }
 
+support::ExpectedVoid ProcessTerminal::enter_output_only() {
+    std::lock_guard lock(impl_->mutex);
+    if (impl_->modes.started) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Process Terminal is already started"));
+    }
+    if (impl_->output_only) return {};
+
+    const auto flags = ::fcntl(impl_->options.output_fd, F_GETFL, 0);
+    if (flags < 0) {
+        return std::unexpected(process_error("Process Terminal could not get output flags", "fcntl(F_GETFL)", errno));
+    }
+    if ((flags & O_NONBLOCK) == 0) {
+        impl_->original_output_only_flags = flags;
+        if (::fcntl(impl_->options.output_fd, F_SETFL, flags | O_NONBLOCK) != 0) {
+            return std::unexpected(
+                    process_error("Process Terminal could not set nonblocking output", "fcntl(F_SETFL)", errno));
+        }
+        impl_->output_nonblock = true;
+    }
+    impl_->output_only = true;
+    return {};
+}
+
+support::ExpectedVoid ProcessTerminal::leave_output_only() {
+    std::lock_guard lock(impl_->mutex);
+    if (!impl_->output_only) return {};
+    impl_->output_only = false;
+
+    drain_output_locked(*impl_, true);
+    impl_->output_queue.clear();
+    impl_->output_queued_bytes = 0;
+    impl_->output_draining = false;
+
+    support::ExpectedVoid result;
+    if (impl_->original_output_only_flags >= 0) {
+        if (::fcntl(impl_->options.output_fd, F_SETFL, impl_->original_output_only_flags) != 0) {
+            result = std::unexpected(process_error(
+                    "Process Terminal could not restore output descriptor flags", "fcntl(F_SETFL)", errno));
+        }
+        impl_->original_output_only_flags = -1;
+        impl_->output_nonblock = false;
+    }
+    return result;
+}
+
 const std::string& ProcessTerminal::write_log_path() const noexcept { return impl_->write_log_path; }
 support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) {
     std::unique_lock<std::mutex> lock(impl_->mutex);
@@ -1346,19 +1394,37 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
         impl_->input_state.stdin_buffer.process(startup_input);
         arm_fragment_deadline(*impl_);
     }
-        lock.lock();
-        prepare_async_io(*impl_);
-        // The preparation phase above has no outstanding asynchronous operations.
-        // From this call onward initiation is in progress; exceptions intentionally
-        // follow the post-initiation contract rather than rolling state back.
-        start_async_io(*impl_);
-        return {};
+    lock.lock();
+    prepare_async_io(*impl_);
+    // The preparation phase above has no outstanding asynchronous operations.
+    // From this call onward initiation is in progress; exceptions intentionally
+    // follow the post-initiation contract rather than rolling state back.
+    start_async_io(*impl_);
+    return {};
 }
 
 support::ExpectedVoid ProcessTerminal::stop() {
     std::lock_guard lock(impl_->mutex);
-    if (!impl_->modes.started) {
+    if (!impl_->modes.started && !impl_->output_only) {
         return {};
+    }
+
+    if (impl_->output_only) {
+        impl_->output_only = false;
+        drain_output_locked(*impl_, true);
+        impl_->output_queue.clear();
+        impl_->output_queued_bytes = 0;
+        impl_->output_draining = false;
+        support::ExpectedVoid result;
+        if (impl_->original_output_only_flags >= 0) {
+            if (::fcntl(impl_->options.output_fd, F_SETFL, impl_->original_output_only_flags) != 0) {
+                result = std::unexpected(process_error(
+                        "Process Terminal could not restore output descriptor flags", "fcntl(F_SETFL)", errno));
+            }
+            impl_->original_output_only_flags = -1;
+            impl_->output_nonblock = false;
+        }
+        return result;
     }
 
     if (impl_->session_alive) {

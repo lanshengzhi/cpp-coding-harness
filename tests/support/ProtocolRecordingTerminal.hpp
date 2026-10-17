@@ -111,6 +111,9 @@ public:
         return inner_.drain_input(max_ms, idle_ms);
     }
 
+    [[nodiscard]] cch::support::ExpectedVoid enter_output_only() override { return inner_.enter_output_only(); }
+    [[nodiscard]] cch::support::ExpectedVoid leave_output_only() override { return inner_.leave_output_only(); }
+
     [[nodiscard]] cch::support::ExpectedVoid inject_input(std::string input) {
         return inner_.inject_input(std::move(input));
     }
