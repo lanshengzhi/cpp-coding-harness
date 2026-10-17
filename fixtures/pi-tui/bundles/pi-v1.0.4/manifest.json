@@ -129,6 +129,14 @@
       {
         "path": "capture/recapture-fullscreen-exit-output.mts",
         "sha256": "9458bbe411224d536645b12e556f3da4be2f8c608270689925250a48539839c1"
+      },
+      {
+        "path": "capture/fullscreen-exit-protocol-scenarios.mts",
+        "sha256": "9e6825021aedae4306d768f4567abdb90f424e3af13246f45e4ecf6f674bbc90"
+      },
+      {
+        "path": "capture/recapture-fullscreen-exit-protocol.mts",
+        "sha256": "635c2b625cc40a7dec916935d6c9bb386699f8e59e1f095999b992196e3f6367"
       }
     ]
   },
@@ -542,6 +550,18 @@
         "packages/tui/src/tui.ts:970",
         "packages/tui/src/tui-main-screen.ts:169",
         "packages/tui/src/tui-alt-screen.ts:399"
+      ]
+    },
+    {
+      "path": "fullscreen-exit-protocol.json",
+      "family": "fullscreen-exit-protocol",
+      "bytes": 127239,
+      "sha256": "b61392feed4befa812eaf1ecaaa4c3b98cbf05b5d41762d9919daf7072c84eae",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:stopInteractiveTui,switchTuiMode",
+        "packages/tui/src/tui-main-screen.ts:beforeTerminalStop",
+        "packages/tui/src/tui-alt-screen.ts:afterTerminalStop",
+        "packages/tui/src/tui.ts:Tui.stop,Tui.renderNow"
       ]
     }
   ]

@@ -491,13 +491,14 @@ and terminal restoration through frozen `InteractiveMode.prototype.stopInteracti
   to a regular `TuiMainScreen` without starting a replacement renderer, `renderNow()` outputs the
   transcript once to the main buffer, and `MainScreen.stop({ preserveScreen: false })` leaves the cursor
   below the rendered lines. The terminal start count does not advance; the terminal stop count advances
-  by 2 (once during switch, once on final stop).
+  by 2 (once during switch, once on final stop). Trimmed non-empty scrollback lines and mode/buffer
+  transitions are recorded.
 - `fullscreen-resume-hint-exit` observes fullscreen exit under `fullscreenExitOutput = "resume-hint"`:
   the mode remains fullscreen, the alternate buffer is exited with `preserveScreen: true`, no transcript
-  or document lines are emitted, the main buffer's original content is preserved byte-identically,
+  or document lines are emitted, the main buffer's original content lines are retained in scrollback,
   and the terminal stop count advances by 1.
 - `regular-mode-exit` observes exit from an explicit regular session: no mode switch occurs,
-  `preserveScreen: false` leaves the incremental conversation lines and final shell cursor in place,
+  `preserveScreen: false` leaves the incremental conversation lines in place,
   and `fullscreenExitOutput` setting variations produce identical regular-screen outcomes.
 - `empty-transcript-exit` observes fullscreen transcript exit with an empty conversation document,
   rendering only the remaining mounted dock/editor rows into the main buffer.
@@ -511,11 +512,39 @@ and terminal restoration through frozen `InteractiveMode.prototype.stopInteracti
   single-quote-escaped), unpersisted sessions (null), missing session files (null), non-TTY stdout (null),
   and the exact dimmed notice styling `\x1b[2mTo resume this session:\x1b[22m <command>\n`.
 
-Artifact 33 preserves all prior 32 artifact bytes, baseline metadata, and generator source digests.
+Artifact 33 records high-level scenario summaries with trimmed lines and start/stop counter deltas;
+it does not measure raw escape protocol bytes, phase transitions, cursor coordinates, or un-trimmed full screen lines.
+All prior 32 artifact bytes, baseline metadata, and generator source digests remain immutable.
 `capture/fullscreen-exit-output-scenarios.mts` holds the scenario bodies;
 `capture/recapture-fullscreen-exit-output.mts` is the append recipe (manifest 32 → 33).
-The captured scenarios execute over `VirtualTerminal` and instrumented product harnesses;
-actual subprocess, PTY, and signal exit lifecycles are validated in C++ consumer test suites.
+
+To fill measurement gaps for cursor coordinates, escape sequence protocol, and regular exit rendering,
+`fullscreen-exit-protocol.json` (artifact 34) records eight exact scenarios over frozen
+`InteractiveMode.prototype.stopInteractiveTui` and `VirtualTerminal`:
+- `fullscreen-transcript-empty`: fullscreen transcript exit with empty conversation document (40x10).
+- `fullscreen-transcript-short`: fullscreen transcript exit with short conversation document (40x10).
+- `fullscreen-transcript-long`: fullscreen transcript exit with long conversation document (40x8).
+- `fullscreen-resume-hint`: fullscreen exit under `fullscreenExitOutput = "resume-hint"` (40x10).
+- `regular-clean-transcript`: clean regular session exit with transcript setting (40x10).
+- `regular-clean-resume-hint`: clean regular session exit with resume-hint setting (40x10).
+- `regular-pending-mutation-stop`: regular session with pending document mutation before exit, executing
+  frozen source `stopInteractiveTui` without extra render calls; measures that pending mutations remain
+  un-rendered in terminal output because frozen regular exit only executes `ui.stop({ preserveScreen: false })`.
+- `regular-pending-mutation-render-now-stop`: paired contrast case executing `renderer.renderNow()` immediately
+  before `stopInteractiveTui`, verifying that an explicit pre-stop render emits the pending mutation into the main buffer.
+
+Artifact 34 measures and records exact runtime observations at each phase boundary:
+`settledbeforeexit`, `switchstop`, `finalrender`, and `finalstop` (only actual phases present).
+Recorded properties include:
+- Total raw write counts and byte lengths, all raw write chunks, and parsed escape control tokens in order.
+- Public `VirtualTerminal`/`xterm` cursor coordinates (`cursorX`, `cursorY`, `baseY`, `viewportY`), cursor visibility,
+  and terminal modes (`bracketedPasteMode`, alternate buffer).
+- Screen lines with trailing spaces preserved vs trimmed, and full scrollback lines.
+- Final cursor cleanup order (`" "`, `\x1b[1B`, `\r\n`) and newline writes from `TuiMainScreen.prototype.beforeTerminalStop`.
+- Distinction between source logic (inspection of frozen TypeScript source) and measured runtime observations over `VirtualTerminal`.
+Artifact 34 preserves all prior 33 artifact bytes, baseline metadata, and generator source digests.
+`capture/fullscreen-exit-protocol-scenarios.mts` holds the scenario bodies;
+`capture/recapture-fullscreen-exit-protocol.mts` is the append recipe (manifest 33 → 34).
 
 
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
