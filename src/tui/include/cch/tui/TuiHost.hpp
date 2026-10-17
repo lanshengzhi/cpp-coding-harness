@@ -92,7 +92,10 @@ public:
     void set_terminal_color_scheme_notifications(bool enabled, bool started, bool stopping);
     [[nodiscard]] std::future<TerminalColors> query_terminal_colors(TerminalColorsQueryOptions options);
     /// Cancel every pending color query: resolve its promise with the partial
-    /// result, drop its callbacks and wake its timer.
+    /// result, drop its callbacks and wake its timer. Renderer-handoff mode
+    /// (`preserve_completion`) instead detaches the pending queries from input
+    /// routing and keeps their completion and partial colors until the original
+    /// deadline; `on_late_reply` is cleared in both modes.
     void cancel_color_queries(bool preserve_completion = false);
 
     /// Apply focus state: the previously focused target is unfocused, then the

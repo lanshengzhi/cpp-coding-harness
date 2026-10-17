@@ -546,8 +546,10 @@ TEST_CASE("Disposed and destroyed theme controllers suppress detached query comp
     }
     tui::AltScreen replacement{harness.terminal};
     REQUIRE(replacement.start());
+    // The retired 100 ms completion must land well before this backstop, so an
+    // un-gated delivery cannot slip past the assertion on a stalled lane.
     auto marker = replacement.query_terminal_colors(
-            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{150}});
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{400}});
     REQUIRE(marker.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
     CHECK(harness.report_count() == 0);
     REQUIRE(replacement.stop());
