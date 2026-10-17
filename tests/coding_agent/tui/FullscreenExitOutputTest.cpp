@@ -22,9 +22,14 @@
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
+#include "coding_agent/tui/ChatViewport.hpp"
+#include <cch/tui/AltScreen.hpp>
+#include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/ProcessTerminal.hpp>
+#include <cch/tui/Text.hpp>
+#include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include "support/PseudoTerminal.hpp"
 
@@ -104,6 +109,67 @@ namespace {
     }
     co_return co_await engine->finish();
 }
+
+class CallCountingTerminal final : public cch::tui::Terminal {
+public:
+    explicit CallCountingTerminal(cch::tui::VirtualTerminalOptions options) : inner_(std::move(options)) {}
+
+    cch::support::ExpectedVoid start(
+            cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
+        ++start_calls;
+        return inner_.start(std::move(input_sink), std::move(resize_sink));
+    }
+
+    cch::support::ExpectedVoid stop() override {
+        ++stop_calls;
+        return inner_.stop();
+    }
+
+    cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+    cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
+    cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+    cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+    cch::support::ExpectedVoid write(std::string_view output) override { return inner_.write(output); }
+    cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
+        return inner_.set_cursor(position);
+    }
+    cch::support::ExpectedVoid set_cursor_visible(bool visible) override { return inner_.set_cursor_visible(visible); }
+    cch::support::ExpectedVoid set_alternate_screen(bool enabled) override {
+        return inner_.set_alternate_screen(enabled);
+    }
+    cch::support::ExpectedVoid set_autowrap(bool enabled) override { return inner_.set_autowrap(enabled); }
+    cch::support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override {
+        return inner_.set_scroll_margins(top_row, bottom_row);
+    }
+    cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+    cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
+    cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+    cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
+    cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    cch::support::ExpectedVoid drain_input(
+            std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {
+        return inner_.drain_input(max_ms, idle_ms);
+    }
+    cch::support::ExpectedVoid enter_output_only() override {
+        ++enter_output_only_calls;
+        return inner_.enter_output_only();
+    }
+    cch::support::ExpectedVoid leave_output_only() override {
+        ++leave_output_only_calls;
+        return inner_.leave_output_only();
+    }
+
+    cch::tui::VirtualTerminal& inner() { return inner_; }
+    const cch::tui::VirtualTerminal& inner() const { return inner_; }
+
+    std::size_t start_calls{0};
+    std::size_t stop_calls{0};
+    std::size_t enter_output_only_calls{0};
+    std::size_t leave_output_only_calls{0};
+
+private:
+    cch::tui::VirtualTerminal inner_;
+};
 
 } // namespace
 
@@ -477,6 +543,79 @@ TEST_CASE("Native TUI regular mode exit retains incremental output regardless of
     CHECK(total_output.find("fake: Regular mode prompt") != std::string::npos);
 }
 
+TEST_CASE("Native TUI regular exit does not render pending mutation or advance frame count during finish",
+        "[coding_agent][tui][exit][regular][pending][issue1019][spec]") {
+    tests::TempWorkspace temp;
+    tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+
+    tests::RuntimeFixture runtime;
+    boost::asio::io_context io;
+
+    CallCountingTerminal terminal({.columns = 40, .rows = 10});
+    REQUIRE(terminal.inner().seed_shell_content(
+            {"[Main Banner Shell 1]", "[Main Banner Shell 2]"}, {.column = 0, .row = 2}).has_value());
+
+    auto created =
+            runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
+    REQUIRE(created.has_value());
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    auto& session = *created->session;
+
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+
+    std::ostringstream out_stream;
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Regular)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
+
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+            io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                CHECK(ex == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.inner().inject_input("prompt text\r"));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal.inner()).find("fake: prompt text") != std::string::npos; }));
+
+    // Introduce unpainted pending state via public ModalPresenter::replace_prompt_slot before requesting exit
+    const std::string pending_text = "Mutation: unpainted pending response";
+    static_cast<coding_agent::tui::ModalPresenter&>(*engine).replace_prompt_slot(
+            std::make_shared<cch::tui::Text>(pending_text, 0, 0));
+
+    const auto render_count_before = engine->render_count();
+    const auto cursor_before = terminal.inner().cursor();
+
+    // Request clean exit and wait for engine to finish
+    engine->request_exit();
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result.has_value());
+    CHECK(run_result->has_value());
+
+    // In frozen regular stopInteractiveTui (artifact 34 scenario 7 vs scenario 8):
+    // 1. Regular exit does NOT render pending mutations during finish (render count delta is 0).
+    const auto render_count_after = engine->render_count();
+    CHECK(render_count_after == render_count_before);
+
+    // 2. The pending mutation text MUST NOT be rendered to the terminal output.
+    const auto scrollback = scrollback_text(terminal.inner());
+    const auto screen = visible_screen(terminal.inner());
+    const std::string total_output = scrollback + "\n" + screen;
+    CHECK(total_output.find(pending_text) == std::string::npos);
+
+    // 3. Stop cleanup sequence preserved (line cleanup advance + carriage return)
+    CHECK_FALSE(terminal.modes().alternate_screen);
+    CHECK(terminal.inner().cursor().row == cursor_before.row + 3);
+}
+
 TEST_CASE("Native TUI fullscreen exit dismisses active overlays before stop",
         "[coding_agent][tui][exit][fullscreen][overlay][issue1019][spec]") {
     tests::TempWorkspace temp;
@@ -664,67 +803,6 @@ TEST_CASE("Native TUI fullscreen long transcript exit outputs complete history i
     CHECK(total_output.find("turn gamma") != std::string::npos);
     CHECK(total_output.find("fake: turn gamma") != std::string::npos);
 }
-
-class CallCountingTerminal final : public cch::tui::Terminal {
-public:
-    explicit CallCountingTerminal(cch::tui::VirtualTerminalOptions options) : inner_(std::move(options)) {}
-
-    cch::support::ExpectedVoid start(
-            cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
-        ++start_calls;
-        return inner_.start(std::move(input_sink), std::move(resize_sink));
-    }
-
-    cch::support::ExpectedVoid stop() override {
-        ++stop_calls;
-        return inner_.stop();
-    }
-
-    cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
-    cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
-    cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
-    cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
-    cch::support::ExpectedVoid write(std::string_view output) override { return inner_.write(output); }
-    cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
-        return inner_.set_cursor(position);
-    }
-    cch::support::ExpectedVoid set_cursor_visible(bool visible) override { return inner_.set_cursor_visible(visible); }
-    cch::support::ExpectedVoid set_alternate_screen(bool enabled) override {
-        return inner_.set_alternate_screen(enabled);
-    }
-    cch::support::ExpectedVoid set_autowrap(bool enabled) override { return inner_.set_autowrap(enabled); }
-    cch::support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override {
-        return inner_.set_scroll_margins(top_row, bottom_row);
-    }
-    cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
-    cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
-    cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
-    cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
-    cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
-    cch::support::ExpectedVoid drain_input(
-            std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {
-        return inner_.drain_input(max_ms, idle_ms);
-    }
-    cch::support::ExpectedVoid enter_output_only() override {
-        ++enter_output_only_calls;
-        return inner_.enter_output_only();
-    }
-    cch::support::ExpectedVoid leave_output_only() override {
-        ++leave_output_only_calls;
-        return inner_.leave_output_only();
-    }
-
-    cch::tui::VirtualTerminal& inner() { return inner_; }
-    const cch::tui::VirtualTerminal& inner() const { return inner_; }
-
-    std::size_t start_calls{0};
-    std::size_t stop_calls{0};
-    std::size_t enter_output_only_calls{0};
-    std::size_t leave_output_only_calls{0};
-
-private:
-    cch::tui::VirtualTerminal inner_;
-};
 
 TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and PTY contracts",
         "[coding_agent][tui][exit][probe][issue1019][spec]") {
@@ -1439,3 +1517,4 @@ TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and 
         CHECK(terminal.enter_output_only_calls == 1);
     }
 }
+

@@ -1318,11 +1318,11 @@ support::ExpectedVoid ProcessTerminal::enter_output_only() {
         return std::unexpected(process_error("Process Terminal could not get output flags", "fcntl(F_GETFL)", errno));
     }
     if ((flags & O_NONBLOCK) == 0) {
-        impl_->original_output_only_flags = flags;
         if (::fcntl(impl_->options.output_fd, F_SETFL, flags | O_NONBLOCK) != 0) {
             return std::unexpected(
                     process_error("Process Terminal could not set nonblocking output", "fcntl(F_SETFL)", errno));
         }
+        impl_->original_output_only_flags = flags;
         impl_->output_nonblock = true;
     }
     impl_->output_only = true;

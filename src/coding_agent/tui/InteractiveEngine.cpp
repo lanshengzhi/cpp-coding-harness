@@ -759,17 +759,6 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
                 record_completion_error(presentation_error(rendered.error(), "Native TUI exit render failed"));
             }
         }
-    } else if (tui_started_ && !was_fullscreen) {
-        if (view_ != nullptr && session_ != nullptr && session_ui_ != nullptr) {
-            (void)session_ui_->drain_composed_snapshot();
-            (void)session_ui_->reconcile_snapshot(session_ui_->composed_snapshot());
-        }
-        rendering_final_presentation_ = true;
-        auto rendered = tui_->render();
-        rendering_final_presentation_ = false;
-        if (!rendered) {
-            record_completion_error(presentation_error(rendered.error(), "Native TUI exit render failed"));
-        }
     }
 
     const bool preserve_screen =

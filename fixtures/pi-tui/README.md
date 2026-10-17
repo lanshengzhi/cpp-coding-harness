@@ -537,11 +537,11 @@ Artifact 34 measures and records exact runtime observations at each phase bounda
 `settledbeforeexit`, `switchstop`, `finalrender`, and `finalstop` (only actual phases present).
 Recorded properties include:
 - Total raw write counts and byte lengths, all raw write chunks, and parsed escape control tokens in order.
-- Public `VirtualTerminal`/`xterm` cursor coordinates (`cursorX`, `cursorY`, `baseY`, `viewportY`), cursor visibility,
-  and terminal modes (`bracketedPasteMode`, alternate buffer).
-- Screen lines with trailing spaces preserved vs trimmed, and full scrollback lines.
+- Headless xterm cursor coordinates (`cursorX`, `cursorY`, `baseY`, `viewportY`) obtained from replay of actual frozen raw writes; cursor visibility uses headless xterm private `_core.coreService.isCursorHidden`, not public API.
+- Screen lines with trailing spaces preserved vs trimmed, and full scrollback lines. Screen line trimming retains rendered spaces within Text spans rather than stripping layout spacing.
 - Final cursor cleanup order (`" "`, `\x1b[1B`, `\r\n`) and newline writes from `TuiMainScreen.prototype.beforeTerminalStop`.
-- Distinction between source logic (inspection of frozen TypeScript source) and measured runtime observations over `VirtualTerminal`.
+- Distinction between source logic (inspection of frozen TypeScript source) and measured runtime observations over `VirtualTerminal`. Regular-only exit stop behavior is sourced from `InteractiveMode.prototype.stopInteractiveTui` and observed directly; intentional upstream design is not asserted without proof.
+- Bundle provenance honesty: historical envelope metadata (`revision`, `capturedAt`, `environment`) is preserved for format compatibility, with execution runtime truth recorded in `observationRun` (Node v26.12.0 on Linux x64). Actual artifact 34 digest is SHA-256 `b61392feed4befa812eaf1ecaaa4c3b98cbf05b5d41762d9919daf7072c84eae`, 127239 bytes across 8 scenarios.
 Artifact 34 preserves all prior 33 artifact bytes, baseline metadata, and generator source digests.
 `capture/fullscreen-exit-protocol-scenarios.mts` holds the scenario bodies;
 `capture/recapture-fullscreen-exit-protocol.mts` is the append recipe (manifest 33 → 34).
