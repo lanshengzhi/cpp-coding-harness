@@ -120,6 +120,8 @@ struct UserSettings {
     std::optional<std::string> device_id{std::nullopt};
     /// pi `showHardwareCursor` — Show terminal cursor while still positioning it for IME.
     std::optional<bool> show_hardware_cursor{std::nullopt};
+    /// pi `terminal.showTerminalProgress` — Show OSC 9;4 progress indicators in the terminal tab bar (default false).
+    std::optional<bool> show_terminal_progress{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -258,6 +260,16 @@ public:
     /// writes `globalSettings`); preserves every other field. A global load
     /// failure suppresses the write. No-op when unchanged.
     [[nodiscard]] support::ExpectedVoid set_show_hardware_cursor(bool enabled);
+
+    /// Resolved pi `terminal.showTerminalProgress` over the merged view (pi `getShowTerminalProgress`): default false.
+    [[nodiscard]] bool get_show_terminal_progress() const noexcept;
+
+    /// Surgical field-level write of the pi `terminal.showTerminalProgress`
+    /// field in the global scope (pi `SettingsManager.setShowTerminalProgress`,
+    /// which always writes `globalSettings.terminal.showTerminalProgress`);
+    /// preserves every other field and nested field. A global load failure
+    /// suppresses the write. No-op when unchanged.
+    [[nodiscard]] support::ExpectedVoid set_show_terminal_progress(bool enabled);
 
     /// Surgical field-level write of the pi `hideThinkingBlock` field in the
     /// global scope (pi `SettingsManager.setHideThinkingBlock`, which always

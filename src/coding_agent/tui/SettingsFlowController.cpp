@@ -78,6 +78,7 @@ void SettingsFlowController::show_settings_selector() {
     config.output_pad = hooks_.output_pad ? hooks_.output_pad() : 0;
     config.enable_skill_commands = settings_manager_->get_enable_skill_commands();
     config.show_hardware_cursor = hooks_.show_hardware_cursor && hooks_.show_hardware_cursor();
+    config.show_terminal_progress = settings_manager_->get_show_terminal_progress();
     config.thinking_level = snapshot.agent_state.thinking_level;
     const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
     config.available_thinking_levels.reserve(supported.size());
@@ -133,6 +134,17 @@ void SettingsFlowController::show_settings_selector() {
     callbacks.on_show_hardware_cursor_change = [weak](bool enabled) {
         if (const auto self = weak.lock()) {
             self->post([self, enabled] { self->set_show_hardware_cursor_setting(enabled); });
+        }
+    };
+    callbacks.on_show_terminal_progress_change = [weak](bool enabled) {
+        if (const auto self = weak.lock()) {
+            self->post([self, enabled] {
+                if (self->settings_manager_ != nullptr) {
+                    if (auto saved = self->settings_manager_->set_show_terminal_progress(enabled); !saved) {
+                        self->show_error(combined_error_text(saved.error()));
+                    }
+                }
+            });
         }
     };
     callbacks.on_thinking_level_change = [weak](std::string level) {

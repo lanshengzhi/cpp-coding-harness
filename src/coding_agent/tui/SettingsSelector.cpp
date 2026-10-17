@@ -255,6 +255,13 @@ private:
             .control = cch::tui::SettingValues{{"0", "1"}},
     });
     items.push_back({
+            .id = "terminal-progress",
+            .label = "Terminal progress",
+            .description = "Show OSC 9;4 progress indicators in the terminal tab bar",
+            .current_value = config.show_terminal_progress ? "true" : "false",
+            .control = cch::tui::SettingValues{{"true", "false"}},
+    });
+    items.push_back({
             .id = "hide-thinking",
             .label = "Hide thinking",
             .description = "Hide thinking blocks in assistant responses",
@@ -334,6 +341,12 @@ struct SettingsSelectorComponent::Impl {
                     if (id == "output-padding") {
                         if (state->callbacks.on_output_pad_change) {
                             state->callbacks.on_output_pad_change(new_value == "0" ? 0 : 1);
+                        }
+                        return {};
+                    }
+                    if (id == "terminal-progress") {
+                        if (state->callbacks.on_show_terminal_progress_change) {
+                            state->callbacks.on_show_terminal_progress_change(new_value == "true");
                         }
                         return {};
                     }

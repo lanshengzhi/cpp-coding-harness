@@ -299,6 +299,7 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         if (auto subscribed = session_ui_->bind(*session_); !subscribed) {
             return fail_start(subscribed.error());
         }
+        bind_session_progress(*session_);
     }
 
     if (auto wired = wire_selected_root(); !wired) return fail_start(wired.error());
@@ -463,7 +464,7 @@ support::ExpectedVoid InteractiveEngine::mount_selected_root(
     return {};
 }
 
-support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode mode) {
+support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode mode, bool restore_progress) {
     const auto previous_mode =
             tui_ == main_screen_.get() ? coding_agent::TuiMode::Regular : coding_agent::TuiMode::Fullscreen;
     // pi orders the same-mode no-op before the overlay guard, so re-selecting
@@ -534,10 +535,15 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode
     // survives as a per-mode lifecycle.
     if (theme_controller_) theme_controller_->rebind_tui(*tui_);
     extension_ui_host_.rebind(*tui_);
-    // pi's trailing progress restore needs `showTerminalProgress` and the
-    // streaming/compacting facts; this product has no terminal-progress setting
-    // and no caller of `Terminal::set_progress` yet, so there is nothing to
-    // restore here.
+    // pi `if (restoreProgress && this.settingsManager.getShowTerminalProgress() &&
+    // (this.session.isStreaming || this.session.isCompacting)) terminal.setProgress(true);`:
+    // restore progress only when enabled and streaming or compacting.
+    const bool show_progress = settings_manager_.has_value() && settings_manager_->get_show_terminal_progress();
+    const bool is_streaming = session_ != nullptr && session_->is_streaming();
+    const bool is_compacting = session_ != nullptr && session_->is_compacting();
+    if (restore_progress && show_progress && (is_streaming || is_compacting)) {
+        (void)terminal_.set_progress(true);
+    }
     return true;
 }
 
@@ -628,6 +634,7 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
         auto failed = fail_start(subscribed.error());
         co_return std::unexpected(failed.error());
     }
+    bind_session_progress(*session_);
     // `initialize_view` installs this context's editor right after the view
     // composition it belongs to, so the host refresh stays bare here.
     extension_ui_host_.refresh();
@@ -677,6 +684,10 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
         flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
         boost::system::error_code wait_error;
         co_await flows_settled_.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    }
+    unbind_session_progress();
+    if (settings_manager_ && settings_manager_->get_show_terminal_progress()) {
+        (void)terminal_.set_progress(false);
     }
     const auto stopped = tui_->stop();
     tui_->set_scheduler(nullptr);
@@ -972,6 +983,10 @@ boost::asio::awaitable<support::Expected<bool>> InteractiveEngine::append_projec
 support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error) {
     running_ = false;
     dispose_extension_ui();
+    unbind_session_progress();
+    if (settings_manager_ && settings_manager_->get_show_terminal_progress()) {
+        (void)terminal_.set_progress(false);
+    }
     if (session_ != nullptr) {
         session_->close();
     }
@@ -984,6 +999,51 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
                 error, stopped.error(), "Native TUI startup and terminal restoration failed"));
     }
     return std::unexpected(startup_error(error));
+}
+
+void InteractiveEngine::bind_session_progress(AgentSession& session) {
+    unbind_session_progress();
+    const auto weak = weak_from_this();
+    if (auto sub = session.subscribe([weak](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
+            if (const auto self = weak.lock()) {
+                if (std::holds_alternative<agent::TurnStartEvent>(event)) {
+                    if (self->settings_manager_ && self->settings_manager_->get_show_terminal_progress()) {
+                        (void)self->terminal_.set_progress(true);
+                    }
+                } else if (std::holds_alternative<agent::AgentEndEvent>(event)) {
+                    if (self->settings_manager_ && self->settings_manager_->get_show_terminal_progress()) {
+                        (void)self->terminal_.set_progress(false);
+                    }
+                }
+            }
+            return {};
+        });
+            sub) {
+        progress_agent_subscription_.emplace(std::move(*sub));
+    }
+
+    if (auto sub = session.subscribe_session([weak](const AgentSessionEvent& event) -> support::ExpectedVoid {
+            if (const auto self = weak.lock()) {
+                if (std::holds_alternative<CompactionStartEvent>(event)) {
+                    if (self->settings_manager_ && self->settings_manager_->get_show_terminal_progress()) {
+                        (void)self->terminal_.set_progress(true);
+                    }
+                } else if (std::holds_alternative<CompactionEndEvent>(event)) {
+                    if (self->settings_manager_ && self->settings_manager_->get_show_terminal_progress()) {
+                        (void)self->terminal_.set_progress(false);
+                    }
+                }
+            }
+            return {};
+        });
+            sub) {
+        progress_session_subscription_.emplace(std::move(*sub));
+    }
+}
+
+void InteractiveEngine::unbind_session_progress() noexcept {
+    progress_agent_subscription_.reset();
+    progress_session_subscription_.reset();
 }
 
 void InteractiveEngine::post_invalidate() {

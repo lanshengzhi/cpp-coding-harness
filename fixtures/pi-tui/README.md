@@ -366,6 +366,55 @@ exact constituent cursor commands and visibility in original order without synth
 `capture/product-cursor-layout-scenarios.mts` defines the scenarios; `capture/recapture-product-cursor-layout.mts`
 is the append recipe (same frozen revision, same `capturedAt`, same `environment`, manifest 26 → 27).
 
+`product-progress.json` records product terminal progress settings resolution, surgical nested persistence,
+mode switch restoration, and protocol constants (#1037, spec #946) covering `terminal.showTerminalProgress`
+resolution across scopes and project trust, surgical nested persistence in global settings, mode switch progress
+restoration across streaming/compaction states, and exact escape sequence definitions (`\x1b]9;4;3\x07` active,
+`\x1b]9;4;0\x07` clear).
+`capture/product-progress-scenarios.mts` defines the scenarios; `capture/recapture-product-progress.mts`
+is the append recipe (same frozen revision `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`,
+same `environment`, every other artifact byte-identical, manifest 27 → 28).
+`ProductProgressEvidenceTest` replays settings resolution, surgical persistence, switch restoration expectations,
+and protocol sequences against `SettingsManager` and `InteractiveEngine` from the verified frozen artifact.
+
+`product-progress-protocol.json` records authoritative independent product terminal progress protocol
+execution (#1037, spec #946) using real frozen `ProcessTerminal` stdout capture and `InteractiveMode`
+seams: raw OSC 9;4 sequences (`\x1b]9;4;3\x07` active, `\x1b]9;4;0\x07` clear with no trailing semicolon)
+and 1-second keepalive interval lifecycle, real `InteractiveMode.prototype.handleEvent` driving
+stdout across `turn_start`, `agent_end`, `compaction_start`, and `compaction_end` (with unrelated UI
+stubs explicitly documented), full 16-case truth matrix and restoration suppression in `switchTuiMode`
+retaining all raw ordered writes, direct `SettingsManager.setShowTerminalProgress(false)` setting toggle
+measurement proving stale progress retention until shutdown teardown, and `InteractiveMode.prototype.stop`
+clear sequence counts across active/idle/toggled states. Historical artifact 28 (`product-progress.json`,
+which exercised a manual `VirtualTerminal` double and literal constants) is partial and remains preserved
+byte-for-byte; its test acceptance role is demoted to supplemental historical checks while appended 29th
+artifact `product-progress-protocol.json` establishes the authoritative protocol acceptance boundary without
+deleting existing bytes.
+Runtime observation boundaries are recorded honestly: the raw keepalive phase observes presence/absence
+of the background interval, not its 1000ms wall-clock timing (`expected.keepaliveIntervalMs` is a source-derived
+literal); switch capture observes the synchronous method boundary and suppresses cleanup/queued paints after
+`stopCapturing` (the brief observer sleep is cleanup, not proof all async output is retained); the accepted
+focus is synchronous OSC 9;4 transitions rather than complete paint/query parity; scenario 5 retains independent
+exact clear counts across active/idle/toggled states, but not raw writes (scenario 4 phase 4 and scenario 1
+`stopActive` retain raw stop protocol); and the both-streaming-and-compacting matrix state is a synthetic
+truth-predicate context rather than proof the live session reaches both simultaneously.
+Public C++ acceptance tests in `ProductProgressEvidenceTest.cpp` and `TuiModeSwitchTest.cpp` consume
+`product-progress-protocol.json` directly through real `InteractiveEngine`, `AgentSession`, and `SettingsManager`
+without stand-in counts, asserting ordered exact OSC 9;4 byte sequences across covered streaming, idle, and
+compaction lifecycle states in both switch directions (`fullscreen -> regular` and `regular -> fullscreen`),
+measuring compaction start synchronized on `CompactionStartEvent` delivery and compaction end upon `compact()`
+completion, verifying settings selector UI navigation, persistence, independent `SettingsManager` re-read,
+separate live `/reload` preference continuity, and verifying exact shutdown teardown clear counts.
+The protocol parser retains malformed sequences verbatim so exact vector comparison distinguishes delimiter
+deviations from canonical forms. The test suite also validates the composed boundary where an active streaming
+turn is toggled disabled in the settings UI: switching modes physically stops the previous root (emitting the
+independently observed terminal stop clear) while the target root suppresses restore, with preference continuity
+holding across both switch directions and through subsequent disabled turn and compaction lifecycles.
+`capture/product-progress-protocol-scenarios.mts` defines the scenarios;
+`capture/recapture-product-progress-protocol.mts` is the append recipe (same frozen revision
+`7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact
+byte-identical, manifest 28 → 29).
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

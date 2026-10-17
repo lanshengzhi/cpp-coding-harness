@@ -101,7 +101,7 @@ constexpr std::string_view kClearScreenSequence = "\x1b[2J\x1b[H\x1b[3J";
 // 1-second progress keepalive is ProcessTerminal's serial-worker behavior;
 // the double records the emitted sequences only.
 constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
-constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
+constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0\x07";
 
 /// Build the visible text of one cell row: the graphemes up to the last
 /// occupied column (wide-grapheme continuations skipped, empty cells as

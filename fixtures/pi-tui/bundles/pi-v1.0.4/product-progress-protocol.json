@@ -1,0 +1,749 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/terminal.ts:ProcessTerminal.setProgress,ProcessTerminal.stop",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.handleEvent,InteractiveMode.switchTuiMode,InteractiveMode.stop",
+    "packages/coding-agent/src/core/settings-manager.ts:SettingsManager.getShowTerminalProgress,SettingsManager.setShowTerminalProgress"
+  ],
+  "scenarios": [
+    {
+      "name": "terminal-progress-raw-protocol",
+      "description": "Real ProcessTerminal raw byte paths, OSC 9;4 sequences, and keepalive lifecycle",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "ProcessTerminal",
+        "protocol": "OSC 9;4"
+      },
+      "expected": {
+        "activeSequence": "\u001b]9;4;3\u0007",
+        "clearSequence": "\u001b]9;4;0\u0007",
+        "keepaliveIntervalMs": 1000,
+        "observations": {
+          "setProgressTrue": {
+            "writes": [
+              "\u001b]9;4;3\u0007"
+            ],
+            "keepaliveArmed": true
+          },
+          "setProgressFalse": {
+            "writes": [
+              "\u001b]9;4;0\u0007"
+            ],
+            "keepaliveArmed": false
+          },
+          "redundantClearInactive": {
+            "writes": [
+              "\u001b]9;4;0\u0007"
+            ],
+            "unconditional": true
+          },
+          "stopActive": {
+            "writes": [
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l"
+            ],
+            "clearEmitted": true,
+            "bracketedPasteEmitted": true,
+            "clearPrecedesBracketedPaste": true,
+            "keepaliveArmed": false
+          },
+          "stopInactive": {
+            "writes": [
+              "\u001b[?2004l"
+            ],
+            "clearEmitted": false
+          }
+        }
+      }
+    },
+    {
+      "name": "interactive-mode-handle-event-lifecycle",
+      "description": "InteractiveMode.prototype.handleEvent driving real ProcessTerminal stdout across lifecycle events",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "InteractiveMode.handleEvent"
+      },
+      "expected": {
+        "unrelatedUIStubs": [
+          "footer",
+          "footerDataProvider",
+          "clearStatusIndicator",
+          "showStatusIndicator",
+          "flushCompactionQueue",
+          "theme"
+        ],
+        "lifecycleResults": {
+          "turnStartEnabled": {
+            "writes": [
+              "\u001b]9;4;3\u0007"
+            ],
+            "activeEmitted": true,
+            "clearEmitted": false
+          },
+          "agentEndEnabled": {
+            "writes": [
+              "\u001b]9;4;0\u0007"
+            ],
+            "activeEmitted": false,
+            "clearEmitted": true
+          },
+          "compactionStartEnabled": {
+            "writes": [
+              "\u001b]9;4;3\u0007"
+            ],
+            "activeEmitted": true,
+            "clearEmitted": false
+          },
+          "compactionEndEnabled": {
+            "writes": [
+              "\u001b]9;4;0\u0007"
+            ],
+            "activeEmitted": false,
+            "clearEmitted": true
+          },
+          "turnStartDisabled": {
+            "writes": [],
+            "activeEmitted": false,
+            "clearEmitted": false
+          },
+          "agentEndDisabled": {
+            "writes": [],
+            "activeEmitted": false,
+            "clearEmitted": false
+          },
+          "compactionStartDisabled": {
+            "writes": [],
+            "activeEmitted": false,
+            "clearEmitted": false
+          },
+          "compactionEndDisabled": {
+            "writes": [],
+            "activeEmitted": false,
+            "clearEmitted": false
+          }
+        }
+      }
+    },
+    {
+      "name": "interactive-mode-switch-matrix",
+      "description": "InteractiveMode.prototype.switchTuiMode full 16-case truth matrix and restoration suppression with raw ordered writes",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "InteractiveMode.switchTuiMode",
+        "matrixCases": 18
+      },
+      "expected": {
+        "matrixTruthDimensions": {
+          "directions": [
+            "fullscreen -> regular",
+            "regular -> fullscreen"
+          ],
+          "showTerminalProgress": [
+            true,
+            false
+          ],
+          "sessionStates": [
+            "streaming: true, compacting: false",
+            "streaming: false, compacting: true",
+            "streaming: true, compacting: true",
+            "streaming: false, compacting: false"
+          ],
+          "totalTruthMatrixCases": 16,
+          "representativeSuppressionCases": 2
+        },
+        "switchResults": {
+          "fullscreenToRegular_streamingOnly_enabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": true,
+            "isStreaming": true,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "totalWrites": 10,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": true,
+            "clearIndex": 2,
+            "activeIndex": 9,
+            "orderValid": true
+          },
+          "fullscreenToRegular_compactingOnly_enabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": true,
+            "isStreaming": false,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "totalWrites": 10,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": true,
+            "clearIndex": 2,
+            "activeIndex": 9,
+            "orderValid": true
+          },
+          "fullscreenToRegular_streamingAndCompacting_enabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": true,
+            "isStreaming": true,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "totalWrites": 10,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": true,
+            "clearIndex": 2,
+            "activeIndex": 9,
+            "orderValid": true
+          },
+          "fullscreenToRegular_idle_enabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": true,
+            "isStreaming": false,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 8,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "fullscreenToRegular_streamingOnly_disabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": false,
+            "isStreaming": true,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 8,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "fullscreenToRegular_compactingOnly_disabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": false,
+            "isStreaming": false,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 8,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "fullscreenToRegular_streamingAndCompacting_disabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": false,
+            "isStreaming": true,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 8,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "fullscreenToRegular_idle_disabled_restoreTrue": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": false,
+            "isStreaming": false,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 8,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "regularToFullscreen_streamingOnly_enabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": true,
+            "isStreaming": true,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "totalWrites": 9,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": true,
+            "clearIndex": 1,
+            "activeIndex": 8,
+            "orderValid": true
+          },
+          "regularToFullscreen_compactingOnly_enabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": true,
+            "isStreaming": false,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "totalWrites": 9,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": true,
+            "clearIndex": 1,
+            "activeIndex": 8,
+            "orderValid": true
+          },
+          "regularToFullscreen_streamingAndCompacting_enabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": true,
+            "isStreaming": true,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l",
+              "\u001b]9;4;3\u0007"
+            ],
+            "totalWrites": 9,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": true,
+            "clearIndex": 1,
+            "activeIndex": 8,
+            "orderValid": true
+          },
+          "regularToFullscreen_idle_enabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": true,
+            "isStreaming": false,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 7,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "regularToFullscreen_streamingOnly_disabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": false,
+            "isStreaming": true,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 7,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "regularToFullscreen_compactingOnly_disabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": false,
+            "isStreaming": false,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 7,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "regularToFullscreen_streamingAndCompacting_disabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": false,
+            "isStreaming": true,
+            "isCompacting": true,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 7,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "regularToFullscreen_idle_disabled_restoreTrue": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": false,
+            "isStreaming": false,
+            "isCompacting": false,
+            "restoreProgress": true,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 7,
+            "progressClearEmitted": false,
+            "progressActiveEmitted": false,
+            "clearIndex": -1,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "fullscreenToRegular_streamingOnly_enabled_restoreFalse": {
+            "direction": "fullscreen -> regular",
+            "from": "fullscreen",
+            "to": "regular",
+            "showTerminalProgress": true,
+            "isStreaming": true,
+            "isCompacting": false,
+            "restoreProgress": false,
+            "outcome": true,
+            "writes": [
+              "\u001b[?2026h\u001b[?1006l\u001b[?1004l\u001b[?1003l\u001b[?1002l\u001b[?1000l\u001b[?7h\u001b[?2026l",
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?2026h\u001b[?1049l\u001b[?25h\u001b[?2026l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 9,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": false,
+            "clearIndex": 2,
+            "activeIndex": -1,
+            "orderValid": true
+          },
+          "regularToFullscreen_compactingOnly_enabled_restoreFalse": {
+            "direction": "regular -> fullscreen",
+            "from": "regular",
+            "to": "fullscreen",
+            "showTerminalProgress": true,
+            "isStreaming": false,
+            "isCompacting": true,
+            "restoreProgress": false,
+            "outcome": true,
+            "writes": [
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[?1049h\u001b[?7l\u001b[?1000h\u001b[?1002h\u001b[?1003h\u001b[?1004h\u001b[?1006h\u001b[2J\u001b[H\u001b[?25l",
+              "\u001b[?2004h",
+              "\u001b[>7u\u001b[?u\u001b[c",
+              "\u001b[?25l"
+            ],
+            "totalWrites": 8,
+            "progressClearEmitted": true,
+            "progressActiveEmitted": false,
+            "clearIndex": 1,
+            "activeIndex": -1,
+            "orderValid": true
+          }
+        }
+      }
+    },
+    {
+      "name": "settings-toggle-stale-progress",
+      "description": "Settings toggle while active: direct setter retention, agent_end suppression, and shutdown safety net",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "SettingsManager.setShowTerminalProgress -> InteractiveMode.handleEvent -> InteractiveMode.stop"
+      },
+      "expected": {
+        "metadata": {
+          "sourceDerivedCallbackDelegation": true,
+          "measuredViaDirectSettingsManager": true,
+          "uiCallbackExecutionMeasured": false,
+          "notes": "Direct SettingsManager setter measurement; onShowTerminalProgressChange delegates to SettingsManager without UI callback execution; active progress remains stale until terminal.stop() safety net clears keepalive interval"
+        },
+        "phases": {
+          "phase1_turnStartActive": {
+            "writes": [
+              "\u001b]9;4;3\u0007"
+            ],
+            "progressActive": true
+          },
+          "phase2_settingsToggleFalse": {
+            "writes": [],
+            "progressActive": true,
+            "note": "Direct SettingsManager setter emits 0 bytes; setting persisted without immediate terminal clear"
+          },
+          "phase3_agentEndWhileDisabled": {
+            "writes": [],
+            "progressActive": true,
+            "note": "agent_end skips clear because getShowTerminalProgress() is false; stale progress retained in host terminal"
+          },
+          "phase4_stopTeardownSafetyNet": {
+            "writes": [
+              "\u001b[?25h",
+              "\u001b]9;4;0\u0007",
+              "\u001b[?2004l"
+            ],
+            "totalWrites": 3,
+            "clearCount": 1,
+            "note": "ProcessTerminal.stop() clears active progress keepalive interval as terminal safety net"
+          }
+        }
+      }
+    },
+    {
+      "name": "interactive-mode-stop-clear-counts",
+      "description": "InteractiveMode.prototype.stop shutdown teardown progress clear counts across lifecycle states",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "InteractiveMode.stop"
+      },
+      "expected": {
+        "counts": {
+          "activeEnabled": {
+            "showTerminalProgress": true,
+            "activeAtStop": true,
+            "clearsEmitted": 1
+          },
+          "idleDisabled": {
+            "showTerminalProgress": false,
+            "activeAtStop": false,
+            "clearsEmitted": 0
+          },
+          "idleEnabled": {
+            "showTerminalProgress": true,
+            "activeAtStop": false,
+            "clearsEmitted": 1
+          },
+          "activeToggledDisabled": {
+            "showTerminalProgress": false,
+            "activeAtStop": true,
+            "clearsEmitted": 1
+          }
+        }
+      }
+    }
+  ]
+}

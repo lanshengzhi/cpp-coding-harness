@@ -1097,3 +1097,102 @@ TEST_CASE("SettingsManager showHardwareCursor write is a surgical global-scope m
     REQUIRE(manager.set_show_hardware_cursor(true));
     CHECK(dirs.workspace.read("agent/settings.json") == before);
 }
+
+TEST_CASE("SettingsManager resolves terminal.showTerminalProgress default false and merges project scope",
+        "[settings][two-scope][terminal-progress][issue1037][spec]") {
+    // 1. Missing setting => default false
+    SettingsDirs empty_dirs;
+    auto manager =
+            coding_agent::SettingsManager::create(empty_dirs.cwd, empty_dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.settings().show_terminal_progress == std::nullopt);
+    CHECK(manager.get_show_terminal_progress() == false);
+
+    // 2. Global true, Project unset => true
+    SettingsDirs dirs_gt;
+    dirs_gt.write_global(R"({"terminal": {"showTerminalProgress": true}})");
+    auto manager_gt = coding_agent::SettingsManager::create(dirs_gt.cwd, dirs_gt.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager_gt.errors().empty());
+    CHECK(manager_gt.settings().show_terminal_progress == true);
+    CHECK(manager_gt.get_show_terminal_progress() == true);
+
+    // 3. Global true, Project false (trusted) => Project false wins
+    SettingsDirs dirs_pf;
+    dirs_pf.write_global(R"({"terminal": {"showTerminalProgress": true}})");
+    dirs_pf.write_project(R"({"terminal": {"showTerminalProgress": false}})");
+    auto manager_pf = coding_agent::SettingsManager::create(dirs_pf.cwd, dirs_pf.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager_pf.errors().empty());
+    CHECK(manager_pf.get_show_terminal_progress() == false);
+
+    // 4. Global false, Project true (trusted) => Project true wins
+    SettingsDirs dirs_pt;
+    dirs_pt.write_global(R"({"terminal": {"showTerminalProgress": false}})");
+    dirs_pt.write_project(R"({"terminal": {"showTerminalProgress": true}})");
+    auto manager_pt = coding_agent::SettingsManager::create(dirs_pt.cwd, dirs_pt.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager_pt.errors().empty());
+    CHECK(manager_pt.get_show_terminal_progress() == true);
+
+    // 5. Global true, Project false (untrusted) => Global true wins
+    SettingsDirs dirs_untrusted;
+    dirs_untrusted.write_global(R"({"terminal": {"showTerminalProgress": true}})");
+    dirs_untrusted.write_project(R"({"terminal": {"showTerminalProgress": false}})");
+    auto manager_untrusted = coding_agent::SettingsManager::create(
+            dirs_untrusted.cwd, dirs_untrusted.agent_dir, /* project_trusted */ false);
+    REQUIRE(manager_untrusted.errors().empty());
+    CHECK(manager_untrusted.get_show_terminal_progress() == true);
+
+    // 6. Global unset, Project true (trusted) => Project true wins
+    SettingsDirs dirs_proj_only;
+    dirs_proj_only.write_project(R"({"terminal": {"showTerminalProgress": true}})");
+    auto manager_proj_only = coding_agent::SettingsManager::create(
+            dirs_proj_only.cwd, dirs_proj_only.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager_proj_only.errors().empty());
+    CHECK(manager_proj_only.get_show_terminal_progress() == true);
+
+    // 7. Global unset, Project true (untrusted) => Global default (false) wins
+    SettingsDirs dirs_proj_untrusted;
+    dirs_proj_untrusted.write_project(R"({"terminal": {"showTerminalProgress": true}})");
+    auto manager_proj_untrusted = coding_agent::SettingsManager::create(
+            dirs_proj_untrusted.cwd, dirs_proj_untrusted.agent_dir, /* project_trusted */ false);
+    REQUIRE(manager_proj_untrusted.errors().empty());
+    CHECK(manager_proj_untrusted.get_show_terminal_progress() == false);
+}
+
+TEST_CASE("SettingsManager set_show_terminal_progress performs surgical global write into nested terminal object",
+        "[settings][two-scope][write][terminal-progress][issue1037][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","terminal":{"clearOnShrink":true,"unknownField":"preserved"}})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_show_terminal_progress() == false);
+
+    auto saved = manager.set_show_terminal_progress(true);
+    REQUIRE(saved);
+
+    CHECK(manager.get_show_terminal_progress() == true);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"showTerminalProgress\": true") != std::string::npos);
+    CHECK(content.find("\"clearOnShrink\": true") != std::string::npos);
+    CHECK(content.find("\"unknownField\": \"preserved\"") != std::string::npos);
+    CHECK(content.find("\"theme\": \"dark\"") != std::string::npos);
+
+    // Reloading re-reads the persisted value
+    auto reloaded = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.get_show_terminal_progress() == true);
+
+    // Changing to false updates the nested field while preserving siblings
+    auto saved_false = manager.set_show_terminal_progress(false);
+    REQUIRE(saved_false);
+    CHECK(manager.get_show_terminal_progress() == false);
+    const auto content_false = dirs.workspace.read("agent/settings.json");
+    CHECK(content_false.find("\"showTerminalProgress\": false") != std::string::npos);
+    CHECK(content_false.find("\"clearOnShrink\": true") != std::string::npos);
+    CHECK(content_false.find("\"unknownField\": \"preserved\"") != std::string::npos);
+
+    // The unchanged value is a no-op
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_show_terminal_progress(false));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+}

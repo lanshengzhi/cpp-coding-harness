@@ -3,6 +3,7 @@
 #include <cch/tui/Terminal.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include <algorithm>
 #include <charconv>
 #include <chrono>
 #include <cstddef>
@@ -613,6 +614,157 @@ struct FrozenTerminalEvent {
 [[nodiscard]] inline std::vector<ImeToken> project_final_ime_sequence(
         const ProtocolRecordingTerminal& terminal, bool is_fullscreen) {
     return project_final_ime_sequence(terminal.ops(), is_fullscreen, terminal.inner().modes().cursor_visible);
+}
+
+/// Scoped parser for OSC 9;4 terminal progress escape sequences.
+/// Retains exact bytes, order, and duplicates.
+/// Supported sequence forms:
+/// - \x1b]9;4;<state>\x07 (BEL terminated)
+/// - \x1b]9;4;<state>\x1b\\ (ST terminated)
+/// Excludes unrelated paint, style, cursor, and query controls (CSI, OSC 0 title, etc.).
+/// Does not silently drop malformed OSC 9;4 sequences (e.g., \x1b]9;4;0;\x07 or unterminated).
+/// Handles fragmented chunk boundaries.
+class Osc94Extractor {
+public:
+    void feed(std::string_view chunk) {
+        buffer_.append(chunk);
+        parse_buffer(/*finishing=*/false);
+    }
+
+    void feed(std::span<const std::string> chunks) {
+        for (const auto& chunk : chunks) {
+            feed(chunk);
+        }
+    }
+
+    void finish() { parse_buffer(/*finishing=*/true); }
+
+    [[nodiscard]] const std::vector<std::string>& commands() const noexcept { return commands_; }
+    [[nodiscard]] std::vector<std::string> take_commands() noexcept { return std::move(commands_); }
+    void clear() noexcept {
+        buffer_.clear();
+        commands_.clear();
+    }
+
+private:
+    void parse_buffer(bool finishing) {
+        std::size_t i = 0;
+        while (i < buffer_.size()) {
+            if (buffer_[i] != '\x1b') {
+                ++i;
+                continue;
+            }
+            if (i + 1 >= buffer_.size()) {
+                if (!finishing) break;
+                ++i;
+                continue;
+            }
+            const char c1 = buffer_[i + 1];
+            if (c1 == ']') {
+                if (i + 2 >= buffer_.size()) {
+                    if (!finishing) break;
+                    i += 2;
+                    continue;
+                }
+                const auto osc_payload = std::string_view{buffer_}.substr(i + 2);
+                if (osc_payload.starts_with("9;4")) {
+                    const auto bel_pos = buffer_.find('\x07', i + 2);
+                    const auto st_pos = buffer_.find("\x1b\\", i + 2);
+                    std::size_t term_end = std::string::npos;
+                    if (bel_pos != std::string::npos && st_pos != std::string::npos) {
+                        term_end = std::min(bel_pos + 1, st_pos + 2);
+                    } else if (bel_pos != std::string::npos) {
+                        term_end = bel_pos + 1;
+                    } else if (st_pos != std::string::npos) {
+                        term_end = st_pos + 2;
+                    }
+
+                    if (term_end != std::string::npos) {
+                        commands_.push_back(buffer_.substr(i, term_end - i));
+                        i = term_end;
+                        continue;
+                    }
+                    if (!finishing) {
+                        break;
+                    }
+                    // Unterminated OSC 9;4 sequence on finish: do NOT silently drop!
+                    commands_.push_back(buffer_.substr(i));
+                    i = buffer_.size();
+                    break;
+                }
+                if (osc_payload.size() < 3 && !finishing && (osc_payload == "9" || osc_payload == "9;")) {
+                    break;
+                }
+                const auto bel_pos = buffer_.find('\x07', i + 2);
+                const auto st_pos = buffer_.find("\x1b\\", i + 2);
+                std::size_t term_end = std::string::npos;
+                if (bel_pos != std::string::npos && st_pos != std::string::npos) {
+                    term_end = std::min(bel_pos + 1, st_pos + 2);
+                } else if (bel_pos != std::string::npos) {
+                    term_end = bel_pos + 1;
+                } else if (st_pos != std::string::npos) {
+                    term_end = st_pos + 2;
+                }
+
+                if (term_end != std::string::npos) {
+                    i = term_end;
+                } else {
+                    if (!finishing) break;
+                    i += 2;
+                }
+                continue;
+            }
+            if (c1 == '[') {
+                std::size_t p = i + 2;
+                while (p < buffer_.size() && (static_cast<unsigned char>(buffer_[p]) >= 0x20 &&
+                                                     static_cast<unsigned char>(buffer_[p]) <= 0x3F)) {
+                    ++p;
+                }
+                if (p < buffer_.size()) {
+                    if (static_cast<unsigned char>(buffer_[p]) >= 0x40 &&
+                            static_cast<unsigned char>(buffer_[p]) <= 0x7E) {
+                        i = p + 1;
+                        continue;
+                    }
+                    i = p + 1;
+                    continue;
+                }
+                if (!finishing) break;
+                i = buffer_.size();
+                break;
+            }
+            if (c1 == '(' || c1 == ')' || c1 == '*' || c1 == '+') {
+                if (i + 2 < buffer_.size()) {
+                    i += 3;
+                    continue;
+                }
+                if (!finishing) break;
+                i = buffer_.size();
+                break;
+            }
+            i += 2;
+        }
+        if (i > 0) {
+            buffer_.erase(0, i);
+        }
+    }
+
+    std::string buffer_{};
+    std::vector<std::string> commands_{};
+};
+
+[[nodiscard]] inline std::vector<std::string> extract_osc_9_4_commands(std::span<const std::string> chunks) {
+    Osc94Extractor extractor;
+    extractor.feed(chunks);
+    extractor.finish();
+    return extractor.take_commands();
+}
+
+[[nodiscard]] inline std::vector<std::string> extract_osc_9_4_commands(std::string_view stream) {
+    Osc94Extractor extractor;
+    extractor.feed(stream);
+    extractor.finish();
+    return extractor.take_commands();
 }
 
 } // namespace cch::tests

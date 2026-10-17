@@ -1171,7 +1171,7 @@ TEST_CASE("Process Terminal clear screen emits the pi-exact clear-scrollback byt
 
 TEST_CASE("Process Terminal re-emits active progress on the one-second keepalive", "[tui][terminal][issue378][spec]") {
     constexpr std::string_view kProgressActiveSequence = "\x1b]9;4;3\x07";
-    constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0;\x07";
+    constexpr std::string_view kProgressClearSequence = "\x1b]9;4;0\x07";
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
     cch::tui::ProcessTerminal terminal(
@@ -1229,8 +1229,12 @@ TEST_CASE("Process Terminal stop clears an active progress indicator and restart
     (void)cch::tests::read_available(pty->master.get());
     REQUIRE(terminal.stop());
     const auto restoration = cch::tests::read_available(pty->master.get());
-    CHECK(restoration.find("\x1b]9;4;0;\x07") != std::string::npos);
-    CHECK(restoration.find("\x1b[?2004l") != std::string::npos);
+    const auto clear_pos = restoration.find("\x1b]9;4;0\x07");
+    const auto paste_pos = restoration.find("\x1b[?2004l");
+    CHECK(clear_pos != std::string::npos);
+    CHECK(paste_pos != std::string::npos);
+    CHECK(clear_pos < paste_pos);
+    CHECK(restoration.find("\x1b]9;4;0;\x07") == std::string::npos);
     CHECK(terminal.modes() == cch::tui::TerminalModeState{});
 
     // A restart must not re-arm the keepalive from the previous session.
@@ -1241,6 +1245,8 @@ TEST_CASE("Process Terminal stop clears an active progress indicator and restart
     const auto after_restart = cch::tests::read_available(pty->master.get());
     CHECK(after_restart.find("\x1b]9;4;3\x07") == std::string::npos);
     REQUIRE(terminal.stop());
+    const auto idle_restoration = cch::tests::read_available(pty->master.get());
+    CHECK(idle_restoration.find("\x1b]9;4;0\x07") == std::string::npos);
 }
 
 TEST_CASE(
@@ -2209,7 +2215,8 @@ TEST_CASE(
 
     REQUIRE(terminal.set_progress(false));
     received = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50));
-    CHECK(received.find("\x1b]9;4;0;\x07") != std::string::npos);
+    CHECK(received.find("\x1b]9;4;0\x07") != std::string::npos);
+    CHECK(received.find("\x1b]9;4;0;\x07") == std::string::npos);
 
     REQUIRE(terminal.stop());
 }
