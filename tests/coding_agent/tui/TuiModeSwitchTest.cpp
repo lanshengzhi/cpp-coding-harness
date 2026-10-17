@@ -25,6 +25,7 @@
 
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
+#include <cch/tui/Editor.hpp>
 #include <cch/tui/Overlay.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
@@ -2675,4 +2676,492 @@ TEST_CASE("Protocol projection detects order inversion and extraneous moves agai
         CHECK(projected_fs[3] == vis_true);
         CHECK_FALSE(projected_fs == oracle_fs);
     }
+}
+
+namespace {
+
+[[nodiscard]] std::string make_osc_10_reply(std::string_view hex) {
+    if (hex.size() == 7 && hex.starts_with("#")) {
+        const auto r = hex.substr(1, 2);
+        const auto g = hex.substr(3, 2);
+        const auto b = hex.substr(5, 2);
+        return std::format("\x1b]10;rgb:{}{}/{}{}/{}{}\x07", r, r, g, g, b, b);
+    }
+    return std::format("\x1b]10;{}\x07", hex);
+}
+
+[[nodiscard]] std::string make_osc_11_reply(std::string_view hex) {
+    if (hex.size() == 7 && hex.starts_with("#")) {
+        const auto r = hex.substr(1, 2);
+        const auto g = hex.substr(3, 2);
+        const auto b = hex.substr(5, 2);
+        return std::format("\x1b]11;rgb:{}{}/{}{}/{}{}\x07", r, r, g, g, b, b);
+    }
+    return std::format("\x1b]11;{}\x07", hex);
+}
+
+[[nodiscard]] coding_agent::tui::InteractiveSessionRun make_run_with_extension(coding_agent::AgentSession& session,
+        const std::filesystem::path& agent_config_directory,
+        coding_agent::TuiMode tui_mode,
+        coding_agent::tui::ExtensionUiRegistrationFactory factory) {
+    return coding_agent::tui::InteractiveSessionRunBuilder{}
+            .with_session(session)
+            .with_agent_config_directory(agent_config_directory)
+            .with_tui_mode(tui_mode)
+            .with_extension_ui_registration_factory(std::move(factory))
+            .build();
+}
+
+} // namespace
+
+TEST_CASE("Native TUI terminal theme rebinding protocol and mode switch acceptance against frozen artifact 31",
+        "[coding_agent][tui][fullscreen][theme][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-theme-rebind-protocol.json");
+    REQUIRE(artifact);
+    const auto& bundle = *artifact;
+    REQUIRE(bundle.at("baseline").get_string() == "pi-v1.0.4");
+    REQUIRE(bundle.at("revision").get_string() == "7c10bd4337495ee613f2224843ecdf349b80d1df");
+
+    const auto& s1 = find_evidence_scenario(bundle, "same_root_late_query");
+    const auto& s2 = find_evidence_scenario(bundle, "direction_a_regular_to_fullscreen");
+    const auto& s3 = find_evidence_scenario(bundle, "direction_b_fullscreen_to_regular");
+    const auto& s4 = find_evidence_scenario(bundle, "unkeyed_reply_pending_target_fifo");
+    const auto& s5 = find_evidence_scenario(bundle, "roundtrip_rebind_idempotency");
+    const auto& s6 = find_evidence_scenario(bundle, "malformed_and_unsupported_controls");
+    tests::EnvVarGuard environment{"COLORFGBG", "0;15"};
+
+    // ── Direction A and B live engine switch acceptance ─────────────────────
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "regular", "theme": "system"})");
+
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal inner_vt({.columns = 80, .rows = 24});
+        tests::ProtocolRecordingTerminal terminal(inner_vt);
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+
+        cch::tui::EditorTheme live_editor_theme;
+        auto factory = [&](coding_agent::tui::ExtensionUiHost& host) {
+            host.set_editor_component([&](cch::tui::ITui&,
+                                              cch::tui::EditorTheme theme,
+                                              std::shared_ptr<coding_agent::tui::SharedKeybindings>) {
+                live_editor_theme = std::move(theme);
+                return std::make_shared<cch::tui::Editor>();
+            });
+        };
+
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine,
+                        make_run_with_extension(
+                                *created->session, config.path(), coding_agent::TuiMode::Regular, std::move(factory))),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // A light initial appearance makes the old dark reply discriminating.
+        REQUIRE(live_editor_theme.border != nullptr);
+        const auto light_border = live_editor_theme.border("─");
+        CHECK_FALSE(light_border.empty());
+
+        // Verify initial query commands on regular root match artifact 31 exact vector
+        const auto initial_commands = tests::extract_theme_protocol_commands(inner_vt.output());
+        const auto expected_initial = strings_of(s1.at("expected").at("initialQueryCommands"));
+        CHECK(initial_commands == expected_initial);
+
+        // ── Phase A2: Switch to fullscreen while query is pending ───────────
+        const auto before_switch_a = inner_vt.output().size();
+        auto switched_a = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+        REQUIRE(switched_a);
+        CHECK(*switched_a);
+        CHECK(inner_vt.modes().alternate_screen);
+
+        std::span<const std::string> switch_a_delta(
+                inner_vt.output().data() + before_switch_a, inner_vt.output().size() - before_switch_a);
+        const auto switch_a_commands = tests::extract_theme_protocol_commands(switch_a_delta);
+        const auto expected_switch_a = strings_of(s2.at("expected").at("phaseA2SwitchCommands"));
+        CHECK(switch_a_commands == expected_switch_a);
+
+        // ── Phase A3: Inject old query reply into active terminal ───────────
+        const auto old_fg = s2.at("inputs").at("oldFg").get_string();
+        const auto old_bg = s2.at("inputs").at("oldBg").get_string();
+        REQUIRE(inner_vt.inject_input(make_osc_10_reply(old_fg)));
+        REQUIRE(inner_vt.inject_input(make_osc_11_reply(old_bg)));
+        REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+
+        // Active root has no pending query; old replies do not mutate theme state
+        CHECK(live_editor_theme.border("─") == light_border);
+
+        // ── Phase A5: Scheme notification on active fullscreen root ─────────
+        const auto before_scheme_a = inner_vt.output().size();
+        REQUIRE(inner_vt.inject_input("\x1b[?997;2n")); // light report
+        drain_ready(io);
+
+        std::span<const std::string> scheme_a_delta(
+                inner_vt.output().data() + before_scheme_a, inner_vt.output().size() - before_scheme_a);
+        const auto scheme_a_commands = tests::extract_theme_protocol_commands(scheme_a_delta);
+        const auto expected_scheme_a = strings_of(s2.at("expected").at("phaseA5QueryCommands"));
+        CHECK(scheme_a_commands == expected_scheme_a);
+
+        // ── Phase A6: Answer new query on active fullscreen root ────────────
+        const auto new_fg = s2.at("inputs").at("newFg").get_string();
+        const auto new_bg = s2.at("inputs").at("newBg").get_string();
+        REQUIRE(inner_vt.inject_input(make_osc_10_reply(new_fg)));
+        REQUIRE(inner_vt.inject_input(make_osc_11_reply(new_bg)));
+        REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+
+        CHECK(live_editor_theme.border("─") == light_border);
+
+        // ── Phase B1: Trigger a query on fullscreen root so a query is PENDING BEFORE switch ──
+        const auto before_pending_b = inner_vt.output().size();
+        REQUIRE(inner_vt.inject_input("\x1b[?997;1n")); // dark report triggers new query burst
+        drain_ready(io);
+        std::span<const std::string> pending_b_delta(
+                inner_vt.output().data() + before_pending_b, inner_vt.output().size() - before_pending_b);
+        const auto pending_b_commands = tests::extract_theme_protocol_commands(pending_b_delta);
+        CHECK(pending_b_commands == expected_scheme_a);
+        // Extra #991 precedence challenge: accepted light background must
+        // defeat this opposite dark scheme; it also leaves B's old query pending.
+        CHECK(live_editor_theme.border("─") == light_border);
+
+        // ── Phase B2: Direction B — Switch back to regular while query is pending ──
+        const auto before_switch_b = inner_vt.output().size();
+        auto switched_b = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+        REQUIRE(switched_b);
+        CHECK(*switched_b);
+        CHECK_FALSE(inner_vt.modes().alternate_screen);
+
+        std::span<const std::string> switch_b_delta(
+                inner_vt.output().data() + before_switch_b, inner_vt.output().size() - before_switch_b);
+        const auto switch_b_commands = tests::extract_theme_protocol_commands(switch_b_delta);
+        const auto expected_switch_b = strings_of(s3.at("expected").at("phaseB2SwitchCommands"));
+        CHECK(switch_b_commands == expected_switch_b);
+
+        // ── Phase B3: Inject old fullscreen reply into regular root ─────────
+        CHECK(live_editor_theme.border("─") == light_border);
+        const auto old_fg_b = s3.at("inputs").at("oldFg").get_string();
+        const auto old_bg_b = s3.at("inputs").at("oldBg").get_string();
+        REQUIRE(inner_vt.inject_input(make_osc_10_reply(old_fg_b)));
+        REQUIRE(inner_vt.inject_input(make_osc_11_reply(old_bg_b)));
+        REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+
+        CHECK(live_editor_theme.border("─") == light_border);
+
+        // ── Phase B5: Dark scheme notification on regular root ──────────────
+        const auto before_scheme_b = inner_vt.output().size();
+        REQUIRE(inner_vt.inject_input("\x1b[?997;1n")); // dark report
+        drain_ready(io);
+
+        std::span<const std::string> scheme_b_delta(
+                inner_vt.output().data() + before_scheme_b, inner_vt.output().size() - before_scheme_b);
+        const auto scheme_b_commands = tests::extract_theme_protocol_commands(scheme_b_delta);
+        const auto expected_scheme_b = strings_of(s3.at("expected").at("phaseB5QueryCommands"));
+        CHECK(scheme_b_commands == expected_scheme_b);
+
+        // ── Phase B6: Answer dark query ─────────────────────────────────────
+        const auto new_fg_b = s3.at("inputs").at("newFg").get_string();
+        const auto new_bg_b = s3.at("inputs").at("newBg").get_string();
+        REQUIRE(inner_vt.inject_input(make_osc_10_reply(new_fg_b)));
+        REQUIRE(inner_vt.inject_input(make_osc_11_reply(new_bg_b)));
+        REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+
+        // Retained light background suppressed B5, so only B6 can change this.
+        const auto dark_border = live_editor_theme.border("─");
+        CHECK(dark_border != light_border);
+
+        // ── Scenario 5: Roundtrip rebind idempotency on live engine ─────────
+        REQUIRE(engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen));
+        REQUIRE(engine->switch_tui_mode(coding_agent::TuiMode::Regular));
+
+        const auto before_idempotent = inner_vt.output().size();
+        REQUIRE(inner_vt.inject_input("\x1b[?997;2n")); // light report
+        drain_ready(io);
+
+        std::span<const std::string> idempotent_delta(
+                inner_vt.output().data() + before_idempotent, inner_vt.output().size() - before_idempotent);
+        const auto burst_commands = tests::extract_theme_protocol_commands(idempotent_delta);
+        const auto expected_burst = strings_of(s5.at("expected").at("burstCommands"));
+        CHECK(burst_commands == expected_burst);
+        // Extra #991 precedence challenge: B's accepted dark background
+        // defeats this opposite light scheme after the roundtrip.
+        CHECK(live_editor_theme.border("─") == dark_border);
+
+        // Clean shutdown
+        REQUIRE(inner_vt.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    }
+
+    // ── Scenario 1: Same-root late query acceptance control with actual timeout ──
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "regular", "theme": "system"})");
+
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal inner_vt({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+
+        cch::tui::EditorTheme live_editor_theme;
+        auto factory = [&](coding_agent::tui::ExtensionUiHost& host) {
+            host.set_editor_component([&](cch::tui::ITui&,
+                                              cch::tui::EditorTheme theme,
+                                              std::shared_ptr<coding_agent::tui::SharedKeybindings>) {
+                live_editor_theme = std::move(theme);
+                return std::make_shared<cch::tui::Editor>();
+            });
+        };
+
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                inner_vt, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine,
+                        make_run_with_extension(
+                                *created->session, config.path(), coding_agent::TuiMode::Regular, std::move(factory))),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        const auto initial_light_border = live_editor_theme.border("─");
+
+        // Wait 120ms (timeout is 100ms) with steady_timer on io:
+        boost::asio::steady_timer timer{io, std::chrono::milliseconds{120}};
+        bool timer_fired = false;
+        timer.async_wait([&](const boost::system::error_code&) { timer_fired = true; });
+        REQUIRE(pump_until(io, [&] { return timer_fired; }));
+
+        // Query timed out without replies; initial light appearance remains.
+        CHECK(live_editor_theme.border("─") == initial_light_border);
+
+        // Inject delayed replies on the same active root with distinct colors
+        const auto late_fg = s1.at("inputs").at("lateFg").get_string();
+        const auto late_bg = s1.at("inputs").at("lateBg").get_string();
+        REQUIRE(inner_vt.inject_input(make_osc_10_reply(late_fg)));
+        REQUIRE(inner_vt.inject_input(make_osc_11_reply(late_bg)));
+        REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+
+        // The dark background must change the initial light appearance.
+        CHECK(live_editor_theme.border("─") != initial_light_border);
+
+        REQUIRE(inner_vt.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    }
+
+    // ── Scenario 4: Ambiguity control — unkeyed reply pending target FIFO ───
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "regular", "theme": "system"})");
+
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal inner_vt({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+
+        cch::tui::EditorTheme live_editor_theme;
+        auto factory = [&](coding_agent::tui::ExtensionUiHost& host) {
+            host.set_editor_component([&](cch::tui::ITui&,
+                                              cch::tui::EditorTheme theme,
+                                              std::shared_ptr<coding_agent::tui::SharedKeybindings>) {
+                live_editor_theme = std::move(theme);
+                return std::make_shared<cch::tui::Editor>();
+            });
+        };
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                inner_vt, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine,
+                        make_run_with_extension(
+                                *created->session, config.path(), coding_agent::TuiMode::Regular, std::move(factory))),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Switch to fullscreen
+        auto switched = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+        REQUIRE(switched);
+        CHECK(*switched);
+
+        // Keep the target light while issuing a query for the dark FIFO reply.
+        const auto before_query = inner_vt.output().size();
+        REQUIRE(inner_vt.inject_input("\x1b[?997;2n"));
+        drain_ready(io);
+        CHECK(tests::extract_theme_protocol_commands(std::span<const std::string>{inner_vt.output()}.subspan(
+                      before_query)) == strings_of(s4.at("expected").at("queryCommands")));
+        const auto light_border = live_editor_theme.border("─");
+
+        // Unkeyed replies arrive FIFO
+        const auto unkeyed_fg = s4.at("inputs").at("unkeyedFg").get_string();
+        const auto unkeyed_bg = s4.at("inputs").at("unkeyedBg").get_string();
+        REQUIRE(inner_vt.inject_input(make_osc_10_reply(unkeyed_fg)));
+        REQUIRE(inner_vt.inject_input(make_osc_11_reply(unkeyed_bg)));
+        REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+
+        const auto dark_border = live_editor_theme.border("─");
+        CHECK(dark_border != light_border);
+        const auto before_challenge = inner_vt.output().size();
+        REQUIRE(inner_vt.inject_input("\x1b[?997;2n"));
+        drain_ready(io);
+        CHECK(tests::extract_theme_protocol_commands(std::span<const std::string>{inner_vt.output()}.subspan(
+                      before_challenge)) == strings_of(s4.at("expected").at("queryCommands")));
+        CHECK(live_editor_theme.border("─") == dark_border);
+
+        REQUIRE(inner_vt.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    }
+
+    // ── Scenario 6: Parser raw mutation and malformed control handling ───────
+    {
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "regular", "theme": "system"})");
+
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal inner_vt({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+
+        cch::tui::EditorTheme live_editor_theme;
+        auto factory = [&](coding_agent::tui::ExtensionUiHost& host) {
+            host.set_editor_component([&](cch::tui::ITui&,
+                                              cch::tui::EditorTheme theme,
+                                              std::shared_ptr<coding_agent::tui::SharedKeybindings>) {
+                live_editor_theme = std::move(theme);
+                return std::make_shared<cch::tui::Editor>();
+            });
+        };
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                inner_vt, io.get_executor(), coding_agent::TuiMode::Regular);
+        boost::asio::co_spawn(io,
+                drive_engine(engine,
+                        make_run_with_extension(
+                                *created->session, config.path(), coding_agent::TuiMode::Regular, std::move(factory))),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        const auto light_border = live_editor_theme.border("─");
+
+        // 1. Malformed OSC 10 (invalid hex)
+        REQUIRE(inner_vt.inject_input("\x1b]10;rgb:invalid\x07"));
+        drain_ready(io);
+
+        // 2. Unsupported OSC 12 (cursor color)
+        REQUIRE(inner_vt.inject_input("\x1b]12;rgb:00/00/00\x07"));
+        drain_ready(io);
+
+        // 3. Unrelated CSI sequence (cursor position report)
+        REQUIRE(inner_vt.inject_input("\x1b[24;80R"));
+        drain_ready(io);
+
+        CHECK(live_editor_theme.border("─") == light_border);
+
+        // The valid dark reply must still reach the sink after these controls.
+        // The small controller case separately proves pending-before-DA1;
+        // this complete engine run can exceed the 100 ms query timeout.
+        const auto valid_bg = s6.at("inputs").at("validBg").get_string();
+        REQUIRE(inner_vt.inject_input(make_osc_11_reply(valid_bg)));
+        REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
+        drain_ready(io);
+        CHECK(live_editor_theme.border("─") != light_border);
+
+        REQUIRE(inner_vt.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    }
+}
+
+TEST_CASE("Terminal theme protocol extractor detects mutations, extra commands, and handles fragmentation",
+        "[coding_agent][tui][theme][protocol][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-theme-rebind-protocol.json");
+    REQUIRE(artifact);
+    const auto oracle = strings_of(
+            find_evidence_scenario(*artifact, "same_root_late_query").at("expected").at("initialQueryCommands"));
+    REQUIRE(oracle.size() == 20);
+    const auto join = [](const std::vector<std::string>& commands) {
+        std::string bytes;
+        for (const auto& command : commands)
+            bytes += command;
+        return bytes;
+    };
+    const auto raw = join(oracle);
+    const auto fragmented = [](std::string_view bytes) {
+        tests::ThemeProtocolExtractor extractor;
+        for (const char& byte : bytes)
+            extractor.feed(std::string_view{&byte, 1});
+        extractor.finish();
+        return extractor.take_commands();
+    };
+    CHECK(fragmented(raw) == oracle);
+    CHECK(fragmented("paint\x1b[31m\x1b]0;title\x07" + raw + "\x1b[2K") == oracle);
+    auto reordered = oracle;
+    std::swap(reordered[1], reordered[2]);
+    CHECK(fragmented(join(reordered)) != oracle);
+    auto missing = oracle;
+    missing.pop_back();
+    CHECK(fragmented(join(missing)) != oracle);
+    CHECK(fragmented(raw + oracle.front()) != oracle);
+
+    // Appending anomalies must fail the same complete oracle comparison;
+    // merely ignoring malformed relevant controls would pass these cases.
+    const std::vector<std::string> anomalies{"\x1b]10;rgb:bad\x07",
+            "\x1b]11;?;extra\x07",
+            "\x1b]4;bad;?\x07",
+            "\x1b[?2031;h",
+            "\x1b[?2031x",
+            "\x1b[1c",
+            "\x1b[?;c",
+            "\x1b]10;?",
+            "\x1b]11;?\x1b",
+            "\x1b]4;0;?",
+            "\x1b[?2031"};
+    for (const auto& anomaly : anomalies) {
+        CAPTURE(anomaly);
+        const auto parsed = fragmented(raw + anomaly);
+        CHECK(parsed != oracle);
+        REQUIRE(parsed.size() == oracle.size() + 1);
+        CHECK(parsed.back() == anomaly);
+    }
+    const std::string st = "\x1b]4;0;?\x1b\\";
+    CHECK(fragmented(st) == std::vector<std::string>{st});
 }

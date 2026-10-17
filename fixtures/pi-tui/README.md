@@ -437,7 +437,15 @@ replies lack transaction IDs so active roots match responses FIFO against pendin
 Public C++ acceptance tests consume `product-theme-rebind-protocol.json` directly through real `InteractiveEngine`,
 `AgentSession`, and `SettingsManager` in `TuiModeSwitchTest.cpp`, asserting ordered exact mode 2031 enable/disable
 transitions across bidirectional switches, query reply drain on the product executor, unkeyed FIFO consumption,
-and roundtrip listener idempotency.
+and roundtrip listener idempotency. The companion `ThemeControllerTest.cpp` cases use actual regular/fullscreen
+roots and the existing public terminal-color sink to compare exact foreground/background RGB values with
+`settledColors`, distinguish two pending FIFO queries, and verify malformed controls leave completion pending
+until DA1. Additional editor-border challenges use the #991 background-over-scheme precedence contract to make
+ignored replies observable; these contrasting challenges extend the frozen scenarios rather than replaying their
+initial appearance literally. The callback phase assertions record Pike's delivery sequence around the frozen
+query phases; artifact 31 does not export a complete frozen callback timeline. In particular, the retired-root
+empty timeout callback versus silent cancellation remains a measured difference, so these tests do not establish
+identical callback order across the two runtimes. Generated system palettes remain outside this consumer proof.
 `capture/product-theme-rebind-protocol-scenarios.mts` defines the scenarios;
 `capture/recapture-product-theme-rebind-protocol.mts` is the append recipe (same frozen revision
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact

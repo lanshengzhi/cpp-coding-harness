@@ -9,9 +9,12 @@
 #include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/theme_color_math.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/PiTuiEvidence.hpp"
+#include "support/ProtocolRecordingTerminal.hpp"
 #include "support/ThemeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/tui/AltScreen.hpp>
 #include <cch/tui/TerminalColors.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
@@ -170,6 +173,217 @@ struct ControllerHarness {
 }
 
 } // namespace
+
+TEST_CASE("Real roots deliver frozen theme RGB and ordered rebind query phases",
+        "[coding_agent][theme][controller][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-theme-rebind-protocol.json");
+    REQUIRE(artifact);
+    tests::EnvVarGuard env("COLORFGBG", "0;15");
+    const auto scenario = [&](std::string_view name) -> const support::JsonValue& {
+        for (const auto& value : artifact->at("scenarios").get_array()) {
+            if (value.at("name").get_string() == name) return value;
+        }
+        REQUIRE(false);
+        return *artifact;
+    };
+    const auto commands_of = [](const support::JsonValue& value) {
+        std::vector<std::string> commands;
+        for (const auto& entry : value.get_array())
+            commands.emplace_back(entry.get_string());
+        return commands;
+    };
+    const auto rgb_of = [](const support::JsonValue& value) {
+        return tui::RgbColor{.red = value.at("r").get_number(),
+                .green = value.at("g").get_number(),
+                .blue = value.at("b").get_number()};
+    };
+
+    bool to_fullscreen = true;
+    SECTION("Regular to fullscreen") { to_fullscreen = true; }
+    SECTION("Fullscreen to regular") { to_fullscreen = false; }
+    const auto& frozen =
+            scenario(to_fullscreen ? "direction_a_regular_to_fullscreen" : "direction_b_fullscreen_to_regular");
+    const auto& expected = frozen.at("expected");
+    const auto& inputs = frozen.at("inputs");
+    tui::VirtualTerminal terminal{{.columns = 80, .rows = 24}};
+    tui::Tui regular{terminal};
+    tui::AltScreen fullscreen{terminal};
+    tui::ITui& old_root = to_fullscreen ? static_cast<tui::ITui&>(regular) : static_cast<tui::ITui&>(fullscreen);
+    tui::ITui& active_root = to_fullscreen ? static_cast<tui::ITui&>(fullscreen) : static_cast<tui::ITui&>(regular);
+    REQUIRE(old_root.start());
+    std::vector<std::string> phases;
+    std::vector<tui::TerminalColors> colors;
+    std::mutex pending_mutex;
+    std::vector<ThemeReport> pending;
+    auto controller = coding_agent::tui::ThemeController(
+            {},
+            {},
+            [] { return std::optional<std::string>{"system"}; },
+            tui::TerminalColorCapability::TrueColor,
+            old_root,
+            [](std::string error) { FAIL(error); },
+            [&] { phases.emplace_back("changed"); },
+            [&](tui::TerminalColors report) {
+                std::lock_guard lock(pending_mutex);
+                pending.push_back(ThemeReport{.colors = std::move(report), .scheme = std::nullopt});
+            },
+            [&](coding_agent::tui::TerminalTheme scheme) {
+                std::lock_guard lock(pending_mutex);
+                pending.push_back(ThemeReport{.colors = std::nullopt, .scheme = scheme});
+            });
+    // Like the engine's executor hop, sinks only enqueue; controller state
+    // and phase observations are applied on the test's owning thread.
+    const auto pump = [&] {
+        std::vector<ThemeReport> reports;
+        {
+            std::lock_guard lock(pending_mutex);
+            reports.swap(pending);
+        }
+        for (auto& report : reports) {
+            if (report.colors) {
+                phases.emplace_back("colors");
+                colors.push_back(*report.colors);
+                controller.apply_terminal_colors(std::move(*report.colors));
+            } else if (report.scheme) {
+                phases.emplace_back("scheme");
+                controller.apply_terminal_color_scheme(*report.scheme);
+            }
+        }
+    };
+    controller.apply_from_settings();
+    CHECK(tests::extract_theme_protocol_commands(terminal.output()) ==
+            commands_of(scenario("same_root_late_query").at("expected").at("initialQueryCommands")));
+    const auto before_switch = terminal.output().size();
+    REQUIRE(old_root.stop({.preserve_screen = true}));
+    REQUIRE(active_root.start());
+    controller.rebind_tui(active_root);
+    CHECK(tests::extract_theme_protocol_commands(
+                  std::span<const std::string>{terminal.output()}.subspan(before_switch)) ==
+            commands_of(expected.at(to_fullscreen ? "phaseA2SwitchCommands" : "phaseB2SwitchCommands")));
+    phases.clear();
+    const auto reply = [&](std::string_view target, const std::string& hex) {
+        REQUIRE(terminal.inject_input("\x1b]" + std::string{target} + ";" + hex + "\x07"));
+    };
+    reply("10", inputs.at("oldFg").get_string());
+    reply("11", inputs.at("oldBg").get_string());
+    REQUIRE(terminal.inject_input("\x1b[?1;2c"));
+    pump();
+    CHECK(colors.empty());
+    CHECK(phases.empty());
+    CHECK(controller.active_theme_name() == "light");
+    // Repeated listener rebinds must still deliver one scheme callback and burst.
+    controller.rebind_terminal_color_scheme_listener();
+    controller.rebind_terminal_color_scheme_listener();
+    controller.rebind_terminal_color_scheme_listener();
+    const auto before_scheme = terminal.output().size();
+    REQUIRE(terminal.inject_input(to_fullscreen ? "\x1b[?997;2n" : "\x1b[?997;1n"));
+    pump();
+    CHECK(phases ==
+            (to_fullscreen ? std::vector<std::string>{"scheme"} : std::vector<std::string>{"scheme", "changed"}));
+    CHECK(tests::extract_theme_protocol_commands(
+                  std::span<const std::string>{terminal.output()}.subspan(before_scheme)) ==
+            commands_of(expected.at(to_fullscreen ? "phaseA5QueryCommands" : "phaseB5QueryCommands")));
+    phases.emplace_back("query-written");
+    reply("10", inputs.at("newFg").get_string());
+    reply("11", inputs.at("newBg").get_string());
+    pump();
+    CHECK(colors.empty());
+    REQUIRE(terminal.inject_input("\x1b[?1;2c"));
+    pump();
+    REQUIRE(colors.size() == 1);
+    CHECK(colors[0].foreground == rgb_of(expected.at("settledColors").at("foreground")));
+    CHECK(colors[0].background == rgb_of(expected.at("settledColors").at("background")));
+    CHECK_FALSE(colors[0].palette.has_value());
+    CHECK(phases ==
+            (to_fullscreen ? std::vector<std::string>{"scheme", "query-written", "colors", "changed"}
+                           : std::vector<std::string>{"scheme", "changed", "query-written", "colors", "changed"}));
+    CHECK(controller.active_theme_name() == expected.at("settledTheme").get_string());
+    controller.dispose();
+    REQUIRE(active_root.stop());
+}
+
+TEST_CASE("Real theme query sink distinguishes late FIFO and malformed frozen replies",
+        "[coding_agent][theme][controller][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-theme-rebind-protocol.json");
+    REQUIRE(artifact);
+    const auto scenario = [&](std::string_view name) -> const support::JsonValue& {
+        for (const auto& entry : artifact->at("scenarios").get_array()) {
+            if (entry.at("name").get_string() == name) return entry;
+        }
+        REQUIRE(false);
+        return *artifact;
+    };
+    std::string name;
+    SECTION("Same root late reply") { name = "same_root_late_query"; }
+    SECTION("Pending queries consume unkeyed replies FIFO") { name = "unkeyed_reply_pending_target_fifo"; }
+    SECTION("Malformed controls leave completion pending") { name = "malformed_and_unsupported_controls"; }
+    const auto& frozen = scenario(name);
+    const auto& inputs = frozen.at("inputs");
+    ControllerHarness harness;
+    tests::EnvVarGuard env("COLORFGBG", "0;15");
+    auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
+    controller.apply_from_settings();
+    CHECK(controller.active_theme_name() == "light");
+    if (name == "same_root_late_query") {
+        REQUIRE(wait_for_reports(harness, 1));
+        {
+            std::lock_guard lock(harness.reports_mutex);
+            REQUIRE(harness.reports.size() == 1);
+            CHECK(harness.reports[0].colors == tui::TerminalColors{});
+        }
+        CHECK(harness.pump(controller) == 1);
+    } else if (name == "unkeyed_reply_pending_target_fifo") {
+        // Two pending requests: one DA1 resolves only the front request.
+        controller.apply_from_settings();
+    } else {
+        REQUIRE(harness.terminal.inject_input("\x1b]10;rgb:invalid\x07\x1b]12;rgb:00/00/00\x07\x1b[24;80R"));
+        CHECK(harness.report_count() == 0);
+    }
+    const auto reply = [&](std::string_view target, const std::string& value) {
+        REQUIRE(harness.terminal.inject_input("\x1b]" + std::string{target} + ";" + value + "\x07"));
+    };
+    if (name == "same_root_late_query") reply("10", inputs.at("lateFg").get_string());
+    if (name == "unkeyed_reply_pending_target_fifo") reply("10", inputs.at("unkeyedFg").get_string());
+    reply("11",
+            inputs.at(name == "same_root_late_query"                    ? "lateBg"
+                          : name == "unkeyed_reply_pending_target_fifo" ? "unkeyedBg"
+                                                                        : "validBg")
+                    .get_string());
+    if (name != "same_root_late_query") CHECK(harness.report_count() == 0);
+    REQUIRE(harness.terminal.inject_input("\x1b[?1;2c"));
+    {
+        std::lock_guard lock(harness.reports_mutex);
+        REQUIRE_FALSE(harness.reports.empty());
+        const auto& actual = harness.reports.back().colors;
+        REQUIRE(actual.has_value());
+        const auto& expected = frozen.at("expected").at("settledColors");
+        const auto check_rgb = [](const std::optional<tui::RgbColor>& rgb, const support::JsonValue& value) {
+            REQUIRE(rgb.has_value());
+            CHECK(rgb->red == value.at("r").get_number());
+            CHECK(rgb->green == value.at("g").get_number());
+            CHECK(rgb->blue == value.at("b").get_number());
+        };
+        check_rgb(actual->background, expected.at("background"));
+        if (name == "malformed_and_unsupported_controls")
+            CHECK_FALSE(actual->foreground.has_value());
+        else
+            check_rgb(actual->foreground, expected.at("foreground"));
+        CHECK_FALSE(actual->palette.has_value());
+        if (name != "same_root_late_query") CHECK(harness.reports.size() == 1);
+    }
+    (void)harness.pump(controller);
+    CHECK(controller.active_theme_name() == "dark");
+    if (name == "unkeyed_reply_pending_target_fifo") {
+        // If the first DA1 consumed both requests, these second replies
+        // would be dropped and the appearance would remain dark.
+        reply("11", "#eeeeee");
+        CHECK(harness.report_count() == 0);
+        REQUIRE(harness.terminal.inject_input("\x1b[?1;2c"));
+        CHECK(harness.report_count() == 1);
+        (void)harness.pump(controller);
+        CHECK(controller.active_theme_name() == "light");
+    }
+}
 
 TEST_CASE("COLORFGBG detection classifies the basic-16 background index",
         "[coding_agent][theme][controller][issue991][spec]") {

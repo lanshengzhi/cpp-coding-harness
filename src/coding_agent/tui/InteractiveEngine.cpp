@@ -317,6 +317,10 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         if (const auto self = weak.lock()) self->invalidate_frame();
     });
 
+    if (!booting && theme_controller_) {
+        theme_controller_->apply_from_settings();
+    }
+
     if (!booting) {
         initialize_view(diagnostics);
         // The `/mcp` refresh drains the manager's latched warnings into the

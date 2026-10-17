@@ -767,4 +767,88 @@ private:
     return extractor.take_commands();
 }
 
+/// Extract theme controls in wire order, retaining duplicates and malformed relevant
+/// controls. Ignore paint, styling, titles and other unrelated terminal protocols.
+/// finish() retains an incomplete relevant control so truncation cannot pass an oracle.
+class ThemeProtocolExtractor final {
+public:
+    void feed(std::string_view chunk) {
+        buffer_.append(chunk);
+        parse(false);
+    }
+
+    void feed(std::span<const std::string> chunks) {
+        for (const auto& chunk : chunks)
+            feed(chunk);
+    }
+
+    void finish() { parse(true); }
+
+    [[nodiscard]] std::vector<std::string> take_commands() { return std::move(commands_); }
+
+private:
+    void parse(bool finishing) {
+        std::size_t pos = 0;
+        while (pos < buffer_.size()) {
+            if (buffer_[pos] != '\x1b') {
+                ++pos;
+                continue;
+            }
+            if (pos + 1 == buffer_.size()) {
+                if (!finishing) break;
+                ++pos;
+                continue;
+            }
+            const auto rest = std::string_view{buffer_}.substr(pos);
+            if (rest[1] == ']') {
+                const auto bel = buffer_.find('\x07', pos + 2);
+                const auto st = buffer_.find("\x1b\\", pos + 2);
+                auto end = std::string::npos;
+                if (bel != std::string::npos) end = bel + 1;
+                if (st != std::string::npos) end = std::min(end, st + 2);
+                if (end == std::string::npos && !finishing) break;
+                const auto payload = rest.substr(2);
+                // Include malformed variants of the three relevant OSC targets.
+                const bool relevant = payload.starts_with("10") || payload.starts_with("11") ||
+                                      (payload.starts_with("4") && (payload.size() == 1 || payload[1] == ';'));
+                if (end == std::string::npos) end = buffer_.size();
+                if (relevant) commands_.emplace_back(buffer_.substr(pos, end - pos));
+                pos = end;
+                continue;
+            }
+            if (rest[1] == '[') {
+                auto end = pos + 2;
+                while (end < buffer_.size() && buffer_[end] >= 0x20 && buffer_[end] <= 0x3f)
+                    ++end;
+                if (end == buffer_.size() && !finishing) break;
+                const auto parameters = std::string_view{buffer_}.substr(pos + 2, end - pos - 2);
+                const bool relevant = parameters.starts_with("?2031") || (end < buffer_.size() && buffer_[end] == 'c');
+                if (end < buffer_.size()) ++end;
+                if (relevant) commands_.emplace_back(buffer_.substr(pos, end - pos));
+                pos = end;
+                continue;
+            }
+            pos += 2;
+        }
+        buffer_.erase(0, pos);
+    }
+
+    std::string buffer_{};
+    std::vector<std::string> commands_{};
+};
+
+[[nodiscard]] inline std::vector<std::string> extract_theme_protocol_commands(std::span<const std::string> chunks) {
+    ThemeProtocolExtractor extractor;
+    extractor.feed(chunks);
+    extractor.finish();
+    return extractor.take_commands();
+}
+
+[[nodiscard]] inline std::vector<std::string> extract_theme_protocol_commands(std::string_view stream) {
+    ThemeProtocolExtractor extractor;
+    extractor.feed(stream);
+    extractor.finish();
+    return extractor.take_commands();
+}
+
 } // namespace cch::tests
