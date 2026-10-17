@@ -559,13 +559,15 @@ frozen `VirtualTerminal` and low-level `@xterm/headless` dispatch without synthe
   and full byte recording measures in-memory terminal emulation state; it does NOT constitute OS-level PTY/stream proof
   (kernel syscalls). Unmeasured generalizations across all eight scenarios are stripped; claims are restricted strictly
   to measured observations.
-- Integrated vs. decomposed crosscheck: For `fullscreen-transcript-short`, an integrated run executing frozen
-  `stopInteractiveTui("transcript")` synchronously (with all public Terminal methods and internal `xterm.write` payloads
-  recorded without internal awaits) followed by `await term.flush()` was directly compared against the decomposed
-  three-phase sequence (`switchstop` → `finalrender` → `finalstop`). Both executions yielded byte-for-byte identical
-  Terminal write vectors, identical xterm byte dispatches, identical normalized event order, and identical final
-  terminal screen/full-buffer states. Both sides of the crosscheck are recorded side-by-side in the artifact without
-  synthetic pass booleans.
+- Integrated vs. decomposed crosscheck limitation: The artifact's `fullscreen-transcript-short` integrated run
+  executes frozen `stopInteractiveTui("transcript")`, but its renderer observer closes over the decomposed terminal.
+  The integrated renderer events and render-count delta are therefore invalid, and the decomposed event list is
+  polluted by that later run. Do not use those fields as an event-order or lifecycle oracle. Controlled phase
+  snapshots taken before the integrated run, actual Terminal/xterm byte vectors, and final terminal state remain
+  usable. A separate notes-only rerun with an explicit observer target compared the short case's complete final
+  state, Terminal/xterm byte vectors and normalized event order; it observed exit deltas of zero starts, two stops
+  and one render. That supplemental rerun does not repair the immutable artifact or establish corrected integrated
+  event observations for the other seven cases.
 - Explicit `fullBuffer` naming: Resolves scrollback ambiguity by capturing `fullBufferLinesWithSpaces` and
   `fullBufferLinesTrimmed` (0 to `buffer.length`), distinguishing full buffer history from viewport `screenLines`.
 - All eight scenarios recorded with identical inputs: `fullscreen-transcript-empty`, `fullscreen-transcript-short`,
@@ -573,8 +575,12 @@ frozen `VirtualTerminal` and low-level `@xterm/headless` dispatch without synthe
   `regular-pending-mutation-stop`, and `regular-pending-mutation-render-now-stop`. Each records all public frozen
   Terminal method calls observed before start, all physical `xterm.write` payloads, cumulative and phase byte/chunk
   counts, and lifecycle deltas from settled setup (`startCountDelta`, `stopCountDelta`, `renderNowCountDelta`).
-- Parent issue #1019 status: Whole issue #1019 remains unaccepted; real consumer engine PTY/stream failure handling,
-  pending image queries, and extension terminal interactions remain open for subsequent work.
+- Consumer coverage: Native tests consume all eight controlled phase snapshots and compare complete relevant
+  buffers, cursor coordinates, modes and joined physical PTY exit bytes. Separate actual-engine tests cover
+  persistent transcript/resume notices, physical output failure, pending image reads, durable streaming Close,
+  failed startup and input drain. Existing extension listener/editor disposal and query-cancellation tests retain
+  their contracts. These checks do not turn the defective integrated observer fields into valid evidence or replace
+  final issue acceptance and Full Validation.
 - Bundle provenance honesty: Historical envelope metadata (`revision`, `capturedAt`, `environment`) is preserved
   for format compatibility, with execution runtime truth recorded in `observationRun` (Node v26.12.0 on Linux x64).
   Actual artifact 35 digest is SHA-256 `3b922dfd32cc8b5e81343694167ae2de59e7b276e929f25654a36fb871013966`,
