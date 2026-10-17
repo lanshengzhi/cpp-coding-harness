@@ -137,6 +137,14 @@
       {
         "path": "capture/recapture-fullscreen-exit-protocol.mts",
         "sha256": "635c2b625cc40a7dec916935d6c9bb386699f8e59e1f095999b992196e3f6367"
+      },
+      {
+        "path": "capture/fullscreen-exit-live-scenarios.mts",
+        "sha256": "5344e5216f51127eb4e925a292574d0be5c69ff0dc6df0ab23791b0324329a11"
+      },
+      {
+        "path": "capture/recapture-fullscreen-exit-live.mts",
+        "sha256": "dd463fd5d63d73b90a9210e6b37a441632cd51cab5d9f5f035947e381af21780"
       }
     ]
   },
@@ -562,6 +570,19 @@
         "packages/tui/src/tui-main-screen.ts:beforeTerminalStop",
         "packages/tui/src/tui-alt-screen.ts:afterTerminalStop",
         "packages/tui/src/tui.ts:Tui.stop,Tui.renderNow"
+      ]
+    },
+    {
+      "path": "fullscreen-exit-live.json",
+      "family": "fullscreen-exit-live",
+      "bytes": 297073,
+      "sha256": "3b922dfd32cc8b5e81343694167ae2de59e7b276e929f25654a36fb871013966",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:stopInteractiveTui,switchTuiMode",
+        "packages/tui/src/tui-main-screen.ts:beforeTerminalStop,renderNow",
+        "packages/tui/src/tui-alt-screen.ts:afterTerminalStop,renderNow",
+        "packages/tui/src/tui.ts:Tui.stop,Tui.renderNow",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.start,VirtualTerminal.stop,VirtualTerminal.write,VirtualTerminal.hideCursor,VirtualTerminal.showCursor"
       ]
     }
   ]

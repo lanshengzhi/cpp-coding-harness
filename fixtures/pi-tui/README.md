@@ -546,6 +546,44 @@ Artifact 34 preserves all prior 33 artifact bytes, baseline metadata, and genera
 `capture/fullscreen-exit-protocol-scenarios.mts` holds the scenario bodies;
 `capture/recapture-fullscreen-exit-protocol.mts` is the append recipe (manifest 33 → 34).
 
+To correct replay harness artifacts and measure actual live terminal state and dispatch sequences,
+`fullscreen-exit-live.json` (artifact 35) records eight exact scenarios directly observing live
+frozen `VirtualTerminal` and low-level `@xterm/headless` dispatch without synthetic replay reconstruction:
+- Scope correction for artifact 34 replay divergence: Artifact 34's replay harness omitted writes
+  emitted directly by `VirtualTerminal` helper methods to its internal `xterm.write` (`start` emitting `\x1b[?2004h`
+  and `hideCursor` emitting `\x1b[?25l`), causing false replay expectations of `bracketedPasteMode: false` in
+  Phase 0 (`settledbeforeexit`) and `cursorHidden: false` (visible) in Phase 2 (`finalrender`). Live frozen measurement
+  in artifact 35 demonstrates that bracketed paste is `true` in Phase 0, and the cursor is hidden (`cursorHidden: true`)
+  in Phase 2. C++ implementation (`4ebd564`) already matches these live frozen states.
+- Observational boundary: Read-only private xterm headless observation (`xterm._core.coreService.isCursorHidden`)
+  and full byte recording measures in-memory terminal emulation state; it does NOT constitute OS-level PTY/stream proof
+  (kernel syscalls). Unmeasured generalizations across all eight scenarios are stripped; claims are restricted strictly
+  to measured observations.
+- Integrated vs. decomposed crosscheck: For `fullscreen-transcript-short`, an integrated run executing frozen
+  `stopInteractiveTui("transcript")` synchronously (with all public Terminal methods and internal `xterm.write` payloads
+  recorded without internal awaits) followed by `await term.flush()` was directly compared against the decomposed
+  three-phase sequence (`switchstop` → `finalrender` → `finalstop`). Both executions yielded byte-for-byte identical
+  Terminal write vectors, identical xterm byte dispatches, identical normalized event order, and identical final
+  terminal screen/full-buffer states. Both sides of the crosscheck are recorded side-by-side in the artifact without
+  synthetic pass booleans.
+- Explicit `fullBuffer` naming: Resolves scrollback ambiguity by capturing `fullBufferLinesWithSpaces` and
+  `fullBufferLinesTrimmed` (0 to `buffer.length`), distinguishing full buffer history from viewport `screenLines`.
+- All eight scenarios recorded with identical inputs: `fullscreen-transcript-empty`, `fullscreen-transcript-short`,
+  `fullscreen-transcript-long`, `fullscreen-resume-hint`, `regular-clean-transcript`, `regular-clean-resume-hint`,
+  `regular-pending-mutation-stop`, and `regular-pending-mutation-render-now-stop`. Each records all public frozen
+  Terminal method calls observed before start, all physical `xterm.write` payloads, cumulative and phase byte/chunk
+  counts, and lifecycle deltas from settled setup (`startCountDelta`, `stopCountDelta`, `renderNowCountDelta`).
+- Parent issue #1019 status: Whole issue #1019 remains unaccepted; real consumer engine PTY/stream failure handling,
+  pending image queries, and extension terminal interactions remain open for subsequent work.
+- Bundle provenance honesty: Historical envelope metadata (`revision`, `capturedAt`, `environment`) is preserved
+  for format compatibility, with execution runtime truth recorded in `observationRun` (Node v26.12.0 on Linux x64).
+  Actual artifact 35 digest is SHA-256 `3b922dfd32cc8b5e81343694167ae2de59e7b276e929f25654a36fb871013966`,
+  297073 bytes across 8 scenarios.
+Artifact 35 preserves all prior 34 artifact bytes, baseline metadata, and generator source digests.
+`capture/fullscreen-exit-live-scenarios.mts` holds the scenario bodies;
+`capture/recapture-fullscreen-exit-live.mts` is the append recipe (manifest 34 → 35).
+
+
 
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
