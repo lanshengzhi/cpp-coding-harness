@@ -23,6 +23,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/tui/ChatViewport.hpp"
+#include "support/ProtocolRecordingTerminal.hpp"
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
@@ -40,7 +41,9 @@
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <fcntl.h>
 #include <iostream>
+#include <termios.h>
 
 #include <filesystem>
 #include <fstream>
@@ -120,9 +123,11 @@ public:
         return inner_.start(std::move(input_sink), std::move(resize_sink));
     }
 
-    cch::support::ExpectedVoid stop() override {
+    using Terminal::stop;
+    cch::support::ExpectedVoid stop() override { return stop(cch::tui::TerminalStopOptions{}); }
+    cch::support::ExpectedVoid stop(cch::tui::TerminalStopOptions options) override {
         ++stop_calls;
-        return inner_.stop();
+        return inner_.stop(options);
     }
 
     cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
@@ -216,6 +221,17 @@ TEST_CASE(
 
 TEST_CASE("Native TUI format_resume_command characterizes the frozen resume command matrix",
         "[coding_agent][tui][exit][resume_command][issue1019][spec]") {
+    const auto bundle = tests::read_pi_tui_evidence("fullscreen-exit-output.json");
+    REQUIRE(bundle);
+    const auto& scenarios = bundle->at("scenarios").get_array();
+    auto sc_it = std::find_if(scenarios.begin(), scenarios.end(), [](const auto& s) {
+        return s.at("name").get_string() == "format-resume-command-matrix";
+    });
+    REQUIRE(sc_it != scenarios.end());
+    const auto& sc = *sc_it;
+    const auto& inputs = sc.at("inputs");
+    const auto& exp = sc.at("expected");
+
     tests::TempWorkspace temp;
     const auto workspace = temp.path() / "workspace";
     std::filesystem::create_directories(workspace);
@@ -224,71 +240,72 @@ TEST_CASE("Native TUI format_resume_command characterizes the frozen resume comm
     const auto default_dir = sessions_root / coding_agent::session_paths::encode_workspace_key(workspace);
     std::filesystem::create_directories(default_dir);
 
-    const std::string session_id = "0197f6e4-4cf9-7f44-a2d8-f8f7f49ee9d3";
-    const auto default_session_file = default_dir / (session_id + ".json");
+    const std::string default_id = inputs.at("defaultSession").at("sessionId").get_string();
+    const auto default_session_file = default_dir / (default_id + ".json");
     std::ofstream(default_session_file) << "{}\n";
 
-    SECTION("default session dir produces pike --session <id>") {
+    SECTION("default session dir produces pi --session <id>") {
         auto cmd = coding_agent::tui::format_resume_command(
-                session_id, default_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+                default_id, default_session_file, workspace, /*stdout_is_tty=*/true, "pi");
         REQUIRE(cmd.has_value());
-        CHECK(*cmd == "pike --session " + session_id);
-    }
+        CHECK(*cmd == exp.at("cmdDefault").get_string());
 
-    SECTION("default session dir with custom app name produces pi --session <id>") {
-        auto cmd = coding_agent::tui::format_resume_command(
-                session_id, default_session_file, workspace, /*stdout_is_tty=*/true, "pi");
-        REQUIRE(cmd.has_value());
-        CHECK(*cmd == "pi --session " + session_id);
+        auto cmd_pike = coding_agent::tui::format_resume_command(
+                default_id, default_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+        REQUIRE(cmd_pike.has_value());
+        CHECK(*cmd_pike == "pike --session " + default_id);
     }
 
     SECTION("custom session dir without spaces") {
-        const auto custom_dir = temp.path() / "custom_sessions";
+        const auto custom_dir = temp.path() / "custom/sessions";
         std::filesystem::create_directories(custom_dir);
-        const auto custom_session_file = custom_dir / "custom-id-1.json";
+        const std::string no_space_id = inputs.at("customNoSpace").at("sessionId").get_string();
+        const auto custom_session_file = custom_dir / (no_space_id + ".json");
         std::ofstream(custom_session_file) << "{}\n";
 
         auto cmd = coding_agent::tui::format_resume_command(
-                "custom-id-1", custom_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+                no_space_id, custom_session_file, workspace, /*stdout_is_tty=*/true, "pi");
         REQUIRE(cmd.has_value());
-        CHECK(*cmd == "pike --session-dir " + custom_dir.string() + " --session custom-id-1");
+        CHECK(*cmd == "pi --session-dir " + custom_dir.string() + " --session " + no_space_id);
     }
 
     SECTION("custom session dir with spaces quotes the path") {
-        const auto custom_dir = temp.path() / "my custom sessions dir";
+        const auto custom_dir = temp.path() / "my custom sessions/dir";
         std::filesystem::create_directories(custom_dir);
-        const auto custom_session_file = custom_dir / "spaces-id.json";
+        const std::string spaces_id = inputs.at("customSpaces").at("sessionId").get_string();
+        const auto custom_session_file = custom_dir / (spaces_id + ".json");
         std::ofstream(custom_session_file) << "{}\n";
 
         auto cmd = coding_agent::tui::format_resume_command(
-                "spaces-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+                spaces_id, custom_session_file, workspace, /*stdout_is_tty=*/true, "pi");
         REQUIRE(cmd.has_value());
-        CHECK(*cmd == "pike --session-dir '" + custom_dir.string() + "' --session spaces-id");
+        CHECK(*cmd == "pi --session-dir '" + custom_dir.string() + "' --session " + spaces_id);
     }
 
     SECTION("custom session dir with single quotes escapes them") {
-        const auto custom_dir = temp.path() / "user's sessions";
+        const auto custom_dir = temp.path() / "my user's sessions/dir";
         std::filesystem::create_directories(custom_dir);
-        const auto custom_session_file = custom_dir / "quotes-id.json";
+        const std::string quotes_id = inputs.at("customSingleQuote").at("sessionId").get_string();
+        const auto custom_session_file = custom_dir / (quotes_id + ".json");
         std::ofstream(custom_session_file) << "{}\n";
 
         auto cmd = coding_agent::tui::format_resume_command(
-                "quotes-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+                quotes_id, custom_session_file, workspace, /*stdout_is_tty=*/true, "pi");
         REQUIRE(cmd.has_value());
-        std::string expected_escaped = custom_dir.string();
-        std::string replaced;
-        for (char c : expected_escaped) {
-            if (c == '\'')
-                replaced += "'\\''";
-            else
-                replaced += c;
-        }
-        CHECK(*cmd == "pike --session-dir '" + replaced + "' --session quotes-id");
+        CHECK(cmd->find("'\\''") != std::string::npos);
+        CHECK(*cmd == "pi --session-dir '" + [&] {
+            std::string r;
+            for (char c : custom_dir.string()) {
+                if (c == '\'')
+                    r += "'\\''";
+                else
+                    r += c;
+            }
+            return r;
+        }() + "' --session " + quotes_id);
     }
 
     SECTION("custom session dir with shell metacharacters is strictly quoted") {
-        // Frozen interactive-mode.ts:332: only /^[a-zA-Z0-9_\-./~:@]+$/ is unquoted.
-        // Paths containing $, ;, (), backticks, wildcard, backslash, etc. MUST be quoted.
         const std::vector<std::string> metachar_dir_names = {"sessions;echo",
                 "sessions$var",
                 "sessions(1)",
@@ -303,46 +320,52 @@ TEST_CASE("Native TUI format_resume_command characterizes the frozen resume comm
             std::ofstream(custom_session_file) << "{}\n";
 
             auto cmd = coding_agent::tui::format_resume_command(
-                    "meta-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+                    "meta-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pi");
             REQUIRE(cmd.has_value());
-            CHECK(*cmd == "pike --session-dir '" + custom_dir.string() + "' --session meta-id");
+            CHECK(*cmd == "pi --session-dir '" + custom_dir.string() + "' --session meta-id");
         }
     }
 
     SECTION("custom session dir with allowed whitelist characters is unquoted") {
-        // Whitelist: a-zA-Z0-9 _ - . / ~ : @
         const auto custom_dir = temp.path() / "dir-123_abc.XYZ~:@";
         std::filesystem::create_directories(custom_dir);
         const auto custom_session_file = custom_dir / "test.json";
         std::ofstream(custom_session_file) << "{}\n";
 
         auto cmd = coding_agent::tui::format_resume_command(
-                "whitelist-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pike");
+                "whitelist-id", custom_session_file, workspace, /*stdout_is_tty=*/true, "pi");
         REQUIRE(cmd.has_value());
-        CHECK(*cmd == "pike --session-dir " + custom_dir.string() + " --session whitelist-id");
+        CHECK(*cmd == "pi --session-dir " + custom_dir.string() + " --session whitelist-id");
+    }
+
+    SECTION("unpersisted session (nullopt path) returns nullopt") {
+        auto cmd = coding_agent::tui::format_resume_command(
+                default_id, std::nullopt, workspace, /*stdout_is_tty=*/true, "pi");
+        CHECK_FALSE(cmd.has_value());
+        CHECK(exp.at("cmdNotPersisted").holds<std::nullptr_t>());
     }
 
     SECTION("non-existent session file returns nullopt") {
         const auto missing_file = default_dir / "does_not_exist.json";
         auto cmd = coding_agent::tui::format_resume_command(
-                "missing", missing_file, workspace, /*stdout_is_tty=*/true, "pike");
+                "missing", missing_file, workspace, /*stdout_is_tty=*/true, "pi");
         CHECK_FALSE(cmd.has_value());
-    }
-
-    SECTION("unpersisted session (nullopt path) returns nullopt") {
-        auto cmd = coding_agent::tui::format_resume_command(
-                session_id, std::nullopt, workspace, /*stdout_is_tty=*/true, "pike");
-        CHECK_FALSE(cmd.has_value());
+        CHECK(exp.at("cmdMissingFile").holds<std::nullptr_t>());
     }
 
     SECTION("non-TTY stdout returns nullopt") {
         auto cmd = coding_agent::tui::format_resume_command(
-                session_id, default_session_file, workspace, /*stdout_is_tty=*/false, "pike");
+                default_id, default_session_file, workspace, /*stdout_is_tty=*/false, "pi");
         CHECK_FALSE(cmd.has_value());
+        CHECK(exp.at("cmdNotTTY").holds<std::nullptr_t>());
     }
 
     SECTION("prefix constant matches pi chalk.dim ANSI string") {
-        CHECK(coding_agent::tui::kResumeNoticePrefix == "\x1b[2mTo resume this session:\x1b[22m ");
+        CHECK(coding_agent::tui::kResumeNoticePrefix == exp.at("chalkDimHeader").get_string() + " ");
+        auto cmd = coding_agent::tui::format_resume_command(
+                default_id, default_session_file, workspace, /*stdout_is_tty=*/true, "pi");
+        REQUIRE(cmd.has_value());
+        CHECK(std::string(coding_agent::tui::kResumeNoticePrefix) + *cmd + "\n" == exp.at("styledNotice").get_string());
     }
 }
 
@@ -552,8 +575,9 @@ TEST_CASE("Native TUI regular exit does not render pending mutation or advance f
     boost::asio::io_context io;
 
     CallCountingTerminal terminal({.columns = 40, .rows = 10});
-    REQUIRE(terminal.inner().seed_shell_content(
-            {"[Main Banner Shell 1]", "[Main Banner Shell 2]"}, {.column = 0, .row = 2}).has_value());
+    REQUIRE(terminal.inner()
+                    .seed_shell_content({"[Main Banner Shell 1]", "[Main Banner Shell 2]"}, {.column = 0, .row = 2})
+                    .has_value());
 
     auto created =
             runtime.run(create_session_async(runtime, session_options(temp, tests::make_scripted_fake_provider())));
@@ -1280,12 +1304,14 @@ TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and 
                         cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
                     return inner_.start(std::move(input_sink), std::move(resize_sink));
                 }
-                cch::support::ExpectedVoid stop() override {
+                using Terminal::stop;
+                cch::support::ExpectedVoid stop() override { return stop(cch::tui::TerminalStopOptions{}); }
+                cch::support::ExpectedVoid stop(cch::tui::TerminalStopOptions options) override {
                     if (fail_stop) {
                         return std::unexpected(
                                 cch::support::make_error(cch::support::ErrorCode::Busy, "simulated stop failure"));
                     }
-                    return inner_.stop();
+                    return inner_.stop(options);
                 }
                 cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
                 cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
@@ -1518,3 +1544,742 @@ TEST_CASE("Native TUI fullscreen exit output probe verifies VirtualTerminal and 
     }
 }
 
+// ── 5. Exact Phase Boundary Protocol & Artifact Consumers ────────────────────
+
+inline std::vector<std::string> extract_control_tokens(std::string_view raw) {
+    std::vector<std::string> tokens;
+    const std::size_t len = raw.size();
+    for (std::size_t i = 0; i < len;) {
+        if (raw[i] == '\x1b') {
+            if (i + 1 < len && raw[i + 1] == '[') {
+                const auto start = i;
+                i += 2;
+                // Parameter bytes (0x30-0x3F): '0'-'9', ':', ';', '<', '=', '>', '?'
+                while (i < len && static_cast<unsigned char>(raw[i]) >= 0x30 &&
+                        static_cast<unsigned char>(raw[i]) <= 0x3F)
+                    ++i;
+                // Intermediate bytes (0x20-0x2F)
+                while (i < len && static_cast<unsigned char>(raw[i]) >= 0x20 &&
+                        static_cast<unsigned char>(raw[i]) <= 0x2F)
+                    ++i;
+                // Final byte (0x40-0x7E)
+                if (i < len && static_cast<unsigned char>(raw[i]) >= 0x40 && static_cast<unsigned char>(raw[i]) <= 0x7E)
+                    ++i;
+                tokens.push_back(std::string(raw.substr(start, i - start)));
+                continue;
+            }
+            if (i + 1 < len && raw[i + 1] == ']') {
+                const auto start = i;
+                i += 2;
+                while (i < len && raw[i] != '\x07' && !(raw[i] == '\x1b' && i + 1 < len && raw[i + 1] == '\\'))
+                    ++i;
+                if (i < len && raw[i] == '\x07') {
+                    ++i;
+                } else if (i + 1 < len && raw[i] == '\x1b' && raw[i + 1] == '\\') {
+                    i += 2;
+                }
+                tokens.push_back(std::string(raw.substr(start, i - start)));
+                continue;
+            }
+            if (i + 1 < len) {
+                tokens.push_back(std::string(raw.substr(i, 2)));
+                i += 2;
+                continue;
+            }
+            tokens.push_back(std::string(raw.substr(i, 1)));
+            ++i;
+            continue;
+        }
+        if (raw[i] == '\r') {
+            if (i + 1 < len && raw[i + 1] == '\n') {
+                tokens.push_back("\r\n");
+                i += 2;
+            } else {
+                tokens.push_back("\r");
+                ++i;
+            }
+            continue;
+        }
+        if (raw[i] == '\n') {
+            tokens.push_back("\n");
+            ++i;
+            continue;
+        }
+        ++i;
+    }
+    return tokens;
+}
+
+class ComponentRef final : public cch::tui::Component {
+public:
+    explicit ComponentRef(cch::tui::Component& target) : target_(target) {}
+    support::Expected<cch::tui::RenderResult> render(std::size_t width) override { return target_.render(width); }
+    void invalidate() override { target_.invalidate(); }
+
+private:
+    cch::tui::Component& target_;
+};
+
+class CountingComponent final : public cch::tui::Component {
+public:
+    explicit CountingComponent(std::unique_ptr<cch::tui::Component> inner, std::shared_ptr<std::size_t> counter)
+        : inner_(std::move(inner)), counter_(std::move(counter)) {}
+
+    support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
+        if (counter_) ++(*counter_);
+        if (inner_) return inner_->render(width);
+        return cch::tui::RenderResult{};
+    }
+
+    void invalidate() override {
+        if (inner_) inner_->invalidate();
+    }
+
+    [[nodiscard]] std::size_t render_count() const noexcept { return counter_ ? *counter_ : 0; }
+
+private:
+    std::unique_ptr<cch::tui::Component> inner_;
+    std::shared_ptr<std::size_t> counter_;
+};
+
+struct ProtocolPhaseSnapshot {
+    std::string phase;
+    std::string active_buffer;
+    std::size_t cursor_x{0};
+    std::size_t cursor_y{0};
+    std::size_t cursor_base_y{0};
+    std::size_t cursor_viewport_y{0};
+    bool cursor_hidden{false};
+    bool bracketed_paste_mode{false};
+    bool alternate_screen{false};
+    bool wraparound_mode{true};
+    std::vector<std::string> screen_lines_with_spaces;
+    std::vector<std::string> screen_lines_trimmed;
+    std::vector<std::string> full_buffer_lines_with_spaces;
+    std::vector<std::string> full_buffer_lines_trimmed;
+    std::vector<std::string> scrollback_lines_with_spaces;
+    std::vector<std::string> scrollback_lines_trimmed;
+    std::size_t start_count{0};
+    std::size_t stop_count{0};
+    std::size_t component_render_count{0};
+    std::size_t start_count_delta{0};
+    std::size_t stop_count_delta{0};
+    std::size_t render_now_count_delta{0};
+    std::size_t raw_writes_total_count{0};
+    std::size_t raw_writes_total_bytes{0};
+    std::vector<std::string> phase_raw_writes;
+    std::vector<std::string> phase_control_tokens;
+    std::vector<tests::ProtocolRecordingTerminal::ObservedOp> phase_ops;
+
+    // Retained for scenario compatibility
+    std::vector<std::string> screen_lines;
+    std::size_t render_now_count{0};
+};
+
+struct ExitScenarioParams {
+    std::string name{};
+    std::size_t columns{40};
+    std::size_t rows{10};
+    std::string initial_mode{"fullscreen"};
+    std::string exit_output{"transcript"};
+    std::vector<std::string> initial_main_buffer{};
+    std::vector<std::string> document_lines{};
+    std::string editor_text{};
+    std::optional<std::string> overlay_text{std::nullopt};
+    std::vector<std::string> pending_mutation{};
+    bool forced_render_now_before_stop{false};
+};
+
+struct ExitRunResult {
+    std::vector<ProtocolPhaseSnapshot> phases;
+    std::vector<std::string> main_buffer_lines;
+    std::string final_cursor_cleanup_writes;
+    std::size_t start_count_delta{0};
+    std::size_t stop_count_delta{0};
+    std::size_t render_now_count_delta{0};
+    std::size_t total_raw_writes_count{0};
+    std::size_t total_raw_bytes{0};
+    std::vector<std::string> relevant_control_tokens;
+    std::string buffer_active_before;
+    std::string buffer_active_after;
+    bool has_overlay_entries_after{false};
+};
+
+inline std::vector<std::string> get_strings(const support::JsonValue& obj, const std::string& key) {
+    std::vector<std::string> res;
+    if (!obj.get_object().contains(key) || !obj.at(key).holds<support::JsonValue::array_t>()) return res;
+    for (const auto& v : obj.at(key).get_array()) {
+        res.push_back(v.get_string());
+    }
+    return res;
+}
+
+ExitRunResult run_exit_scenario(const ExitScenarioParams& params) {
+    ExitRunResult result;
+    cch::tui::VirtualTerminal vt({.columns = params.columns, .rows = params.rows});
+    if (!params.initial_main_buffer.empty()) {
+        REQUIRE(vt.seed_shell_content(
+                          params.initial_main_buffer, {.column = 0, .row = params.initial_main_buffer.size()})
+                        .has_value());
+    }
+    tests::ProtocolRecordingTerminal terminal(vt);
+    std::size_t root_render_count = 0;
+    auto component_render_counter = std::make_shared<std::size_t>(0);
+    std::size_t ops_prev_idx = 0;
+    std::size_t start_count_before_exit = 0;
+    std::size_t stop_count_before_exit = 0;
+
+    auto make_snapshot = [&](std::string phase_name) {
+        ProtocolPhaseSnapshot snap;
+        snap.phase = std::move(phase_name);
+        snap.active_buffer = terminal.inner().modes().alternate_screen ? "alternate" : "normal";
+        snap.cursor_x = terminal.inner().cursor().column;
+        snap.cursor_y = terminal.inner().cursor().row;
+        snap.cursor_base_y = terminal.inner().scrollback_cells().size();
+        snap.cursor_viewport_y = terminal.inner().viewport_top();
+        snap.cursor_hidden = !terminal.inner().modes().cursor_visible;
+        snap.bracketed_paste_mode = terminal.inner().modes().bracketed_paste;
+        snap.alternate_screen = terminal.inner().modes().alternate_screen;
+        snap.wraparound_mode = terminal.inner().modes().autowrap;
+
+        const std::size_t cols = terminal.inner().dimensions().columns;
+        for (const auto& row : terminal.inner().cells()) {
+            std::string line;
+            for (const auto& cell : row) {
+                if (cell.continuation) continue;
+                line += cell.grapheme.empty() ? " " : cell.grapheme;
+            }
+            if (line.size() < cols) {
+                line.append(cols - line.size(), ' ');
+            }
+            snap.screen_lines_with_spaces.push_back(line);
+        }
+        snap.screen_lines_trimmed = terminal.inner().screen();
+        snap.screen_lines = snap.screen_lines_trimmed;
+
+        for (const auto& row : terminal.inner().scrollback_cells()) {
+            std::string line;
+            for (const auto& cell : row) {
+                if (cell.continuation) continue;
+                line += cell.grapheme.empty() ? " " : cell.grapheme;
+            }
+            if (line.size() < cols) {
+                line.append(cols - line.size(), ' ');
+            }
+            snap.scrollback_lines_with_spaces.push_back(line);
+        }
+        snap.scrollback_lines_trimmed = terminal.inner().scrollback();
+
+        snap.full_buffer_lines_with_spaces = snap.scrollback_lines_with_spaces;
+        snap.full_buffer_lines_with_spaces.insert(snap.full_buffer_lines_with_spaces.end(),
+                snap.screen_lines_with_spaces.begin(),
+                snap.screen_lines_with_spaces.end());
+
+        snap.full_buffer_lines_trimmed = snap.scrollback_lines_trimmed;
+        snap.full_buffer_lines_trimmed.insert(snap.full_buffer_lines_trimmed.end(),
+                snap.screen_lines_trimmed.begin(),
+                snap.screen_lines_trimmed.end());
+
+        snap.start_count = terminal.start_count();
+        snap.stop_count = terminal.stop_count();
+        snap.component_render_count = *component_render_counter;
+        snap.render_now_count = root_render_count;
+        snap.start_count_delta = terminal.start_count() - start_count_before_exit;
+        snap.stop_count_delta = terminal.stop_count() - stop_count_before_exit;
+        snap.render_now_count_delta = root_render_count;
+
+        const auto& all_ops = terminal.ops();
+        for (std::size_t i = ops_prev_idx; i < all_ops.size(); ++i) {
+            snap.phase_ops.push_back(all_ops[i]);
+            if (all_ops[i].kind == tests::ProtocolRecordingTerminal::OpKind::Write) {
+                snap.phase_raw_writes.push_back(all_ops[i].write_bytes);
+            }
+        }
+        ops_prev_idx = all_ops.size();
+
+        std::size_t total_writes = 0;
+        std::size_t total_bytes = 0;
+        for (const auto& op : all_ops) {
+            if (op.kind == tests::ProtocolRecordingTerminal::OpKind::Write) {
+                ++total_writes;
+                total_bytes += op.write_bytes.size();
+            }
+        }
+        snap.raw_writes_total_count = total_writes;
+        snap.raw_writes_total_bytes = total_bytes;
+
+        std::string phase_combined;
+        for (const auto& w : snap.phase_raw_writes)
+            phase_combined += w;
+        snap.phase_control_tokens = extract_control_tokens(phase_combined);
+
+        return snap;
+    };
+
+    auto doc_c = std::make_unique<cch::tui::Container>();
+    auto* doc_ptr = doc_c.get();
+    for (const auto& line : params.document_lines) {
+        (void)doc_c->add_child(std::make_unique<cch::tui::Text>(line, 0, 0));
+    }
+    auto pending_c = std::make_unique<cch::tui::Container>();
+    auto status_c = std::make_unique<cch::tui::Container>();
+    auto editor_c = std::make_unique<cch::tui::Container>();
+    if (!params.editor_text.empty()) {
+        (void)editor_c->add_child(std::make_unique<cch::tui::Text>(params.editor_text, 0, 0));
+    }
+    auto footer_c = std::make_unique<cch::tui::Container>();
+
+    if (params.initial_mode == "fullscreen") {
+        cch::coding_agent::tui::ChatViewportOptions vp_opts;
+        vp_opts.document = std::make_unique<ComponentRef>(*doc_c);
+        vp_opts.pending_messages = std::make_unique<ComponentRef>(*pending_c);
+        vp_opts.status = std::make_unique<ComponentRef>(*status_c);
+        vp_opts.editor = std::make_unique<ComponentRef>(*editor_c);
+        vp_opts.footer = std::make_unique<ComponentRef>(*footer_c);
+        vp_opts.scrollbar = cch::tui::ScrollbarMode::Hidden;
+        auto viewport = cch::coding_agent::tui::create_chat_viewport(std::move(vp_opts));
+        REQUIRE(viewport.has_value());
+
+        cch::tui::AltScreen screen(terminal);
+        screen.set_layout_root(std::move(viewport->root));
+        REQUIRE(screen.add_child(std::move(doc_c)));
+        REQUIRE(screen.add_child(std::move(pending_c)));
+        REQUIRE(screen.add_child(std::move(status_c)));
+        REQUIRE(screen.add_child(std::move(editor_c)));
+        REQUIRE(screen.add_child(std::move(footer_c)));
+
+        cch::tui::Overlay* overlay_ptr = nullptr;
+        if (params.overlay_text.has_value()) {
+            auto overlay = std::make_unique<cch::tui::Overlay>();
+            (void)overlay->add_child(std::make_unique<cch::tui::Text>(*params.overlay_text, 0, 0));
+            overlay_ptr = overlay.get();
+            REQUIRE(screen.add_overlay(std::move(overlay)));
+            REQUIRE(screen.has_overlay_entries());
+        }
+
+        REQUIRE(screen.start());
+        REQUIRE(screen.render());
+
+        start_count_before_exit = terminal.start_count();
+        stop_count_before_exit = terminal.stop_count();
+
+        result.buffer_active_before = terminal.inner().modes().alternate_screen ? "alternate" : "normal";
+        result.phases.push_back(make_snapshot("settledbeforeexit"));
+
+        if (params.exit_output == "transcript") {
+            if (overlay_ptr != nullptr) {
+                screen.clear_overlays();
+            }
+            auto transferred = screen.take_children();
+            (void)screen.take_layout_root();
+            REQUIRE(screen.stop(cch::tui::TuiStopOptions{.preserve_screen = true}));
+            result.phases.push_back(make_snapshot("switchstop"));
+
+            cch::tui::MainScreen main_screen(terminal);
+            main_screen.set_render_complete_sink([&](const support::ExpectedVoid& res) {
+                if (res) ++root_render_count;
+            });
+            auto root_container = std::make_unique<cch::tui::Container>();
+            for (auto& child : transferred) {
+                (void)root_container->add_child(std::move(child));
+            }
+            REQUIRE(main_screen.add_child(
+                    std::make_unique<CountingComponent>(std::move(root_container), component_render_counter)));
+            REQUIRE(main_screen.render_final_presentation());
+            result.phases.push_back(make_snapshot("finalrender"));
+
+            const auto ops_before_final_stop = terminal.ops().size();
+            REQUIRE(main_screen.stop(cch::tui::TuiStopOptions{.preserve_screen = false}));
+            result.phases.push_back(make_snapshot("finalstop"));
+            result.has_overlay_entries_after = main_screen.has_overlay_entries();
+
+            std::string cleanup;
+            for (std::size_t i = ops_before_final_stop; i < terminal.ops().size(); ++i) {
+                if (terminal.ops()[i].kind == tests::ProtocolRecordingTerminal::OpKind::Write) {
+                    cleanup += terminal.ops()[i].write_bytes;
+                }
+            }
+            result.final_cursor_cleanup_writes = std::move(cleanup);
+        } else {
+            // resume-hint
+            if (overlay_ptr != nullptr) {
+                screen.clear_overlays();
+            }
+            const auto ops_before_final_stop = terminal.ops().size();
+            REQUIRE(screen.stop(cch::tui::TuiStopOptions{.preserve_screen = true}));
+            result.phases.push_back(make_snapshot("finalstop"));
+            result.has_overlay_entries_after = screen.has_overlay_entries();
+
+            std::string cleanup;
+            for (std::size_t i = ops_before_final_stop; i < terminal.ops().size(); ++i) {
+                if (terminal.ops()[i].kind == tests::ProtocolRecordingTerminal::OpKind::Write) {
+                    cleanup += terminal.ops()[i].write_bytes;
+                }
+            }
+            result.final_cursor_cleanup_writes = std::move(cleanup);
+        }
+    } else {
+        // Regular mode
+        cch::tui::MainScreen screen(terminal);
+        REQUIRE(screen.add_child(std::move(doc_c)));
+        REQUIRE(screen.add_child(std::move(pending_c)));
+        REQUIRE(screen.add_child(std::move(status_c)));
+        REQUIRE(screen.add_child(std::move(editor_c)));
+        REQUIRE(screen.add_child(std::move(footer_c)));
+
+        REQUIRE(screen.start());
+        REQUIRE(screen.render());
+
+        start_count_before_exit = terminal.start_count();
+        stop_count_before_exit = terminal.stop_count();
+
+        result.buffer_active_before = terminal.inner().modes().alternate_screen ? "alternate" : "normal";
+        result.phases.push_back(make_snapshot("settledbeforeexit"));
+
+        if (!params.pending_mutation.empty()) {
+            for (const auto& mut : params.pending_mutation) {
+                (void)doc_ptr->add_child(std::make_unique<cch::tui::Text>(mut, 0, 0));
+            }
+            result.phases.push_back(make_snapshot("pendingmutation"));
+        }
+
+        if (params.forced_render_now_before_stop) {
+            screen.set_render_complete_sink([&](const support::ExpectedVoid& res) {
+                if (res) ++root_render_count;
+            });
+            REQUIRE(screen.render());
+            result.phases.push_back(make_snapshot("finalrender"));
+        }
+
+        const auto ops_before_final_stop = terminal.ops().size();
+        REQUIRE(screen.stop(cch::tui::TuiStopOptions{.preserve_screen = false}));
+        result.phases.push_back(make_snapshot("finalstop"));
+        result.has_overlay_entries_after = screen.has_overlay_entries();
+
+        std::string cleanup;
+        for (std::size_t i = ops_before_final_stop; i < terminal.ops().size(); ++i) {
+            if (terminal.ops()[i].kind == tests::ProtocolRecordingTerminal::OpKind::Write) {
+                cleanup += terminal.ops()[i].write_bytes;
+            }
+        }
+        result.final_cursor_cleanup_writes = std::move(cleanup);
+    }
+
+    result.buffer_active_after = terminal.inner().modes().alternate_screen ? "alternate" : "normal";
+    result.start_count_delta = terminal.start_count() - start_count_before_exit;
+    result.stop_count_delta = terminal.stop_count() - stop_count_before_exit;
+    result.render_now_count_delta = root_render_count;
+
+    std::size_t total_writes = 0;
+    std::size_t total_bytes = 0;
+    std::string all_writes_combined;
+    for (const auto& op : terminal.ops()) {
+        if (op.kind == tests::ProtocolRecordingTerminal::OpKind::Write) {
+            ++total_writes;
+            total_bytes += op.write_bytes.size();
+            all_writes_combined += op.write_bytes;
+        }
+    }
+    result.total_raw_writes_count = total_writes;
+    result.total_raw_bytes = total_bytes;
+    result.relevant_control_tokens = extract_control_tokens(all_writes_combined);
+
+    auto trim_right = [](std::string_view s) {
+        auto end = s.find_last_not_of(" \t\r\n");
+        return end == std::string_view::npos ? std::string{} : std::string(s.substr(0, end + 1));
+    };
+    for (const auto& line : terminal.inner().scrollback()) {
+        auto trimmed = trim_right(line);
+        if (!trimmed.empty()) result.main_buffer_lines.push_back(std::move(trimmed));
+    }
+    for (const auto& line : terminal.inner().screen()) {
+        auto trimmed = trim_right(line);
+        if (!trimmed.empty()) result.main_buffer_lines.push_back(std::move(trimmed));
+    }
+
+    return result;
+}
+
+TEST_CASE("Native TUI public fullscreen exit output characterizes frozen artifact 33 scenarios",
+        "[coding_agent][tui][exit][artifact33][issue1019][spec]") {
+    const auto bundle = tests::read_pi_tui_evidence("fullscreen-exit-output.json");
+    REQUIRE(bundle);
+    const auto& scenarios = bundle->at("scenarios").get_array();
+
+    for (std::size_t s_idx = 0; s_idx < 6; ++s_idx) {
+        const auto& s = scenarios[s_idx];
+        const auto name = s.at("name").get_string();
+        DYNAMIC_SECTION("scenario: " << name) {
+            const auto& dims = s.at("dimensions");
+            const auto& inputs = s.at("inputs");
+            const auto& exp = s.at("expected");
+
+            auto initial_main_buffer = get_strings(inputs, "initialMainBuffer");
+            auto document_lines = get_strings(inputs, "documentLines");
+            auto editor_text = inputs.get_object().contains("editorText") ? inputs.at("editorText").get_string() : "";
+            if (name == "overlay-dismissal-exit") {
+                // Sourced from frozen capture harness (fullscreen-exit-output-scenarios.mts:354-356)
+                if (initial_main_buffer.empty()) initial_main_buffer = {"Main buffer row"};
+                if (document_lines.empty()) document_lines = {"User message"};
+                if (editor_text.empty()) editor_text = "active prompt";
+            }
+
+            ExitScenarioParams params{
+                    .name = name,
+                    .columns = static_cast<std::size_t>(dims.at("columns").get_number()),
+                    .rows = static_cast<std::size_t>(dims.at("rows").get_number()),
+                    .initial_mode = inputs.at("initialMode").get_string(),
+                    .exit_output = inputs.at("fullscreenExitOutput").get_string(),
+                    .initial_main_buffer = std::move(initial_main_buffer),
+                    .document_lines = std::move(document_lines),
+                    .editor_text = std::move(editor_text),
+                    .overlay_text = inputs.get_object().contains("overlayText")
+                                            ? std::optional(inputs.at("overlayText").get_string())
+                                            : std::nullopt,
+                    .pending_mutation = {},
+                    .forced_render_now_before_stop = false,
+            };
+
+            auto res = run_exit_scenario(params);
+
+            if (exp.get_object().contains("bufferActiveTypeBefore")) {
+                CHECK(res.buffer_active_before == exp.at("bufferActiveTypeBefore").get_string());
+            }
+            if (exp.get_object().contains("bufferActiveTypeAfter")) {
+                CHECK(res.buffer_active_after == exp.at("bufferActiveTypeAfter").get_string());
+            }
+            if (exp.get_object().contains("startCountDelta")) {
+                CHECK(res.start_count_delta == static_cast<std::size_t>(exp.at("startCountDelta").get_number()));
+            }
+            if (exp.get_object().contains("stopCountDelta")) {
+                CHECK(res.stop_count_delta == static_cast<std::size_t>(exp.at("stopCountDelta").get_number()));
+            }
+            if (exp.get_object().contains("hasOverlayEntriesAfter")) {
+                CHECK(res.has_overlay_entries_after == exp.at("hasOverlayEntriesAfter").get_boolean());
+            }
+            if (exp.get_object().contains("mainBufferLines")) {
+                CHECK(res.main_buffer_lines == get_strings(exp, "mainBufferLines"));
+            }
+        }
+    }
+}
+
+TEST_CASE("Native TUI fullscreen exit characterizes live artifact 35 fullscreen-transcript-short probe",
+        "[coding_agent][tui][exit][artifact35][issue1019][probe][fullscreen_short]") {
+    const auto bundle = tests::read_pi_tui_evidence("fullscreen-exit-live.json");
+    REQUIRE(bundle);
+    const auto& scenarios = bundle->at("scenarios").get_array();
+    auto sc_it = std::find_if(scenarios.begin(), scenarios.end(), [](const auto& s) {
+        return s.at("name").get_string() == "fullscreen-transcript-short";
+    });
+    REQUIRE(sc_it != scenarios.end());
+    const auto& sc = *sc_it;
+    const auto& dims = sc.at("dimensions");
+    const auto& inputs = sc.at("inputs");
+    const auto& exp = sc.at("expected");
+
+    ExitScenarioParams params{
+            .name = "fullscreen-transcript-short",
+            .columns = static_cast<std::size_t>(dims.at("columns").get_number()),
+            .rows = static_cast<std::size_t>(dims.at("rows").get_number()),
+            .initial_mode = inputs.at("initialMode").get_string(),
+            .exit_output = inputs.at("fullscreenExitOutput").get_string(),
+            .initial_main_buffer = get_strings(inputs, "initialMainBuffer"),
+            .document_lines = get_strings(inputs, "documentLines"),
+            .editor_text = inputs.at("editorText").get_string(),
+            .overlay_text = std::nullopt,
+            .pending_mutation = get_strings(inputs, "pendingMutation"),
+            .forced_render_now_before_stop = inputs.at("forcedRenderNowBeforeStop").get_boolean(),
+    };
+
+    SECTION("VirtualTerminal public interface and protocol snapshot probe") {
+        auto res = run_exit_scenario(params);
+
+        // Scenario-level expectations from live artifact 35:
+        CHECK(res.buffer_active_before == exp.at("bufferActiveTypeBefore").get_string());
+        CHECK(res.buffer_active_after == exp.at("bufferActiveTypeAfter").get_string());
+        CHECK(res.start_count_delta == static_cast<std::size_t>(exp.at("startCountDelta").get_number()));
+        CHECK(res.stop_count_delta == static_cast<std::size_t>(exp.at("stopCountDelta").get_number()));
+        CHECK(res.render_now_count_delta == static_cast<std::size_t>(exp.at("renderNowCountDelta").get_number()));
+
+        // Final cursor & modes:
+        const auto& exp_final_cursor = exp.at("finalCursor");
+        const auto& final_snap = res.phases.back();
+        CHECK(final_snap.cursor_x == static_cast<std::size_t>(exp_final_cursor.at("x").get_number()));
+        CHECK(final_snap.cursor_y == static_cast<std::size_t>(exp_final_cursor.at("y").get_number()));
+        CHECK(final_snap.cursor_base_y == static_cast<std::size_t>(exp_final_cursor.at("baseY").get_number()));
+        CHECK(final_snap.cursor_viewport_y == static_cast<std::size_t>(exp_final_cursor.at("viewportY").get_number()));
+        CHECK(final_snap.cursor_hidden == !exp.at("finalCursorVisible").get_boolean());
+        const auto& exp_final_modes = exp.at("finalModes");
+        CHECK(final_snap.bracketed_paste_mode == exp_final_modes.at("bracketedPasteMode").get_boolean());
+        CHECK(final_snap.alternate_screen == exp_final_modes.at("alternateScreen").get_boolean());
+        CHECK(final_snap.wraparound_mode == exp_final_modes.at("wraparoundMode").get_boolean());
+
+        // Final screen & full active buffer lines:
+        CHECK(final_snap.screen_lines_with_spaces == get_strings(exp, "finalScreenLinesWithSpaces"));
+        CHECK(final_snap.full_buffer_lines_with_spaces == get_strings(exp, "finalFullBufferLinesWithSpaces"));
+
+        std::string exp_cleanup;
+        for (const auto& w : exp.at("finalCursorCleanupWrites").get_array())
+            exp_cleanup += w.get_string();
+        CHECK(res.final_cursor_cleanup_writes == exp_cleanup);
+
+        // Exact per-phase comparisons:
+        const auto& exp_phases = exp.at("phases").get_array();
+        REQUIRE(res.phases.size() == exp_phases.size());
+        for (std::size_t p_idx = 0; p_idx < exp_phases.size(); ++p_idx) {
+            const auto& ep = exp_phases[p_idx];
+            const auto& sp = res.phases[p_idx];
+            DYNAMIC_SECTION("phase " << p_idx << ": " << ep.at("phase").get_string()) {
+                CHECK(sp.phase == ep.at("phase").get_string());
+                CHECK(sp.active_buffer == ep.at("activeBuffer").get_string());
+                CHECK(sp.cursor_x == static_cast<std::size_t>(ep.at("cursor").at("x").get_number()));
+                CHECK(sp.cursor_y == static_cast<std::size_t>(ep.at("cursor").at("y").get_number()));
+                CHECK(sp.cursor_base_y == static_cast<std::size_t>(ep.at("cursor").at("baseY").get_number()));
+                CHECK(sp.cursor_viewport_y == static_cast<std::size_t>(ep.at("cursor").at("viewportY").get_number()));
+                CHECK(sp.cursor_hidden == ep.at("cursorHidden").get_boolean());
+                const auto& ep_modes = ep.at("modes");
+                CHECK(sp.bracketed_paste_mode == ep_modes.at("bracketedPasteMode").get_boolean());
+                CHECK(sp.alternate_screen == ep_modes.at("alternateScreen").get_boolean());
+                CHECK(sp.wraparound_mode == ep_modes.at("wraparoundMode").get_boolean());
+                CHECK(sp.screen_lines_with_spaces == get_strings(ep, "screenLinesWithSpaces"));
+                CHECK(sp.full_buffer_lines_with_spaces == get_strings(ep, "fullBufferLinesWithSpaces"));
+                CHECK(sp.start_count_delta == static_cast<std::size_t>(ep.at("startCountDelta").get_number()));
+                CHECK(sp.stop_count_delta == static_cast<std::size_t>(ep.at("stopCountDelta").get_number()));
+                CHECK(sp.render_now_count_delta == static_cast<std::size_t>(ep.at("renderNowCountDelta").get_number()));
+                CHECK(sp.component_render_count == static_cast<std::size_t>(ep.at("renderNowCountDelta").get_number()));
+            }
+        }
+    }
+
+    SECTION("ProcessTerminal real PTY byte stream probe") {
+        auto pty = tests::open_pseudo_terminal(40, 10);
+        REQUIRE(pty);
+
+        // 1. Explicitly configure slave termios with OPOST OFF (documented raw output)
+        termios orig_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &orig_termios) == 0);
+        termios raw_slave_termios = orig_termios;
+        raw_slave_termios.c_oflag &= ~OPOST;
+        REQUIRE(tcsetattr(pty->slave.get(), TCSANOW, &raw_slave_termios) == 0);
+
+        // Snapshot initial fd flags and termios on slave
+        const int initial_slave_flags = fcntl(pty->slave.get(), F_GETFL);
+        termios initial_slave_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &initial_slave_termios) == 0);
+
+        // 2. Initial shell banner written to SLAVE fd before start
+        std::string expected_banner;
+        for (const auto& line : params.initial_main_buffer) {
+            const std::string banner_line = line + "\r\n";
+            expected_banner += banner_line;
+            REQUIRE(::write(pty->slave.get(), banner_line.data(), banner_line.size()) ==
+                    static_cast<ssize_t>(banner_line.size()));
+        }
+
+        // 3. Read master independently to verify exact joined banner before starting ProcessTerminal
+        std::string received_banner;
+        while (received_banner.size() < expected_banner.size()) {
+            char buf[256];
+            const auto n = ::read(pty->master.get(), buf, sizeof(buf));
+            if (n <= 0) break;
+            received_banner.append(buf, static_cast<std::size_t>(n));
+        }
+        CHECK(received_banner == expected_banner);
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal pty_terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+
+        auto doc_c = std::make_unique<cch::tui::Container>();
+        for (const auto& line : params.document_lines) {
+            (void)doc_c->add_child(std::make_unique<cch::tui::Text>(line, 0, 0));
+        }
+        auto pending_c = std::make_unique<cch::tui::Container>();
+        auto status_c = std::make_unique<cch::tui::Container>();
+        auto editor_c = std::make_unique<cch::tui::Container>();
+        (void)editor_c->add_child(std::make_unique<cch::tui::Text>(params.editor_text, 0, 0));
+        auto footer_c = std::make_unique<cch::tui::Container>();
+
+        cch::coding_agent::tui::ChatViewportOptions vp_opts;
+        vp_opts.document = std::make_unique<ComponentRef>(*doc_c);
+        vp_opts.pending_messages = std::make_unique<ComponentRef>(*pending_c);
+        vp_opts.status = std::make_unique<ComponentRef>(*status_c);
+        vp_opts.editor = std::make_unique<ComponentRef>(*editor_c);
+        vp_opts.footer = std::make_unique<ComponentRef>(*footer_c);
+        vp_opts.scrollbar = cch::tui::ScrollbarMode::Hidden;
+        auto viewport = cch::coding_agent::tui::create_chat_viewport(std::move(vp_opts));
+        REQUIRE(viewport.has_value());
+
+        cch::tui::AltScreen screen(pty_terminal);
+        screen.set_layout_root(std::move(viewport->root));
+        REQUIRE(screen.add_child(std::move(doc_c)));
+        REQUIRE(screen.add_child(std::move(pending_c)));
+        REQUIRE(screen.add_child(std::move(status_c)));
+        REQUIRE(screen.add_child(std::move(editor_c)));
+        REQUIRE(screen.add_child(std::move(footer_c)));
+
+        REQUIRE(screen.start());
+        REQUIRE(screen.render());
+        const auto p0_bytes = cch::tests::read_available(pty->master.get());
+        (void)p0_bytes;
+
+        // Drain buffered input before exit matching product caller and document:
+        // ProcessTerminal pushes the keyboard protocol on startup, so drain_input()
+        // delivers the exact pop sequence for the active protocol.
+        const std::string expected_drain_bytes = "\x1b[<u";
+        REQUIRE(pty_terminal.drain_input());
+        const auto drain_bytes = cch::tests::read_available(pty->master.get());
+        CHECK(drain_bytes == expected_drain_bytes);
+
+        auto transferred = screen.take_children();
+        (void)screen.take_layout_root();
+        REQUIRE(screen.stop(cch::tui::TuiStopOptions{.preserve_screen = true}));
+        const auto p1_bytes = cch::tests::read_available(pty->master.get());
+
+        cch::tui::MainScreen main_screen(pty_terminal);
+        for (auto& child : transferred) {
+            REQUIRE(main_screen.add_child(std::move(child)));
+        }
+        REQUIRE(main_screen.render_final_presentation());
+        const auto p2_bytes = cch::tests::read_available(pty->master.get());
+
+        REQUIRE(main_screen.stop(cch::tui::TuiStopOptions{.preserve_screen = false}));
+        const auto p3_bytes = cch::tests::read_available(pty->master.get());
+
+        // Drain phase boundaries and compare fd flags and termios restoration at finish
+        const int final_slave_flags = fcntl(pty->slave.get(), F_GETFL);
+        termios final_slave_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &final_slave_termios) == 0);
+        CHECK(final_slave_flags == initial_slave_flags);
+        CHECK(cch::tests::same_terminal_state(final_slave_termios, initial_slave_termios));
+
+        auto join_strings = [](const std::vector<std::string>& strs) {
+            std::string res;
+            for (const auto& s : strs)
+                res += s;
+            return res;
+        };
+
+        const auto& exp_phases = exp.at("phases").get_array();
+        const auto exp_p1_bytes = join_strings(get_strings(exp_phases[1], "phaseXtermWrites"));
+        const auto exp_p2_bytes = join_strings(get_strings(exp_phases[2], "phaseXtermWrites"));
+        const auto exp_p3_bytes = join_strings(get_strings(exp_phases[3], "phaseXtermWrites"));
+
+        // Compare FULL joined actual exit bytes against artifact 35 phaseXtermWrites baseline
+        CHECK(p1_bytes == exp_p1_bytes);
+        CHECK(p2_bytes == exp_p2_bytes);
+        CHECK(p3_bytes == exp_p3_bytes);
+
+        const auto p1_tokens = extract_control_tokens(p1_bytes);
+        const auto p2_tokens = extract_control_tokens(p2_bytes);
+        const auto p3_tokens = extract_control_tokens(p3_bytes);
+
+        CHECK(p1_tokens == get_strings(exp_phases[1], "phaseControlTokens"));
+        CHECK(p2_tokens == get_strings(exp_phases[2], "phaseControlTokens"));
+        CHECK(p3_tokens == get_strings(exp_phases[3], "phaseControlTokens"));
+    }
+}

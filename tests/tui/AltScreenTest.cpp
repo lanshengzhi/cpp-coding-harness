@@ -1037,3 +1037,125 @@ TEST_CASE("AltScreen cancels a multi-click press on focus loss and drops its cli
     CHECK(copy() == "beta");
     REQUIRE(tui.stop());
 }
+
+TEST_CASE("AltScreen stop preserve_screen falls back to ordinary stop on unsupported terminal",
+        "[tui][alt-screen][atomic][stop][fallback][issue1019][spec]") {
+    class UnsupportedAtomicTerminal final : public cch::tui::Terminal {
+    public:
+        explicit UnsupportedAtomicTerminal(cch::tui::VirtualTerminal& inner) : inner_(inner) {}
+        using Terminal::stop;
+        cch::support::ExpectedVoid start(cch::tui::TerminalInputSink in, cch::tui::TerminalResizeSink rsz) override {
+            return inner_.start(std::move(in), std::move(rsz));
+        }
+        // Inherits default stop(TerminalStopOptions) which returns Validation error for final_alternate_restore
+        cch::support::ExpectedVoid stop() override {
+            ++fallback_stop_calls;
+            return inner_.stop();
+        }
+        cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+        cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
+        cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+        cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+        cch::support::ExpectedVoid write(std::string_view s) override { return inner_.write(s); }
+        cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition p) override { return inner_.set_cursor(p); }
+        cch::support::ExpectedVoid set_cursor_visible(bool v) override { return inner_.set_cursor_visible(v); }
+        cch::support::ExpectedVoid set_alternate_screen(bool a) override { return inner_.set_alternate_screen(a); }
+        cch::support::ExpectedVoid set_autowrap(bool w) override { return inner_.set_autowrap(w); }
+        cch::support::ExpectedVoid set_scroll_margins(std::size_t t, std::size_t b) override {
+            return inner_.set_scroll_margins(t, b);
+        }
+        cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+        cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
+        cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+        cch::support::ExpectedVoid set_title(std::string_view t) override { return inner_.set_title(t); }
+        cch::support::ExpectedVoid set_progress(bool p) override { return inner_.set_progress(p); }
+        cch::support::ExpectedVoid drain_input(std::chrono::milliseconds a, std::chrono::milliseconds b) override {
+            return inner_.drain_input(a, b);
+        }
+        cch::support::ExpectedVoid enter_output_only() override { return inner_.enter_output_only(); }
+        cch::support::ExpectedVoid leave_output_only() override { return inner_.leave_output_only(); }
+
+        std::size_t fallback_stop_calls{0};
+
+    private:
+        cch::tui::VirtualTerminal& inner_;
+    };
+
+    cch::tui::VirtualTerminal vt({.columns = 40, .rows = 10});
+    UnsupportedAtomicTerminal term(vt);
+    cch::tui::AltScreen screen(term);
+    REQUIRE(screen.start());
+
+    // When preserve_screen=true is requested on a terminal that does not support
+    // final_alternate_restore, AltScreen must invoke fallback stop() so input
+    // and raw mode are restored, but return the Validation error (no false capability success).
+    auto res = screen.stop(cch::tui::TuiStopOptions{.preserve_screen = true});
+    REQUIRE_FALSE(res.has_value());
+    CHECK(res.error().code == cch::support::ErrorCode::Validation);
+    CHECK(term.fallback_stop_calls == 1);
+
+    // Terminal was properly stopped by the fallback, so starting again succeeds
+    REQUIRE(screen.start());
+    REQUIRE(screen.stop());
+}
+
+TEST_CASE("AltScreen stop aggregates multiple errors from pre-steps and stop",
+        "[tui][alt-screen][atomic][stop][error_aggregation][issue1019][spec]") {
+    class FailingPreStepTerminal final : public cch::tui::Terminal {
+    public:
+        explicit FailingPreStepTerminal(cch::tui::VirtualTerminal& inner) : inner_(inner) {}
+        cch::support::ExpectedVoid start(cch::tui::TerminalInputSink in, cch::tui::TerminalResizeSink rsz) override {
+            return inner_.start(std::move(in), std::move(rsz));
+        }
+        using Terminal::stop;
+        cch::support::ExpectedVoid stop() override { return inner_.stop(); }
+        cch::support::ExpectedVoid stop(cch::tui::TerminalStopOptions) override {
+            return std::unexpected(
+                    cch::support::make_error(cch::support::ErrorCode::Process, "simulated atomic stop failure"));
+        }
+        cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+        cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
+        cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+        cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+        cch::support::ExpectedVoid write(std::string_view s) override {
+            if (s.find("1000l") != std::string_view::npos) {
+                return std::unexpected(
+                        cch::support::make_error(cch::support::ErrorCode::Process, "simulated mouse disable failure"));
+            }
+            return inner_.write(s);
+        }
+        cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition p) override { return inner_.set_cursor(p); }
+        cch::support::ExpectedVoid set_cursor_visible(bool v) override { return inner_.set_cursor_visible(v); }
+        cch::support::ExpectedVoid set_alternate_screen(bool a) override { return inner_.set_alternate_screen(a); }
+        cch::support::ExpectedVoid set_autowrap(bool w) override { return inner_.set_autowrap(w); }
+        cch::support::ExpectedVoid set_scroll_margins(std::size_t t, std::size_t b) override {
+            return inner_.set_scroll_margins(t, b);
+        }
+        cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+        cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
+        cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+        cch::support::ExpectedVoid set_title(std::string_view t) override { return inner_.set_title(t); }
+        cch::support::ExpectedVoid set_progress(bool p) override { return inner_.set_progress(p); }
+        cch::support::ExpectedVoid drain_input(std::chrono::milliseconds a, std::chrono::milliseconds b) override {
+            return inner_.drain_input(a, b);
+        }
+        cch::support::ExpectedVoid enter_output_only() override { return inner_.enter_output_only(); }
+        cch::support::ExpectedVoid leave_output_only() override { return inner_.leave_output_only(); }
+
+    private:
+        cch::tui::VirtualTerminal& inner_;
+    };
+
+    cch::tui::VirtualTerminal vt({.columns = 40, .rows = 10});
+    FailingPreStepTerminal term(vt);
+    cch::tui::AltScreen screen(term);
+    REQUIRE(screen.start());
+
+    auto res = screen.stop(cch::tui::TuiStopOptions{.preserve_screen = true});
+    REQUIRE_FALSE(res.has_value());
+    // Primary error (mouse disable failure) and secondary error (atomic stop failure)
+    // are both recorded in detail by combine_errors.
+    CHECK(res.error().message.find("AltScreen stop encountered multiple failures") != std::string::npos);
+    CHECK(res.error().detail.find("mouse disable failure") != std::string::npos);
+    CHECK(res.error().detail.find("atomic stop failure") != std::string::npos);
+}

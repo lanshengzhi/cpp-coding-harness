@@ -526,7 +526,20 @@ support::ExpectedVoid VirtualTerminal::start(TerminalInputSink input_sink, Termi
     return {};
 }
 
-support::ExpectedVoid VirtualTerminal::stop() {
+support::ExpectedVoid VirtualTerminal::stop() { return stop(TerminalStopOptions{}); }
+
+support::ExpectedVoid VirtualTerminal::stop(TerminalStopOptions options) {
+    if (options.final_alternate_restore) {
+        if (!impl_->modes.started) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "Virtual Terminal must be started for final alternate restore stop"));
+        }
+        if (!impl_->modes.alternate_screen) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "Virtual Terminal is not in alternate screen for final alternate restore stop"));
+        }
+    }
+
     if (impl_->output_only) {
         return leave_output_only();
     }
@@ -540,6 +553,37 @@ support::ExpectedVoid VirtualTerminal::stop() {
     impl_->modes.started = false;
     impl_->modes.raw_input = false;
     impl_->modes.bracketed_paste = false;
+
+    if (impl_->sync_depth > 0) {
+        impl_->output.push_back(std::string(kEndSync));
+        impl_->sync_depth = 0;
+    }
+    if (!impl_->modes.autowrap) {
+        impl_->output.push_back("\x1b[?7h");
+        impl_->modes.autowrap = true;
+    }
+
+    if (options.final_alternate_restore) {
+        if (impl_->saved_main_screen) {
+            auto saved = std::move(*impl_->saved_main_screen);
+            impl_->saved_main_screen.reset();
+            impl_->cells = std::move(saved.cells);
+            impl_->scrollback_cells = std::move(saved.scrollback_cells);
+            impl_->viewport_top = saved.viewport_top;
+            impl_->scroll_origin = saved.scroll_origin;
+            impl_->cursor = saved.cursor;
+            impl_->images = std::move(saved.images);
+            impl_->style = saved.style;
+            impl_->next_image_handle = saved.next_image_handle;
+            resize_cells(*impl_, impl_->dimensions);
+        }
+        constexpr std::string_view kFinalAlternateRestoreFrame = "\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l";
+        impl_->output.push_back(std::string(kFinalAlternateRestoreFrame));
+        impl_->modes.alternate_screen = false;
+        impl_->modes.cursor_visible = true;
+        refresh_screen(*impl_);
+    }
+
     impl_->modes.cursor_visible = true;
     impl_->images.clear();
     if (impl_->margins_active) {

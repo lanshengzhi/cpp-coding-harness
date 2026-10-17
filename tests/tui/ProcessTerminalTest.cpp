@@ -2301,3 +2301,291 @@ TEST_CASE("PI_TUI_WRITE_LOG resolves an existing directory to a timestamped per-
 
     CHECK(read_text_file(resolved) == "session-log");
 }
+
+TEST_CASE("Process Terminal atomic stop rejects unstarted terminal or non-alternate screen state",
+        "[tui][terminal][atomic][stop][issue1019][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    SECTION("rejects unstarted terminal") {
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = test_io().io.get_executor(),
+        });
+        auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+        REQUIRE_FALSE(stop_res.has_value());
+        CHECK(stop_res.error().code == cch::support::ErrorCode::Validation);
+        CHECK(stop_res.error().message.find("must be started") != std::string::npos);
+    }
+
+    SECTION("rejects started terminal not in alternate screen") {
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = test_io().io.get_executor(),
+        });
+        REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+        (void)cch::tests::read_available(pty->master.get());
+
+        auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+        REQUIRE_FALSE(stop_res.has_value());
+        CHECK(stop_res.error().code == cch::support::ErrorCode::Validation);
+        CHECK(stop_res.error().message.find("not in alternate screen") != std::string::npos);
+
+        REQUIRE(terminal.stop());
+    }
+
+    SECTION("base Terminal stop default implementation handles compatibility") {
+        class MockTerminal final : public cch::tui::Terminal {
+        public:
+            using Terminal::stop;
+            cch::support::ExpectedVoid start(cch::tui::TerminalInputSink, cch::tui::TerminalResizeSink) override {
+                return {};
+            }
+            cch::support::ExpectedVoid stop() override {
+                ++ordinary_stop_calls;
+                return {};
+            }
+            cch::tui::TerminalDimensions dimensions() const override { return {.columns = 80, .rows = 24}; }
+            cch::tui::TerminalCapabilities capabilities() const override { return {}; }
+            cch::tui::TerminalModeState modes() const override { return {}; }
+            cch::support::ExpectedVoid clear_screen() override { return {}; }
+            cch::support::ExpectedVoid write(std::string_view) override { return {}; }
+            cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition) override { return {}; }
+            cch::support::ExpectedVoid set_cursor_visible(bool) override { return {}; }
+            cch::support::ExpectedVoid set_alternate_screen(bool) override { return {}; }
+            cch::support::ExpectedVoid set_autowrap(bool) override { return {}; }
+            cch::support::ExpectedVoid set_scroll_margins(std::size_t, std::size_t) override { return {}; }
+            cch::support::ExpectedVoid reset_scroll_margins() override { return {}; }
+            cch::support::ExpectedVoid begin_synchronized_update() override { return {}; }
+            cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
+            cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
+            cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+            cch::support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
+                return {};
+            }
+            cch::support::ExpectedVoid enter_output_only() override { return {}; }
+            cch::support::ExpectedVoid leave_output_only() override { return {}; }
+            std::size_t ordinary_stop_calls{0};
+        };
+
+        MockTerminal mock;
+        auto default_res = mock.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = false});
+        REQUIRE(default_res.has_value());
+        CHECK(mock.ordinary_stop_calls == 1);
+
+        auto atomic_res = mock.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+        REQUIRE_FALSE(atomic_res.has_value());
+        CHECK(atomic_res.error().code == cch::support::ErrorCode::Validation);
+        CHECK(atomic_res.error().message.find("does not support final alternate restore stop") != std::string::npos);
+    }
+}
+
+TEST_CASE("Process Terminal atomic stop restores boundedly under saturated PTY on same descriptor",
+        "[tui][terminal][atomic][stop][saturation][issue1019][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    const int initial_slave_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    termios initial_slave_termios{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &initial_slave_termios) == 0);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = test_io().io.get_executor(),
+    });
+
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.set_alternate_screen(true));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Saturate the PTY output buffer and bounded output queue
+    (void)fill_output_queue_until_busy(terminal);
+
+    // Bounded atomic stop under saturation must finish quickly and return Busy
+    const auto start_time = std::chrono::steady_clock::now();
+    auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+    const auto elapsed = std::chrono::steady_clock::now() - start_time;
+
+    CHECK(elapsed < std::chrono::milliseconds(500));
+    REQUIRE_FALSE(stop_res.has_value());
+    CHECK(stop_res.error().code == cch::support::ErrorCode::Busy);
+
+    // Flags and termios MUST still be restored
+    const int final_slave_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    termios final_slave_termios{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &final_slave_termios) == 0);
+    CHECK(final_slave_flags == initial_slave_flags);
+    CHECK(cch::tests::same_terminal_state(final_slave_termios, initial_slave_termios));
+
+    // Mode restoration failure latches: subsequent start/output-only rejected
+    auto follow_start = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+    REQUIRE_FALSE(follow_start.has_value());
+    CHECK(follow_start.error().code == cch::support::ErrorCode::Process);
+
+    auto follow_output_only = terminal.enter_output_only();
+    REQUIRE_FALSE(follow_output_only.has_value());
+    CHECK(follow_output_only.error().code == cch::support::ErrorCode::Validation);
+}
+
+TEST_CASE("Process Terminal atomic stop restores boundedly under saturated PTY on dup descriptor",
+        "[tui][terminal][atomic][stop][saturation][issue1019][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::support::UniqueFd dup_output(::dup(pty->slave.get()));
+    REQUIRE(dup_output.get() >= 0);
+
+    const int initial_slave_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    termios initial_slave_termios{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &initial_slave_termios) == 0);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = dup_output.get(),
+            .executor = test_io().io.get_executor(),
+    });
+
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.set_alternate_screen(true));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Saturate PTY buffer and output queue
+    (void)fill_output_queue_until_busy(terminal);
+
+    const auto start_time = std::chrono::steady_clock::now();
+    auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+    const auto elapsed = std::chrono::steady_clock::now() - start_time;
+
+    CHECK(elapsed < std::chrono::milliseconds(500));
+    REQUIRE_FALSE(stop_res.has_value());
+    CHECK(stop_res.error().code == cch::support::ErrorCode::Busy);
+
+    // Flags and termios restored
+    const int final_slave_flags = ::fcntl(pty->slave.get(), F_GETFL);
+    termios final_slave_termios{};
+    REQUIRE(::tcgetattr(pty->slave.get(), &final_slave_termios) == 0);
+    CHECK(final_slave_flags == initial_slave_flags);
+    CHECK(cch::tests::same_terminal_state(final_slave_termios, initial_slave_termios));
+}
+
+TEST_CASE("Process Terminal atomic stop and default stop detect postdrain EIO on closed master",
+        "[tui][terminal][atomic][stop][drain_error][issue1019][spec]") {
+    SECTION("atomic stop detects closed master postdrain EIO and reports error") {
+        auto pty = cch::tests::open_pseudo_terminal();
+        REQUIRE(pty);
+
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = test_io().io.get_executor(),
+        });
+        REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+        REQUIRE(terminal.set_alternate_screen(true));
+        (void)cch::tests::read_available(pty->master.get());
+
+        // Close master so subsequent writes in stop fail with EIO
+        pty->master.reset();
+
+        auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+        REQUIRE_FALSE(stop_res.has_value());
+        CHECK(stop_res.error().code == cch::support::ErrorCode::Process);
+
+        // State latch: subsequent start rejected
+        auto follow_start = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+        REQUIRE_FALSE(follow_start.has_value());
+    }
+
+    SECTION("ordinary default stop detects closed master postdrain EIO and reports error") {
+        auto pty = cch::tests::open_pseudo_terminal();
+        REQUIRE(pty);
+
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = test_io().io.get_executor(),
+        });
+        REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+        REQUIRE(terminal.set_alternate_screen(true));
+        (void)cch::tests::read_available(pty->master.get());
+
+        pty->master.reset();
+
+        auto stop_res = terminal.stop();
+        REQUIRE_FALSE(stop_res.has_value());
+        CHECK(stop_res.error().code == cch::support::ErrorCode::Process);
+    }
+}
+
+TEST_CASE("Process Terminal atomic stop flushes nested synchronized update payload before exit",
+        "[tui][terminal][atomic][stop][sync_depth][issue1019][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = test_io().io.get_executor(),
+    });
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.set_alternate_screen(true));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // Nested synchronized update with unique payload
+    REQUIRE(terminal.begin_synchronized_update());
+    REQUIRE(terminal.begin_synchronized_update());
+    REQUIRE(terminal.write("NESTED_PAYLOAD_SPEC946_UNIQUE"));
+
+    REQUIRE(terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true}));
+
+    const auto master_bytes = cch::tests::read_available(pty->master.get());
+    CHECK(master_bytes.find("NESTED_PAYLOAD_SPEC946_UNIQUE") != std::string::npos);
+    // Verified closed with \x1b[?2026l then final exit sequence
+    const auto payload_pos = master_bytes.find("NESTED_PAYLOAD_SPEC946_UNIQUE");
+    const auto sync_close_pos = master_bytes.find("\x1b[?2026l", payload_pos);
+    const auto exit_pos = master_bytes.find("\x1b[?1049l", sync_close_pos);
+    CHECK(payload_pos != std::string::npos);
+    CHECK(sync_close_pos != std::string::npos);
+    CHECK(exit_pos != std::string::npos);
+
+    // Sync depth was reset to 0: restart succeeds
+    auto follow_start = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+    REQUIRE(follow_start.has_value());
+    REQUIRE(terminal.stop());
+}
+
+TEST_CASE("Process Terminal atomic stop restores autowrap when caller disabled it directly",
+        "[tui][terminal][atomic][stop][autowrap][issue1019][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = test_io().io.get_executor(),
+    });
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.set_alternate_screen(true));
+    (void)cch::tests::read_available(pty->master.get());
+
+    REQUIRE(terminal.set_autowrap(false));
+    (void)cch::tests::read_available(pty->master.get());
+
+    REQUIRE(terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true}));
+
+    const auto master_bytes = cch::tests::read_available(pty->master.get());
+    CHECK(master_bytes.find("\x1b[?7h") != std::string::npos);
+    CHECK(terminal.modes().autowrap == true);
+}

@@ -46,8 +46,10 @@ public:
     ProcessTerminal(const ProcessTerminal&) = delete;
     ProcessTerminal& operator=(const ProcessTerminal&) = delete;
 
+    using Terminal::stop;
     [[nodiscard]] support::ExpectedVoid start(TerminalInputSink input_sink, TerminalResizeSink resize_sink) override;
     [[nodiscard]] support::ExpectedVoid stop() override;
+    [[nodiscard]] support::ExpectedVoid stop(TerminalStopOptions options) override;
     [[nodiscard]] TerminalDimensions dimensions() const override;
     [[nodiscard]] TerminalCapabilities capabilities() const override;
     [[nodiscard]] TerminalModeState modes() const override;
