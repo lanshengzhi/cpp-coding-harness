@@ -104,8 +104,8 @@ protected:
         std::streamsize total = 0;
         while (total < count) {
             const auto n = ::write(fd_, s + total, static_cast<size_t>(count - total));
-            if (n < 0) {
-                if (errno == EINTR) continue;
+            if (n <= 0) {
+                if (n < 0 && errno == EINTR) continue;
                 return total > 0 ? total : -1;
             }
             total += n;
@@ -129,6 +129,36 @@ public:
 private:
     FdStreamBuf buf_;
 };
+
+constexpr std::string_view kIndependentResumeNoticePrefix = "\x1b[2mTo resume this session:\x1b[22m ";
+
+[[nodiscard]] std::string text_from_message(const ai::MessageVariant& message) {
+    if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
+        if (const auto* vec = std::get_if<std::vector<ai::Content>>(&user->content)) {
+            if (!vec->empty() && std::holds_alternative<ai::TextContent>(vec->front())) {
+                return std::get<ai::TextContent>(vec->front()).text;
+            }
+        } else if (const auto* text = std::get_if<std::string>(&user->content)) {
+            return *text;
+        }
+    }
+    if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
+        if (!assistant->content.empty() && std::holds_alternative<ai::TextContent>(assistant->content.front())) {
+            return std::get<ai::TextContent>(assistant->content.front()).text;
+        }
+    }
+    return {};
+}
+
+[[nodiscard]] std::size_t count_occurrences(std::string_view text, std::string_view target) {
+    std::size_t count = 0;
+    std::size_t pos = 0;
+    while ((pos = text.find(target, pos)) != std::string_view::npos) {
+        ++count;
+        pos += target.size();
+    }
+    return count;
+}
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
         const tests::TempWorkspace& workspace, std::shared_ptr<tests::ScriptedProvider> client) {
@@ -2672,12 +2702,13 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                 static_cast<ssize_t>(shell_banner.size()));
 
         std::string received_banner;
-        while (received_banner.size() < shell_banner.size()) {
-            char buf[256];
-            const auto n = ::read(pty->master.get(), buf, sizeof(buf));
-            if (n <= 0) break;
-            received_banner.append(buf, static_cast<std::size_t>(n));
-        }
+        REQUIRE(cch::tests::wait_until(
+                [&] {
+                    received_banner.append(
+                            cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return received_banner.size() >= shell_banner.size();
+                },
+                std::chrono::seconds(2)));
         CHECK(received_banner == shell_banner);
 
         const auto custom_dir = temp.path() / "user's sessions dir";
@@ -2694,15 +2725,8 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         tests::RuntimeLoopDriver runtime_driver(runtime);
         auto& session = *created->session;
 
-        std::string escaped_dir;
-        for (char c : custom_dir.string()) {
-            if (c == '\'')
-                escaped_dir += "'\\''";
-            else
-                escaped_dir += c;
-        }
-        const std::string expected_notice = std::string(coding_agent::tui::kResumeNoticePrefix) +
-                                            "pike --session-dir '" + escaped_dir + "' --session " +
+        const std::string expected_notice = std::string(kIndependentResumeNoticePrefix) + "pike --session-dir '" +
+                                            temp.path().string() + "/user'\\''s sessions dir' --session " +
                                             session.session_id() + "\n";
 
         boost::asio::io_context io;
@@ -2732,19 +2756,25 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                     run_exception = ex;
                     run_result.emplace(std::move(res));
                 });
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
 
-        std::jthread runner([&] { io.run(); });
-
-        REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
-        std::string phase0_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
-        CHECK(phase0_bytes.find("\x1b[?1049h") != std::string::npos);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+        std::string phase0_bytes;
+        REQUIRE(pump_until(
+                io,
+                [&] {
+                    phase0_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase0_bytes.find("\x1b[?1049h") != std::string::npos;
+                },
+                std::chrono::seconds(2)));
 
         const std::string prompt_text = "hello persistent exit test\r";
         REQUIRE(::write(pty->master.get(), prompt_text.data(), prompt_text.size()) ==
                 static_cast<ssize_t>(prompt_text.size()));
 
         std::string phase1_bytes;
-        REQUIRE(cch::tests::wait_until(
+        REQUIRE(pump_until(
+                io,
                 [&] {
                     phase1_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
                     return phase1_bytes.find("fake: hello persistent exit test") != std::string::npos;
@@ -2756,32 +2786,35 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         const auto actual_session_path = *session.session_path();
         CHECK(std::filesystem::exists(actual_session_path));
         CHECK(std::filesystem::file_size(actual_session_path) > 0);
+
         const auto loaded = harness::session::SessionStore::load(actual_session_path);
         REQUIRE(loaded.has_value());
-
-        const auto snap = session.snapshot();
-        REQUIRE(snap.agent_state.messages.size() == 3);
-        const auto* user_msg = std::get_if<ai::UserMessage>(&snap.agent_state.messages[1]);
+        REQUIRE(loaded->messages.size() == 3);
+        CHECK(std::holds_alternative<ai::SystemMessage>(loaded->messages[0]));
+        const auto* user_msg = std::get_if<ai::UserMessage>(&loaded->messages[1]);
         REQUIRE(user_msg != nullptr);
-        const auto* user_content = std::get_if<std::vector<ai::Content>>(&user_msg->content);
-        REQUIRE(user_content != nullptr);
-        REQUIRE(!user_content->empty());
-        CHECK(std::get<ai::TextContent>((*user_content)[0]).text == "hello persistent exit test");
-        const auto* asst_msg = std::get_if<ai::AssistantMessage>(&snap.agent_state.messages[2]);
+        CHECK(text_from_message(*user_msg) == "hello persistent exit test");
+        const auto* asst_msg = std::get_if<ai::AssistantMessage>(&loaded->messages[2]);
         REQUIRE(asst_msg != nullptr);
-        REQUIRE(!asst_msg->content.empty());
-        CHECK(std::get<ai::TextContent>(asst_msg->content[0]).text == "fake: hello persistent exit test");
+        CHECK(text_from_message(*asst_msg) == "fake: hello persistent exit test");
 
         constexpr char kCtrlD = '\x04';
         REQUIRE(::write(pty->master.get(), &kCtrlD, 1) == 1);
-        REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
-        runner.join();
+        REQUIRE(pump_until(
+                io, [&] { return run_result.has_value() && !terminal.modes().started; }, std::chrono::seconds(10)));
 
         CHECK(run_exception == nullptr);
         REQUIRE(run_result.has_value());
         CHECK(run_result->has_value());
 
-        std::string phase2_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(200));
+        std::string phase2_bytes;
+        REQUIRE(pump_until(
+                io,
+                [&] {
+                    phase2_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase2_bytes.find(expected_notice) != std::string::npos;
+                },
+                std::chrono::seconds(2)));
 
         CHECK(pty_ostream.fd_buf().write_calls() > 0);
         CHECK(pty_ostream.fd_buf().bytes_written() == expected_notice.size());
@@ -2789,14 +2822,26 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         REQUIRE(phase2_bytes.size() >= expected_notice.size());
         CHECK(phase2_bytes.ends_with(expected_notice));
 
+        CHECK(count_occurrences(phase2_bytes, "\x1b[?1049l") == 1);
         const auto pos_1049l = phase2_bytes.find("\x1b[?1049l");
         REQUIRE(pos_1049l != std::string::npos);
         const std::string after_1049l = phase2_bytes.substr(pos_1049l + 8);
         CHECK(after_1049l.find("fake: hello persistent exit test") != std::string::npos);
+        CHECK(after_1049l.find("\x1b[?25h") != std::string::npos);
         CHECK(after_1049l.ends_with(expected_notice));
 
+        const auto reloaded = harness::session::SessionStore::load(actual_session_path);
+        REQUIRE(reloaded.has_value());
+        REQUIRE(reloaded->messages.size() == 3);
+        CHECK(text_from_message(reloaded->messages[1]) == "hello persistent exit test");
+        CHECK(text_from_message(reloaded->messages[2]) == "fake: hello persistent exit test");
+
         CHECK(!terminal.modes().started);
+        CHECK(!terminal.modes().raw_input);
+        CHECK(!terminal.modes().bracketed_paste);
+        CHECK(terminal.modes().cursor_visible);
         CHECK(!terminal.modes().alternate_screen);
+        CHECK(terminal.modes().autowrap);
 
         const int final_flags = fcntl(pty->slave.get(), F_GETFL);
         termios final_termios{};
@@ -2840,12 +2885,13 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                 static_cast<ssize_t>(shell_banner.size()));
 
         std::string received_banner;
-        while (received_banner.size() < shell_banner.size()) {
-            char buf[256];
-            const auto n = ::read(pty->master.get(), buf, sizeof(buf));
-            if (n <= 0) break;
-            received_banner.append(buf, static_cast<std::size_t>(n));
-        }
+        REQUIRE(cch::tests::wait_until(
+                [&] {
+                    received_banner.append(
+                            cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return received_banner.size() >= shell_banner.size();
+                },
+                std::chrono::seconds(2)));
         CHECK(received_banner == shell_banner);
 
         tests::RuntimeFixture runtime;
@@ -2859,7 +2905,7 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         auto& session = *created->session;
 
         const std::string expected_notice =
-                std::string(coding_agent::tui::kResumeNoticePrefix) + "pike --session " + session.session_id() + "\n";
+                std::string(kIndependentResumeNoticePrefix) + "pike --session " + session.session_id() + "\n";
 
         boost::asio::io_context io;
         cch::tui::ProcessTerminal terminal({
@@ -2888,19 +2934,25 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                     run_exception = ex;
                     run_result.emplace(std::move(res));
                 });
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
 
-        std::jthread runner([&] { io.run(); });
-
-        REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
-        std::string phase0_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
-        CHECK(phase0_bytes.find("\x1b[?1049h") != std::string::npos);
+        REQUIRE(pump_until(io, [&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+        std::string phase0_bytes;
+        REQUIRE(pump_until(
+                io,
+                [&] {
+                    phase0_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase0_bytes.find("\x1b[?1049h") != std::string::npos;
+                },
+                std::chrono::seconds(2)));
 
         const std::string prompt_text = "hello hint exit test\r";
         REQUIRE(::write(pty->master.get(), prompt_text.data(), prompt_text.size()) ==
                 static_cast<ssize_t>(prompt_text.size()));
 
         std::string phase1_bytes;
-        REQUIRE(cch::tests::wait_until(
+        REQUIRE(pump_until(
+                io,
                 [&] {
                     phase1_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
                     return phase1_bytes.find("fake: hello hint exit test") != std::string::npos;
@@ -2912,19 +2964,35 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         const auto actual_session_path = *session.session_path();
         CHECK(std::filesystem::exists(actual_session_path));
         CHECK(std::filesystem::file_size(actual_session_path) > 0);
+
         const auto loaded = harness::session::SessionStore::load(actual_session_path);
         REQUIRE(loaded.has_value());
+        REQUIRE(loaded->messages.size() == 3);
+        CHECK(std::holds_alternative<ai::SystemMessage>(loaded->messages[0]));
+        const auto* user_msg = std::get_if<ai::UserMessage>(&loaded->messages[1]);
+        REQUIRE(user_msg != nullptr);
+        CHECK(text_from_message(*user_msg) == "hello hint exit test");
+        const auto* asst_msg = std::get_if<ai::AssistantMessage>(&loaded->messages[2]);
+        REQUIRE(asst_msg != nullptr);
+        CHECK(text_from_message(*asst_msg) == "fake: hello hint exit test");
 
         constexpr char kCtrlD = '\x04';
         REQUIRE(::write(pty->master.get(), &kCtrlD, 1) == 1);
-        REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
-        runner.join();
+        REQUIRE(pump_until(
+                io, [&] { return run_result.has_value() && !terminal.modes().started; }, std::chrono::seconds(10)));
 
         CHECK(run_exception == nullptr);
         REQUIRE(run_result.has_value());
         CHECK(run_result->has_value());
 
-        std::string phase2_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(200));
+        std::string phase2_bytes;
+        REQUIRE(pump_until(
+                io,
+                [&] {
+                    phase2_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase2_bytes.find(expected_notice) != std::string::npos;
+                },
+                std::chrono::seconds(2)));
 
         CHECK(pty_ostream.fd_buf().write_calls() > 0);
         CHECK(pty_ostream.fd_buf().bytes_written() == expected_notice.size());
@@ -2932,6 +3000,7 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         REQUIRE(phase2_bytes.size() >= expected_notice.size());
         CHECK(phase2_bytes.ends_with(expected_notice));
 
+        CHECK(count_occurrences(phase2_bytes, "\x1b[?1049l") == 1);
         const auto pos_1049l = phase2_bytes.rfind("\x1b[?1049l");
         REQUIRE(pos_1049l != std::string::npos);
         const std::string after_1049l = phase2_bytes.substr(pos_1049l + 8);
@@ -2939,8 +3008,18 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         CHECK(after_1049l.find("\x1b[?25h") != std::string::npos);
         CHECK(after_1049l.ends_with(expected_notice));
 
+        const auto reloaded = harness::session::SessionStore::load(actual_session_path);
+        REQUIRE(reloaded.has_value());
+        REQUIRE(reloaded->messages.size() == 3);
+        CHECK(text_from_message(reloaded->messages[1]) == "hello hint exit test");
+        CHECK(text_from_message(reloaded->messages[2]) == "fake: hello hint exit test");
+
         CHECK(!terminal.modes().started);
+        CHECK(!terminal.modes().raw_input);
+        CHECK(!terminal.modes().bracketed_paste);
+        CHECK(terminal.modes().cursor_visible);
         CHECK(!terminal.modes().alternate_screen);
+        CHECK(terminal.modes().autowrap);
 
         const int final_flags = fcntl(pty->slave.get(), F_GETFL);
         termios final_termios{};
@@ -3015,10 +3094,9 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                     run_exception = ex;
                     run_result.emplace(std::move(res));
                 });
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
 
-        std::jthread runner([&] { io.run(); });
-
-        REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+        REQUIRE(pump_until(io, [&] { return terminal.modes().started; }, std::chrono::seconds(2)));
         (void)cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
 
         const std::string prompt_text = "hello failure prompt\r";
@@ -3026,7 +3104,8 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                 static_cast<ssize_t>(prompt_text.size()));
 
         std::string phase1_bytes;
-        REQUIRE(cch::tests::wait_until(
+        REQUIRE(pump_until(
+                io,
                 [&] {
                     phase1_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
                     return phase1_bytes.find("fake: hello failure prompt") != std::string::npos;
@@ -3034,15 +3113,33 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                 std::chrono::seconds(10)));
 
         REQUIRE(session.session_path().has_value());
-        CHECK(std::filesystem::exists(*session.session_path()));
-        CHECK(std::filesystem::file_size(*session.session_path()) > 0);
+        const auto actual_session_path = *session.session_path();
+        CHECK(std::filesystem::exists(actual_session_path));
+        CHECK(std::filesystem::file_size(actual_session_path) > 0);
+
+        // Verify physical file contains the full typed conversation before master is closed
+        const auto loaded_pre = harness::session::SessionStore::load(actual_session_path);
+        REQUIRE(loaded_pre.has_value());
+        REQUIRE(loaded_pre->messages.size() == 3);
+        CHECK(std::holds_alternative<ai::SystemMessage>(loaded_pre->messages[0]));
+        const auto* user_msg = std::get_if<ai::UserMessage>(&loaded_pre->messages[1]);
+        REQUIRE(user_msg != nullptr);
+        CHECK(text_from_message(*user_msg) == "hello failure prompt");
+        const auto* asst_msg = std::get_if<ai::AssistantMessage>(&loaded_pre->messages[2]);
+        REQUIRE(asst_msg != nullptr);
+        CHECK(text_from_message(*asst_msg) == "fake: hello failure prompt");
 
         // Break physical output by closing master descriptor
         pty->master.reset();
 
-        // Request exit through public engine (master is closed, so cannot send keys)
-        engine->request_exit();
-        runner.join();
+        // Request exit through cooperative executor guard (master is closed, so cannot send keys)
+        boost::asio::post(io, [&] {
+            if (!run_result.has_value()) {
+                engine->request_exit();
+            }
+        });
+
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }, std::chrono::seconds(10)));
 
         CHECK(run_exception == nullptr);
         REQUIRE(run_result.has_value());
@@ -3053,5 +3150,12 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         // Crucial contract: When exit/restoration fails physically, ZERO resume notice bytes are written
         CHECK(pty_ostream.fd_buf().write_calls() == 0);
         CHECK(pty_ostream.fd_buf().bytes_written() == 0);
+
+        // Conversation history remains durable in the physical file after failed exit
+        const auto loaded_post = harness::session::SessionStore::load(actual_session_path);
+        REQUIRE(loaded_post.has_value());
+        REQUIRE(loaded_post->messages.size() == 3);
+        CHECK(text_from_message(loaded_post->messages[1]) == "hello failure prompt");
+        CHECK(text_from_message(loaded_post->messages[2]) == "fake: hello failure prompt");
     }
 }
