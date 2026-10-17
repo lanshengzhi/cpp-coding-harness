@@ -14,9 +14,7 @@
 
 #include <chrono>
 #include <format>
-#include <functional>
 #include <optional>
-#include <stop_token>
 #include <vector>
 
 namespace cch::tests {
@@ -39,20 +37,7 @@ public:
                 requests.push_back(RecordedProviderRequest{model, context, options});
                 const auto turn = requests.size();
 
-                if (options.stop_token.stop_requested()) {
-                    co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "cancelled"));
-                }
-
-                std::optional<std::stop_callback<std::function<void()>>> stop_cb;
-                if (options.stop_token.stop_possible()) {
-                    stop_cb.emplace(options.stop_token, [this] { gate_.interrupt(); });
-                }
-
                 co_await gate_.wait();
-
-                if (options.stop_token.stop_requested()) {
-                    co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "cancelled"));
-                }
 
                 auto response = ai::assistant_text_message(std::format("turn {}", turn));
                 response.provider = "gated-fake";
