@@ -21,6 +21,13 @@ enum class TuiMode {
     Fullscreen,
 };
 
+/// pi `FullscreenExitOutput` — exit output policy when leaving fullscreen mode
+/// (settings key `fullscreenExitOutput`). In regular mode this setting has no effect.
+enum class FullscreenExitOutput {
+    Transcript,
+    ResumeHint,
+};
+
 /// pi `compaction` — nested automatic-compaction settings. Every field is
 /// optional: a missing field falls back to pi's `DEFAULT_COMPACTION_SETTINGS`
 /// (`enabled: true`, `reserveTokens: 16384`, `keepRecentTokens: 20000`) when
@@ -122,6 +129,8 @@ struct UserSettings {
     std::optional<bool> show_hardware_cursor{std::nullopt};
     /// pi `terminal.showTerminalProgress` — Show OSC 9;4 progress indicators in the terminal tab bar (default false).
     std::optional<bool> show_terminal_progress{std::nullopt};
+    /// pi `fullscreenExitOutput` — Print transcript or resume hint when exiting fullscreen mode.
+    std::optional<std::string> fullscreen_exit_output{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -206,6 +215,16 @@ public:
     [[nodiscard]] support::ExpectedVoid set_default_thinking_level(
         SettingsScope scope,
         std::string_view value);
+
+    /// Resolved pi `fullscreenExitOutput` over the merged view (pi `getFullscreenExitOutput`):
+    /// a stored `"resume-hint"` resolves as resume-hint and every other value resolves as transcript.
+    [[nodiscard]] FullscreenExitOutput get_fullscreen_exit_output() const noexcept;
+
+    /// Surgical field-level write of the pi `fullscreenExitOutput` field in the
+    /// global scope (pi `SettingsManager.setFullscreenExitOutput`, which always
+    /// writes `globalSettings`); preserves every other field. A global load
+    /// failure suppresses the write. No-op when the value is unchanged.
+    [[nodiscard]] support::ExpectedVoid set_fullscreen_exit_output(FullscreenExitOutput output);
 
     /// Resolved pi `tuiMode` over the merged view (pi `getTuiMode`): a stored
     /// `"regular"` resolves as regular and every other stored value as

@@ -161,7 +161,18 @@ public:
     /// text, transcript, focus and session. `false` is pi's overlay refusal
     /// (the engine is left exactly as it was); an error reports a swap that
     /// could not complete.
-    [[nodiscard]] support::Expected<bool> switch_tui_mode(coding_agent::TuiMode mode, bool restore_progress = true);
+    [[nodiscard]] support::Expected<bool> switch_tui_mode(
+            coding_agent::TuiMode mode, bool restore_progress = true, bool start_renderer = true);
+
+    /// Request clean shutdown of interactive mode (pi `stopInteractiveTui`).
+    void request_exit();
+
+    /// Format a resume command for the session that ran (or nullopt if unpersisted/non-TTY).
+    [[nodiscard]] std::optional<std::string> format_resume_command(
+            bool stdout_is_tty, std::string_view app_name = "pike") const;
+
+    [[nodiscard]] std::ostream* output_stream() const noexcept { return output_stream_; }
+    [[nodiscard]] bool stdout_is_tty() const noexcept { return stdout_is_tty_; }
 
     /// The component holding focus on the live renderer (pi `getFocusedComponent()`).
     [[nodiscard]] cch::tui::Component* focus() const noexcept { return tui_ != nullptr ? tui_->focus() : nullptr; }
@@ -537,7 +548,6 @@ private:
 
     // ── Exit gating ──────────────────────────────────────────────────────
 
-    void request_exit();
     void signal_exit();
     // ── State ────────────────────────────────────────────────────────────
 
@@ -624,6 +634,11 @@ private:
     /// data computation. Created with the flow controllers; `bind()`/`detach()`
     /// follow the session lifecycle.
     std::shared_ptr<SessionUiBinding> session_ui_;
+    std::string last_session_id_{};
+    std::optional<std::filesystem::path> last_session_path_{std::nullopt};
+    std::filesystem::path last_session_workspace_{};
+    std::ostream* output_stream_{nullptr};
+    bool stdout_is_tty_{true};
     std::unique_ptr<ThemeController> theme_controller_;
     std::unique_ptr<cch::tui::NativeClipboard> native_clipboard_;
     /// The copy policy the engine's standalone fallback uses when no host sink

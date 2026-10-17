@@ -137,6 +137,7 @@ public:
     void clear_children() override;
     [[nodiscard]] std::vector<std::unique_ptr<Component>> take_children() override;
     [[nodiscard]] bool has_overlay_entries() const noexcept override;
+    void clear_overlays() override;
 
     /// Install the component that fills the viewport as the root of a
     /// constrained layout (pi `TuiAltScreen.setLayoutRoot`). While one is

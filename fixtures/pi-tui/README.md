@@ -482,6 +482,42 @@ DA1 is an internal difference from Pike detachment; generated system-theme repai
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact
 byte-identical, manifest 30 → 31).
 
+For the frozen fullscreen exit output policy (#1019, spec #946, group E20),
+`fullscreen-exit-output.json` (artifact 33) records seven scenarios of product exit presentation
+and terminal restoration through frozen `InteractiveMode.prototype.stopInteractiveTui`,
+`formatResumeCommand`, and `VirtualTerminal`:
+- `fullscreen-transcript-exit` observes fullscreen exit under `fullscreenExitOutput = "transcript"`:
+  the alternate buffer is left, `switchTuiMode("regular", false, false)` transfers the mounted regions
+  to a regular `TuiMainScreen` without starting a replacement renderer, `renderNow()` outputs the
+  transcript once to the main buffer, and `MainScreen.stop({ preserveScreen: false })` leaves the cursor
+  below the rendered lines. The terminal start count does not advance; the terminal stop count advances
+  by 2 (once during switch, once on final stop).
+- `fullscreen-resume-hint-exit` observes fullscreen exit under `fullscreenExitOutput = "resume-hint"`:
+  the mode remains fullscreen, the alternate buffer is exited with `preserveScreen: true`, no transcript
+  or document lines are emitted, the main buffer's original content is preserved byte-identically,
+  and the terminal stop count advances by 1.
+- `regular-mode-exit` observes exit from an explicit regular session: no mode switch occurs,
+  `preserveScreen: false` leaves the incremental conversation lines and final shell cursor in place,
+  and `fullscreenExitOutput` setting variations produce identical regular-screen outcomes.
+- `empty-transcript-exit` observes fullscreen transcript exit with an empty conversation document,
+  rendering only the remaining mounted dock/editor rows into the main buffer.
+- `long-transcript-exit` observes fullscreen transcript exit when conversation messages exceed the
+  constrained viewport height (12 message lines in an 8-row terminal): regular line-flow rendering
+  ensures all 12 rows are emitted into the scrollback history rather than clipped to the viewport window.
+- `overlay-dismissal-exit` observes that active overlay entries are dismissed before mode switching and
+  stop, ensuring overlay modals do not leak into the terminal main buffer or transcript.
+- `format-resume-command-matrix` records six distinguishing cases of `formatResumeCommand`:
+  default session directories, custom session directories (unquoted, space-containing, and
+  single-quote-escaped), unpersisted sessions (null), missing session files (null), non-TTY stdout (null),
+  and the exact dimmed notice styling `\x1b[2mTo resume this session:\x1b[22m <command>\n`.
+
+Artifact 33 preserves all prior 32 artifact bytes, baseline metadata, and generator source digests.
+`capture/fullscreen-exit-output-scenarios.mts` holds the scenario bodies;
+`capture/recapture-fullscreen-exit-output.mts` is the append recipe (manifest 32 → 33).
+The captured scenarios execute over `VirtualTerminal` and instrumented product harnesses;
+actual subprocess, PTY, and signal exit lifecycles are validated in C++ consumer test suites.
+
+
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at
 widths 40/41/60, wide-glyph truncation including the exact ANSI reset, unbound-key

@@ -61,6 +61,9 @@ public:
     /// `TuiBase.hasOverlayEntries`, `tui.ts:527`).
     [[nodiscard]] virtual bool has_overlay_entries() const noexcept = 0;
 
+    /// Clear all overlay entries, restoring any pre-focus state.
+    virtual void clear_overlays() = 0;
+
     [[nodiscard]] virtual support::ExpectedVoid set_focus(Component* component) = 0;
     [[nodiscard]] virtual Component* focus() const noexcept = 0;
 

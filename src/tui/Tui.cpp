@@ -193,6 +193,11 @@ std::vector<std::unique_ptr<Component>> MainScreen::take_children() {
 
 bool MainScreen::has_overlay_entries() const noexcept { return compositor_->has_overlay_entries(); }
 
+void MainScreen::clear_overlays() {
+    compositor_->clear_overlays();
+    overlay_focus_restore_ = {};
+}
+
 support::Expected<OverlayHandle> MainScreen::show_overlay(std::unique_ptr<Overlay> overlay) {
     if (!overlay) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "TUI cannot attach a null Overlay"));

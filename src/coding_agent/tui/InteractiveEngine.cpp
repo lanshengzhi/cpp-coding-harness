@@ -34,6 +34,7 @@
 #include <algorithm>
 #include <atomic>
 #include <filesystem>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
@@ -226,6 +227,8 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         clipboard_write_options_.write_osc52 = [this](std::string_view bytes) { (void)terminal_.write(bytes); };
     }
     stop_source_ = std::stop_source{};
+    output_stream_ = run.output_stream();
+    stdout_is_tty_ = run.stdout_is_tty();
     model_fallback_message_ = run.model_fallback_message();
     // The fullscreen root's right-click paste performs the native clipboard read
     // and editor insert through this engine (#1017), which owns the reader, the
@@ -468,7 +471,8 @@ support::ExpectedVoid InteractiveEngine::mount_selected_root(
     return {};
 }
 
-support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode mode, bool restore_progress) {
+support::Expected<bool> InteractiveEngine::switch_tui_mode(
+        coding_agent::TuiMode mode, bool restore_progress, bool start_renderer) {
     const auto previous_mode =
             tui_ == main_screen_.get() ? coding_agent::TuiMode::Regular : coding_agent::TuiMode::Fullscreen;
     // pi orders the same-mode no-op before the overlay guard, so re-selecting
@@ -533,6 +537,9 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode
     if (auto focused = tui_->set_focus(focus); !focused) return std::unexpected(focused.error());
     if (auto started = tui_->start(); !started) return std::unexpected(started.error());
     tui_started_ = true;
+    if (!start_renderer) {
+        return true;
+    }
     // pi rebinds the live consumers after `start()`: the theme's terminal
     // colour-scheme listener, then the extension terminal input listeners
     // (`rebindExtensionTerminalInputListeners`, `interactive-mode.ts:928`).
@@ -666,22 +673,39 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::boot_session() 
 
 boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     stop_source_.request_stop();
+
+    if (session_ != nullptr) {
+        last_session_id_ = session_->session_id();
+        last_session_path_ = session_->session_path();
+        last_session_workspace_ = session_->workspace();
+    }
+
     // pi `AgentSessionRuntime.dispose()`: the extension registration context
     // is settled (`beforeSessionInvalidate` -> `resetExtensionUI`) while the
     // terminal is still owned by the run.
     dispose_extension_ui();
     tui_->set_render_prepare_sink(nullptr);
     tui_->set_render_complete_sink(nullptr);
+
     // Cancel extracted modal/session flows before terminal restoration;
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
     if (auth_flows_) auth_flows_->close();
     if (session_flows_) session_flows_->close();
-    running_ = false;
-    if (theme_controller_) theme_controller_->dispose();
-    // Retire the action generation so late deliveries from captured
-    // hooks are rejected after Close (ADR 0040).
-    retire_current_session();
+
+    // pi `stopInteractiveTui`: pop all active overlays before stopping
+    if (active_overlay_ != nullptr) {
+        active_overlay_handle_.hide();
+        active_overlay_handle_ = {};
+        active_overlay_ = nullptr;
+    }
+    if (tui_ != nullptr) {
+        tui_->clear_overlays();
+    }
+    if (view_ != nullptr) {
+        view_->set_editor_replacement(nullptr);
+    }
+
     // Await every admitted controller flow to quiesce (ADR 0040: no
     // resource is destroyed while an admitted operation can still use
     // it). The counter is executor-confined; the last flow to finish
@@ -695,9 +719,45 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     if (settings_manager_ && settings_manager_->get_show_terminal_progress()) {
         (void)terminal_.set_progress(false);
     }
-    const auto stopped = tui_->stop();
+
+    const auto exit_output = settings_manager_.has_value() ? settings_manager_->get_fullscreen_exit_output()
+                                                           : FullscreenExitOutput::Transcript;
+    const bool was_fullscreen = (tui_ == &fullscreen_host_->tui());
+
+    // pi `if (this.currentMode === "fullscreen" && this.fullscreenExitOutput === "transcript")`:
+    // switch to regular mode without starting renderer and render once into main buffer.
+    if (tui_started_ && was_fullscreen && exit_output == FullscreenExitOutput::Transcript) {
+        auto switched =
+                switch_tui_mode(coding_agent::TuiMode::Regular, /*restore_progress=*/false, /*start_renderer=*/false);
+        if (switched && *switched) {
+            (void)tui_->render();
+        }
+    }
+
+    const bool preserve_screen =
+            (tui_ == &fullscreen_host_->tui()) && (exit_output == FullscreenExitOutput::ResumeHint);
+    const auto stopped = tui_->stop(cch::tui::TuiStopOptions{.preserve_screen = preserve_screen});
     tui_->set_scheduler(nullptr);
     tui_started_ = false;
+    tui_->set_render_prepare_sink(nullptr);
+    tui_->set_render_complete_sink(nullptr);
+
+    running_ = false;
+    if (theme_controller_) theme_controller_->dispose();
+
+    // Retire the action generation so late deliveries from captured
+    // hooks are rejected after Close (ADR 0040).
+    retire_current_session();
+
+    if (auto resume_cmd = format_resume_command(stdout_is_tty_)) {
+        if (output_stream_ != nullptr) {
+            *output_stream_ << kResumeNoticePrefix << *resume_cmd << '\n';
+            output_stream_->flush();
+        } else if (stdout_is_tty_) {
+            std::cout << kResumeNoticePrefix << *resume_cmd << '\n';
+            std::cout.flush();
+        }
+    }
     if (!completion_result_) completion_result_.emplace();
     if (!*completion_result_) {
         if (!stopped) {
@@ -1259,6 +1319,13 @@ void InteractiveEngine::signal_exit() {
     }
     if (prompt_presentation_dirty_.load(std::memory_order_acquire)) tui_->request_render(true);
     (void)exit_wait_.cancel();
+}
+
+std::optional<std::string> InteractiveEngine::format_resume_command(
+        bool stdout_is_tty, std::string_view app_name) const {
+    if (last_session_id_.empty()) return std::nullopt;
+    return cch::coding_agent::tui::format_resume_command(
+            last_session_id_, last_session_path_, last_session_workspace_, stdout_is_tty, app_name);
 }
 
 } // namespace cch::coding_agent::tui

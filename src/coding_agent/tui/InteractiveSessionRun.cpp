@@ -118,6 +118,14 @@ bool InteractiveSessionRun::creation_failure_reported() const noexcept {
     return state_ && state_->creation_failure_reported.load(std::memory_order_relaxed);
 }
 
+std::ostream* InteractiveSessionRun::output_stream() const noexcept { return state_ ? state_->output_stream : nullptr; }
+
+bool InteractiveSessionRun::stdout_is_tty() const noexcept {
+    if (!state_) return false;
+    if (state_->stdout_is_tty_configured) return state_->stdout_is_tty;
+    return ::isatty(STDOUT_FILENO) == 1;
+}
+
 void InteractiveSessionRun::open_browser(std::string url) const { coding_agent::tui::open_browser(std::move(url)); }
 
 ClipboardCopyResult InteractiveSessionRun::write_clipboard_text(const std::string& text) const {
@@ -360,6 +368,17 @@ InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_model_runtime_c
 
 InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_error_stream(std::ostream* error_stream) noexcept {
     state_->error_stream = error_stream;
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_output_stream(std::ostream* output_stream) noexcept {
+    state_->output_stream = output_stream;
+    return *this;
+}
+
+InteractiveSessionRunBuilder& InteractiveSessionRunBuilder::with_stdout_is_tty(bool stdout_is_tty) noexcept {
+    state_->stdout_is_tty = stdout_is_tty;
+    state_->stdout_is_tty_configured = true;
     return *this;
 }
 
