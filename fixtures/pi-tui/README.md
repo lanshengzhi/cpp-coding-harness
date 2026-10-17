@@ -419,19 +419,22 @@ byte-identical, manifest 28 → 29).
 
 `product-theme-rebind-protocol.json` records authoritative independent product terminal theme rebinding protocol
 vectors (#1037, spec #946) using real frozen `ProcessTerminal`/`VirtualTerminal` capture and `InteractiveMode`
-controlled-context seams: complete per-phase ordered protocol vectors for queries and mode toggles; exact
+controlled-context seams: exported ordered vectors for startup, scheme queries, and mode toggles; exact
 `\x1b[?2031l` (disable) followed by `\x1b[?2031h` (enable) sequence ordering across bidirectional mode switches;
-same-root late query acceptance control via `onLateReply` delivering colors after the 100ms query timer expires;
+same-root delayed query reply acceptance after a 120ms wait (artifact 31 does not observe timer completion before injection);
 bidirectional mode switches (`regular -> fullscreen` and `fullscreen -> regular`) with an unsettled query pending
-on the retiring root before each switch, observing unconsumed old replies on replacement roots (active root queue
-length is 0), unperturbed detached roots receiving 0 physical bytes, and subsequent terminal appearance notification
-(`\x1b[?997;1n` / `\x1b[?997;2n`) triggering a new single query burst and settling palette colors; ambiguity
+on the retiring root before each switch (queue depth is asserted during capture, not exported). Active-root consume
+results reject old replies; instrumentation observes calls at the active terminal input-handler boundary, without
+measuring physical bytes at retired roots. Subsequent terminal appearance notifications
+(`\x1b[?997;1n` / `\x1b[?997;2n`) trigger a single query burst and settle foreground/background colors; ambiguity
 control demonstrating unkeyed OSC 10/11 responses matching open pending queries FIFO; roundtrip rebind
 idempotency maintaining strictly 1 active scheme listener and emitting exactly 1 query burst; and malformed,
-unsupported, and unrelated CSI handling where invalid RGB responses mark targets replied without color data,
-duplicate replies for an answered target are ignored without early completion, and valid DA1 completes the query.
-Runtime observation boundaries are recorded honestly: the 100ms timeout reflects frozen Node timer mechanics;
-frozen Pi's retired root timer fires and applies empty colors whereas Pike cancels queries on stop; Pi allocates
+unsupported, and unrelated CSI handling where invalid RGB responses mark targets replied without color data
+and valid DA1 completes the query. Artifact 31 exercises no OSC 4 replies or duplicate replies. Its retired-root
+timeout effect was originally inferred from source; artifact 32 below supplies the actual completion observation.
+Artifacts 30/31 inherit historical manifest environment metadata rather than measuring the current host; COLORFGBG
+was not scrubbed. Artifact 31's controlled mount adds children but omits production setLayoutRoot; protocol vectors
+are the measured boundary. Its root-N owner strings are opaque run-order tokens. Pi allocates
 replacement TUI instances on every switch while Pike reuses retained root allocations; and unkeyed VT color
 replies lack transaction IDs so active roots match responses FIFO against pending queries.
 Public C++ acceptance tests consume `product-theme-rebind-protocol.json` directly through real `InteractiveEngine`,
@@ -446,6 +449,29 @@ initial appearance literally. The callback phase assertions record Pike's delive
 query phases; artifact 31 does not export a complete frozen callback timeline. In particular, the retired-root
 empty timeout callback versus silent cancellation remains a measured difference, so these tests do not establish
 identical callback order across the two runtimes. Generated system palettes remain outside this consumer proof.
+
+`product-theme-rebind-lifecycle.json` (artifact 32) adds two bounded observations using the actual frozen controller,
+real regular/fullscreen roots, the real `InteractiveMode.prototype.switchTuiMode`, and delegated method wrappers
+installed before start/rebind. The retired query is observed pending before the switch. Awaiting its actual query
+promise and controller apply records empty colors, one change callback, two replacement-root invalidations, and
+one replacement-root render request, with exact ordered events, queue/listener snapshots and raw write window.
+The window ends at controller completion; scheduled painting after that boundary is not counted as absent.
+The replacement then receives a scheme report, emits the full 19-command query, and accepts exact new RGB.
+The same-root scenario reports all 16 distinct OSC 4 colors. A contrasting duplicate for target 0 cannot complete
+the query early or replace its first value; the eighteenth distinct color completes the query, and trailing DA1
+drains its frozen queue entry. A subsequent empty timeout is observed through actual promise completion before
+late input; late background applies while retaining the reported palette. This measures terminal palette reporting,
+not generated system-theme colors. Public C++ sinks verify the palette/duplicate/late values and separately retain
+the observed frozen-one-versus-Pike-zero retired completion gap, pending a cancellation-policy decision.
+
+Artifact 32 fixes COLORFGBG to `0;15`, exports current controlled inputs separately from the inherited historical
+envelope, and deep-copies event snapshots with local serials and logical owners. The controlled context supplies
+settings/session fields, mounts children and setLayoutRoot, and stubs extension rebind and unrelated Azure catalog
+loading; no provider or AgentSession runs in the frozen capture. Retired roots remain alive through observers and
+pending timers. Input observations describe terminal handler dispatch, not physical device bytes. The one-off
+`capture/recapture-product-theme-rebind-lifecycle.mts` appends this family and its coupled source hashes, preserving
+all prior 31 artifact bytes and baseline metadata. The actual mismatch remains: frozen Pi completes the retired
+query and applies through its live UI proxy, whereas Pike stop silently cancels; identical callback order is not accepted.
 `capture/product-theme-rebind-protocol-scenarios.mts` defines the scenarios;
 `capture/recapture-product-theme-rebind-protocol.mts` is the append recipe (same frozen revision
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact

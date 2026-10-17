@@ -385,6 +385,103 @@ TEST_CASE("Real theme query sink distinguishes late FIFO and malformed frozen re
     }
 }
 
+TEST_CASE("Real theme sink preserves frozen palette duplicate and observed late reply behavior",
+        "[coding_agent][theme][controller][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-theme-rebind-lifecycle.json");
+    REQUIRE(artifact);
+    const auto& frozen = artifact->at("scenarios").get_array().at(1);
+    REQUIRE(frozen.at("name").get_string() == "same_root_palette_duplicate_and_observed_late_reply");
+    tests::EnvVarGuard env("COLORFGBG", "0;15");
+    ControllerHarness harness;
+    auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
+    controller.apply_from_settings();
+    REQUIRE(harness.terminal.inject_input("\x1b]10;#112233\x07"));
+    REQUIRE(harness.terminal.inject_input("\x1b]11;#445566\x07"));
+    const auto& expected_palette =
+            frozen.at("expected").at("afterPaletteCompletion").at("terminalColors").at("palette").get_array();
+    REQUIRE(expected_palette.size() == 16);
+    const auto inject_palette = [&](std::size_t index) {
+        const auto& color = expected_palette[index];
+        const auto channel = [](const support::JsonValue& value) {
+            constexpr std::string_view digits = "0123456789abcdef";
+            const auto number = static_cast<unsigned>(value.get_number());
+            return std::string{digits[number / 16], digits[number % 16]};
+        };
+        REQUIRE(harness.terminal.inject_input("\x1b]4;" + std::to_string(index) + ";#" + channel(color.at("r")) +
+                                              channel(color.at("g")) + channel(color.at("b")) + "\x07"));
+    };
+    inject_palette(0);
+    REQUIRE(harness.terminal.inject_input("\x1b]4;0;#ffffff\x07"));
+    for (std::size_t i = 1; i < 15; ++i)
+        inject_palette(i);
+    CHECK(harness.report_count() == 0);
+    inject_palette(15);
+    REQUIRE(harness.report_count() == 1);
+    {
+        std::lock_guard lock(harness.reports_mutex);
+        const auto& colors = harness.reports[0].colors;
+        REQUIRE(colors.has_value());
+        REQUIRE(colors->palette.has_value());
+        REQUIRE(colors->palette->size() == 16);
+        for (std::size_t i = 0; i < 16; ++i) {
+            CHECK(colors->palette->at(i).red == expected_palette[i].at("r").get_number());
+            CHECK(colors->palette->at(i).green == expected_palette[i].at("g").get_number());
+            CHECK(colors->palette->at(i).blue == expected_palette[i].at("b").get_number());
+        }
+    }
+    (void)harness.pump(controller);
+    REQUIRE(harness.terminal.inject_input("\x1b[?1;2c"));
+    CHECK(harness.report_count() == 0);
+    controller.apply_from_settings();
+    REQUIRE(wait_for_reports(harness, 1));
+    (void)harness.pump(controller);
+    REQUIRE(harness.terminal.inject_input("\x1b]11;#abcdef\x07"));
+    REQUIRE(harness.report_count() == 1);
+    {
+        std::lock_guard lock(harness.reports_mutex);
+        REQUIRE(harness.reports[0].colors.has_value());
+        REQUIRE(harness.reports[0].colors->background.has_value());
+        const auto& expected = frozen.at("expected").at("afterLateReply").at("terminalColors").at("background");
+        CHECK(harness.reports[0].colors->background->red == expected.at("r").get_number());
+        CHECK(harness.reports[0].colors->background->green == expected.at("g").get_number());
+        CHECK(harness.reports[0].colors->background->blue == expected.at("b").get_number());
+    }
+    (void)harness.pump(controller);
+    REQUIRE(harness.terminal.inject_input("\x1b[?1;2c"));
+    (void)harness.pump(controller);
+}
+
+TEST_CASE("Retired theme query cancellation retains the measured frozen callback gap",
+        "[coding_agent][theme][controller][issue1037][spec]") {
+    const auto artifact = tests::read_pi_tui_evidence("product-theme-rebind-lifecycle.json");
+    REQUIRE(artifact);
+    const auto& frozen = artifact->at("scenarios").get_array().at(0);
+    ControllerHarness harness;
+    auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
+    controller.apply_from_settings();
+    REQUIRE(harness.root.stop({.preserve_screen = true}));
+    harness.started = false;
+    tui::AltScreen replacement{harness.terminal};
+    REQUIRE(replacement.start());
+    controller.rebind_tui(replacement);
+    // Await an actual replacement-root completion as a backstop beyond the
+    // retired100ms deadline; never treat a sleep alone as callback evidence.
+    auto completion = replacement.query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{150}});
+    REQUIRE(completion.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    std::size_t frozen_completions = 0;
+    for (const auto& event : frozen.at("expected").at("timerEvents").get_array()) {
+        if (event.at("kind").get_string() == "query-complete") ++frozen_completions;
+    }
+    REQUIRE(frozen_completions == 1);
+    // Frozen retired completion is measured above; Pike's existing stop
+    // contract cancels silently. Preserve this observed gap pending policy
+    // disposition rather than committing a failing parity assertion.
+    CHECK(harness.report_count() == 0);
+    controller.dispose();
+    REQUIRE(replacement.stop());
+}
+
 TEST_CASE("COLORFGBG detection classifies the basic-16 background index",
         "[coding_agent][theme][controller][issue991][spec]") {
     using coding_agent::tui::terminal_theme_from_colorfgbg;

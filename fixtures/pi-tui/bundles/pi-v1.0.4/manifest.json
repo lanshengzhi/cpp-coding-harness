@@ -113,6 +113,14 @@
       {
         "path": "capture/product-theme-rebind-protocol-scenarios.mts",
         "sha256": "c54363914235abf7721351da56f885347a02a68346f22bdb5a7bae2ebaeae0c9"
+      },
+      {
+        "path": "capture/product-theme-rebind-lifecycle-scenarios.mts",
+        "sha256": "c17b2c6c3b646e7fa443efdf469b53ccbc67c5e862263018c42b2ef28ee3ee46"
+      },
+      {
+        "path": "capture/recapture-product-theme-rebind-lifecycle.mts",
+        "sha256": "688e9ab1b0653ffabbd6cc327db9d9f5faf1e403cc875c86a70054ea91f2dead"
       }
     ]
   },
@@ -498,6 +506,17 @@
         "packages/tui/src/tui.ts:Tui.setTerminalColorSchemeNotifications,Tui.consumeTerminalColorResponse,Tui.consumeTerminalColorSchemeReport,Tui.onTerminalColorSchemeChange",
         "packages/coding-agent/src/modes/interactive/theme/theme-controller.ts:InteractiveThemeController.applyFromSettings,InteractiveThemeController.rebindTui",
         "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode"
+      ]
+    },
+    {
+      "path": "product-theme-rebind-lifecycle.json",
+      "family": "product-theme-rebind-lifecycle",
+      "bytes": 52759,
+      "sha256": "2c76589a83dc553594676b20cb882e3983bfb68497d4308e99253ad7adeb2aaf",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/theme/theme-controller.ts:requestTerminalColors,InteractiveThemeController.applyTerminalColors,waitForTerminalColors,rebindTui",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode",
+        "packages/tui/src/tui.ts:TuiBase.queryTerminalColors,consumeTerminalColorResponse"
       ]
     }
   ]
