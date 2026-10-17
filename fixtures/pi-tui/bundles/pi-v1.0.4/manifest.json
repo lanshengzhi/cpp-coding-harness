@@ -105,6 +105,10 @@
       {
         "path": "capture/product-progress-protocol-scenarios.mts",
         "sha256": "596ca86effa02d6b5dd82622c101b11ca4e35222f29e27bd38c85776330c185a"
+      },
+      {
+        "path": "capture/product-theme-rebind-scenarios.mts",
+        "sha256": "4fa07d5743e25eac8d9c876e20feb2c24a03b08f2bbf1f672459955f4d8d5892"
       }
     ]
   },
@@ -468,6 +472,17 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.setProgress,ProcessTerminal.stop",
         "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.handleEvent,InteractiveMode.switchTuiMode,InteractiveMode.stop",
         "packages/coding-agent/src/core/settings-manager.ts:SettingsManager.getShowTerminalProgress,SettingsManager.setShowTerminalProgress"
+      ]
+    },
+    {
+      "path": "product-theme-rebind.json",
+      "family": "product-theme-rebind",
+      "bytes": 7205,
+      "sha256": "eaafba0ae0d7acb24d87f15dc000b1297f51988f9315051d626a065b59696aba",
+      "sourceEndpoints": [
+        "packages/tui/src/tui.ts:Tui.setTerminalColorSchemeNotifications,Tui.consumeTerminalColorResponse,Tui.consumeTerminalColorSchemeReport,Tui.onTerminalColorSchemeChange",
+        "packages/coding-agent/src/modes/interactive/theme/theme-controller.ts:InteractiveThemeController.applyFromSettings,InteractiveThemeController.rebindTui",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode"
       ]
     }
   ]
