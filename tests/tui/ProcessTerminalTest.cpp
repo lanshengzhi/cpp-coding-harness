@@ -2647,3 +2647,46 @@ TEST_CASE("Process Terminal atomic stop restores autowrap when caller disabled i
     CHECK(master_bytes.find("\x1b[?7h") != std::string::npos);
     CHECK(terminal.modes().autowrap == true);
 }
+
+TEST_CASE("Process Terminal duplicate cursor visibility calls physically write without generic suppression",
+        "[tui][terminal][issue1019][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = test_io().io.get_executor(),
+    });
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+
+    // Drain initial startup sequences
+    (void)cch::tests::read_available(pty->master.get());
+
+    // First hide cursor emits escape sequence
+    REQUIRE(terminal.set_cursor_visible(false));
+    const auto first_hide = cch::tests::read_available(pty->master.get());
+    CHECK(first_hide == "\x1b[?25l");
+    CHECK_FALSE(terminal.modes().cursor_visible);
+
+    // Duplicate hide cursor emits \x1b[?25l physically without being suppressed by generic cache
+    REQUIRE(terminal.set_cursor_visible(false));
+    const auto second_hide = cch::tests::read_available(pty->master.get());
+    CHECK(second_hide == "\x1b[?25l");
+    CHECK_FALSE(terminal.modes().cursor_visible);
+
+    // Show cursor emits escape sequence
+    REQUIRE(terminal.set_cursor_visible(true));
+    const auto first_show = cch::tests::read_available(pty->master.get());
+    CHECK(first_show == "\x1b[?25h");
+    CHECK(terminal.modes().cursor_visible);
+
+    // Duplicate show cursor emits \x1b[?25h physically without being suppressed
+    REQUIRE(terminal.set_cursor_visible(true));
+    const auto second_show = cch::tests::read_available(pty->master.get());
+    CHECK(second_show == "\x1b[?25h");
+    CHECK(terminal.modes().cursor_visible);
+
+    REQUIRE(terminal.stop());
+}

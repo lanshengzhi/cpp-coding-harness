@@ -2537,6 +2537,16 @@ TEST_CASE("Native TUI repeated interrupt and shutdown input restores the termina
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
     CHECK_FALSE(terminal.modes().alternate_screen);
+
+    const auto snapshot = created->session->snapshot();
+    REQUIRE(!snapshot.agent_state.messages.empty());
+    const auto* assistant = std::get_if<ai::AssistantMessage>(&snapshot.agent_state.messages.back());
+    REQUIRE(assistant != nullptr);
+    CHECK(assistant->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(!assistant->content.empty());
+    const auto* text = std::get_if<ai::TextContent>(&assistant->content[0]);
+    REQUIRE(text != nullptr);
+    CHECK(text->text == "partial assistant output");
 }
 
 TEST_CASE("Native TUI repeated interrupt and shutdown input in regular mode leaves screen without forced render and "
@@ -2580,6 +2590,16 @@ TEST_CASE("Native TUI repeated interrupt and shutdown input in regular mode leav
     CHECK_FALSE(created->session->is_busy());
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
+
+    const auto snapshot = created->session->snapshot();
+    REQUIRE(!snapshot.agent_state.messages.empty());
+    const auto* assistant = std::get_if<ai::AssistantMessage>(&snapshot.agent_state.messages.back());
+    REQUIRE(assistant != nullptr);
+    CHECK(assistant->stop_reason == ai::AssistantStopReason::Aborted);
+    REQUIRE(!assistant->content.empty());
+    const auto* text = std::get_if<ai::TextContent>(&assistant->content[0]);
+    REQUIRE(text != nullptr);
+    CHECK(text->text == "partial assistant output");
 }
 
 TEST_CASE("Native TUI waits for cancelled tool quiescence before accepting the next prompt",

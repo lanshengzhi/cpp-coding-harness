@@ -97,6 +97,20 @@ public:
     });
 }
 
+[[nodiscard]] const ai::BashExecutionMessage* expect_single_bash_message(
+        const std::vector<ai::MessageVariant>& messages) {
+    const ai::BashExecutionMessage* found = nullptr;
+    std::size_t count = 0;
+    for (const auto& message : messages) {
+        if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
+            ++count;
+            found = bash;
+        }
+    }
+    if (count != 1) return nullptr;
+    return found;
+}
+
 struct TestRunOptions {
     std::filesystem::path agent_config_directory{};
     std::string initial_prompt{};
@@ -1410,7 +1424,13 @@ TEST_CASE("Session Close through the exit command cancels gated provider, tool, 
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
     CHECK_FALSE(terminal.modes().alternate_screen);
-    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo close"));
+    const auto snapshot = created->session->snapshot();
+    const auto* bash = expect_single_bash_message(snapshot.agent_state.messages);
+    REQUIRE(bash != nullptr);
+    CHECK(bash->command == "echo close");
+    CHECK(bash->cancelled);
+    CHECK(bash->output == "close bash partial");
+    CHECK_FALSE(bash->exit_code.has_value());
 }
 
 TEST_CASE("Session Close through the exit command in regular mode cancels gated provider, tool, and User Shell work "
@@ -1484,7 +1504,13 @@ TEST_CASE("Session Close through the exit command in regular mode cancels gated 
     CHECK(terminal.modes().cursor_visible);
 
     // Final session state is persisted through the public Session API
-    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo close"));
+    const auto snapshot = created->session->snapshot();
+    const auto* bash = expect_single_bash_message(snapshot.agent_state.messages);
+    REQUIRE(bash != nullptr);
+    CHECK(bash->command == "echo close");
+    CHECK(bash->cancelled);
+    CHECK(bash->output == "close bash partial");
+    CHECK_FALSE(bash->exit_code.has_value());
 }
 
 TEST_CASE("Session Close through the effective exit keybinding cancels gated provider, tool, and User Shell work",
@@ -1562,7 +1588,13 @@ TEST_CASE("Session Close through the effective exit keybinding cancels gated pro
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
     CHECK_FALSE(terminal.modes().alternate_screen);
-    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo f6 close"));
+    const auto snapshot = created->session->snapshot();
+    const auto* bash = expect_single_bash_message(snapshot.agent_state.messages);
+    REQUIRE(bash != nullptr);
+    CHECK(bash->command == "echo f6 close");
+    CHECK(bash->cancelled);
+    CHECK(bash->output == "keybinding close partial");
+    CHECK_FALSE(bash->exit_code.has_value());
 }
 
 TEST_CASE("Session Close through the effective exit keybinding in regular mode cancels gated provider, tool, and User "
@@ -1637,7 +1669,13 @@ TEST_CASE("Session Close through the effective exit keybinding in regular mode c
     CHECK(terminal.modes().cursor_visible);
 
     // Final session state is persisted through the public Session API
-    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo f6 close"));
+    const auto snapshot = created->session->snapshot();
+    const auto* bash = expect_single_bash_message(snapshot.agent_state.messages);
+    REQUIRE(bash != nullptr);
+    CHECK(bash->command == "echo f6 close");
+    CHECK(bash->cancelled);
+    CHECK(bash->output == "keybinding close partial");
+    CHECK_FALSE(bash->exit_code.has_value());
 }
 
 TEST_CASE("committed User Bash blocks preview the output tail and expand through the effective action",

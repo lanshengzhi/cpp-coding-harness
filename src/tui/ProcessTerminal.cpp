@@ -1934,7 +1934,6 @@ support::ExpectedVoid ProcessTerminal::reset_scroll_margins() {
 support::ExpectedVoid ProcessTerminal::set_cursor_visible(bool visible) {
     std::lock_guard lock(impl_->mutex);
     if (auto started = require_output_admission(*impl_); !started) return std::unexpected(started.error());
-    if (impl_->modes.cursor_visible == visible) return {};
     auto result = enqueue_output(*impl_, visible ? kCursorShow : kCursorHide);
     if (result) impl_->modes.cursor_visible = visible;
     return result;
