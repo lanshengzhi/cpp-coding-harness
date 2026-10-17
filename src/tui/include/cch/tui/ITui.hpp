@@ -24,6 +24,10 @@ namespace cch::tui {
 struct TuiStopOptions {
     /// Leave the current screen content and cursor position in place for another TUI to take over.
     bool preserve_screen{false};
+    /// Renderer handoff only: detach pending color queries from input routing,
+    /// retaining their completion and partial colors until the original deadline.
+    /// Callbacks must own lifetime-safe state independent of the retired root.
+    bool preserve_pending_color_query_completion{false};
 };
 
 using TuiRenderPrepareSink = std::move_only_function<support::Expected<bool>()>;

@@ -66,7 +66,7 @@ public:
     void set_kitty_protocol_active(bool active) noexcept;
     void reset_decoder() noexcept;
     void handle_input(std::string input, std::function<void(const InputEventVariant&)> dispatch);
-    void cancel_color_queries();
+    void cancel_color_queries(bool preserve_completion = false);
 
     [[nodiscard]] TerminalColorSchemeListenerHandle on_terminal_color_scheme_change(
             TerminalColorSchemeListener listener);

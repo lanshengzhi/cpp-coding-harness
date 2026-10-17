@@ -639,9 +639,6 @@ support::ExpectedVoid AltScreen::start() {
 
 support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     if (!started_ || stopping_) return {};
-    (void)options; // The alternate buffer is always exited; the main buffer
-                   // returns.
-
     cancel_scheduled_render();
     ++render_generation_;
     render_scheduled_ = false;
@@ -675,7 +672,7 @@ support::ExpectedVoid AltScreen::stop(TuiStopOptions options) {
     // is left (pi `beforeTerminalStop`).
     (void)terminal_.write(kDisableMouse);
 
-    cancel_color_queries();
+    cancel_color_queries(options.preserve_pending_color_query_completion);
 
     // Restore the mode stack in reverse order of entry.
     const auto cursor_result = terminal_.set_cursor_visible(true);

@@ -446,9 +446,9 @@ roots and the existing public terminal-color sink to compare exact foreground/ba
 until DA1. Additional editor-border challenges use the #991 background-over-scheme precedence contract to make
 ignored replies observable; these contrasting challenges extend the frozen scenarios rather than replaying their
 initial appearance literally. The callback phase assertions record Pike's delivery sequence around the frozen
-query phases; artifact 31 does not export a complete frozen callback timeline. In particular, the retired-root
-empty timeout callback versus silent cancellation remains a measured difference, so these tests do not establish
-identical callback order across the two runtimes. Generated system palettes remain outside this consumer proof.
+query phases; artifact 31 does not export a complete frozen callback timeline. The initial retired-root empty
+timeout callback versus silent cancellation difference motivated artifact 32 and the explicit renderer-handoff
+completion path below. Generated system palettes remain outside this consumer proof.
 
 `product-theme-rebind-lifecycle.json` (artifact 32) adds two bounded observations using the actual frozen controller,
 real regular/fullscreen roots, the real `InteractiveMode.prototype.switchTuiMode`, and delegated method wrappers
@@ -461,8 +461,9 @@ The same-root scenario reports all 16 distinct OSC 4 colors. A contrasting dupli
 the query early or replace its first value; the eighteenth distinct color completes the query, and trailing DA1
 drains its frozen queue entry. A subsequent empty timeout is observed through actual promise completion before
 late input; late background applies while retaining the reported palette. This measures terminal palette reporting,
-not generated system-theme colors. Public C++ sinks verify the palette/duplicate/late values and separately retain
-the observed frozen-one-versus-Pike-zero retired completion gap, pending a cancellation-policy decision.
+not generated system-theme colors. Public C++ sinks verify the palette/duplicate/late values. The initial frozen-one-versus-Pike-zero
+retired completion RED is retained in development evidence; renderer handoff now explicitly preserves unresolved
+query completion at its original deadline, while ordinary stop/destruction retains callback cancellation.
 
 Artifact 32 fixes COLORFGBG to `0;15`, exports current controlled inputs separately from the inherited historical
 envelope, and deep-copies event snapshots with local serials and logical owners. The controlled context supplies
@@ -470,8 +471,12 @@ settings/session fields, mounts children and setLayoutRoot, and stubs extension 
 loading; no provider or AgentSession runs in the frozen capture. Retired roots remain alive through observers and
 pending timers. Input observations describe terminal handler dispatch, not physical device bytes. The one-off
 `capture/recapture-product-theme-rebind-lifecycle.mts` appends this family and its coupled source hashes, preserving
-all prior 31 artifact bytes and baseline metadata. The actual mismatch remains: frozen Pi completes the retired
-query and applies through its live UI proxy, whereas Pike stop silently cancels; identical callback order is not accepted.
+all prior 31 artifact bytes and baseline metadata. Pike's renderer-switch stop explicitly detaches unresolved queries
+from old-root input routing while allowing their existing query-owned timer to deliver retained partial colors to
+the live controller. No second timer is created. Ordinary stop and destruction still cancel; controller disposal
+suppresses callbacks and reports already posted to the host executor. Tests cover partial results, original deadlines,
+completed-query duplication, stale replies, queued reports across rebind, and disposal. Frozen queue retention until
+DA1 is an internal difference from Pike detachment; generated system-theme repaint policy remains outside this proof.
 `capture/product-theme-rebind-protocol-scenarios.mts` defines the scenarios;
 `capture/recapture-product-theme-rebind-protocol.mts` is the append recipe (same frozen revision
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact

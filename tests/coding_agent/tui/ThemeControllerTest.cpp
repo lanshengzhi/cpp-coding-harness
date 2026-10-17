@@ -254,7 +254,7 @@ TEST_CASE("Real roots deliver frozen theme RGB and ordered rebind query phases",
     CHECK(tests::extract_theme_protocol_commands(terminal.output()) ==
             commands_of(scenario("same_root_late_query").at("expected").at("initialQueryCommands")));
     const auto before_switch = terminal.output().size();
-    REQUIRE(old_root.stop({.preserve_screen = true}));
+    REQUIRE(old_root.stop({.preserve_screen = true, .preserve_pending_color_query_completion = true}));
     REQUIRE(active_root.start());
     controller.rebind_tui(active_root);
     CHECK(tests::extract_theme_protocol_commands(
@@ -271,6 +271,26 @@ TEST_CASE("Real roots deliver frozen theme RGB and ordered rebind query phases",
     CHECK(colors.empty());
     CHECK(phases.empty());
     CHECK(controller.active_theme_name() == "light");
+    const auto lifecycle = tests::read_pi_tui_evidence("product-theme-rebind-lifecycle.json");
+    REQUIRE(lifecycle);
+    auto timer_marker = active_root.query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{150}});
+    REQUIRE(timer_marker.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    // Complete the marker's late-input slot before the scheme's next query.
+    REQUIRE(terminal.inject_input("\x1b[?1;2c"));
+    pump();
+    std::vector<std::string> frozen_callbacks;
+    for (const auto& event :
+            lifecycle->at("scenarios").get_array().at(0).at("expected").at("timerEvents").get_array()) {
+        const auto& kind = event.at("kind").get_string();
+        if (kind == "query-complete") frozen_callbacks.emplace_back("colors");
+        if (kind == "changed") frozen_callbacks.emplace_back("changed");
+    }
+    CHECK(phases == frozen_callbacks);
+    REQUIRE(colors.size() == 1);
+    CHECK(colors.front() == tui::TerminalColors{});
+    phases.clear();
+    colors.clear();
     // Repeated listener rebinds must still deliver one scheme callback and burst.
     controller.rebind_terminal_color_scheme_listener();
     controller.rebind_terminal_color_scheme_listener();
@@ -451,7 +471,7 @@ TEST_CASE("Real theme sink preserves frozen palette duplicate and observed late 
     (void)harness.pump(controller);
 }
 
-TEST_CASE("Retired theme query cancellation retains the measured frozen callback gap",
+TEST_CASE("Retired theme query renderer handoff delivers the measured frozen completion",
         "[coding_agent][theme][controller][issue1037][spec]") {
     const auto artifact = tests::read_pi_tui_evidence("product-theme-rebind-lifecycle.json");
     REQUIRE(artifact);
@@ -459,7 +479,7 @@ TEST_CASE("Retired theme query cancellation retains the measured frozen callback
     ControllerHarness harness;
     auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
     controller.apply_from_settings();
-    REQUIRE(harness.root.stop({.preserve_screen = true}));
+    REQUIRE(harness.root.stop({.preserve_screen = true, .preserve_pending_color_query_completion = true}));
     harness.started = false;
     tui::AltScreen replacement{harness.terminal};
     REQUIRE(replacement.start());
@@ -474,11 +494,62 @@ TEST_CASE("Retired theme query cancellation retains the measured frozen callback
         if (event.at("kind").get_string() == "query-complete") ++frozen_completions;
     }
     REQUIRE(frozen_completions == 1);
-    // Frozen retired completion is measured above; Pike's existing stop
-    // contract cancels silently. Preserve this observed gap pending policy
-    // disposition rather than committing a failing parity assertion.
-    CHECK(harness.report_count() == 0);
+    CHECK(harness.report_count() == frozen_completions);
+    const auto before_apply = harness.changed;
+    CHECK(harness.pump(controller) == frozen_completions);
+    CHECK(harness.changed == before_apply + 1);
     controller.dispose();
+    REQUIRE(replacement.stop());
+}
+
+TEST_CASE("Theme reports queued before rebind apply once and disposal suppresses posted delivery",
+        "[coding_agent][theme][controller][issue1037][spec]") {
+    ControllerHarness harness;
+    tests::EnvVarGuard env("COLORFGBG", "0;15");
+    auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
+    controller.apply_from_settings();
+    REQUIRE(harness.terminal.inject_input("\x1b]11;#112233\x07\x1b[?1;2c"));
+    REQUIRE(harness.report_count() == 1);
+    REQUIRE(harness.root.stop({.preserve_pending_color_query_completion = true}));
+    harness.started = false;
+    tui::AltScreen replacement{harness.terminal};
+    REQUIRE(replacement.start());
+    controller.rebind_tui(replacement);
+    const auto changes = harness.changed;
+    CHECK(harness.pump(controller) == 1);
+    CHECK(controller.active_theme_name() == "dark");
+    CHECK(harness.changed == changes + 1);
+    REQUIRE(harness.terminal.inject_input("\x1b[?997;2n"));
+    CHECK(harness.pump(controller) == 1);
+    REQUIRE(harness.terminal.inject_input("\x1b]11;#eeeeee\x07\x1b[?1;2c"));
+    REQUIRE(harness.report_count() == 1);
+    controller.dispose();
+    const auto after_dispose = harness.changed;
+    const auto theme_after_dispose = controller.active_theme_name();
+    CHECK(harness.pump(controller) == 1);
+    CHECK(harness.changed == after_dispose);
+    CHECK(controller.active_theme_name() == theme_after_dispose);
+    controller.apply_terminal_color_scheme(coding_agent::tui::TerminalTheme::Light);
+    CHECK(harness.changed == after_dispose);
+    REQUIRE(replacement.stop());
+}
+
+TEST_CASE("Disposed and destroyed theme controllers suppress detached query completion",
+        "[coding_agent][theme][controller][issue1037][spec]") {
+    ControllerHarness harness;
+    {
+        auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
+        controller.apply_from_settings();
+        REQUIRE(harness.root.stop({.preserve_pending_color_query_completion = true}));
+        harness.started = false;
+        controller.dispose();
+    }
+    tui::AltScreen replacement{harness.terminal};
+    REQUIRE(replacement.start());
+    auto marker = replacement.query_terminal_colors(
+            tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{150}});
+    REQUIRE(marker.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    CHECK(harness.report_count() == 0);
     REQUIRE(replacement.stop());
 }
 

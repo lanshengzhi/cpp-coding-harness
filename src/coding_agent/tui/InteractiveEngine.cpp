@@ -513,7 +513,9 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode
     // pi `previousUi.stop({ preserveScreen: true })`: the retired root writes no
     // exit sequence, so the replacement's first paint repaints over the same
     // screen instead of clearing it.
-    if (auto stopped = tui_->stop(cch::tui::TuiStopOptions{.preserve_screen = true}); !stopped) {
+    if (auto stopped = tui_->stop(
+                cch::tui::TuiStopOptions{.preserve_screen = true, .preserve_pending_color_query_completion = true});
+            !stopped) {
         return std::unexpected(stopped.error());
     }
     tui_started_ = false;
