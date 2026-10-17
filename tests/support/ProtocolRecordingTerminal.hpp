@@ -809,8 +809,9 @@ private:
                 if (end == std::string::npos && !finishing) break;
                 const auto payload = rest.substr(2);
                 // Include malformed variants of the three relevant OSC targets.
-                const bool relevant = payload.starts_with("10") || payload.starts_with("11") ||
-                                      (payload.starts_with("4") && (payload.size() == 1 || payload[1] == ';'));
+                const bool relevant =
+                        payload.starts_with("10") || payload.starts_with("11") ||
+                        (payload.starts_with("4") && (payload.size() == 1 || payload[1] == ';' || payload[1] == ':'));
                 if (end == std::string::npos) end = buffer_.size();
                 if (relevant) commands_.emplace_back(buffer_.substr(pos, end - pos));
                 pos = end;

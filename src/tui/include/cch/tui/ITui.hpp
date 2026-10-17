@@ -26,7 +26,8 @@ struct TuiStopOptions {
     bool preserve_screen{false};
     /// Renderer handoff only: detach pending color queries from input routing,
     /// retaining their completion and partial colors until the original deadline.
-    /// Callbacks must own lifetime-safe state independent of the retired root.
+    /// Default stop and destruction still cancel. Callbacks must own
+    /// lifetime-safe state independent of the retired root.
     bool preserve_pending_color_query_completion{false};
 };
 
