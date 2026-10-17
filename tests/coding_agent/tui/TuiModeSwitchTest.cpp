@@ -636,7 +636,9 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         config.write("settings.json", R"({"tuiMode": "fullscreen"})");
         auto client = std::make_shared<tests::GatedChatProvider>();
         auto* gated = client.get();
-        auto created = runtime.run(create_session_async(runtime, session_options(workspace, std::move(client))));
+        auto opts = session_options(workspace, std::move(client));
+        opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
+        auto created = runtime.run(create_session_async(runtime, std::move(opts)));
         REQUIRE(created);
         tests::RuntimeLoopDriver runtime_driver(runtime);
 
@@ -706,6 +708,83 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
                 tests::extract_osc_9_4_commands(strings_of(lifecycle.at("agentEndDisabled").at("writes")));
         CHECK(end_osc == expected_end_disabled);
         CHECK(end_osc.empty());
+
+        // Complete a second turn so the session history has entries to compact
+        REQUIRE(terminal.inject_input("second\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 2; }));
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 2") != std::string::npos; }));
+
+        // Register session subscription observer to synchronize compaction start event delivery
+        bool comp_disabled_event_delivered = false;
+        auto comp_disabled_sub = created->session->subscribe_session(
+                [&](const coding_agent::AgentSessionEvent& ev) -> support::ExpectedVoid {
+                    if (std::holds_alternative<coding_agent::CompactionStartEvent>(ev)) {
+                        comp_disabled_event_delivered = true;
+                    }
+                    return {};
+                });
+        REQUIRE(comp_disabled_sub);
+
+        const auto before_comp_disabled = terminal.output().size();
+        std::optional<support::Expected<coding_agent::CompactionResult>> compact_disabled_result;
+        boost::asio::co_spawn(
+                io,
+                [&]() -> boost::asio::awaitable<void> {
+                    compact_disabled_result = co_await created->session->compact();
+                    co_return;
+                },
+                boost::asio::detached);
+
+        // Synchronize on compaction start event delivery: matches compactionStartDisabled
+        REQUIRE(pump_until(io, [&] { return comp_disabled_event_delivered; }));
+        std::span<const std::string> comp_start_disabled_delta(
+                terminal.output().data() + before_comp_disabled, terminal.output().size() - before_comp_disabled);
+        const auto comp_start_disabled_osc = tests::extract_osc_9_4_commands(comp_start_disabled_delta);
+        const auto expected_comp_start_disabled =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("compactionStartDisabled").at("writes")));
+        CHECK(comp_start_disabled_osc == expected_comp_start_disabled);
+        CHECK(comp_start_disabled_osc.empty());
+
+        // Mode switch during disabled compaction: fullscreen -> regular (restoreProgress = true)
+        // Matches fullscreenToRegular_compactingOnly_disabled_restoreTrue
+        const auto before_switch_cd1 = terminal.output().size();
+        auto switched_cd1 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched_cd1);
+        CHECK(*switched_cd1);
+        std::span<const std::string> switch_cd1_delta(
+                terminal.output().data() + before_switch_cd1, terminal.output().size() - before_switch_cd1);
+        const auto switch_cd1_osc = tests::extract_osc_9_4_commands(switch_cd1_delta);
+        const auto expected_switch_cd1 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("fullscreenToRegular_compactingOnly_disabled_restoreTrue").at("writes")));
+        CHECK(switch_cd1_osc == expected_switch_cd1);
+        CHECK(switch_cd1_osc.empty());
+
+        // Reverse mode switch during disabled compaction: regular -> fullscreen (restoreProgress = true)
+        // Matches regularToFullscreen_compactingOnly_disabled_restoreTrue
+        const auto before_switch_cd2 = terminal.output().size();
+        auto switched_cd2 = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched_cd2);
+        CHECK(*switched_cd2);
+        std::span<const std::string> switch_cd2_delta(
+                terminal.output().data() + before_switch_cd2, terminal.output().size() - before_switch_cd2);
+        const auto switch_cd2_osc = tests::extract_osc_9_4_commands(switch_cd2_delta);
+        const auto expected_switch_cd2 = tests::extract_osc_9_4_commands(
+                strings_of(matrix.at("regularToFullscreen_compactingOnly_disabled_restoreTrue").at("writes")));
+        CHECK(switch_cd2_osc == expected_switch_cd2);
+        CHECK(switch_cd2_osc.empty());
+
+        // Releasing summarization completes compaction: matches compactionEndDisabled
+        const auto before_comp_end_disabled = terminal.output().size();
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return compact_disabled_result.has_value(); }));
+        std::span<const std::string> comp_end_disabled_delta(terminal.output().data() + before_comp_end_disabled,
+                terminal.output().size() - before_comp_end_disabled);
+        const auto comp_end_disabled_osc = tests::extract_osc_9_4_commands(comp_end_disabled_delta);
+        const auto expected_comp_end_disabled =
+                tests::extract_osc_9_4_commands(strings_of(lifecycle.at("compactionEndDisabled").at("writes")));
+        CHECK(comp_end_disabled_osc == expected_comp_end_disabled);
+        CHECK(comp_end_disabled_osc.empty());
 
         // Idle switches in both directions emit no progress
         const auto before_idle1 = terminal.output().size();
@@ -856,8 +935,8 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         CHECK(*run_result);
     }
 
-    // ── Case 4: settings selector UI navigation, persisted true->false->reload, preference continuity through
-    // switches, and stale progress teardown ──
+    // ── Case 4: settings selector UI navigation, persisted true->false re-read, agent_end clear-skip while disabled,
+    // and stale progress teardown safety net ──
     {
         tests::RuntimeFixture runtime;
         tests::TempWorkspace workspace;
@@ -910,7 +989,7 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
                 terminal.output().data() + before_toggle, terminal.output().size() - before_toggle);
         CHECK(tests::extract_osc_9_4_commands(toggle_delta).empty());
 
-        // Verify independent reloaded SettingsManager reflects persisted false
+        // Verify independent SettingsManager re-read reflects persisted false (distinct from live /reload round-trip)
         auto reloaded_mgr1 = coding_agent::SettingsManager::create(workspace.path(), config.path(), true);
         CHECK_FALSE(reloaded_mgr1.get_show_terminal_progress());
 
@@ -937,6 +1016,165 @@ TEST_CASE("Native TUI terminal progress lifecycle and mode switch restoration ho
         const auto close_osc = tests::extract_osc_9_4_commands(close_delta);
         // Clear count is exactly 1 (from shutdown teardown safety net)
         CHECK(close_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
+    }
+
+    // ── Case 5: real UI toggle to false, active-stop clear on first mode switch, and preference continuity across
+    // bidirectional switches and subsequent disabled turn/compaction (composed boundary) ──
+    {
+        // Composed boundary note:
+        // Frozen artifact 29 interactive-mode-switch-matrix disabled entries record switch transitions that started
+        // while progress was already inactive. This test verifies the composition of two independently observed
+        // behaviors:
+        // 1. Terminal stop clear on active progress (independently captured in artifact 29 Scenario 1 stopActive and
+        //    Scenario 4 Phase 4), triggered here because switching renderer modes physically stops the retired UI root.
+        // 2. Disabled restore suppression across bidirectional switches and preference continuity into subsequent
+        //    turn and compaction lifecycles.
+        tests::RuntimeFixture runtime;
+        tests::TempWorkspace workspace;
+        tests::TempWorkspace config;
+        config.write("settings.json", R"({"tuiMode": "fullscreen", "terminal": {"showTerminalProgress": true}})");
+        auto client = std::make_shared<tests::GatedChatProvider>();
+        auto* gated = client.get();
+        auto opts = session_options(workspace, std::move(client));
+        opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
+        auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        boost::asio::io_context io;
+        std::optional<support::ExpectedVoid> run_result;
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+        boost::asio::co_spawn(io,
+                drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        // Turn start activates progress
+        const auto before_turn = terminal.output().size();
+        REQUIRE(terminal.inject_input("active turn\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 1; }));
+        std::span<const std::string> turn_delta(
+                terminal.output().data() + before_turn, terminal.output().size() - before_turn);
+        CHECK(tests::extract_osc_9_4_commands(turn_delta) == std::vector<std::string>{"\x1b]9;4;3\x07"});
+
+        // Open settings selector and navigate to Terminal progress row
+        focus_terminal_progress_row(terminal, io);
+        CHECK(on_terminal_progress_row(terminal));
+        const auto screen_before = visible_screen(terminal);
+        CHECK(screen_before.find("Terminal progress") != std::string::npos);
+        CHECK(screen_before.find("true") != std::string::npos);
+
+        // Enter cycles true -> false: updates settings persistence ONLY
+        const auto before_toggle = terminal.output().size();
+        REQUIRE(terminal.inject_input("\r"));
+        drain_ready(io);
+        REQUIRE(pump_until(io, [&] {
+            return read_text_file(config.path() / "settings.json").find("\"showTerminalProgress\": false") !=
+                   std::string::npos;
+        }));
+        std::span<const std::string> toggle_delta(
+                terminal.output().data() + before_toggle, terminal.output().size() - before_toggle);
+        CHECK(tests::extract_osc_9_4_commands(toggle_delta).empty());
+
+        // Close settings
+        close_terminal_progress_settings(terminal, io);
+
+        // First switch: fullscreen -> regular while streaming is still active, but setting was toggled to false.
+        // The retiring fullscreen UI root stops, physically clearing the previously active progress
+        // (\x1b]9;4;0\x07). The target regular UI root starts, but because showTerminalProgress is now false,
+        // it suppresses restore.
+        const auto before_switch1 = terminal.output().size();
+        auto switched1 = engine->switch_tui_mode(coding_agent::TuiMode::Regular, /* restore_progress */ true);
+        REQUIRE(switched1);
+        CHECK(*switched1);
+        std::span<const std::string> switch1_delta(
+                terminal.output().data() + before_switch1, terminal.output().size() - before_switch1);
+        const auto switch1_osc = tests::extract_osc_9_4_commands(switch1_delta);
+        CHECK(switch1_osc == std::vector<std::string>{"\x1b]9;4;0\x07"});
+
+        // Reverse switch: regular -> fullscreen while streaming is still active and setting is false.
+        // The retiring regular UI root was never active, so its stop emits nothing; the incoming fullscreen
+        // root sees showTerminalProgress false and restores nothing. Zero writes.
+        const auto before_switch2 = terminal.output().size();
+        auto switched2 = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen, /* restore_progress */ true);
+        REQUIRE(switched2);
+        CHECK(*switched2);
+        std::span<const std::string> switch2_delta(
+                terminal.output().data() + before_switch2, terminal.output().size() - before_switch2);
+        const auto switch2_osc = tests::extract_osc_9_4_commands(switch2_delta);
+        CHECK(switch2_osc.empty());
+
+        // Complete the first turn: setting is false and progress was already cleared; agent_end emits nothing.
+        const auto before_end1 = terminal.output().size();
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 1") != std::string::npos; }));
+        std::span<const std::string> end1_delta(
+                terminal.output().data() + before_end1, terminal.output().size() - before_end1);
+        CHECK(tests::extract_osc_9_4_commands(end1_delta).empty());
+
+        // Subsequent new turn: preference continuity ensures disabled setting suppresses turn_start and agent_end.
+        const auto before_turn2 = terminal.output().size();
+        REQUIRE(terminal.inject_input("turn two\r"));
+        REQUIRE(pump_until(io, [&] { return gated->requests.size() == 2; }));
+        std::span<const std::string> turn2_delta(
+                terminal.output().data() + before_turn2, terminal.output().size() - before_turn2);
+        CHECK(tests::extract_osc_9_4_commands(turn2_delta).empty());
+
+        const auto before_end2 = terminal.output().size();
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("turn 2") != std::string::npos; }));
+        std::span<const std::string> end2_delta(
+                terminal.output().data() + before_end2, terminal.output().size() - before_end2);
+        CHECK(tests::extract_osc_9_4_commands(end2_delta).empty());
+
+        // Subsequent compaction: preference continuity ensures disabled compaction emits no progress writes.
+        bool comp_delivered = false;
+        auto comp_sub = created->session->subscribe_session(
+                [&](const coding_agent::AgentSessionEvent& ev) -> support::ExpectedVoid {
+                    if (std::holds_alternative<coding_agent::CompactionStartEvent>(ev)) {
+                        comp_delivered = true;
+                    }
+                    return {};
+                });
+        REQUIRE(comp_sub);
+
+        const auto before_comp = terminal.output().size();
+        std::optional<support::Expected<coding_agent::CompactionResult>> comp_res;
+        boost::asio::co_spawn(
+                io,
+                [&]() -> boost::asio::awaitable<void> {
+                    comp_res = co_await created->session->compact();
+                    co_return;
+                },
+                boost::asio::detached);
+        REQUIRE(pump_until(io, [&] { return comp_delivered; }));
+        std::span<const std::string> comp_start_delta(
+                terminal.output().data() + before_comp, terminal.output().size() - before_comp);
+        CHECK(tests::extract_osc_9_4_commands(comp_start_delta).empty());
+
+        const auto before_comp_end = terminal.output().size();
+        gated->release();
+        REQUIRE(pump_until(io, [&] { return comp_res.has_value(); }));
+        std::span<const std::string> comp_end_delta(
+                terminal.output().data() + before_comp_end, terminal.output().size() - before_comp_end);
+        CHECK(tests::extract_osc_9_4_commands(comp_end_delta).empty());
+
+        // Teardown: progress was cleared at the first mode switch and remained inactive, so terminal.stop() emits
+        // nothing.
+        const auto before_close = terminal.output().size();
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        CHECK(*run_result);
+        std::span<const std::string> close_delta(
+                terminal.output().data() + before_close, terminal.output().size() - before_close);
+        CHECK(tests::extract_osc_9_4_commands(close_delta).empty());
     }
 }
 

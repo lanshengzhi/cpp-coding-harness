@@ -277,19 +277,15 @@ TEST_CASE("frozen product-progress-protocol switch matrix raw writes replay exac
         const bool active_emitted = case_data.at("progressActiveEmitted").get_boolean();
 
         if (clear_emitted && active_emitted) {
-            REQUIRE(osc_vector.size() == 2);
-            CHECK(osc_vector[0] == "\x1b]9;4;0\x07");
-            CHECK(osc_vector[1] == "\x1b]9;4;3\x07");
+            CHECK(osc_vector == std::vector<std::string>{"\x1b]9;4;0\x07", "\x1b]9;4;3\x07"});
             const auto clear_idx = static_cast<int>(case_data.at("clearIndex").get_number());
             const auto active_idx = static_cast<int>(case_data.at("activeIndex").get_number());
             CHECK(clear_idx < active_idx);
             CHECK(case_data.at("orderValid").get_boolean());
         } else if (clear_emitted && !active_emitted) {
-            REQUIRE(osc_vector.size() == 1);
-            CHECK(osc_vector[0] == "\x1b]9;4;0\x07");
+            CHECK(osc_vector == std::vector<std::string>{"\x1b]9;4;0\x07"});
         } else if (!clear_emitted && active_emitted) {
-            REQUIRE(osc_vector.size() == 1);
-            CHECK(osc_vector[1] == "\x1b]9;4;3\x07");
+            CHECK(osc_vector == std::vector<std::string>{"\x1b]9;4;3\x07"});
         } else {
             CHECK(osc_vector.empty());
         }
@@ -335,42 +331,50 @@ TEST_CASE("frozen product-progress-protocol settings toggle and shutdown teardow
 
 TEST_CASE("Protocol progress parser and vector comparison detect mutations, corruptions, and fragmentation",
         "[coding_agent][progress][protocol][issue1037][mutation]") {
-    const std::vector<std::string> expected_switch{
-            "\x1b]9;4;0\x07",
-            "\x1b]9;4;3\x07",
-    };
+    const auto artifact = cch::tests::read_pi_tui_evidence("product-progress-protocol.json");
+    REQUIRE(artifact);
+    const auto& bundle = *artifact;
+    const auto& scenario3 = find_scenario(bundle, "interactive-mode-switch-matrix");
+    const auto& switch_results = scenario3.at("expected").at("switchResults");
+
+    // Derive expected switch oracle directly from frozen artifact 29 matrix write stream
+    const auto switch_oracle_writes =
+            strings_of(switch_results.at("fullscreenToRegular_streamingOnly_enabled_restoreTrue").at("writes"));
+    const auto expected_switch = cch::tests::extract_osc_9_4_commands(switch_oracle_writes);
+    REQUIRE(expected_switch == std::vector<std::string>{"\x1b]9;4;0\x07", "\x1b]9;4;3\x07"});
+
+    // Derive expected idle oracle directly from frozen artifact 29 matrix write stream
+    const auto idle_oracle_writes =
+            strings_of(switch_results.at("fullscreenToRegular_idle_enabled_restoreTrue").at("writes"));
+    const auto expected_idle = cch::tests::extract_osc_9_4_commands(idle_oracle_writes);
+    REQUIRE(expected_idle.empty());
 
     SECTION("Separating mutation: reversed order during mode switch fails comparison") {
-        const std::vector<std::string> reversed_order{
-                "\x1b]9;4;3\x07",
-                "\x1b]9;4;0\x07",
-        };
-        CHECK_FALSE(reversed_order == expected_switch);
+        const std::string reversed_stream = "\x1b]9;4;3\x07\x1b]9;4;0\x07";
+        const auto extracted = cch::tests::extract_osc_9_4_commands(reversed_stream);
+        CHECK(extracted == std::vector<std::string>{"\x1b]9;4;3\x07", "\x1b]9;4;0\x07"});
+        CHECK_FALSE(extracted == expected_switch);
     }
 
     SECTION("Separating mutation: duplicate active sequence fails comparison") {
-        const std::vector<std::string> duplicate_active{
-                "\x1b]9;4;0\x07",
-                "\x1b]9;4;3\x07",
-                "\x1b]9;4;3\x07",
-        };
-        CHECK_FALSE(duplicate_active == expected_switch);
+        const std::string duplicate_active_stream = "\x1b]9;4;0\x07\x1b]9;4;3\x07\x1b]9;4;3\x07";
+        const auto extracted = cch::tests::extract_osc_9_4_commands(duplicate_active_stream);
+        CHECK(extracted == std::vector<std::string>{"\x1b]9;4;0\x07", "\x1b]9;4;3\x07", "\x1b]9;4;3\x07"});
+        CHECK_FALSE(extracted == expected_switch);
     }
 
     SECTION("Separating mutation: duplicate clear sequence fails comparison") {
-        const std::vector<std::string> duplicate_clear{
-                "\x1b]9;4;0\x07",
-                "\x1b]9;4;0\x07",
-                "\x1b]9;4;3\x07",
-        };
-        CHECK_FALSE(duplicate_clear == expected_switch);
+        const std::string duplicate_clear_stream = "\x1b]9;4;0\x07\x1b]9;4;0\x07\x1b]9;4;3\x07";
+        const auto extracted = cch::tests::extract_osc_9_4_commands(duplicate_clear_stream);
+        CHECK(extracted == std::vector<std::string>{"\x1b]9;4;0\x07", "\x1b]9;4;0\x07", "\x1b]9;4;3\x07"});
+        CHECK_FALSE(extracted == expected_switch);
     }
 
     SECTION("Separating mutation: missing clear before restore fails comparison") {
-        const std::vector<std::string> missing_clear{
-                "\x1b]9;4;3\x07",
-        };
-        CHECK_FALSE(missing_clear == expected_switch);
+        const std::string missing_clear_stream = "\x1b]9;4;3\x07";
+        const auto extracted = cch::tests::extract_osc_9_4_commands(missing_clear_stream);
+        CHECK(extracted == std::vector<std::string>{"\x1b]9;4;3\x07"});
+        CHECK_FALSE(extracted == expected_switch);
     }
 
     SECTION("Separating mutation: wrong trailing semicolon is not silently normalized") {
@@ -381,11 +385,10 @@ TEST_CASE("Protocol progress parser and vector comparison detect mutations, corr
     }
 
     SECTION("Separating mutation: unexpected active during idle or disabled fails comparison") {
-        const std::vector<std::string> unexpected_active{
-                "\x1b]9;4;3\x07",
-        };
-        const std::vector<std::string> expected_idle{};
-        CHECK_FALSE(unexpected_active == expected_idle);
+        const std::string unexpected_active_stream = "\x1b]9;4;3\x07";
+        const auto extracted = cch::tests::extract_osc_9_4_commands(unexpected_active_stream);
+        CHECK(extracted == std::vector<std::string>{"\x1b]9;4;3\x07"});
+        CHECK_FALSE(extracted == expected_idle);
     }
 
     SECTION("Parser correctly reassembles fragmented chunks across boundaries") {

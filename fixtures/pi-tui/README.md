@@ -400,10 +400,16 @@ exact clear counts across active/idle/toggled states, but not raw writes (scenar
 truth-predicate context rather than proof the live session reaches both simultaneously.
 Public C++ acceptance tests in `ProductProgressEvidenceTest.cpp` and `TuiModeSwitchTest.cpp` consume
 `product-progress-protocol.json` directly through real `InteractiveEngine`, `AgentSession`, and `SettingsManager`
-without stand-in counts, asserting ordered exact OSC 9;4 byte sequences across all reachable states in both
-switch directions (`fullscreen -> regular` and `regular -> fullscreen`), measuring phase-synchronized
-compaction deltas upon event delivery, validating settings selector UI navigation, persistence, `/reload`
-preference continuity, and verifying exact shutdown teardown clear counts.
+without stand-in counts, asserting ordered exact OSC 9;4 byte sequences across covered streaming, idle, and
+compaction lifecycle states in both switch directions (`fullscreen -> regular` and `regular -> fullscreen`),
+measuring compaction start synchronized on `CompactionStartEvent` delivery and compaction end upon `compact()`
+completion, verifying settings selector UI navigation, persistence, independent `SettingsManager` re-read,
+separate live `/reload` preference continuity, and verifying exact shutdown teardown clear counts.
+The protocol parser retains malformed sequences verbatim so exact vector comparison distinguishes delimiter
+deviations from canonical forms. The test suite also validates the composed boundary where an active streaming
+turn is toggled disabled in the settings UI: switching modes physically stops the previous root (emitting the
+independently observed terminal stop clear) while the target root suppresses restore, with preference continuity
+holding across both switch directions and through subsequent disabled turn and compaction lifecycles.
 `capture/product-progress-protocol-scenarios.mts` defines the scenarios;
 `capture/recapture-product-progress-protocol.mts` is the append recipe (same frozen revision
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact
