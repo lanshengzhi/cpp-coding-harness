@@ -732,6 +732,16 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
         }
     };
 
+    // pi `shutdown` (`interactive-mode.ts:4264`): drain buffered input before
+    // stopping so late Kitty key-release sequences cannot leak to the parent
+    // shell. A failed drain is aggregated and restoration is still attempted;
+    // a failed exit returns before the resume notice (zero notice on error).
+    if (tui_started_) {
+        if (auto drained = terminal_.drain_input(); !drained) {
+            record_completion_error(presentation_error(drained.error(), "Native TUI exit input drain failed"));
+        }
+    }
+
     const auto exit_output = settings_manager_.has_value() ? settings_manager_->get_fullscreen_exit_output()
                                                            : FullscreenExitOutput::Transcript;
     const bool was_fullscreen = (tui_ == &fullscreen_host_->tui());

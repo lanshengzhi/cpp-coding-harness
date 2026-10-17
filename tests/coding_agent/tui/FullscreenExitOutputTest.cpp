@@ -47,9 +47,14 @@
 #include <termios.h>
 #include <thread>
 
+#include <algorithm>
+#include <atomic>
+#include <condition_variable>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -254,6 +259,88 @@ public:
 
 private:
     cch::tui::VirtualTerminal inner_;
+};
+
+/// Records the ordered exit calls an engine makes through the terminal seam so
+/// a test can separate a drain placed before the final presentation and stop
+/// from one placed after them. Wraps any terminal (VirtualTerminal or the real
+/// ProcessTerminal); an injected drain error makes the failure path observable.
+class DrainOrderTerminal final : public cch::tui::Terminal {
+public:
+    enum class Kind { Drain, Stop, Write, EnterOutputOnly };
+
+    struct Call {
+        Kind kind;
+        std::chrono::milliseconds max_ms{};
+        std::chrono::milliseconds idle_ms{};
+        std::string payload{};
+    };
+
+    explicit DrainOrderTerminal(cch::tui::Terminal& inner) : inner_(inner) {}
+
+    cch::support::ExpectedVoid start(
+            cch::tui::TerminalInputSink input_sink, cch::tui::TerminalResizeSink resize_sink) override {
+        return inner_.start(std::move(input_sink), std::move(resize_sink));
+    }
+
+    using Terminal::stop;
+    cch::support::ExpectedVoid stop() override { return stop(cch::tui::TerminalStopOptions{}); }
+    cch::support::ExpectedVoid stop(cch::tui::TerminalStopOptions options) override {
+        calls.push_back(Call{.kind = Kind::Stop});
+        return inner_.stop(options);
+    }
+
+    cch::tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
+    cch::tui::TerminalCapabilities capabilities() const override { return inner_.capabilities(); }
+    cch::tui::TerminalModeState modes() const override { return inner_.modes(); }
+    cch::support::ExpectedVoid clear_screen() override { return inner_.clear_screen(); }
+    cch::support::ExpectedVoid write(std::string_view output) override {
+        calls.push_back(Call{.kind = Kind::Write, .payload = std::string(output)});
+        return inner_.write(output);
+    }
+    cch::support::ExpectedVoid set_cursor(cch::tui::CursorPosition position) override {
+        return inner_.set_cursor(position);
+    }
+    cch::support::ExpectedVoid set_cursor_visible(bool visible) override { return inner_.set_cursor_visible(visible); }
+    cch::support::ExpectedVoid set_alternate_screen(bool enabled) override {
+        return inner_.set_alternate_screen(enabled);
+    }
+    cch::support::ExpectedVoid set_autowrap(bool enabled) override { return inner_.set_autowrap(enabled); }
+    cch::support::ExpectedVoid set_scroll_margins(std::size_t top_row, std::size_t bottom_row) override {
+        return inner_.set_scroll_margins(top_row, bottom_row);
+    }
+    cch::support::ExpectedVoid reset_scroll_margins() override { return inner_.reset_scroll_margins(); }
+    cch::support::ExpectedVoid begin_synchronized_update() override { return inner_.begin_synchronized_update(); }
+    cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
+    cch::support::ExpectedVoid set_title(std::string_view title) override { return inner_.set_title(title); }
+    cch::support::ExpectedVoid apply_cell_pixel_dimensions(cch::tui::CellPixelDimensions pixels) override {
+        return inner_.apply_cell_pixel_dimensions(pixels);
+    }
+    cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    cch::support::ExpectedVoid drain_input(
+            std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {
+        calls.push_back(Call{.kind = Kind::Drain, .max_ms = max_ms, .idle_ms = idle_ms});
+        if (on_drain_start) on_drain_start();
+        if (drain_error) return std::unexpected(*drain_error);
+        return inner_.drain_input(max_ms, idle_ms);
+    }
+    cch::support::ExpectedVoid enter_output_only() override {
+        calls.push_back(Call{.kind = Kind::EnterOutputOnly});
+        return inner_.enter_output_only();
+    }
+    cch::support::ExpectedVoid leave_output_only() override { return inner_.leave_output_only(); }
+
+    [[nodiscard]] std::size_t drain_count() const {
+        return static_cast<std::size_t>(
+                std::count_if(calls.begin(), calls.end(), [](const Call& call) { return call.kind == Kind::Drain; }));
+    }
+
+    std::vector<Call> calls;
+    std::optional<cch::support::Error> drain_error;
+    std::function<void()> on_drain_start;
+
+private:
+    cch::tui::Terminal& inner_;
 };
 
 } // namespace
@@ -2667,6 +2754,164 @@ TEST_CASE("Native TUI fullscreen exit characterizes all live artifact 35 scenari
     }
 }
 
+TEST_CASE("Native TUI engine drains terminal input once before the exit presentation and stop",
+        "[coding_agent][tui][exit][drain][issue1019][spec]") {
+    tests::TempWorkspace temp;
+    tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+
+    tests::RuntimeFixture runtime;
+    boost::asio::io_context io;
+
+    tui::VirtualTerminal virtual_terminal({.columns = 80, .rows = 24});
+    DrainOrderTerminal terminal(virtual_terminal);
+
+    auto opts = session_options(temp, tests::make_scripted_fake_provider());
+    opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{temp.path() / "drain-session.jsonl"};
+
+    auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+    REQUIRE(created.has_value());
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    auto& session = *created->session;
+
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+    std::ostringstream out_stream;
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
+
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+            io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                CHECK(ex == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.modes().alternate_screen);
+    REQUIRE(virtual_terminal.inject_input("drain prompt text\r"));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(virtual_terminal).find("fake: drain prompt text") != std::string::npos; }));
+
+    REQUIRE(virtual_terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result.has_value());
+    CHECK(run_result->has_value());
+
+    const auto& calls = terminal.calls;
+    const auto drain_it = std::find_if(calls.begin(), calls.end(), [](const DrainOrderTerminal::Call& call) {
+        return call.kind == DrainOrderTerminal::Kind::Drain;
+    });
+    REQUIRE(drain_it != calls.end());
+    CHECK(terminal.drain_count() == 1);
+    CHECK(drain_it->max_ms == std::chrono::milliseconds(1000));
+    CHECK(drain_it->idle_ms == std::chrono::milliseconds(50));
+    const auto drain_index = static_cast<std::size_t>(drain_it - calls.begin());
+
+    const auto stop_it = std::find_if(calls.begin(), calls.end(), [](const DrainOrderTerminal::Call& call) {
+        return call.kind == DrainOrderTerminal::Kind::Stop;
+    });
+    REQUIRE(stop_it != calls.end());
+    CHECK(drain_index < static_cast<std::size_t>(stop_it - calls.begin()));
+
+    // The frozen shutdown drains before the exit policy switch and the final
+    // presentation: the output-only final render follows it.
+    const auto output_only_it = std::find_if(calls.begin(), calls.end(), [](const DrainOrderTerminal::Call& call) {
+        return call.kind == DrainOrderTerminal::Kind::EnterOutputOnly;
+    });
+    REQUIRE(output_only_it != calls.end());
+    CHECK(drain_index < static_cast<std::size_t>(output_only_it - calls.begin()));
+
+    const auto transcript_it = std::find_if(calls.rbegin(), calls.rend(), [](const DrainOrderTerminal::Call& call) {
+        return call.kind == DrainOrderTerminal::Kind::Write &&
+               call.payload.find("fake: drain prompt text") != std::string::npos;
+    });
+    REQUIRE(transcript_it != calls.rend());
+    const auto transcript_index = static_cast<std::size_t>(calls.size() - 1 - (transcript_it - calls.rbegin()));
+    CHECK(drain_index < transcript_index);
+
+    // A successful exit still prints the resume notice after the stop.
+    CHECK(out_stream.str().find("To resume this session:") != std::string::npos);
+}
+
+TEST_CASE("Native TUI engine failed exit drain is aggregated, still stops, and suppresses the resume notice",
+        "[coding_agent][tui][exit][drain][issue1019][spec]") {
+    tests::TempWorkspace temp;
+    tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+
+    tests::RuntimeFixture runtime;
+    boost::asio::io_context io;
+
+    tui::VirtualTerminal virtual_terminal({.columns = 80, .rows = 24});
+    DrainOrderTerminal terminal(virtual_terminal);
+    terminal.drain_error =
+            support::make_error(support::ErrorCode::Process, "terminal drain failed", "late key release tail");
+
+    auto opts = session_options(temp, tests::make_scripted_fake_provider());
+    opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{temp.path() / "drain-failure-session.jsonl"};
+
+    auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+    REQUIRE(created.has_value());
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    auto& session = *created->session;
+
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+    std::ostringstream out_stream;
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_session(session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_output_stream(&out_stream)
+                       .with_stdout_is_tty(true)
+                       .build();
+
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(
+            io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid result) {
+                CHECK(ex == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.modes().alternate_screen);
+    REQUIRE(virtual_terminal.inject_input("failed drain prompt\r"));
+    REQUIRE(pump_until(io,
+            [&] { return visible_screen(virtual_terminal).find("fake: failed drain prompt") != std::string::npos; }));
+
+    REQUIRE(virtual_terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result.has_value());
+    REQUIRE_FALSE(run_result->has_value());
+    CHECK(run_result->error().code == support::ErrorCode::Process);
+    CHECK(run_result->error().message == "Native TUI exit input drain failed");
+
+    const auto& calls = terminal.calls;
+    const auto drain_it = std::find_if(calls.begin(), calls.end(), [](const DrainOrderTerminal::Call& call) {
+        return call.kind == DrainOrderTerminal::Kind::Drain;
+    });
+    REQUIRE(drain_it != calls.end());
+    CHECK(terminal.drain_count() == 1);
+
+    // A failed drain still attempts restoration.
+    const auto stop_it = std::find_if(calls.begin(), calls.end(), [](const DrainOrderTerminal::Call& call) {
+        return call.kind == DrainOrderTerminal::Kind::Stop;
+    });
+    REQUIRE(stop_it != calls.end());
+    CHECK(static_cast<std::size_t>(drain_it - calls.begin()) < static_cast<std::size_t>(stop_it - calls.begin()));
+
+    // Zero notice: a failed exit must not claim a resumable session.
+    CHECK(out_stream.str().empty());
+}
+
 TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent sessions and failure pair",
         "[coding_agent][tui][exit][pty][issue1019][issue1019enginepty][spec]") {
     SECTION("persistent session exit with transcript renders main buffer and emits exact notice to PTY") {
@@ -3157,5 +3402,161 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
         REQUIRE(loaded_post->messages.size() == 3);
         CHECK(text_from_message(loaded_post->messages[1]) == "hello failure prompt");
         CHECK(text_from_message(loaded_post->messages[2]) == "fake: hello failure prompt");
+    }
+
+    SECTION("persistent session exit drains the pending physical keyboard tail before stop") {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard guard_xdg{"XDG_CONFIG_HOME", temp.path().string()};
+        tests::EnvVarGuard guard_home{"HOME", temp.path().string()};
+        const auto agent_config_dir = coding_agent::agent_config_dir();
+        std::filesystem::create_directories(agent_config_dir);
+
+        {
+            std::ofstream settings_file(coding_agent::settings_file_path());
+            settings_file << "{\n  \"fullscreenExitOutput\": \"transcript\"\n}\n";
+        }
+
+        const auto workspace = temp.path() / "test-workspace";
+        std::filesystem::create_directories(workspace);
+
+        auto pty = tests::open_pseudo_terminal(80, 24);
+        REQUIRE(pty);
+
+        termios orig_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &orig_termios) == 0);
+        termios raw_slave_termios = orig_termios;
+        raw_slave_termios.c_oflag &= ~OPOST;
+        REQUIRE(tcsetattr(pty->slave.get(), TCSANOW, &raw_slave_termios) == 0);
+
+        const auto custom_dir = temp.path() / "tail sessions dir";
+        std::filesystem::create_directories(custom_dir);
+        const auto session_file = custom_dir / "tail_session.jsonl";
+
+        tests::RuntimeFixture runtime;
+        auto opts = session_options(temp, tests::make_scripted_fake_provider());
+        opts.workspace = workspace;
+        opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+
+        auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal process_terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+        DrainOrderTerminal terminal(process_terminal);
+
+        FdOStream pty_ostream(pty->slave.get());
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(agent_config_dir)
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .with_output_stream(&pty_ostream)
+                           .with_stdout_is_tty(true)
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        std::exception_ptr run_exception;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid res) {
+                    run_exception = ex;
+                    run_result.emplace(std::move(res));
+                });
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+        std::mutex drain_mutex;
+        std::condition_variable drain_started_cv;
+        bool drain_started = false;
+        std::atomic<bool> tail_written{false};
+        terminal.on_drain_start = [&] {
+            {
+                std::lock_guard lock(drain_mutex);
+                drain_started = true;
+            }
+            drain_started_cv.notify_all();
+        };
+
+        // The late Kitty key-release tail arrives after the exit request while
+        // the product drain holds its idle budget; the drain must discard it so
+        // no bytes remain for the parent shell.
+        const std::string tail_sequence = "\x1b[13;5u\x1b[13;5u\x1b[13;5u\x1b[13;5u";
+        std::jthread tail_writer([&] {
+            {
+                std::unique_lock lock(drain_mutex);
+                if (!drain_started_cv.wait_for(lock, std::chrono::seconds(3), [&] { return drain_started; })) return;
+            }
+            for (int chunk = 0; chunk < 4; ++chunk) {
+                if (::write(pty->master.get(), tail_sequence.data(), tail_sequence.size()) !=
+                        static_cast<ssize_t>(tail_sequence.size())) {
+                    return;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+            tail_written.store(true, std::memory_order_release);
+        });
+
+        REQUIRE(pump_until(io, [&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+        (void)cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
+
+        const std::string prompt_text = "hello tail drain\r";
+        REQUIRE(::write(pty->master.get(), prompt_text.data(), prompt_text.size()) ==
+                static_cast<ssize_t>(prompt_text.size()));
+
+        std::string phase1_bytes;
+        REQUIRE(pump_until(
+                io,
+                [&] {
+                    phase1_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase1_bytes.find("fake: hello tail drain") != std::string::npos;
+                },
+                std::chrono::seconds(10)));
+
+        constexpr char kCtrlD = '\x04';
+        REQUIRE(::write(pty->master.get(), &kCtrlD, 1) == 1);
+
+        std::string phase2_bytes;
+        REQUIRE(pump_until(
+                io,
+                [&] {
+                    phase2_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return run_result.has_value();
+                },
+                std::chrono::seconds(10)));
+        tail_writer.join();
+
+        CHECK(run_exception == nullptr);
+        REQUIRE(run_result.has_value());
+        CHECK(run_result->has_value());
+        REQUIRE(tail_written.load(std::memory_order_acquire));
+
+        const auto& calls = terminal.calls;
+        const auto drain_it = std::find_if(calls.begin(), calls.end(), [](const DrainOrderTerminal::Call& call) {
+            return call.kind == DrainOrderTerminal::Kind::Drain;
+        });
+        REQUIRE(drain_it != calls.end());
+        CHECK(terminal.drain_count() == 1);
+        CHECK(drain_it->max_ms == std::chrono::milliseconds(1000));
+        CHECK(drain_it->idle_ms == std::chrono::milliseconds(50));
+        const auto drain_index = static_cast<std::size_t>(drain_it - calls.begin());
+
+        const auto stop_it = std::find_if(calls.begin(), calls.end(), [](const DrainOrderTerminal::Call& call) {
+            return call.kind == DrainOrderTerminal::Kind::Stop;
+        });
+        REQUIRE(stop_it != calls.end());
+        CHECK(drain_index < static_cast<std::size_t>(stop_it - calls.begin()));
+
+        // The physical tail is gone: a parent shell reading the slave after the
+        // product exit finds no pending key-release bytes.
+        CHECK(cch::tests::read_available(pty->slave.get(), std::chrono::milliseconds(50)).empty());
+        CHECK(!terminal.modes().started);
+        CHECK(!terminal.modes().raw_input);
+        CHECK(terminal.modes().cursor_visible);
     }
 }
