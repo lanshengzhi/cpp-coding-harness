@@ -24,6 +24,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/tui/ChatViewport.hpp"
 #include "support/ProtocolRecordingTerminal.hpp"
+#include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>
@@ -44,6 +45,7 @@
 #include <fcntl.h>
 #include <iostream>
 #include <termios.h>
+#include <thread>
 
 #include <filesystem>
 #include <fstream>
@@ -79,6 +81,54 @@ namespace {
     }
     return text;
 }
+
+class FdStreamBuf final : public std::streambuf {
+public:
+    explicit FdStreamBuf(int fd) : fd_(fd) {}
+
+    [[nodiscard]] std::size_t bytes_written() const noexcept { return bytes_written_; }
+    [[nodiscard]] std::size_t write_calls() const noexcept { return write_calls_; }
+
+protected:
+    int_type overflow(int_type ch) override {
+        if (ch != traits_type::eof()) {
+            char c = static_cast<char>(ch);
+            if (xsputn(&c, 1) != 1) return traits_type::eof();
+        }
+        return ch;
+    }
+
+    std::streamsize xsputn(const char* s, std::streamsize count) override {
+        if (count <= 0 || fd_ < 0) return 0;
+        ++write_calls_;
+        std::streamsize total = 0;
+        while (total < count) {
+            const auto n = ::write(fd_, s + total, static_cast<size_t>(count - total));
+            if (n < 0) {
+                if (errno == EINTR) continue;
+                return total > 0 ? total : -1;
+            }
+            total += n;
+            bytes_written_ += static_cast<std::size_t>(n);
+        }
+        return total;
+    }
+
+private:
+    int fd_{-1};
+    std::size_t bytes_written_{0};
+    std::size_t write_calls_{0};
+};
+
+class FdOStream final : public std::ostream {
+public:
+    explicit FdOStream(int fd) : std::ostream(&buf_), buf_(fd) {}
+    FdStreamBuf& fd_buf() { return buf_; }
+    const FdStreamBuf& fd_buf() const { return buf_; }
+
+private:
+    FdStreamBuf buf_;
+};
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
         const tests::TempWorkspace& workspace, std::shared_ptr<tests::ScriptedProvider> client) {
@@ -2584,5 +2634,424 @@ TEST_CASE("Native TUI fullscreen exit characterizes all live artifact 35 scenari
                 }
             }
         }
+    }
+}
+
+TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent sessions and failure pair",
+        "[coding_agent][tui][exit][pty][issue1019][issue1019enginepty][spec]") {
+    SECTION("persistent session exit with transcript renders main buffer and emits exact notice to PTY") {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard guard_xdg{"XDG_CONFIG_HOME", temp.path().string()};
+        tests::EnvVarGuard guard_home{"HOME", temp.path().string()};
+        const auto agent_config_dir = coding_agent::agent_config_dir();
+        std::filesystem::create_directories(agent_config_dir);
+
+        {
+            std::ofstream settings_file(coding_agent::settings_file_path());
+            settings_file << "{\n  \"fullscreenExitOutput\": \"transcript\"\n}\n";
+        }
+
+        const auto workspace = temp.path() / "test-workspace";
+        std::filesystem::create_directories(workspace);
+
+        auto pty = tests::open_pseudo_terminal(80, 24);
+        REQUIRE(pty);
+
+        termios orig_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &orig_termios) == 0);
+        termios raw_slave_termios = orig_termios;
+        raw_slave_termios.c_oflag &= ~OPOST;
+        REQUIRE(tcsetattr(pty->slave.get(), TCSANOW, &raw_slave_termios) == 0);
+
+        const int initial_slave_flags = fcntl(pty->slave.get(), F_GETFL);
+        termios initial_slave_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &initial_slave_termios) == 0);
+
+        const std::string shell_banner = "initial shell banner line 1\r\ninitial shell banner line 2\r\n";
+        REQUIRE(::write(pty->slave.get(), shell_banner.data(), shell_banner.size()) ==
+                static_cast<ssize_t>(shell_banner.size()));
+
+        std::string received_banner;
+        while (received_banner.size() < shell_banner.size()) {
+            char buf[256];
+            const auto n = ::read(pty->master.get(), buf, sizeof(buf));
+            if (n <= 0) break;
+            received_banner.append(buf, static_cast<std::size_t>(n));
+        }
+        CHECK(received_banner == shell_banner);
+
+        const auto custom_dir = temp.path() / "user's sessions dir";
+        std::filesystem::create_directories(custom_dir);
+        const auto session_file = custom_dir / "persisted_session.jsonl";
+
+        tests::RuntimeFixture runtime;
+        auto opts = session_options(temp, tests::make_scripted_fake_provider());
+        opts.workspace = workspace;
+        opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+
+        auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        std::string escaped_dir;
+        for (char c : custom_dir.string()) {
+            if (c == '\'')
+                escaped_dir += "'\\''";
+            else
+                escaped_dir += c;
+        }
+        const std::string expected_notice = std::string(coding_agent::tui::kResumeNoticePrefix) +
+                                            "pike --session-dir '" + escaped_dir + "' --session " +
+                                            session.session_id() + "\n";
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+
+        FdOStream pty_ostream(pty->slave.get());
+
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(agent_config_dir)
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .with_output_stream(&pty_ostream)
+                           .with_stdout_is_tty(true)
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        std::exception_ptr run_exception;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid res) {
+                    run_exception = ex;
+                    run_result.emplace(std::move(res));
+                });
+
+        std::jthread runner([&] { io.run(); });
+
+        REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+        std::string phase0_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
+        CHECK(phase0_bytes.find("\x1b[?1049h") != std::string::npos);
+
+        const std::string prompt_text = "hello persistent exit test\r";
+        REQUIRE(::write(pty->master.get(), prompt_text.data(), prompt_text.size()) ==
+                static_cast<ssize_t>(prompt_text.size()));
+
+        std::string phase1_bytes;
+        REQUIRE(cch::tests::wait_until(
+                [&] {
+                    phase1_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase1_bytes.find("fake: hello persistent exit test") != std::string::npos;
+                },
+                std::chrono::seconds(10)));
+        CHECK(session.message_count() == 3);
+
+        REQUIRE(session.session_path().has_value());
+        const auto actual_session_path = *session.session_path();
+        CHECK(std::filesystem::exists(actual_session_path));
+        CHECK(std::filesystem::file_size(actual_session_path) > 0);
+        const auto loaded = harness::session::SessionStore::load(actual_session_path);
+        REQUIRE(loaded.has_value());
+
+        const auto snap = session.snapshot();
+        REQUIRE(snap.agent_state.messages.size() == 3);
+        const auto* user_msg = std::get_if<ai::UserMessage>(&snap.agent_state.messages[1]);
+        REQUIRE(user_msg != nullptr);
+        const auto* user_content = std::get_if<std::vector<ai::Content>>(&user_msg->content);
+        REQUIRE(user_content != nullptr);
+        REQUIRE(!user_content->empty());
+        CHECK(std::get<ai::TextContent>((*user_content)[0]).text == "hello persistent exit test");
+        const auto* asst_msg = std::get_if<ai::AssistantMessage>(&snap.agent_state.messages[2]);
+        REQUIRE(asst_msg != nullptr);
+        REQUIRE(!asst_msg->content.empty());
+        CHECK(std::get<ai::TextContent>(asst_msg->content[0]).text == "fake: hello persistent exit test");
+
+        constexpr char kCtrlD = '\x04';
+        REQUIRE(::write(pty->master.get(), &kCtrlD, 1) == 1);
+        REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
+        runner.join();
+
+        CHECK(run_exception == nullptr);
+        REQUIRE(run_result.has_value());
+        CHECK(run_result->has_value());
+
+        std::string phase2_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(200));
+
+        CHECK(pty_ostream.fd_buf().write_calls() > 0);
+        CHECK(pty_ostream.fd_buf().bytes_written() == expected_notice.size());
+
+        REQUIRE(phase2_bytes.size() >= expected_notice.size());
+        CHECK(phase2_bytes.ends_with(expected_notice));
+
+        const auto pos_1049l = phase2_bytes.find("\x1b[?1049l");
+        REQUIRE(pos_1049l != std::string::npos);
+        const std::string after_1049l = phase2_bytes.substr(pos_1049l + 8);
+        CHECK(after_1049l.find("fake: hello persistent exit test") != std::string::npos);
+        CHECK(after_1049l.ends_with(expected_notice));
+
+        CHECK(!terminal.modes().started);
+        CHECK(!terminal.modes().alternate_screen);
+
+        const int final_flags = fcntl(pty->slave.get(), F_GETFL);
+        termios final_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &final_termios) == 0);
+        CHECK(final_flags == initial_slave_flags);
+        CHECK((final_flags & O_NONBLOCK) == 0);
+        CHECK(cch::tests::same_terminal_state(final_termios, initial_slave_termios));
+    }
+
+    SECTION("persistent session exit with resume-hint leaves alt screen without main transcript and emits exact "
+            "notice") {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard guard_xdg{"XDG_CONFIG_HOME", temp.path().string()};
+        tests::EnvVarGuard guard_home{"HOME", temp.path().string()};
+        const auto agent_config_dir = coding_agent::agent_config_dir();
+        std::filesystem::create_directories(agent_config_dir);
+
+        {
+            std::ofstream settings_file(coding_agent::settings_file_path());
+            settings_file << "{\n  \"fullscreenExitOutput\": \"resume-hint\"\n}\n";
+        }
+
+        const auto workspace = temp.path() / "test-workspace";
+        std::filesystem::create_directories(workspace);
+
+        auto pty = tests::open_pseudo_terminal(80, 24);
+        REQUIRE(pty);
+
+        termios orig_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &orig_termios) == 0);
+        termios raw_slave_termios = orig_termios;
+        raw_slave_termios.c_oflag &= ~OPOST;
+        REQUIRE(tcsetattr(pty->slave.get(), TCSANOW, &raw_slave_termios) == 0);
+
+        const int initial_slave_flags = fcntl(pty->slave.get(), F_GETFL);
+        termios initial_slave_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &initial_slave_termios) == 0);
+
+        const std::string shell_banner = "banner row 1\r\nbanner row 2\r\n";
+        REQUIRE(::write(pty->slave.get(), shell_banner.data(), shell_banner.size()) ==
+                static_cast<ssize_t>(shell_banner.size()));
+
+        std::string received_banner;
+        while (received_banner.size() < shell_banner.size()) {
+            char buf[256];
+            const auto n = ::read(pty->master.get(), buf, sizeof(buf));
+            if (n <= 0) break;
+            received_banner.append(buf, static_cast<std::size_t>(n));
+        }
+        CHECK(received_banner == shell_banner);
+
+        tests::RuntimeFixture runtime;
+        auto opts = session_options(temp, tests::make_scripted_fake_provider());
+        opts.workspace = workspace;
+        opts.session_target = coding_agent::DefaultPersistedSessionTarget{};
+
+        auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        const std::string expected_notice =
+                std::string(coding_agent::tui::kResumeNoticePrefix) + "pike --session " + session.session_id() + "\n";
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+
+        FdOStream pty_ostream(pty->slave.get());
+
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(agent_config_dir)
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .with_output_stream(&pty_ostream)
+                           .with_stdout_is_tty(true)
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        std::exception_ptr run_exception;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid res) {
+                    run_exception = ex;
+                    run_result.emplace(std::move(res));
+                });
+
+        std::jthread runner([&] { io.run(); });
+
+        REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+        std::string phase0_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
+        CHECK(phase0_bytes.find("\x1b[?1049h") != std::string::npos);
+
+        const std::string prompt_text = "hello hint exit test\r";
+        REQUIRE(::write(pty->master.get(), prompt_text.data(), prompt_text.size()) ==
+                static_cast<ssize_t>(prompt_text.size()));
+
+        std::string phase1_bytes;
+        REQUIRE(cch::tests::wait_until(
+                [&] {
+                    phase1_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase1_bytes.find("fake: hello hint exit test") != std::string::npos;
+                },
+                std::chrono::seconds(10)));
+        CHECK(session.message_count() == 3);
+
+        REQUIRE(session.session_path().has_value());
+        const auto actual_session_path = *session.session_path();
+        CHECK(std::filesystem::exists(actual_session_path));
+        CHECK(std::filesystem::file_size(actual_session_path) > 0);
+        const auto loaded = harness::session::SessionStore::load(actual_session_path);
+        REQUIRE(loaded.has_value());
+
+        constexpr char kCtrlD = '\x04';
+        REQUIRE(::write(pty->master.get(), &kCtrlD, 1) == 1);
+        REQUIRE(cch::tests::wait_until([&] { return !terminal.modes().started; }, std::chrono::seconds(10)));
+        runner.join();
+
+        CHECK(run_exception == nullptr);
+        REQUIRE(run_result.has_value());
+        CHECK(run_result->has_value());
+
+        std::string phase2_bytes = cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(200));
+
+        CHECK(pty_ostream.fd_buf().write_calls() > 0);
+        CHECK(pty_ostream.fd_buf().bytes_written() == expected_notice.size());
+
+        REQUIRE(phase2_bytes.size() >= expected_notice.size());
+        CHECK(phase2_bytes.ends_with(expected_notice));
+
+        const auto pos_1049l = phase2_bytes.rfind("\x1b[?1049l");
+        REQUIRE(pos_1049l != std::string::npos);
+        const std::string after_1049l = phase2_bytes.substr(pos_1049l + 8);
+        CHECK(after_1049l.find("fake: hello hint exit test") == std::string::npos);
+        CHECK(after_1049l.find("\x1b[?25h") != std::string::npos);
+        CHECK(after_1049l.ends_with(expected_notice));
+
+        CHECK(!terminal.modes().started);
+        CHECK(!terminal.modes().alternate_screen);
+
+        const int final_flags = fcntl(pty->slave.get(), F_GETFL);
+        termios final_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &final_termios) == 0);
+        CHECK(final_flags == initial_slave_flags);
+        CHECK((final_flags & O_NONBLOCK) == 0);
+        CHECK(cch::tests::same_terminal_state(final_termios, initial_slave_termios));
+    }
+
+    SECTION("paired failure case: physical master close before exit yields Process error and ZERO notice writes") {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard guard_xdg{"XDG_CONFIG_HOME", temp.path().string()};
+        tests::EnvVarGuard guard_home{"HOME", temp.path().string()};
+        const auto agent_config_dir = coding_agent::agent_config_dir();
+        std::filesystem::create_directories(agent_config_dir);
+
+        {
+            std::ofstream settings_file(coding_agent::settings_file_path());
+            settings_file << "{\n  \"fullscreenExitOutput\": \"transcript\"\n}\n";
+        }
+
+        const auto workspace = temp.path() / "test-workspace";
+        std::filesystem::create_directories(workspace);
+
+        auto pty = tests::open_pseudo_terminal(80, 24);
+        REQUIRE(pty);
+
+        termios orig_termios{};
+        REQUIRE(tcgetattr(pty->slave.get(), &orig_termios) == 0);
+        termios raw_slave_termios = orig_termios;
+        raw_slave_termios.c_oflag &= ~OPOST;
+        REQUIRE(tcsetattr(pty->slave.get(), TCSANOW, &raw_slave_termios) == 0);
+
+        const auto custom_dir = temp.path() / "failure_sessions";
+        std::filesystem::create_directories(custom_dir);
+        const auto session_file = custom_dir / "persisted_failure.jsonl";
+
+        tests::RuntimeFixture runtime;
+        auto opts = session_options(temp, tests::make_scripted_fake_provider());
+        opts.workspace = workspace;
+        opts.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+
+        auto created = runtime.run(create_session_async(runtime, std::move(opts)));
+        REQUIRE(created.has_value());
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+        auto& session = *created->session;
+
+        boost::asio::io_context io;
+        cch::tui::ProcessTerminal terminal({
+                .input_fd = pty->slave.get(),
+                .output_fd = pty->slave.get(),
+                .executor = io.get_executor(),
+        });
+
+        FdOStream pty_ostream(pty->slave.get());
+
+        auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+                terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+
+        auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                           .with_session(session)
+                           .with_agent_config_directory(agent_config_dir)
+                           .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                           .with_output_stream(&pty_ostream)
+                           .with_stdout_is_tty(true)
+                           .build();
+
+        std::optional<support::ExpectedVoid> run_result;
+        std::exception_ptr run_exception;
+        boost::asio::co_spawn(
+                io, drive_engine(engine, std::move(run)), [&](std::exception_ptr ex, support::ExpectedVoid res) {
+                    run_exception = ex;
+                    run_result.emplace(std::move(res));
+                });
+
+        std::jthread runner([&] { io.run(); });
+
+        REQUIRE(cch::tests::wait_until([&] { return terminal.modes().started; }, std::chrono::seconds(2)));
+        (void)cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(100));
+
+        const std::string prompt_text = "hello failure prompt\r";
+        REQUIRE(::write(pty->master.get(), prompt_text.data(), prompt_text.size()) ==
+                static_cast<ssize_t>(prompt_text.size()));
+
+        std::string phase1_bytes;
+        REQUIRE(cch::tests::wait_until(
+                [&] {
+                    phase1_bytes.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                    return phase1_bytes.find("fake: hello failure prompt") != std::string::npos;
+                },
+                std::chrono::seconds(10)));
+
+        REQUIRE(session.session_path().has_value());
+        CHECK(std::filesystem::exists(*session.session_path()));
+        CHECK(std::filesystem::file_size(*session.session_path()) > 0);
+
+        // Break physical output by closing master descriptor
+        pty->master.reset();
+
+        // Request exit through public engine (master is closed, so cannot send keys)
+        engine->request_exit();
+        runner.join();
+
+        CHECK(run_exception == nullptr);
+        REQUIRE(run_result.has_value());
+        REQUIRE_FALSE(run_result->has_value());
+        CHECK((run_result->error().code == support::ErrorCode::Process ||
+                run_result->error().code == support::ErrorCode::Validation));
+
+        // Crucial contract: When exit/restoration fails physically, ZERO resume notice bytes are written
+        CHECK(pty_ostream.fd_buf().write_calls() == 0);
+        CHECK(pty_ostream.fd_buf().bytes_written() == 0);
     }
 }
