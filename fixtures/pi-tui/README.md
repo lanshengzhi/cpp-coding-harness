@@ -415,13 +415,16 @@ holding across both switch directions and through subsequent disabled turn and c
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact
 byte-identical, manifest 28 → 29).
 
-`product-theme-rebind.json` records authoritative independent product terminal theme rebinding protocol
-execution (#1037, spec #946) using real frozen `ProcessTerminal`/`VirtualTerminal` capture and `InteractiveMode`
-controlled-context seams: exact `\x1b[?2031h` (enable) and `\x1b[?2031l` (disable) sequence ordering across
-mode switches; same-root late query acceptance control via `onLateReply` delivering colors after the 100ms
-query timer expires; bidirectional mode switches (`regular -> fullscreen` and `fullscreen -> regular`) with an
-unsettled query pending, observing unconsumed old replies on replacement roots (active root queue length is 0),
-unperturbed detached roots receiving 0 physical bytes, and subsequent terminal appearance notification
+`product-theme-rebind.json` records supplemental partial observations for product theme rebinding (#1037, spec #946).
+
+`product-theme-rebind-protocol.json` records authoritative independent product terminal theme rebinding protocol
+vectors (#1037, spec #946) using real frozen `ProcessTerminal`/`VirtualTerminal` capture and `InteractiveMode`
+controlled-context seams: complete per-phase ordered protocol vectors for queries and mode toggles; exact
+`\x1b[?2031l` (disable) followed by `\x1b[?2031h` (enable) sequence ordering across bidirectional mode switches;
+same-root late query acceptance control via `onLateReply` delivering colors after the 100ms query timer expires;
+bidirectional mode switches (`regular -> fullscreen` and `fullscreen -> regular`) with an unsettled query pending
+on the retiring root before each switch, observing unconsumed old replies on replacement roots (active root queue
+length is 0), unperturbed detached roots receiving 0 physical bytes, and subsequent terminal appearance notification
 (`\x1b[?997;1n` / `\x1b[?997;2n`) triggering a new single query burst and settling palette colors; ambiguity
 control demonstrating unkeyed OSC 10/11 responses matching open pending queries FIFO; roundtrip rebind
 idempotency maintaining strictly 1 active scheme listener and emitting exactly 1 query burst; and malformed,
@@ -431,14 +434,14 @@ Runtime observation boundaries are recorded honestly: the 100ms timeout reflects
 frozen Pi's retired root timer fires and applies empty colors whereas Pike cancels queries on stop; Pi allocates
 replacement TUI instances on every switch while Pike reuses retained root allocations; and unkeyed VT color
 replies lack transaction IDs so active roots match responses FIFO against pending queries.
-Public C++ acceptance tests consume `product-theme-rebind.json` directly through real `InteractiveEngine`,
+Public C++ acceptance tests consume `product-theme-rebind-protocol.json` directly through real `InteractiveEngine`,
 `AgentSession`, and `SettingsManager` in `TuiModeSwitchTest.cpp`, asserting ordered exact mode 2031 enable/disable
 transitions across bidirectional switches, query reply drain on the product executor, unkeyed FIFO consumption,
 and roundtrip listener idempotency.
-`capture/product-theme-rebind-scenarios.mts` defines the scenarios;
-`capture/recapture-product-theme-rebind.mts` is the append recipe (same frozen revision
+`capture/product-theme-rebind-protocol-scenarios.mts` defines the scenarios;
+`capture/recapture-product-theme-rebind-protocol.mts` is the append recipe (same frozen revision
 `7c10bd4337495ee613f2224843ecdf349b80d1df`, same `capturedAt`, same `environment`, every other artifact
-byte-identical, manifest 29 → 30).
+byte-identical, manifest 30 → 31).
 
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
 cyclic selection/callback order, the centered five-row window, description allocation at

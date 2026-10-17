@@ -1,0 +1,406 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/tui.ts:Tui.setTerminalColorSchemeNotifications,Tui.consumeTerminalColorResponse,Tui.consumeTerminalColorSchemeReport,Tui.onTerminalColorSchemeChange",
+    "packages/coding-agent/src/modes/interactive/theme/theme-controller.ts:InteractiveThemeController.applyFromSettings,InteractiveThemeController.rebindTui",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode"
+  ],
+  "scenarios": [
+    {
+      "name": "same_root_late_query",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "lateFg": "#112233",
+        "lateBg": "#445566",
+        "timeoutDelayMs": 120
+      },
+      "expected": {
+        "initialQueryCommands": [
+          "\u001b[?2031h",
+          "\u001b]10;?\u0007",
+          "\u001b]11;?\u0007",
+          "\u001b]4;0;?\u0007",
+          "\u001b]4;1;?\u0007",
+          "\u001b]4;2;?\u0007",
+          "\u001b]4;3;?\u0007",
+          "\u001b]4;4;?\u0007",
+          "\u001b]4;5;?\u0007",
+          "\u001b]4;6;?\u0007",
+          "\u001b]4;7;?\u0007",
+          "\u001b]4;8;?\u0007",
+          "\u001b]4;9;?\u0007",
+          "\u001b]4;10;?\u0007",
+          "\u001b]4;11;?\u0007",
+          "\u001b]4;12;?\u0007",
+          "\u001b]4;13;?\u0007",
+          "\u001b]4;14;?\u0007",
+          "\u001b]4;15;?\u0007",
+          "\u001b[c"
+        ],
+        "mode2031Enabled": true,
+        "lateRepliesAccepted": true,
+        "settledColors": {
+          "foreground": {
+            "r": 17,
+            "g": 34,
+            "b": 51
+          },
+          "background": {
+            "r": 68,
+            "g": 85,
+            "b": 102
+          }
+        },
+        "consumeResults": [
+          {
+            "data": "\\x1b]10;rgb:1111/2222/3333\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:4444/5555/6666\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "direction_a_regular_to_fullscreen",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "direction": "regular_to_fullscreen",
+        "oldFg": "#111111",
+        "oldBg": "#222222",
+        "schemeReport": "light",
+        "newFg": "#333333",
+        "newBg": "#eeeeee"
+      },
+      "expected": {
+        "phaseA2SwitchCommands": [
+          "\u001b[?2031l",
+          "\u001b[?2031h"
+        ],
+        "phaseA5QueryCommands": [
+          "\u001b]10;?\u0007",
+          "\u001b]11;?\u0007",
+          "\u001b]4;0;?\u0007",
+          "\u001b]4;1;?\u0007",
+          "\u001b]4;2;?\u0007",
+          "\u001b]4;3;?\u0007",
+          "\u001b]4;4;?\u0007",
+          "\u001b]4;5;?\u0007",
+          "\u001b]4;6;?\u0007",
+          "\u001b]4;7;?\u0007",
+          "\u001b]4;8;?\u0007",
+          "\u001b]4;9;?\u0007",
+          "\u001b]4;10;?\u0007",
+          "\u001b]4;11;?\u0007",
+          "\u001b]4;12;?\u0007",
+          "\u001b]4;13;?\u0007",
+          "\u001b]4;14;?\u0007",
+          "\u001b]4;15;?\u0007",
+          "\u001b[c"
+        ],
+        "activeHandlerOwnerAfterSwitch": "root-3-fullscreen",
+        "oldRepliesAcceptedByActive": false,
+        "schemeNotificationConsumed": true,
+        "settledTheme": "light",
+        "settledColors": {
+          "foreground": {
+            "r": 51,
+            "g": 51,
+            "b": 51
+          },
+          "background": {
+            "r": 238,
+            "g": 238,
+            "b": 238
+          }
+        },
+        "phaseA3ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:1111/1111/1111\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b]11;rgb:2222/2222/2222\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": false
+          }
+        ],
+        "phaseA6ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:3333/3333/3333\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:eeee/eeee/eeee\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "direction_b_fullscreen_to_regular",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "direction": "fullscreen_to_regular",
+        "oldFg": "#333333",
+        "oldBg": "#444444",
+        "schemeReport": "dark",
+        "newFg": "#222222",
+        "newBg": "#111111"
+      },
+      "expected": {
+        "phaseB2SwitchCommands": [
+          "\u001b[?2031l",
+          "\u001b[?2031h"
+        ],
+        "phaseB5QueryCommands": [
+          "\u001b]10;?\u0007",
+          "\u001b]11;?\u0007",
+          "\u001b]4;0;?\u0007",
+          "\u001b]4;1;?\u0007",
+          "\u001b]4;2;?\u0007",
+          "\u001b]4;3;?\u0007",
+          "\u001b]4;4;?\u0007",
+          "\u001b]4;5;?\u0007",
+          "\u001b]4;6;?\u0007",
+          "\u001b]4;7;?\u0007",
+          "\u001b]4;8;?\u0007",
+          "\u001b]4;9;?\u0007",
+          "\u001b]4;10;?\u0007",
+          "\u001b]4;11;?\u0007",
+          "\u001b]4;12;?\u0007",
+          "\u001b]4;13;?\u0007",
+          "\u001b]4;14;?\u0007",
+          "\u001b]4;15;?\u0007",
+          "\u001b[c"
+        ],
+        "activeHandlerOwnerAfterSwitch": "root-5-regular",
+        "oldRepliesAcceptedByActive": false,
+        "schemeNotificationConsumed": true,
+        "settledTheme": "dark",
+        "settledColors": {
+          "foreground": {
+            "r": 34,
+            "g": 34,
+            "b": 34
+          },
+          "background": {
+            "r": 17,
+            "g": 17,
+            "b": 17
+          }
+        },
+        "phaseB3ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:3333/3333/3333\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b]11;rgb:4444/4444/4444\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": false
+          }
+        ],
+        "phaseB6ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:2222/2222/2222\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:1111/1111/1111\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unkeyed_reply_pending_target_fifo",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "unkeyedFg": "#778899",
+        "unkeyedBg": "#112233"
+      },
+      "expected": {
+        "queryCommands": [
+          "\u001b]10;?\u0007",
+          "\u001b]11;?\u0007",
+          "\u001b]4;0;?\u0007",
+          "\u001b]4;1;?\u0007",
+          "\u001b]4;2;?\u0007",
+          "\u001b]4;3;?\u0007",
+          "\u001b]4;4;?\u0007",
+          "\u001b]4;5;?\u0007",
+          "\u001b]4;6;?\u0007",
+          "\u001b]4;7;?\u0007",
+          "\u001b]4;8;?\u0007",
+          "\u001b]4;9;?\u0007",
+          "\u001b]4;10;?\u0007",
+          "\u001b]4;11;?\u0007",
+          "\u001b]4;12;?\u0007",
+          "\u001b]4;13;?\u0007",
+          "\u001b]4;14;?\u0007",
+          "\u001b]4;15;?\u0007",
+          "\u001b[c"
+        ],
+        "consumedFifo": true,
+        "settledColors": {
+          "foreground": {
+            "r": 119,
+            "g": 136,
+            "b": 153
+          },
+          "background": {
+            "r": 17,
+            "g": 34,
+            "b": 51
+          }
+        },
+        "consumeResults": [
+          {
+            "data": "\\x1b]10;rgb:7777/8888/9999\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:1111/2222/3333\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "roundtrip_rebind_idempotency",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "switches": [
+          "fullscreen",
+          "regular"
+        ],
+        "extraRebindCalls": 3
+      },
+      "expected": {
+        "sw1Commands": [
+          "\u001b[?2031l",
+          "\u001b[?2031h"
+        ],
+        "sw2Commands": [
+          "\u001b[?2031l",
+          "\u001b[?2031h"
+        ],
+        "burstCommands": [
+          "\u001b]10;?\u0007",
+          "\u001b]11;?\u0007",
+          "\u001b]4;0;?\u0007",
+          "\u001b]4;1;?\u0007",
+          "\u001b]4;2;?\u0007",
+          "\u001b]4;3;?\u0007",
+          "\u001b]4;4;?\u0007",
+          "\u001b]4;5;?\u0007",
+          "\u001b]4;6;?\u0007",
+          "\u001b]4;7;?\u0007",
+          "\u001b]4;8;?\u0007",
+          "\u001b]4;9;?\u0007",
+          "\u001b]4;10;?\u0007",
+          "\u001b]4;11;?\u0007",
+          "\u001b]4;12;?\u0007",
+          "\u001b]4;13;?\u0007",
+          "\u001b]4;14;?\u0007",
+          "\u001b]4;15;?\u0007",
+          "\u001b[c"
+        ],
+        "finalListenerCount": 1,
+        "queryBurstsEmitted": 1,
+        "idempotent": true
+      }
+    },
+    {
+      "name": "malformed_and_unsupported_controls",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "invalidOsc": "\\x1b]10;rgb:invalid\\x07",
+        "unsupportedOsc12": "\\x1b]12;rgb:00/00/00\\x07",
+        "unrelatedCsi": "\\x1b[24;80R",
+        "validBg": "#654321"
+      },
+      "expected": {
+        "invalidControlsIgnored": true,
+        "queryRemainedPendingBeforeValidDa1": true,
+        "settledColors": {
+          "background": {
+            "r": 101,
+            "g": 67,
+            "b": 33
+          }
+        }
+      }
+    }
+  ]
+}
