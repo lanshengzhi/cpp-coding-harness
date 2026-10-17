@@ -410,6 +410,16 @@ struct TerminalEvent {
                     ++index;
                 }
                 if (index < payload.size()) ++index;
+            } else if (index < payload.size() && payload[index] == ']') {
+                ++index;
+                while (index < payload.size() && payload[index] != '\x07' && payload[index] != '\x1b') {
+                    ++index;
+                }
+                if (index < payload.size() && payload[index] == '\x07') {
+                    ++index;
+                } else if (index + 1 < payload.size() && payload[index] == '\x1b' && payload[index + 1] == '\\') {
+                    index += 2;
+                }
             }
             continue;
         }

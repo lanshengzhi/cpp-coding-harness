@@ -363,6 +363,10 @@ const std::vector<RegisteredTheme>& ThemeController::registered_themes() const {
 }
 
 void ThemeController::apply_from_settings() {
+    {
+        std::lock_guard lock(impl_->color_dispatch->mutex);
+        if (!impl_->color_dispatch->active) return;
+    }
     const auto setting = read_theme_setting(impl_->theme_setting);
     impl_->set_auto_sync(impl_->automatic_setting());
     impl_->apply_current_selection(setting.has_value());
@@ -370,6 +374,10 @@ void ThemeController::apply_from_settings() {
 }
 
 void ThemeController::apply_terminal_colors(cch::tui::TerminalColors colors) {
+    {
+        std::lock_guard lock(impl_->color_dispatch->mutex);
+        if (!impl_->color_dispatch->active) return;
+    }
     const auto previous = impl_->terminal_colors.value_or(cch::tui::TerminalColors{});
     cch::tui::TerminalColors next;
     next.foreground = colors.foreground ? colors.foreground : previous.foreground;
@@ -385,6 +393,10 @@ void ThemeController::apply_terminal_colors(cch::tui::TerminalColors colors) {
 }
 
 void ThemeController::apply_terminal_color_scheme(TerminalTheme scheme) {
+    {
+        std::lock_guard lock(impl_->scheme_dispatch->mutex);
+        if (!impl_->scheme_dispatch->active) return;
+    }
     if (!impl_->auto_sync_enabled) return;
     const auto previous = impl_->detected_terminal_theme();
     impl_->terminal_scheme = scheme;
@@ -420,6 +432,10 @@ void ThemeController::dispose() {
     if (!impl_) return;
     impl_->set_auto_sync(false);
     impl_->scheme_listener.reset();
+    // Explicit disposal is terminal. Reports already posted by the host must
+    // also be rejected at apply_terminal_* on the owning executor.
+    impl_->color_dispatch->deactivate();
+    impl_->scheme_dispatch->deactivate();
 }
 
 bool ThemeController::set_theme_name(std::string_view name, bool show_error) {

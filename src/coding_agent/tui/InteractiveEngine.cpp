@@ -317,6 +317,10 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
         if (const auto self = weak.lock()) self->invalidate_frame();
     });
 
+    if (!booting && theme_controller_) {
+        theme_controller_->apply_from_settings();
+    }
+
     if (!booting) {
         initialize_view(diagnostics);
         // The `/mcp` refresh drains the manager's latched warnings into the
@@ -509,7 +513,9 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(coding_agent::TuiMode
     // pi `previousUi.stop({ preserveScreen: true })`: the retired root writes no
     // exit sequence, so the replacement's first paint repaints over the same
     // screen instead of clearing it.
-    if (auto stopped = tui_->stop(cch::tui::TuiStopOptions{.preserve_screen = true}); !stopped) {
+    if (auto stopped = tui_->stop(
+                cch::tui::TuiStopOptions{.preserve_screen = true, .preserve_pending_color_query_completion = true});
+            !stopped) {
         return std::unexpected(stopped.error());
     }
     tui_started_ = false;

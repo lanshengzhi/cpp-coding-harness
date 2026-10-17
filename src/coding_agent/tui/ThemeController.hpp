@@ -133,6 +133,9 @@ public:
     /// Rebind the listener exactly once after starting a replacement renderer.
     void rebind_tui(cch::tui::ITui& root);
     void rebind_terminal_color_scheme_listener();
+    /// Terminal disposal suppresses later reports, including reports already
+    /// posted to the host executor before disposal. A disposed controller is
+    /// not reusable; create a new controller for a new run.
     void dispose();
 
     /// pi `setThemeName` → `applyThemeName`; returns success.

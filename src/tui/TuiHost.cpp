@@ -199,9 +199,10 @@ std::future<TerminalColors> TuiHost::query_terminal_colors(TerminalColorsQueryOp
     // The timer runs as a detached thread holding the query state shared_ptr:
     // the query outlives the caller, and the timer must not be joined from
     // inside itself when it is the last owner. The thread holds no root
-    // reference, so a stopped or destroyed root cannot be reached through it:
-    // stop() cancels and notifies under the query mutex, and the timeout path
-    // is static and re-checks the query flags under the same mutex.
+    // reference. Ordinary stop cancels under the query mutex; an explicit
+    // renderer handoff may keep completion at this same deadline, so such
+    // callbacks must own lifetime-safe state independent of the retired root.
+    // The static timeout path re-checks query flags under the same mutex.
     std::thread([query] {
         std::unique_lock lock(query->mutex);
         query->cv.wait_until(lock, query->deadline, [&] { return query->completed || query->cancelled; });
@@ -214,7 +215,7 @@ std::future<TerminalColors> TuiHost::query_terminal_colors(TerminalColorsQueryOp
     return future;
 }
 
-void TuiHost::cancel_color_queries() {
+void TuiHost::cancel_color_queries(bool preserve_completion) {
     std::deque<std::shared_ptr<QueryState>> queries_to_cancel;
     {
         std::lock_guard lock(color_queries_mutex_);
@@ -223,9 +224,15 @@ void TuiHost::cancel_color_queries() {
     }
     for (const auto& q : queries_to_cancel) {
         std::lock_guard lock(q->mutex);
+        q->on_late_reply = nullptr;
+        if (preserve_completion && !q->promise_resolved && !q->completed && !q->cancelled) {
+            // The existing timer owns only QueryState, never the stopped root.
+            // Its original deadline delivers the partial result once; the query
+            // is already absent from input routing and cannot accept late input.
+            continue;
+        }
         q->cancelled = true;
         q->on_complete = nullptr;
-        q->on_late_reply = nullptr;
         if (!q->promise_resolved) {
             q->promise_resolved = true;
             q->promise.set_value(TerminalColors{});

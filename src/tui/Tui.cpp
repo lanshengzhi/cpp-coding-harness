@@ -442,7 +442,7 @@ support::ExpectedVoid MainScreen::stop(TuiStopOptions options) {
         (void)terminal_.write("\x1b[?2031l");
     }
 
-    cancel_color_queries();
+    cancel_color_queries(options.preserve_pending_color_query_completion);
 
     const auto exit_result = render_pipeline_->stop(stop_cursor, options);
     const auto cursor_result = terminal_.set_cursor_visible(true);

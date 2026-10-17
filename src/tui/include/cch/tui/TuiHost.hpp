@@ -93,7 +93,7 @@ public:
     [[nodiscard]] std::future<TerminalColors> query_terminal_colors(TerminalColorsQueryOptions options);
     /// Cancel every pending color query: resolve its promise with the partial
     /// result, drop its callbacks and wake its timer.
-    void cancel_color_queries();
+    void cancel_color_queries(bool preserve_completion = false);
 
     /// Apply focus state: the previously focused target is unfocused, then the
     /// new target is focused only when `available` accepts it.

@@ -4,6 +4,7 @@
 // parseTerminalColorSchemeReport, TERMINAL_COLOR_QUERY) and
 // packages/tui/src/tui.ts (queryTerminalColors, 2031 notifications).
 
+#include <cch/tui/AltScreen.hpp>
 #include <cch/tui/TerminalColors.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -13,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <future>
+#include <memory>
 #include <string>
 #include <thread>
 #include <vector>
@@ -327,6 +329,72 @@ TEST_CASE("stopping the Tui cancels pending query callbacks", "[tui][theme][issu
     REQUIRE(terminal.inject_input("\x1b]11;#010203\x07"));
     CHECK(late_calls.load() == 0);
     REQUIRE(tui.stop());
+}
+
+TEST_CASE("Renderer handoff preserves query deadline partial completion and rejects stale input",
+        "[tui][theme][issue1037][spec]") {
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 6});
+    std::unique_ptr<tui::ITui> root;
+    SECTION("Regular root") { root = std::make_unique<tui::Tui>(terminal); }
+    SECTION("Fullscreen root") { root = std::make_unique<tui::AltScreen>(terminal); }
+    REQUIRE(root->start());
+    std::atomic<int> complete{0};
+    std::atomic<int> late{0};
+    std::promise<void> delivered;
+    auto delivered_future = delivered.get_future();
+    auto result = root->query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{600},
+            .on_complete =
+                    [&](tui::TerminalColors) {
+                        ++complete;
+                        delivered.set_value();
+                    },
+            .on_late_reply = [&](tui::TerminalColors) { ++late; }});
+    REQUIRE(terminal.inject_input("\x1b]11;#112233\x07"));
+    // Observe another actual query's completion before handoff. Restarting
+    // the first deadline on handoff would leave it pending after marker2.
+    auto marker1 =
+            root->query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{400}});
+    REQUIRE(marker1.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    REQUIRE(root->stop({.preserve_screen = true, .preserve_pending_color_query_completion = true}));
+    CHECK(result.wait_for(std::chrono::milliseconds{0}) == std::future_status::timeout);
+    REQUIRE(root->start());
+    REQUIRE(terminal.inject_input("\x1b]11;#ffffff\x07"));
+    REQUIRE(terminal.inject_input("\x1b[?1;2c"));
+    auto marker2 =
+            root->query_terminal_colors(tui::TerminalColorsQueryOptions{.timeout = std::chrono::milliseconds{400}});
+    REQUIRE(marker2.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    CHECK(result.wait_for(std::chrono::milliseconds{0}) == std::future_status::ready);
+    CHECK(result.get().background == tui::RgbColor{.red = 17, .green = 34, .blue = 51});
+    REQUIRE(delivered_future.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    CHECK(complete.load() == 1);
+    CHECK(late.load() == 0);
+    REQUIRE(root->stop());
+}
+
+TEST_CASE("Renderer handoff completion outlives root and never duplicates completed queries",
+        "[tui][theme][issue1037][spec]") {
+    tui::VirtualTerminal terminal({.columns = 40, .rows = 6});
+    std::atomic<int> completed{0};
+    std::promise<void> delivered;
+    auto delivered_future = delivered.get_future();
+    std::future<tui::TerminalColors> pending;
+    {
+        tui::Tui root{terminal};
+        REQUIRE(root.start());
+        auto done = root.query_terminal_colors(tui::TerminalColorsQueryOptions{
+                .timeout = std::chrono::milliseconds{100}, .on_complete = [&](tui::TerminalColors) { ++completed; }});
+        REQUIRE(terminal.inject_input("\x1b[?1;2c"));
+        REQUIRE(done.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+        pending = root.query_terminal_colors(tui::TerminalColorsQueryOptions{
+                .timeout = std::chrono::milliseconds{150}, .on_complete = [&](tui::TerminalColors) {
+                    ++completed;
+                    delivered.set_value();
+                }});
+        REQUIRE(root.stop({.preserve_pending_color_query_completion = true}));
+    }
+    REQUIRE(pending.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    REQUIRE(delivered_future.wait_for(std::chrono::seconds{2}) == std::future_status::ready);
+    CHECK(completed.load() == 2);
 }
 
 TEST_CASE("scheme notifications toggle mode 2031 while running and on start/stop", "[tui][theme][issue990][spec]") {

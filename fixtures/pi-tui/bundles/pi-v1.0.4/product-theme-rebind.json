@@ -1,0 +1,291 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/tui.ts:Tui.setTerminalColorSchemeNotifications,Tui.consumeTerminalColorResponse,Tui.consumeTerminalColorSchemeReport,Tui.onTerminalColorSchemeChange",
+    "packages/coding-agent/src/modes/interactive/theme/theme-controller.ts:InteractiveThemeController.applyFromSettings,InteractiveThemeController.rebindTui",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode.switchTuiMode"
+  ],
+  "scenarios": [
+    {
+      "name": "same_root_late_query",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "initialMode": "regular",
+        "lateFg": "#112233",
+        "lateBg": "#445566",
+        "timeoutDelayMs": 120
+      },
+      "expected": {
+        "queryBurstLength": 159,
+        "mode2031Enabled": true,
+        "lateRepliesAccepted": true,
+        "settledColors": {
+          "foreground": {
+            "r": 17,
+            "g": 34,
+            "b": 51
+          },
+          "background": {
+            "r": 68,
+            "g": 85,
+            "b": 102
+          }
+        },
+        "consumeResults": [
+          {
+            "data": "\\x1b]10;rgb:1111/2222/3333\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:4444/5555/6666\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "direction_a_regular_to_fullscreen",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "direction": "regular_to_fullscreen",
+        "oldFg": "#111111",
+        "oldBg": "#222222",
+        "schemeReport": "light",
+        "newFg": "#333333",
+        "newBg": "#eeeeee"
+      },
+      "expected": {
+        "stopDisabled2031l": true,
+        "rebindEnabled2031h": true,
+        "activeHandlerOwnerAfterSwitch": "root-3-fullscreen",
+        "retiredRootBytesReceived": 0,
+        "oldRepliesAcceptedByActive": false,
+        "schemeNotificationConsumed": true,
+        "settledTheme": "light",
+        "settledColors": {
+          "foreground": {
+            "r": 51,
+            "g": 51,
+            "b": 51
+          },
+          "background": {
+            "r": 238,
+            "g": 238,
+            "b": 238
+          }
+        },
+        "phaseA3ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:1111/1111/1111\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b]11;rgb:2222/2222/2222\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": false
+          }
+        ],
+        "phaseA6ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:3333/3333/3333\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:eeee/eeee/eeee\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "direction_b_fullscreen_to_regular",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "direction": "fullscreen_to_regular",
+        "oldFg": "#555555",
+        "oldBg": "#666666",
+        "schemeReport": "dark",
+        "newFg": "#ffffff",
+        "newBg": "#050505"
+      },
+      "expected": {
+        "stopDisabled2031l": true,
+        "rebindEnabled2031h": true,
+        "activeHandlerOwnerAfterSwitch": "root-5-regular",
+        "retiredRootBytesReceived": 0,
+        "oldRepliesAcceptedByActive": false,
+        "schemeNotificationConsumed": true,
+        "settledTheme": "dark",
+        "settledColors": {
+          "foreground": {
+            "r": 255,
+            "g": 255,
+            "b": 255
+          },
+          "background": {
+            "r": 5,
+            "g": 5,
+            "b": 5
+          }
+        },
+        "phaseB3ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:5555/5555/5555\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b]11;rgb:6666/6666/6666\\x07",
+            "result": false
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": false
+          }
+        ],
+        "phaseB6ActiveConsume": [
+          {
+            "data": "\\x1b]10;rgb:ffff/ffff/ffff\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:0505/0505/0505\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "unkeyed_reply_pending_target_fifo",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "unkeyedFg": "#778899",
+        "unkeyedBg": "#112233"
+      },
+      "expected": {
+        "consumedFifo": true,
+        "settledColors": {
+          "foreground": {
+            "r": 119,
+            "g": 136,
+            "b": 153
+          },
+          "background": {
+            "r": 17,
+            "g": 34,
+            "b": 51
+          }
+        },
+        "consumeResults": [
+          {
+            "data": "\\x1b]10;rgb:7777/8888/9999\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b]11;rgb:1111/2222/3333\\x07",
+            "result": true
+          },
+          {
+            "data": "\\x1b[?1;2c",
+            "result": true
+          }
+        ]
+      }
+    },
+    {
+      "name": "roundtrip_rebind_idempotency",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "switches": [
+          "fullscreen",
+          "regular"
+        ],
+        "extraRebindCalls": 3
+      },
+      "expected": {
+        "finalListenerCount": 1,
+        "queryBurstsEmitted": 1,
+        "idempotent": true
+      }
+    },
+    {
+      "name": "malformed_and_unsupported_controls",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "invalidOsc": "\\x1b]10;rgb:invalid\\x07",
+        "unsupportedOsc12": "\\x1b]12;rgb:00/00/00\\x07",
+        "unrelatedCsi": "\\x1b[24;80R",
+        "validBg": "#654321"
+      },
+      "expected": {
+        "invalidControlsIgnored": true,
+        "queryRemainedPendingBeforeValidDa1": true,
+        "settledColors": {
+          "background": {
+            "r": 101,
+            "g": 67,
+            "b": 33
+          }
+        }
+      }
+    }
+  ]
+}
