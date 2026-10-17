@@ -2508,8 +2508,9 @@ TEST_CASE("Native TUI repeated interrupt and shutdown input restores the termina
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(io,
-            coding_agent::tui::run_interactive_mode(
-                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Fullscreen})),
             [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));
@@ -2531,6 +2532,50 @@ TEST_CASE("Native TUI repeated interrupt and shutdown input restores the termina
     CHECK(*run_result);
     CHECK(client_pointer->stop_callback_count == 1);
     CHECK(count_text(visible_screen(terminal), "prompt aborted") == 1);
+    CHECK_FALSE(created->session->is_open());
+    CHECK_FALSE(created->session->is_busy());
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+}
+
+TEST_CASE("Native TUI repeated interrupt and shutdown input in regular mode leaves screen without forced render and "
+          "session closed",
+        "[coding_agent][tui][abort][shutdown][regular][issue1019][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("keybindings.json", R"({"app.interrupt":"f7","app.exit":"f6"})");
+    auto client = std::make_shared<AbortAwareInteractiveChatProvider>();
+    auto* client_pointer = client.get();
+    auto created = runtime.run(create_session_async(runtime, session_options(workspace, client)));
+    REQUIRE(created);
+
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 12});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Regular})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.inject_input("stop and close\r"));
+    drain_ready(io);
+    REQUIRE(client_pointer->started);
+    REQUIRE(terminal.inject_input("\x1b[18~\x1b[18~\x1b[17~\x1b[17~"));
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
+    CHECK(*run_result);
+    CHECK(client_pointer->stop_callback_count == 1);
+    // In regular mode, stopInteractiveTui does not render pending UI during finish
+    CHECK(count_text(visible_screen(terminal), "prompt aborted") == 0);
     CHECK_FALSE(created->session->is_open());
     CHECK_FALSE(created->session->is_busy());
     CHECK_FALSE(terminal.modes().started);

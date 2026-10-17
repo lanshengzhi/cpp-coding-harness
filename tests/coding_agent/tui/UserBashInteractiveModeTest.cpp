@@ -101,6 +101,7 @@ struct TestRunOptions {
     std::filesystem::path agent_config_directory{};
     std::string initial_prompt{};
     coding_agent::PromptOptions initial_prompt_options{};
+    coding_agent::TuiMode tui_mode{coding_agent::TuiMode::Regular};
 };
 
 [[nodiscard]] auto make_run(coding_agent::AgentSession& session, TestRunOptions options = {}) {
@@ -109,6 +110,7 @@ struct TestRunOptions {
             .with_agent_config_directory(std::move(options.agent_config_directory))
             .with_initial_prompt(std::move(options.initial_prompt))
             .with_initial_prompt_options(std::move(options.initial_prompt_options))
+            .with_tui_mode(options.tui_mode)
             .build();
 }
 
@@ -1364,8 +1366,9 @@ TEST_CASE("Session Close through the exit command cancels gated provider, tool, 
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(io,
-            coding_agent::tui::run_interactive_mode(
-                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Fullscreen})),
             [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 REQUIRE(exception == nullptr);
                 run_result.emplace(std::move(result));
@@ -1406,6 +1409,82 @@ TEST_CASE("Session Close through the exit command cancels gated provider, tool, 
     CHECK(screen.find("close bash partial") != std::string::npos);
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo close"));
+}
+
+TEST_CASE("Session Close through the exit command in regular mode cancels gated provider, tool, and User Shell work "
+          "without forced render",
+        "[coding_agent][tui][regular][issue88][issue1019][spec]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
+    auto client = std::make_shared<ToolCallThenAbortChatProvider>();
+    auto tool = make_gated_close_tool();
+    auto* tool_pointer = tool.state.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+            .updates = {"close bash partial"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
+    });
+
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.models = cch::tests::models_from_provider(std::move(client));
+    options.custom_tools.push_back(std::move(tool.tool));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Regular})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.inject_input("use the tool\r"));
+    REQUIRE(tests::pump_until(io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
+    REQUIRE(terminal.inject_input("!echo close\r"));
+    REQUIRE(tests::pump_until(io, [&] { return shell_pointer->commands.size() == 1; }));
+
+    REQUIRE(terminal.inject_input("/quit\r"));
+    REQUIRE(tests::pump_until(io,
+            [&] { return tool_pointer->stop_callback_count == 1 && shell_pointer->cancellation_request_count == 1; }));
+    CHECK(created->session->is_busy());
+    REQUIRE_FALSE(run_result.has_value());
+
+    tool_pointer->release();
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
+    CHECK(*run_result);
+    CHECK_FALSE(created->session->is_open());
+    REQUIRE(tests::pump_until(io, [&] { return !created->session->is_busy(); }));
+    CHECK_FALSE(created->session->is_busy());
+
+    // In regular mode, shutdown does not force-render the pending cancelled bash block
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find("(cancelled)") == std::string::npos);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+
+    // Final session state is persisted through the public Session API
+    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo close"));
 }
 
 TEST_CASE("Session Close through the effective exit keybinding cancels gated provider, tool, and User Shell work",
@@ -1443,8 +1522,9 @@ TEST_CASE("Session Close through the effective exit keybinding cancels gated pro
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     boost::asio::co_spawn(io,
-            coding_agent::tui::run_interactive_mode(
-                    terminal, make_run(*created->session, {.agent_config_directory = config.path()})),
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Fullscreen})),
             [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 REQUIRE(exception == nullptr);
                 run_result.emplace(std::move(result));
@@ -1481,6 +1561,83 @@ TEST_CASE("Session Close through the effective exit keybinding cancels gated pro
     CHECK(screen.find("keybinding close partial") != std::string::npos);
     CHECK_FALSE(terminal.modes().started);
     CHECK(terminal.modes().cursor_visible);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo f6 close"));
+}
+
+TEST_CASE("Session Close through the effective exit keybinding in regular mode cancels gated provider, tool, and User "
+          "Shell work without forced render",
+        "[coding_agent][tui][regular][issue88][issue1019][spec]") {
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    tests::RuntimeFixture runtime;
+    config.write("keybindings.json", R"({"app.exit":"f6"})");
+    auto client = std::make_shared<ToolCallThenAbortChatProvider>();
+    auto tool = make_gated_close_tool();
+    auto* tool_pointer = tool.state.get();
+    auto shell = std::make_unique<tests::FakeUserShell>();
+    auto* shell_pointer = shell.get();
+    shell_pointer->enqueue({
+            .updates = {"keybinding close partial"},
+            .result = {.exit_code = 0},
+            .infrastructure_failure = std::nullopt,
+            .gated = true,
+    });
+
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.models = cch::tests::models_from_provider(std::move(client));
+    options.custom_tools.push_back(std::move(tool.tool));
+    auto models = std::move(options.models);
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models), std::move(shell))));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    tui::VirtualTerminal terminal({.columns = 72, .rows = 46});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    make_run(*created->session,
+                            {.agent_config_directory = config.path(), .tui_mode = coding_agent::TuiMode::Regular})),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                REQUIRE(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.inject_input("use the tool\r"));
+    REQUIRE(tests::pump_until(io, [&] { return tool_pointer->started.load(std::memory_order_acquire); }));
+    REQUIRE(terminal.inject_input("!echo f6 close\r"));
+    REQUIRE(tests::pump_until(io, [&] { return shell_pointer->commands.size() == 1; }));
+
+    REQUIRE(terminal.inject_input("\x1b[17~"));
+    REQUIRE(tests::pump_until(io,
+            [&] { return tool_pointer->stop_callback_count == 1 && shell_pointer->cancellation_request_count == 1; }));
+    CHECK(created->session->is_busy());
+    REQUIRE_FALSE(run_result.has_value());
+
+    tool_pointer->release();
+    REQUIRE(tests::pump_until(io, [&] { return run_result.has_value(); }));
+    CHECK(*run_result);
+    CHECK_FALSE(created->session->is_open());
+    REQUIRE(tests::pump_until(io, [&] { return !created->session->is_busy(); }));
+    CHECK_FALSE(created->session->is_busy());
+
+    // In regular mode, shutdown does not force-render the pending cancelled bash block
+    const auto screen = visible_screen(terminal);
+    CHECK(screen.find("(cancelled)") == std::string::npos);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK(terminal.modes().cursor_visible);
+
+    // Final session state is persisted through the public Session API
+    CHECK(has_bash_command(created->session->snapshot().agent_state.messages, "echo f6 close"));
 }
 
 TEST_CASE("committed User Bash blocks preview the output tail and expand through the effective action",

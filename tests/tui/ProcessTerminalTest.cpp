@@ -2491,17 +2491,27 @@ TEST_CASE("Process Terminal atomic stop and default stop detect postdrain EIO on
         REQUIRE(terminal.set_alternate_screen(true));
         (void)cch::tests::read_available(pty->master.get());
 
-        // Close master so subsequent writes in stop fail with EIO
+        // Fill kernel PTY buffer with unread writes so subsequent chunks queue before master close
+        for (int i = 0; i < 4; ++i) {
+            REQUIRE(terminal.write(std::string(4096, 'q')));
+        }
+
+        // Close master so subsequent writes during stop's drain fail with EIO
         pty->master.reset();
 
         auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
         REQUIRE_FALSE(stop_res.has_value());
         CHECK(stop_res.error().code == cch::support::ErrorCode::Process);
+        const auto err_str = stop_res.error().message + " " + stop_res.error().detail;
+        CHECK(err_str.find("could not write terminal output") != std::string::npos);
 
-        // State latch: subsequent start rejected
+        // State latch: subsequent start and enter_output_only rejected
         auto follow_start = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
                 [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
         REQUIRE_FALSE(follow_start.has_value());
+
+        auto enter_res = terminal.enter_output_only();
+        REQUIRE_FALSE(enter_res.has_value());
     }
 
     SECTION("ordinary default stop detects closed master postdrain EIO and reports error") {
@@ -2518,12 +2528,60 @@ TEST_CASE("Process Terminal atomic stop and default stop detect postdrain EIO on
         REQUIRE(terminal.set_alternate_screen(true));
         (void)cch::tests::read_available(pty->master.get());
 
+        // Fill kernel PTY buffer with unread writes so subsequent chunks queue before master close
+        for (int i = 0; i < 4; ++i) {
+            REQUIRE(terminal.write(std::string(4096, 'q')));
+        }
+
         pty->master.reset();
 
         auto stop_res = terminal.stop();
         REQUIRE_FALSE(stop_res.has_value());
         CHECK(stop_res.error().code == cch::support::ErrorCode::Process);
+        const auto err_str = stop_res.error().message + " " + stop_res.error().detail;
+        CHECK(err_str.find("could not write terminal output") != std::string::npos);
+
+        auto follow_start = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+                [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+        REQUIRE_FALSE(follow_start.has_value());
+
+        auto enter_res = terminal.enter_output_only();
+        REQUIRE_FALSE(enter_res.has_value());
     }
+}
+
+TEST_CASE("Process Terminal start and enter_output_only reject unrestored alternate screen state",
+        "[tui][terminal][atomic][stop][alternate_screen][unrestored][issue1019][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+
+    cch::tui::ProcessTerminal terminal({
+            .input_fd = pty->slave.get(),
+            .output_fd = pty->slave.get(),
+            .executor = test_io().io.get_executor(),
+    });
+    REQUIRE(terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    REQUIRE(terminal.set_alternate_screen(true));
+    (void)cch::tests::read_available(pty->master.get());
+
+    for (int i = 0; i < 4; ++i) {
+        REQUIRE(terminal.write(std::string(4096, 'q')));
+    }
+    pty->master.reset();
+
+    auto stop_res = terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true});
+    REQUIRE_FALSE(stop_res.has_value());
+    CHECK(terminal.modes().alternate_screen);
+
+    auto follow_start = terminal.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; });
+    REQUIRE_FALSE(follow_start.has_value());
+    CHECK(follow_start.error().message.find("unrestored state") != std::string::npos);
+
+    auto enter_res = terminal.enter_output_only();
+    REQUIRE_FALSE(enter_res.has_value());
+    CHECK(enter_res.error().message.find("unrestored") != std::string::npos);
 }
 
 TEST_CASE("Process Terminal atomic stop flushes nested synchronized update payload before exit",

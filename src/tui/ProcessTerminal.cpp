@@ -1325,10 +1325,10 @@ support::ExpectedVoid ProcessTerminal::enter_output_only() {
                 "Process Terminal must complete start/stop lifetime before output-only presentation"));
     }
     if (impl_->has_original_termios || impl_->input_nonblock || impl_->output_nonblock ||
-            impl_->original_output_only_flags >= 0 || impl_->modes.raw_input || impl_->modes.bracketed_paste ||
-            !impl_->modes.cursor_visible || !impl_->modes.autowrap || impl_->keyboard_protocol_pushed ||
-            impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 || impl_->progress_active ||
-            impl_->margins_active) {
+            impl_->original_output_only_flags >= 0 || impl_->modes.raw_input || impl_->modes.alternate_screen ||
+            impl_->modes.bracketed_paste || !impl_->modes.cursor_visible || !impl_->modes.autowrap ||
+            impl_->keyboard_protocol_pushed || impl_->modify_other_keys_active ||
+            impl_->synchronized_update_depth > 0 || impl_->progress_active || impl_->margins_active) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 "Process Terminal cannot enter output-only mode while terminal modes or input state remain "
                 "unrestored"));
@@ -1370,8 +1370,8 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "Process Terminal cannot start while in output-only mode"));
     }
-    if (impl_->has_original_termios || impl_->modes.bracketed_paste || !impl_->modes.cursor_visible ||
-            !impl_->modes.autowrap || impl_->input_nonblock || impl_->output_nonblock ||
+    if (impl_->has_original_termios || impl_->modes.alternate_screen || impl_->modes.bracketed_paste ||
+            !impl_->modes.cursor_visible || !impl_->modes.autowrap || impl_->input_nonblock || impl_->output_nonblock ||
             impl_->original_output_only_flags >= 0 || impl_->keyboard_protocol_pushed ||
             impl_->modify_other_keys_active || impl_->synchronized_update_depth > 0 || impl_->progress_active ||
             impl_->margins_active) {
