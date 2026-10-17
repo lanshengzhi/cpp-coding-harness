@@ -1715,6 +1715,39 @@ TEST_CASE("Process Terminal resolves a lone escape within pi's escape fragment w
 #endif
 }
 
+TEST_CASE("Process Terminal flushes the Tui decoder after a lone-escape fragment delivery",
+        "[tui][terminal][issue1038][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    std::mutex input_mutex;
+    std::vector<std::string> deliveries;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = test_io().io.get_executor()});
+    REQUIRE(terminal.start(
+            [&](std::string input) -> cch::support::ExpectedVoid {
+                std::lock_guard lock(input_mutex);
+                deliveries.push_back(std::move(input));
+                return {};
+            },
+            [](cch::tui::TerminalDimensions) -> cch::support::ExpectedVoid { return {}; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    // pi resolves the lone ESC at the fragment deadline and then flushes the Tui
+    // decoder with an empty-value delivery (`stdinBuffer.flush()` emits "\x1b",
+    // tui.ts handleInput then receives "" and flushes its own decoder). Without
+    // that trailing flush the Tui decoder keeps holding the ESC until the next
+    // byte frames with it (issue #1038).
+    REQUIRE(::write(pty->master.get(), "\x1b", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] {
+        std::lock_guard lock(input_mutex);
+        return deliveries.size() >= 2;
+    }));
+    std::lock_guard lock(input_mutex);
+    REQUIRE(deliveries.size() == 2);
+    CHECK(deliveries[0] == "\x1b");
+    CHECK(deliveries[1].empty());
+}
+
 TEST_CASE("Process Terminal stops promptly while input is streaming", "[tui][terminal][issue462][spec]") {
     auto pty = cch::tests::open_pseudo_terminal();
     REQUIRE(pty);
