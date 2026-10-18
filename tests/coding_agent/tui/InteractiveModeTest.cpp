@@ -1925,7 +1925,7 @@ TEST_CASE("Native TUI fullscreen dock stays fixed while the transcript scrolls i
     REQUIRE(terminal.modes().alternate_screen);
 
     // Enough rounds that the transcript overflows its viewport, with the dock
-    // (empty status block, editor, footer) below it.
+    // (widget spacer, editor, footer) below it.
     for (const std::string prompt : {"one", "two", "three", "four", "five", "six"}) {
         REQUIRE(terminal.inject_input(prompt + "\r"));
         REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: " + prompt) != std::string::npos; }));
@@ -1939,10 +1939,12 @@ TEST_CASE("Native TUI fullscreen dock stays fixed while the transcript scrolls i
     REQUIRE(terminal.inject_input("\r"));
     REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: draft") != std::string::npos; }));
 
-    // The dock sits under the transcript and covers the last seven rows.
+    // The dock sits under the transcript and covers the last six rows
+    // (widget spacer, editor, footer); the clip's last row above it carries
+    // the scroll affordance.
     const auto before = terminal.screen();
     REQUIRE(before.size() == 20);
-    const std::vector<std::string> dock{before.end() - 7, before.end()};
+    const std::vector<std::string> dock{before.end() - 6, before.end()};
 
     // Wheel over the transcript: the frozen viewport scrolls its own window
     // while every dock row keeps its place.
@@ -1954,7 +1956,7 @@ TEST_CASE("Native TUI fullscreen dock stays fixed while the transcript scrolls i
     const auto after = terminal.screen();
     REQUIRE(after.size() == 20);
     CHECK(after.front() != before.front());
-    const std::vector<std::string> dock_after{after.end() - 7, after.end()};
+    const std::vector<std::string> dock_after{after.end() - 6, after.end()};
     {
         std::string rows;
         for (const auto& row : dock)

@@ -2,6 +2,7 @@
 
 #include "coding_agent/tui/ChatViewport.hpp"
 
+#include <cch/tui/Container.hpp>
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/support/Error.hpp>
 
@@ -522,13 +523,14 @@ support::Expected<std::vector<std::string>> InteractiveView::render_pending_regi
 support::Expected<std::vector<std::string>> InteractiveView::render_status_region(std::size_t width) {
     // Status and footer containers are part of the composition: the status
     // container holds the active Working/Compaction/Retry indicator (two
-    // rows: one spacer + the loader line, pi's Loader) or the two-row
-    // IdleStatus; the footer renders pi's two-line layout from the live
-    // footer data source. While the default editor renders, the active
-    // indicator embeds into the editor's top border instead (pi v0.87.1
-    // embedWorkingStatus) and the container contributes zero rows; an
-    // editor-slot replacement keeps the standalone indicator rows (pi's
-    // non-opted custom editors).
+    // rows: one spacer + the loader line, pi's Loader); the footer renders
+    // pi's two-line layout from the live footer data source. While the
+    // default editor renders, the active indicator embeds into the editor's
+    // top border instead (pi v0.87.1 embedWorkingStatus) and the container
+    // contributes zero rows; an editor-slot replacement keeps the standalone
+    // indicator rows (pi's non-opted custom editors). At idle the container
+    // is the two-row IdleStatus in Regular and empty in Fullscreen (the
+    // fullscreen dock's blank row is the widget region's default spacer).
     //
     // The status region is the first region of either composition whose render
     // reads the footer data, and it precedes the editor in both the dock order
@@ -547,8 +549,12 @@ support::Expected<std::vector<std::string>> InteractiveView::render_status_regio
         } else {
             status_lines = std::move(rendered->lines);
         }
-    } else {
-        // pi's IdleStatus: the two-row empty status container.
+    } else if (!fullscreen_) {
+        // pi's IdleStatus: the two-row empty status container. It belongs to
+        // the Regular composition. In Fullscreen the frozen status container
+        // is empty at idle: pi re-adds IdleStatus only in Regular mode under
+        // clear-on-shrink, so the blank row above the editor in the frozen
+        // dock is the widget region's default `Spacer(1)` instead.
         auto idle = idle_status_.render(width);
         if (!idle) return std::unexpected(idle.error());
         status_lines = std::move(idle->lines);
@@ -740,6 +746,11 @@ support::Expected<ChatViewport> InteractiveView::make_fullscreen_root(
     options.pending_messages = line_region(&InteractiveView::render_pending_region);
     options.status = line_region(&InteractiveView::render_status_region);
     options.footer = line_region(&InteractiveView::render_footer_region);
+    // pi `renderWidgets()`: an empty widgets-above container holds a default
+    // `Spacer(1)` (`spacerWhenEmpty: true`), so every frozen fullscreen dock
+    // carries one blank row between the status and the editor. Pike has no
+    // extension widget surface yet; the spacer is the region's only content.
+    options.widgets_above = std::make_unique<cch::tui::Spacer>(1);
     // The dock's editor entry is the view itself: the engine focuses this
     // instance, and every editor operation (`set_autocomplete_provider`,
     // `initialize`/`reconcile_snapshot`, `set_pending_input`) reaches it
