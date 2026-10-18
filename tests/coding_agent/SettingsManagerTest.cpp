@@ -1536,3 +1536,157 @@ TEST_CASE("SettingsManager fullscreen setting writes suppress on a global load f
     CHECK_FALSE(manager.settings().fullscreen_wheel_scroll_lines.has_value());
     CHECK(dirs.workspace.read("agent/settings.json") == "{");
 }
+
+TEST_CASE("SettingsManager set_fullscreen_scrollbar canonicalizes a non-canonical global value and then no-ops",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    // `"bogus"` is not the canonical wire spelling but resolves as auto; the
+    // setter must rewrite the field instead of leaving the malformed value on
+    // disk, while unknown siblings survive the surgical write.
+    dirs.write_global(R"({"fullscreenScrollbar":"bogus","future":true,"theme":"dark"})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Auto);
+
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n"
+                                                        "  \"fullscreenScrollbar\": \"auto\",\n"
+                                                        "  \"future\": true,\n"
+                                                        "  \"theme\": \"dark\"\n"
+                                                        "}\n");
+
+    // A repeated call against the canonical wire value is a house no-op.
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // Reload recomputes the canonical wire state from the rewritten file.
+    REQUIRE(manager.reload());
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // A trusted project override still leaves the setter canonicalizing the
+    // global wire value while the project value keeps shadowing the reads.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"fullscreenScrollbar":"bogus"})");
+    shadow.write_project(R"({"fullscreenScrollbar":"always"})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.errors().empty());
+    CHECK(shadowed.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Always);
+
+    REQUIRE(shadowed.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(shadow.workspace.read("agent/settings.json") == "{\n  \"fullscreenScrollbar\": \"auto\"\n}\n");
+    CHECK(shadow.workspace.read(".pi/settings.json") == R"({"fullscreenScrollbar":"always"})");
+    CHECK(shadowed.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Always);
+
+    const auto shadow_before = shadow.workspace.read("agent/settings.json");
+    REQUIRE(shadowed.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(shadow.workspace.read("agent/settings.json") == shadow_before);
+}
+
+TEST_CASE("SettingsManager set_fullscreen_copy_on_select canonicalizes a non-canonical global value and then no-ops",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    // The string `"false"` is truthy, so it resolves as enabled; the setter
+    // must still rewrite it as the canonical JSON boolean.
+    dirs.write_global(R"({"fullscreenCopyOnSelect":"false","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_fullscreen_copy_on_select());
+
+    REQUIRE(manager.set_fullscreen_copy_on_select(true));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n"
+                                                        "  \"fullscreenCopyOnSelect\": true,\n"
+                                                        "  \"future\": true\n"
+                                                        "}\n");
+
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_copy_on_select(true));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // The falsy numeric spelling resolves as disabled and is rewritten as the
+    // canonical boolean too.
+    dirs.write_global(R"({"fullscreenCopyOnSelect":0})");
+    REQUIRE(manager.reload());
+    CHECK_FALSE(manager.get_fullscreen_copy_on_select());
+
+    REQUIRE(manager.set_fullscreen_copy_on_select(false));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n  \"fullscreenCopyOnSelect\": false\n}\n");
+    const auto disabled = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_copy_on_select(false));
+    CHECK(dirs.workspace.read("agent/settings.json") == disabled);
+
+    // A trusted project override keeps shadowing the reads while the setter
+    // canonicalizes the global wire value.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"fullscreenCopyOnSelect":"false"})");
+    shadow.write_project(R"({"fullscreenCopyOnSelect":false})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.errors().empty());
+    CHECK_FALSE(shadowed.get_fullscreen_copy_on_select());
+
+    REQUIRE(shadowed.set_fullscreen_copy_on_select(true));
+    CHECK(shadow.workspace.read("agent/settings.json") == "{\n  \"fullscreenCopyOnSelect\": true\n}\n");
+    CHECK_FALSE(shadowed.get_fullscreen_copy_on_select());
+
+    const auto shadow_before = shadow.workspace.read("agent/settings.json");
+    REQUIRE(shadowed.set_fullscreen_copy_on_select(true));
+    CHECK(shadow.workspace.read("agent/settings.json") == shadow_before);
+}
+
+TEST_CASE(
+        "SettingsManager set_fullscreen_wheel_scroll_lines canonicalizes a non-canonical global value and then no-ops",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    // `250` resolves as the clamped line count 100; the setter must rewrite
+    // the canonical clamped number.
+    dirs.write_global(R"({"fullscreenWheelScrollLines":250,"future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    REQUIRE(std::holds_alternative<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()) == 100);
+
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n"
+                                                        "  \"fullscreenWheelScrollLines\": 100,\n"
+                                                        "  \"future\": true\n"
+                                                        "}\n");
+
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // The wrong-typed string `"5"` resolves as auto and is rewritten as the
+    // canonical string.
+    dirs.write_global(R"({"fullscreenWheelScrollLines":"5"})");
+    REQUIRE(manager.reload());
+    CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(manager.get_fullscreen_wheel_scroll_lines()));
+
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(coding_agent::AutoWheelScrollLines{}));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n  \"fullscreenWheelScrollLines\": \"auto\"\n}\n");
+    const auto auto_wire = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(coding_agent::AutoWheelScrollLines{}));
+    CHECK(dirs.workspace.read("agent/settings.json") == auto_wire);
+
+    // A trusted project override keeps shadowing the reads while the setter
+    // canonicalizes the global wire value.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"fullscreenWheelScrollLines":250})");
+    shadow.write_project(R"({"fullscreenWheelScrollLines":5})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.errors().empty());
+    REQUIRE(std::holds_alternative<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()) == 5);
+
+    REQUIRE(shadowed.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(shadow.workspace.read("agent/settings.json") == "{\n  \"fullscreenWheelScrollLines\": 100\n}\n");
+    REQUIRE(std::holds_alternative<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()) == 5);
+
+    const auto shadow_before = shadow.workspace.read("agent/settings.json");
+    REQUIRE(shadowed.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(shadow.workspace.read("agent/settings.json") == shadow_before);
+}

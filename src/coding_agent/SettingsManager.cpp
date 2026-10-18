@@ -233,6 +233,35 @@ void migrate_settings(JsonObject& settings) {
     return std::min<std::size_t>(std::max<std::size_t>(lines, 1), 100);
 }
 
+/// Wire-form canonicality of the three fullscreen settings in one scope: the
+/// exact JSON shape pi's setters persist. A present but non-canonical raw
+/// value still resolves to a typed value at load, so the setter for that same
+/// resolved value must rewrite the field instead of treating it as a house
+/// no-op and leaving the malformed wire value on disk.
+struct FullscreenWireCanonical {
+    bool scrollbar{false};
+    bool copy_on_select{false};
+    bool wheel_scroll_lines{false};
+};
+
+[[nodiscard]] bool is_canonical_fullscreen_scrollbar(const support::JsonValue& value) {
+    const auto* mode = value.get_if<std::string>();
+    return mode != nullptr && (*mode == "hidden" || *mode == "auto" || *mode == "always");
+}
+
+[[nodiscard]] bool is_canonical_fullscreen_copy_on_select(const support::JsonValue& value) {
+    return value.holds<bool>();
+}
+
+[[nodiscard]] bool is_canonical_fullscreen_wheel_scroll_lines(const support::JsonValue& value) {
+    if (const auto* mode = value.get_if<std::string>()) {
+        return *mode == "auto";
+    }
+    const auto* number = value.get_if<double>();
+    return number != nullptr && std::isfinite(*number) && std::floor(*number) == *number && *number >= 1.0 &&
+           *number <= 100.0;
+}
+
 /// Parse pi's nested `compaction` object (`{enabled, reserveTokens,
 /// keepRecentTokens}`). Each field is optional; unknown or mistyped fields
 /// are ignored (a mistyped field falls back to the pi default at resolution,
@@ -351,8 +380,7 @@ void migrate_settings(JsonObject& settings) {
 /// (global-only). Unknown fields are ignored for forward compatibility and
 /// preserved by the surgical write path.
 [[nodiscard]] support::Expected<UserSettings> parse_settings(
-    const JsonObject& object,
-    bool allow_default_project_trust) {
+        const JsonObject& object, bool allow_default_project_trust, FullscreenWireCanonical* fullscreen_canonical) {
     UserSettings settings;
 
     if (const auto* value = string_field(object, "defaultProvider")) {
@@ -418,12 +446,21 @@ void migrate_settings(JsonObject& settings) {
     // value priority over global even when it is invalid.
     if (const auto found = object.find("fullscreenScrollbar"); found != object.end()) {
         settings.fullscreen_scrollbar = resolve_fullscreen_scrollbar(found->second);
+        if (fullscreen_canonical != nullptr) {
+            fullscreen_canonical->scrollbar = is_canonical_fullscreen_scrollbar(found->second);
+        }
     }
     if (const auto found = object.find("fullscreenCopyOnSelect"); found != object.end()) {
         settings.fullscreen_copy_on_select = resolve_fullscreen_copy_on_select(found->second);
+        if (fullscreen_canonical != nullptr) {
+            fullscreen_canonical->copy_on_select = is_canonical_fullscreen_copy_on_select(found->second);
+        }
     }
     if (const auto found = object.find("fullscreenWheelScrollLines"); found != object.end()) {
         settings.fullscreen_wheel_scroll_lines = resolve_fullscreen_wheel_scroll_lines(found->second);
+        if (fullscreen_canonical != nullptr) {
+            fullscreen_canonical->wheel_scroll_lines = is_canonical_fullscreen_wheel_scroll_lines(found->second);
+        }
     }
     if (const auto found = object.find("compaction"); found != object.end()) {
         if (auto parsed = parse_compaction_settings(found->second); parsed) {
@@ -554,10 +591,12 @@ private:
     return contents.str();
 }
 
-/// Load one scope: read, parse, and apply pi's read-time migrations.
-[[nodiscard]] support::Expected<UserSettings> load_scope(
-    const std::filesystem::path& path,
-    bool allow_default_project_trust) {
+/// Load one scope: read, parse, and apply pi's read-time migrations. When
+/// `fullscreen_canonical` is non-null it receives the wire-form canonicality
+/// of the scope's three fullscreen settings.
+[[nodiscard]] support::Expected<UserSettings> load_scope(const std::filesystem::path& path,
+        bool allow_default_project_trust,
+        FullscreenWireCanonical* fullscreen_canonical) {
     auto content = read_text_file(path);
     if (!content) {
         return std::unexpected(content.error());
@@ -581,7 +620,7 @@ private:
     }
     auto object = *parsed_object;
     migrate_settings(object);
-    return parse_settings(object, allow_default_project_trust);
+    return parse_settings(object, allow_default_project_trust, fullscreen_canonical);
 }
 
 /// Read the current file content into a JSON object, applying pi's
@@ -780,6 +819,8 @@ struct SettingsManager::Impl {
     std::vector<SettingsError> errors;
     bool global_load_failed{false};
     bool project_load_failed{false};
+    /// Wire-form canonicality of the global scope's three fullscreen settings.
+    FullscreenWireCanonical global_fullscreen_canonical;
 
     [[nodiscard]] UserSettings merge(const UserSettings& global, const UserSettings& project) const {
         UserSettings merged = global;
@@ -873,13 +914,17 @@ struct SettingsManager::Impl {
             bool allow_default_project_trust,
             UserSettings& target,
             bool& load_failed,
-            bool clear_on_failure) {
+            bool clear_on_failure,
+            FullscreenWireCanonical* fullscreen_canonical = nullptr) {
         load_failed = false;
+        if (fullscreen_canonical != nullptr) {
+            *fullscreen_canonical = {};
+        }
         if (path.empty()) {
             return;
         }
 
-        auto parsed = load_scope(path, allow_default_project_trust);
+        auto parsed = load_scope(path, allow_default_project_trust, fullscreen_canonical);
         if (!parsed) {
             load_failed = true;
             if (clear_on_failure) {
@@ -937,7 +982,8 @@ SettingsManager SettingsManager::create(
             /* allow_default_project_trust */ true,
             impl->global_settings,
             impl->global_load_failed,
-            /* clear_on_failure */ false);
+            /* clear_on_failure */ false,
+            &impl->global_fullscreen_canonical);
 
     // Project scope loads only while the project is trusted.
     if (impl->project_trusted) {
@@ -1028,7 +1074,8 @@ support::ExpectedVoid SettingsManager::reload() {
             /* allow_default_project_trust */ true,
             impl_->global_settings,
             impl_->global_load_failed,
-            /* clear_on_failure */ true);
+            /* clear_on_failure */ true,
+            &impl_->global_fullscreen_canonical);
 
     if (impl_->project_trusted) {
         impl_->apply_scope(impl_->project_path,
@@ -1182,7 +1229,10 @@ support::ExpectedVoid SettingsManager::set_fullscreen_scrollbar(FullscreenScroll
         value = "always";
     }
     auto& target = impl_->global_settings;
-    if (target.fullscreen_scrollbar == mode) {
+    // House no-op: only when the global field is already canonical on disk and
+    // equal to the resolved value. A raw non-canonical value that resolves to
+    // the same mode is rewritten as the canonical spelling pi persists.
+    if (impl_->global_fullscreen_canonical.scrollbar && target.fullscreen_scrollbar == mode) {
         return support::ExpectedVoid{};
     }
 
@@ -1192,6 +1242,7 @@ support::ExpectedVoid SettingsManager::set_fullscreen_scrollbar(FullscreenScroll
         return persisted;
     }
     target.fullscreen_scrollbar = mode;
+    impl_->global_fullscreen_canonical.scrollbar = true;
     impl_->recompute_merged();
     return support::ExpectedVoid{};
 }
@@ -1202,7 +1253,10 @@ support::ExpectedVoid SettingsManager::set_fullscreen_copy_on_select(bool enable
         return support::ExpectedVoid{};
     }
     auto& target = impl_->global_settings;
-    if (target.fullscreen_copy_on_select == enabled) {
+    // House no-op: only when the global field is already canonical on disk and
+    // equal to the resolved value. A raw non-canonical value that resolves to
+    // the same boolean is rewritten as the canonical JSON boolean.
+    if (impl_->global_fullscreen_canonical.copy_on_select && target.fullscreen_copy_on_select == enabled) {
         return support::ExpectedVoid{};
     }
 
@@ -1213,6 +1267,7 @@ support::ExpectedVoid SettingsManager::set_fullscreen_copy_on_select(bool enable
         return persisted;
     }
     target.fullscreen_copy_on_select = enabled;
+    impl_->global_fullscreen_canonical.copy_on_select = true;
     impl_->recompute_merged();
     return support::ExpectedVoid{};
 }
@@ -1228,7 +1283,11 @@ support::ExpectedVoid SettingsManager::set_fullscreen_wheel_scroll_lines(Fullscr
             requested == nullptr ? FullscreenWheelScrollLines{AutoWheelScrollLines{}}
                                  : FullscreenWheelScrollLines{clamp_wheel_scroll_lines(*requested)};
     auto& target = impl_->global_settings;
-    if (target.fullscreen_wheel_scroll_lines == normalized) {
+    // House no-op: only when the global field is already canonical on disk and
+    // equal to the resolved value. A raw non-canonical value (unclamped number,
+    // wrong type) that resolves to the same lines is rewritten as the canonical
+    // wire value.
+    if (impl_->global_fullscreen_canonical.wheel_scroll_lines && target.fullscreen_wheel_scroll_lines == normalized) {
         return support::ExpectedVoid{};
     }
 
@@ -1241,6 +1300,7 @@ support::ExpectedVoid SettingsManager::set_fullscreen_wheel_scroll_lines(Fullscr
         return persisted;
     }
     target.fullscreen_wheel_scroll_lines = normalized;
+    impl_->global_fullscreen_canonical.wheel_scroll_lines = true;
     impl_->recompute_merged();
     return support::ExpectedVoid{};
 }
