@@ -34,10 +34,11 @@
     },
     "809": {
       "title": "Align Native TUI settings selector supported rows while retaining pi-only omissions",
-      "disposition": "old settings-omission rule superseded only for capabilities included by ADR0067/#946; SettingsList/fullscreen settings owned by #968/#1020; retained pi-only omissions include the Editor padding (editorPaddingX) row (comment 6237034344); registry-derived settings help line accepted over frozen hardcoded Enter/Space to change · Esc to cancel wording by owner on 2026-10-18 (E05 help convergence)",
+      "disposition": "old settings-omission rule superseded only for capabilities included by ADR0067/#946; SettingsList/fullscreen settings owned by #968/#1020; retained pi-only omissions include the Editor padding (editorPaddingX) row (comment 6237034344); registry-derived settings help line accepted over frozen hardcoded Enter/Space to change · Esc to cancel wording by owner on 2026-10-18 (E05 help convergence); stale settings-selector differential refresh is an explicit #1023 acceptance obligation (issue comment #issuecomment-6247044393)",
       "tickets": [
         "#968",
-        "#1020"
+        "#1020",
+        "#1023"
       ],
       "issueMutation": "none"
     },

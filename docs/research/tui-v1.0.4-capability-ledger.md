@@ -18,7 +18,7 @@
 | --- | --- | --- |
 | #831 Native TUI dock-growth frames drop footer rows | preserve footer-preservation regression cases; dock-only remedy superseded by #978/#983/#987 single-output-path migration | #978, #983, #987, #998 |
 | #811 Align Native TUI editor viewport composition for wrapped and narrow input | rechecked: later comment reports original dual-runtime repro stopped reproducing after theme/editor text-style alignment; viewport/padding work still owned by #969 without assuming #811 blocks | #969 |
-| #809 Align Native TUI settings selector supported rows while retaining pi-only omissions | old settings-omission rule superseded only for capabilities included by ADR0067/#946; SettingsList/fullscreen settings owned by #968/#1020; retained pi-only omissions include the `Editor padding` (`editorPaddingX`) row (comment 6237034344); registry-derived settings help line accepted over the frozen hardcoded `Enter/Space to change · Esc to cancel` wording (owner decision 2026-10-18, E05 help convergence) | #968, #1020 |
+| #809 Align Native TUI settings selector supported rows while retaining pi-only omissions | old settings-omission rule superseded only for capabilities included by ADR0067/#946; SettingsList/fullscreen settings owned by #968/#1020; retained pi-only omissions include the `Editor padding` (`editorPaddingX`) row (comment 6237034344); registry-derived settings help line accepted over the frozen hardcoded `Enter/Space to change · Esc to cancel` wording (owner decision 2026-10-18, E05 help convergence); stale `settings-selector` differential refresh is an explicit #1023 acceptance obligation (issue comment #issuecomment-6247044393) | #968, #1020, #1023 |
 | #749 refactor(cch_tui): deepen editor layout seam for staged simplification | reuse landed layout/renderer seams; do not repeat umbrella work | #969, #977, #983 |
 | #830 refactor(cch_tui): name the frame commit/rollback protocol inside RenderPipeline | related renderer commit/rollback cleanup; recorded without treating as required blocker for #946 graph | #986, #987 |
 
@@ -244,4 +244,3 @@ Each index export is classified and assigned. Public class/interface operations 
 - Actual named evidence consumers remain the #947 differential/golden readers; later tickets extend scenarios using this ledger's ticket assignments.
 - Historical gap inventories remain provenance for older baselines; they are not authority for `pi-v1.0.4` inclusion.
 - Missing coverage discovered later must become an explicit small implementation ticket before downstream acceptance.
-
