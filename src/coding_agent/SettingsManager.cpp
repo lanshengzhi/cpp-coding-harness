@@ -3,7 +3,9 @@
 #include "PrettyJson.hpp"
 #include "support/Json.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -175,6 +177,60 @@ void migrate_settings(JsonObject& settings) {
     return value == "off" || value == "minimal" || value == "low" ||
            value == "medium" || value == "high" || value == "xhigh" ||
            value == "max";
+}
+
+/// pi `getFullscreenScrollbar`: only the exact stored strings `"always"` and
+/// `"hidden"` resolve to themselves; every other stored value resolves as
+/// `"auto"`.
+[[nodiscard]] FullscreenScrollbar resolve_fullscreen_scrollbar(const support::JsonValue& value) {
+    if (const auto* mode = value.get_if<std::string>()) {
+        if (*mode == "always") {
+            return FullscreenScrollbar::Always;
+        }
+        if (*mode == "hidden") {
+            return FullscreenScrollbar::Hidden;
+        }
+    }
+    return FullscreenScrollbar::Auto;
+}
+
+/// pi `getFullscreenCopyOnSelect` and its AltScreen consumer: the nullish
+/// stored value falls back to `true` (`?? true`) and every other value keeps
+/// JavaScript truthiness, so `false`, `0`, and `""` disable copy-on-select
+/// while wrong types such as `"false"` and `[]` enable it.
+[[nodiscard]] bool resolve_fullscreen_copy_on_select(const support::JsonValue& value) {
+    if (value.holds<support::JsonValue::null_t>()) {
+        return true;
+    }
+    if (const auto* enabled = value.get_if<bool>()) {
+        return *enabled;
+    }
+    if (const auto* number = value.get_if<double>()) {
+        return *number != 0.0;
+    }
+    if (const auto* text = value.get_if<std::string>()) {
+        return !text->empty();
+    }
+    return true;
+}
+
+/// pi `getFullscreenWheelScrollLines`: only a finite number is a line count
+/// and it is floored and clamped to 1..100 in the double domain (pi
+/// `Math.max(1, Math.min(100, Math.floor(lines)))`); every other stored value
+/// resolves as `"auto"`.
+[[nodiscard]] FullscreenWheelScrollLines resolve_fullscreen_wheel_scroll_lines(const support::JsonValue& value) {
+    const auto* number = value.get_if<double>();
+    if (number == nullptr || !std::isfinite(*number)) {
+        return FullscreenWheelScrollLines{AutoWheelScrollLines{}};
+    }
+    const auto lines = std::max(1.0, std::min(100.0, std::floor(*number)));
+    return FullscreenWheelScrollLines{static_cast<std::size_t>(lines)};
+}
+
+/// pi `setFullscreenWheelScrollLines` clamp for a typed line count:
+/// `Math.max(1, Math.min(100, lines))`.
+[[nodiscard]] std::size_t clamp_wheel_scroll_lines(std::size_t lines) noexcept {
+    return std::min<std::size_t>(std::max<std::size_t>(lines, 1), 100);
 }
 
 /// Parse pi's nested `compaction` object (`{enabled, reserveTokens,
@@ -356,6 +412,18 @@ void migrate_settings(JsonObject& settings) {
     }
     if (const auto* value = string_field(object, "fullscreenExitOutput")) {
         settings.fullscreen_exit_output = *value;
+    }
+    // The three fullscreen settings below resolve each present value per scope
+    // before the merge, because pi's deep merge gives any present project
+    // value priority over global even when it is invalid.
+    if (const auto found = object.find("fullscreenScrollbar"); found != object.end()) {
+        settings.fullscreen_scrollbar = resolve_fullscreen_scrollbar(found->second);
+    }
+    if (const auto found = object.find("fullscreenCopyOnSelect"); found != object.end()) {
+        settings.fullscreen_copy_on_select = resolve_fullscreen_copy_on_select(found->second);
+    }
+    if (const auto found = object.find("fullscreenWheelScrollLines"); found != object.end()) {
+        settings.fullscreen_wheel_scroll_lines = resolve_fullscreen_wheel_scroll_lines(found->second);
     }
     if (const auto found = object.find("compaction"); found != object.end()) {
         if (auto parsed = parse_compaction_settings(found->second); parsed) {
@@ -776,6 +844,15 @@ struct SettingsManager::Impl {
         if (project.fullscreen_exit_output) {
             merged.fullscreen_exit_output = project.fullscreen_exit_output;
         }
+        if (project.fullscreen_scrollbar) {
+            merged.fullscreen_scrollbar = project.fullscreen_scrollbar;
+        }
+        if (project.fullscreen_copy_on_select) {
+            merged.fullscreen_copy_on_select = project.fullscreen_copy_on_select;
+        }
+        if (project.fullscreen_wheel_scroll_lines) {
+            merged.fullscreen_wheel_scroll_lines = project.fullscreen_wheel_scroll_lines;
+        }
         if (project.output_pad) {
             merged.output_pad = project.output_pad;
         }
@@ -1076,6 +1153,94 @@ support::ExpectedVoid SettingsManager::set_fullscreen_exit_output(FullscreenExit
         return persisted;
     }
     target.fullscreen_exit_output = value;
+    impl_->recompute_merged();
+    return support::ExpectedVoid{};
+}
+
+FullscreenScrollbar SettingsManager::get_fullscreen_scrollbar() const noexcept {
+    return impl_->merged_settings.fullscreen_scrollbar.value_or(FullscreenScrollbar::Auto);
+}
+
+bool SettingsManager::get_fullscreen_copy_on_select() const noexcept {
+    return impl_->merged_settings.fullscreen_copy_on_select.value_or(true);
+}
+
+FullscreenWheelScrollLines SettingsManager::get_fullscreen_wheel_scroll_lines() const noexcept {
+    return impl_->merged_settings.fullscreen_wheel_scroll_lines.value_or(
+            FullscreenWheelScrollLines{AutoWheelScrollLines{}});
+}
+
+support::ExpectedVoid SettingsManager::set_fullscreen_scrollbar(FullscreenScrollbar mode) {
+    // pi `setFullscreenScrollbar` always writes the global scope.
+    if (impl_->global_write_suppressed()) {
+        return support::ExpectedVoid{};
+    }
+    std::string value{"auto"};
+    if (mode == FullscreenScrollbar::Hidden) {
+        value = "hidden";
+    } else if (mode == FullscreenScrollbar::Always) {
+        value = "always";
+    }
+    auto& target = impl_->global_settings;
+    if (target.fullscreen_scrollbar == mode) {
+        return support::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = impl_->persist_global_field("fullscreenScrollbar", support::JsonValue{value}); !persisted) {
+        return persisted;
+    }
+    target.fullscreen_scrollbar = mode;
+    impl_->recompute_merged();
+    return support::ExpectedVoid{};
+}
+
+support::ExpectedVoid SettingsManager::set_fullscreen_copy_on_select(bool enabled) {
+    // pi `setFullscreenCopyOnSelect` always writes the global scope.
+    if (impl_->global_write_suppressed()) {
+        return support::ExpectedVoid{};
+    }
+    auto& target = impl_->global_settings;
+    if (target.fullscreen_copy_on_select == enabled) {
+        return support::ExpectedVoid{};
+    }
+
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = impl_->persist_global_field("fullscreenCopyOnSelect", support::JsonValue{enabled});
+            !persisted) {
+        return persisted;
+    }
+    target.fullscreen_copy_on_select = enabled;
+    impl_->recompute_merged();
+    return support::ExpectedVoid{};
+}
+
+support::ExpectedVoid SettingsManager::set_fullscreen_wheel_scroll_lines(FullscreenWheelScrollLines lines) {
+    // pi `setFullscreenWheelScrollLines` always writes the global scope and
+    // keeps `"auto"` while clamping a number to 1..100.
+    if (impl_->global_write_suppressed()) {
+        return support::ExpectedVoid{};
+    }
+    const auto* requested = std::get_if<std::size_t>(&lines);
+    const FullscreenWheelScrollLines normalized =
+            requested == nullptr ? FullscreenWheelScrollLines{AutoWheelScrollLines{}}
+                                 : FullscreenWheelScrollLines{clamp_wheel_scroll_lines(*requested)};
+    auto& target = impl_->global_settings;
+    if (target.fullscreen_wheel_scroll_lines == normalized) {
+        return support::ExpectedVoid{};
+    }
+
+    support::JsonValue value = std::holds_alternative<AutoWheelScrollLines>(normalized)
+                                       ? support::JsonValue{std::string{"auto"}}
+                                       : support::JsonValue{static_cast<double>(std::get<std::size_t>(normalized))};
+    // Persist first; the in-memory view advances only when the surgical write
+    // succeeded, so a persist failure never leaves memory diverged from disk.
+    if (auto persisted = impl_->persist_global_field("fullscreenWheelScrollLines", std::move(value)); !persisted) {
+        return persisted;
+    }
+    target.fullscreen_wheel_scroll_lines = normalized;
     impl_->recompute_merged();
     return support::ExpectedVoid{};
 }
