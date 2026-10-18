@@ -33,12 +33,14 @@
 #include <boost/asio/redirect_error.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <memory>
 #include <optional>
+#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -156,9 +158,11 @@ struct LongRowShape {
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
-        const tests::TempWorkspace& workspace, std::shared_ptr<tests::ScriptedProvider> client) {
+        const tests::TempWorkspace& workspace,
+        std::shared_ptr<tests::ScriptedProvider> client,
+        coding_agent::SessionTarget session_target = coding_agent::InMemorySessionTarget{}) {
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.session_target = std::move(session_target);
     options.workspace = workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
     return options;
@@ -175,11 +179,14 @@ struct LongRowShape {
 
 [[nodiscard]] coding_agent::tui::InteractiveSessionRun make_run(coding_agent::AgentSession& session,
         const std::filesystem::path& agent_config_directory,
-        coding_agent::tui::TuiActionSink action_sink) {
+        coding_agent::tui::TuiActionSink action_sink,
+        std::ostream* output_stream) {
     return coding_agent::tui::InteractiveSessionRunBuilder{}
             .with_session(session)
             .with_agent_config_directory(agent_config_directory)
             .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+            .with_output_stream(output_stream)
+            .with_stdout_is_tty(true)
             .with_action_sink(std::move(action_sink))
             .build();
 }
@@ -234,6 +241,20 @@ void close_settings(tui::VirtualTerminal& terminal, boost::asio::io_context& io,
     REQUIRE_FALSE(visible_screen(terminal).find(description) != std::string::npos);
 }
 
+/// One wheel-down notch over the row that shows `needle` (mouse reports are
+/// 1-based): the row under the marker is inside the transcript region, whose
+/// position in the fullscreen layout varies with the terminal size.
+void wheel_notch(tui::VirtualTerminal& terminal, std::string_view needle) {
+    const auto& screen = terminal.screen();
+    std::size_t row = 0;
+    for (; row < screen.size(); ++row) {
+        if (screen[row].find(needle) != std::string::npos) break;
+    }
+    REQUIRE(row < screen.size());
+    const auto y = std::to_string(row + 1);
+    REQUIRE(terminal.inject_input("\x1b[<64;5;" + y + "M"));
+}
+
 /// Drag-select `length` cells starting at the first `needle` cell of the row
 /// that contains it; mouse reports are 1-based.
 void select_cells(
@@ -261,6 +282,10 @@ struct FullscreenRun {
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
     std::shared_ptr<ActionSinkRecorder> actions{std::make_shared<ActionSinkRecorder>()};
+    /// Post-exit notices (the resume hint) land here instead of the test's stdout.
+    std::ostringstream output;
+    /// The session the run binds; persisted targets can carry a resume notice.
+    coding_agent::SessionTarget session_target{coding_agent::InMemorySessionTarget{}};
     /// Owns the session the engine borrows; declared before the engine so the
     /// engine (and its coroutine) is destroyed first.
     std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> created;
@@ -278,14 +303,14 @@ struct FullscreenRun {
     /// Create the session and start the engine; the runtime fixture and
     /// workspace must already exist (members above are constructed first).
     void start() {
-        created.emplace(runtime.run(
-                create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider()))));
+        created.emplace(runtime.run(create_session_async(
+                runtime, session_options(workspace, tests::make_scripted_fake_provider(), session_target))));
         REQUIRE(*created);
         runtime_driver.emplace(runtime);
         engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
                 terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
         boost::asio::co_spawn(io,
-                drive_engine(engine, make_run(*(*created)->session, config.path(), actions->make_sink())),
+                drive_engine(engine, make_run(*(*created)->session, config.path(), actions->make_sink(), &output)),
                 [this](std::exception_ptr exception, support::ExpectedVoid result) {
                     CHECK(exception == nullptr);
                     run_result.emplace(std::move(result));
@@ -366,6 +391,13 @@ TEST_CASE("Native TUI fullscreen copy-on-select row drives the real copy callbac
     select_cells(run.terminal, run.io, "fake", 4);
     REQUIRE(pump_until(run.io, [&] { return run.actions->write_clipboard.size() == 2; }));
     CHECK(run.actions->write_clipboard.back().text == "fake");
+
+    // With automatic copy enabled, Ctrl+X falls through to the last assistant
+    // message: the selection is not copied again, and the clipboard receives
+    // the newest assistant turn's text instead.
+    REQUIRE(run.terminal.inject_input("\x18"));
+    REQUIRE(pump_until(run.io, [&] { return run.actions->write_clipboard.size() == 3; }));
+    CHECK(run.actions->write_clipboard.back().text == "fake: 2");
 
     close_run(run);
 }
@@ -485,4 +517,169 @@ TEST_CASE("Native TUI fullscreen settings survive a regular/fullscreen mode swit
             std::string::npos);
 
     close_run(run);
+}
+
+TEST_CASE("Native TUI fullscreen Ctrl+X reports the no-assistant-message fallback",
+        "[coding_agent][tui][fullscreen][copy][issue1020][spec]") {
+    FullscreenRun run(R"({"tuiMode": "fullscreen"})");
+    run.start();
+
+    // A selection exists before any agent message: the default automatic copy
+    // copies it on release, then Ctrl+X falls through to the last-message path,
+    // which reports pi's `No agent messages to copy yet.` diagnostic.
+    const std::string draft{"fallback-draft"};
+    REQUIRE(run.terminal.inject_input(draft));
+    REQUIRE(pump_until(run.io, [&] { return visible_screen(run.terminal).find(draft) != std::string::npos; }));
+    select_cells(run.terminal, run.io, "fallback", 8);
+    REQUIRE(pump_until(run.io, [&] { return !run.actions->write_clipboard.empty(); }));
+    CHECK(run.actions->write_clipboard.back().text == "fallback");
+
+    REQUIRE(run.terminal.inject_input("\x18"));
+    REQUIRE(pump_until(run.io, [&] {
+        return visible_screen(run.terminal).find("No agent messages to copy yet.") != std::string::npos;
+    }));
+    // The fall-through reported the diagnostic instead of copying the selection
+    // again.
+    CHECK(run.actions->write_clipboard.size() == 1);
+    CHECK(run.actions->write_clipboard.back().text == "fallback");
+
+    // Ctrl+D exits only with an empty editor: clear the draft first.
+    REQUIRE(run.terminal.inject_input("\x03"));
+    REQUIRE(pump_until(run.io, [&] { return visible_screen(run.terminal).find(draft) == std::string::npos; }));
+    close_run(run);
+}
+
+TEST_CASE("Native TUI fullscreen runtime apply and mode switch keep the resolved consumers",
+        "[coding_agent][tui][fullscreen][settings-selector][issue1020][spec]") {
+    FullscreenRun run(
+            R"({"tuiMode": "fullscreen", "fullscreenScrollbar": "auto", "fullscreenCopyOnSelect": true, "fullscreenWheelScrollLines": "auto"})");
+    run.start();
+    submit_turns(run.terminal, run.io, 12);
+
+    // settingsBefore: auto follows the transcript end (no bar), the wheel is one
+    // line per notch, and a release copies the selection.
+    CHECK(scrollbar_rows(run.terminal) == 0);
+    const auto auto_turn = topmost_fake_turn(content_rows(run.terminal));
+    const auto auto_before = fake_turn_row(content_rows(run.terminal), auto_turn);
+    REQUIRE(auto_before.has_value());
+    wheel_notch(run.terminal, "fake: " + std::to_string(auto_turn));
+    REQUIRE(pump_until(
+            run.io, [&] { return wheel_shift(content_rows(run.terminal), auto_turn, *auto_before).has_value(); }));
+    CHECK(wheel_shift(content_rows(run.terminal), auto_turn, *auto_before) == 1);
+    select_cells(run.terminal, run.io, "fake", 4);
+    REQUIRE(pump_until(run.io, [&] { return !run.actions->write_clipboard.empty(); }));
+    CHECK(run.actions->write_clipboard.back().text == "fake");
+    run.actions->write_clipboard.clear();
+
+    // The runtime settings update goes through the real `/settings` rows: each
+    // callback persists the value and applies it to the live consumers
+    // (`applyRuntimeSettings` after the change, the product's runtime seam).
+    focus_settings_row(run.terminal, run.io, 9, "Scrollbar behavior in fullscreen mode");
+    REQUIRE(run.terminal.inject_input("\r")); // auto -> always
+    drain_ready(run.io);
+    close_settings(run.terminal, run.io, "Scrollbar behavior in fullscreen mode");
+
+    focus_settings_row(run.terminal, run.io, 10, "Automatically copy selected text in fullscreen mode");
+    REQUIRE(run.terminal.inject_input("\r")); // true -> false
+    drain_ready(run.io);
+    close_settings(run.terminal, run.io, "Automatically copy selected text in fullscreen mode");
+
+    focus_settings_row(run.terminal, run.io, 11, "Lines per mouse-wheel event in fullscreen mode");
+    for (int step = 0; step < 4; ++step) {
+        REQUIRE(run.terminal.inject_input("\r")); // auto -> 1 -> 2 -> 3 -> 5
+    }
+    drain_ready(run.io);
+    close_settings(run.terminal, run.io, "Lines per mouse-wheel event in fullscreen mode");
+
+    const auto persisted = read_text_file(run.config.path() / "settings.json");
+    CHECK(persisted.find("\"fullscreenScrollbar\": \"always\"") != std::string::npos);
+    CHECK(persisted.find("\"fullscreenCopyOnSelect\": false") != std::string::npos);
+    CHECK(persisted.find("\"fullscreenWheelScrollLines\": 5") != std::string::npos);
+    REQUIRE(pump_until(run.io, [&] { return scrollbar_rows(run.terminal) > 0; }));
+
+    const auto fixed_turn = topmost_fake_turn(content_rows(run.terminal));
+    const auto fixed_before = fake_turn_row(content_rows(run.terminal), fixed_turn);
+    REQUIRE(fixed_before.has_value());
+    wheel_notch(run.terminal, "fake: " + std::to_string(fixed_turn));
+    REQUIRE(pump_until(
+            run.io, [&] { return wheel_shift(content_rows(run.terminal), fixed_turn, *fixed_before).has_value(); }));
+    CHECK(wheel_shift(content_rows(run.terminal), fixed_turn, *fixed_before) == 5);
+
+    select_cells(run.terminal, run.io, "fake", 4);
+    CHECK(run.actions->write_clipboard.empty());
+
+    // The real renderer switch: regular then back to fullscreen keeps the
+    // retained transcript and re-applies the resolved consumers.
+    auto switched = run.engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(switched);
+    CHECK(*switched);
+    REQUIRE(pump_until(run.io, [&] { return !run.terminal.modes().alternate_screen; }));
+    switched = run.engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    REQUIRE(switched);
+    CHECK(*switched);
+    REQUIRE(pump_until(run.io, [&] { return run.terminal.modes().alternate_screen; }));
+    REQUIRE(pump_until(run.io, [&] { return scrollbar_rows(run.terminal) > 0; }));
+
+    const auto back_turn = topmost_fake_turn(content_rows(run.terminal));
+    const auto back_before = fake_turn_row(content_rows(run.terminal), back_turn);
+    REQUIRE(back_before.has_value());
+    wheel_notch(run.terminal, "fake: " + std::to_string(back_turn));
+    REQUIRE(pump_until(
+            run.io, [&] { return wheel_shift(content_rows(run.terminal), back_turn, *back_before).has_value(); }));
+    CHECK(wheel_shift(content_rows(run.terminal), back_turn, *back_before) == 5);
+    select_cells(run.terminal, run.io, "fake", 4);
+    CHECK(run.actions->write_clipboard.empty());
+
+    close_run(run);
+}
+
+TEST_CASE("Native TUI fullscreen exit-output row persists resume-hint over the stored regular mode",
+        "[coding_agent][tui][fullscreen][exit-output][issue1020][spec]") {
+    // Run A: the default transcript policy transfers the transcript to the main
+    // buffer on exit.
+    {
+        FullscreenRun run(R"({"tuiMode": "regular", "fullscreenExitOutput": "transcript"})", {.columns = 80, .rows = 24});
+        run.session_target = coding_agent::DefaultPersistedSessionTarget{};
+        REQUIRE(run.terminal.seed_shell_content({"Existing main buffer line"}, {.column = 0, .row = 0}));
+        run.start();
+        // The explicit typed fullscreen run wins over the stored regular mode.
+        CHECK(run.terminal.modes().alternate_screen);
+        REQUIRE(run.terminal.inject_input("exit-policy-prompt\r"));
+        REQUIRE(pump_until(run.io, [&] {
+            return visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos;
+        }));
+        close_run(run);
+        CHECK_FALSE(run.terminal.modes().alternate_screen);
+        CHECK(visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos);
+        CHECK(read_text_file(run.config.path() / "settings.json").find("\"tuiMode\": \"regular\"") !=
+                std::string::npos);
+    }
+
+    // Run B: cycling the exit-output row to resume-hint changes the actual exit
+    // output while the stored TUI mode stays regular.
+    {
+        FullscreenRun run(R"({"tuiMode": "regular", "fullscreenExitOutput": "transcript"})", {.columns = 80, .rows = 24});
+        run.session_target = coding_agent::DefaultPersistedSessionTarget{};
+        REQUIRE(run.terminal.seed_shell_content({"Existing main buffer line"}, {.column = 0, .row = 0}));
+        run.start();
+        REQUIRE(run.terminal.inject_input("exit-policy-prompt\r"));
+        REQUIRE(pump_until(run.io, [&] {
+            return visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos;
+        }));
+
+        focus_settings_row(run.terminal, run.io, 8, "Print the transcript");
+        REQUIRE(run.terminal.inject_input("\r")); // transcript -> resume-hint
+        drain_ready(run.io);
+        close_settings(run.terminal, run.io, "Print the transcript");
+        const auto persisted = read_text_file(run.config.path() / "settings.json");
+        CHECK(persisted.find("\"fullscreenExitOutput\": \"resume-hint\"") != std::string::npos);
+        CHECK(persisted.find("\"tuiMode\": \"regular\"") != std::string::npos);
+
+        close_run(run);
+        CHECK_FALSE(run.terminal.modes().alternate_screen);
+        const auto screen = visible_screen(run.terminal);
+        CHECK(screen.find("Existing main buffer line") != std::string::npos);
+        CHECK(screen.find("fake: exit-policy-prompt") == std::string::npos);
+        CHECK(run.output.str().find(coding_agent::tui::kResumeNoticePrefix) != std::string::npos);
+    }
 }
