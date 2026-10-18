@@ -169,7 +169,7 @@ const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["settings-selector", {
 		classification: "product-defect",
 		evidence: ["#809", "report.json:settings-selector"],
-		rationale: "Pi-only settings remain explicitly omitted, with Editor padding retained as out of scope. The scenario searches for the supported Show hardware cursor row, captures its false and true states, then exits with Escape. The accepted first-viewport delta remains visible after omitting only pi-only settings rows and reflects the different supported selector inventories and selection geometry.",
+		rationale: "Refreshed against pi v1.0.4. Show hardware cursor and Terminal progress are no longer omission patterns: the scenario searches both rows and captures their false and true states, whose rendered labels, values and styles match pi. Editor padding and the other out-of-scope pi-only rows stay explicit omissions. The residual product-defect delta is the retained-omission viewport consequence: pi's first viewport carries four of its pi-only rows, its row counter reads (1/32) against Pike's (1/13), and each side's description line follows its own selected row, so the omission projection cannot equate the two frames. No supported capability is unverified by this row.",
 		acceptedDifferences: [
 			"#809 accepts Pike's registry-derived, effective-binding settings help wording. The raw help cells and styles remain in the capture and comparison; this wording is not filtered as an omission.",
 		],
@@ -179,7 +179,7 @@ const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["editor-cjk", { classification: "product-defect", evidence: ["report.json:editor-cjk"], rationale: "The mixed-width editor text wraps identically, but the 72-column startup help retains the same segment-boundary difference recorded by boot-72 after pi's runtime banner and onboarding copy are projected out." }],
 	["editor-token", { classification: "match", evidence: ["report.json:editor-token"], rationale: "Narrow unbreakable editor input matches pi: the editor text is unstyled like pi's and the composition is equal." }],
 	["user-message", { classification: "product-defect", evidence: ["report.json:user-message", "report.json:boot-72"], rationale: "After the declared footer-stats projection, the remaining visible difference is the 72-column startup-help segment boundary recorded by boot-72. The user prompt and response content match." }],
-	["tool-result", { classification: "product-defect", evidence: ["#812", "report.json:tool-result"], rationale: "The visible cell text is byte-identical and exactly one styled-cell delta remains: pike emits a bold read tool title, pi does not. pi composes the title as theme.fg('toolTitle', theme.bold('read')) and Theme.bold is chalk.bold; the harness runs the pi child with stdout as a pipe, so chalk.level is 0 and the bold is suppressed before capture. Pike's bold therefore matches pi's source and pi's real-terminal output, and dropping it would satisfy the check while violating the property. The triage taxonomy has no label for an environment artifact; this row is filed as a product-defect only because no such label exists." }],
+	["tool-result", { classification: "product-defect", evidence: ["#812", "report.json:tool-result"], rationale: "The tool-result content, including the read tool title, is byte-identical: the capture now runs the pi child with FORCE_COLOR so pi emits its real styles, and the title's bold over the tool palette matches pike exactly. The residual delta is the mid-stream capture moment: pike's snapshot has already painted the next prose row (recorded as <model-prose>) where pi's same-moment frame carries the embedded Working spinner border, so snapshot 1's projected text and cursor differ while the post-completion snapshot matches. The triage taxonomy has no label for a capture-timing artifact; this row is filed as a product-defect only because no such label exists, and the recorded frames show the same content at adjacent moments." }],
 	["status-footer", { classification: "match", evidence: ["report.json:status-footer", "profile:footer-stats"], rationale: "Same footer-stats projection artifact as user-message: the right-aligned row kept the padding computed around the removed token-usage prefix. With the run after the token collapsed, this scenario observes as match." }],
 	["resize-72-41", { classification: "product-defect", evidence: ["report.json:resize-72-41", "report.json:boot-72"], rationale: "After resizing, the narrow startup help wraps differently from pi at the same segment boundary recorded by boot-72; projecting the runtime banner and onboarding copy does not remove the difference." }],
 	["resize-100-72", { classification: "product-defect", evidence: ["report.json:resize-100-72", "report.json:boot-72"], rationale: "After resizing to 72 columns, the startup help wraps differently from pi at the same segment boundary recorded by boot-72; projecting the runtime banner and onboarding copy does not remove the difference." }],
@@ -998,7 +998,7 @@ function stableProjection(capture: Record<string, unknown>, scenario: Scenario, 
 	};
 }
 
-type ProfileCellProjection = { rows: string[]; removed: Record<string, number> };
+type ProfileCellProjection = { rows: string[]; removed: Record<string, number>; keptRowMap: number[] };
 
 /// Whether a styled row opens with pi's block-glyph banner art. The glyph run
 /// is its own styled segment, so this does not depend on the spacing a text
@@ -1012,6 +1012,11 @@ function startsWithBannerArt(segments: unknown[]): boolean {
 function projectProfileCellRows(rows: string[]): ProfileCellProjection {
 	const removed: Record<string, number> = {};
 	for (const projection of profileCellRowProjections) removed[projection.name] = 0;
+	// keptRowMap[rawIndex] is the row's projected index, or -1 when the
+	// projection dropped it. The cursor row shares the visible-frame
+	// coordinates and is mapped through this table.
+	const keptRowMap: number[] = [];
+	let retainedCount = 0;
 	const retained = rows.flatMap((line) => {
 		const projection = profileCellRowProjections.find((candidate) => candidate.pattern.test(line));
 		if (projection !== undefined) {
@@ -1020,14 +1025,27 @@ function projectProfileCellRows(rows: string[]): ProfileCellProjection {
 			// scrollback discount must not absorb a row that is still compared.
 			if (projection.strip !== true) {
 				removed[projection.name] += 1;
+				keptRowMap.push(-1);
 				return [];
 			}
 			const stripped = line.replace(projection.pattern, "");
-			return stripped.trim() === "" ? [] : [stripped];
+			if (stripped.trim() === "") {
+				keptRowMap.push(-1);
+				return [];
+			}
+			keptRowMap.push(retainedCount);
+			retainedCount += 1;
+			return [stripped];
 		}
-		return line.trim() === "" ? [] : [line];
+		if (line.trim() === "") {
+			keptRowMap.push(-1);
+			return [];
+		}
+		keptRowMap.push(retainedCount);
+		retainedCount += 1;
+		return [line];
 	});
-	return { rows: retained, removed };
+	return { rows: retained, removed, keptRowMap };
 }
 
 // Rows the profile projection removed from one composed buffer that the other
@@ -1139,15 +1157,38 @@ function profileProjectionForComparison(projection: Record<string, unknown>, sce
 	const snapshots = projection.snapshots as Record<string, unknown>[];
 	return {
 		...projection,
-		snapshots: snapshots.map((snapshot) => ({
-			visible: projectProfileCellRows(projectDiagnosticFooterRows(snapshot.visible as string[], scenario)).rows,
-			scrollback: projectProfileCellRows(projectDiagnosticFooterRows(snapshot.scrollback as string[], scenario)).rows,
-			styledVisible: projectProfileStyledRows(snapshot.styledVisible, scenario),
-			styledScrollback: projectProfileStyledRows(snapshot.styledScrollback, scenario),
-			cursor: snapshot.cursor,
-			cursorVisible: snapshot.cursorVisible,
-			sgr: snapshot.sgr,
-		})),
+		snapshots: snapshots.map((snapshot) => {
+			const projectedVisible = projectProfileCellRows(projectDiagnosticFooterRows(snapshot.visible as string[], scenario));
+			// The cursor row lives in the same viewport coordinate space as the
+			// visible rows, so it is mapped through the projection's kept-row
+			// table. Without this, every snapshot whose frame carries projected
+			// startup rows reports a cursor row mismatch that is a projection
+			// artifact, not a runtime difference.
+			const rawCursor = snapshot.cursor as Record<string, unknown> | undefined;
+			const cursorRow = typeof rawCursor?.row === "number" ? rawCursor.row : undefined;
+			let projectedCursorRow: number | undefined;
+			if (cursorRow !== undefined) {
+				projectedCursorRow = 0;
+				for (let index = Math.min(cursorRow, projectedVisible.keptRowMap.length - 1); index >= 0; index -= 1) {
+					const mapped = projectedVisible.keptRowMap[index];
+					if (mapped !== undefined && mapped >= 0) {
+						projectedCursorRow = mapped;
+						break;
+					}
+				}
+			}
+			return {
+				visible: projectedVisible.rows,
+				scrollback: projectProfileCellRows(projectDiagnosticFooterRows(snapshot.scrollback as string[], scenario)).rows,
+				styledVisible: projectProfileStyledRows(snapshot.styledVisible, scenario),
+				styledScrollback: projectProfileStyledRows(snapshot.styledScrollback, scenario),
+				cursor: rawCursor === undefined || projectedCursorRow === undefined
+					? rawCursor
+					: { ...rawCursor, row: projectedCursorRow },
+				cursorVisible: snapshot.cursorVisible,
+				sgr: snapshot.sgr,
+			};
+		}),
 	};
 }
 
@@ -1452,9 +1493,15 @@ function runLiveManual(): number {
 }
 
 function reportMetadata(report: Record<string, unknown>): Record<string, unknown> {
+	const base = report.captureBase as Record<string, unknown> | undefined;
 	return {
 		schema: report.schema,
-		captureBase: report.captureBase,
+		// The capture's repository HEAD is recorded provenance, but it must not
+		// participate in metadata equality: any later, behaviour-preserving
+		// commit would otherwise invalidate the checked-in evidence. The Pike
+		// side of the comparison is guarded by the per-scenario stable digests,
+		// and the required-fix set stays enforced at capture time and here.
+		captureBase: base === undefined ? undefined : { requiredFixes: base.requiredFixes },
 		baseline: report.baseline,
 		profile: report.profile,
 		structuralProjection: report.structuralProjection,
@@ -1787,6 +1834,20 @@ async function runPiChild(): Promise<number> {
 			this.ansi += data;
 			for (const match of data.matchAll(/\x1b\[\?25([hl])/g)) this.cursorVisible = match[1] === "h";
 			super.write(data);
+		}
+
+		// pi's Terminal contract routes cursor visibility through these two
+		// methods, and the product calls them directly (never through write).
+		// Tracking the write() stream alone misses every hide/show, which left
+		// the mock reporting a permanently visible cursor.
+		override hideCursor(): void {
+			this.cursorVisible = false;
+			super.hideCursor();
+		}
+
+		override showCursor(): void {
+			this.cursorVisible = true;
+			super.showCursor();
 		}
 	}
 

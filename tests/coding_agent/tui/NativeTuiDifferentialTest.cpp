@@ -368,7 +368,9 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
         const auto label_position = line.find(label);
         if (label_position == std::string::npos) continue;
         const auto value_position = line.find_first_not_of(' ', label_position + label.size());
-        if (value_position == std::string::npos) return std::string_view{};
+        // A token-less match is the search input showing the query text, not
+        // the settings row; keep scanning for the row that carries a value.
+        if (value_position == std::string::npos) continue;
         const auto value_end = line.find_first_of(" \t", value_position);
         return std::string_view{line}.substr(value_position, value_end - value_position);
     }
@@ -394,7 +396,12 @@ void check_editor_workspace_footer_composition(
                                                                  : std::string_view{inputs[0]};
     const auto first_draft_row = row_containing(rows, first_draft_marker);
     const auto final_draft_row = row_containing(rows, final_draft_marker);
-    const auto workspace_row = row_containing(rows, scenario);
+    // The workspace row is the footer's cwd line. At narrow widths the path is
+    // head-truncated, so the scenario id at its tail is not visible; fall back
+    // to the harness root fragment, which every standard differential
+    // workspace path carries and which survives the truncation.
+    auto workspace_row = row_containing(rows, scenario);
+    if (!workspace_row.has_value()) workspace_row = row_containing(rows, "cpp-harness-pike-differential");
     const auto footer_row = row_containing(rows, "/128k (auto)");
 
     REQUIRE(first_draft_row.has_value());
