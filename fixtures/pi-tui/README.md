@@ -613,7 +613,9 @@ the real settings selector, `ScrollView`/layout frames, the fullscreen consumer 
   `hidden` paints no scrollbar cells and keeps the full content width, `always` reserves the last
   column (child width 9 of 10) and paints track/thumb cells, `auto` reserves nothing and shows the
   transient bar after scroll activity until the frozen 1000 ms hide timer, and an invalid persisted
-  value resolves to `auto`. `setScrollbar` requests a render only when the mode changes.
+  value resolves to `auto`. `setScrollbar` requests a render only when the mode changes. Each frame
+  records both `lines` (sequence-stripped) and `rawLines` (the exact SGR/OSC styled lines), so the
+  scrollbar track/thumb styling bytes observed at this seam are preserved.
 - `copy-on-select-settings-and-ctrl-x` observes the resolved copy value at the real fullscreen
   consumer: release copies once when the value is `true`, `"false"` (wrong-type truthy) or `null`,
   and does not copy for boolean `false` or `0`; controlled `handleCopyCommand` records that manual
@@ -627,16 +629,20 @@ the real settings selector, `ScrollView`/layout frames, the fullscreen consumer 
   one line, and `auto` under the controlled clock moves 1, 5, 5, 1 lines. Live `setWheelScrollLines`
   and `createInteractiveTui` forwarding are included.
 - `product-live-apply-and-mode-switch` observes the private `applyRuntimeSettings` on a controlled
-  context: the real transcript `ScrollView` switches to `always`, the fullscreen renderer takes
-  `false` copy-on-select and 5 wheel lines, and the actual `switchTuiMode` regular→fullscreen rebuilds
-  the renderer from the settings manager (`getCopyOnSelect()` false, 5-line wheel deltas) while
-  keeping the typed `options.tuiMode` and the transcript scrollbar mode across the switch.
+  context: the transcript `ScrollView` is created with `settings.getFullscreenScrollbar()` like the
+  product `InteractiveMode.init()` path (so `beforeApply.transcriptScrollbar` matches the `auto`
+  setting), then switches to `always`, the fullscreen renderer takes `false` copy-on-select and
+  5 wheel lines, and the actual `switchTuiMode` regular→fullscreen rebuilds the renderer from the
+  settings manager (`getCopyOnSelect()` false, 5-line wheel deltas) while keeping the typed
+  `options.tuiMode` and the transcript scrollbar mode across the switch.
 
 Artifact 36 records only measured runtime values; no Pike-generated expectation enters the fixture.
 Provenance honesty: the bundle envelope keeps the historical `capturedAt`/`environment` metadata for
-format compatibility, and `observationRun` records the actual capture timestamp (2026-10-18T01:12:39.201Z),
+format compatibility, and `observationRun` records the actual capture timestamp (2026-10-18T03:27:24.840Z),
 Node v26.12.0 on linux x64, the caller, the seven scenarios, and identity gates: ambient `PI_*`
-variables sanitized (`sanitizedPiVariables`), `PI_PACKAGE_DIR` pinned to the frozen checkout,
+variables sanitized (`sanitizedPiVariables`), terminal/multiplexer/SSH variables scrubbed
+(`disabledTerminalVariables`, plus the names actually removed in `sanitizedTerminalVariables`) with
+`TERM` pinned to `xterm-256color` (`pinnedTerm`), `PI_PACKAGE_DIR` pinned to the frozen checkout,
 `VERSION` 1.0.4, eight `@earendil-works/*` specifiers resolved into frozen `packages/*/src`, and no
 foreign resolutions. The synchronous `registerHooks` Azure catalog stub only satisfies the missing
 generated `packages/ai/src/providers/data/azure.json` and is disclosed in `identity.azureStub`.
@@ -645,10 +651,17 @@ controlled prototype contexts (not OS-level PTY/stream proof); the copy sink is 
 clipboard is never written; the auto wheel clock is controlled rather than wall-clock; the full live
 `/settings` overlay inside a running `InteractiveMode` and the real system clipboard are not
 exercised; artifact 36 records the settings application policy only, so fullscreen exit presentation
-remains the authority of artifacts 33–35.
+remains the authority of artifacts 33–35, and selection highlight/flash SGR styles are not recorded
+(scenario 5 discloses this): scrollbar/selection style coverage remains the authority of
+`scrollbar.json` (#1001), `chat-viewport.json` (#1036) and `selection.json` (#1006), while artifact
+36 pins the settings-to-component mode, width reservation, glyph cells and their exact styled
+`rawLines` plus callback order.
 Artifact 36 preserves all prior 35 artifact bytes, baseline metadata, and all 29 prior generator
 source digests (85 predecessor files re-hashed before and after capture; only `manifest.json` and
-`baselines.json` were appended/pinned).
+`baselines.json` were appended/pinned). The provisional artifact-36 candidate was replaced before
+acceptance by a corrected recapture run from a pristine base-35 snapshot (scenario-7 harness now
+seeds the transcript viewport from the resolved setting, and the terminal environment is scrubbed);
+the rejected candidate bytes are preserved outside the repository.
 `capture/fullscreen-settings-scenarios.mts` holds the scenario bodies;
 `capture/recapture-fullscreen-settings.mts` is the append recipe (manifest 35 → 36).
 

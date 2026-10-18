@@ -16,8 +16,9 @@ import { registerHooks } from "node:module";
 /// `switchTuiMode` and `handleCopyCommand`. No Pike-side expected value is
 /// used to construct these observations.
 ///
-/// Identity gates: ambient `PI_*` variables are removed, `PI_PACKAGE_DIR` is
-/// pinned to the frozen checkout, `VERSION` must be 1.0.4, and every
+/// Identity gates: ambient `PI_*` variables are removed, terminal/multiplexer/
+/// SSH capability variables are removed and `TERM` is pinned, `PI_PACKAGE_DIR`
+/// is pinned to the frozen checkout, `VERSION` must be 1.0.4, and every
 /// `@earendil-works/*` specifier must resolve inside the frozen checkout. The
 /// Azure model catalog is only stubbed because the read-only checkout has no
 /// generated `packages/ai/src/providers/data/azure.json`; the stub is
@@ -30,6 +31,31 @@ export async function captureFullscreenSettings(piCheckout: string) {
 			delete process.env[key];
 		}
 	}
+	// Terminal capability inputs leak from the invoking session; scrub the same
+	// terminal/multiplexer/SSH set as capture-named-tui.mts and pin TERM so a
+	// recapture inside tmux/zellij/screen/SSH produces the same artifact.
+	const disabledTerminalVariables = [
+		"TERM_PROGRAM",
+		"TERM_PROGRAM_VERSION",
+		"KITTY_WINDOW_ID",
+		"WEZTERM_PANE",
+		"TMUX",
+		"ZELLIJ",
+		"STY",
+		"TERMUX_VERSION",
+		"COLORTERM",
+		"SSH_CONNECTION",
+		"SSH_CLIENT",
+		"SSH_TTY",
+	];
+	const sanitizedTerminalVariables: string[] = [];
+	for (const key of disabledTerminalVariables) {
+		if (key in process.env) {
+			sanitizedTerminalVariables.push(key);
+			delete process.env[key];
+		}
+	}
+	process.env.TERM = "xterm-256color";
 	const piPackageDir = path.join(piCheckout, "packages/coding-agent");
 	process.env.PI_PACKAGE_DIR = piPackageDir;
 
@@ -111,6 +137,9 @@ export async function captureFullscreenSettings(piCheckout: string) {
 		frozenVersion: VERSION,
 		piPackageDir,
 		sanitizedPiVariables,
+		disabledTerminalVariables,
+		sanitizedTerminalVariables,
+		pinnedTerm: process.env.TERM,
 		azureStub:
 			"registerHooks resolve/load stub for packages/ai/src/providers/data/azure.json (generated catalog absent in the read-only checkout)",
 		packageSourceResolutions: [...new Set(packageResolutions.map((entry) => entry.split(" -> ")[0]))],
@@ -144,6 +173,8 @@ export async function captureFullscreenSettings(piCheckout: string) {
 	/// A real fullscreen `TuiAltScreen` over pi's `VirtualTerminal`, mounted with
 	/// the product `createChatViewport` layout. `copySelection` is injected so
 	/// the frozen copy path is observed instead of writing to the host clipboard.
+	/// `scrollbar` defaults to the toolkit-level `"hidden"`; scenarios that
+	/// observe the product init path pass the resolved setting explicitly.
 	function makeFullscreenHarness(options: {
 		columns: number;
 		rows: number;
@@ -151,6 +182,7 @@ export async function captureFullscreenSettings(piCheckout: string) {
 		copyOnSelect: unknown;
 		copied: string[];
 		wheelScrollLines?: unknown;
+		scrollbar?: unknown;
 	}) {
 		const terminal = new VirtualTerminal(options.columns, options.rows);
 		terminal.start(() => {}, () => {});
@@ -167,7 +199,7 @@ export async function captureFullscreenSettings(piCheckout: string) {
 			status,
 			editor,
 			footer,
-			scrollbar: "hidden",
+			scrollbar: (options.scrollbar ?? "hidden") as any,
 		});
 		const renderer = new TuiAltScreen(terminal, false, "/tmp", {
 			copyOnSelect: options.copyOnSelect as any,
@@ -198,6 +230,7 @@ export async function captureFullscreenSettings(piCheckout: string) {
 		const child = scrollBox?.children?.[0];
 		return {
 			lines: plainLines(painted.lines).map((line) => line.trimEnd()),
+			rawLines: [...painted.lines],
 			window: scrollBox
 				? {
 						width: scrollBox.rect.width,
@@ -536,7 +569,12 @@ export async function captureFullscreenSettings(piCheckout: string) {
 				setScrollbarSameValueRequestRenderDelta: repeatedRequestRenderDelta,
 				setScrollbarChangedValueRequestRenderDelta: changedRequestRenderDelta,
 				alternateMode: alternate,
-				alternateFrame: { lines: alternateFrame.lines, window: alternateFrame.window, isScrollbarVisible: view.isScrollbarVisible },
+				alternateFrame: {
+					lines: alternateFrame.lines,
+					rawLines: alternateFrame.rawLines,
+					window: alternateFrame.window,
+					isScrollbarVisible: view.isScrollbarVisible,
+				},
 			};
 		};
 		const cases: any[] = [];
@@ -551,6 +589,7 @@ export async function captureFullscreenSettings(piCheckout: string) {
 				seam: "real ScrollView over Text with renderLayoutFrame(root, 10, 4) and frozen auto hide timer (1100 ms wait)",
 				contentLines: 8,
 				viewportRows: 4,
+				frameNote: "each frame carries `lines` (terminal sequences stripped) and `rawLines` (exact styled lines with SGR/OSC bytes)",
 				cases: cases.map((entry) => ({ name: entry.name, resolvedValue: entry.resolvedValue, resolvedFrom: entry.initial.resolvedFrom })),
 			},
 			expected: { cases },
@@ -640,6 +679,7 @@ export async function captureFullscreenSettings(piCheckout: string) {
 			inputs: {
 				seam:
 					"real TuiAltScreen over VirtualTerminal with injected copySelection sink; controlled InteractiveMode.prototype.handleCopyCommand context (runtimeHost.session.getLastAssistantText -> undefined)",
+				styleScope: "selection highlight/flash SGR styling is not recorded; selection styles remain the authority of selection.json (#1006)",
 				drag: [{ x: 1, y: 1 }, { x: 6, y: 1 }],
 				resolvedCases: resolvedCases.map((entry) => ({ name: entry.name })),
 			},
@@ -812,6 +852,7 @@ export async function captureFullscreenSettings(piCheckout: string) {
 			copyOnSelect: settings.getFullscreenCopyOnSelect(),
 			copied,
 			wheelScrollLines: settings.getFullscreenWheelScrollLines(),
+			scrollbar: settings.getFullscreenScrollbar(),
 		});
 		await harness.terminal.waitForRender();
 		const defaultEditor = { setPaddingX: () => {}, setAutocompleteMaxVisible: () => {} };
@@ -895,7 +936,7 @@ export async function captureFullscreenSettings(piCheckout: string) {
 			dimensions: { columns: 20, rows: 10 },
 			inputs: {
 				seam:
-					"controlled InteractiveMode.prototype context (private applyRuntimeSettings / switchTuiMode) over a real TuiAltScreen + createChatViewport; stubs: footer, footerDataProvider, statusContainer, defaultEditor padding setters, themeController.rebindTui, runtimeHost.session",
+					"controlled InteractiveMode.prototype context (private applyRuntimeSettings / switchTuiMode) over a real TuiAltScreen + createChatViewport; stubs: footer, footerDataProvider, statusContainer, defaultEditor padding setters, themeController.rebindTui, runtimeHost.session; createChatViewport scrollbar initialized from settings.getFullscreenScrollbar() like the product init path",
 				settingsBefore: { fullscreenScrollbar: "auto", fullscreenCopyOnSelect: true, fullscreenWheelScrollLines: "auto" },
 				settingsAfter: { fullscreenScrollbar: "always", fullscreenCopyOnSelect: false, fullscreenWheelScrollLines: 5 },
 			},

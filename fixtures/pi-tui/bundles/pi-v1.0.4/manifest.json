@@ -148,7 +148,7 @@
       },
       {
         "path": "capture/fullscreen-settings-scenarios.mts",
-        "sha256": "255409cc73e30e325d782071286b88ab8854ae7ce681c68d7b2a2bd20db59f93"
+        "sha256": "ca6c5ea37f0e9c72f1407173aad27113109b35b34ddfcd15d2d2cd26227f6d67"
       },
       {
         "path": "capture/recapture-fullscreen-settings.mts",
@@ -596,8 +596,8 @@
     {
       "path": "fullscreen-settings.json",
       "family": "fullscreen-settings",
-      "bytes": 83077,
-      "sha256": "31e38c87bd11a256b2618f41a02cef3ea359f6b9141a7e5c588718785841bf0c",
+      "bytes": 88235,
+      "sha256": "d40a66b4fb863cf1de9929cbaf585dd4a64c091ffdab9e4ce051b1e292be2afb",
       "sourceEndpoints": [
         "packages/coding-agent/src/core/settings-manager.ts:getFullscreenScrollbar,setFullscreenScrollbar,getFullscreenCopyOnSelect,setFullscreenCopyOnSelect,getFullscreenWheelScrollLines,setFullscreenWheelScrollLines",
         "packages/coding-agent/src/core/settings-manager.ts:deepMergeObjects,applyOverrides,save,reload,persistScopedSettings,fromStorage",
