@@ -64,6 +64,7 @@
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/ScrollView.hpp>
 #include <cch/tui/Text.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "support/Json.hpp"
@@ -141,23 +142,6 @@ constexpr std::string_view kFrozenRevision{"7c10bd4337495ee613f2224843ecdf349b80
     while (end > begin && text[end - 1] == ' ')
         --end;
     return std::string{text.substr(begin, end - begin)};
-}
-
-[[nodiscard]] std::string strip_ansi(std::string_view text) {
-    std::string stripped;
-    stripped.reserve(text.size());
-    for (std::size_t index = 0; index < text.size();) {
-        if (text[index] == '\x1b' && index + 1 < text.size() && text[index + 1] == '[') {
-            index += 2;
-            while (index < text.size() && !(text[index] >= '@' && text[index] <= '~'))
-                ++index;
-            if (index < text.size()) ++index;
-            continue;
-        }
-        stripped.push_back(text[index]);
-        ++index;
-    }
-    return stripped;
 }
 
 [[nodiscard]] std::string scrollbar_name(cch::tui::ScrollbarMode mode) {
@@ -683,8 +667,8 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence replays the selector row
             bool found_row = false;
             bool found_description = false;
             for (const auto& line : rendered->lines) {
-                const auto stripped = trimmed(strip_ansi(line));
-                if (stripped.rfind("\u2192 " + expected_label, 0) == 0) {
+                const auto stripped = trimmed(cch::tui::strip_terminal_sequences(line));
+                if (stripped.starts_with("\u2192 " + expected_label)) {
                     const auto value = stripped.substr(stripped.find_last_of(' ') + 1);
                     if (value == expected_value) found_row = true;
                 }

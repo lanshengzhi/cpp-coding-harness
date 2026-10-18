@@ -92,7 +92,7 @@ namespace {
 [[nodiscard]] std::vector<std::string> fullscreen_wheel_values(const FullscreenWheelScrollLines& lines) {
     std::vector<std::size_t> numbers{1, 2, 3, 5, 10};
     if (const auto* fixed = std::get_if<std::size_t>(&lines)) numbers.push_back(*fixed);
-    std::sort(numbers.begin(), numbers.end());
+    std::ranges::sort(numbers);
     numbers.erase(std::unique(numbers.begin(), numbers.end()), numbers.end());
     std::vector<std::string> values;
     values.reserve(numbers.size() + 1);
