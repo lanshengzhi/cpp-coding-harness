@@ -494,7 +494,9 @@ private:
     std::optional<ThemeToken> presented_border_token_;
     std::size_t editor_revision_{0};
     // The status container's active indicator (pi's statusContainer child);
-    // null renders the two-row IdleStatus.
+    // null renders the idle state: the two-row IdleStatus in Regular, the
+    // empty container in Fullscreen (whose dock's single blank row is the
+    // widget region's default spacer).
     std::unique_ptr<StatusIndicator> status_indicator_;
     IdleStatus idle_status_;
     // The latest footer data (polled from the data source during render);
