@@ -182,13 +182,9 @@ TEST_CASE("frozen stored tuiMode values resolve through the Pike settings manage
         REQUIRE(settings.errors().empty());
         const auto frozen_resolved = tui_mode_of(read.at("resolved").get_string());
         REQUIRE(frozen_resolved.has_value());
-        if (stored_file.holds<std::nullptr_t>()) {
-            // Recorded divergence: frozen resolves an unset `tuiMode` to
-            // `fullscreen`; Pike answers `regular` until #1024 flips the default.
-            CHECK(settings.get_tui_mode() == cch::coding_agent::TuiMode::Regular);
-        } else {
-            CHECK(settings.get_tui_mode() == *frozen_resolved);
-        }
+        // #1024 flipped the product default: an unset `tuiMode` now resolves
+        // fullscreen on Pike as well, matching the frozen resolution.
+        CHECK(settings.get_tui_mode() == *frozen_resolved);
     }
 }
 
@@ -233,7 +229,7 @@ TEST_CASE("frozen --tui-mode over stored setting resolves through Pike precedenc
 
     cch::tests::TempWorkspace workspace;
     const auto agent_dir = workspace.path() / "agent";
-    std::size_t default_flip_rows = 0;
+    std::size_t default_rows = 0;
     for (const auto& resolution : resolutions.get_array()) {
         const auto& frozen_cli = resolution.at("cliTuiMode");
         const auto& stored_file = resolution.at("storedFile");
@@ -265,15 +261,16 @@ TEST_CASE("frozen --tui-mode over stored setting resolves through Pike precedenc
         REQUIRE(frozen_resolved.has_value());
         const auto selected = cch::cli::select_tui_mode(config, settings);
         if (stored_file.holds<std::nullptr_t>() && frozen_cli.holds<std::nullptr_t>()) {
-            // The single recorded divergence: unset flag over unset setting.
-            ++default_flip_rows;
-            CHECK(selected == cch::coding_agent::TuiMode::Regular);
+            // #1024 flipped the one recorded divergence: unset flag over unset
+            // setting now resolves the frozen fullscreen default.
+            ++default_rows;
+            CHECK(selected == cch::coding_agent::TuiMode::Fullscreen);
             CHECK(*frozen_resolved == cch::coding_agent::TuiMode::Fullscreen);
         } else {
             CHECK(selected == *frozen_resolved);
         }
     }
-    // Keeps the divergence from spreading silently: only the unset/unset row
-    // may differ, and #1024 is where that one flips.
-    CHECK(default_flip_rows == 1);
+    // The unset/unset row is still exercised; no row may diverge from the
+    // frozen resolution now that #1024 flipped the default.
+    CHECK(default_rows == 1);
 }

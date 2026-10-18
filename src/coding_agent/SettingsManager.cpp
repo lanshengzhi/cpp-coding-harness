@@ -1307,13 +1307,13 @@ support::ExpectedVoid SettingsManager::set_fullscreen_wheel_scroll_lines(Fullscr
 
 TuiMode SettingsManager::get_tui_mode() const noexcept {
     // pi `getTuiMode`: `this.settings.tuiMode === "regular" ? "regular" :
-    // "fullscreen"`, with one named divergence: pi's unset default is
-    // fullscreen and this product's is regular until #1024 (T78) flips it.
+    // "fullscreen"`. #1024 (T78) flipped the unset default to fullscreen, so
+    // the resolution now matches pi with no divergence.
     const auto& stored = impl_->merged_settings.tui_mode;
     if (stored) {
         return *stored == "regular" ? TuiMode::Regular : TuiMode::Fullscreen;
     }
-    return TuiMode::Regular;
+    return TuiMode::Fullscreen;
 }
 
 support::ExpectedVoid SettingsManager::set_tui_mode(TuiMode mode) {

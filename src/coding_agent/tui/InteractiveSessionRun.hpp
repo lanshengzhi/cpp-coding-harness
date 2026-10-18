@@ -142,9 +142,11 @@ private:
 
     struct State {
         runtime::InteractiveSessionFacts session_facts{};
-        /// pi interactive-mode.ts:604 resolution result; defaults to the
-        /// product default (regular; #1024 flips it) for a run assembled
-        /// without an explicit choice.
+        /// pi interactive-mode.ts:604 resolution result. This assembly fallback
+        /// (regular) serves runs built without an explicit choice — tests and
+        /// library callers; the production resolver always supplies
+        /// `cch::cli::select_tui_mode`'s result, whose unset default is the
+        /// frozen fullscreen mode (#1024).
         coding_agent::TuiMode tui_mode{coding_agent::TuiMode::Regular};
         std::filesystem::path agent_config_directory{};
         std::optional<std::string> initial_prompt{std::nullopt};

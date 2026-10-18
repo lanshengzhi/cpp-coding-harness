@@ -735,8 +735,8 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
     CHECK(WEXITSTATUS(status) == 0);
 }
 
-TEST_CASE("CLI --tui-mode launches the requested Native TUI root on a real terminal",
-        "[cli][tui-mode][fullscreen][issue1017][spec]") {
+TEST_CASE("CLI --tui-mode launches the requested Native TUI root and the no-option default is fullscreen",
+        "[cli][tui-mode][fullscreen][issue1017][issue1024][spec]") {
     cch::tests::TempWorkspace workspace;
     // A fresh HOME keeps ambient user configuration out of the run: the boot
     // settles on pi's no-models warning screen, whose footer carries the
@@ -795,6 +795,15 @@ TEST_CASE("CLI --tui-mode launches the requested Native TUI root on a real termi
         const auto output = boot_and_exit({"--tui-mode", "regular"});
         CHECK(output.find("\x1b[?1049h") == std::string::npos);
         CHECK(output.find(workspace.path().string()) != std::string::npos);
+    }
+    {
+        // #1024: with no flag and no stored setting, the product default
+        // resolves fullscreen, so the assembled root owns the alternate buffer
+        // before the boot screen exactly like the explicit fullscreen branch.
+        const auto output = boot_and_exit({});
+        const auto enter_alternate = output.find("\x1b[?1049h");
+        REQUIRE(enter_alternate != std::string::npos);
+        CHECK(enter_alternate < output.find(workspace.path().string()));
     }
 }
 

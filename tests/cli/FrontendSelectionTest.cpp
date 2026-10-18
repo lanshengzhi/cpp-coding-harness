@@ -51,12 +51,12 @@ TEST_CASE(
     explicit_regular.tui_mode = coding_agent::TuiMode::Regular;
     CHECK(cli::select_tui_mode(explicit_regular, stored_fullscreen) == coding_agent::TuiMode::Regular);
 
-    // Neither the flag nor the setting: the product default, which the T78
-    // default flip (#1024) moves to fullscreen.
+    // Neither the flag nor the setting: the #1024 product default is the
+    // frozen resolution, fullscreen.
     workspace.write("agent/settings.json", R"({})");
     auto unset = coding_agent::SettingsManager::create(cwd, agent_dir, /* project_trusted */ false);
     REQUIRE(unset.errors().empty());
-    CHECK(cli::select_tui_mode(cli::CliConfig{}, unset) == coding_agent::TuiMode::Regular);
+    CHECK(cli::select_tui_mode(cli::CliConfig{}, unset) == coding_agent::TuiMode::Fullscreen);
 }
 
 TEST_CASE("text mode leaves terminal-based frontend selection unchanged", "[cli][selection][issue64][spec]") {

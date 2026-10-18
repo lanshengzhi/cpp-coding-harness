@@ -916,16 +916,16 @@ TEST_CASE("SettingsManager resolves pi's codemode mode and inline budget",
     CHECK(unknown.codemode_mode() == "on");
 }
 
-TEST_CASE("SettingsManager resolves tuiMode with the unset default recorded as regular",
-        "[settings][two-scope][issue1017][spec]") {
+TEST_CASE("SettingsManager resolves tuiMode with the frozen unset default fullscreen",
+        "[settings][two-scope][issue1017][issue1024][spec]") {
     SettingsDirs dirs;
     dirs.write_global(R"({"theme":"dark"})");
     auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
 
-    // Frozen pi `getTuiMode` defaults an unset key to fullscreen and Pike keeps
-    // the regular root: the T78 default flip (#1024) changes this one case.
+    // #1024 (T78) flipped the unset default: the resolution now matches the
+    // frozen `getTuiMode` behavior, fullscreen.
     CHECK_FALSE(manager.settings().tui_mode.has_value());
-    CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Regular);
+    CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Fullscreen);
 
     for (const auto& [stored, expected] : std::array{
                  std::pair<std::string_view, coding_agent::TuiMode>{"regular", coding_agent::TuiMode::Regular},
@@ -981,8 +981,9 @@ TEST_CASE("SettingsManager tuiMode write suppresses on a global load failure",
     REQUIRE_FALSE(manager.errors().empty());
     REQUIRE(manager.set_tui_mode(coding_agent::TuiMode::Fullscreen));
     // A scope whose load failed suppresses writes to that scope (pi), and the
-    // in-memory view does not advance either.
-    CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Regular);
+    // in-memory view does not advance either: the resolution falls back to the
+    // #1024 fullscreen default.
+    CHECK(manager.get_tui_mode() == coding_agent::TuiMode::Fullscreen);
 }
 
 TEST_CASE("SettingsManager loads showHardwareCursor with explicit false vs env fallback",
