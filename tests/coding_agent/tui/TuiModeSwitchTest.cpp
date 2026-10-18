@@ -1636,12 +1636,31 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     CHECK(indicator->row == terminal.dimensions().rows - 8);
     CHECK(indicator->column == kFrozenIndicatorColumn);
     CHECK(indicator->width == kFrozenIndicatorWidth);
-    tui::TerminalStyle kFrozenIndicatorStyle{};
-    kFrozenIndicatorStyle.bg_color = "48;2;26;45;66";
-    for (const auto& cell :
-            std::span{terminal.cells().at(indicator->row)}.subspan(indicator->column, indicator->width)) {
-        CHECK(cell.style.bg_color == kFrozenIndicatorStyle.bg_color);
-    }
+    // Frozen pi's scrollToEndIndicator composes background(SelectedBg,
+    // foreground(Text, label)). This fixture resolves Text to the terminal
+    // default and SelectedBg to #1a2d42, so the complete frozen cell style has
+    // only the canonical truecolor background set; all attributes, foreground,
+    // and OSC 8 fields are empty/default.
+    const tui::TerminalStyle kFrozenIndicatorStyle{
+            .bold = false,
+            .dim = false,
+            .italic = false,
+            .underline = false,
+            .blink = false,
+            .inverse = false,
+            .hidden = false,
+            .strikethrough = false,
+            .fg_color = "",
+            .bg_color = "48;2;26;45;66",
+            .hyperlink = "",
+            .hyperlink_params = "",
+    };
+    const auto check_indicator_style = [&terminal, &kFrozenIndicatorStyle](const CellTextPosition& position) {
+        for (const auto& cell : std::span{terminal.cells().at(position.row)}.subspan(position.column, position.width)) {
+            CHECK(cell.style == kFrozenIndicatorStyle);
+        }
+    };
+    check_indicator_style(*indicator);
 
     // Swap both renderers directly, without submitting a message or adding the
     // settings flow's status line. The label must survive at the same position.
@@ -1663,6 +1682,7 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     CHECK(switched_indicator->row == indicator->row);
     CHECK(switched_indicator->column == indicator->column);
     CHECK(switched_indicator->width == indicator->width);
+    check_indicator_style(*switched_indicator);
     // The direct-launch frame above pins the frozen style. Renderer switching
     // retains the label geometry and text while reapplying the live palette.
     // Following is resumed by the same affordance's gate: jump to the bottom
