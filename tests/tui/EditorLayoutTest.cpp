@@ -341,7 +341,7 @@ TEST_CASE("EditorLayout places wrapped line-end cursor after a wrap-boundary tra
 TEST_CASE("EditorLayout places wrapped line-end cursor after a mid-line trailing space",
         "[tui][editor][layout][cursor][wrapping][issue811][spec]") {
     BufferDocument doc{BufferLine{}};
-    for (const char character : std::string_view{"word word"})
+    for (const auto& character : std::string_view{"word word"})
         doc[0].push_back(BufferSegment{.text = std::string(1, character)});
     const auto layout = EditorLayout::compute(EditorLayoutOptions{
             .document = &doc,
