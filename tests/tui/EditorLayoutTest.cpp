@@ -303,3 +303,112 @@ TEST_CASE("EditorLayout computes visual cursor position with scrolling and handl
             EditorLayout::compute_cursor_position(buffer.document(), {}, BufferCursor{.line = 0, .column = 0}, 0, 0, 2);
     CHECK_FALSE(empty_pos.has_value());
 }
+
+// Frozen pi v1.0.4 (real-terminal DSR evidence, issue #811 / #1021): a wrapped
+// draft ending in a trailing space keeps the cursor counted one column past the
+// rendered row width. pi clamps the rendered cursor to the chunk text only for
+// non-last wrapped chunks (editor.ts layoutText/cursorPos); on the last chunk
+// the buffer cursor keeps its position even where wrapping trimmed the
+// whitespace from the rendered row. The 200-char and 1200-char drafts measured
+// one DSR cell further right (41/81 vs 40/80) at 83x40.
+TEST_CASE("EditorLayout places wrapped line-end cursor after a wrap-boundary trailing space",
+        "[tui][editor][layout][cursor][wrapping][issue811][spec]") {
+    // "word " x 12 = 60 graphemes; layout width 10 -> 6 wrapped rows of
+    // "word word" (9 visible) with one boundary space dropped per row.
+    BufferDocument doc{BufferLine{}};
+    for (std::size_t index = 0; index < 60; ++index) {
+        doc[0].push_back(BufferSegment{.text = std::string(1, (index % 5 == 4) ? ' ' : "word"[index % 5])});
+    }
+
+    const auto layout = EditorLayout::compute(EditorLayoutOptions{
+            .document = &doc,
+            .cursor = BufferCursor{.line = 0, .column = 60},
+            .width = 11,
+    });
+    REQUIRE(layout);
+    // The draft resolves to six wrapped rows and the cursor row is the last
+    // visible wrapped row; the column is the discriminating assertion.
+    REQUIRE(layout->lines.size() == 6);
+    CHECK(layout->lines[5] == "word word\x1b[7m \x1b[27m ");
+    CHECK(layout->cursor_position.has_value());
+    CHECK(layout->cursor_position->row == 5);
+    // Frozen: the cursor column counts the trailing space the wrap boundary
+    // dropped from the rendered row (one past the 9 visible cells), not the
+    // trimmed 9.
+    CHECK(layout->cursor_position->column == 10);
+}
+
+TEST_CASE("EditorLayout places wrapped line-end cursor after a mid-line trailing space",
+        "[tui][editor][layout][cursor][wrapping][issue811][spec]") {
+    BufferDocument doc{BufferLine{}};
+    for (const char character : std::string_view{"word word"})
+        doc[0].push_back(BufferSegment{.text = std::string(1, character)});
+    const auto layout = EditorLayout::compute(EditorLayoutOptions{
+            .document = &doc,
+            .cursor = BufferCursor{.line = 0, .column = 5},
+            .width = 12,
+    });
+    REQUIRE(layout);
+    REQUIRE(layout->lines.size() == 1);
+    CHECK(layout->cursor_position.has_value());
+    CHECK(layout->cursor_position->row == 0);
+    CHECK(layout->cursor_position->column == 5);
+}
+
+TEST_CASE("EditorLayout keeps wrapped cursor columns for drafts without a line-end trailing space",
+        "[tui][editor][layout][cursor][wrapping][issue811][spec]") {
+    // "word " x 11 + "word" = 59 graphemes, same layout width: six rows, the
+    // last row is exactly "word word" with no trailing space to count.
+    BufferDocument doc{BufferLine{}};
+    for (std::size_t index = 0; index < 59; ++index) {
+        doc[0].push_back(BufferSegment{.text = std::string(1, (index % 5 == 4) ? ' ' : "word"[index % 5])});
+    }
+
+    // Line-end cursor: the column stays at the rendered row width (frozen
+    // clamps nothing here either - there is no dropped whitespace to count).
+    const auto end_layout = EditorLayout::compute(EditorLayoutOptions{
+            .document = &doc,
+            .cursor = BufferCursor{.line = 0, .column = 59},
+            .width = 11,
+    });
+    REQUIRE(end_layout);
+    REQUIRE(end_layout->lines.size() == 6);
+    CHECK(end_layout->lines[5] == "word word\x1b[7m \x1b[27m ");
+    CHECK(end_layout->cursor_position.has_value());
+    CHECK(end_layout->cursor_position->row == 5);
+    CHECK(end_layout->cursor_position->column == 9);
+
+    // Mid-buffer cursor right after a wrapped row's own content: the column
+    // stays at the dropped boundary space's cell and does not advance a row.
+    const auto boundary_layout = EditorLayout::compute(EditorLayoutOptions{
+            .document = &doc,
+            .cursor = BufferCursor{.line = 0, .column = 19},
+            .width = 11,
+    });
+    REQUIRE(boundary_layout);
+    CHECK(boundary_layout->cursor_position.has_value());
+    CHECK(boundary_layout->cursor_position->row == 1);
+    CHECK(boundary_layout->cursor_position->column == 9);
+
+    // Cursor before the drafted grapheme preceding the boundary space.
+    const auto before_layout = EditorLayout::compute(EditorLayoutOptions{
+            .document = &doc,
+            .cursor = BufferCursor{.line = 0, .column = 18},
+            .width = 11,
+    });
+    REQUIRE(before_layout);
+    CHECK(before_layout->cursor_position.has_value());
+    CHECK(before_layout->cursor_position->row == 1);
+    CHECK(before_layout->cursor_position->column == 8);
+
+    // Cursor at the next wrapped row's first grapheme: row restart at column 0.
+    const auto after_layout = EditorLayout::compute(EditorLayoutOptions{
+            .document = &doc,
+            .cursor = BufferCursor{.line = 0, .column = 20},
+            .width = 11,
+    });
+    REQUIRE(after_layout);
+    CHECK(after_layout->cursor_position.has_value());
+    CHECK(after_layout->cursor_position->row == 2);
+    CHECK(after_layout->cursor_position->column == 0);
+}

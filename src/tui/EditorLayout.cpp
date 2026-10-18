@@ -327,7 +327,9 @@ std::optional<CursorPosition> EditorLayout::compute_cursor_position(const Buffer
                 col += visible_width(line[i].text);
             }
         }
-        col = std::min(col, vl_text_width);
+        const bool has_next_wrapped_line =
+                visual_row + 1 < visual.size() && visual[visual_row + 1].logical_line == vl.logical_line;
+        if (has_next_wrapped_line) col = std::min(col, vl_text_width);
     }
     return CursorPosition{.column = col + left_padding, .row = display_row};
 }
