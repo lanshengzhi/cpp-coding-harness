@@ -330,7 +330,7 @@ TEST_CASE("EditorLayout places wrapped line-end cursor after a wrap-boundary tra
     // visible wrapped row; the column is the discriminating assertion.
     REQUIRE(layout->lines.size() == 6);
     CHECK(layout->lines[5] == "word word\x1b[7m \x1b[27m ");
-    CHECK(layout->cursor_position.has_value());
+    REQUIRE(layout->cursor_position.has_value());
     CHECK(layout->cursor_position->row == 5);
     // Frozen: the cursor column counts the trailing space the wrap boundary
     // dropped from the rendered row (one past the 9 visible cells), not the
@@ -350,7 +350,7 @@ TEST_CASE("EditorLayout places wrapped line-end cursor after a mid-line trailing
     });
     REQUIRE(layout);
     REQUIRE(layout->lines.size() == 1);
-    CHECK(layout->cursor_position.has_value());
+    REQUIRE(layout->cursor_position.has_value());
     CHECK(layout->cursor_position->row == 0);
     CHECK(layout->cursor_position->column == 5);
 }
@@ -374,7 +374,7 @@ TEST_CASE("EditorLayout keeps wrapped cursor columns for drafts without a line-e
     REQUIRE(end_layout);
     REQUIRE(end_layout->lines.size() == 6);
     CHECK(end_layout->lines[5] == "word word\x1b[7m \x1b[27m ");
-    CHECK(end_layout->cursor_position.has_value());
+    REQUIRE(end_layout->cursor_position.has_value());
     CHECK(end_layout->cursor_position->row == 5);
     CHECK(end_layout->cursor_position->column == 9);
 
@@ -386,7 +386,7 @@ TEST_CASE("EditorLayout keeps wrapped cursor columns for drafts without a line-e
             .width = 11,
     });
     REQUIRE(boundary_layout);
-    CHECK(boundary_layout->cursor_position.has_value());
+    REQUIRE(boundary_layout->cursor_position.has_value());
     CHECK(boundary_layout->cursor_position->row == 1);
     CHECK(boundary_layout->cursor_position->column == 9);
 
@@ -397,7 +397,7 @@ TEST_CASE("EditorLayout keeps wrapped cursor columns for drafts without a line-e
             .width = 11,
     });
     REQUIRE(before_layout);
-    CHECK(before_layout->cursor_position.has_value());
+    REQUIRE(before_layout->cursor_position.has_value());
     CHECK(before_layout->cursor_position->row == 1);
     CHECK(before_layout->cursor_position->column == 8);
 
@@ -408,7 +408,7 @@ TEST_CASE("EditorLayout keeps wrapped cursor columns for drafts without a line-e
             .width = 11,
     });
     REQUIRE(after_layout);
-    CHECK(after_layout->cursor_position.has_value());
+    REQUIRE(after_layout->cursor_position.has_value());
     CHECK(after_layout->cursor_position->row == 2);
     CHECK(after_layout->cursor_position->column == 0);
 }
