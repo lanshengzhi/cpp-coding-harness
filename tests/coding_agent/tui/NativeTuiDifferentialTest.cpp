@@ -356,10 +356,64 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
     return false;
 }
 
+[[nodiscard]] std::optional<std::size_t> row_containing(
+        const std::vector<std::string>& rows, std::string_view expected) {
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        if (rows[index].find(expected) != std::string::npos) return index;
+    }
+    return std::nullopt;
+}
+
+void check_editor_workspace_footer_composition(
+        const tui::VirtualTerminal& terminal, std::string_view scenario, const std::vector<std::string>& inputs) {
+    const auto rows = terminal.screen();
+    const auto first_draft_marker = scenario == "editor-long"    ? std::string_view{"A long editor line"}
+                                    : scenario == "editor-token" ? std::string_view{"UNBREAKABLE_TOKEN_"}
+                                                                 : std::string_view{inputs[0]};
+    const auto final_draft_marker = scenario == "editor-long"    ? std::string_view{"suffix"}
+                                    : scenario == "editor-token" ? std::string_view{"wxyz0123456789"}
+                                                                 : std::string_view{inputs[0]};
+    const auto first_draft_row = row_containing(rows, first_draft_marker);
+    const auto final_draft_row = row_containing(rows, final_draft_marker);
+    const auto workspace_row = row_containing(rows, scenario);
+    const auto footer_row = row_containing(rows, "/128k (auto)");
+
+    REQUIRE(first_draft_row.has_value());
+    REQUIRE(final_draft_row.has_value());
+    REQUIRE(workspace_row.has_value());
+    REQUIRE(footer_row.has_value());
+    REQUIRE(*first_draft_row > 0);
+    REQUIRE(*final_draft_row + 1 < rows.size());
+
+    // The frozen report.json post-input rows for editor-long, editor-cjk and
+    // editor-token have this border/draft/border/workspace/footer order. Compare
+    // only that region: boot-72 records the separate shared-header difference
+    // tracked by #806, so it cannot satisfy these composition assertions.
+    CHECK(rows[*first_draft_row - 1].find("─") != std::string::npos);
+    CHECK(rows[*final_draft_row + 1].find("─") != std::string::npos);
+    CHECK(*workspace_row == *final_draft_row + 2);
+    CHECK(*footer_row == *workspace_row + 1);
+    CHECK(rows[*footer_row].find("thinking off") != std::string::npos);
+
+    if (scenario == "editor-long") {
+        CHECK(*final_draft_row == *first_draft_row + 1);
+        CHECK(rows[*first_draft_row].find("A long editor line that must wrap without losing the fixture-authored") !=
+                std::string::npos);
+    }
+    if (scenario == "editor-cjk") {
+        CHECK(*first_draft_row == *final_draft_row);
+        CHECK(rows[*first_draft_row].find(inputs[0]) != std::string::npos);
+    }
+    if (scenario == "editor-token") {
+        CHECK(*final_draft_row == *first_draft_row + 1);
+        CHECK(rows[*first_draft_row].find("UNBREAKABLE_TOKEN_abcdefghijklmnopqrstuv") != std::string::npos);
+    }
+}
+
 } // namespace
 
 TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and ANSI",
-        "[coding_agent][tui][differential][issue797][issue800][spec]") {
+        "[coding_agent][tui][differential][issue797][issue800][issue811][spec]") {
     const auto scenario = environment_or_empty("CCH_DIFFERENTIAL_SCENARIO");
     if (scenario.empty()) SKIP("dual-runtime capture environment is not selected");
     const auto width = parse_size(environment_or_empty("CCH_DIFFERENTIAL_WIDTH"));
@@ -484,6 +538,9 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
             }
         }
         drain_ready(io, std::chrono::milliseconds{20});
+        if (input_index == 0 && (scenario == "editor-long" || scenario == "editor-cjk" || scenario == "editor-token")) {
+            check_editor_workspace_footer_composition(terminal, scenario, inputs);
+        }
         snapshots.push_back(snapshot(terminal, output_offset));
         output_offset = output_size(terminal);
     }
