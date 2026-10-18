@@ -159,8 +159,7 @@ struct LongRowShape {
     return {};
 }
 
-[[nodiscard]] tests::ModelsSessionOptions session_options(
-        const tests::TempWorkspace& workspace,
+[[nodiscard]] tests::ModelsSessionOptions session_options(const tests::TempWorkspace& workspace,
         std::shared_ptr<tests::ScriptedProvider> client,
         coding_agent::SessionTarget session_target = coding_agent::InMemorySessionTarget{}) {
     tests::ModelsSessionOptions options;
@@ -698,9 +697,8 @@ TEST_CASE("Native TUI fullscreen Ctrl+X reports the no-assistant-message fallbac
     CHECK(run.actions->write_clipboard.back().text == "fallback");
 
     REQUIRE(run.terminal.inject_input("\x18"));
-    REQUIRE(pump_until(run.io, [&] {
-        return visible_screen(run.terminal).find("No agent messages to copy yet.") != std::string::npos;
-    }));
+    REQUIRE(pump_until(run.io,
+            [&] { return visible_screen(run.terminal).find("No agent messages to copy yet.") != std::string::npos; }));
     // The fall-through reported the diagnostic instead of copying the selection
     // again.
     CHECK(run.actions->write_clipboard.size() == 1);
@@ -798,15 +796,13 @@ TEST_CASE("Native TUI fullscreen runtime apply and mode switch keep the resolved
     REQUIRE(switched);
     CHECK(*switched == after_regular.at("result").get_boolean());
     REQUIRE(pump_until(run.io, [&] {
-        return run.terminal.modes().alternate_screen ==
-                (after_regular.at("rendererMode").get_string() == "fullscreen");
+        return run.terminal.modes().alternate_screen == (after_regular.at("rendererMode").get_string() == "fullscreen");
     }));
     switched = run.engine->switch_tui_mode(mode_of(after_back.at("optionsTuiMode")));
     REQUIRE(switched);
     CHECK(*switched == after_back.at("result").get_boolean());
     REQUIRE(pump_until(run.io, [&] {
-        return run.terminal.modes().alternate_screen ==
-                (after_back.at("rendererMode").get_string() == "fullscreen");
+        return run.terminal.modes().alternate_screen == (after_back.at("rendererMode").get_string() == "fullscreen");
     }));
     REQUIRE(pump_until(run.io, [&] { return scrollbar_rows(run.terminal) > 0; }));
 
@@ -828,16 +824,16 @@ TEST_CASE("Native TUI fullscreen exit-output row persists resume-hint over the s
     // Run A: the default transcript policy transfers the transcript to the main
     // buffer on exit.
     {
-        FullscreenRun run(R"({"tuiMode": "regular", "fullscreenExitOutput": "transcript"})", {.columns = 80, .rows = 24});
+        FullscreenRun run(
+                R"({"tuiMode": "regular", "fullscreenExitOutput": "transcript"})", {.columns = 80, .rows = 24});
         run.session_target = coding_agent::DefaultPersistedSessionTarget{};
         REQUIRE(run.terminal.seed_shell_content({"Existing main buffer line"}, {.column = 0, .row = 0}));
         run.start();
         // The explicit typed fullscreen run wins over the stored regular mode.
         CHECK(run.terminal.modes().alternate_screen);
         REQUIRE(run.terminal.inject_input("exit-policy-prompt\r"));
-        REQUIRE(pump_until(run.io, [&] {
-            return visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos;
-        }));
+        REQUIRE(pump_until(run.io,
+                [&] { return visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos; }));
         close_run(run);
         CHECK_FALSE(run.terminal.modes().alternate_screen);
         CHECK(visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos);
@@ -848,14 +844,14 @@ TEST_CASE("Native TUI fullscreen exit-output row persists resume-hint over the s
     // Run B: cycling the exit-output row to resume-hint changes the actual exit
     // output while the stored TUI mode stays regular.
     {
-        FullscreenRun run(R"({"tuiMode": "regular", "fullscreenExitOutput": "transcript"})", {.columns = 80, .rows = 24});
+        FullscreenRun run(
+                R"({"tuiMode": "regular", "fullscreenExitOutput": "transcript"})", {.columns = 80, .rows = 24});
         run.session_target = coding_agent::DefaultPersistedSessionTarget{};
         REQUIRE(run.terminal.seed_shell_content({"Existing main buffer line"}, {.column = 0, .row = 0}));
         run.start();
         REQUIRE(run.terminal.inject_input("exit-policy-prompt\r"));
-        REQUIRE(pump_until(run.io, [&] {
-            return visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos;
-        }));
+        REQUIRE(pump_until(run.io,
+                [&] { return visible_screen(run.terminal).find("fake: exit-policy-prompt") != std::string::npos; }));
 
         focus_settings_row(run.terminal, run.io, 8, "Print the transcript");
         REQUIRE(run.terminal.inject_input("\r")); // transcript -> resume-hint

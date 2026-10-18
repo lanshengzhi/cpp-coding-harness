@@ -241,9 +241,13 @@ struct EvidenceSettingsWorkspace {
     cch::tests::TempWorkspace workspace;
     std::filesystem::path agent_dir{workspace.path() / "agent"};
 
-    void write_global(const JsonValue& settings) const { workspace.write("agent/settings.json", serialize_json(settings)); }
+    void write_global(const JsonValue& settings) const {
+        workspace.write("agent/settings.json", serialize_json(settings));
+    }
     void write_global_text(std::string text) const { workspace.write("agent/settings.json", std::move(text)); }
-    void write_project(const JsonValue& settings) const { workspace.write(".pi/settings.json", serialize_json(settings)); }
+    void write_project(const JsonValue& settings) const {
+        workspace.write(".pi/settings.json", serialize_json(settings));
+    }
 
     [[nodiscard]] coding_agent::SettingsManager manager() const {
         return coding_agent::SettingsManager::create(workspace.path(), agent_dir, /* project_trusted */ true);
@@ -286,8 +290,7 @@ struct EvidenceSettingsWorkspace {
 void check_resolved_getters(const coding_agent::SettingsManager& manager, const JsonValue& expected) {
     CHECK(product_scrollbar_name(manager.get_fullscreen_scrollbar()) ==
             expected.at("fullscreenScrollbar").at("value").get_string());
-    CHECK(manager.get_fullscreen_copy_on_select() ==
-            expected.at("fullscreenCopyOnSelect").at("truthy").get_boolean());
+    CHECK(manager.get_fullscreen_copy_on_select() == expected.at("fullscreenCopyOnSelect").at("truthy").get_boolean());
     CHECK(wheel_spelling(manager.get_fullscreen_wheel_scroll_lines()) ==
             value_spelling(expected.at("fullscreenWheelScrollLines").at("value")));
 }
@@ -299,7 +302,8 @@ void check_resolved_getters(const coding_agent::SettingsManager& manager, const 
 
 /// The resolution-matrix case a downstream scenario names for its raw inputs.
 [[nodiscard]] const JsonValue& resolution_case_of(const JsonValue& bundle, std::string_view name) {
-    for (const auto& recorded : scenario_of(bundle, "settings-resolution-matrix").at("inputs").at("cases").get_array()) {
+    for (const auto& recorded :
+            scenario_of(bundle, "settings-resolution-matrix").at("inputs").at("cases").get_array()) {
         if (recorded.at("name").get_string() == name) return recorded;
     }
     REQUIRE(false);
@@ -805,7 +809,7 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence replays the scrollbar re
             CHECK(requests == size_of(recorded_case.at("setScrollbarSameValueRequestRenderDelta")));
             probe.set_scrollbar(cch::tui::ScrollbarMode::Hidden);
             CHECK(requests == size_of(recorded_case.at("setScrollbarSameValueRequestRenderDelta")) +
-                                    size_of(recorded_case.at("setScrollbarChangedValueRequestRenderDelta")));
+                                      size_of(recorded_case.at("setScrollbarChangedValueRequestRenderDelta")));
         }
 
         // One scroll step: `auto` reveals its transient bar, `always` keeps it
@@ -939,7 +943,9 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence replays the wheel accele
             {"resolvedFixedFive", numeric_setting(5), "5"},
             {"resolvedInvalidZero", numeric_setting(0), "1"},
             {"resolvedAuto", JsonValue{JsonValue::object_t{{"fullscreenWheelScrollLines", JsonValue{"auto"}}}}, "auto"},
-            {"resolvedInvalidString", JsonValue{JsonValue::object_t{{"fullscreenWheelScrollLines", JsonValue{"5"}}}}, "auto"},
+            {"resolvedInvalidString",
+                    JsonValue{JsonValue::object_t{{"fullscreenWheelScrollLines", JsonValue{"5"}}}},
+                    "auto"},
     };
     for (const auto& row : resolved) {
         INFO(row.name);
@@ -1231,11 +1237,11 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence replays the applied mode
     // absolute start (33) for the 20x10 product viewport, the same start
     // scenario 6's resolved rows record.
     const auto recorded_start = size_of(scenario_of(*bundle, "wheel-settings-fixed-vs-auto")
-                                               .at("expected")
-                                               .at("resolvedFixedFive")
-                                               .at("deltas")
-                                               .get_array()[0]
-                                               .at("before"));
+                    .at("expected")
+                    .at("resolvedFixedFive")
+                    .at("deltas")
+                    .get_array()[0]
+                    .at("before"));
     transcript->scroll_to(static_cast<std::ptrdiff_t>(recorded_start));
     REQUIRE(screen.render());
     CHECK(transcript->scroll_top() == recorded_start);
