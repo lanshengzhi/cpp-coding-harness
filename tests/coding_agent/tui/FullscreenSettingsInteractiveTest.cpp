@@ -35,6 +35,7 @@
 #include <boost/asio/use_awaitable.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cstddef>
 #include <filesystem>
 #include <fstream>
@@ -242,10 +243,11 @@ void close_settings(tui::VirtualTerminal& terminal, boost::asio::io_context& io,
     REQUIRE_FALSE(visible_screen(terminal).find(description) != std::string::npos);
 }
 
-/// One wheel-down notch over the row that shows `needle` (mouse reports are
-/// 1-based): the row under the marker is inside the transcript region, whose
-/// position in the fullscreen layout varies with the terminal size.
-void wheel_notch(tui::VirtualTerminal& terminal, std::string_view needle) {
+/// One wheel notch over the row that shows `needle` (mouse reports are
+/// 1-based): button 64 scrolls up (older content), 65 down (newer). The row
+/// under the marker is inside the transcript region, whose position in the
+/// fullscreen layout varies with the terminal size.
+void wheel_notch(tui::VirtualTerminal& terminal, std::string_view needle, int button = 64) {
     const auto& screen = terminal.screen();
     std::size_t row = 0;
     for (; row < screen.size(); ++row) {
@@ -253,7 +255,7 @@ void wheel_notch(tui::VirtualTerminal& terminal, std::string_view needle) {
     }
     REQUIRE(row < screen.size());
     const auto y = std::to_string(row + 1);
-    REQUIRE(terminal.inject_input("\x1b[<64;5;" + y + "M"));
+    REQUIRE(terminal.inject_input("\x1b[<" + std::to_string(button) + ";5;" + y + "M"));
 }
 
 /// Drag-select `length` cells starting at the first `needle` cell of the row
@@ -328,6 +330,67 @@ void close_run(FullscreenRun& run) {
     REQUIRE(pump_until(run.io, [&] { return run.run_result.has_value(); }));
     REQUIRE(run.run_result);
     CHECK(*run.run_result);
+}
+
+/// pi `/reload` completion status (`SessionFlowController::handle_reload`):
+/// the visible proof that the asynchronous session reload finished, applied its
+/// result and restored the editor. The plain and `; saved project trust`
+/// spellings share this prefix.
+inline constexpr std::string_view kReloadCompleteStatus =
+        "Reloaded keybindings, skills, prompts, themes, and context files";
+
+[[nodiscard]] std::size_t count_occurrences(std::string_view haystack, std::string_view needle) {
+    std::size_t count = 0;
+    for (std::size_t pos = haystack.find(needle); pos != std::string_view::npos;
+            pos = haystack.find(needle, pos + needle.size())) {
+        ++count;
+    }
+    return count;
+}
+
+/// Wait for one `/reload` invocation to actually finish: a *new* completion
+/// status line and the restored editor that accepts a draft again.
+/// `prior_status_lines` is how many completion lines the viewport already
+/// showed, so a second reload is never satisfied by the first reload's still
+/// visible status (or by a transient `auto` scrollbar / reload overlay the
+/// premature probe waited on). A refusal (streaming or compacting session) and
+/// a `Reload failed` error fail here with their own text instead of timing
+/// out: these cases run a bound, non-streaming, non-compacting session with a
+/// scripted provider, so the real `/reload` path must admit them.
+std::chrono::steady_clock::time_point wait_for_reload_completion(FullscreenRun& run, std::size_t prior_status_lines) {
+    const auto finished = [&] {
+        const auto screen = visible_screen(run.terminal);
+        return count_occurrences(screen, kReloadCompleteStatus) > prior_status_lines ||
+               screen.find("Reload failed") != std::string::npos ||
+               screen.find("Wait for the current response to finish before reloading.") != std::string::npos ||
+               screen.find("Wait for compaction to finish before reloading.") != std::string::npos;
+    };
+    REQUIRE(pump_until(run.io, finished, std::chrono::milliseconds{30000}));
+    const auto screen = visible_screen(run.terminal);
+    REQUIRE(screen.find("Reload failed") == std::string::npos);
+    REQUIRE(screen.find("Wait for the current response to finish before reloading.") == std::string::npos);
+    REQUIRE(screen.find("Wait for compaction to finish before reloading.") == std::string::npos);
+    REQUIRE(count_occurrences(screen, kReloadCompleteStatus) > prior_status_lines);
+    const auto completed_at = std::chrono::steady_clock::now();
+
+    // `show_status` runs immediately before `restore_prompt_slot`, and only the
+    // restored editor renders a typed draft (the reload box owns the slot
+    // while the reload runs).
+    const std::string draft{"reload-draft"};
+    REQUIRE(run.terminal.inject_input(draft));
+    REQUIRE(pump_until(run.io, [&] { return visible_screen(run.terminal).find(draft) != std::string::npos; }));
+    REQUIRE(run.terminal.inject_input("\x03"));
+    REQUIRE(pump_until(run.io, [&] { return visible_screen(run.terminal).find(draft) == std::string::npos; }));
+    return completed_at;
+}
+
+/// Wait for the bound session to finish its run: `handle_reload` refuses while
+/// the session is streaming or compacting, so a `/reload` case must start from
+/// the settled fixture state.
+void settle_session(FullscreenRun& run) {
+    auto& session = *(*run.created)->session;
+    REQUIRE(pump_until(run.io, [&] { return !session.is_streaming() && !session.is_compacting(); }));
+    drain_ready(run.io);
 }
 
 } // namespace
@@ -477,6 +540,101 @@ TEST_CASE("Native TUI fullscreen hidden scrollbar persists, reloads and reserves
     const auto hidden_shape = long_row_shape(run.terminal, long_prefix);
     CHECK_FALSE(is_scrollbar_glyph(hidden_shape.last_grapheme));
     CHECK(hidden_shape.columns == always_shape.columns + 1);
+
+    close_run(run);
+}
+
+TEST_CASE("Native TUI fullscreen settings re-apply through a real /reload completion",
+        "[coding_agent][tui][fullscreen][reload][issue1020][spec]") {
+    // Boot with the artifact's `settingsBefore` consumer state (auto/true/auto).
+    FullscreenRun run(
+            R"({"tuiMode": "fullscreen", "fullscreenScrollbar": "auto", "fullscreenCopyOnSelect": true, "fullscreenWheelScrollLines": "auto"})");
+    run.start();
+    submit_turns(run.terminal, run.io, 12);
+    CHECK(scrollbar_rows(run.terminal) == 0);
+    settle_session(run);
+
+    // An external edit rewrites the resolved settings; `/reload` re-resolves
+    // them through the real session reload (`apply_reload_result` reloads the
+    // settings manager and applies the fullscreen consumers).
+    run.config.write("settings.json",
+            R"({"tuiMode": "fullscreen", "fullscreenScrollbar": "always", "fullscreenCopyOnSelect": false, "fullscreenWheelScrollLines": 5})");
+    REQUIRE(run.terminal.inject_input("/reload\r"));
+    const auto reloaded_at = wait_for_reload_completion(run, 0);
+
+    // always: a real bar, not the transient `auto` reveal the reload's status
+    // append arms. It must outlive the 1 s `auto` hide timer, so the check
+    // cannot be satisfied by the premature-completion artifact.
+    REQUIRE(pump_until(run.io, [&] { return scrollbar_rows(run.terminal) > 0; }));
+    REQUIRE(pump_until(
+            run.io,
+            [&] { return std::chrono::steady_clock::now() - reloaded_at >= std::chrono::milliseconds{1400}; },
+            std::chrono::milliseconds{5000}));
+    drain_ready(run.io);
+    CHECK(scrollbar_rows(run.terminal) > 0);
+
+    // copyOnSelect false: the release over a live selection copies nothing;
+    // the manual Ctrl+X path still copies the selection itself.
+    select_cells(run.terminal, run.io, "fake", 4);
+    CHECK(run.actions->write_clipboard.empty());
+    REQUIRE(run.terminal.inject_input("\x18"));
+    REQUIRE(pump_until(run.io, [&] { return !run.actions->write_clipboard.empty(); }));
+    CHECK(run.actions->write_clipboard.back().text == "fake");
+    run.actions->write_clipboard.clear();
+
+    // fixed 5: one notch moves the transcript window five lines, measured on
+    // the topmost visible turn. Two notches back return the view to the end.
+    const auto bottom_turn = topmost_fake_turn(content_rows(run.terminal));
+    const auto fixed_before = fake_turn_row(content_rows(run.terminal), bottom_turn);
+    REQUIRE(fixed_before.has_value());
+    wheel_notch(run.terminal, "fake: " + std::to_string(bottom_turn));
+    REQUIRE(pump_until(
+            run.io, [&] { return wheel_shift(content_rows(run.terminal), bottom_turn, *fixed_before).has_value(); }));
+    CHECK(wheel_shift(content_rows(run.terminal), bottom_turn, *fixed_before) == 5);
+    wheel_notch(run.terminal, "fake: " + std::to_string(bottom_turn), 65);
+    wheel_notch(run.terminal, "fake: " + std::to_string(bottom_turn), 65);
+    REQUIRE(pump_until(run.io, [&] { return topmost_fake_turn(content_rows(run.terminal)) == bottom_turn; }));
+
+    // A long unbroken user message measures the reserved bar column: with
+    // `always` the wrapped row gives the bar one column. The message also
+    // replaces the status tail, so the next completion appends a new status
+    // line instead of overwriting the first one.
+    const std::string long_text(90, 'x');
+    const auto long_prefix = long_text.substr(0, 40);
+    REQUIRE(run.terminal.inject_input(long_text + "\r"));
+    REQUIRE(pump_until(run.io, [&] { return visible_screen(run.terminal).find(long_prefix) != std::string::npos; }));
+    settle_session(run);
+    const auto always_shape = long_row_shape(run.terminal, long_prefix);
+    CHECK(is_scrollbar_glyph(always_shape.last_grapheme));
+
+    // A second external edit and reload: hidden/true/auto must reach the live
+    // consumers again.
+    run.config.write("settings.json",
+            R"({"tuiMode": "fullscreen", "fullscreenScrollbar": "hidden", "fullscreenCopyOnSelect": true, "fullscreenWheelScrollLines": "auto"})");
+    const auto prior_status_lines = count_occurrences(visible_screen(run.terminal), kReloadCompleteStatus);
+    REQUIRE(run.terminal.inject_input("/reload\r"));
+    wait_for_reload_completion(run, prior_status_lines);
+
+    // hidden: no bar and no reserved column; the same wrapped row keeps one
+    // more `x` in its last cell.
+    REQUIRE(pump_until(run.io, [&] { return scrollbar_rows(run.terminal) == 0; }));
+    const auto hidden_shape = long_row_shape(run.terminal, long_prefix);
+    CHECK_FALSE(is_scrollbar_glyph(hidden_shape.last_grapheme));
+    CHECK(hidden_shape.columns == always_shape.columns + 1);
+
+    // copyOnSelect true: the release copies the selection again.
+    select_cells(run.terminal, run.io, "fake", 4);
+    REQUIRE(pump_until(run.io, [&] { return !run.actions->write_clipboard.empty(); }));
+    CHECK(run.actions->write_clipboard.back().text == "fake");
+
+    // wheel auto: the first notch again moves one line.
+    const auto auto_turn = topmost_fake_turn(content_rows(run.terminal));
+    const auto auto_before = fake_turn_row(content_rows(run.terminal), auto_turn);
+    REQUIRE(auto_before.has_value());
+    wheel_notch(run.terminal, "fake: " + std::to_string(auto_turn));
+    REQUIRE(pump_until(
+            run.io, [&] { return wheel_shift(content_rows(run.terminal), auto_turn, *auto_before).has_value(); }));
+    CHECK(wheel_shift(content_rows(run.terminal), auto_turn, *auto_before) == 1);
 
     close_run(run);
 }
