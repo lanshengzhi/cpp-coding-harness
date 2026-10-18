@@ -1509,18 +1509,18 @@ TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mod
     REQUIRE(terminal.inject_input("\r"));
     REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: draft") != std::string::npos; }));
 
-    // The dock covers the last seven rows; the transcript window is everything
+    // The dock covers the last six rows; the transcript window is everything
     // above it. Wheel up over the transcript so it stops following the end.
     const auto follow_end = terminal.screen();
     REQUIRE(follow_end.size() == 20);
-    const std::vector<std::string> follow_end_window{follow_end.begin(), follow_end.end() - 7};
+    const std::vector<std::string> follow_end_window{follow_end.begin(), follow_end.end() - 6};
     for (int notch = 0; notch < 3; ++notch) {
         REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
     }
     drain_ready(io);
     const auto scrolled = terminal.screen();
     REQUIRE(scrolled.size() == 20);
-    const std::vector<std::string> scrolled_window{scrolled.begin(), scrolled.end() - 7};
+    const std::vector<std::string> scrolled_window{scrolled.begin(), scrolled.end() - 6};
     REQUIRE(scrolled_window.front() != follow_end_window.front());
 
     // Regular, then back to fullscreen through the settings row.
@@ -1547,12 +1547,23 @@ TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mod
     // renderer would have snapped the transcript back to its follow-end window.
     const auto after = terminal.screen();
     REQUIRE(after.size() == 20);
-    const std::vector<std::string> after_window{after.begin(), after.end() - 7};
+    const std::vector<std::string> after_window{after.begin(), after.end() - 6};
     // The switch appended the mode status below the window, so the bottom row
     // carries the viewport's "unseen tail" hint while every row above it is the
     // window the transcript was scrolled to. A rebuilt renderer would have
-    // snapped back to the follow-end window instead.
-    CHECK(std::equal(after_window.begin(), after_window.end() - 1, scrolled_window.begin()));
+    // snapped back to the follow-end window instead. The scrollbar cell is
+    // masked: the appended row changes the thumb geometry (length and track
+    // rounding), which is not a transcript-window change.
+    const auto mask_scrollbar = [](std::string_view row) -> std::string {
+        for (const std::string_view glyph : {std::string_view{"│"}, std::string_view{"┃"}}) {
+            if (row.ends_with(glyph)) return std::string{row.substr(0, row.size() - glyph.size())};
+        }
+        return std::string{row};
+    };
+    for (std::size_t row = 0; row + 1 < after_window.size(); ++row) {
+        INFO(std::format("row {} after=[{}] scrolled=[{}]", row, after_window[row], scrolled_window[row]));
+        CHECK(mask_scrollbar(after_window[row]) == mask_scrollbar(scrolled_window[row]));
+    }
     CHECK(after_window.back().find("Jump to latest message") != std::string::npos);
     CHECK(after_window != follow_end_window);
     close_settings(terminal, io);
@@ -1591,9 +1602,12 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     const std::string_view kScrollToEndLabel = " ↓ Jump to latest message · Ctrl+End ";
 
     tui::VirtualTerminal terminal({.columns = 83,
-            .rows = 42,
+            .rows = 40,
             .capabilities = {.synchronized_output = true, .color = tui::TerminalColorCapability::TrueColor}});
-    // Pike's idle status dock reserves nine rows; frozen pi reserves eight.
+    // Frozen real-kitty evidence (#1021 s4) is an 83x40 fullscreen session:
+    // a six-row dock (widget spacer, three editor rows, two footer rows)
+    // anchors below the transcript clip, and the scrolled label paints on the
+    // clip's last row, terminal line 34 (zero-based row 33).
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
     auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
@@ -1616,21 +1630,22 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     // While following the end the affordance must be absent: the gated hint
     // only belongs to a scrolled-away transcript, not to the follow-end frame.
     const auto screen = terminal.screen();
-    REQUIRE(screen.size() == 42);
+    REQUIRE(screen.size() == 40);
     for (std::size_t row = 0; row < screen.size(); ++row) {
         INFO(std::format("follow-end row {}: [{}]", row, screen[row]));
         CHECK(screen[row].find("Jump to latest message") == std::string::npos);
     }
-    const std::vector<std::string> follow_end_window{screen.begin(), screen.end() - 9};
+    const std::vector<std::string> follow_end_window{screen.begin(), screen.end() - 7};
 
-    // The dock covers the last nine rows; wheel up over the transcript so it
-    // stops following the end. No content is appended while scrolled.
+    // The label row and the six-row dock occupy the last seven rows; wheel up
+    // over the transcript so it stops following the end. No content is
+    // appended while scrolled.
     for (int notch = 0; notch < 3; ++notch) {
         REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
     }
     drain_ready(io);
-    REQUIRE(terminal.screen().size() == 42);
-    const std::vector<std::string> scrolled_window{terminal.screen().begin(), terminal.screen().end() - 9};
+    REQUIRE(terminal.screen().size() == 40);
+    const std::vector<std::string> scrolled_window{terminal.screen().begin(), terminal.screen().end() - 7};
     CHECK(scrolled_window.front() != follow_end_window.front());
     CHECK(scrolled_window != follow_end_window);
 
@@ -1657,8 +1672,8 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     check_indicator_row(*indicator, " turn-23", "│");
 
     // Frozen kitty evidence centers the label at column 23 with 37 visible
-    // cells. Pike's dock places it one row higher at 83x42.
-    CHECK(indicator->row == terminal.dimensions().rows - 8);
+    // cells on terminal line 34 of the 83x40 session (zero-based row 33).
+    CHECK(indicator->row == 33);
     CHECK(indicator->column == kFrozenIndicatorColumn);
     CHECK(indicator->width == kFrozenIndicatorWidth);
     // Frozen pi's scrollToEndIndicator composes background(SelectedBg,
@@ -1745,7 +1760,7 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     REQUIRE(terminal.inject_input("\x1b[1;5F"));
     drain_ready(io);
     const auto resumed = terminal.screen();
-    CHECK(resumed.size() == 42);
+    CHECK(resumed.size() == 40);
     // The label is absent once the viewport follows the end again.
     CHECK(std::none_of(resumed.begin(), resumed.end(), [](const std::string& line) {
         return line.find("Jump to latest message") != std::string::npos;
