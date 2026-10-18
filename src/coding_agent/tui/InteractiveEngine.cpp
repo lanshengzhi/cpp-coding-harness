@@ -203,11 +203,16 @@ InteractiveEngine::InteractiveEngine(
     // The owned fullscreen root registers the same platform-action adapter an
     // externally hosted fullscreen consumer uses (#1006): selection copies, OSC
     // 8 link opens, and right-click paste all cross the closed action seam.
-    set_alt_screen_host(tui_ == &fullscreen_host_->tui() ? fullscreen_host_.get() : nullptr);
     tui_->set_scheduler(tui_scheduler_.get());
 }
 
 support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
+    // `weak_from_this()` is empty during construction even though every
+    // running engine is shared-owned. Install the fullscreen host callbacks
+    // before its first frame so callbacks can lock the live engine on a direct
+    // fullscreen launch. Renderer switches rebind the host in `select_root`.
+    if (tui_ == &fullscreen_host_->tui()) set_alt_screen_host(fullscreen_host_.get());
+
     auto intent = run.take_session_intent();
     std::visit(
             [this](auto&& it) {
