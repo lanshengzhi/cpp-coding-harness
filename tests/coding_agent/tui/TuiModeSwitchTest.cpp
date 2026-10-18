@@ -10,6 +10,7 @@
 #include "coding_agent/tui/InteractiveEngine.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
+#include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -22,11 +23,13 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/ThemeFixture.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <catch2/catch_message.hpp>
@@ -40,6 +43,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <format>
 #include <iterator>
 #include <memory>
 #include <optional>
@@ -83,6 +87,50 @@ using support::JsonValue;
 [[nodiscard]] std::string read_text_file(const std::filesystem::path& path) {
     std::ifstream file(path);
     return std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+void replace_theme_value(std::string& theme, std::string_view old_value, std::string_view new_value) {
+    const auto position = theme.find(old_value);
+    REQUIRE(position != std::string::npos);
+    theme.replace(position, old_value.size(), new_value);
+}
+
+struct CellTextPosition {
+    std::size_t row{0};
+    std::size_t column{0};
+    std::size_t width{0};
+};
+
+[[nodiscard]] std::optional<CellTextPosition> find_cell_text(
+        const tui::VirtualTerminal& terminal, std::string_view text) {
+    const auto& cells = terminal.cells();
+    for (std::size_t row = 0; row < cells.size(); ++row) {
+        std::string rendered;
+        std::vector<std::size_t> byte_columns;
+        for (std::size_t column = 0; column < cells[row].size(); ++column) {
+            const auto& cell = cells[row][column];
+            if (cell.continuation) continue;
+            const std::string_view grapheme = cell.grapheme.empty() ? std::string_view{" "} : cell.grapheme;
+            rendered.append(grapheme);
+            byte_columns.insert(byte_columns.end(), grapheme.size(), column);
+        }
+        const auto offset = rendered.find(text);
+        if (offset == std::string::npos) continue;
+        const auto last_byte = offset + text.size() - 1;
+        const auto first_column = byte_columns[offset];
+        return CellTextPosition{
+                .row = row, .column = first_column, .width = byte_columns[last_byte] - first_column + 1};
+    }
+    return std::nullopt;
+}
+
+[[nodiscard]] std::string rendered_cell_row(const tui::VirtualTerminal& terminal, std::size_t row) {
+    std::string rendered;
+    for (const auto& cell : terminal.cells().at(row)) {
+        if (cell.continuation) continue;
+        rendered.append(cell.grapheme.empty() ? std::string_view{" "} : std::string_view{cell.grapheme});
+    }
+    return rendered;
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
@@ -1508,6 +1556,200 @@ TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mod
     CHECK(after_window.back().find("Jump to latest message") != std::string::npos);
     CHECK(after_window != follow_end_window);
     close_settings(terminal, io);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-fullscreen launch while the transcript is "
+          "scrolled", // cspell: disable-line
+        "[coding_agent][tui][fullscreen][scroll-indicator][issue1039][spec]") {
+    // #1039: the indicator is a scrolled-transcript affordance, not a
+    // mode-switch artifact. This is the real-run E13 case: a session launched
+    // directly in fullscreen, transcript scrolled with nothing newly appended
+    // and no switch in between. The frozen reference composites the complete
+    // themed label centered on the transcript window's last clip row
+    // (`pi packages/coding-agent/src/modes/interactive/tui-renderer.ts:32`,
+    // `scrollToEndIndicator`); a plain substring hit would also pass an
+    // unstyled, misplaced, or follow-end-painted text, so the value compared
+    // here is the styled cell run and its geometry.
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"tuiMode": "fullscreen", "theme": "frozen-indicator"})");
+    auto indicator_theme = tests::fixture_theme("frozen-indicator", "#69add0");
+    replace_theme_value(indicator_theme, "\"blueBg\": \"#213b49\"", "\"blueBg\": \"#1a2d42\"");
+    replace_theme_value(indicator_theme, "\"text\": \"text\"", "\"text\": \"\"");
+    config.write("themes/frozen-indicator.json", std::move(indicator_theme));
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    const std::string_view kScrollToEndLabel = " ↓ Jump to latest message · Ctrl+End ";
+
+    tui::VirtualTerminal terminal({.columns = 83,
+            .rows = 42,
+            .capabilities = {.synchronized_output = true, .color = tui::TerminalColorCapability::TrueColor}});
+    // Pike's idle status dock reserves nine rows; frozen pi reserves eight.
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+    auto run = make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen);
+    boost::asio::co_spawn(
+            io, drive_engine(engine, std::move(run)), [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+    REQUIRE(terminal.modes().alternate_screen);
+
+    for (std::size_t turn = 0; turn < 24; ++turn) {
+        const auto prompt = std::format("turn-{}", turn);
+        REQUIRE(terminal.inject_input(prompt + "\r"));
+        REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: " + prompt) != std::string::npos; }));
+    }
+    // While following the end the affordance must be absent: the gated hint
+    // only belongs to a scrolled-away transcript, not to the follow-end frame.
+    const auto screen = terminal.screen();
+    REQUIRE(screen.size() == 42);
+    for (std::size_t row = 0; row < screen.size(); ++row) {
+        INFO(std::format("follow-end row {}: [{}]", row, screen[row]));
+        CHECK(screen[row].find("Jump to latest message") == std::string::npos);
+    }
+    const std::vector<std::string> follow_end_window{screen.begin(), screen.end() - 9};
+
+    // The dock covers the last nine rows; wheel up over the transcript so it
+    // stops following the end. No content is appended while scrolled.
+    for (int notch = 0; notch < 3; ++notch) {
+        REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    }
+    drain_ready(io);
+    REQUIRE(terminal.screen().size() == 42);
+    const std::vector<std::string> scrolled_window{terminal.screen().begin(), terminal.screen().end() - 9};
+    CHECK(scrolled_window.front() != follow_end_window.front());
+    CHECK(scrolled_window != follow_end_window);
+
+    const auto scrolled = terminal.screen();
+    CAPTURE(scrolled);
+    const auto indicator = find_cell_text(terminal, kScrollToEndLabel);
+    REQUIRE(indicator);
+    constexpr std::size_t kFrozenIndicatorColumn = 23;
+    constexpr std::size_t kFrozenIndicatorWidth = 37;
+    const auto check_indicator_row = [&terminal, &kScrollToEndLabel](const CellTextPosition& position,
+                                             std::string_view transcript_text,
+                                             std::string_view right_edge) {
+        CHECK(position.column == kFrozenIndicatorColumn);
+        CHECK(position.width == kFrozenIndicatorWidth);
+        std::string expected_row{transcript_text};
+        expected_row.append(kFrozenIndicatorColumn - expected_row.size(), ' ');
+        expected_row.append(kScrollToEndLabel);
+        expected_row.append(
+                terminal.dimensions().columns - tui::visible_width(expected_row) - tui::visible_width(right_edge), ' ');
+        expected_row.append(right_edge);
+        const auto actual_row = rendered_cell_row(terminal, position.row);
+        CHECK(actual_row == expected_row);
+    };
+    check_indicator_row(*indicator, " turn-23", "│");
+
+    // Frozen kitty evidence centers the label at column 23 with 37 visible
+    // cells. Pike's dock places it one row higher at 83x42.
+    CHECK(indicator->row == terminal.dimensions().rows - 8);
+    CHECK(indicator->column == kFrozenIndicatorColumn);
+    CHECK(indicator->width == kFrozenIndicatorWidth);
+    // Frozen pi's scrollToEndIndicator composes background(SelectedBg,
+    // foreground(Text, label)). This fixture resolves Text to the terminal
+    // default and SelectedBg to #1a2d42, so the complete frozen cell style has
+    // only the canonical truecolor background set; all attributes, foreground,
+    // and OSC 8 fields are empty/default.
+    const tui::TerminalStyle kFrozenIndicatorStyle{
+            .bold = false,
+            .dim = false,
+            .italic = false,
+            .underline = false,
+            .blink = false,
+            .inverse = false,
+            .hidden = false,
+            .strikethrough = false,
+            .fg_color = "",
+            .bg_color = "48;2;26;45;66",
+            .hyperlink = "",
+            .hyperlink_params = "",
+    };
+    const auto check_indicator_style = [&terminal, &kFrozenIndicatorStyle](const CellTextPosition& position) {
+        for (const auto& cell : std::span{terminal.cells().at(position.row)}.subspan(position.column, position.width)) {
+            CHECK(cell.style == kFrozenIndicatorStyle);
+        }
+    };
+    check_indicator_style(*indicator);
+
+    // Activate the direct-launch affordance through the terminal's SGR mouse
+    // event path. The coordinates supplied by find_cell_text are zero-based;
+    // terminal mouse reports are one-based.
+    const auto click_indicator = std::format("\x1b[<0;{};{}M", indicator->column + 1, indicator->row + 1);
+    const auto release_indicator = std::format("\x1b[<0;{};{}m", indicator->column + 1, indicator->row + 1);
+    REQUIRE(terminal.inject_input(click_indicator));
+    REQUIRE(terminal.inject_input(release_indicator));
+    REQUIRE(pump_until(io, [&] { return !find_cell_text(terminal, kScrollToEndLabel).has_value(); }));
+    const auto after_click = terminal.screen();
+    for (const auto& row : after_click) {
+        CHECK(row.find("Jump to latest message") == std::string::npos);
+    }
+    const std::string post_click_prompt = "after-indicator-click";
+    REQUIRE(terminal.inject_input(post_click_prompt + "\r"));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("fake: " + post_click_prompt) != std::string::npos; }));
+    for (const auto& row : terminal.screen()) {
+        CHECK(row.find("Jump to latest message") == std::string::npos);
+    }
+
+    // Restore the scrolled state so the renderer round-trip is checked against
+    // the same frozen direct-launch indicator.
+    for (int notch = 0; notch < 3; ++notch) {
+        REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    }
+    REQUIRE(pump_until(io, [&] { return find_cell_text(terminal, kScrollToEndLabel).has_value(); }));
+    const auto before_switch_indicator = find_cell_text(terminal, kScrollToEndLabel);
+    REQUIRE(before_switch_indicator);
+    check_indicator_row(*before_switch_indicator, " after-indicator-click", "│");
+    check_indicator_style(*before_switch_indicator);
+
+    // Swap both renderers directly, without submitting a message or adding the
+    // settings flow's status line. The label must survive at the same position.
+    auto regular = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(regular);
+    REQUIRE(*regular);
+    drain_ready(io);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+    auto fullscreen = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    REQUIRE(fullscreen);
+    REQUIRE(*fullscreen);
+    drain_ready(io);
+    REQUIRE(terminal.modes().alternate_screen);
+    REQUIRE(pump_until(io, [&] { return find_cell_text(terminal, kScrollToEndLabel).has_value(); }));
+    const auto switched_indicator = find_cell_text(terminal, kScrollToEndLabel);
+    REQUIRE(switched_indicator);
+    check_indicator_row(*switched_indicator, " after-indicator-click", "│");
+    CHECK(switched_indicator->row == before_switch_indicator->row);
+    CHECK(switched_indicator->column == before_switch_indicator->column);
+    CHECK(switched_indicator->width == before_switch_indicator->width);
+    check_indicator_style(*switched_indicator);
+    // The direct-launch frame above pins the frozen style. Renderer switching
+    // retains the label geometry and text while reapplying the live palette.
+    // Following is resumed by the same affordance's gate: jump to the bottom
+    // and the painted label disappears while the transcript follows the end.
+    REQUIRE(terminal.inject_input("\x1b[1;5F"));
+    drain_ready(io);
+    const auto resumed = terminal.screen();
+    CHECK(resumed.size() == 42);
+    // The label is absent once the viewport follows the end again.
+    CHECK(std::none_of(resumed.begin(), resumed.end(), [](const std::string& line) {
+        return line.find("Jump to latest message") != std::string::npos;
+    }));
 
     REQUIRE(terminal.inject_input("\x04"));
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
