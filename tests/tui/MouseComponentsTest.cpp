@@ -103,7 +103,10 @@ using cch::tui::MouseEventType;
 /// registry (`SettingsList.cpp:376-387`), which spells the keys in its own
 /// style. That divergence predates #1003 and is not what the family records, so
 /// every other row — in particular every row a mouse event resolved to — is
-/// compared exactly.
+/// compared exactly. The divergence is accepted by owner decision (2026-10-18,
+/// recorded on #809 and in the capability ledger): the registry-derived line is
+/// the E05 help-convergence design and stays authoritative on rebind, so do not
+/// silently align this line with the frozen wording.
 [[nodiscard]] bool is_settings_hint(std::string_view row) {
     return row.find(" to change · ") != std::string_view::npos;
 }

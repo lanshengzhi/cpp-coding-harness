@@ -34,7 +34,7 @@
     },
     "809": {
       "title": "Align Native TUI settings selector supported rows while retaining pi-only omissions",
-      "disposition": "old settings-omission rule superseded only for capabilities included by ADR0067/#946; SettingsList/fullscreen settings owned by #968/#1020",
+      "disposition": "old settings-omission rule superseded only for capabilities included by ADR0067/#946; SettingsList/fullscreen settings owned by #968/#1020; retained pi-only omissions include the Editor padding (editorPaddingX) row (comment 6237034344); registry-derived settings help line accepted over frozen hardcoded Enter/Space to change · Esc to cancel wording by owner on 2026-10-18 (E05 help convergence)",
       "tickets": [
         "#968",
         "#1020"
