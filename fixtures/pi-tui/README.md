@@ -589,6 +589,69 @@ Artifact 35 preserves all prior 34 artifact bytes, baseline metadata, and genera
 `capture/fullscreen-exit-live-scenarios.mts` holds the scenario bodies;
 `capture/recapture-fullscreen-exit-live.mts` is the append recipe (manifest 34 → 35).
 
+For the frozen fullscreen settings policy (#1020, spec #946, group E20),
+`fullscreen-settings.json` (artifact 36) records seven scenarios over the frozen settings manager,
+the real settings selector, `ScrollView`/layout frames, the fullscreen consumer over
+`VirtualTerminal`, `WheelScrollAccelerator`, and controlled `InteractiveMode.prototype` contexts:
+- `settings-resolution-matrix` observes the frozen getters for defaults (`auto`/`true`/`auto`),
+  valid values, wrong persisted types (`"false"` string, `0`, `null`, boolean, number scrollbar),
+  wheel bounds (`0`→1, `-5`→1, `1.9`→1, `100.5`→100, `1000`→100), runtime `applyOverrides`
+  (NaN/Infinity → `auto`; `undefined` does not clear an existing value), and project precedence
+  including invalid project values that override valid global ones. Each row records the resolved
+  value, its runtime `typeof`, and copy-on-select truthiness so wrong-type truthiness is explicit.
+- `settings-setters-surgery-reload` observes `SettingsManager.create` file-backed setters: the exact
+  global `settings.json` text after each write (unrelated keys and the project file untouched),
+  merged getters before/after `reload`, and setter persistence for wrong-type (`"bogus"`, `"false"`),
+  floored (`2.7`→2), clamped (`100000`→100) and `"auto"` wheel writes.
+- `settings-selector-rows-and-cycles` drives the real `SettingsSelectorComponent`/`SettingsList`
+  with Enter: recorded rendered rows and descriptions for `fullscreen-scrollbar`
+  (`auto`/`always`/`hidden`), `fullscreen-copy-on-select` (`true`/`false`),
+  `fullscreen-wheel-scroll-lines` (`auto`, 1, 2, 3, 5, 10 plus the current value sorted), and the
+  actual callback values/types including the wheel `parseInt`. A wrong-type persisted `"false"`
+  copy value renders as `true` because the frozen selector tests truthiness.
+- `scrollbar-modes-cells-and-reservation` observes the actual `ScrollView` for the resolved setting:
+  `hidden` paints no scrollbar cells and keeps the full content width, `always` reserves the last
+  column (child width 9 of 10) and paints track/thumb cells, `auto` reserves nothing and shows the
+  transient bar after scroll activity until the frozen 1000 ms hide timer, and an invalid persisted
+  value resolves to `auto`. `setScrollbar` requests a render only when the mode changes.
+- `copy-on-select-settings-and-ctrl-x` observes the resolved copy value at the real fullscreen
+  consumer: release copies once when the value is `true`, `"false"` (wrong-type truthy) or `null`,
+  and does not copy for boolean `false` or `0`; controlled `handleCopyCommand` records that manual
+  Ctrl+X copies the selection only when copy-on-select is disabled and otherwise falls through to
+  the last-assistant-message branch. It also records the live `setCopyOnSelect` transition and
+  `createInteractiveTui` option forwarding, including the wrong-type value.
+- `wheel-settings-fixed-vs-auto` observes the frozen `WheelScrollAccelerator.next` with explicit
+  clocks (zero and fractional values floor to at least one line; `auto` returns 1, then 5, 5 for
+  20 ms bursts and resets to 1 after a gesture gap; a disabled accelerator never accelerates) and the
+  real renderer's transcript deltas: fixed 5 moves 5 lines per wheel event, persisted `0` resolves to
+  one line, and `auto` under the controlled clock moves 1, 5, 5, 1 lines. Live `setWheelScrollLines`
+  and `createInteractiveTui` forwarding are included.
+- `product-live-apply-and-mode-switch` observes the private `applyRuntimeSettings` on a controlled
+  context: the real transcript `ScrollView` switches to `always`, the fullscreen renderer takes
+  `false` copy-on-select and 5 wheel lines, and the actual `switchTuiMode` regular→fullscreen rebuilds
+  the renderer from the settings manager (`getCopyOnSelect()` false, 5-line wheel deltas) while
+  keeping the typed `options.tuiMode` and the transcript scrollbar mode across the switch.
+
+Artifact 36 records only measured runtime values; no Pike-generated expectation enters the fixture.
+Provenance honesty: the bundle envelope keeps the historical `capturedAt`/`environment` metadata for
+format compatibility, and `observationRun` records the actual capture timestamp (2026-10-18T01:12:39.201Z),
+Node v26.12.0 on linux x64, the caller, the seven scenarios, and identity gates: ambient `PI_*`
+variables sanitized (`sanitizedPiVariables`), `PI_PACKAGE_DIR` pinned to the frozen checkout,
+`VERSION` 1.0.4, eight `@earendil-works/*` specifiers resolved into frozen `packages/*/src`, and no
+foreign resolutions. The synchronous `registerHooks` Azure catalog stub only satisfies the missing
+generated `packages/ai/src/providers/data/azure.json` and is disclosed in `identity.azureStub`.
+Observational boundaries: measurements use the in-memory `@xterm/headless` `VirtualTerminal` and
+controlled prototype contexts (not OS-level PTY/stream proof); the copy sink is injected so the host
+clipboard is never written; the auto wheel clock is controlled rather than wall-clock; the full live
+`/settings` overlay inside a running `InteractiveMode` and the real system clipboard are not
+exercised; artifact 36 records the settings application policy only, so fullscreen exit presentation
+remains the authority of artifacts 33–35.
+Artifact 36 preserves all prior 35 artifact bytes, baseline metadata, and all 29 prior generator
+source digests (85 predecessor files re-hashed before and after capture; only `manifest.json` and
+`baselines.json` were appended/pinned).
+`capture/fullscreen-settings-scenarios.mts` holds the scenario bodies;
+`capture/recapture-fullscreen-settings.mts` is the append recipe (manifest 35 → 36).
+
 
 
 For #967, the same screen-state artifact also records seven independent SelectList scenarios:
