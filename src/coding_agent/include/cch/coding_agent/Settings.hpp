@@ -3,12 +3,14 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/support/Error.hpp>
 
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <vector>
 
 namespace cch::coding_agent {
@@ -27,6 +29,25 @@ enum class FullscreenExitOutput {
     Transcript,
     ResumeHint,
 };
+
+/// pi `ScrollViewScrollbar` — scrollbar behavior in fullscreen mode (settings
+/// key `fullscreenScrollbar`). The enumerators are C++ spellings of the
+/// persisted `"hidden"`, `"auto"`, and `"always"` values and mirror
+/// `cch::tui::ScrollbarMode`'s order. In regular mode this setting has no effect.
+enum class FullscreenScrollbar {
+    Hidden,
+    Auto,
+    Always,
+};
+
+/// pi `WheelScrollLines` — `"auto"` (the velocity-based wheel accelerator) or
+/// an explicit number of lines per wheel event. `AutoWheelScrollLines` mirrors
+/// the toolkit alternative of the same name so the frontend maps the variant
+/// without reinterpretation.
+struct AutoWheelScrollLines {
+    bool operator==(const AutoWheelScrollLines&) const = default;
+};
+using FullscreenWheelScrollLines = std::variant<std::size_t, AutoWheelScrollLines>;
 
 /// pi `compaction` — nested automatic-compaction settings. Every field is
 /// optional: a missing field falls back to pi's `DEFAULT_COMPACTION_SETTINGS`
@@ -131,6 +152,25 @@ struct UserSettings {
     std::optional<bool> show_terminal_progress{std::nullopt};
     /// pi `fullscreenExitOutput` — Print transcript or resume hint when exiting fullscreen mode.
     std::optional<std::string> fullscreen_exit_output{std::nullopt};
+    /// pi `fullscreenScrollbar` — resolved per scope at load: `"always"` and
+    /// `"hidden"` keep their enumerator and every other stored value (unknown
+    /// text, wrong type, `null`) resolves as `auto`. Resolution happens per
+    /// scope because pi's deep merge gives any present project value priority
+    /// over the global value, including an invalid one.
+    std::optional<FullscreenScrollbar> fullscreen_scrollbar{std::nullopt};
+    /// pi `fullscreenCopyOnSelect` — resolved per scope at load with pi's
+    /// nullish/truthiness read (`settings.fullscreenCopyOnSelect ?? true`
+    /// followed by the AltScreen consumer's truthiness check): `false`, `0`,
+    /// and `""` disable copy-on-select; `null` and every other value enable
+    /// it. A present value shadows the other scope exactly as pi's deep merge
+    /// does.
+    std::optional<bool> fullscreen_copy_on_select{std::nullopt};
+    /// pi `fullscreenWheelScrollLines` — resolved per scope at load: a finite
+    /// number is floored and clamped to 1..100, every other value (`"auto"`,
+    /// wrong types, `null`) resolves as `AutoWheelScrollLines`. `std::nullopt`
+    /// means the scope has no value; a present `AutoWheelScrollLines` still
+    /// shadows the other scope's line count.
+    std::optional<FullscreenWheelScrollLines> fullscreen_wheel_scroll_lines{std::nullopt};
 };
 
 /// One `settings.json` scope (pi `SettingsScope`).
@@ -225,6 +265,41 @@ public:
     /// writes `globalSettings`); preserves every other field. A global load
     /// failure suppresses the write. No-op when the value is unchanged.
     [[nodiscard]] support::ExpectedVoid set_fullscreen_exit_output(FullscreenExitOutput output);
+
+    /// Resolved pi `fullscreenScrollbar` over the merged view (pi
+    /// `getFullscreenScrollbar`): a stored `"always"` or `"hidden"` resolves
+    /// to its enumerator and every other stored value resolves as `auto`.
+    [[nodiscard]] FullscreenScrollbar get_fullscreen_scrollbar() const noexcept;
+
+    /// Resolved pi `fullscreenCopyOnSelect` over the merged view (pi
+    /// `getFullscreenCopyOnSelect`): the stored value's truthiness decides,
+    /// with `null`/unset falling back to the default `true`.
+    [[nodiscard]] bool get_fullscreen_copy_on_select() const noexcept;
+
+    /// Resolved pi `fullscreenWheelScrollLines` over the merged view (pi
+    /// `getFullscreenWheelScrollLines`): a finite stored number resolves as a
+    /// line count floored and clamped to 1..100; every other value resolves as
+    /// `AutoWheelScrollLines`.
+    [[nodiscard]] FullscreenWheelScrollLines get_fullscreen_wheel_scroll_lines() const noexcept;
+
+    /// Surgical field-level write of the pi `fullscreenScrollbar` field in the
+    /// global scope (pi `SettingsManager.setFullscreenScrollbar`, which always
+    /// writes `globalSettings`); preserves every other field. A global load
+    /// failure suppresses the write. No-op when the value is unchanged.
+    [[nodiscard]] support::ExpectedVoid set_fullscreen_scrollbar(FullscreenScrollbar mode);
+
+    /// Surgical field-level write of the pi `fullscreenCopyOnSelect` field in
+    /// the global scope (pi `SettingsManager.setFullscreenCopyOnSelect`, which
+    /// always writes `globalSettings`); preserves every other field. A global
+    /// load failure suppresses the write. No-op when the value is unchanged.
+    [[nodiscard]] support::ExpectedVoid set_fullscreen_copy_on_select(bool enabled);
+
+    /// Surgical field-level write of the pi `fullscreenWheelScrollLines` field
+    /// in the global scope (pi `SettingsManager.setFullscreenWheelScrollLines`,
+    /// which writes `"auto"` or the number floored and clamped to 1..100);
+    /// preserves every other field. A global load failure suppresses the
+    /// write. No-op when the value is unchanged.
+    [[nodiscard]] support::ExpectedVoid set_fullscreen_wheel_scroll_lines(FullscreenWheelScrollLines lines);
 
     /// Resolved pi `tuiMode` over the merged view (pi `getTuiMode`): a stored
     /// `"regular"` resolves as regular and every other stored value as

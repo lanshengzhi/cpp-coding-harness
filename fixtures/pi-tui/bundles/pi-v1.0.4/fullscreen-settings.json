@@ -1,0 +1,2877 @@
+{
+  "schema": "pike/tui-evidence/1",
+  "baseline": "pi-v1.0.4",
+  "revision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+  "capturedAt": "2026-10-15T06:53:20.747Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.11.1",
+    "TERM": "xterm-256color",
+    "disabledVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "KITTY_WINDOW_ID",
+      "WEZTERM_PANE",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR",
+      "COLORTERM"
+    ],
+    "dependencies": {
+      "@xterm/headless": "5.5.0",
+      "tsx": "4.22.1"
+    }
+  },
+  "observationRun": {
+    "timestamp": "2026-10-18T03:27:24.840Z",
+    "node": "v26.12.0",
+    "platform": "linux",
+    "arch": "x64",
+    "caller": "recapture-fullscreen-settings.mts",
+    "scenarioCount": 7,
+    "envelopeCapturedAtIsHistorical": true,
+    "measurementType": "in-memory @xterm/headless VirtualTerminal, frozen ScrollView/layout frames and controlled InteractiveMode.prototype contexts; not OS-level PTY proof",
+    "clipboardInjection": "copySelection sink injected into the frozen fullscreen consumer; the host clipboard is never written",
+    "identity": {
+      "frozenVersion": "1.0.4",
+      "piPackageDir": "/home/lansy/Work/github/coding-agent/pi/packages/coding-agent",
+      "sanitizedPiVariables": [
+        "PI_SUBAGENT_RUNNER_PID",
+        "PI_CODING_AGENT",
+        "PI_PACKAGE_DIR",
+        "PI_SUBAGENTS_PI_CODING_AGENT_PACKAGE_ROOT",
+        "PI_REASONING_LEVEL",
+        "PI_SESSION_FILE",
+        "PI_PROVIDER",
+        "PI_MODEL",
+        "PI_SESSION_ID",
+        "PI_SUBAGENT_PARENT_SESSION",
+        "PI_SUBAGENT_CHILD",
+        "PI_ASYNC_NATIVE_RUNNER"
+      ],
+      "disabledTerminalVariables": [
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+        "KITTY_WINDOW_ID",
+        "WEZTERM_PANE",
+        "TMUX",
+        "ZELLIJ",
+        "STY",
+        "TERMUX_VERSION",
+        "COLORTERM",
+        "SSH_CONNECTION",
+        "SSH_CLIENT",
+        "SSH_TTY"
+      ],
+      "sanitizedTerminalVariables": [
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+        "COLORTERM"
+      ],
+      "pinnedTerm": "xterm-256color",
+      "azureStub": "registerHooks resolve/load stub for packages/ai/src/providers/data/azure.json (generated catalog absent in the read-only checkout)",
+      "packageSourceResolutions": [
+        "@earendil-works/pi-ai",
+        "@earendil-works/pi-ai/compat",
+        "@earendil-works/pi-tui",
+        "@earendil-works/pi-agent-core",
+        "@earendil-works/pi-ai/utils/model-operations",
+        "@earendil-works/pi-ai/providers/all",
+        "@earendil-works/pi-ai/utils/provider-env",
+        "@earendil-works/pi-ai/providers/radius-config"
+      ],
+      "foreignResolutions": []
+    }
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/settings-manager.ts:getFullscreenScrollbar,setFullscreenScrollbar,getFullscreenCopyOnSelect,setFullscreenCopyOnSelect,getFullscreenWheelScrollLines,setFullscreenWheelScrollLines",
+    "packages/coding-agent/src/core/settings-manager.ts:deepMergeObjects,applyOverrides,save,reload,persistScopedSettings,fromStorage",
+    "packages/coding-agent/src/modes/interactive/components/settings-selector.ts:fullscreen-scrollbar,fullscreen-copy-on-select,fullscreen-wheel-scroll-lines,onFullscreenScrollbarChange,onFullscreenCopyOnSelectChange,onFullscreenWheelScrollLinesChange",
+    "packages/tui/src/components/settings-list.ts:SettingsList.activateItem,SettingsList.handleInput,SettingsList.render",
+    "packages/tui/src/components/scroll-view.ts:ScrollView.setScrollbar,ScrollView.getContentWidth,ScrollView.isScrollbarVisible,ScrollView.scrollBy",
+    "packages/tui/src/layout.ts:getScrollbarGeometry,paintScrollbar,renderLayoutFrame",
+    "packages/tui/src/tui-alt-screen.ts:handleSelectionMouseEvent,copySelectionToClipboard,copyActiveSelectionToClipboard,setCopyOnSelect,setWheelScrollLines,parseWheelEvent,routeWheel",
+    "packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.next,WheelScrollAccelerator.setLines",
+    "packages/coding-agent/src/modes/interactive/tui-renderer.ts:createInteractiveTui",
+    "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:applyFullscreenScrollbarSetting,applyRuntimeSettings,switchTuiMode,handleCopyCommand",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.start,sendInput,waitForRender"
+  ],
+  "scenarios": [
+    {
+      "name": "settings-resolution-matrix",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "SettingsManager.fromStorage(InMemorySettingsStorage) getters and applyOverrides",
+        "dimensionsNote": "no terminal is involved; 80x24 is the evidence-schema nominal size",
+        "cases": [
+          {
+            "name": "defaults",
+            "inputs": {
+              "global": {},
+              "project": {}
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-valid",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "always",
+                "fullscreenCopyOnSelect": false,
+                "fullscreenWheelScrollLines": 7
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "always",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": false,
+                "type": "boolean",
+                "truthy": false
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 7,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-scrollbar-invalid-string",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "bogus"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-scrollbar-invalid-number",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": 42
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-scrollbar-case-sensitive",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "Always"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-copy-wrong-type-string-false",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": "false"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": "false",
+                "type": "string",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-copy-wrong-type-zero",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": 0
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": 0,
+                "type": "number",
+                "truthy": false
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-copy-null-falls-back-true",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": null
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-wrong-type-string",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": "5"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-zero-floors",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 0
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-negative-floors",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": -5
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-fraction-floors",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 1.9
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-high-fraction-clamps",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 100.5
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 100,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-over-clamps",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 1000
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 100,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-null-resolves-auto",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": null
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-bool-resolves-auto",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": true
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "project-valid-overrides-global",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "auto",
+                "fullscreenCopyOnSelect": true,
+                "fullscreenWheelScrollLines": 3
+              },
+              "project": {
+                "fullscreenScrollbar": "always",
+                "fullscreenCopyOnSelect": false,
+                "fullscreenWheelScrollLines": 9
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "always",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": false,
+                "type": "boolean",
+                "truthy": false
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 9,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "project-invalid-overrides-global-valid",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "always",
+                "fullscreenCopyOnSelect": false,
+                "fullscreenWheelScrollLines": 9
+              },
+              "project": {
+                "fullscreenScrollbar": "bogus",
+                "fullscreenCopyOnSelect": "false",
+                "fullscreenWheelScrollLines": 0
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": "false",
+                "type": "string",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "project-null-copy-overrides-global-false",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": false
+              },
+              "project": {
+                "fullscreenCopyOnSelect": null
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-nan-wheel",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 7
+              },
+              "project": {},
+              "override": "NaN"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": 7,
+                  "type": "number"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-infinity-wheel",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 7
+              },
+              "project": {},
+              "override": "Infinity"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": 7,
+                  "type": "number"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-undefined-scrollbar-keeps",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "always"
+              },
+              "project": {},
+              "override": "undefined-scrollbar"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "always",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "always",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-hidden-and-zero-copy",
+            "inputs": {
+              "global": {},
+              "project": {},
+              "override": "hidden-and-zero"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "hidden",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": 0,
+                  "type": "number",
+                  "truthy": false
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "defaults",
+            "inputs": {
+              "global": {},
+              "project": {}
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-valid",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "always",
+                "fullscreenCopyOnSelect": false,
+                "fullscreenWheelScrollLines": 7
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "always",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": false,
+                "type": "boolean",
+                "truthy": false
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 7,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-scrollbar-invalid-string",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "bogus"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-scrollbar-invalid-number",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": 42
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-scrollbar-case-sensitive",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "Always"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-copy-wrong-type-string-false",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": "false"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": "false",
+                "type": "string",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-copy-wrong-type-zero",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": 0
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": 0,
+                "type": "number",
+                "truthy": false
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-copy-null-falls-back-true",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": null
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-wrong-type-string",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": "5"
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-zero-floors",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 0
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-negative-floors",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": -5
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-fraction-floors",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 1.9
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-high-fraction-clamps",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 100.5
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 100,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-over-clamps",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 1000
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 100,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-null-resolves-auto",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": null
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "global-wheel-bool-resolves-auto",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": true
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "project-valid-overrides-global",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "auto",
+                "fullscreenCopyOnSelect": true,
+                "fullscreenWheelScrollLines": 3
+              },
+              "project": {
+                "fullscreenScrollbar": "always",
+                "fullscreenCopyOnSelect": false,
+                "fullscreenWheelScrollLines": 9
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "always",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": false,
+                "type": "boolean",
+                "truthy": false
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 9,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "project-invalid-overrides-global-valid",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "always",
+                "fullscreenCopyOnSelect": false,
+                "fullscreenWheelScrollLines": 9
+              },
+              "project": {
+                "fullscreenScrollbar": "bogus",
+                "fullscreenCopyOnSelect": "false",
+                "fullscreenWheelScrollLines": 0
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": "false",
+                "type": "string",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": 1,
+                "type": "number"
+              }
+            }
+          },
+          {
+            "name": "project-null-copy-overrides-global-false",
+            "inputs": {
+              "global": {
+                "fullscreenCopyOnSelect": false
+              },
+              "project": {
+                "fullscreenCopyOnSelect": null
+              }
+            },
+            "expected": {
+              "fullscreenScrollbar": {
+                "value": "auto",
+                "type": "string"
+              },
+              "fullscreenCopyOnSelect": {
+                "value": true,
+                "type": "boolean",
+                "truthy": true
+              },
+              "fullscreenWheelScrollLines": {
+                "value": "auto",
+                "type": "string"
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-nan-wheel",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 7
+              },
+              "project": {},
+              "override": "NaN"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": 7,
+                  "type": "number"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-infinity-wheel",
+            "inputs": {
+              "global": {
+                "fullscreenWheelScrollLines": 7
+              },
+              "project": {},
+              "override": "Infinity"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": 7,
+                  "type": "number"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-undefined-scrollbar-keeps",
+            "inputs": {
+              "global": {
+                "fullscreenScrollbar": "always"
+              },
+              "project": {},
+              "override": "undefined-scrollbar"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "always",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "always",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "name": "apply-overrides-hidden-and-zero-copy",
+            "inputs": {
+              "global": {},
+              "project": {},
+              "override": "hidden-and-zero"
+            },
+            "expected": {
+              "beforeOverride": {
+                "fullscreenScrollbar": {
+                  "value": "auto",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": true,
+                  "type": "boolean",
+                  "truthy": true
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              },
+              "afterOverride": {
+                "fullscreenScrollbar": {
+                  "value": "hidden",
+                  "type": "string"
+                },
+                "fullscreenCopyOnSelect": {
+                  "value": 0,
+                  "type": "number",
+                  "truthy": false
+                },
+                "fullscreenWheelScrollLines": {
+                  "value": "auto",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "settings-setters-surgery-reload",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "SettingsManager.create(FileSettingsStorage) setters + flush + reload; exact settings.json texts",
+        "dimensionsNote": "no terminal is involved; 80x24 is the evidence-schema nominal size",
+        "globalSeed": {
+          "theme": "dark",
+          "fullscreenScrollbar": "auto",
+          "fullscreenCopyOnSelect": true,
+          "fullscreenWheelScrollLines": "auto",
+          "lastChangelogVersion": "0.9.9"
+        },
+        "projectSeed": {
+          "fullscreenWheelScrollLines": 12,
+          "unrelatedProject": true
+        },
+        "setterCalls": [
+          "setFullscreenScrollbar('hidden')",
+          "setFullscreenCopyOnSelect(false)",
+          "setFullscreenWheelScrollLines(7)",
+          "setFullscreenScrollbar('bogus' as any)",
+          "setFullscreenCopyOnSelect('false' as any)",
+          "setFullscreenWheelScrollLines(-3 as any)",
+          "setFullscreenWheelScrollLines(2.7 as any)",
+          "setFullscreenWheelScrollLines(100000 as any)",
+          "setFullscreenWheelScrollLines('auto' as any)"
+        ]
+      },
+      "expected": {
+        "before": {
+          "globalText": "{\n  \"theme\": \"dark\",\n  \"fullscreenScrollbar\": \"auto\",\n  \"fullscreenCopyOnSelect\": true,\n  \"fullscreenWheelScrollLines\": \"auto\",\n  \"lastChangelogVersion\": \"0.9.9\"\n}\n",
+          "projectText": "{\n  \"fullscreenWheelScrollLines\": 12,\n  \"unrelatedProject\": true\n}\n",
+          "resolved": {
+            "fullscreenScrollbar": {
+              "value": "auto",
+              "type": "string"
+            },
+            "fullscreenCopyOnSelect": {
+              "value": true,
+              "type": "boolean",
+              "truthy": true
+            },
+            "fullscreenWheelScrollLines": {
+              "value": 12,
+              "type": "number"
+            }
+          }
+        },
+        "afterSetters": {
+          "globalText": "{\n  \"theme\": \"dark\",\n  \"fullscreenScrollbar\": \"hidden\",\n  \"fullscreenCopyOnSelect\": false,\n  \"fullscreenWheelScrollLines\": 7,\n  \"lastChangelogVersion\": \"0.9.9\"\n}",
+          "projectText": "{\n  \"fullscreenWheelScrollLines\": 12,\n  \"unrelatedProject\": true\n}\n",
+          "resolved": {
+            "fullscreenScrollbar": {
+              "value": "hidden",
+              "type": "string"
+            },
+            "fullscreenCopyOnSelect": {
+              "value": false,
+              "type": "boolean",
+              "truthy": false
+            },
+            "fullscreenWheelScrollLines": {
+              "value": 12,
+              "type": "number"
+            }
+          }
+        },
+        "afterReload": {
+          "fullscreenScrollbar": {
+            "value": "hidden",
+            "type": "string"
+          },
+          "fullscreenCopyOnSelect": {
+            "value": false,
+            "type": "boolean",
+            "truthy": false
+          },
+          "fullscreenWheelScrollLines": {
+            "value": 12,
+            "type": "number"
+          }
+        },
+        "afterInvalidSetters": {
+          "globalText": "{\n  \"theme\": \"dark\",\n  \"fullscreenScrollbar\": \"bogus\",\n  \"fullscreenCopyOnSelect\": \"false\",\n  \"fullscreenWheelScrollLines\": 1,\n  \"lastChangelogVersion\": \"0.9.9\"\n}",
+          "projectText": "{\n  \"fullscreenWheelScrollLines\": 12,\n  \"unrelatedProject\": true\n}\n",
+          "resolved": {
+            "fullscreenScrollbar": {
+              "value": "auto",
+              "type": "string"
+            },
+            "fullscreenCopyOnSelect": {
+              "value": "false",
+              "type": "string",
+              "truthy": true
+            },
+            "fullscreenWheelScrollLines": {
+              "value": 12,
+              "type": "number"
+            }
+          }
+        },
+        "afterFractionSetter": {
+          "globalText": "{\n  \"theme\": \"dark\",\n  \"fullscreenScrollbar\": \"bogus\",\n  \"fullscreenCopyOnSelect\": \"false\",\n  \"fullscreenWheelScrollLines\": 2,\n  \"lastChangelogVersion\": \"0.9.9\"\n}",
+          "projectText": "{\n  \"fullscreenWheelScrollLines\": 12,\n  \"unrelatedProject\": true\n}\n",
+          "resolved": {
+            "fullscreenScrollbar": {
+              "value": "auto",
+              "type": "string"
+            },
+            "fullscreenCopyOnSelect": {
+              "value": "false",
+              "type": "string",
+              "truthy": true
+            },
+            "fullscreenWheelScrollLines": {
+              "value": 12,
+              "type": "number"
+            }
+          }
+        },
+        "afterOverSetter": {
+          "globalText": "{\n  \"theme\": \"dark\",\n  \"fullscreenScrollbar\": \"bogus\",\n  \"fullscreenCopyOnSelect\": \"false\",\n  \"fullscreenWheelScrollLines\": 100,\n  \"lastChangelogVersion\": \"0.9.9\"\n}",
+          "projectText": "{\n  \"fullscreenWheelScrollLines\": 12,\n  \"unrelatedProject\": true\n}\n",
+          "resolved": {
+            "fullscreenScrollbar": {
+              "value": "auto",
+              "type": "string"
+            },
+            "fullscreenCopyOnSelect": {
+              "value": "false",
+              "type": "string",
+              "truthy": true
+            },
+            "fullscreenWheelScrollLines": {
+              "value": 12,
+              "type": "number"
+            }
+          }
+        },
+        "afterAutoSetter": {
+          "globalText": "{\n  \"theme\": \"dark\",\n  \"fullscreenScrollbar\": \"bogus\",\n  \"fullscreenCopyOnSelect\": \"false\",\n  \"fullscreenWheelScrollLines\": \"auto\",\n  \"lastChangelogVersion\": \"0.9.9\"\n}",
+          "projectText": "{\n  \"fullscreenWheelScrollLines\": 12,\n  \"unrelatedProject\": true\n}\n",
+          "resolved": {
+            "fullscreenScrollbar": {
+              "value": "auto",
+              "type": "string"
+            },
+            "fullscreenCopyOnSelect": {
+              "value": "false",
+              "type": "string",
+              "truthy": true
+            },
+            "fullscreenWheelScrollLines": {
+              "value": 12,
+              "type": "number"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "settings-selector-rows-and-cycles",
+      "dimensions": {
+        "columns": 120,
+        "rows": 24
+      },
+      "inputs": {
+        "seam": "real SettingsSelectorComponent + SettingsList handleInput('\\r'), render(120)",
+        "observedIds": [
+          "fullscreen-scrollbar",
+          "fullscreen-copy-on-select",
+          "fullscreen-wheel-scroll-lines"
+        ],
+        "defaultConfig": {
+          "fullscreenScrollbar": "auto",
+          "fullscreenCopyOnSelect": true,
+          "fullscreenWheelScrollLines": "auto"
+        },
+        "nonDefaultConfig": {
+          "fullscreenScrollbar": "hidden",
+          "fullscreenCopyOnSelect": false,
+          "fullscreenWheelScrollLines": 7
+        },
+        "wrongTypeConfig": {
+          "fullscreenCopyOnSelectGetter": "false",
+          "getterType": "string"
+        }
+      },
+      "expected": {
+        "defaultConfig": {
+          "rows": {
+            "fullscreen-scrollbar": {
+              "row": "→ Fullscreen scrollbar              auto",
+              "description": [
+                "  Scrollbar behavior in fullscreen mode; has no effect in regular mode"
+              ]
+            },
+            "fullscreen-copy-on-select": {
+              "row": "→ Fullscreen copy on select         true",
+              "description": [
+                "  Automatically copy selected text in fullscreen mode; disable to copy selections with Ctrl+X"
+              ]
+            },
+            "fullscreen-wheel-scroll-lines": {
+              "row": "→ Fullscreen wheel scrolling        auto",
+              "description": [
+                "  Lines per mouse-wheel event in fullscreen mode; 'auto' speeds up fast wheel spins where the terminal does not"
+              ]
+            }
+          },
+          "cycles": {
+            "fullscreen-scrollbar": [
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "always",
+                "type": "string"
+              },
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "hidden",
+                "type": "string"
+              },
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "auto",
+                "type": "string"
+              }
+            ],
+            "fullscreen-copy-on-select": [
+              {
+                "id": "fullscreen-copy-on-select",
+                "value": false,
+                "type": "boolean"
+              },
+              {
+                "id": "fullscreen-copy-on-select",
+                "value": true,
+                "type": "boolean"
+              }
+            ],
+            "fullscreen-wheel-scroll-lines": [
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 1,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 2,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 3,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 5,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 10,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": "auto",
+                "type": "string"
+              }
+            ]
+          },
+          "changes": [
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "always",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "hidden",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "auto",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-copy-on-select",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "fullscreen-copy-on-select",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": "auto",
+              "type": "string"
+            }
+          ]
+        },
+        "nonDefaultConfig": {
+          "rows": {
+            "fullscreen-scrollbar": {
+              "row": "→ Fullscreen scrollbar              hidden",
+              "description": [
+                "  Scrollbar behavior in fullscreen mode; has no effect in regular mode"
+              ]
+            },
+            "fullscreen-copy-on-select": {
+              "row": "→ Fullscreen copy on select         false",
+              "description": [
+                "  Automatically copy selected text in fullscreen mode; disable to copy selections with Ctrl+X"
+              ]
+            },
+            "fullscreen-wheel-scroll-lines": {
+              "row": "→ Fullscreen wheel scrolling        7",
+              "description": [
+                "  Lines per mouse-wheel event in fullscreen mode; 'auto' speeds up fast wheel spins where the terminal does not"
+              ]
+            }
+          },
+          "cycles": {
+            "fullscreen-scrollbar": [
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "auto",
+                "type": "string"
+              },
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "always",
+                "type": "string"
+              },
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "hidden",
+                "type": "string"
+              }
+            ],
+            "fullscreen-copy-on-select": [
+              {
+                "id": "fullscreen-copy-on-select",
+                "value": true,
+                "type": "boolean"
+              },
+              {
+                "id": "fullscreen-copy-on-select",
+                "value": false,
+                "type": "boolean"
+              }
+            ],
+            "fullscreen-wheel-scroll-lines": [
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 10,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": "auto",
+                "type": "string"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 1,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 2,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 3,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 5,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 7,
+                "type": "number"
+              }
+            ]
+          },
+          "changes": [
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "auto",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "always",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "hidden",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-copy-on-select",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "fullscreen-copy-on-select",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": "auto",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 7,
+              "type": "number"
+            }
+          ]
+        },
+        "wrongTypeCopyOnSelectConfig": {
+          "rows": {
+            "fullscreen-scrollbar": {
+              "row": "→ Fullscreen scrollbar              auto",
+              "description": [
+                "  Scrollbar behavior in fullscreen mode; has no effect in regular mode"
+              ]
+            },
+            "fullscreen-copy-on-select": {
+              "row": "→ Fullscreen copy on select         true",
+              "description": [
+                "  Automatically copy selected text in fullscreen mode; disable to copy selections with Ctrl+X"
+              ]
+            },
+            "fullscreen-wheel-scroll-lines": {
+              "row": "→ Fullscreen wheel scrolling        auto",
+              "description": [
+                "  Lines per mouse-wheel event in fullscreen mode; 'auto' speeds up fast wheel spins where the terminal does not"
+              ]
+            }
+          },
+          "cycles": {
+            "fullscreen-scrollbar": [
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "always",
+                "type": "string"
+              },
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "hidden",
+                "type": "string"
+              },
+              {
+                "id": "fullscreen-scrollbar",
+                "value": "auto",
+                "type": "string"
+              }
+            ],
+            "fullscreen-copy-on-select": [
+              {
+                "id": "fullscreen-copy-on-select",
+                "value": false,
+                "type": "boolean"
+              },
+              {
+                "id": "fullscreen-copy-on-select",
+                "value": true,
+                "type": "boolean"
+              }
+            ],
+            "fullscreen-wheel-scroll-lines": [
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 1,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 2,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 3,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 5,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": 10,
+                "type": "number"
+              },
+              {
+                "id": "fullscreen-wheel-scroll-lines",
+                "value": "auto",
+                "type": "string"
+              }
+            ]
+          },
+          "changes": [
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "always",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "hidden",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-scrollbar",
+              "value": "auto",
+              "type": "string"
+            },
+            {
+              "id": "fullscreen-copy-on-select",
+              "value": false,
+              "type": "boolean"
+            },
+            {
+              "id": "fullscreen-copy-on-select",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 1,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 2,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 5,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": 10,
+              "type": "number"
+            },
+            {
+              "id": "fullscreen-wheel-scroll-lines",
+              "value": "auto",
+              "type": "string"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "scrollbar-modes-cells-and-reservation",
+      "dimensions": {
+        "columns": 10,
+        "rows": 4
+      },
+      "inputs": {
+        "seam": "real ScrollView over Text with renderLayoutFrame(root, 10, 4) and frozen auto hide timer (1100 ms wait)",
+        "contentLines": 8,
+        "viewportRows": 4,
+        "frameNote": "each frame carries `lines` (terminal sequences stripped) and `rawLines` (exact styled lines with SGR/OSC bytes)",
+        "cases": [
+          {
+            "name": "default-auto",
+            "resolvedValue": "auto",
+            "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (default)"
+          },
+          {
+            "name": "valid-always",
+            "resolvedValue": "always",
+            "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (persisted always)"
+          },
+          {
+            "name": "valid-hidden",
+            "resolvedValue": "hidden",
+            "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (persisted hidden)"
+          },
+          {
+            "name": "invalid-resolves-auto",
+            "resolvedValue": "auto",
+            "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (persisted bogus)"
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "default-auto",
+            "resolvedValue": "auto",
+            "initial": {
+              "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (default)",
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 4,
+              "viewportHeight": 4,
+              "contentWidthAtTen": 10,
+              "contentWidthAtOne": 1,
+              "frame": {
+                "lines": [
+                  "line 5",
+                  "line 6",
+                  "line 7",
+                  "line 8"
+                ],
+                "rawLines": [
+                  "line 5    ",
+                  "line 6    ",
+                  "line 7    ",
+                  "line 8    "
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "scrolled": {
+              "scrollTop": 2,
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "contentWidthAtTen": 10,
+              "frame": {
+                "lines": [
+                  "line 3   │",
+                  "line 4   ┃",
+                  "line 5   ┃",
+                  "line 6   │"
+                ],
+                "rawLines": [
+                  "line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "afterTimer": {
+              "scrollTop": 2,
+              "isScrollbarVisible": false,
+              "contentWidthAtTen": 10,
+              "frame": {
+                "lines": [
+                  "line 3",
+                  "line 4",
+                  "line 5",
+                  "line 6"
+                ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "setScrollbarSameValueRequestRenderDelta": 0,
+            "setScrollbarChangedValueRequestRenderDelta": 1,
+            "alternateMode": "hidden",
+            "alternateFrame": {
+              "lines": [
+                "line 3",
+                "line 4",
+                "line 5",
+                "line 6"
+              ],
+              "rawLines": [
+                "line 3    ",
+                "line 4    ",
+                "line 5    ",
+                "line 6    "
+              ],
+              "window": {
+                "width": 10,
+                "height": 4,
+                "childWidth": 10,
+                "childHeight": 8
+              },
+              "isScrollbarVisible": false
+            }
+          },
+          {
+            "name": "valid-always",
+            "resolvedValue": "always",
+            "initial": {
+              "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (persisted always)",
+              "scrollbar": "always",
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "scrollTop": 4,
+              "viewportHeight": 4,
+              "contentWidthAtTen": 9,
+              "contentWidthAtOne": 1,
+              "frame": {
+                "lines": [
+                  "line 5   │",
+                  "line 6   │",
+                  "line 7   ┃",
+                  "line 8   ┃"
+                ],
+                "rawLines": [
+                  "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 7   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 8   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m"
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 9,
+                  "childHeight": 8
+                }
+              }
+            },
+            "scrolled": {
+              "scrollTop": 2,
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "contentWidthAtTen": 9,
+              "frame": {
+                "lines": [
+                  "line 3   │",
+                  "line 4   ┃",
+                  "line 5   ┃",
+                  "line 6   │"
+                ],
+                "rawLines": [
+                  "\u001b[0m\u001b]8;;\u0007line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 9,
+                  "childHeight": 8
+                }
+              }
+            },
+            "afterTimer": {
+              "scrollTop": 2,
+              "isScrollbarVisible": true,
+              "contentWidthAtTen": 9,
+              "frame": {
+                "lines": [
+                  "line 3   │",
+                  "line 4   ┃",
+                  "line 5   ┃",
+                  "line 6   │"
+                ],
+                "rawLines": [
+                  "\u001b[0m\u001b]8;;\u0007line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 9,
+                  "childHeight": 8
+                }
+              }
+            },
+            "setScrollbarSameValueRequestRenderDelta": 0,
+            "setScrollbarChangedValueRequestRenderDelta": 1,
+            "alternateMode": "hidden",
+            "alternateFrame": {
+              "lines": [
+                "line 3",
+                "line 4",
+                "line 5",
+                "line 6"
+              ],
+              "rawLines": [
+                "line 3    ",
+                "line 4    ",
+                "line 5    ",
+                "line 6    "
+              ],
+              "window": {
+                "width": 10,
+                "height": 4,
+                "childWidth": 10,
+                "childHeight": 8
+              },
+              "isScrollbarVisible": false
+            }
+          },
+          {
+            "name": "valid-hidden",
+            "resolvedValue": "hidden",
+            "initial": {
+              "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (persisted hidden)",
+              "scrollbar": "hidden",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 4,
+              "viewportHeight": 4,
+              "contentWidthAtTen": 10,
+              "contentWidthAtOne": 1,
+              "frame": {
+                "lines": [
+                  "line 5",
+                  "line 6",
+                  "line 7",
+                  "line 8"
+                ],
+                "rawLines": [
+                  "line 5    ",
+                  "line 6    ",
+                  "line 7    ",
+                  "line 8    "
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "scrolled": {
+              "scrollTop": 2,
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "contentWidthAtTen": 10,
+              "frame": {
+                "lines": [
+                  "line 3",
+                  "line 4",
+                  "line 5",
+                  "line 6"
+                ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "afterTimer": {
+              "scrollTop": 2,
+              "isScrollbarVisible": false,
+              "contentWidthAtTen": 10,
+              "frame": {
+                "lines": [
+                  "line 3",
+                  "line 4",
+                  "line 5",
+                  "line 6"
+                ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "setScrollbarSameValueRequestRenderDelta": 0,
+            "setScrollbarChangedValueRequestRenderDelta": 1,
+            "alternateMode": "always",
+            "alternateFrame": {
+              "lines": [
+                "line 3   │",
+                "line 4   ┃",
+                "line 5   ┃",
+                "line 6   │"
+              ],
+              "rawLines": [
+                "\u001b[0m\u001b]8;;\u0007line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                "\u001b[0m\u001b]8;;\u0007line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+              ],
+              "window": {
+                "width": 10,
+                "height": 4,
+                "childWidth": 9,
+                "childHeight": 8
+              },
+              "isScrollbarVisible": true
+            }
+          },
+          {
+            "name": "invalid-resolves-auto",
+            "resolvedValue": "auto",
+            "initial": {
+              "resolvedFrom": "SettingsManager.getFullscreenScrollbar() (persisted bogus)",
+              "scrollbar": "auto",
+              "isScrollbarVisible": false,
+              "isScrollbarActive": false,
+              "scrollTop": 4,
+              "viewportHeight": 4,
+              "contentWidthAtTen": 10,
+              "contentWidthAtOne": 1,
+              "frame": {
+                "lines": [
+                  "line 5",
+                  "line 6",
+                  "line 7",
+                  "line 8"
+                ],
+                "rawLines": [
+                  "line 5    ",
+                  "line 6    ",
+                  "line 7    ",
+                  "line 8    "
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "scrolled": {
+              "scrollTop": 2,
+              "isScrollbarVisible": true,
+              "isScrollbarActive": false,
+              "contentWidthAtTen": 10,
+              "frame": {
+                "lines": [
+                  "line 3   │",
+                  "line 4   ┃",
+                  "line 5   ┃",
+                  "line 6   │"
+                ],
+                "rawLines": [
+                  "line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "afterTimer": {
+              "scrollTop": 2,
+              "isScrollbarVisible": false,
+              "contentWidthAtTen": 10,
+              "frame": {
+                "lines": [
+                  "line 3",
+                  "line 4",
+                  "line 5",
+                  "line 6"
+                ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
+                "window": {
+                  "width": 10,
+                  "height": 4,
+                  "childWidth": 10,
+                  "childHeight": 8
+                }
+              }
+            },
+            "setScrollbarSameValueRequestRenderDelta": 0,
+            "setScrollbarChangedValueRequestRenderDelta": 1,
+            "alternateMode": "hidden",
+            "alternateFrame": {
+              "lines": [
+                "line 3",
+                "line 4",
+                "line 5",
+                "line 6"
+              ],
+              "rawLines": [
+                "line 3    ",
+                "line 4    ",
+                "line 5    ",
+                "line 6    "
+              ],
+              "window": {
+                "width": 10,
+                "height": 4,
+                "childWidth": 10,
+                "childHeight": 8
+              },
+              "isScrollbarVisible": false
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "copy-on-select-settings-and-ctrl-x",
+      "dimensions": {
+        "columns": 20,
+        "rows": 6
+      },
+      "inputs": {
+        "seam": "real TuiAltScreen over VirtualTerminal with injected copySelection sink; controlled InteractiveMode.prototype.handleCopyCommand context (runtimeHost.session.getLastAssistantText -> undefined)",
+        "styleScope": "selection highlight/flash SGR styling is not recorded; selection styles remain the authority of selection.json (#1006)",
+        "drag": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 6,
+            "y": 1
+          }
+        ],
+        "resolvedCases": [
+          {
+            "name": "default-true"
+          },
+          {
+            "name": "valid-false"
+          },
+          {
+            "name": "wrong-type-string-false"
+          },
+          {
+            "name": "wrong-type-zero"
+          }
+        ]
+      },
+      "expected": {
+        "cases": [
+          {
+            "name": "default-true",
+            "resolvedGetter": {
+              "value": true,
+              "type": "boolean",
+              "truthy": true
+            },
+            "rendererGetter": {
+              "value": true,
+              "type": "boolean"
+            },
+            "hasSelectionBeforeManual": true,
+            "hasSelectionAfterManual": true,
+            "selectionText": "alpha",
+            "afterRelease": [
+              "alpha"
+            ],
+            "afterManualCtrlX": [
+              "alpha"
+            ],
+            "manualCtrlXErrors": [
+              "No agent messages to copy yet."
+            ],
+            "createdTuiForwardedCopyOnSelect": {
+              "value": true,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "valid-false",
+            "resolvedGetter": {
+              "value": false,
+              "type": "boolean",
+              "truthy": false
+            },
+            "rendererGetter": {
+              "value": false,
+              "type": "boolean"
+            },
+            "hasSelectionBeforeManual": true,
+            "hasSelectionAfterManual": true,
+            "selectionText": "alpha",
+            "afterRelease": [],
+            "afterManualCtrlX": [
+              "alpha"
+            ],
+            "manualCtrlXErrors": [],
+            "createdTuiForwardedCopyOnSelect": {
+              "value": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "name": "wrong-type-string-false",
+            "resolvedGetter": {
+              "value": "false",
+              "type": "string",
+              "truthy": true
+            },
+            "rendererGetter": {
+              "value": "false",
+              "type": "string"
+            },
+            "hasSelectionBeforeManual": true,
+            "hasSelectionAfterManual": true,
+            "selectionText": "alpha",
+            "afterRelease": [
+              "alpha"
+            ],
+            "afterManualCtrlX": [
+              "alpha"
+            ],
+            "manualCtrlXErrors": [
+              "No agent messages to copy yet."
+            ],
+            "createdTuiForwardedCopyOnSelect": {
+              "value": "false",
+              "type": "string"
+            }
+          },
+          {
+            "name": "wrong-type-zero",
+            "resolvedGetter": {
+              "value": 0,
+              "type": "number",
+              "truthy": false
+            },
+            "rendererGetter": {
+              "value": 0,
+              "type": "number"
+            },
+            "hasSelectionBeforeManual": true,
+            "hasSelectionAfterManual": true,
+            "selectionText": "alpha",
+            "afterRelease": [],
+            "afterManualCtrlX": [
+              "alpha"
+            ],
+            "manualCtrlXErrors": [],
+            "createdTuiForwardedCopyOnSelect": {
+              "value": 0,
+              "type": "number"
+            }
+          }
+        ],
+        "liveSetCopyOnSelect": {
+          "falsePhase": {
+            "getter": false,
+            "afterRelease": []
+          },
+          "truePhaseBeforeDrag": {
+            "getter": true,
+            "afterRelease": []
+          },
+          "truePhaseAfterDrag": {
+            "getter": true,
+            "afterRelease": [
+              "alpha"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "wheel-settings-fixed-vs-auto",
+      "dimensions": {
+        "columns": 20,
+        "rows": 10
+      },
+      "inputs": {
+        "seam": "real WheelScrollAccelerator.next explicit clocks; real TuiAltScreen + createChatViewport wheel SGR events with controlled performance.now for auto; createInteractiveTui option forwarding",
+        "contentLines": 40,
+        "autoClockStepsMs": [
+          20,
+          20,
+          20,
+          300
+        ]
+      },
+      "expected": {
+        "acceleratorMatrix": {
+          "autoBurst20": [
+            1,
+            5,
+            5,
+            5
+          ],
+          "autoSteady100": [
+            1,
+            1,
+            1,
+            1
+          ],
+          "directionChange": [
+            1,
+            5,
+            1,
+            5
+          ],
+          "noAccelerate": [
+            1,
+            1,
+            1
+          ],
+          "fixedFive": [
+            5,
+            5,
+            5
+          ],
+          "fixedZero": [
+            1,
+            1
+          ],
+          "fixedFraction": [
+            2,
+            2
+          ]
+        },
+        "resolvedFixedFive": {
+          "deltas": [
+            {
+              "before": 33,
+              "after": 28,
+              "delta": -5
+            },
+            {
+              "before": 28,
+              "after": 23,
+              "delta": -5
+            },
+            {
+              "before": 23,
+              "after": 18,
+              "delta": -5
+            }
+          ],
+          "scrolledTop": 18
+        },
+        "resolvedInvalidZero": {
+          "deltas": [
+            {
+              "before": 33,
+              "after": 32,
+              "delta": -1
+            },
+            {
+              "before": 32,
+              "after": 31,
+              "delta": -1
+            },
+            {
+              "before": 31,
+              "after": 30,
+              "delta": -1
+            }
+          ],
+          "scrolledTop": 30
+        },
+        "resolvedAuto": {
+          "deltas": [
+            {
+              "advanceMs": 20,
+              "before": 33,
+              "after": 32,
+              "delta": -1
+            },
+            {
+              "advanceMs": 20,
+              "before": 32,
+              "after": 27,
+              "delta": -5
+            },
+            {
+              "advanceMs": 20,
+              "before": 27,
+              "after": 22,
+              "delta": -5
+            },
+            {
+              "advanceMs": 300,
+              "before": 22,
+              "after": 21,
+              "delta": -1
+            }
+          ],
+          "scrolledTop": 21
+        },
+        "resolvedInvalidString": {
+          "deltas": [
+            {
+              "advanceMs": 20,
+              "before": 33,
+              "after": 32,
+              "delta": -1
+            },
+            {
+              "advanceMs": 20,
+              "before": 32,
+              "after": 27,
+              "delta": -5
+            },
+            {
+              "advanceMs": 20,
+              "before": 27,
+              "after": 22,
+              "delta": -5
+            },
+            {
+              "advanceMs": 300,
+              "before": 22,
+              "after": 21,
+              "delta": -1
+            }
+          ],
+          "scrolledTop": 21
+        },
+        "liveSetWheelScrollLines": {
+          "fixedFiveDeltas": [
+            -5,
+            -5
+          ],
+          "autoDeltas": [
+            {
+              "advanceMs": 20,
+              "delta": -1
+            },
+            {
+              "advanceMs": 20,
+              "delta": -5
+            }
+          ]
+        },
+        "createInteractiveTuiForwardedFixedFiveDeltas": [
+          -5,
+          -5
+        ]
+      }
+    },
+    {
+      "name": "product-live-apply-and-mode-switch",
+      "dimensions": {
+        "columns": 20,
+        "rows": 10
+      },
+      "inputs": {
+        "seam": "controlled InteractiveMode.prototype context (private applyRuntimeSettings / switchTuiMode) over a real TuiAltScreen + createChatViewport; stubs: footer, footerDataProvider, statusContainer, defaultEditor padding setters, themeController.rebindTui, runtimeHost.session; createChatViewport scrollbar initialized from settings.getFullscreenScrollbar() like the product init path",
+        "settingsBefore": {
+          "fullscreenScrollbar": "auto",
+          "fullscreenCopyOnSelect": true,
+          "fullscreenWheelScrollLines": "auto"
+        },
+        "settingsAfter": {
+          "fullscreenScrollbar": "always",
+          "fullscreenCopyOnSelect": false,
+          "fullscreenWheelScrollLines": 5
+        }
+      },
+      "expected": {
+        "beforeApply": {
+          "transcriptScrollbar": "auto",
+          "rendererCopyOnSelect": true,
+          "optionsTuiMode": "fullscreen"
+        },
+        "afterApply": {
+          "transcriptScrollbar": "always",
+          "rendererCopyOnSelect": false,
+          "wheelDeltas": [
+            -5,
+            -5
+          ],
+          "settingsResolved": {
+            "fullscreenScrollbar": {
+              "value": "always",
+              "type": "string"
+            },
+            "fullscreenCopyOnSelect": {
+              "value": false,
+              "type": "boolean",
+              "truthy": false
+            },
+            "fullscreenWheelScrollLines": {
+              "value": 5,
+              "type": "number"
+            }
+          },
+          "optionsTuiMode": "fullscreen"
+        },
+        "afterRegularSwitch": {
+          "result": true,
+          "rendererMode": "regular",
+          "optionsTuiMode": "regular",
+          "transcriptScrollbar": "always"
+        },
+        "afterBackSwitch": {
+          "result": true,
+          "rendererMode": "fullscreen",
+          "rendererCopyOnSelect": {
+            "value": false,
+            "type": "boolean"
+          },
+          "wheelDeltas": [
+            -5,
+            -5
+          ],
+          "optionsTuiMode": "fullscreen",
+          "transcriptScrollbar": "always",
+          "transcriptScrollTop": 13
+        }
+      }
+    }
+  ]
+}

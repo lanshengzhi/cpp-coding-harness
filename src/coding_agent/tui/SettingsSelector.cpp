@@ -10,6 +10,8 @@
 #include <cch/tui/Text.hpp>
 
 #include <cch/support/Error.hpp>
+#include <algorithm>
+#include <charconv>
 #include <memory>
 #include <optional>
 #include <string>
@@ -38,6 +40,74 @@ namespace {
     if (label == "Always trust") return DefaultProjectTrust::Always;
     if (label == "Never trust") return DefaultProjectTrust::Never;
     return std::nullopt;
+}
+
+/// The frozen settings selector renders the fullscreen settings as their
+/// persisted wire spellings. The product enum and the toolkit enum share an
+/// order, but the mapping is explicit here and at the consumer, never a cast.
+[[nodiscard]] std::string_view fullscreen_scrollbar_value(FullscreenScrollbar mode) {
+    switch (mode) {
+    case FullscreenScrollbar::Hidden:
+        return "hidden";
+    case FullscreenScrollbar::Auto:
+        return "auto";
+    case FullscreenScrollbar::Always:
+        return "always";
+    }
+    return "auto";
+}
+
+[[nodiscard]] std::optional<FullscreenScrollbar> fullscreen_scrollbar_by_value(std::string_view value) {
+    if (value == "hidden") return FullscreenScrollbar::Hidden;
+    if (value == "always") return FullscreenScrollbar::Always;
+    if (value == "auto") return FullscreenScrollbar::Auto;
+    return std::nullopt;
+}
+
+[[nodiscard]] std::string_view fullscreen_exit_output_value(FullscreenExitOutput output) {
+    switch (output) {
+    case FullscreenExitOutput::Transcript:
+        return "transcript";
+    case FullscreenExitOutput::ResumeHint:
+        return "resume-hint";
+    }
+    return "transcript";
+}
+
+[[nodiscard]] std::optional<FullscreenExitOutput> fullscreen_exit_output_by_value(std::string_view value) {
+    if (value == "transcript") return FullscreenExitOutput::Transcript;
+    if (value == "resume-hint") return FullscreenExitOutput::ResumeHint;
+    return std::nullopt;
+}
+
+[[nodiscard]] std::string fullscreen_wheel_value(const FullscreenWheelScrollLines& lines) {
+    if (const auto* fixed = std::get_if<std::size_t>(&lines)) return std::to_string(*fixed);
+    return "auto";
+}
+
+/// pi `settings-selector.ts`: `["auto", ...[...new Set([1, 2, 3, 5, 10,
+/// config.fullscreenWheelScrollLines])].filter((lines) => lines !== "auto")
+/// .sort((a, b) => a - b).map(String)]` — the sorted distinct current value
+/// joins the fixed cycle values.
+[[nodiscard]] std::vector<std::string> fullscreen_wheel_values(const FullscreenWheelScrollLines& lines) {
+    std::vector<std::size_t> numbers{1, 2, 3, 5, 10};
+    if (const auto* fixed = std::get_if<std::size_t>(&lines)) numbers.push_back(*fixed);
+    std::ranges::sort(numbers);
+    numbers.erase(std::unique(numbers.begin(), numbers.end()), numbers.end());
+    std::vector<std::string> values;
+    values.reserve(numbers.size() + 1);
+    values.emplace_back("auto");
+    for (const auto number : numbers)
+        values.push_back(std::to_string(number));
+    return values;
+}
+
+[[nodiscard]] std::optional<FullscreenWheelScrollLines> fullscreen_wheel_by_value(std::string_view value) {
+    if (value == "auto") return FullscreenWheelScrollLines{AutoWheelScrollLines{}};
+    std::size_t number = 0;
+    const auto parsed = std::from_chars(value.data(), value.data() + value.size(), number);
+    if (parsed.ec != std::errc{} || parsed.ptr != value.data() + value.size()) return std::nullopt;
+    return FullscreenWheelScrollLines{number};
 }
 
 struct SettingsSelectorState {
@@ -290,6 +360,36 @@ private:
             .control = cch::tui::SettingValues{{"regular", "fullscreen"}},
     });
     items.push_back({
+            .id = "fullscreen-exit-output",
+            .label = "Fullscreen exit output",
+            .description = "Print the transcript or only a session resume hint when exiting fullscreen mode",
+            .current_value = std::string{fullscreen_exit_output_value(config.fullscreen_exit_output)},
+            .control = cch::tui::SettingValues{{"transcript", "resume-hint"}},
+    });
+    items.push_back({
+            .id = "fullscreen-scrollbar",
+            .label = "Fullscreen scrollbar",
+            .description = "Scrollbar behavior in fullscreen mode; has no effect in regular mode",
+            .current_value = std::string{fullscreen_scrollbar_value(config.fullscreen_scrollbar)},
+            .control = cch::tui::SettingValues{{"auto", "always", "hidden"}},
+    });
+    items.push_back({
+            .id = "fullscreen-copy-on-select",
+            .label = "Fullscreen copy on select",
+            .description =
+                    "Automatically copy selected text in fullscreen mode; disable to copy selections with Ctrl+X",
+            .current_value = config.fullscreen_copy_on_select ? "true" : "false",
+            .control = cch::tui::SettingValues{{"true", "false"}},
+    });
+    items.push_back({
+            .id = "fullscreen-wheel-scroll-lines",
+            .label = "Fullscreen wheel scrolling",
+            .description = "Lines per mouse-wheel event in fullscreen mode; 'auto' speeds up fast wheel spins where "
+                           "the terminal does not",
+            .current_value = fullscreen_wheel_value(config.fullscreen_wheel_scroll_lines),
+            .control = cch::tui::SettingValues{fullscreen_wheel_values(config.fullscreen_wheel_scroll_lines)},
+    });
+    items.push_back({
             .id = "theme",
             .label = "Theme",
             .description = "Color theme for the interface",
@@ -373,6 +473,45 @@ struct SettingsSelectorComponent::Impl {
                         // moved the row; the caller rolls it back.
                         if (state->callbacks.on_tui_mode_change) {
                             state->callbacks.on_tui_mode_change(std::move(new_value));
+                        }
+                        return {};
+                    }
+                    if (id == "fullscreen-exit-output") {
+                        // pi `case "fullscreen-exit-output":
+                        // callbacks.onFullscreenExitOutputChange(newValue as
+                        // FullscreenExitOutput)`.
+                        const auto output = fullscreen_exit_output_by_value(new_value);
+                        if (output && state->callbacks.on_fullscreen_exit_output_change) {
+                            state->callbacks.on_fullscreen_exit_output_change(*output);
+                        }
+                        return {};
+                    }
+                    if (id == "fullscreen-scrollbar") {
+                        // pi `case "fullscreen-scrollbar":
+                        // callbacks.onFullscreenScrollbarChange(newValue as
+                        // ScrollViewScrollbar)`.
+                        const auto mode = fullscreen_scrollbar_by_value(new_value);
+                        if (mode && state->callbacks.on_fullscreen_scrollbar_change) {
+                            state->callbacks.on_fullscreen_scrollbar_change(*mode);
+                        }
+                        return {};
+                    }
+                    if (id == "fullscreen-copy-on-select") {
+                        // pi `case "fullscreen-copy-on-select":
+                        // callbacks.onFullscreenCopyOnSelectChange(newValue ===
+                        // "true")`.
+                        if (state->callbacks.on_fullscreen_copy_on_select_change) {
+                            state->callbacks.on_fullscreen_copy_on_select_change(new_value == "true");
+                        }
+                        return {};
+                    }
+                    if (id == "fullscreen-wheel-scroll-lines") {
+                        // pi `case "fullscreen-wheel-scroll-lines":
+                        // callbacks.onFullscreenWheelScrollLinesChange(newValue ===
+                        // "auto" ? "auto" : parseInt(newValue, 10))`.
+                        const auto lines = fullscreen_wheel_by_value(new_value);
+                        if (lines && state->callbacks.on_fullscreen_wheel_scroll_lines_change) {
+                            state->callbacks.on_fullscreen_wheel_scroll_lines_change(*lines);
                         }
                         return {};
                     }

@@ -79,6 +79,13 @@ void SettingsFlowController::show_settings_selector() {
     config.enable_skill_commands = settings_manager_->get_enable_skill_commands();
     config.show_hardware_cursor = hooks_.show_hardware_cursor && hooks_.show_hardware_cursor();
     config.show_terminal_progress = settings_manager_->get_show_terminal_progress();
+    // pi settings-selector.ts config: the fullscreen rows read the same typed
+    // values the live consumers use, so the rows show the resolved state after
+    // a surgical write or a reload.
+    config.fullscreen_exit_output = settings_manager_->get_fullscreen_exit_output();
+    config.fullscreen_scrollbar = settings_manager_->get_fullscreen_scrollbar();
+    config.fullscreen_copy_on_select = settings_manager_->get_fullscreen_copy_on_select();
+    config.fullscreen_wheel_scroll_lines = settings_manager_->get_fullscreen_wheel_scroll_lines();
     config.thinking_level = snapshot.agent_state.thinking_level;
     const auto supported = ai::get_supported_thinking_levels(snapshot.agent_state.model);
     config.available_thinking_levels.reserve(supported.size());
@@ -145,6 +152,26 @@ void SettingsFlowController::show_settings_selector() {
                     }
                 }
             });
+        }
+    };
+    callbacks.on_fullscreen_exit_output_change = [weak](FullscreenExitOutput output) {
+        if (const auto self = weak.lock()) {
+            self->post([self, output] { self->set_fullscreen_exit_output_setting(output); });
+        }
+    };
+    callbacks.on_fullscreen_scrollbar_change = [weak](FullscreenScrollbar mode) {
+        if (const auto self = weak.lock()) {
+            self->post([self, mode] { self->set_fullscreen_scrollbar_setting(mode); });
+        }
+    };
+    callbacks.on_fullscreen_copy_on_select_change = [weak](bool enabled) {
+        if (const auto self = weak.lock()) {
+            self->post([self, enabled] { self->set_fullscreen_copy_on_select_setting(enabled); });
+        }
+    };
+    callbacks.on_fullscreen_wheel_scroll_lines_change = [weak](FullscreenWheelScrollLines lines) {
+        if (const auto self = weak.lock()) {
+            self->post([self, lines] { self->set_fullscreen_wheel_scroll_lines_setting(lines); });
         }
     };
     callbacks.on_thinking_level_change = [weak](std::string level) {
@@ -271,6 +298,42 @@ void SettingsFlowController::set_show_hardware_cursor_setting(bool enabled) {
         }
     }
     if (hooks_.set_show_hardware_cursor) hooks_.set_show_hardware_cursor(enabled);
+}
+
+void SettingsFlowController::set_fullscreen_exit_output_setting(FullscreenExitOutput output) {
+    if (settings_manager_ == nullptr) return;
+    if (auto persisted = settings_manager_->set_fullscreen_exit_output(output); !persisted) {
+        show_error(combined_error_text(persisted.error()));
+    }
+}
+
+void SettingsFlowController::set_fullscreen_scrollbar_setting(FullscreenScrollbar mode) {
+    if (settings_manager_ != nullptr) {
+        if (auto persisted = settings_manager_->set_fullscreen_scrollbar(mode); !persisted) {
+            show_error(combined_error_text(persisted.error()));
+        }
+    }
+    // pi applies the change even when the write fails: the live renderer keeps
+    // the user's choice while the status line reports the persistence error.
+    if (hooks_.apply_fullscreen_scrollbar) hooks_.apply_fullscreen_scrollbar(mode);
+}
+
+void SettingsFlowController::set_fullscreen_copy_on_select_setting(bool enabled) {
+    if (settings_manager_ != nullptr) {
+        if (auto persisted = settings_manager_->set_fullscreen_copy_on_select(enabled); !persisted) {
+            show_error(combined_error_text(persisted.error()));
+        }
+    }
+    if (hooks_.apply_fullscreen_copy_on_select) hooks_.apply_fullscreen_copy_on_select(enabled);
+}
+
+void SettingsFlowController::set_fullscreen_wheel_scroll_lines_setting(FullscreenWheelScrollLines lines) {
+    if (settings_manager_ != nullptr) {
+        if (auto persisted = settings_manager_->set_fullscreen_wheel_scroll_lines(lines); !persisted) {
+            show_error(combined_error_text(persisted.error()));
+        }
+    }
+    if (hooks_.apply_fullscreen_wheel_scroll_lines) hooks_.apply_fullscreen_wheel_scroll_lines(lines);
 }
 
 void SettingsFlowController::toggle_thinking_block_visibility() {

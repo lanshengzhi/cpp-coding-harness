@@ -76,6 +76,14 @@ struct SettingsFlowHostHooks {
     /// pi `this.ui.mode`: the mode the live renderer runs, read when a refused
     /// switch rolls its settings row back to the mode still in effect.
     std::move_only_function<coding_agent::TuiMode()> current_tui_mode{nullptr};
+    /// pi `applyFullscreenScrollbarSetting`: set the live transcript viewport's
+    /// scrollbar mode (`interactive-mode.ts:2040-2042`).
+    std::move_only_function<void(coding_agent::FullscreenScrollbar)> apply_fullscreen_scrollbar{nullptr};
+    /// pi `renderer.setCopyOnSelect(enabled)` on the live fullscreen root.
+    std::move_only_function<void(bool)> apply_fullscreen_copy_on_select{nullptr};
+    /// pi `renderer.setWheelScrollLines(lines)` on the live fullscreen root.
+    std::move_only_function<void(coding_agent::FullscreenWheelScrollLines)> apply_fullscreen_wheel_scroll_lines{
+            nullptr};
 };
 
 /// Native TUI settings flow controller (#506). Synchronous like the pi
@@ -138,6 +146,18 @@ private:
     /// pi `onShowHardwareCursorChange`: persist the global `showHardwareCursor`
     /// setting and update the live renderer (pi `interactive-mode.ts:5027-5030`).
     void set_show_hardware_cursor_setting(bool enabled);
+    /// pi `onFullscreenExitOutputChange`: persist the global-scope setting; the
+    /// exit path reads the manager itself.
+    void set_fullscreen_exit_output_setting(FullscreenExitOutput output);
+    /// pi `onFullscreenScrollbarChange`: persist the global-scope setting then
+    /// re-apply the live transcript viewport's scrollbar mode.
+    void set_fullscreen_scrollbar_setting(FullscreenScrollbar mode);
+    /// pi `onFullscreenCopyOnSelectChange`: persist the global-scope setting
+    /// then re-apply the live fullscreen renderer's copy-on-select.
+    void set_fullscreen_copy_on_select_setting(bool enabled);
+    /// pi `onFullscreenWheelScrollLinesChange`: persist the global-scope setting
+    /// then re-apply the live fullscreen renderer's wheel line count.
+    void set_fullscreen_wheel_scroll_lines_setting(FullscreenWheelScrollLines lines);
 
     void post(std::move_only_function<void()> action);
     [[nodiscard]] AgentSession* current_session();

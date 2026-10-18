@@ -9,7 +9,11 @@
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <optional>
 #include <string>
+#include <string_view>
+#include <tuple>
+#include <variant>
 
 using namespace cch;
 
@@ -1195,4 +1199,494 @@ TEST_CASE("SettingsManager set_show_terminal_progress performs surgical global w
     const auto before = dirs.workspace.read("agent/settings.json");
     REQUIRE(manager.set_show_terminal_progress(false));
     CHECK(dirs.workspace.read("agent/settings.json") == before);
+}
+
+TEST_CASE("SettingsManager resolves the fullscreen settings pi defaults", "[coding_agent][settings][issue1020][spec]") {
+    SettingsDirs dirs;
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+
+    REQUIRE(manager.errors().empty());
+    CHECK_FALSE(manager.settings().fullscreen_scrollbar.has_value());
+    CHECK_FALSE(manager.settings().fullscreen_copy_on_select.has_value());
+    CHECK_FALSE(manager.settings().fullscreen_wheel_scroll_lines.has_value());
+    // pi `getFullscreenScrollbar`/`getFullscreenCopyOnSelect`/
+    // `getFullscreenWheelScrollLines` defaults: auto/true/auto.
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Auto);
+    CHECK(manager.get_fullscreen_copy_on_select());
+    CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(manager.get_fullscreen_wheel_scroll_lines()));
+}
+
+TEST_CASE("SettingsManager resolves fullscreenScrollbar and keeps invalid project values shadowing",
+        "[coding_agent][settings][issue1020][spec]") {
+    SettingsDirs dirs;
+    // pi `getFullscreenScrollbar`: only the exact stored strings "always" and
+    // "hidden" resolve to themselves; every other value resolves as "auto".
+    const auto cases = std::array{
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "\"always\"", coding_agent::FullscreenScrollbar::Always},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "\"hidden\"", coding_agent::FullscreenScrollbar::Hidden},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "\"auto\"", coding_agent::FullscreenScrollbar::Auto},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "\"bogus\"", coding_agent::FullscreenScrollbar::Auto},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "\"\"", coding_agent::FullscreenScrollbar::Auto},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "42", coding_agent::FullscreenScrollbar::Auto},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "true", coding_agent::FullscreenScrollbar::Auto},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "null", coding_agent::FullscreenScrollbar::Auto},
+            std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                    "[\"always\"]", coding_agent::FullscreenScrollbar::Auto},
+    };
+    for (const auto& [stored, expected] : cases) {
+        dirs.write_global(std::format(R"({{"fullscreenScrollbar":{}}})", stored));
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+        REQUIRE(manager.errors().empty());
+        CHECK(manager.settings().fullscreen_scrollbar == expected);
+        CHECK(manager.get_fullscreen_scrollbar() == expected);
+    }
+
+    // pi's deep merge gives a present project value priority over global even
+    // when it is invalid, so the invalid value resolves as "auto".
+    for (const auto& [project_value, expected] : std::array{
+                 std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                         "\"bogus\"", coding_agent::FullscreenScrollbar::Auto},
+                 std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                         "42", coding_agent::FullscreenScrollbar::Auto},
+                 std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                         "null", coding_agent::FullscreenScrollbar::Auto},
+                 std::pair<std::string_view, coding_agent::FullscreenScrollbar>{
+                         "\"hidden\"", coding_agent::FullscreenScrollbar::Hidden},
+         }) {
+        dirs.write_global(R"({"fullscreenScrollbar":"always"})");
+        dirs.write_project(std::format(R"({{"fullscreenScrollbar":{}}})", project_value));
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+        REQUIRE(manager.errors().empty());
+        CHECK(manager.get_fullscreen_scrollbar() == expected);
+    }
+}
+
+TEST_CASE("SettingsManager resolves fullscreenCopyOnSelect with pi's nullish and truthiness reads",
+        "[coding_agent][settings][issue1020][spec]") {
+    SettingsDirs dirs;
+    // pi `getFullscreenCopyOnSelect` is `settings.fullscreenCopyOnSelect ??
+    // true` and the AltScreen consumer keeps JavaScript truthiness, so null is
+    // true while false, 0, and "" disable copy-on-select.
+    const auto cases = std::array{
+            std::pair<std::string_view, bool>{"true", true},
+            std::pair<std::string_view, bool>{"false", false},
+            std::pair<std::string_view, bool>{"1", true},
+            std::pair<std::string_view, bool>{"0", false},
+            std::pair<std::string_view, bool>{"\"false\"", true},
+            std::pair<std::string_view, bool>{"\"0\"", true},
+            std::pair<std::string_view, bool>{"\"\"", false},
+            std::pair<std::string_view, bool>{"null", true},
+            std::pair<std::string_view, bool>{"[]", true},
+            std::pair<std::string_view, bool>{"{}", true},
+    };
+    for (const auto& [stored, expected] : cases) {
+        dirs.write_global(std::format(R"({{"fullscreenCopyOnSelect":{}}})", stored));
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+        REQUIRE(manager.errors().empty());
+        CHECK(manager.settings().fullscreen_copy_on_select == expected);
+        CHECK(manager.get_fullscreen_copy_on_select() == expected);
+    }
+
+    // A present project value wins over global under pi's deep merge, so a
+    // falsy wrong-typed project value can disable copy-on-select and a nullish
+    // one falls back to the true default rather than to the global value.
+    for (const auto& [global_value, project_value, expected] : std::array{
+                 std::tuple<std::string_view, std::string_view, bool>{"true", "0", false},
+                 std::tuple<std::string_view, std::string_view, bool>{"true", "\"\"", false},
+                 std::tuple<std::string_view, std::string_view, bool>{"false", "\"false\"", true},
+                 std::tuple<std::string_view, std::string_view, bool>{"false", "null", true},
+                 std::tuple<std::string_view, std::string_view, bool>{"true", "false", false},
+         }) {
+        dirs.write_global(std::format(R"({{"fullscreenCopyOnSelect":{}}})", global_value));
+        dirs.write_project(std::format(R"({{"fullscreenCopyOnSelect":{}}})", project_value));
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+        REQUIRE(manager.errors().empty());
+        CHECK(manager.get_fullscreen_copy_on_select() == expected);
+    }
+}
+
+TEST_CASE("SettingsManager resolves fullscreenWheelScrollLines with pi's finite floor and clamp",
+        "[coding_agent][settings][issue1020][spec]") {
+    SettingsDirs dirs;
+    // pi `getFullscreenWheelScrollLines`: only a finite number is a line count
+    // and it is floored and clamped to 1..100; everything else is "auto".
+    const auto cases = std::array{
+            std::pair<std::string_view, std::optional<std::size_t>>{"\"auto\"", std::nullopt},
+            std::pair<std::string_view, std::optional<std::size_t>>{"1", 1},
+            std::pair<std::string_view, std::optional<std::size_t>>{"5", 5},
+            std::pair<std::string_view, std::optional<std::size_t>>{"2.9", 2},
+            std::pair<std::string_view, std::optional<std::size_t>>{"0", 1},
+            std::pair<std::string_view, std::optional<std::size_t>>{"-4", 1},
+            std::pair<std::string_view, std::optional<std::size_t>>{"100", 100},
+            std::pair<std::string_view, std::optional<std::size_t>>{"100.5", 100},
+            std::pair<std::string_view, std::optional<std::size_t>>{"250", 100},
+            std::pair<std::string_view, std::optional<std::size_t>>{"\"5\"", std::nullopt},
+            std::pair<std::string_view, std::optional<std::size_t>>{"true", std::nullopt},
+            std::pair<std::string_view, std::optional<std::size_t>>{"null", std::nullopt},
+            std::pair<std::string_view, std::optional<std::size_t>>{"[]", std::nullopt},
+    };
+    for (const auto& [stored, expected] : cases) {
+        dirs.write_global(std::format(R"({{"fullscreenWheelScrollLines":{}}})", stored));
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+        REQUIRE(manager.errors().empty());
+        const auto resolved = manager.get_fullscreen_wheel_scroll_lines();
+        if (expected.has_value()) {
+            REQUIRE(std::holds_alternative<std::size_t>(resolved));
+            CHECK(std::get<std::size_t>(resolved) == *expected);
+        } else {
+            CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(resolved));
+        }
+    }
+
+    // A present project value always shadows global, including wrong types and
+    // values that resolve as auto.
+    for (const auto& [project_value, expected] : std::array{
+                 std::pair<std::string_view, std::optional<std::size_t>>{"2", 2},
+                 std::pair<std::string_view, std::optional<std::size_t>>{"2.9", 2},
+                 std::pair<std::string_view, std::optional<std::size_t>>{"\"5\"", std::nullopt},
+                 std::pair<std::string_view, std::optional<std::size_t>>{"null", std::nullopt},
+                 std::pair<std::string_view, std::optional<std::size_t>>{"\"auto\"", std::nullopt},
+         }) {
+        dirs.write_global(R"({"fullscreenWheelScrollLines":10})");
+        dirs.write_project(std::format(R"({{"fullscreenWheelScrollLines":{}}})", project_value));
+        auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+        REQUIRE(manager.errors().empty());
+        const auto resolved = manager.get_fullscreen_wheel_scroll_lines();
+        if (expected.has_value()) {
+            REQUIRE(std::holds_alternative<std::size_t>(resolved));
+            CHECK(std::get<std::size_t>(resolved) == *expected);
+        } else {
+            CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(resolved));
+        }
+    }
+}
+
+TEST_CASE("SettingsManager reload re-reads the fullscreen settings",
+        "[coding_agent][settings][issue1020][reload][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({
+        "fullscreenScrollbar":"always",
+        "fullscreenCopyOnSelect":false,
+        "fullscreenWheelScrollLines":10
+    })");
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Always);
+    CHECK_FALSE(manager.get_fullscreen_copy_on_select());
+    REQUIRE(std::holds_alternative<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()) == 10);
+
+    // A removed key falls back to the pi default after reload.
+    dirs.write_global(R"({"fullscreenWheelScrollLines":"auto"})");
+    REQUIRE(manager.reload());
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Auto);
+    CHECK(manager.get_fullscreen_copy_on_select());
+    CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(manager.get_fullscreen_wheel_scroll_lines()));
+
+    // A project value shadows global on reload too.
+    dirs.write_global(R"({"fullscreenScrollbar":"always"})");
+    dirs.write_project(R"({"fullscreenScrollbar":"hidden"})");
+    REQUIRE(manager.reload());
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Hidden);
+}
+
+TEST_CASE("SettingsManager set_fullscreen_scrollbar writes the global scope only and is a no-op when unchanged",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Hidden));
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Hidden);
+    CHECK(manager.settings().fullscreen_scrollbar == coding_agent::FullscreenScrollbar::Hidden);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"fullscreenScrollbar\": \"hidden\"") != std::string::npos);
+    // Unknown and unmodified fields survive the surgical write.
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    auto reloaded = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(reloaded.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Hidden);
+
+    // The unchanged value is a no-op: the file is not rewritten.
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Hidden));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // The write creates a missing global file.
+    SettingsDirs empty;
+    auto fresh = coding_agent::SettingsManager::create(empty.cwd, empty.agent_dir, /* project_trusted */ true);
+    REQUIRE(fresh.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Always));
+    CHECK(empty.workspace.read("agent/settings.json").find("\"fullscreenScrollbar\": \"always\"") != std::string::npos);
+
+    // pi always writes `globalSettings`, so a project value still shadows it.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"theme":"dark"})");
+    shadow.write_project(R"({"fullscreenScrollbar":"always"})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Hidden));
+    CHECK(shadowed.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Always);
+    CHECK(shadow.workspace.read("agent/settings.json").find("\"fullscreenScrollbar\": \"hidden\"") !=
+            std::string::npos);
+}
+
+TEST_CASE("SettingsManager set_fullscreen_copy_on_select writes the global scope only and is a no-op when unchanged",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.set_fullscreen_copy_on_select(false));
+    CHECK_FALSE(manager.get_fullscreen_copy_on_select());
+    CHECK(manager.settings().fullscreen_copy_on_select == false);
+    CHECK(manager.settings().theme == "dark");
+    const auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"fullscreenCopyOnSelect\": false") != std::string::npos);
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    auto reloaded = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK_FALSE(reloaded.get_fullscreen_copy_on_select());
+
+    // The unchanged value is a no-op: the file is not rewritten.
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_copy_on_select(false));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // pi always writes `globalSettings`, so a project value still shadows it.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"theme":"dark"})");
+    shadow.write_project(R"({"fullscreenCopyOnSelect":true})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.set_fullscreen_copy_on_select(false));
+    CHECK(shadowed.get_fullscreen_copy_on_select());
+    CHECK(shadow.workspace.read("agent/settings.json").find("\"fullscreenCopyOnSelect\": false") != std::string::npos);
+}
+
+TEST_CASE("SettingsManager set_fullscreen_wheel_scroll_lines clamps and persists auto",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global(R"({"theme":"dark","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    // pi `setFullscreenWheelScrollLines` writes the number floored and clamped
+    // to 1..100.
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(std::size_t{250}));
+    REQUIRE(std::holds_alternative<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()) == 100);
+    auto content = dirs.workspace.read("agent/settings.json");
+    CHECK(content.find("\"fullscreenWheelScrollLines\": 100") != std::string::npos);
+    CHECK(content.find("\"future\": true") != std::string::npos);
+
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(std::size_t{0}));
+    REQUIRE(std::holds_alternative<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()) == 1);
+    CHECK(dirs.workspace.read("agent/settings.json").find("\"fullscreenWheelScrollLines\": 1") != std::string::npos);
+
+    // `"auto"` is persisted as the string pi writes.
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(coding_agent::AutoWheelScrollLines{}));
+    CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(manager.get_fullscreen_wheel_scroll_lines()));
+    CHECK(dirs.workspace.read("agent/settings.json").find("\"fullscreenWheelScrollLines\": \"auto\"") !=
+            std::string::npos);
+
+    // The unchanged value is a no-op: the file is not rewritten.
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(coding_agent::AutoWheelScrollLines{}));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    auto reloaded = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(reloaded.get_fullscreen_wheel_scroll_lines()));
+
+    // pi always writes `globalSettings`, so a project value still shadows it.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"fullscreenWheelScrollLines":10})");
+    shadow.write_project(R"({"fullscreenWheelScrollLines":2})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.set_fullscreen_wheel_scroll_lines(coding_agent::AutoWheelScrollLines{}));
+    REQUIRE(std::holds_alternative<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()) == 2);
+    CHECK(shadow.workspace.read("agent/settings.json").find("\"fullscreenWheelScrollLines\": \"auto\"") !=
+            std::string::npos);
+}
+
+TEST_CASE("SettingsManager fullscreen setting writes suppress on a global load failure",
+        "[coding_agent][settings][issue1020][write][error][spec]") {
+    SettingsDirs dirs;
+    dirs.write_global("{");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE_FALSE(manager.errors().empty());
+    // A scope whose load failed suppresses writes to that scope (pi), and the
+    // in-memory view does not advance either.
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Hidden));
+    REQUIRE(manager.set_fullscreen_copy_on_select(false));
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(std::size_t{5}));
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Auto);
+    CHECK(manager.get_fullscreen_copy_on_select());
+    CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(manager.get_fullscreen_wheel_scroll_lines()));
+    CHECK_FALSE(manager.settings().fullscreen_scrollbar.has_value());
+    CHECK_FALSE(manager.settings().fullscreen_copy_on_select.has_value());
+    CHECK_FALSE(manager.settings().fullscreen_wheel_scroll_lines.has_value());
+    CHECK(dirs.workspace.read("agent/settings.json") == "{");
+}
+
+TEST_CASE("SettingsManager set_fullscreen_scrollbar canonicalizes a non-canonical global value and then no-ops",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    // `"bogus"` is not the canonical wire spelling but resolves as auto; the
+    // setter must rewrite the field instead of leaving the malformed value on
+    // disk, while unknown siblings survive the surgical write.
+    dirs.write_global(R"({"fullscreenScrollbar":"bogus","future":true,"theme":"dark"})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Auto);
+
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n"
+                                                        "  \"fullscreenScrollbar\": \"auto\",\n"
+                                                        "  \"future\": true,\n"
+                                                        "  \"theme\": \"dark\"\n"
+                                                        "}\n");
+
+    // A repeated call against the canonical wire value is a house no-op.
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // Reload recomputes the canonical wire state from the rewritten file.
+    REQUIRE(manager.reload());
+    REQUIRE(manager.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // A trusted project override still leaves the setter canonicalizing the
+    // global wire value while the project value keeps shadowing the reads.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"fullscreenScrollbar":"bogus"})");
+    shadow.write_project(R"({"fullscreenScrollbar":"always"})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.errors().empty());
+    CHECK(shadowed.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Always);
+
+    REQUIRE(shadowed.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(shadow.workspace.read("agent/settings.json") == "{\n  \"fullscreenScrollbar\": \"auto\"\n}\n");
+    CHECK(shadow.workspace.read(".pi/settings.json") == R"({"fullscreenScrollbar":"always"})");
+    CHECK(shadowed.get_fullscreen_scrollbar() == coding_agent::FullscreenScrollbar::Always);
+
+    const auto shadow_before = shadow.workspace.read("agent/settings.json");
+    REQUIRE(shadowed.set_fullscreen_scrollbar(coding_agent::FullscreenScrollbar::Auto));
+    CHECK(shadow.workspace.read("agent/settings.json") == shadow_before);
+}
+
+TEST_CASE("SettingsManager set_fullscreen_copy_on_select canonicalizes a non-canonical global value and then no-ops",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    // The string `"false"` is truthy, so it resolves as enabled; the setter
+    // must still rewrite it as the canonical JSON boolean.
+    dirs.write_global(R"({"fullscreenCopyOnSelect":"false","future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    CHECK(manager.get_fullscreen_copy_on_select());
+
+    REQUIRE(manager.set_fullscreen_copy_on_select(true));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n"
+                                                        "  \"fullscreenCopyOnSelect\": true,\n"
+                                                        "  \"future\": true\n"
+                                                        "}\n");
+
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_copy_on_select(true));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // The falsy numeric spelling resolves as disabled and is rewritten as the
+    // canonical boolean too.
+    dirs.write_global(R"({"fullscreenCopyOnSelect":0})");
+    REQUIRE(manager.reload());
+    CHECK_FALSE(manager.get_fullscreen_copy_on_select());
+
+    REQUIRE(manager.set_fullscreen_copy_on_select(false));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n  \"fullscreenCopyOnSelect\": false\n}\n");
+    const auto disabled = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_copy_on_select(false));
+    CHECK(dirs.workspace.read("agent/settings.json") == disabled);
+
+    // A trusted project override keeps shadowing the reads while the setter
+    // canonicalizes the global wire value.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"fullscreenCopyOnSelect":"false"})");
+    shadow.write_project(R"({"fullscreenCopyOnSelect":false})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.errors().empty());
+    CHECK_FALSE(shadowed.get_fullscreen_copy_on_select());
+
+    REQUIRE(shadowed.set_fullscreen_copy_on_select(true));
+    CHECK(shadow.workspace.read("agent/settings.json") == "{\n  \"fullscreenCopyOnSelect\": true\n}\n");
+    CHECK_FALSE(shadowed.get_fullscreen_copy_on_select());
+
+    const auto shadow_before = shadow.workspace.read("agent/settings.json");
+    REQUIRE(shadowed.set_fullscreen_copy_on_select(true));
+    CHECK(shadow.workspace.read("agent/settings.json") == shadow_before);
+}
+
+TEST_CASE(
+        "SettingsManager set_fullscreen_wheel_scroll_lines canonicalizes a non-canonical global value and then no-ops",
+        "[coding_agent][settings][issue1020][write][spec]") {
+    SettingsDirs dirs;
+    // `250` resolves as the clamped line count 100; the setter must rewrite
+    // the canonical clamped number.
+    dirs.write_global(R"({"fullscreenWheelScrollLines":250,"future":true})");
+
+    auto manager = coding_agent::SettingsManager::create(dirs.cwd, dirs.agent_dir, /* project_trusted */ true);
+    REQUIRE(manager.errors().empty());
+    REQUIRE(std::holds_alternative<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(manager.get_fullscreen_wheel_scroll_lines()) == 100);
+
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n"
+                                                        "  \"fullscreenWheelScrollLines\": 100,\n"
+                                                        "  \"future\": true\n"
+                                                        "}\n");
+
+    const auto before = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(dirs.workspace.read("agent/settings.json") == before);
+
+    // The wrong-typed string `"5"` resolves as auto and is rewritten as the
+    // canonical string.
+    dirs.write_global(R"({"fullscreenWheelScrollLines":"5"})");
+    REQUIRE(manager.reload());
+    CHECK(std::holds_alternative<coding_agent::AutoWheelScrollLines>(manager.get_fullscreen_wheel_scroll_lines()));
+
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(coding_agent::AutoWheelScrollLines{}));
+    CHECK(dirs.workspace.read("agent/settings.json") == "{\n  \"fullscreenWheelScrollLines\": \"auto\"\n}\n");
+    const auto auto_wire = dirs.workspace.read("agent/settings.json");
+    REQUIRE(manager.set_fullscreen_wheel_scroll_lines(coding_agent::AutoWheelScrollLines{}));
+    CHECK(dirs.workspace.read("agent/settings.json") == auto_wire);
+
+    // A trusted project override keeps shadowing the reads while the setter
+    // canonicalizes the global wire value.
+    SettingsDirs shadow;
+    shadow.write_global(R"({"fullscreenWheelScrollLines":250})");
+    shadow.write_project(R"({"fullscreenWheelScrollLines":5})");
+    auto shadowed = coding_agent::SettingsManager::create(shadow.cwd, shadow.agent_dir, /* project_trusted */ true);
+    REQUIRE(shadowed.errors().empty());
+    REQUIRE(std::holds_alternative<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()) == 5);
+
+    REQUIRE(shadowed.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(shadow.workspace.read("agent/settings.json") == "{\n  \"fullscreenWheelScrollLines\": 100\n}\n");
+    REQUIRE(std::holds_alternative<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()));
+    CHECK(std::get<std::size_t>(shadowed.get_fullscreen_wheel_scroll_lines()) == 5);
+
+    const auto shadow_before = shadow.workspace.read("agent/settings.json");
+    REQUIRE(shadowed.set_fullscreen_wheel_scroll_lines(std::size_t{100}));
+    CHECK(shadow.workspace.read("agent/settings.json") == shadow_before);
 }

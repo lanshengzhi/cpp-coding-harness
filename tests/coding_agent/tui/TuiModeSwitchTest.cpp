@@ -374,7 +374,9 @@ TEST_CASE("Native TUI TUI mode switch refuses while an overlay entry is present"
     // of cycling onto the mode already in effect.
     CHECK(terminal.modes().alternate_screen);
     CHECK(terminal.modes().started);
-    CHECK(visible_screen(terminal).find("fake: one") != std::string::npos);
+    // The settings selector covers the transcript while it is open (pi's
+    // full-height prompt slot), so the intact transcript is asserted after the
+    // switch below; the refusal must leave the mode and the live root alone.
     CHECK(visible_screen(terminal).find("TUI mode: ") == std::string::npos);
     REQUIRE(pump_until(io, [&] { return on_tui_mode_row(terminal); }));
     CHECK(terminal.modes().alternate_screen);

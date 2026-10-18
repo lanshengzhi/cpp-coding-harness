@@ -31,7 +31,7 @@ def fixture(root):
         "generator": {"path": "capture/capture-named-tui.mts", "sha256": "0" * 64},
         "artifacts": [],
     }
-    for family in ("input", "component", "screen-state", "capability-ledger", "utils-width", "utils-ansi", "fuzzy", "keys-kitty-text", "latex"):
+    for family in ("input", "component", "screen-state", "capability-ledger", "utils-width", "utils-ansi", "fuzzy", "keys-kitty-text", "latex", "fullscreen-settings"):
         artifact = {
             "baseline": "pi-v1.0.4", "revision": REVISION, "capturedAt": captured,
             "environment": environment, "sourceEndpoints": ["packages/tui/src/keys.ts:parseKey"],
@@ -119,6 +119,16 @@ class EvidenceBoundaryTest(unittest.TestCase):
             root = Path(directory)
             manifest = fixture(root)
             manifest["artifacts"].pop()
+            pin_manifest(root, manifest)
+            result = run(root)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn(b"missing required evidence family", result.stderr)
+
+    def test_fullscreen_settings_family_is_required(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            manifest = fixture(root)
+            manifest["artifacts"] = [record for record in manifest["artifacts"] if record["family"] != "fullscreen-settings"]
             pin_manifest(root, manifest)
             result = run(root)
             self.assertNotEqual(result.returncode, 0)
