@@ -23,6 +23,7 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
+#include "support/ThemeFixture.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -85,6 +86,41 @@ using support::JsonValue;
 [[nodiscard]] std::string read_text_file(const std::filesystem::path& path) {
     std::ifstream file(path);
     return std::string{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+}
+
+void replace_theme_value(std::string& theme, std::string_view old_value, std::string_view new_value) {
+    const auto position = theme.find(old_value);
+    REQUIRE(position != std::string::npos);
+    theme.replace(position, old_value.size(), new_value);
+}
+
+struct CellTextPosition {
+    std::size_t row{0};
+    std::size_t column{0};
+    std::size_t width{0};
+};
+
+[[nodiscard]] std::optional<CellTextPosition> find_cell_text(
+        const tui::VirtualTerminal& terminal, std::string_view text) {
+    const auto& cells = terminal.cells();
+    for (std::size_t row = 0; row < cells.size(); ++row) {
+        std::string rendered;
+        std::vector<std::size_t> byte_columns;
+        for (std::size_t column = 0; column < cells[row].size(); ++column) {
+            const auto& cell = cells[row][column];
+            if (cell.continuation) continue;
+            const std::string_view grapheme = cell.grapheme.empty() ? std::string_view{" "} : cell.grapheme;
+            rendered.append(grapheme);
+            byte_columns.insert(byte_columns.end(), grapheme.size(), column);
+        }
+        const auto offset = rendered.find(text);
+        if (offset == std::string::npos) continue;
+        const auto last_byte = offset + text.size() - 1;
+        const auto first_column = byte_columns[offset];
+        return CellTextPosition{
+                .row = row, .column = first_column, .width = byte_columns[last_byte] - first_column + 1};
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
@@ -1517,7 +1553,8 @@ TEST_CASE("Native TUI fullscreen transcript keeps its scroll window across a mod
     CHECK(*run_result);
 }
 
-TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-fullscreen launch while the transcript is scrolled", // cspell: disable-line
+TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-fullscreen launch while the transcript is "
+          "scrolled", // cspell: disable-line
         "[coding_agent][tui][fullscreen][scroll-indicator][issue1039][spec]") {
     // #1039: the indicator is a scrolled-transcript affordance, not a
     // mode-switch artifact. This is the real-run E13 case: a session launched
@@ -1531,7 +1568,11 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     tests::RuntimeFixture runtime;
     tests::TempWorkspace workspace;
     tests::TempWorkspace config;
-    config.write("settings.json", R"({"tuiMode": "fullscreen"})");
+    config.write("settings.json", R"({"tuiMode": "fullscreen", "theme": "frozen-indicator"})");
+    auto indicator_theme = tests::fixture_theme("frozen-indicator", "#69add0");
+    replace_theme_value(indicator_theme, "\"blueBg\": \"#213b49\"", "\"blueBg\": \"#1a2d42\"");
+    replace_theme_value(indicator_theme, "\"text\": \"text\"", "\"text\": \"\"");
+    config.write("themes/frozen-indicator.json", std::move(indicator_theme));
     auto created = runtime.run(
             create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
     REQUIRE(created);
@@ -1539,138 +1580,102 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
 
     const std::string_view kScrollToEndLabel = " ↓ Jump to latest message · Ctrl+End ";
 
-    tui::VirtualTerminal terminal({.columns = 48, .rows = 20});
+    tui::VirtualTerminal terminal({.columns = 83,
+            .rows = 42,
+            .capabilities = {.synchronized_output = true, .color = tui::TerminalColorCapability::TrueColor}});
+    // Pike's idle status dock reserves nine rows; frozen pi reserves eight.
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
-    boost::asio::co_spawn(io,
-            coding_agent::tui::run_interactive_mode(
-                    terminal, make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen)),
-            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Fullscreen);
+    auto run = make_run(*created->session, config.path(), coding_agent::TuiMode::Fullscreen);
+    boost::asio::co_spawn(
+            io, drive_engine(engine, std::move(run)), [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
                 run_result.emplace(std::move(result));
             });
     drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
     REQUIRE(terminal.modes().alternate_screen);
 
-    for (const std::string prompt : {"one", "two", "three", "four", "five", "six"}) {
+    for (std::size_t turn = 0; turn < 24; ++turn) {
+        const auto prompt = std::format("turn-{}", turn);
         REQUIRE(terminal.inject_input(prompt + "\r"));
         REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: " + prompt) != std::string::npos; }));
     }
-    REQUIRE(terminal.inject_input("draft"));
-    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("draft") != std::string::npos; }));
-    REQUIRE(terminal.inject_input("\r"));
-    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: draft") != std::string::npos; }));
-
     // While following the end the affordance must be absent: the gated hint
     // only belongs to a scrolled-away transcript, not to the follow-end frame.
     const auto screen = terminal.screen();
-    REQUIRE(screen.size() == 20);
+    REQUIRE(screen.size() == 42);
     for (std::size_t row = 0; row < screen.size(); ++row) {
         INFO(std::format("follow-end row {}: [{}]", row, screen[row]));
         CHECK(screen[row].find("Jump to latest message") == std::string::npos);
     }
-    const std::vector<std::string> follow_end_window{screen.begin(), screen.end() - 7};
+    const std::vector<std::string> follow_end_window{screen.begin(), screen.end() - 9};
 
-    // The dock covers the last seven rows; wheel up over the transcript so it
+    // The dock covers the last nine rows; wheel up over the transcript so it
     // stops following the end. No content is appended while scrolled.
     for (int notch = 0; notch < 3; ++notch) {
         REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
     }
     drain_ready(io);
-    REQUIRE(terminal.screen().size() == 20);
-    const std::vector<std::string> scrolled_window{terminal.screen().begin(), terminal.screen().end() - 7};
-    REQUIRE(scrolled_window.front() != follow_end_window.front());
+    REQUIRE(terminal.screen().size() == 42);
+    const std::vector<std::string> scrolled_window{terminal.screen().begin(), terminal.screen().end() - 9};
+    CHECK(scrolled_window.front() != follow_end_window.front());
     CHECK(scrolled_window != follow_end_window);
 
-    // The transcript's last clip row is the window's bottom row, which is
-    // where frozen composites the affordance.
     const auto scrolled = terminal.screen();
     CAPTURE(scrolled);
-    const std::size_t transcript_last_row = std::size_t{20} - 7 - 1;
-    for (std::size_t row = 0; row < transcript_last_row; ++row) {
-        INFO(std::format("row {}: [{}]", row, scrolled[row]));
-        CHECK(scrolled[row].find("Jump to latest message") == std::string::npos);
-    }
-    INFO("transcript last row: " << scrolled[transcript_last_row]);
-    REQUIRE(scrolled[transcript_last_row].find(kScrollToEndLabel) != std::string::npos);
+    const auto indicator = find_cell_text(terminal, kScrollToEndLabel);
+    REQUIRE(indicator);
 
-    // The complete styled value: the product composites
-    // `background(SelectedBg, foreground(Text, label))` through the live
-    // theme, so every painted label cell carries exactly that style. The
-    // reference is rendered through the same terminal model the run paints
-    // with, so the comparison is on parsed cells, never on SGR text.
-    coding_agent::tui::LiveTheme reference_theme(
-            coding_agent::tui::select_builtin_theme(terminal.capabilities()), terminal.capabilities().color);
-    tui::VirtualTerminal probe({.columns = 64, .rows = 1});
-    REQUIRE(probe.start([](std::string) -> support::ExpectedVoid { return {}; },
-            [](tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
-    REQUIRE(probe.write(reference_theme.background(coding_agent::tui::ThemeToken::SelectedBg,
-            reference_theme.foreground(coding_agent::tui::ThemeToken::Text, std::string{kScrollToEndLabel}))));
-    const auto& probe_row = probe.cells().at(0);
-    const tui::TerminalStyle label_style = probe_row.at(0).style;
-    // The reference run is itself the complete styled label: one style from
-    // the first painted cell to the label's last cell, then the default.
-    std::size_t label_width = 0;
-    std::size_t label_bytes = 0;
-    for (const auto& cell : probe_row) {
-        if (cell.continuation) continue;
-        if (cell.style != label_style || label_bytes == kScrollToEndLabel.size()) break;
-        label_bytes += cell.grapheme.empty() ? 1 : cell.grapheme.size();
-        ++label_width;
+    // Frozen kitty evidence centers the label at column 23 with 37 visible
+    // cells. Pike's dock places it one row higher at 83x42.
+    constexpr std::size_t kFrozenIndicatorColumn = 23;
+    constexpr std::size_t kFrozenIndicatorWidth = 37;
+    CHECK(indicator->row == terminal.dimensions().rows - 8);
+    CHECK(indicator->column == kFrozenIndicatorColumn);
+    CHECK(indicator->width == kFrozenIndicatorWidth);
+    tui::TerminalStyle kFrozenIndicatorStyle{};
+    kFrozenIndicatorStyle.bg_color = "48;2;26;45;66";
+    for (const auto& cell :
+            std::span{terminal.cells().at(indicator->row)}.subspan(indicator->column, indicator->width)) {
+        CHECK(cell.style.bg_color == kFrozenIndicatorStyle.bg_color);
     }
-    REQUIRE(label_bytes == kScrollToEndLabel.size());
-    REQUIRE(label_width > 0);
-    REQUIRE(probe_row.at(label_width).style != label_style);
 
-    // The painted value must be that exact styled run at the frozen geometry:
-    // the transcript window's bottom row, centered in the clip, with the
-    // theme's selected-background style on every label cell — not a plain
-    // text the substring check would accept unstyled or misplaced.
-    const auto& scrolled_cells = terminal.cells();
-    const auto& indicator_cells = scrolled_cells.at(transcript_last_row);
-    // Rebuild the row the way the terminal's own `screen()` does: graphemes to
-    // the last occupied column, continuations skipped, empty cells as spaces.
-    std::size_t occupied = 0;
-    for (std::size_t column = 0; column < indicator_cells.size(); ++column) {
-        if (!indicator_cells[column].grapheme.empty() || indicator_cells[column].continuation) occupied = column + 1;
-    }
-    std::string indicator_text;
-    for (std::size_t column = 0; column < occupied; ++column) {
-        const auto& cell = indicator_cells.at(column);
-        if (cell.continuation) continue;
-        indicator_text += cell.grapheme.empty() ? " " : cell.grapheme;
-    }
-    REQUIRE(indicator_text == scrolled[transcript_last_row]);
-    // Map the label's byte offset in that row text back to a cell column.
-    const auto label_byte = indicator_text.find(kScrollToEndLabel);
-    REQUIRE(label_byte != std::string::npos);
-    std::size_t label_column = indicator_cells.size();
-    std::size_t byte_cursor = 0;
-    for (std::size_t column = 0; column < indicator_cells.size(); ++column) {
-        const auto& cell = indicator_cells.at(column);
-        if (cell.continuation) continue;
-        if (byte_cursor == label_byte) label_column = column;
-        byte_cursor += cell.grapheme.empty() ? 1 : cell.grapheme.size();
-    }
-    REQUIRE(label_column < indicator_cells.size());
-    CHECK(label_column == (indicator_cells.size() - label_width) / 2);
-    for (std::size_t offset = 0; offset < label_width; ++offset) {
-        const auto& cell = indicator_cells.at(label_column + offset);
-        if (!cell.continuation) REQUIRE(cell.style == label_style);
+    // Swap both renderers directly, without submitting a message or adding the
+    // settings flow's status line. The retained transcript and complete frozen
+    // affordance must survive the round trip byte-for-byte.
+    auto regular = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(regular);
+    REQUIRE(*regular);
+    drain_ready(io);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+    auto fullscreen = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    REQUIRE(fullscreen);
+    REQUIRE(*fullscreen);
+    drain_ready(io);
+    REQUIRE(terminal.modes().alternate_screen);
+    REQUIRE(pump_until(io, [&] { return find_cell_text(terminal, kScrollToEndLabel).has_value(); }));
+    const auto after_switch = terminal.screen();
+    CHECK(after_switch == scrolled);
+    const auto switched_indicator = find_cell_text(terminal, kScrollToEndLabel);
+    REQUIRE(switched_indicator);
+    CHECK(switched_indicator->row == indicator->row);
+    CHECK(switched_indicator->column == indicator->column);
+    CHECK(switched_indicator->width == indicator->width);
+    for (const auto& cell : std::span{terminal.cells().at(switched_indicator->row)}.subspan(
+                 switched_indicator->column, switched_indicator->width)) {
+        CHECK(cell.style.bg_color == kFrozenIndicatorStyle.bg_color);
     }
 
     // Following is resumed by the same affordance's gate: jump to the bottom
-    // and the painted label disappears while the transcript window snaps back
-    // to the follow-end window.
+    // and the painted label disappears while the transcript follows the end.
     REQUIRE(terminal.inject_input("\x1b[1;5F"));
     drain_ready(io);
     const auto resumed = terminal.screen();
-    REQUIRE(resumed.size() == 20);
-    // The first reply may settle more transcript state after its visible text
-    // arrives, so returning to follow-end need not recreate the earlier frame
-    // byte-for-byte. The latest exchange remains visible and the affordance is
-    // absent once the viewport follows the end again.
-    CHECK(visible_screen(terminal).find("fake: draft") != std::string::npos);
+    REQUIRE(resumed.size() == 42);
+    // The label is absent once the viewport follows the end again.
     CHECK(std::none_of(resumed.begin(), resumed.end(), [](const std::string& line) {
         return line.find("Jump to latest message") != std::string::npos;
     }));
