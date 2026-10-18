@@ -8,6 +8,7 @@
 #include "coding_agent/tui/Theme.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Keybindings.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -89,7 +90,10 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     const auto screen = render_screen(selector);
     // pi settings-selector.ts item order for the C++ subset:
     // skill-commands, show-hardware-cursor, output-padding, terminal-progress,
-    // hide-thinking, default-project-trust, thinking, tui-mode, theme.
+    // hide-thinking, default-project-trust, thinking, tui-mode,
+    // fullscreen-exit-output, fullscreen-scrollbar, fullscreen-copy-on-select,
+    // fullscreen-wheel-scroll-lines, theme. The list window shows ten rows, so
+    // the last three rows are checked after navigating.
     const auto skill_commands = screen.find("Skill commands");
     const auto show_hardware_cursor = screen.find("Show hardware cursor");
     const auto output_padding = screen.find("Output padding");
@@ -98,7 +102,8 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     const auto project_trust = screen.find("Default project trust");
     const auto thinking = screen.find("Thinking level");
     const auto tui_mode = screen.find("TUI mode");
-    const auto theme_item = screen.find("Theme");
+    const auto exit_output = screen.find("Fullscreen exit output");
+    const auto scrollbar = screen.find("Fullscreen scrollbar");
     REQUIRE(skill_commands != std::string::npos);
     REQUIRE(show_hardware_cursor != std::string::npos);
     REQUIRE(output_padding != std::string::npos);
@@ -107,7 +112,8 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     REQUIRE(project_trust != std::string::npos);
     REQUIRE(thinking != std::string::npos);
     REQUIRE(tui_mode != std::string::npos);
-    REQUIRE(theme_item != std::string::npos);
+    REQUIRE(exit_output != std::string::npos);
+    REQUIRE(scrollbar != std::string::npos);
     CHECK(skill_commands < show_hardware_cursor);
     CHECK(show_hardware_cursor < output_padding);
     CHECK(output_padding < terminal_progress);
@@ -115,7 +121,8 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     CHECK(hide_thinking < project_trust);
     CHECK(project_trust < thinking);
     CHECK(thinking < tui_mode);
-    CHECK(tui_mode < theme_item);
+    CHECK(tui_mode < exit_output);
+    CHECK(exit_output < scrollbar);
     // The selected item's description renders (pi verbatim wording); the
     // other descriptions render as their rows are selected.
     CHECK(screen.find("Register skills as /skill:name commands") != std::string::npos);
@@ -138,13 +145,25 @@ TEST_CASE("SettingsSelector renders the #327 subset items with pi labels and res
     CHECK(render_screen(selector).find("Interface layout; regular mode uses the terminal's normal scrollback") !=
             std::string::npos);
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    CHECK(render_screen(selector).find("Print the transcript or only a session resume hint") != std::string::npos);
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    CHECK(render_screen(selector).find("Scrollbar behavior in fullscreen mode; has no effect in regular mode") !=
+            std::string::npos);
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    CHECK(render_screen(selector).find("Automatically copy selected text in fullscreen mode; disable to copy") !=
+            std::string::npos);
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    CHECK(render_screen(selector).find("Lines per mouse-wheel event in fullscreen mode; 'auto' speeds up fast wheel") !=
+            std::string::npos);
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     CHECK(render_screen(selector).find("Color theme for the interface") != std::string::npos);
-    // Resolved current values.
+    // Resolved current values; the initial window carries the #327 rows and
+    // the fullscreen rows, the last window carries the theme row's value.
+    CHECK(screen.find("true") != std::string::npos);
+    CHECK(screen.find("0") != std::string::npos);
+    CHECK(screen.find("Always trust") != std::string::npos);
+    CHECK(screen.find("high") != std::string::npos);
     const auto resolved = render_screen(selector);
-    CHECK(resolved.find("true") != std::string::npos);
-    CHECK(resolved.find("0") != std::string::npos);
-    CHECK(resolved.find("Always trust") != std::string::npos);
-    CHECK(resolved.find("high") != std::string::npos);
     CHECK(resolved.find("dark") != std::string::npos);
 }
 
@@ -259,9 +278,9 @@ TEST_CASE("SettingsSelector Theme item opens the single-mode ThemeSubmenu with p
 
     coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
 
-    // Navigate to the theme item (last, index 8, behind the TUI mode row)
+    // Navigate to the theme item (last, behind the four fullscreen rows)
     // and confirm.
-    for (int step = 0; step < 8; ++step) {
+    for (int step = 0; step < 12; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
@@ -305,7 +324,7 @@ TEST_CASE("SettingsSelector ThemeSubmenu cancel re-previews the original without
 
     coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
 
-    for (int step = 0; step < 8; ++step) {
+    for (int step = 0; step < 12; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
@@ -355,11 +374,12 @@ TEST_CASE("SettingsSelector always renders the Theme item with the single-mode s
     const auto screen = render_screen(selector);
     CHECK(screen.find("Hide thinking") != std::string::npos);
     // The Theme item renders always (pi settings-selector.ts renders it
-    // unconditionally); the submenu opens with the builtin themes.
-    CHECK(screen.find("Theme") != std::string::npos);
-    for (int step = 0; step < 8; ++step) {
+    // unconditionally); the fullscreen rows push it behind the list window,
+    // so it is reached by navigating to the end.
+    for (int step = 0; step < 12; ++step) {
         static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
     }
+    CHECK(render_screen(selector).find("Theme") != std::string::npos);
     static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
     const auto submenu = render_screen(selector);
     CHECK(submenu.find("dark") != std::string::npos);
@@ -456,4 +476,137 @@ TEST_CASE("SettingsSelector styles the selected row's cursor glyph with the acce
     // styling of the glyph is not the plain text a respelling could satisfy.
     CHECK(strip_ansi(*selected).rfind("→ Skill commands", 0) == 0);
     CHECK(selected->rfind("→ ", 0) != 0);
+}
+
+TEST_CASE("SettingsSelector renders the fullscreen settings rows with frozen labels, descriptions and values",
+        "[coding_agent][tui][settings-selector][fullscreen][issue1020][spec]") {
+    auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorConfig config;
+    config.fullscreen_exit_output = coding_agent::FullscreenExitOutput::ResumeHint;
+    config.fullscreen_scrollbar = coding_agent::FullscreenScrollbar::Always;
+    config.fullscreen_copy_on_select = false;
+    config.fullscreen_wheel_scroll_lines = std::size_t{7};
+
+    coding_agent::tui::SettingsSelectorComponent selector(
+            theme, test_keybindings(), config, coding_agent::tui::SettingsSelectorCallbacks{});
+
+    // The four rows sit after the TUI mode row and before the theme row; the
+    // frozen rows and descriptions are pi settings-selector.ts verbatim.
+    const auto first = render_screen(selector);
+    CHECK(first.find("TUI mode") != std::string::npos);
+    CHECK(first.find("Fullscreen exit output") != std::string::npos);
+    CHECK(first.find("Fullscreen scrollbar") != std::string::npos);
+    CHECK(first.find("resume-hint") != std::string::npos);
+    CHECK(first.find("always") != std::string::npos);
+
+    // The list window shows ten rows; navigate to the last row so the copy,
+    // wheel and theme rows render together.
+    for (int step = 0; step < 12; ++step) {
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    }
+    const auto last = render_screen(selector);
+    CHECK(last.find("Fullscreen copy on select") != std::string::npos);
+    CHECK(last.find("Fullscreen wheel scrolling") != std::string::npos);
+    CHECK(last.find("Theme") != std::string::npos);
+    // Resolved current values render as the frozen spellings.
+    const auto copy_row = last.find("Fullscreen copy on select");
+    REQUIRE(copy_row != std::string::npos);
+    CHECK(last.find("false", copy_row) != std::string::npos);
+    const auto wheel_row = last.find("Fullscreen wheel scrolling");
+    REQUIRE(wheel_row != std::string::npos);
+    CHECK(last.find("7", wheel_row) != std::string::npos);
+}
+
+TEST_CASE("SettingsSelector fullscreen rows fire the typed sinks in frozen cycle order",
+        "[coding_agent][tui][settings-selector][fullscreen][issue1020][spec]") {
+    auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorConfig config;
+    std::vector<coding_agent::FullscreenExitOutput> exit_outputs;
+    std::vector<coding_agent::FullscreenScrollbar> scrollbars;
+    std::vector<bool> copy_changes;
+    std::vector<coding_agent::FullscreenWheelScrollLines> wheel_changes;
+    coding_agent::tui::SettingsSelectorCallbacks callbacks;
+    callbacks.on_fullscreen_exit_output_change = [&exit_outputs](coding_agent::FullscreenExitOutput output) {
+        exit_outputs.push_back(output);
+    };
+    callbacks.on_fullscreen_scrollbar_change = [&scrollbars](coding_agent::FullscreenScrollbar mode) {
+        scrollbars.push_back(mode);
+    };
+    callbacks.on_fullscreen_copy_on_select_change = [&copy_changes](bool enabled) { copy_changes.push_back(enabled); };
+    callbacks.on_fullscreen_wheel_scroll_lines_change =
+            [&wheel_changes](coding_agent::FullscreenWheelScrollLines lines) { wheel_changes.push_back(lines); };
+
+    coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
+
+    // Frozen value order: the exit-output row cycles transcript → resume-hint.
+    for (int step = 0; step < 8; ++step) {
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    }
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    CHECK(exit_outputs == std::vector<coding_agent::FullscreenExitOutput>{
+                                  coding_agent::FullscreenExitOutput::ResumeHint,
+                                  coding_agent::FullscreenExitOutput::Transcript,
+                          });
+
+    // Scrollbar cycles auto → always → hidden → auto.
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    for (int step = 0; step < 3; ++step) {
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    }
+    CHECK(scrollbars == std::vector<coding_agent::FullscreenScrollbar>{
+                                coding_agent::FullscreenScrollbar::Always,
+                                coding_agent::FullscreenScrollbar::Hidden,
+                                coding_agent::FullscreenScrollbar::Auto,
+                        });
+
+    // Copy-on-select cycles true → false → true.
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    CHECK(copy_changes == std::vector<bool>{false, true});
+
+    // Wheel with the default auto cycles auto → 1 → 2 → 3 → 5 → 10 → auto.
+    static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    for (int step = 0; step < 6; ++step) {
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    }
+    CHECK(wheel_changes == std::vector<coding_agent::FullscreenWheelScrollLines>{
+                                   std::size_t{1},
+                                   std::size_t{2},
+                                   std::size_t{3},
+                                   std::size_t{5},
+                                   std::size_t{10},
+                                   coding_agent::AutoWheelScrollLines{},
+                           });
+}
+
+TEST_CASE("SettingsSelector wheel row keeps the sorted distinct current value in the cycle",
+        "[coding_agent][tui][settings-selector][fullscreen][issue1020][spec]") {
+    auto theme = test_theme();
+    coding_agent::tui::SettingsSelectorConfig config;
+    config.fullscreen_wheel_scroll_lines = std::size_t{7};
+    std::vector<coding_agent::FullscreenWheelScrollLines> wheel_changes;
+    coding_agent::tui::SettingsSelectorCallbacks callbacks;
+    callbacks.on_fullscreen_wheel_scroll_lines_change =
+            [&wheel_changes](coding_agent::FullscreenWheelScrollLines lines) { wheel_changes.push_back(lines); };
+
+    coding_agent::tui::SettingsSelectorComponent selector(theme, test_keybindings(), config, std::move(callbacks));
+
+    for (int step = 0; step < 11; ++step) {
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "down"}));
+    }
+    CHECK(render_screen(selector).find("7") != std::string::npos);
+    for (int step = 0; step < 7; ++step) {
+        static_cast<void>(selector.handle_input(tui::KeyEvent{.key = "enter"}));
+    }
+    CHECK(wheel_changes == std::vector<coding_agent::FullscreenWheelScrollLines>{
+                                   std::size_t{10},
+                                   coding_agent::AutoWheelScrollLines{},
+                                   std::size_t{1},
+                                   std::size_t{2},
+                                   std::size_t{3},
+                                   std::size_t{5},
+                                   std::size_t{7},
+                           });
 }

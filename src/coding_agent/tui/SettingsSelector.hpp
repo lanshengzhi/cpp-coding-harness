@@ -3,6 +3,7 @@
 #include "coding_agent/tui/ThemeController.hpp"
 
 #include <cch/coding_agent/ProjectTrust.hpp>
+#include <cch/coding_agent/Settings.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/SettingsList.hpp>
@@ -52,6 +53,18 @@ struct SettingsSelectorConfig {
     /// The live `tuiMode` setting (`regular` / `fullscreen`), shown as the TUI
     /// mode item's value and the value a refused switch rolls back to.
     std::string current_tui_mode{"regular"};
+    /// Resolved pi `fullscreenExitOutput` (default transcript), shown as the
+    /// exit-output item's value; the exit path reads the manager itself.
+    FullscreenExitOutput fullscreen_exit_output{FullscreenExitOutput::Transcript};
+    /// Resolved pi `fullscreenScrollbar` (default auto; regular mode has no
+    /// effect), shown as the scrollbar item's value.
+    FullscreenScrollbar fullscreen_scrollbar{FullscreenScrollbar::Auto};
+    /// Resolved pi `fullscreenCopyOnSelect` (default true), shown as the
+    /// copy-on-select item's value.
+    bool fullscreen_copy_on_select{true};
+    /// Resolved pi `fullscreenWheelScrollLines` (default auto), shown as the
+    /// wheel-scrolling item's value and the extra entry its cycle appends.
+    FullscreenWheelScrollLines fullscreen_wheel_scroll_lines{AutoWheelScrollLines{}};
 };
 
 using SettingsSelectorHideThinkingSink = std::move_only_function<void(bool)>;
@@ -64,6 +77,10 @@ using SettingsSelectorDefaultProjectTrustSink = std::move_only_function<void(Def
 using SettingsSelectorThemeChangeSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorThemePreviewSink = std::move_only_function<void(std::string)>;
 using SettingsSelectorTuiModeChangeSink = std::move_only_function<void(std::string)>;
+using SettingsSelectorFullscreenExitOutputSink = std::move_only_function<void(FullscreenExitOutput)>;
+using SettingsSelectorFullscreenScrollbarSink = std::move_only_function<void(FullscreenScrollbar)>;
+using SettingsSelectorFullscreenCopyOnSelectSink = std::move_only_function<void(bool)>;
+using SettingsSelectorFullscreenWheelScrollLinesSink = std::move_only_function<void(FullscreenWheelScrollLines)>;
 using SettingsSelectorCancelSink = std::move_only_function<void()>;
 
 /// pi `settings-selector.ts` callbacks: one sink per rendered subset item.
@@ -83,6 +100,17 @@ struct SettingsSelectorCallbacks {
     /// pi `onTuiModeChange`: switch the live renderer and persist the mode on
     /// success; a refusal is reported and the row is rolled back by the caller.
     SettingsSelectorTuiModeChangeSink on_tui_mode_change{};
+    /// pi `onFullscreenExitOutputChange`: persist the global-scope setting.
+    SettingsSelectorFullscreenExitOutputSink on_fullscreen_exit_output_change{};
+    /// pi `onFullscreenScrollbarChange`: persist and re-apply the transcript
+    /// scrollbar mode.
+    SettingsSelectorFullscreenScrollbarSink on_fullscreen_scrollbar_change{};
+    /// pi `onFullscreenCopyOnSelectChange`: persist and re-apply the live
+    /// fullscreen renderer's copy-on-select.
+    SettingsSelectorFullscreenCopyOnSelectSink on_fullscreen_copy_on_select_change{};
+    /// pi `onFullscreenWheelScrollLinesChange`: persist and re-apply the live
+    /// fullscreen renderer's wheel line count.
+    SettingsSelectorFullscreenWheelScrollLinesSink on_fullscreen_wheel_scroll_lines_change{};
     SettingsSelectorCancelSink on_cancel{};
 };
 

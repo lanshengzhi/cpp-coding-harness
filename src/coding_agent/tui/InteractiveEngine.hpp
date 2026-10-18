@@ -253,6 +253,20 @@ private:
     /// is setter-only on `ITui`), so the engine keeps the value it installed.
     void apply_debug_hook();
 
+    /// pi `applyFullscreenScrollbarSetting`: set the live transcript viewport's
+    /// scrollbar mode (`interactive-mode.ts:2040-2042`).
+    void apply_fullscreen_scrollbar(FullscreenScrollbar mode);
+    /// pi `renderer.setCopyOnSelect(enabled)` on the owned fullscreen root.
+    void apply_fullscreen_copy_on_select(bool enabled);
+    /// pi `renderer.setWheelScrollLines(lines)` on the owned fullscreen root.
+    void apply_fullscreen_wheel_scroll_lines(FullscreenWheelScrollLines lines);
+    /// pi `applyRuntimeSettings` for the three fullscreen consumers
+    /// (`interactive-mode.ts:2052-2060`): re-apply the resolved settings after
+    /// boot, `/reload` and a regular↔fullscreen switch. The per-row callbacks
+    /// apply one consumer each so a scrollbar change cannot reset the wheel
+    /// accelerator state.
+    void apply_fullscreen_settings();
+
     /// Point `tui_` and its borrowed consumers at one of the two owned roots
     /// (pi `this.renderer = nextUi` plus `this.options.tuiMode = mode`).
     /// `switch_tui_mode` reaches this only once every alias into the retired

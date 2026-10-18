@@ -281,6 +281,9 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
             self->hide_thinking_block_ = self->settings_manager_->hide_thinking_block();
             self->output_pad_ = self->settings_manager_->output_pad();
             self->set_show_hardware_cursor(self->settings_manager_->get_show_hardware_cursor());
+            // pi `applyRuntimeSettings` after the reload: the fullscreen
+            // consumers pick up an externally edited settings file.
+            self->apply_fullscreen_settings();
         }
         if (self->view_ != nullptr) {
             self->view_->apply_render_settings(self->hide_thinking_block_, self->output_pad_);
@@ -422,6 +425,18 @@ std::shared_ptr<SettingsFlowController> InteractiveEngine::make_settings_flow_co
         const auto self = weak.lock();
         return self != nullptr && self->tui_ == self->main_screen_.get() ? coding_agent::TuiMode::Regular
                                                                          : coding_agent::TuiMode::Fullscreen;
+    };
+    // pi settings-selector.ts callbacks: each fullscreen row persists through
+    // the settings manager, then the engine re-applies the one live consumer
+    // the row owns (`interactive-mode.ts:5086-5099`).
+    hooks.apply_fullscreen_scrollbar = [weak](coding_agent::FullscreenScrollbar mode) {
+        if (const auto self = weak.lock()) self->apply_fullscreen_scrollbar(mode);
+    };
+    hooks.apply_fullscreen_copy_on_select = [weak](bool enabled) {
+        if (const auto self = weak.lock()) self->apply_fullscreen_copy_on_select(enabled);
+    };
+    hooks.apply_fullscreen_wheel_scroll_lines = [weak](coding_agent::FullscreenWheelScrollLines lines) {
+        if (const auto self = weak.lock()) self->apply_fullscreen_wheel_scroll_lines(lines);
     };
     return std::make_shared<SettingsFlowController>(executor_,
             *this,

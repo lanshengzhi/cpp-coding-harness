@@ -56,6 +56,26 @@ namespace {
             support::ErrorCode::Workspace, "Project resource detection filesystem capability is unavailable");
 }
 
+/// Explicit product→toolkit mappings for the fullscreen settings. The two
+/// enumerations happen to share an order, but the settings schema's spellings
+/// are the product's contract; an ordinal cast would couple them silently.
+[[nodiscard]] cch::tui::ScrollbarMode to_toolkit_scrollbar(FullscreenScrollbar mode) {
+    switch (mode) {
+    case FullscreenScrollbar::Hidden:
+        return cch::tui::ScrollbarMode::Hidden;
+    case FullscreenScrollbar::Auto:
+        return cch::tui::ScrollbarMode::Auto;
+    case FullscreenScrollbar::Always:
+        return cch::tui::ScrollbarMode::Always;
+    }
+    return cch::tui::ScrollbarMode::Auto;
+}
+
+[[nodiscard]] cch::tui::WheelScrollLines to_toolkit_wheel_scroll_lines(const FullscreenWheelScrollLines& lines) {
+    if (const auto* fixed = std::get_if<std::size_t>(&lines)) return *fixed;
+    return cch::tui::AutoWheelScrollLines{};
+}
+
 struct DelayedTuiWork {
     explicit DelayedTuiWork(boost::asio::any_io_executor executor) : timer(std::move(executor)) {}
     boost::asio::steady_timer timer;
@@ -281,9 +301,17 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     const auto weak = weak_from_this();
     auto view = make_interactive_view(weak);
     view_ = view.get();
-    auto viewport = InteractiveView::make_fullscreen_root(std::move(view), cch::tui::ScrollbarMode::Auto);
+    // pi `createChatViewport({scrollbar: this.settingsManager.getFullscreenScrollbar()})`:
+    // the product viewport takes the resolved setting, while the reusable
+    // toolkit viewport keeps its own hidden default.
+    const auto scrollbar = settings_manager_ ? to_toolkit_scrollbar(settings_manager_->get_fullscreen_scrollbar())
+                                             : cch::tui::ScrollbarMode::Auto;
+    auto viewport = InteractiveView::make_fullscreen_root(std::move(view), scrollbar);
     if (!viewport) return fail_start(viewport.error());
     fullscreen_viewport_.emplace(std::move(*viewport));
+    // pi `applyRuntimeSettings` at boot: the owned fullscreen host takes the
+    // resolved copy/wheel values before the root can paint.
+    apply_fullscreen_settings();
     if (tui_ == &fullscreen_host_->tui()) {
         fullscreen_host_->alt_screen().set_layout_root(std::move(fullscreen_viewport_->root));
     } else if (auto editor = fullscreen_viewport_->take_editor(); !editor) {
@@ -382,6 +410,23 @@ void InteractiveEngine::apply_debug_hook() {
 void InteractiveEngine::set_show_hardware_cursor(bool enabled) noexcept {
     show_hardware_cursor_ = enabled;
     if (tui_ != nullptr) tui_->set_show_hardware_cursor(enabled);
+}
+
+void InteractiveEngine::apply_fullscreen_scrollbar(FullscreenScrollbar mode) {
+    if (fullscreen_viewport_) fullscreen_viewport_->transcript->set_scrollbar(to_toolkit_scrollbar(mode));
+}
+
+void InteractiveEngine::apply_fullscreen_copy_on_select(bool enabled) { fullscreen_host_->set_copy_on_select(enabled); }
+
+void InteractiveEngine::apply_fullscreen_wheel_scroll_lines(FullscreenWheelScrollLines lines) {
+    fullscreen_host_->alt_screen().set_wheel_scroll_lines(to_toolkit_wheel_scroll_lines(lines));
+}
+
+void InteractiveEngine::apply_fullscreen_settings() {
+    if (!settings_manager_) return;
+    apply_fullscreen_scrollbar(settings_manager_->get_fullscreen_scrollbar());
+    apply_fullscreen_copy_on_select(settings_manager_->get_fullscreen_copy_on_select());
+    apply_fullscreen_wheel_scroll_lines(settings_manager_->get_fullscreen_wheel_scroll_lines());
 }
 
 support::ExpectedVoid InteractiveEngine::wire_selected_root() {
@@ -533,6 +578,11 @@ support::Expected<bool> InteractiveEngine::switch_tui_mode(
         return std::unexpected(mounted.error());
     }
     if (auto wired = wire_selected_root(); !wired) return std::unexpected(wired.error());
+    // pi `switchTuiMode` rebuilds the fullscreen renderer from the settings
+    // manager (`fullscreenCopyOnSelect` / `fullscreenWheelScrollLines`) and
+    // keeps the retained transcript viewport's scrollbar mode; re-applying all
+    // three keeps the live consumers on the resolved values across the switch.
+    apply_fullscreen_settings();
     tui_->invalidate();
     if (auto focused = tui_->set_focus(focus); !focused) return std::unexpected(focused.error());
     if (!start_renderer) {
