@@ -30,6 +30,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
+import { registerHooks } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -84,6 +85,7 @@ const profile = Object.freeze({
 		TERM: "xterm-256color",
 		COLORTERM: "truecolor",
 		COLORFGBG: "15;0",
+		FORCE_COLOR: "3",
 		NO_COLOR: undefined,
 	},
 	configuration: {
@@ -91,6 +93,7 @@ const profile = Object.freeze({
 		extensions: "disabled",
 		userSettings: "in-memory dark theme",
 		projectResources: "empty deterministic .pi directory",
+		generatedAzureCatalog: "empty JSON import stub; faux scenarios do not consume provider catalog data",
 	},
 	provider: "deterministic-faux",
 });
@@ -108,6 +111,7 @@ type Triage = {
 	classification: TriageClassification;
 	evidence: string[];
 	rationale: string;
+	acceptedDifferences?: string[];
 };
 
 type Scenario = {
@@ -125,7 +129,24 @@ const scenarios: Scenario[] = [
 	{ id: "boot-120", width: 120, inputs: [], omissions: [] },
 	{ id: "boot-41", width: 41, inputs: [], omissions: [] },
 	{ id: "model-selector", width: 100, inputs: ["\x0c", "\r"], omissions: [] },
-	{ id: "settings-selector", width: 100, inputs: ["/settings", "\r", "\r", "\x1b"], omissions: ["pi-only settings outside the Supported Capability subset are not projected as Pike capabilities"], omissionPatterns: ["Auto-compact", "Auto-resize", "Block images", "Show hardware cursor", "Editor padding", "Autocomplete max items", "Clear on shrink", "Terminal progress", "Automatically compact context", "extension", "Extension", "package", "Package"] },
+	{
+		id: "settings-selector",
+		width: 100,
+		inputs: ["/settings", "\r", "Show hardware cursor", "\r", "\x15", "Terminal progress", "\r", "\x15", "\x1b"],
+		omissions: ["pi-only settings outside the Supported Capability subset are not projected as Pike capabilities"],
+		omissionPatterns: [
+			"Auto-compact",
+			"Auto-resize images",
+			"Block images",
+			"Editor padding",
+			"Autocomplete max items",
+			"Clear on shrink",
+			"Automatically compact context when it gets too large",
+			"extension",
+			"Extension",
+			"package",
+		],
+	},
 	{ id: "thinking-selector", width: 100, inputs: ["/thinking", "\r", "\r"], omissions: [] },
 	{ id: "editor-long", width: 72, inputs: ["A long editor line that must wrap without losing the fixture-authored suffix", "\x15"], omissions: [] },
 	{ id: "editor-cjk", width: 72, inputs: ["混在文本 mixed 日本語 ✅", "\x15"], omissions: [] },
@@ -145,7 +166,14 @@ const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["boot-120", { classification: "match", evidence: ["report.json:boot-120"], rationale: "The profile-stripped shared regular Native TUI header matches pi at 120 columns." }],
 	["boot-41", { classification: "match", evidence: ["report.json:boot-41"], rationale: "The profile-stripped shared regular Native TUI header matches pi at the narrow width." }],
 	["model-selector", { classification: "match", evidence: ["#808", "report.json:model-selector"], rationale: "The supported model row marker and order now match pi: the row leads with pi's marker cell instead of a trailing success-styled check, the provider hint renders unpadded, and the save hint uses pi's dim role." }],
-	["settings-selector", { classification: "product-defect", evidence: ["#809", "report.json:settings-selector"], rationale: "Pi-only settings are documented omissions, but supported settings rows and transitions also differ. This row rests on profileProjection.visibleCellTextEqual=false and on the unresolved omission projection, not on profileProjection.scrollbackStructureEqual: the length compensation already pays back the pi-only row pi adds inside its viewport and the retained rows still differ." }],
+	["settings-selector", {
+		classification: "product-defect",
+		evidence: ["#809", "report.json:settings-selector"],
+		rationale: "Pi-only settings remain explicitly omitted, with Editor padding retained as out of scope. The scenario searches for the supported Show hardware cursor row, captures its false and true states, then exits with Escape. The accepted first-viewport delta remains visible after omitting only pi-only settings rows and reflects the different supported selector inventories and selection geometry.",
+		acceptedDifferences: [
+			"#809 accepts Pike's registry-derived, effective-binding settings help wording. The raw help cells and styles remain in the capture and comparison; this wording is not filtered as an omission.",
+		],
+	}],
 	["thinking-selector", { classification: "product-defect", evidence: ["#810", "report.json:thinking-selector"], rationale: "The supported thinking selector viewport and command-row presentation remain different." }],
 	["editor-long", { classification: "product-defect", evidence: ["report.json:editor-long"], rationale: "The long editor text wraps identically, but the 72-column startup help retains the same segment-boundary difference recorded by boot-72 after pi's runtime banner and onboarding copy are projected out." }],
 	["editor-cjk", { classification: "product-defect", evidence: ["report.json:editor-cjk"], rationale: "The mixed-width editor text wraps identically, but the 72-column startup help retains the same segment-boundary difference recorded by boot-72 after pi's runtime banner and onboarding copy are projected out." }],
@@ -253,6 +281,7 @@ function childEnvironment(extra: Record<string, string>): NodeJS.ProcessEnv {
 		TERM: profile.terminalVariables.TERM,
 		COLORTERM: profile.terminalVariables.COLORTERM,
 		COLORFGBG: profile.terminalVariables.COLORFGBG,
+		FORCE_COLOR: profile.terminalVariables.FORCE_COLOR,
 		...extra,
 	};
 }
@@ -425,6 +454,7 @@ async function runPi(scenario: Scenario, output: string): Promise<Record<string,
 		env: childEnvironment({
 			...scenarioEnvironment(scenario, output),
 			PI_CHECKOUT: checkout,
+			FORCE_COLOR: profile.terminalVariables.FORCE_COLOR,
 		}),
 		stdio: ["ignore", "pipe", "pipe"],
 		encoding: "utf8",
@@ -628,6 +658,7 @@ function verifyAnsiBoundary(): void {
 	// do not decide classification when the resolved cells agree.
 	const scenario = scenarios.find((item) => item.id === "boot-72");
 	if (!scenario) throw new Error("ANSI boundary verification requires the boot-72 scenario");
+	const cursor = { column: 4, row: 1 };
 	const theme = {
 		name: "dark",
 		colorCapability: "truecolor",
@@ -657,13 +688,15 @@ function verifyAnsiBoundary(): void {
 			scrollback: [],
 			styledVisible: [[{ text: "row", style: style(foreground) }]],
 			styledScrollback: [],
+			cursor,
+			cursorVisible: true,
 			ansi,
 		}],
 	});
 	const projection = stableProjection(makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"), scenario, repoRoot);
 	assert.deepEqual(
 		Object.keys((projection.snapshots as Record<string, unknown>[])[0]).sort(),
-		["scrollback", "sgr", "styledScrollback", "styledVisible", "visible"],
+		["cursor", "cursorVisible", "scrollback", "sgr", "styledScrollback", "styledVisible", "visible"],
 	);
 	// Same cell text and same normalized SGR structure, different raw framing
 	// bytes (cursor moves, erase sequences): not a difference.
@@ -693,6 +726,38 @@ function verifyAnsiBoundary(): void {
 	assert.equal((restyled.projection as Record<string, unknown>).sgrStructureEqual, false);
 	assert.equal((restyled.projection as Record<string, unknown>).visibleCellTextEqual, true);
 	assert.equal((restyled.projection as Record<string, unknown>).visibleCellPresentationEqual, false);
+	const cursorMoved = compare(
+		makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"),
+		{ ...makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"), snapshots: [{
+			visible: ["row"],
+			scrollback: [],
+			styledVisible: [[{ text: "row", style: style("#123456") }]],
+			styledScrollback: [],
+			cursor: { column: 5, row: 1 },
+			cursorVisible: true,
+			ansi: "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m",
+		}] },
+		scenario,
+		repoRoot,
+	);
+	assert.equal(cursorMoved.classification, "supported-capability-regression");
+	assert.equal((cursorMoved.projection as Record<string, unknown>).cursorEqual, false);
+	const cursorHidden = compare(
+		makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"),
+		{ ...makeCapture("\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"), snapshots: [{
+			visible: ["row"],
+			scrollback: [],
+			styledVisible: [[{ text: "row", style: style("#123456") }]],
+			styledScrollback: [],
+			cursor,
+			cursorVisible: false,
+			ansi: "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m",
+		}] },
+		scenario,
+		repoRoot,
+	);
+	assert.equal(cursorHidden.classification, "supported-capability-regression");
+	assert.equal((cursorHidden.projection as Record<string, unknown>).cursorEqual, false);
 }
 
 // canonicalStyledStyle's slot order. The presentation comparison resolves only
@@ -869,6 +934,7 @@ function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, 
 		theme: normalizeThemeEvidence(capture.theme, `${String(capture.runtime)}/${scenario.id}`),
 		snapshots: snapshots.map((item) => {
 			const snapshot = item as Record<string, unknown>;
+			const rawCursor = snapshot.cursor as Record<string, unknown> | undefined;
 			const ansi = typeof snapshot.ansi === "string" ? replaceFixturePaths(snapshot.ansi, workspace, repositoryRoot, scenario) : "";
 			const visible = Array.isArray(snapshot.visible)
 				? snapshot.visible.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
@@ -880,6 +946,8 @@ function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, 
 					: [],
 				styledVisible: normalizeStyledRows(snapshot.styledVisible, workspace, repositoryRoot, scenario),
 				styledScrollback: normalizeStyledRows(snapshot.styledScrollback, workspace, repositoryRoot, scenario),
+				cursor: rawCursor === undefined ? undefined : { column: rawCursor.column, row: rawCursor.row },
+				cursorVisible: snapshot.cursorVisible,
 				ansi,
 				sgr: sgrTokens(ansi),
 			};
@@ -923,6 +991,8 @@ function stableProjection(capture: Record<string, unknown>, scenario: Scenario, 
 			scrollback: snapshot.scrollback,
 			styledVisible: snapshot.styledVisible,
 			styledScrollback: snapshot.styledScrollback,
+			cursor: snapshot.cursor,
+			cursorVisible: snapshot.cursorVisible,
 			sgr: (snapshot.sgr as string[]).map(normalizeSgrToken),
 		})),
 	};
@@ -1074,6 +1144,8 @@ function profileProjectionForComparison(projection: Record<string, unknown>, sce
 			scrollback: projectProfileCellRows(projectDiagnosticFooterRows(snapshot.scrollback as string[], scenario)).rows,
 			styledVisible: projectProfileStyledRows(snapshot.styledVisible, scenario),
 			styledScrollback: projectProfileStyledRows(snapshot.styledScrollback, scenario),
+			cursor: snapshot.cursor,
+			cursorVisible: snapshot.cursorVisible,
 			sgr: snapshot.sgr,
 		})),
 	};
@@ -1085,12 +1157,18 @@ function compareProfileProjection(pike: Record<string, unknown>, pi: Record<stri
 	const pikeSnapshots = pikeProjected.snapshots as Record<string, unknown>[];
 	const piSnapshots = piProjected.snapshots as Record<string, unknown>[];
 	const scrollback = compareScrollbackStructure(pike, pi, scenario);
+	const cursorEqual = pikeSnapshots.length === piSnapshots.length && pikeSnapshots.every((snapshot, index) => {
+		const other = piSnapshots[index];
+		return JSON.stringify({ cursor: snapshot.cursor, cursorVisible: snapshot.cursorVisible }) ===
+			JSON.stringify({ cursor: other.cursor, cursorVisible: other.cursorVisible });
+	});
 	return {
 		visibleCellTextEqual: JSON.stringify(pikeSnapshots.map((item) => item.visible)) === JSON.stringify(piSnapshots.map((item) => item.visible)),
 		visibleCellPresentationEqual: styledPresentationEqual(pikeProjected, piProjected),
 		scrollbackStructureEqual: scrollback.equal,
 		scrollbackLengthCompensation: scrollback.lengthCompensation,
 		scrollbackCellPresentationEqual: styledRowsEqual(pikeProjected, piProjected, "scrollback"),
+		cursorEqual,
 		footerStatsProjected: usageProfileScenarios.has(String(pike.scenario)),
 		removedCellRows: {
 			pike: (pike.snapshots as Record<string, unknown>[]).map((snapshot) => projectProfileCellRows(projectDiagnosticFooterRows(snapshot.visible as string[], scenario)).removed),
@@ -1115,6 +1193,8 @@ function omitProjectionLines(projection: Record<string, unknown>, patterns: stri
 			scrollback: (snapshot.scrollback as string[]).filter((line) => !patterns.some((pattern) => line.includes(pattern))),
 			styledVisible: (snapshot.styledVisible as unknown[]).filter((row) => !patterns.some((pattern) => styledRowText(row).includes(pattern))),
 			styledScrollback: (snapshot.styledScrollback as unknown[]).filter((row) => !patterns.some((pattern) => styledRowText(row).includes(pattern))),
+			cursor: snapshot.cursor,
+			cursorVisible: snapshot.cursorVisible,
 			sgr: snapshot.sgr,
 		})),
 	};
@@ -1146,16 +1226,23 @@ function omissionSgrEqual(left: Record<string, unknown>, right: Record<string, u
 	return JSON.stringify(leftSnapshots.map((snapshot) => snapshot.sgr)) === JSON.stringify(rightSnapshots.map((snapshot) => snapshot.sgr));
 }
 
-function isIntentionalSubsetOmission(scenario: Pick<Scenario, "omissions">, omissionProjectionEqual: boolean, pikeObserved: boolean, piObserved: boolean): boolean {
-	return scenario.omissions.length > 0 && piObserved && !pikeObserved && omissionProjectionEqual;
+function isIntentionalSubsetOmission(
+	scenario: Pick<Scenario, "omissions">,
+	omissionProjectionEqual: boolean,
+	pikeObserved: boolean,
+	piObserved: boolean,
+	cursorEqual: boolean,
+): boolean {
+	return scenario.omissions.length > 0 && piObserved && !pikeObserved && omissionProjectionEqual && cursorEqual;
 }
 
 function verifyProjectionPolicy(): void {
 	const scenario = { omissions: ["pi-only chrome"] };
-	assert.equal(isIntentionalSubsetOmission(scenario, true, false, true), true);
-	assert.equal(isIntentionalSubsetOmission(scenario, false, false, true), false);
-	assert.equal(isIntentionalSubsetOmission(scenario, true, true, true), false);
-	assert.equal(isIntentionalSubsetOmission(scenario, true, false, false), false);
+	assert.equal(isIntentionalSubsetOmission(scenario, true, false, true, true), true);
+	assert.equal(isIntentionalSubsetOmission(scenario, false, false, true, true), false);
+	assert.equal(isIntentionalSubsetOmission(scenario, true, true, true, true), false);
+	assert.equal(isIntentionalSubsetOmission(scenario, true, false, false, true), false);
+	assert.equal(isIntentionalSubsetOmission(scenario, true, false, true, false), false);
 
 	const styled = (text: string) => [{ text, style: { foreground: "#ff0000" } }];
 	const left = {
@@ -1261,7 +1348,7 @@ function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, sce
 	// The styled-cell comparison resolves a cell color through the theme the
 	// capture carries. The colors ride on the comparison projection instead of
 	// inside stableProjection so the stable digest stays the cell projection it
-	// has always been; validateThemeParity owns the theme evidence itself.
+	// has always been; cursor position and visibility are included alongside cells.
 	const pikeProjection: Record<string, unknown> = {
 		...stableProjection(pike, scenario, repositoryRoot),
 		themeColors: normalizeThemeEvidence(pike.theme, `Pike/${scenario.id}`).colors,
@@ -1272,6 +1359,11 @@ function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, sce
 	};
 	const pikeSnapshots = pikeProjection.snapshots as Record<string, unknown>[];
 	const piSnapshots = piProjection.snapshots as Record<string, unknown>[];
+	const cursorEqual = pikeSnapshots.length === piSnapshots.length && pikeSnapshots.every((snapshot, index) => {
+		const other = piSnapshots[index];
+		return JSON.stringify({ cursor: snapshot.cursor, cursorVisible: snapshot.cursorVisible }) ===
+			JSON.stringify({ cursor: other.cursor, cursorVisible: other.cursorVisible });
+	});
 	const workspaceEqual = pikeProjection.workspace === piProjection.workspace;
 	const visibleEqual = JSON.stringify(pikeSnapshots.map((item) => item.visible)) === JSON.stringify(piSnapshots.map((item) => item.visible));
 	const scrollbackEqual = JSON.stringify(pikeSnapshots.map((item) => item.scrollback)) === JSON.stringify(piSnapshots.map((item) => item.scrollback));
@@ -1286,14 +1378,14 @@ function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, sce
 	const omissionText = omissionTextEqual(omissionProjection, piOmissionProjection);
 	const omissionPresentation = styledPresentationEqual(omissionProjection, piOmissionProjection);
 	const resolvedTextEqual = omissionText;
-	const equal = workspaceEqual && resolvedTextEqual && omissionPresentation;
+	const equal = workspaceEqual && resolvedTextEqual && omissionPresentation && cursorEqual;
 	const omissionSgr = omissionSgrEqual(omissionProjection, piOmissionProjection);
-	const omissionProjectionEqual = omissionText && omissionPresentation;
+	const omissionProjectionEqual = omissionText && omissionPresentation && cursorEqual;
 	const pikeText = JSON.stringify(pikeProjection.snapshots);
 	const piText = JSON.stringify(piProjection.snapshots);
 	const pikeObserved = (scenario.omissionPatterns ?? []).some((pattern) => pikeText.includes(pattern));
 	const piObserved = (scenario.omissionPatterns ?? []).some((pattern) => piText.includes(pattern));
-	const omissionOnly = isIntentionalSubsetOmission(scenario, omissionProjectionEqual, pikeObserved, piObserved);
+	const omissionOnly = isIntentionalSubsetOmission(scenario, omissionProjectionEqual, pikeObserved, piObserved, cursorEqual);
 	return {
 		projection: {
 			workspaceProfileEqual: workspaceEqual,
@@ -1302,6 +1394,7 @@ function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, sce
 			scrollbackStructureEqual: scrollbackEqual,
 			scrollbackCellPresentationEqual: scrollbackPresentationEqual,
 			resolvedCellPresentationEqual: presentationEqual,
+			cursorEqual,
 			sgrStructureEqual: sgrEqual,
 			omissionTextEqual: omissionText,
 			omissionCellPresentationEqual: omissionPresentation,
@@ -1361,6 +1454,7 @@ function runLiveManual(): number {
 function reportMetadata(report: Record<string, unknown>): Record<string, unknown> {
 	return {
 		schema: report.schema,
+		captureBase: report.captureBase,
 		baseline: report.baseline,
 		profile: report.profile,
 		structuralProjection: report.structuralProjection,
@@ -1383,6 +1477,9 @@ function validateReportCaptures(report: Record<string, unknown>): void {
 		"intentional-divergence",
 		"pi-only-deferred-capability",
 	]);
+	if (!report.captureBase || typeof report.captureBase !== "object") {
+		throw new Error("differential report is missing capture base provenance");
+	}
 	for (const item of report.scenarios as Record<string, unknown>[]) {
 		const triage = item.triage as Record<string, unknown> | undefined;
 		const id = String(item.id);
@@ -1409,6 +1506,13 @@ function validateReportCaptures(report: Record<string, unknown>): void {
 				requireStringArray(snapshot.visible, `differential report visible cells for ${runtime}/${String(item.id)}`);
 				requireStringArray(snapshot.scrollback, `differential report scrollback for ${runtime}/${String(item.id)}`);
 				requireStringArray(snapshot.sgr, `differential report SGR tokens for ${runtime}/${String(item.id)}`);
+				const cursor = snapshot.cursor as Record<string, unknown> | undefined;
+				if (!cursor || typeof cursor.column !== "number" || typeof cursor.row !== "number") {
+					throw new Error(`differential report is missing cursor coordinates for ${runtime}/${String(item.id)}`);
+				}
+				if (typeof snapshot.cursorVisible !== "boolean") {
+					throw new Error(`differential report is missing cursor visibility for ${runtime}/${String(item.id)}`);
+				}
 				if (typeof snapshot.ansi !== "string") throw new Error(`differential report is missing ANSI for ${runtime}/${String(item.id)}`);
 				if (JSON.stringify(snapshot.sgr) !== JSON.stringify(sgrTokens(snapshot.ansi))) {
 					throw new Error(`differential report SGR tokens do not match ANSI for ${runtime}/${String(item.id)}`);
@@ -1466,11 +1570,13 @@ async function runParent(): Promise<number> {
 	const baseline = resolvePiBaseline();
 	const checkout = baseline.checkout;
 	const repositoryRoot = repositoryRootFromEnvironment();
+	const captureBase = validateCaptureBase(repositoryRoot);
 	const temporaryDirectory = path.join(differentialDir, `.verify-${process.pid}`);
 	rmSync(temporaryDirectory, { recursive: true, force: true });
 	mkdirSync(temporaryDirectory, { recursive: true });
 	const report: Record<string, unknown> = {
-		schema: 2,
+		schema: 3,
+		captureBase,
 		baseline: {
 			piCommit: baseline.commit,
 			artifact: `${packageName}@${baseline.version}`,
@@ -1587,13 +1693,25 @@ async function runParent(): Promise<number> {
 	return 0;
 }
 
-function inputStateBarrier(scenario: Scenario, inputIndex: number): { present?: string; absent?: string } {
+function inputStateBarrier(scenario: Scenario, inputIndex: number): {
+	present?: string;
+	presentRow?: { label: string; value: string };
+	absent?: string;
+} {
 	if (scenario.id === "model-selector") return inputIndex === 0 ? { present: "Only showing models" } : { present: "Model:" };
 	if (scenario.id === "thinking-selector") {
 		return inputIndex === 0 ? { present: "Set thinking level" } : inputIndex === 1 ? { present: "No reasoning" } : { present: "Thinking level:" };
 	}
 	if (scenario.id === "settings-selector") {
-		return inputIndex === 0 ? { present: "Open settings menu" } : inputIndex === 3 ? { absent: "Type to search" } : { present: "Type to search" };
+		if (inputIndex === 0) return { present: "Open settings menu" };
+		if (inputIndex === 1) return { present: "Type to search" };
+		if (inputIndex === 2) return { presentRow: { label: "Show hardware cursor", value: "false" } };
+		if (inputIndex === 3) return { presentRow: { label: "Show hardware cursor", value: "true" } };
+		if (inputIndex === 4) return { present: "Type to search" };
+		if (inputIndex === 5) return { presentRow: { label: "Terminal progress", value: "false" } };
+		if (inputIndex === 6) return { presentRow: { label: "Terminal progress", value: "true" } };
+		if (inputIndex === 7) return { present: "Type to search" };
+		return { absent: "Type to search" };
 	}
 	if (["editor-long", "editor-cjk", "editor-token"].includes(scenario.id)) {
 		const expected = scenario.inputs[0].slice(0, 20);
@@ -1607,6 +1725,21 @@ async function runPiChild(): Promise<number> {
 	const output = process.env.CCH_DIFFERENTIAL_OUTPUT;
 	if (!scenario || !output) throw new Error("pi child requires CCH_DIFFERENTIAL_SCENARIO and CCH_DIFFERENTIAL_OUTPUT");
 	const checkout = piCheckout();
+	// The frozen, read-only pi checkout omits this gitignored generated catalog
+	// file. The scenarios use only explicitly supplied faux models, so stub the
+	// import in memory without writing generated data into the authority checkout.
+	registerHooks({
+		resolve(specifier, context, nextResolve) {
+			if (specifier === "./data/azure.json" && context.parentURL?.includes("/packages/ai/src/providers/")) {
+				return { url: new URL(specifier, context.parentURL).href, shortCircuit: true, format: "json" };
+			}
+			return nextResolve(specifier, context);
+		},
+		load(url, context, nextLoad) {
+			if (url.endsWith("/providers/data/azure.json")) return { format: "json", source: "{}", shortCircuit: true };
+			return nextLoad(url, context);
+		},
+	});
 	const source = (relative: string) => pathToFileURL(path.join(checkout, relative)).href;
 	const { createHarness } = await import(source("packages/coding-agent/test/suite/harness.ts"));
 	const { fauxAssistantMessage, fauxText, fauxToolCall } = await import(source("packages/ai/src/providers/faux.ts"));
@@ -1648,9 +1781,11 @@ async function runPiChild(): Promise<number> {
 
 	class RecordingTerminal extends VirtualTerminal {
 		ansi = "";
+		cursorVisible = true;
 
 		override write(data: string): void {
 			this.ansi += data;
+			for (const match of data.matchAll(/\x1b\[\?25([hl])/g)) this.cursorVisible = match[1] === "h";
 			super.write(data);
 		}
 	}
@@ -1721,6 +1856,9 @@ async function runPiChild(): Promise<number> {
 			await waitForTerminalAnsi(terminal, inputOffset);
 			const barrier = inputStateBarrier(scenario, inputIndex);
 			if (barrier.present !== undefined) await waitForTerminalText(terminal, barrier.present);
+			if (barrier.presentRow !== undefined) {
+				await waitForSettingsRow(terminal, barrier.presentRow);
+			}
 			if (barrier.absent !== undefined) await waitForTerminalTextAbsent(terminal, barrier.absent);
 		}
 		snapshots.push(await capture(terminal, workspace, ansiOffset));
@@ -1781,10 +1919,32 @@ type PiHeadlessState = {
 
 type PiRecordingTerminal = {
 	ansi: string;
+	cursorVisible: boolean;
 	flush(): Promise<void>;
 	getViewport(): string[];
 	getScrollBuffer(): string[];
+	getCursorPosition(): { x: number; y: number };
 };
+
+const captureBase = Object.freeze({
+	// The capture records the actual repository HEAD it ran at
+	// (`validateCaptureBase`) and fails unless every listed fix commit is an
+	// ancestor of that HEAD, so a report cannot be produced from a tree that
+	// predates the fixes it claims to include.
+	includedFixes: {
+		issue811: "d467587cb5d00611aff3a642851c710069f11038",
+		issue1039: "82ea384f5a04b0d747b7cb2dee9be8c580e7f821",
+	},
+});
+
+function validateCaptureBase(repositoryRoot: string): Record<string, unknown> {
+	const head = execFileSync("git", ["rev-parse", "HEAD"], { cwd: repositoryRoot, encoding: "utf8" }).trim();
+	for (const [name, commit] of Object.entries(captureBase.includedFixes)) {
+		const result = spawnSync("git", ["merge-base", "--is-ancestor", commit, head], { cwd: repositoryRoot });
+		if (result.status !== 0) throw new Error(`capture requires ${name} fix ${commit} to be an ancestor of HEAD ${head}`);
+	}
+	return { sha: head, requiredFixes: captureBase.includedFixes };
+}
 
 function piCellColor(cell: PiHeadlessCell, foreground: boolean): string {
 	if (foreground ? cell.isFgRGB() : cell.isBgRGB()) {
@@ -1857,11 +2017,14 @@ async function capture(terminal: PiRecordingTerminal, workspace: string, ansiOff
 	const visible = terminal.getViewport();
 	const buffer = terminal.getScrollBuffer();
 	const scrollbackCount = Math.max(0, buffer.length - visible.length);
+	const cursor = terminal.getCursorPosition();
 	return {
 		visible,
 		scrollback: buffer.slice(0, scrollbackCount),
 		styledVisible: piStyledRows(terminal, piHeadlessState(terminal).buffer.active.viewportY, visible.length),
 		styledScrollback: piStyledRows(terminal, 0, scrollbackCount),
+		cursor: { column: cursor.x, row: cursor.y },
+		cursorVisible: terminal.cursorVisible,
 		ansi: terminal.ansi.slice(ansiOffset),
 		workspace,
 	};
@@ -1889,6 +2052,45 @@ async function waitForTerminalText(terminal: { flush(): Promise<void>; getViewpo
 		await delay(20);
 	}
 	throw new Error(`pi differential scenario did not render expected text: ${expected}\n${terminal.getViewport().join("\n")}`);
+}
+
+async function waitForTerminalRowText(
+	terminal: { flush(): Promise<void>; getViewport(): string[] },
+	expected: { label: string; value: string },
+	minimumViewportRows = 1,
+): Promise<void> {
+	const deadline = Date.now() + 3_000;
+	while (Date.now() < deadline) {
+		await terminal.flush();
+		const viewport = terminal.getViewport();
+		if (viewport.length >= minimumViewportRows &&
+			viewport.some((line) => line.includes(expected.label) && line.includes(expected.value))) return;
+		await delay(20);
+	}
+	throw new Error(
+		`pi differential scenario did not render ${expected.label} with value ${expected.value}\n${terminal.getViewport().join("\n")}`,
+	);
+}
+
+async function waitForSettingsRow(
+	terminal: { flush(): Promise<void>; getViewport(): string[] },
+	expected: { label: string; value: string },
+): Promise<void> {
+	const deadline = Date.now() + 3_000;
+	while (Date.now() < deadline) {
+		await terminal.flush();
+		const viewport = terminal.getViewport();
+		if (viewport.length >= profile.viewportRows &&
+			viewport.some((line) => settingRowValue(line, expected.label) === expected.value)) return;
+		await delay(20);
+	}
+	throw new Error(`pi differential scenario did not render ${expected.label}=${expected.value}\n${terminal.getViewport().join("\n")}`);
+}
+
+function settingRowValue(row: string, label: string): string | undefined {
+	const labelPosition = row.indexOf(label);
+	if (labelPosition < 0) return undefined;
+	return row.slice(labelPosition + label.length).trim().split(/\s+/)[0];
 }
 
 async function waitForTerminalTextAbsent(terminal: { flush(): Promise<void>; getViewport(): string[] }, unexpected: string): Promise<void> {

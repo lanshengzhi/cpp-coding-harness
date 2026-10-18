@@ -340,6 +340,12 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
     value.emplace("scrollback", lines_json(terminal.scrollback()));
     value.emplace("styledVisible", styled_rows_json(terminal.cells()));
     value.emplace("styledScrollback", styled_rows_json(terminal.scrollback_cells()));
+    const auto cursor = terminal.cursor();
+    support::JsonValue::object_t cursor_position;
+    cursor_position.emplace("column", support::JsonValue{static_cast<double>(cursor.column)});
+    cursor_position.emplace("row", support::JsonValue{static_cast<double>(cursor.row)});
+    value.emplace("cursor", support::JsonValue{std::move(cursor_position)});
+    value.emplace("cursorVisible", support::JsonValue{terminal.modes().cursor_visible});
     std::string ansi;
     for (std::size_t index = output_offset; index < terminal.output().size(); ++index) {
         ansi.append(terminal.output()[index]);
@@ -354,6 +360,19 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
     for (const auto& line : terminal.screen())
         if (line.find(expected) != std::string::npos) return true;
     return false;
+}
+
+[[nodiscard]] std::optional<std::string_view> setting_value(
+        const tui::VirtualTerminal& terminal, std::string_view label) {
+    for (const auto& line : terminal.screen()) {
+        const auto label_position = line.find(label);
+        if (label_position == std::string::npos) continue;
+        const auto value_position = line.find_first_not_of(' ', label_position + label.size());
+        if (value_position == std::string::npos) return std::string_view{};
+        const auto value_end = line.find_first_of(" \t", value_position);
+        return std::string_view{line}.substr(value_position, value_end - value_position);
+    }
+    return std::nullopt;
 }
 
 [[nodiscard]] std::optional<std::size_t> row_containing(
@@ -527,7 +546,21 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Thinking level:"); }));
             if (scenario == "settings-selector" && input_index == 0)
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Open settings menu"); }));
-            if (scenario == "settings-selector" && (input_index == 1 || input_index == 2))
+            if (scenario == "settings-selector" && input_index == 1)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Type to search"); }));
+            if (scenario == "settings-selector" && input_index == 2)
+                REQUIRE(tests::pump_until(
+                        io, [&] { return setting_value(terminal, "Show hardware cursor") == "false"; }));
+            if (scenario == "settings-selector" && input_index == 3)
+                REQUIRE(tests::pump_until(
+                        io, [&] { return setting_value(terminal, "Show hardware cursor") == "true"; }));
+            if (scenario == "settings-selector" && input_index == 4)
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Type to search"); }));
+            if (scenario == "settings-selector" && input_index == 5)
+                REQUIRE(tests::pump_until(io, [&] { return setting_value(terminal, "Terminal progress") == "false"; }));
+            if (scenario == "settings-selector" && input_index == 6)
+                REQUIRE(tests::pump_until(io, [&] { return setting_value(terminal, "Terminal progress") == "true"; }));
+            if (scenario == "settings-selector" && input_index == 7)
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Type to search"); }));
             if (scenario == "editor-long" || scenario == "editor-cjk" || scenario == "editor-token") {
                 const auto expected_editor_text = inputs[0].substr(0, 20);

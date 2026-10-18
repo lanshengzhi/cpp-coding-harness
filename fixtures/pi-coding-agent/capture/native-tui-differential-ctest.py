@@ -55,25 +55,12 @@ def recorded_baseline(report: Path) -> tuple[str | None, str | None]:
 def unrunnable_reason(checkout: Path) -> str | None:
     """Why this checkout cannot run pi's capture, phrased as the remedy.
 
-    pi's provider catalogs under packages/ai/src/providers/data are generated
-    and gitignored, so a checkout can be present, current, and still unable to
-    import. Import-time failure inside node reports a missing module rather
-    than the missing generate step, which is a poor way to learn this.
+    The capture stubs the unused generated Azure catalog import in memory.
+    Other missing runtime imports are reported by the capture itself.
     """
     package = checkout / "packages" / "coding-agent" / "package.json"
     if not package.is_file():
         return f"{package} is missing, so {checkout} is not a pi coding-agent checkout"
-    data_dir = checkout / "packages" / "ai" / "src" / "providers" / "data"
-    if not data_dir.is_dir():
-        return (
-            f"pi's generated provider data is missing at {data_dir}. Run in the pi checkout: "
-            "npm --prefix packages/ai run generate-models"
-        )
-    if not any(data_dir.glob("*.json")):
-        return (
-            f"pi's generated provider data directory {data_dir} is empty. Run in the pi checkout: "
-            "npm --prefix packages/ai run generate-models"
-        )
     return None
 
 
