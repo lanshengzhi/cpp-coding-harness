@@ -29,6 +29,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <catch2/catch_message.hpp>
@@ -121,6 +122,15 @@ struct CellTextPosition {
                 .row = row, .column = first_column, .width = byte_columns[last_byte] - first_column + 1};
     }
     return std::nullopt;
+}
+
+[[nodiscard]] std::string rendered_cell_row(const tui::VirtualTerminal& terminal, std::size_t row) {
+    std::string rendered;
+    for (const auto& cell : terminal.cells().at(row)) {
+        if (cell.continuation) continue;
+        rendered.append(cell.grapheme.empty() ? std::string_view{" "} : std::string_view{cell.grapheme});
+    }
+    return rendered;
 }
 
 [[nodiscard]] tests::ModelsSessionOptions session_options(
@@ -1628,11 +1638,26 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     CAPTURE(scrolled);
     const auto indicator = find_cell_text(terminal, kScrollToEndLabel);
     REQUIRE(indicator);
+    constexpr std::size_t kFrozenIndicatorColumn = 23;
+    constexpr std::size_t kFrozenIndicatorWidth = 37;
+    const auto check_indicator_row = [&terminal, &kScrollToEndLabel](const CellTextPosition& position,
+                                             std::string_view transcript_text,
+                                             std::string_view right_edge) {
+        CHECK(position.column == kFrozenIndicatorColumn);
+        CHECK(position.width == kFrozenIndicatorWidth);
+        std::string expected_row{transcript_text};
+        expected_row.append(kFrozenIndicatorColumn - expected_row.size(), ' ');
+        expected_row.append(kScrollToEndLabel);
+        expected_row.append(
+                terminal.dimensions().columns - tui::visible_width(expected_row) - tui::visible_width(right_edge), ' ');
+        expected_row.append(right_edge);
+        const auto actual_row = rendered_cell_row(terminal, position.row);
+        CHECK(actual_row == expected_row);
+    };
+    check_indicator_row(*indicator, " turn-23", "│");
 
     // Frozen kitty evidence centers the label at column 23 with 37 visible
     // cells. Pike's dock places it one row higher at 83x42.
-    constexpr std::size_t kFrozenIndicatorColumn = 23;
-    constexpr std::size_t kFrozenIndicatorWidth = 37;
     CHECK(indicator->row == terminal.dimensions().rows - 8);
     CHECK(indicator->column == kFrozenIndicatorColumn);
     CHECK(indicator->width == kFrozenIndicatorWidth);
@@ -1662,6 +1687,37 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     };
     check_indicator_style(*indicator);
 
+    // Activate the direct-launch affordance through the terminal's SGR mouse
+    // event path. The coordinates supplied by find_cell_text are zero-based;
+    // terminal mouse reports are one-based.
+    const auto click_indicator = std::format("\x1b[<0;{};{}M", indicator->column + 1, indicator->row + 1);
+    const auto release_indicator = std::format("\x1b[<0;{};{}m", indicator->column + 1, indicator->row + 1);
+    REQUIRE(terminal.inject_input(click_indicator));
+    REQUIRE(terminal.inject_input(release_indicator));
+    REQUIRE(pump_until(io, [&] { return !find_cell_text(terminal, kScrollToEndLabel).has_value(); }));
+    const auto after_click = terminal.screen();
+    for (const auto& row : after_click) {
+        CHECK(row.find("Jump to latest message") == std::string::npos);
+    }
+    const std::string post_click_prompt = "after-indicator-click";
+    REQUIRE(terminal.inject_input(post_click_prompt + "\r"));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("fake: " + post_click_prompt) != std::string::npos; }));
+    for (const auto& row : terminal.screen()) {
+        CHECK(row.find("Jump to latest message") == std::string::npos);
+    }
+
+    // Restore the scrolled state so the renderer round-trip is checked against
+    // the same frozen direct-launch indicator.
+    for (int notch = 0; notch < 3; ++notch) {
+        REQUIRE(terminal.inject_input("\x1b[<64;1;1M"));
+    }
+    REQUIRE(pump_until(io, [&] { return find_cell_text(terminal, kScrollToEndLabel).has_value(); }));
+    const auto before_switch_indicator = find_cell_text(terminal, kScrollToEndLabel);
+    REQUIRE(before_switch_indicator);
+    check_indicator_row(*before_switch_indicator, " after-indicator-click", "│");
+    check_indicator_style(*before_switch_indicator);
+
     // Swap both renderers directly, without submitting a message or adding the
     // settings flow's status line. The label must survive at the same position.
     auto regular = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
@@ -1675,13 +1731,12 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     drain_ready(io);
     REQUIRE(terminal.modes().alternate_screen);
     REQUIRE(pump_until(io, [&] { return find_cell_text(terminal, kScrollToEndLabel).has_value(); }));
-    const auto after_switch = terminal.screen();
-    CHECK(after_switch == scrolled);
     const auto switched_indicator = find_cell_text(terminal, kScrollToEndLabel);
     REQUIRE(switched_indicator);
-    CHECK(switched_indicator->row == indicator->row);
-    CHECK(switched_indicator->column == indicator->column);
-    CHECK(switched_indicator->width == indicator->width);
+    check_indicator_row(*switched_indicator, " after-indicator-click", "│");
+    CHECK(switched_indicator->row == before_switch_indicator->row);
+    CHECK(switched_indicator->column == before_switch_indicator->column);
+    CHECK(switched_indicator->width == before_switch_indicator->width);
     check_indicator_style(*switched_indicator);
     // The direct-launch frame above pins the frozen style. Renderer switching
     // retains the label geometry and text while reapplying the live palette.
@@ -1690,7 +1745,7 @@ TEST_CASE("Native TUI fullscreen scroll-to-end indicator paints on a direct-full
     REQUIRE(terminal.inject_input("\x1b[1;5F"));
     drain_ready(io);
     const auto resumed = terminal.screen();
-    REQUIRE(resumed.size() == 42);
+    CHECK(resumed.size() == 42);
     // The label is absent once the viewport follows the end again.
     CHECK(std::none_of(resumed.begin(), resumed.end(), [](const std::string& line) {
         return line.find("Jump to latest message") != std::string::npos;
