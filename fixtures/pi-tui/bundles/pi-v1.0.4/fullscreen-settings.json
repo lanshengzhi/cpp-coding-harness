@@ -27,7 +27,7 @@
     }
   },
   "observationRun": {
-    "timestamp": "2026-10-18T01:12:39.201Z",
+    "timestamp": "2026-10-18T03:27:24.840Z",
     "node": "v26.12.0",
     "platform": "linux",
     "arch": "x64",
@@ -53,6 +53,26 @@
         "PI_SUBAGENT_CHILD",
         "PI_ASYNC_NATIVE_RUNNER"
       ],
+      "disabledTerminalVariables": [
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+        "KITTY_WINDOW_ID",
+        "WEZTERM_PANE",
+        "TMUX",
+        "ZELLIJ",
+        "STY",
+        "TERMUX_VERSION",
+        "COLORTERM",
+        "SSH_CONNECTION",
+        "SSH_CLIENT",
+        "SSH_TTY"
+      ],
+      "sanitizedTerminalVariables": [
+        "TERM_PROGRAM",
+        "TERM_PROGRAM_VERSION",
+        "COLORTERM"
+      ],
+      "pinnedTerm": "xterm-256color",
       "azureStub": "registerHooks resolve/load stub for packages/ai/src/providers/data/azure.json (generated catalog absent in the read-only checkout)",
       "packageSourceResolutions": [
         "@earendil-works/pi-ai",
@@ -1982,6 +2002,7 @@
         "seam": "real ScrollView over Text with renderLayoutFrame(root, 10, 4) and frozen auto hide timer (1100 ms wait)",
         "contentLines": 8,
         "viewportRows": 4,
+        "frameNote": "each frame carries `lines` (terminal sequences stripped) and `rawLines` (exact styled lines with SGR/OSC bytes)",
         "cases": [
           {
             "name": "default-auto",
@@ -2026,6 +2047,12 @@
                   "line 7",
                   "line 8"
                 ],
+                "rawLines": [
+                  "line 5    ",
+                  "line 6    ",
+                  "line 7    ",
+                  "line 8    "
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2046,6 +2073,12 @@
                   "line 5   ┃",
                   "line 6   │"
                 ],
+                "rawLines": [
+                  "line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2065,6 +2098,12 @@
                   "line 5",
                   "line 6"
                 ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2082,6 +2121,12 @@
                 "line 4",
                 "line 5",
                 "line 6"
+              ],
+              "rawLines": [
+                "line 3    ",
+                "line 4    ",
+                "line 5    ",
+                "line 6    "
               ],
               "window": {
                 "width": 10,
@@ -2111,6 +2156,12 @@
                   "line 7   ┃",
                   "line 8   ┃"
                 ],
+                "rawLines": [
+                  "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 7   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 8   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m"
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2131,6 +2182,12 @@
                   "line 5   ┃",
                   "line 6   │"
                 ],
+                "rawLines": [
+                  "\u001b[0m\u001b]8;;\u0007line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2150,6 +2207,12 @@
                   "line 5   ┃",
                   "line 6   │"
                 ],
+                "rawLines": [
+                  "\u001b[0m\u001b]8;;\u0007line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2167,6 +2230,12 @@
                 "line 4",
                 "line 5",
                 "line 6"
+              ],
+              "rawLines": [
+                "line 3    ",
+                "line 4    ",
+                "line 5    ",
+                "line 6    "
               ],
               "window": {
                 "width": 10,
@@ -2196,6 +2265,12 @@
                   "line 7",
                   "line 8"
                 ],
+                "rawLines": [
+                  "line 5    ",
+                  "line 6    ",
+                  "line 7    ",
+                  "line 8    "
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2216,6 +2291,12 @@
                   "line 5",
                   "line 6"
                 ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2235,6 +2316,12 @@
                   "line 5",
                   "line 6"
                 ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2252,6 +2339,12 @@
                 "line 4   ┃",
                 "line 5   ┃",
                 "line 6   │"
+              ],
+              "rawLines": [
+                "\u001b[0m\u001b]8;;\u0007line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                "\u001b[0m\u001b]8;;\u0007line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                "\u001b[0m\u001b]8;;\u0007line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                "\u001b[0m\u001b]8;;\u0007line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
               ],
               "window": {
                 "width": 10,
@@ -2281,6 +2374,12 @@
                   "line 7",
                   "line 8"
                 ],
+                "rawLines": [
+                  "line 5    ",
+                  "line 6    ",
+                  "line 7    ",
+                  "line 8    "
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2301,6 +2400,12 @@
                   "line 5   ┃",
                   "line 6   │"
                 ],
+                "rawLines": [
+                  "line 3   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m",
+                  "line 4   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 5   \u001b[0m\u001b]8;;\u0007\u001b[37m┃\u001b[39m",
+                  "line 6   \u001b[0m\u001b]8;;\u0007\u001b[90m│\u001b[39m"
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2320,6 +2425,12 @@
                   "line 5",
                   "line 6"
                 ],
+                "rawLines": [
+                  "line 3    ",
+                  "line 4    ",
+                  "line 5    ",
+                  "line 6    "
+                ],
                 "window": {
                   "width": 10,
                   "height": 4,
@@ -2337,6 +2448,12 @@
                 "line 4",
                 "line 5",
                 "line 6"
+              ],
+              "rawLines": [
+                "line 3    ",
+                "line 4    ",
+                "line 5    ",
+                "line 6    "
               ],
               "window": {
                 "width": 10,
@@ -2358,6 +2475,7 @@
       },
       "inputs": {
         "seam": "real TuiAltScreen over VirtualTerminal with injected copySelection sink; controlled InteractiveMode.prototype.handleCopyCommand context (runtimeHost.session.getLastAssistantText -> undefined)",
+        "styleScope": "selection highlight/flash SGR styling is not recorded; selection styles remain the authority of selection.json (#1006)",
         "drag": [
           {
             "x": 1,
@@ -2690,7 +2808,7 @@
         "rows": 10
       },
       "inputs": {
-        "seam": "controlled InteractiveMode.prototype context (private applyRuntimeSettings / switchTuiMode) over a real TuiAltScreen + createChatViewport; stubs: footer, footerDataProvider, statusContainer, defaultEditor padding setters, themeController.rebindTui, runtimeHost.session",
+        "seam": "controlled InteractiveMode.prototype context (private applyRuntimeSettings / switchTuiMode) over a real TuiAltScreen + createChatViewport; stubs: footer, footerDataProvider, statusContainer, defaultEditor padding setters, themeController.rebindTui, runtimeHost.session; createChatViewport scrollbar initialized from settings.getFullscreenScrollbar() like the product init path",
         "settingsBefore": {
           "fullscreenScrollbar": "auto",
           "fullscreenCopyOnSelect": true,
@@ -2704,7 +2822,7 @@
       },
       "expected": {
         "beforeApply": {
-          "transcriptScrollbar": "hidden",
+          "transcriptScrollbar": "auto",
           "rendererCopyOnSelect": true,
           "optionsTuiMode": "fullscreen"
         },
