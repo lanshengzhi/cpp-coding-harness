@@ -15,6 +15,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/PiTuiEvidence.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -608,16 +609,43 @@ TEST_CASE("Native TUI fullscreen runtime apply and mode switch keep the resolved
     select_cells(run.terminal, run.io, "fake", 4);
     CHECK(run.actions->write_clipboard.empty());
 
-    // The real renderer switch: regular then back to fullscreen keeps the
-    // retained transcript and re-applies the resolved consumers.
-    auto switched = run.engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    // The real renderer switch: the artifact's recorded option-mode sequence
+    // (`product-live-apply-and-mode-switch`) drives the same two switches, and
+    // its `result`/`rendererMode` fields are checked against the engine's
+    // return value and the renderer the terminal actually runs (the alternate
+    // screen is the observable fullscreen renderer).
+    const auto evidence = cch::tests::read_pi_tui_evidence("fullscreen-settings.json");
+    REQUIRE(evidence);
+    const auto& product_expected = [&]() -> const cch::support::JsonValue& {
+        for (const auto& scenario : evidence->at("scenarios").get_array()) {
+            if (scenario.at("name").get_string() == "product-live-apply-and-mode-switch") {
+                return scenario.at("expected");
+            }
+        }
+        REQUIRE(false);
+        return *evidence;
+    }();
+    const auto& after_regular = product_expected.at("afterRegularSwitch");
+    const auto& after_back = product_expected.at("afterBackSwitch");
+    const auto mode_of = [](const cch::support::JsonValue& options_mode) {
+        return options_mode.get_string() == "fullscreen" ? coding_agent::TuiMode::Fullscreen
+                                                         : coding_agent::TuiMode::Regular;
+    };
+
+    auto switched = run.engine->switch_tui_mode(mode_of(after_regular.at("optionsTuiMode")));
     REQUIRE(switched);
-    CHECK(*switched);
-    REQUIRE(pump_until(run.io, [&] { return !run.terminal.modes().alternate_screen; }));
-    switched = run.engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    CHECK(*switched == after_regular.at("result").get_boolean());
+    REQUIRE(pump_until(run.io, [&] {
+        return run.terminal.modes().alternate_screen ==
+                (after_regular.at("rendererMode").get_string() == "fullscreen");
+    }));
+    switched = run.engine->switch_tui_mode(mode_of(after_back.at("optionsTuiMode")));
     REQUIRE(switched);
-    CHECK(*switched);
-    REQUIRE(pump_until(run.io, [&] { return run.terminal.modes().alternate_screen; }));
+    CHECK(*switched == after_back.at("result").get_boolean());
+    REQUIRE(pump_until(run.io, [&] {
+        return run.terminal.modes().alternate_screen ==
+                (after_back.at("rendererMode").get_string() == "fullscreen");
+    }));
     REQUIRE(pump_until(run.io, [&] { return scrollbar_rows(run.terminal) > 0; }));
 
     const auto back_turn = topmost_fake_turn(content_rows(run.terminal));

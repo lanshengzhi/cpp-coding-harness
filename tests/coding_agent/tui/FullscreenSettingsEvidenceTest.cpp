@@ -285,6 +285,15 @@ struct EvidenceSettingsWorkspace {
     return std::to_string(static_cast<long long>(value.get_number()));
 }
 
+/// JavaScript truthiness of an artifact raw value: the wrong-type string and
+/// number cases project onto the typed product values through it.
+[[nodiscard]] bool js_truthy(const JsonValue& value) {
+    if (value.holds<bool>()) return value.get_boolean();
+    if (value.holds<std::string>()) return !value.get_string().empty();
+    if (value.holds<double>()) return value.get_number() != 0.0;
+    return false;
+}
+
 /// The artifact's resolved-value triple, compared through the typed product
 /// getters. The copy-on-select getter carries the consumer bool (`?? true`
 /// plus JavaScript truthiness); the artifact also records the raw JS
@@ -492,9 +501,15 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence resolves the settings ma
         const auto& case_inputs = recorded.at("inputs");
         // The four `apply-overrides-*` cases record pi's in-memory
         // `applyOverrides` payloads (`NaN`, `Infinity`, `undefined`, a
-        // hidden/zero merge); the C++ settings manager has no override
-        // application path, so they stay explicitly unrereplayed here.
+        // hidden/zero merge) and their `beforeOverride`/`afterOverride`
+        // resolutions; the C++ settings manager has no override application
+        // path, so they stay explicitly unrereplayed here.
         if (case_inputs.get_object().contains("override")) {
+            // The excluded case's `beforeOverride`/`afterOverride`
+            // resolutions have no C++ seam; assert the record is one of those
+            // cases so the count above cannot silently absorb another shape.
+            CHECK(recorded.at("expected").get_object().contains("beforeOverride"));
+            CHECK(recorded.at("expected").get_object().contains("afterOverride"));
             ++override_cases;
             continue;
         }
@@ -1125,6 +1140,12 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence replays the copy-on-sele
         REQUIRE(manager.errors().empty());
         const bool copy_on_select = manager.get_fullscreen_copy_on_select();
         CHECK(copy_on_select == expected.at("resolvedGetter").at("truthy").get_boolean());
+        // The renderer and the created TUI receive the typed bool; the
+        // artifact's raw JS values (`rendererGetter`,
+        // `createdTuiForwardedCopyOnSelect`) project onto it through
+        // JavaScript truthiness.
+        CHECK(copy_on_select == js_truthy(expected.at("rendererGetter").at("value")));
+        CHECK(copy_on_select == js_truthy(expected.at("createdTuiForwardedCopyOnSelect").at("value")));
 
         ActionSinkRecorder recorder;
         auto sink = recorder.make_sink();
@@ -1144,7 +1165,12 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence replays the copy-on-sele
 
         // pi `handleCopyCommand` with `preferSelection`: with copy-on-select
         // disabled the keyboard path copies the selection; enabled, it falls
-        // through to the last-message path and reports that error instead.
+        // through to the last-message path and reports that error instead. The
+        // artifact's `manualCtrlXErrors` names exactly that fall-through, so
+        // it is non-empty when the keyboard path is not handled; the live
+        // engine asserts the diagnostic text in
+        // `FullscreenSettingsInteractiveTest.cpp`.
+        CHECK(!expected.at("manualCtrlXErrors").get_array().empty() == copy_on_select);
         const bool handled = host.copy_selection_for_keyboard();
         CHECK(handled == !copy_on_select);
         CHECK(copied_texts(recorder) == strings_of(expected.at("afterManualCtrlX")));
@@ -1267,9 +1293,10 @@ TEST_CASE("Named pi-v1.0.4 fullscreen-settings evidence replays the applied mode
     CHECK(wheel_deltas == numbers_of(after_apply.at("wheelDeltas")));
 
     // The engine's regular switch retains this viewport and its resolved
-    // consumer state; the actual `switch_tui_mode` operation, the option-mode
-    // fields (`result`/`rendererMode`/`optionsTuiMode`) and the boot/reload
-    // apply run against the live engine in
+    // consumer state; the actual `switch_tui_mode` calls, its `result` and
+    // the `rendererMode`/`optionsTuiMode` fields (the option mode drives which
+    // typed mode the switch is driven with, the renderer mode is observed as
+    // the terminal's alternate-screen state) run against the live engine in
     // `FullscreenSettingsInteractiveTest.cpp`.
     CHECK(scrollbar_name(transcript->scrollbar()) == after_regular.at("transcriptScrollbar").get_string());
 
