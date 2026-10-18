@@ -211,26 +211,35 @@ Pike's Native TUI VirtualTerminal and the pi checkout recorded in
 `differential/report.json` through the same scenario records and input byte sequences. The report
 records the exact pi revision used for its captures.
 
-**Two baselines are kept, because one report is evidence about one baseline (ADR 0053 treats pi as
+**Three baselines are kept, because one report is evidence about one baseline (ADR 0053 treats pi as
 reference material, not a specification):**
 
 | File | pi baseline | Status |
 | --- | --- | --- |
-| `differential/report.json` | pi v1.0.0 at `a13d35a742c6ef8462812a28fbe1d8c8b7431c32` | **current** — the report `--verify` and the CTest gate compare against |
+| `differential/report.json` | pi v1.0.4 at `7c10bd4337495ee613f2224843ecdf349b80d1df` | **current** — the report `--verify` and the CTest gate compare against |
+| `differential/report-v1.0.0.json` | pi v1.0.0 at `a13d35a742c6ef8462812a28fbe1d8c8b7431c32` | retained historical evidence; not overwritten when the baseline was advanced |
 | `differential/report-v0.99.2.json` | pi v0.99.2 at `005af57d88ee23b33778f343a9595b32e67ff788` | retained historical evidence; not overwritten when the baseline was advanced |
 
 Re-recording at a new baseline must never overwrite the older report. Record to a separate path
-and archive the previous one under its baseline name:
+and archive the previous one under its baseline name; `PI_BASELINE_COMMIT` re-asserts the frozen
+checkout revision, and the capture additionally requires its recorded fix commits (the #811 and
+#1039 fixes at the v1.0.4 baseline) to be ancestors of the repository HEAD it runs at:
 
 ```bash
-PI_CHECKOUT=../pi CCH_DIFFERENTIAL_REPORT="$PWD/fixtures/pi-coding-agent/differential/report-<baseline>.json" \
+PI_CHECKOUT=../pi PI_BASELINE_COMMIT=<frozen revision> \
+  CCH_DIFFERENTIAL_REPORT="$PWD/fixtures/pi-coding-agent/differential/report-<baseline>.json" \
   ../pi/node_modules/.bin/tsx fixtures/pi-coding-agent/capture/native-tui-differential.mts --write
 ```
 
 `CCH_DIFFERENTIAL_REPORT` is unset by default, which keeps `report.json` as the compared path.
-The v0.99.2 → v1.0.0 triage found **no classification change** across all 17 scenarios; the two
-reports are not otherwise comparable difference-by-difference, because the pi-side captures moved
-with the baseline and the Pike-side captures moved with intervening Pike work. The checked-in `differential/report.json` retains
+The v0.99.2 → v1.0.0 and v1.0.0 → v1.0.4 triages each found **no classification change** across
+all 17 scenarios; successive reports are not otherwise comparable difference-by-difference, because
+the pi-side captures moved with the baseline and the Pike-side captures moved with intervening Pike
+work. The v1.0.4 refresh additionally removes `Show hardware cursor` and `Terminal progress` from
+the `settings-selector` omission patterns (the scenario now captures both rows' false/true states),
+retains `Editor padding` and the other out-of-scope pi-only rows as explicit omissions, and records
+the #809-accepted registry-derived settings-help wording as an accepted difference. Schema 3 adds
+cursor position/visibility to every snapshot and the capture-base provenance. The checked-in `differential/report.json` retains
 visible cell rows, scrollback rows, raw ANSI output, and the SGR-token projection for both
 runtimes. It is not an opaque whole-session screenshot: each scenario and transition remains
 addressable as structured rows.
