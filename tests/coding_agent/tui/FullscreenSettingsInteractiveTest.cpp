@@ -520,6 +520,7 @@ TEST_CASE("Native TUI fullscreen hidden scrollbar persists, reloads and reserves
     const auto long_prefix = long_text.substr(0, 40);
     REQUIRE(run.terminal.inject_input(long_text + "\r"));
     REQUIRE(pump_until(run.io, [&] { return visible_screen(run.terminal).find(long_prefix) != std::string::npos; }));
+    settle_session(run);
     REQUIRE(scrollbar_rows(run.terminal) > 0);
 
     // `always` reserves the bar column: the long message's first wrapped row
@@ -529,9 +530,12 @@ TEST_CASE("Native TUI fullscreen hidden scrollbar persists, reloads and reserves
     CHECK(is_scrollbar_glyph(always_shape.last_grapheme));
 
     // The literal persisted value reaches the live transcript through the
-    // runtime reload path: rewrite the file and run `/reload`.
+    // runtime reload path: rewrite the file, await the actual `/reload`
+    // completion (new status line + restored editor), then observe the
+    // reservation change.
     run.config.write("settings.json", R"({"tuiMode": "fullscreen", "fullscreenScrollbar": "hidden"})");
     REQUIRE(run.terminal.inject_input("/reload\r"));
+    wait_for_reload_completion(run, 0);
     REQUIRE(pump_until(run.io, [&] { return scrollbar_rows(run.terminal) == 0; }));
     CHECK(read_text_file(run.config.path() / "settings.json").find("\"hidden\"") != std::string::npos);
 
