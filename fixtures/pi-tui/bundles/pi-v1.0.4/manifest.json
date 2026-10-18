@@ -145,6 +145,14 @@
       {
         "path": "capture/recapture-fullscreen-exit-live.mts",
         "sha256": "dd463fd5d63d73b90a9210e6b37a441632cd51cab5d9f5f035947e381af21780"
+      },
+      {
+        "path": "capture/fullscreen-settings-scenarios.mts",
+        "sha256": "255409cc73e30e325d782071286b88ab8854ae7ce681c68d7b2a2bd20db59f93"
+      },
+      {
+        "path": "capture/recapture-fullscreen-settings.mts",
+        "sha256": "bc5c6354b7f1a84fd74421b39b765f22a46fc050343c86c09ad2f702a7274e8c"
       }
     ]
   },
@@ -583,6 +591,26 @@
         "packages/tui/src/tui-alt-screen.ts:afterTerminalStop,renderNow",
         "packages/tui/src/tui.ts:Tui.stop,Tui.renderNow",
         "packages/tui/test/virtual-terminal.ts:VirtualTerminal.start,VirtualTerminal.stop,VirtualTerminal.write,VirtualTerminal.hideCursor,VirtualTerminal.showCursor"
+      ]
+    },
+    {
+      "path": "fullscreen-settings.json",
+      "family": "fullscreen-settings",
+      "bytes": 83077,
+      "sha256": "31e38c87bd11a256b2618f41a02cef3ea359f6b9141a7e5c588718785841bf0c",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/settings-manager.ts:getFullscreenScrollbar,setFullscreenScrollbar,getFullscreenCopyOnSelect,setFullscreenCopyOnSelect,getFullscreenWheelScrollLines,setFullscreenWheelScrollLines",
+        "packages/coding-agent/src/core/settings-manager.ts:deepMergeObjects,applyOverrides,save,reload,persistScopedSettings,fromStorage",
+        "packages/coding-agent/src/modes/interactive/components/settings-selector.ts:fullscreen-scrollbar,fullscreen-copy-on-select,fullscreen-wheel-scroll-lines,onFullscreenScrollbarChange,onFullscreenCopyOnSelectChange,onFullscreenWheelScrollLinesChange",
+        "packages/tui/src/components/settings-list.ts:SettingsList.activateItem,SettingsList.handleInput,SettingsList.render",
+        "packages/tui/src/components/scroll-view.ts:ScrollView.setScrollbar,ScrollView.getContentWidth,ScrollView.isScrollbarVisible,ScrollView.scrollBy",
+        "packages/tui/src/layout.ts:getScrollbarGeometry,paintScrollbar,renderLayoutFrame",
+        "packages/tui/src/tui-alt-screen.ts:handleSelectionMouseEvent,copySelectionToClipboard,copyActiveSelectionToClipboard,setCopyOnSelect,setWheelScrollLines,parseWheelEvent,routeWheel",
+        "packages/tui/src/wheel-scroll.ts:WheelScrollAccelerator.next,WheelScrollAccelerator.setLines",
+        "packages/coding-agent/src/modes/interactive/tui-renderer.ts:createInteractiveTui",
+        "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:applyFullscreenScrollbarSetting,applyRuntimeSettings,switchTuiMode,handleCopyCommand",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.start,sendInput,waitForRender"
       ]
     }
   ]
