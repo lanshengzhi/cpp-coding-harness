@@ -27,7 +27,6 @@
 #include <limits>
 #include <memory>
 #include <stop_token>
-#include <stdexcept>
 #include <string_view>
 #include <utility>
 
