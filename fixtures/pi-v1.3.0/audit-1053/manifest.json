@@ -1,0 +1,3958 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:00:12.864Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
+    "sha256": "6ac5731255c021d8cbafca8cc1cbe349e4df60b1c60903c9705fa6843644333b",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
+        "sha256": "6ac5731255c021d8cbafca8cc1cbe349e4df60b1c60903c9705fa6843644333b"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1053/scenarios.mts",
+        "sha256": "86a07aad53779cd2fd39989c3245b1babd834007296a8d77ffc4bed1377f2c45"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1053/pi.mts",
+        "sha256": "870d271585711e9596d998d48e755a0d15fc3ae5d54c05a39d840e8ede76a63b"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "source-options.json",
+      "family": "audit-1053",
+      "bytes": 12907,
+      "sha256": "16b441ec5fe420fa1e4a6dc9b850a54ddea4ca8e15079fcafddc65a4478b3e1e",
+      "sourceEndpoints": [
+        "packages/codemode/src/source.ts:parseCodemodeSource,parseOptions,CodemodeSourceError,CODEMODE_OPTIONS_PREFIX,CODEMODE_SOURCE_GRAMMAR",
+        "packages/codemode/test/source.test.ts:parseCodemodeSource"
+      ],
+      "scenarios": [
+        {
+          "name": "source keeps plain JavaScript and a leading ordinary comment unchanged",
+          "inputs": {
+            "inputs": [
+              "text('hi')",
+              "// just a comment\nreturn 1"
+            ]
+          },
+          "expected": [
+            {
+              "code": "text('hi')",
+              "options": {}
+            },
+            {
+              "code": "// just a comment\nreturn 1",
+              "options": {}
+            }
+          ],
+          "observed": [
+            {
+              "code": "text('hi')",
+              "options": {}
+            },
+            {
+              "code": "// just a comment\nreturn 1",
+              "options": {}
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/source.test.ts",
+            "case": "returns plain code unchanged"
+          }
+        },
+        {
+          "name": "first-line options are parsed and replaced by an empty line to preserve line numbers",
+          "inputs": {
+            "input": "// @options: {\"timeout_ms\": 10}\nconst a = 1;\ntext(a)"
+          },
+          "expected": {
+            "code": "\nconst a = 1;\ntext(a)",
+            "options": {
+              "timeoutMs": 10
+            }
+          },
+          "observed": {
+            "code": "\nconst a = 1;\ntext(a)",
+            "options": {
+              "timeoutMs": 10
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/source.test.ts",
+            "case": "parses the options line and keeps line numbers"
+          }
+        },
+        {
+          "name": "options accept leading whitespace, CRLF, an empty object and a zero token budget",
+          "inputs": {
+            "inputs": [
+              "  // @options:{\"max_output_tokens\":0,\"timeout_ms\":1500}\r\ntext(1)",
+              "// @options: {}\ntext(1)"
+            ]
+          },
+          "expected": [
+            {
+              "code": "\ntext(1)",
+              "options": {
+                "maxOutputTokens": 0,
+                "timeoutMs": 1500
+              }
+            },
+            {
+              "code": "\ntext(1)",
+              "options": {}
+            }
+          ],
+          "observed": [
+            {
+              "code": "\ntext(1)",
+              "options": {
+                "maxOutputTokens": 0,
+                "timeoutMs": 1500
+              }
+            },
+            {
+              "code": "\ntext(1)",
+              "options": {}
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/source.test.ts",
+            "case": "parses the options line and keeps line numbers"
+          }
+        },
+        {
+          "name": "only the first line is an options line",
+          "inputs": {
+            "inputs": [
+              "// @optionsx {}\ntext(1)",
+              "text(\"// @options: {}\")"
+            ]
+          },
+          "expected": [
+            {
+              "code": "// @optionsx {}\ntext(1)",
+              "options": {}
+            },
+            {
+              "code": "text(\"// @options: {}\")",
+              "options": {}
+            }
+          ],
+          "observed": [
+            {
+              "code": "// @optionsx {}\ntext(1)",
+              "options": {}
+            },
+            {
+              "code": "text(\"// @options: {}\")",
+              "options": {}
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/source.test.ts",
+            "case": "only treats the first line as an options line"
+          }
+        },
+        {
+          "name": "a misplaced options line is rejected with its line number",
+          "inputs": {
+            "inputs": [
+              "// count things\n// @options: {\"timeout_ms\": 1000}\nwhile (true) {}",
+              "\n  // @options: {\"timeout_ms\": 1000}\nwhile (true) {}",
+              "text(1)\r\n// @options: {\"timeout_ms\": 1}",
+              "// @options: {\"timeout_ms\": 1}\ntext(1)\n// @options: {\"timeout_ms\": 2}"
+            ]
+          },
+          "expected": [
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 2"
+            },
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 2"
+            },
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 2"
+            },
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 3"
+            }
+          ],
+          "observed": [
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 2"
+            },
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 2"
+            },
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 2"
+            },
+            {
+              "name": "CodemodeSourceError",
+              "message": "The // @options: line must be the first line of the input; found one on line 3"
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/source.test.ts",
+            "case": "rejects an options line that is not the first line"
+          }
+        },
+        {
+          "name": "invalid options and empty input are rejected with typed errors",
+          "inputs": {
+            "inputs": [
+              "",
+              "  \n",
+              "// @options:\ntext(1)",
+              "// @options: [1]\ntext(1)",
+              "// @options: {\"yield\": 1}\ntext(1)",
+              "// @options: {\"max_output_tokens\": 1.5}\ntext(1)",
+              "// @options: {\"timeout_ms\": 0}\ntext(1)",
+              "// @options: {\"timeout_ms\": 2147483648}\ntext(1)",
+              "// @options: {\"timeout_ms\": 1}",
+              "// @options: {\"timeout_ms\": 1}\n  \n"
+            ]
+          },
+          "expected": [
+            {
+              "input": "",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+              }
+            },
+            {
+              "input": "  \n",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+              }
+            },
+            {
+              "input": "// @options:\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+              }
+            },
+            {
+              "input": "// @options: [1]\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+              }
+            },
+            {
+              "input": "// @options: {\"yield\": 1}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options only supports `max_output_tokens` and `timeout_ms`; got `yield`"
+              }
+            },
+            {
+              "input": "// @options: {\"max_output_tokens\": 1.5}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options field `max_output_tokens` must be a non-negative safe integer"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 0}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 2147483648}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 1}",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "The @options line must be followed by JavaScript source on subsequent lines"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 1}\n  \n",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "The @options line must be followed by JavaScript source on subsequent lines"
+              }
+            }
+          ],
+          "observed": [
+            {
+              "input": "",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+              }
+            },
+            {
+              "input": "  \n",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+              }
+            },
+            {
+              "input": "// @options:\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+              }
+            },
+            {
+              "input": "// @options: [1]\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+              }
+            },
+            {
+              "input": "// @options: {\"yield\": 1}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options only supports `max_output_tokens` and `timeout_ms`; got `yield`"
+              }
+            },
+            {
+              "input": "// @options: {\"max_output_tokens\": 1.5}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options field `max_output_tokens` must be a non-negative safe integer"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 0}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 2147483648}\ntext(1)",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 1}",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "The @options line must be followed by JavaScript source on subsequent lines"
+              }
+            },
+            {
+              "input": "// @options: {\"timeout_ms\": 1}\n  \n",
+              "error": {
+                "name": "CodemodeSourceError",
+                "message": "The @options line must be followed by JavaScript source on subsequent lines"
+              }
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/source.test.ts",
+            "case": "rejects empty input and invalid options"
+          }
+        },
+        {
+          "name": "the public options prefix and grammar constants are fixed",
+          "inputs": {
+            "exports": [
+              "CODEMODE_OPTIONS_PREFIX",
+              "CODEMODE_SOURCE_GRAMMAR"
+            ]
+          },
+          "expected": {
+            "prefix": "// @options:",
+            "grammar": "\nstart: options_source | plain_source\noptions_source: OPTIONS_LINE NEWLINE SOURCE\nplain_source: SOURCE\n\nOPTIONS_LINE: /[ \\t]*\\/\\/ @options:[^\\r\\n]*/\nNEWLINE: /\\r?\\n/\nSOURCE: /[\\s\\S]+/\n"
+          },
+          "observed": {
+            "prefix": "// @options:",
+            "grammar": "\nstart: options_source | plain_source\noptions_source: OPTIONS_LINE NEWLINE SOURCE\nplain_source: SOURCE\n\nOPTIONS_LINE: /[ \\t]*\\/\\/ @options:[^\\r\\n]*/\nNEWLINE: /\\r?\\n/\nSOURCE: /[\\s\\S]+/\n"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/source.ts",
+            "case": "CODEMODE_SOURCE_GRAMMAR"
+          }
+        }
+      ]
+    },
+    {
+      "path": "declarations.json",
+      "family": "audit-1053",
+      "bytes": 19824,
+      "sha256": "64758b1d6035ca2661886d57d8253b9c84c9c31a355acbd18c9e8bccafd903d7",
+      "sourceEndpoints": [
+        "packages/codemode/src/declarations.ts:schemaToType,renderDeclarations,renderToolSignature,renderToolSample,renderToolOutputType,constraintTags",
+        "packages/codemode/src/identifier.ts:toCodemodeIdentifier",
+        "packages/codemode/src/runtime/prelude-source.ts:MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_TOTAL_CHARS,MAX_STORE_VALUE_CHARS",
+        "packages/codemode/test/declarations.test.ts:schemaToType,renderDeclarations"
+      ],
+      "scenarios": [
+        {
+          "name": "tool identifiers replace invalid characters and preserve MCP names",
+          "inputs": {
+            "names": [
+              "mcp__docs__search",
+              "my-tool",
+              "9lives",
+              "",
+              "a b",
+              "$ok",
+              "_",
+              "naïve"
+            ]
+          },
+          "expected": [
+            "mcp__docs__search",
+            "my_tool",
+            "_lives",
+            "_",
+            "a_b",
+            "$ok",
+            "_",
+            "na_ve"
+          ],
+          "observed": [
+            "mcp__docs__search",
+            "my_tool",
+            "_lives",
+            "_",
+            "a_b",
+            "$ok",
+            "_",
+            "na_ve"
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/identifier.ts",
+            "case": "toCodemodeIdentifier"
+          }
+        },
+        {
+          "name": "schema primitives, literals, unions and references render as TypeScript types",
+          "inputs": {
+            "schemas": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              {
+                "const": "a"
+              },
+              {
+                "enum": [
+                  "a",
+                  1,
+                  null
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {}
+                ]
+              },
+              {
+                "allOf": [
+                  {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "number"
+                      }
+                    ]
+                  },
+                  {
+                    "const": 1
+                  }
+                ]
+              },
+              {
+                "$ref": "#/defs/x"
+              },
+              true,
+              false,
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "array",
+                "prefixItems": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              {
+                "type": "array"
+              }
+            ]
+          },
+          "expected": [
+            "string",
+            "number",
+            "string | null",
+            "\"a\"",
+            "\"a\" | 1 | null",
+            "string | number",
+            "unknown",
+            "(string | number) & 1",
+            "unknown",
+            "unknown",
+            "never",
+            "Array<string>",
+            "[string, number]",
+            "unknown[]"
+          ],
+          "observed": [
+            "string",
+            "number",
+            "string | null",
+            "\"a\"",
+            "\"a\" | 1 | null",
+            "string | number",
+            "unknown",
+            "(string | number) & 1",
+            "unknown",
+            "unknown",
+            "never",
+            "Array<string>",
+            "[string, number]",
+            "unknown[]"
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "renders primitives, literals, and unions"
+          }
+        },
+        {
+          "name": "object properties are sorted on one line with quoted non-identifier keys",
+          "inputs": {
+            "schemas": [
+              {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  },
+                  "max-lines": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "number"
+                }
+              },
+              {
+                "type": "object"
+              },
+              {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            ]
+          },
+          "expected": [
+            "{ city: string; \"max-lines\"?: number; }",
+            "{ [key: string]: number; }",
+            "{ [key: string]: unknown; }",
+            "{}"
+          ],
+          "observed": [
+            "{ city: string; \"max-lines\"?: number; }",
+            "{ [key: string]: number; }",
+            "{ [key: string]: unknown; }",
+            "{}"
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "renders objects on one line with sorted properties"
+          }
+        },
+        {
+          "name": "property descriptions become comment lines",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "weather": {
+                  "type": "array",
+                  "description": "look up weather for a given list of locations",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "location": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "location"
+                    ]
+                  }
+                }
+              },
+              "required": [
+                "weather"
+              ]
+            }
+          },
+          "expected": "{\n  // look up weather for a given list of locations\n  weather: Array<{ location: string; }>;\n}",
+          "observed": "{\n  // look up weather for a given list of locations\n  weather: Array<{ location: string; }>;\n}",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "puts property descriptions on comment lines"
+          }
+        },
+        {
+          "name": "constraint tags render integer bounds, defaults, patterns and deprecated markers",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "timeoutMs": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 30000,
+                  "default": 0,
+                  "description": "Wait in milliseconds."
+                },
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z]+$",
+                  "maxLength": 8
+                },
+                "tags": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "maxItems": 5,
+                  "uniqueItems": true,
+                  "deprecated": true
+                },
+                "name": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "expected": "{\n  // @maxLength 8 @pattern ^[a-z]+$\n  id: string;\n  name?: string;\n  // @maxItems 5 @uniqueItems @deprecated\n  tags?: Array<string>;\n  // Wait in milliseconds.\n  // @integer @minimum 0 @maximum 30000 @default 0\n  timeoutMs?: number;\n}",
+          "observed": "{\n  // @maxLength 8 @pattern ^[a-z]+$\n  id: string;\n  name?: string;\n  // @maxItems 5 @uniqueItems @deprecated\n  tags?: Array<string>;\n  // Wait in milliseconds.\n  // @integer @minimum 0 @maximum 30000 @default 0\n  timeoutMs?: number;\n}",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "puts constraints the type cannot express on property comment lines"
+          }
+        },
+        {
+          "name": "optional non-null branches keep their constraint tags",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "limit": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 100
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "default": null,
+                  "title": "Limit"
+                },
+                "n": {
+                  "anyOf": [
+                    {
+                      "type": "integer",
+                      "minimum": 10,
+                      "maximum": 50,
+                      "format": "int32"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "minimum": 0,
+                  "maximum": 20,
+                  "format": "port"
+                }
+              }
+            }
+          },
+          "expected": "{\n  // @integer @minimum 1 @maximum 100\n  limit?: number | null;\n  // @integer @minimum 10 @maximum 20 @format port @format int32\n  n?: number | null;\n}",
+          "observed": "{\n  // @integer @minimum 1 @maximum 100\n  limit?: number | null;\n  // @integer @minimum 10 @maximum 20 @format port @format int32\n  n?: number | null;\n}",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "reads constraints of optional fields from the non-null branch"
+          }
+        },
+        {
+          "name": "draft-04 boolean exclusive bounds become exclusive tags",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "exclusiveMinimum": true,
+                  "maximum": 10,
+                  "exclusiveMaximum": false
+                },
+                "m": {
+                  "anyOf": [
+                    {
+                      "type": "number",
+                      "maximum": 5,
+                      "exclusiveMaximum": true
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "maximum": 8
+                }
+              }
+            }
+          },
+          "expected": "{\n  // @maximum 8 @exclusiveMaximum 5\n  m?: number | null;\n  // @integer @exclusiveMinimum 0 @maximum 10\n  n?: number;\n}",
+          "observed": "{\n  // @maximum 8 @exclusiveMaximum 5\n  m?: number | null;\n  // @integer @exclusiveMinimum 0 @maximum 10\n  n?: number;\n}",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "reads draft-04 boolean exclusive bounds"
+          }
+        },
+        {
+          "name": "long tags are dropped, line terminators are escaped, and line breaks stay in comments",
+          "inputs": {
+            "schemas": [
+              {
+                "type": "object",
+                "properties": {
+                  "config": {
+                    "type": "object",
+                    "default": {
+                      "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    }
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "sep": {
+                    "type": "string",
+                    "pattern": "^[\r\n  ]$",
+                    "default": " ",
+                    "description": "a b"
+                  }
+                }
+              }
+            ]
+          },
+          "expected": [
+            "{ config?: { [key: string]: unknown; }; }",
+            "{\n  // a\n  // b\n  // @pattern ^[\\u000d\\u000a\\u2028\\u2029]$ @default \"\\u2028\"\n  sep?: string;\n}"
+          ],
+          "observed": [
+            "{ config?: { [key: string]: unknown; }; }",
+            "{\n  // a\n  // b\n  // @pattern ^[\\u000d\\u000a\\u2028\\u2029]$ @default \"\\u2028\"\n  sep?: string;\n}"
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "leaves out long tags and escapes line terminators"
+          }
+        },
+        {
+          "name": "types over the character budget drop tags, then become unknown",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "n": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "budgets": [
+              null,
+              20,
+              10
+            ]
+          },
+          "expected": [
+            "{\n  // @integer @minimum 1\n  n?: number;\n}",
+            "{ n?: number; }",
+            "unknown"
+          ],
+          "observed": [
+            "{\n  // @integer @minimum 1\n  n?: number;\n}",
+            "{ n?: number; }",
+            "unknown"
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "drops constraint tags before rendering a type over the budget as unknown"
+          }
+        },
+        {
+          "name": "local references resolve and recursive or remote references render unknown",
+          "inputs": {
+            "schema": {
+              "type": "object",
+              "properties": {
+                "item": {
+                  "$ref": "#/$defs/Item"
+                },
+                "legacy": {
+                  "$ref": "#/definitions/Legacy"
+                },
+                "remote": {
+                  "$ref": "https://example.com/schema.json"
+                }
+              },
+              "required": [
+                "item"
+              ],
+              "$defs": {
+                "Item": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "parent": {
+                      "$ref": "#/$defs/Item"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              },
+              "definitions": {
+                "Legacy": {
+                  "enum": [
+                    "a",
+                    "b"
+                  ]
+                }
+              }
+            }
+          },
+          "expected": "{ item: { id: string; parent?: unknown; }; legacy?: \"a\" | \"b\"; remote?: unknown; }",
+          "observed": "{ item: { id: string; parent?: unknown; }; legacy?: \"a\" | \"b\"; remote?: unknown; }",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "resolves local references and stops at recursive ones"
+          }
+        },
+        {
+          "name": "tool signatures and samples use the output schema and input budget",
+          "inputs": {
+            "tool": {
+              "name": "mcp__docs__search",
+              "description": " Search docs ",
+              "inputSchema": {
+                "type": "object",
+                "properties": {
+                  "query": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "query"
+                ]
+              },
+              "outputSchema": {
+                "type": "object",
+                "properties": {
+                  "results": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "results"
+                ]
+              }
+            }
+          },
+          "expected": {
+            "signature": "mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>;",
+            "unknownOutput": "unknown",
+            "output": "{ [key: string]: unknown; }",
+            "sample": "Search docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>; };\n```",
+            "budgeted": "mcp__docs__search(args: unknown): Promise<{ results: Array<string>; }>;"
+          },
+          "observed": {
+            "signature": "mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>;",
+            "unknownOutput": "unknown",
+            "output": "{ [key: string]: unknown; }",
+            "sample": "Search docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>; };\n```",
+            "budgeted": "mcp__docs__search(args: unknown): Promise<{ results: Array<string>; }>;"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "renderToolSignature"
+          }
+        },
+        {
+          "name": "renderDeclarations groups tools, globals and namespaces with doc comments",
+          "inputs": {
+            "tools": [
+              {
+                "name": "my-tool",
+                "description": "Do the thing",
+                "inputSchema": {
+                  "type": "object",
+                  "properties": {
+                    "a": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "outputSchema": {
+                  "type": "string"
+                }
+              }
+            ],
+            "globals": [
+              {
+                "name": "searchTools",
+                "description": "Search tools",
+                "signature": "(query: string): Promise<string[]>"
+              },
+              {
+                "name": "models.classify",
+                "description": "Classify",
+                "signature": "(input: string): Promise<string>"
+              },
+              {
+                "name": "models.generateImages",
+                "signature": "(input: string): Promise<string[]>"
+              }
+            ]
+          },
+          "expected": "declare const tools: {\n  /** Do the thing */\n  my_tool(args: { a?: string; }): Promise<string>;\n};\n\n/** Search tools */\ndeclare function searchTools(query: string): Promise<string[]>;\n\ndeclare const models: {\n  /** Classify */\n  classify(input: string): Promise<string>;\n  generateImages(input: string): Promise<string[]>;\n};",
+          "observed": "declare const tools: {\n  /** Do the thing */\n  my_tool(args: { a?: string; }): Promise<string>;\n};\n\n/** Search tools */\ndeclare function searchTools(query: string): Promise<string[]>;\n\ndeclare const models: {\n  /** Classify */\n  classify(input: string): Promise<string>;\n  generateImages(input: string): Promise<string[]>;\n};",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/declarations.test.ts",
+            "case": "renderDeclarations"
+          }
+        },
+        {
+          "name": "default and stored limits are public constants",
+          "inputs": {
+            "exports": [
+              "DEFAULT_INPUT_SCHEMA_MAX_CHARS",
+              "MAX_OUTPUT_CHARS",
+              "MAX_OUTPUT_ITEMS",
+              "MAX_STORE_TOTAL_CHARS",
+              "MAX_STORE_VALUE_CHARS",
+              "DEFAULT_INTERRUPT_BUDGET"
+            ]
+          },
+          "expected": {
+            "inputSchemaMaxChars": 16000,
+            "outputChars": 16777216,
+            "outputItems": 100000,
+            "storeTotalChars": 1048576,
+            "storeValueChars": 262144,
+            "interruptBudget": 100000
+          },
+          "observed": {
+            "inputSchemaMaxChars": 16000,
+            "outputChars": 16777216,
+            "outputItems": 100000,
+            "storeTotalChars": 1048576,
+            "storeValueChars": 262144,
+            "interruptBudget": 100000
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/prelude-source.ts",
+            "case": "MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_TOTAL_CHARS,MAX_STORE_VALUE_CHARS"
+          }
+        }
+      ]
+    },
+    {
+      "path": "script-execution.json",
+      "family": "audit-1053",
+      "bytes": 61462,
+      "sha256": "c95338f7eadd9e71cebe2587ad679528ca5aa780257dc4761e06372ca7fd1fd3",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.execute,CodemodeSandboxBase.registerTool,CodemodeSandboxBase.close",
+        "packages/codemode/src/runtime/prelude-source.ts:MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_TOTAL_CHARS,MAX_STORE_VALUE_CHARS",
+        "packages/codemode/src/runtime/vm.ts:startVm",
+        "packages/codemode/test/sandbox.test.ts:script execution,tools,output"
+      ],
+      "scenarios": [
+        {
+          "name": "a script returns a JSON value after top-level await and collects output in order",
+          "inputs": {
+            "script": "text('plain'); console.log('log', 2); console.error('err'); image(dataUrl); return { a: 1 }"
+          },
+          "expected": {
+            "ok": true,
+            "value": {
+              "a": 1
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "plain"
+              },
+              {
+                "type": "text",
+                "text": "log 2",
+                "console": true
+              },
+              {
+                "type": "text",
+                "text": "err",
+                "console": true
+              },
+              {
+                "type": "image",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lYQ5WQAAAABJRU5ErkJggg==",
+                "mimeType": "image/png"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": {
+              "a": 1
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "plain"
+              },
+              {
+                "type": "text",
+                "text": "log 2",
+                "console": true
+              },
+              {
+                "type": "text",
+                "text": "err",
+                "console": true
+              },
+              {
+                "type": "image",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lYQ5WQAAAABJRU5ErkJggg==",
+                "mimeType": "image/png"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "collects text(), image(), and console output in order"
+          }
+        },
+        {
+          "name": "text values are stringified and image accepts data URLs and image blocks",
+          "inputs": {
+            "script": "text(['a', 1]); text({x: true}); text(undefined); image({type:'image', data: b64, mimeType:'image/png'}); return 1"
+          },
+          "expected": {
+            "ok": true,
+            "value": 1,
+            "output": [
+              {
+                "type": "text",
+                "text": "[\"a\",1]"
+              },
+              {
+                "type": "text",
+                "text": "{\"x\":true}"
+              },
+              {
+                "type": "text",
+                "text": "undefined"
+              },
+              {
+                "type": "image",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lYQ5WQAAAABJRU5ErkJggg==",
+                "mimeType": "image/png"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": 1,
+            "output": [
+              {
+                "type": "text",
+                "text": "[\"a\",1]"
+              },
+              {
+                "type": "text",
+                "text": "{\"x\":true}"
+              },
+              {
+                "type": "text",
+                "text": "undefined"
+              },
+              {
+                "type": "image",
+                "data": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lYQ5WQAAAABJRU5ErkJggg==",
+                "mimeType": "image/png"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "collects text(), image(), and console output in order"
+          }
+        },
+        {
+          "name": "invalid image arguments throw a catchable TypeError inside the script",
+          "inputs": {
+            "script": "try { image(42); } catch (error) { return [error.name, error.message]; }"
+          },
+          "expected": {
+            "ok": true,
+            "value": [
+              "TypeError",
+              "image expects a non-empty image URL string, an object with image_url, or an image block { type: \"image\", data, mimeType }"
+            ],
+            "output": [],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": [
+              "TypeError",
+              "image expects a non-empty image URL string, an object with image_url, or an image block { type: \"image\", data, mimeType }"
+            ],
+            "output": [],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "rejects invalid text() and image() arguments"
+          }
+        },
+        {
+          "name": "exit() succeeds with prior output and store writes and stops later output",
+          "inputs": {
+            "script": "text(\"before\"); store(\"a\", {x: 1}); store(\"b\", 2); store(\"b\", undefined); exit(); text(\"after\")"
+          },
+          "expected": {
+            "ok": true,
+            "output": [
+              {
+                "type": "text",
+                "text": "before"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {
+                "a": {
+                  "x": 1
+                }
+              },
+              "delete": [
+                "b"
+              ]
+            }
+          },
+          "observed": {
+            "ok": true,
+            "output": [
+              {
+                "type": "text",
+                "text": "before"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {
+                "a": {
+                  "x": 1
+                }
+              },
+              "delete": [
+                "b"
+              ]
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "ends the script successfully on exit(), keeping output and store writes"
+          }
+        },
+        {
+          "name": "a script failure keeps prior output and reports the script error with its line",
+          "inputs": {
+            "script": "text(\"before\");\nthrow new Error(\"boom\")"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "script",
+              "name": "Error",
+              "message": "boom",
+              "stack": "Error: boom\n    at <anonymous> (codemode.js:2:11)"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "before"
+              }
+            ],
+            "calls": []
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "script",
+              "name": "Error",
+              "message": "boom",
+              "stack": "Error: boom\n    at <anonymous> (codemode.js:2:11)"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "before"
+              }
+            ],
+            "calls": []
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "keeps output produced before a failure"
+          }
+        },
+        {
+          "name": "non-Error throws, syntax errors and non-serializable returns are script errors",
+          "inputs": {
+            "scripts": [
+              "throw \"plain\"",
+              "return 1n",
+              "text("
+            ]
+          },
+          "expected": [
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "message": "plain"
+              },
+              "output": [],
+              "calls": []
+            },
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "name": "TypeError",
+                "message": "BigInt are forbidden in JSON.stringify",
+                "stack": "TypeError: BigInt are forbidden in JSON.stringify\n    at stringify (native)"
+              },
+              "output": [],
+              "calls": []
+            },
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "name": "SyntaxError",
+                "message": "unexpected token in expression: '}'",
+                "stack": "SyntaxError: unexpected token in expression: '}'\n    at codemode.js:2:1"
+              },
+              "output": [],
+              "calls": []
+            }
+          ],
+          "observed": [
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "message": "plain"
+              },
+              "output": [],
+              "calls": []
+            },
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "name": "TypeError",
+                "message": "BigInt are forbidden in JSON.stringify",
+                "stack": "TypeError: BigInt are forbidden in JSON.stringify\n    at stringify (native)"
+              },
+              "output": [],
+              "calls": []
+            },
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "name": "SyntaxError",
+                "message": "unexpected token in expression: '}'",
+                "stack": "SyntaxError: unexpected token in expression: '}'\n    at codemode.js:2:1"
+              },
+              "output": [],
+              "calls": []
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "reports non-Error throws,reports a non-serializable return value as a script error"
+          }
+        },
+        {
+          "name": "tools are async functions under normalized identifiers and record status and duration presence",
+          "inputs": {
+            "tools": [
+              "read",
+              "my-tool"
+            ]
+          },
+          "expected": {
+            "ok": true,
+            "value": [
+              "function",
+              "function",
+              [
+                "read",
+                "my_tool"
+              ],
+              {
+                "got": {
+                  "path": "x"
+                }
+              },
+              "y"
+            ],
+            "output": [],
+            "calls": [
+              {
+                "name": "read",
+                "status": "ok",
+                "durationPresent": true
+              },
+              {
+                "name": "my-tool",
+                "status": "ok",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": [
+              "function",
+              "function",
+              [
+                "read",
+                "my_tool"
+              ],
+              {
+                "got": {
+                  "path": "x"
+                }
+              },
+              "y"
+            ],
+            "output": [],
+            "calls": [
+              {
+                "name": "read",
+                "status": "ok",
+                "durationPresent": true
+              },
+              {
+                "name": "my-tool",
+                "status": "ok",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "exposes tools as async functions and records calls"
+          }
+        },
+        {
+          "name": "unknown tools and thrown tool errors are catchable, with error call status",
+          "inputs": {
+            "tools": [
+              "fail"
+            ]
+          },
+          "expected": {
+            "ok": true,
+            "value": [
+              "TypeError",
+              "tools.nope does not exist. Available: fail. ALL_TOOLS lists every tool; searchTools(query) finds tools by topic. Check for a member with \"nope\" in tools.",
+              "Error",
+              "boom"
+            ],
+            "output": [],
+            "calls": [
+              {
+                "name": "fail",
+                "status": "error",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": [
+              "TypeError",
+              "tools.nope does not exist. Available: fail. ALL_TOOLS lists every tool; searchTools(query) finds tools by topic. Check for a member with \"nope\" in tools.",
+              "Error",
+              "boom"
+            ],
+            "output": [],
+            "calls": [
+              {
+                "name": "fail",
+                "status": "error",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "turns tool errors into catchable Errors in the script"
+          }
+        },
+        {
+          "name": "an unawaited tool call is aborted when the script returns and its record is cancelled",
+          "inputs": {
+            "script": "tools.hang(); return \"done\""
+          },
+          "expected": {
+            "ok": true,
+            "value": "done",
+            "output": [],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": "done",
+            "output": [],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "aborts unawaited calls when the script returns"
+          }
+        },
+        {
+          "name": "globals support top-level spread calls and dotted frozen namespaces",
+          "inputs": {
+            "globals": [
+              "search",
+              "ns.member"
+            ]
+          },
+          "expected": {
+            "ok": true,
+            "value": [
+              [
+                "a",
+                2
+              ],
+              {
+                "x": 1
+              }
+            ],
+            "output": [],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": [
+              [
+                "a",
+                2
+              ],
+              {
+                "x": 1
+              }
+            ],
+            "output": [],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "numbers calls to globals with tools, and answers errors as rejections"
+          }
+        },
+        {
+          "name": "invalid global names, duplicates and namespace conflicts are rejected at construction",
+          "inputs": {
+            "globals": [
+              "tools",
+              "a-b",
+              "x,x",
+              "ns,ns.m"
+            ]
+          },
+          "expected": [
+            "Invalid global name \"tools\"",
+            "Invalid global name \"a-b\"",
+            "Global \"x\" is already registered",
+            "Global \"ns\" conflicts with the namespace \"ns\""
+          ],
+          "observed": [
+            "Invalid global name \"tools\"",
+            "Invalid global name \"a-b\"",
+            "Global \"x\" is already registered",
+            "Global \"ns\" conflicts with the namespace \"ns\""
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/execution.ts",
+            "case": "checkGlobals"
+          }
+        },
+        {
+          "name": "store and load use a JSON snapshot and only successful executions report writes",
+          "inputs": {
+            "store": {
+              "existing": {
+                "keep": true
+              }
+            },
+            "scripts": [
+              "success",
+              "failure"
+            ]
+          },
+          "expected": [
+            {
+              "ok": true,
+              "value": {
+                "keep": true
+              },
+              "output": [],
+              "calls": [],
+              "storeWrites": {
+                "set": {
+                  "added": {
+                    "x": 1
+                  }
+                },
+                "delete": [
+                  "obsolete"
+                ]
+              }
+            },
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "name": "Error",
+                "message": "x",
+                "stack": "Error: x\n    at <anonymous> (codemode.js:1:57)"
+              },
+              "output": [],
+              "calls": []
+            }
+          ],
+          "observed": [
+            {
+              "ok": true,
+              "value": {
+                "keep": true
+              },
+              "output": [],
+              "calls": [],
+              "storeWrites": {
+                "set": {
+                  "added": {
+                    "x": 1
+                  }
+                },
+                "delete": [
+                  "obsolete"
+                ]
+              }
+            },
+            {
+              "ok": false,
+              "error": {
+                "kind": "script",
+                "name": "Error",
+                "message": "x",
+                "stack": "Error: x\n    at <anonymous> (codemode.js:1:57)"
+              },
+              "output": [],
+              "calls": []
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "store"
+          }
+        },
+        {
+          "name": "the public tool table can be registered, listed and unregistered; close rejects later runs",
+          "inputs": {
+            "tools": [
+              "a-b",
+              "a_b"
+            ]
+          },
+          "expected": {
+            "duplicateConstructorAllowed": true,
+            "duplicateRegister": "Tool \"a-b\" is already registered",
+            "listed": [
+              "a-b",
+              "a_b"
+            ],
+            "removedExisting": true,
+            "removedMissing": false,
+            "listedAfter": [
+              "a_b"
+            ],
+            "closed": "Sandbox is closed"
+          },
+          "observed": {
+            "duplicateConstructorAllowed": true,
+            "duplicateRegister": "Tool \"a-b\" is already registered",
+            "listed": [
+              "a-b",
+              "a_b"
+            ],
+            "removedExisting": true,
+            "removedMissing": false,
+            "listedAfter": [
+              "a_b"
+            ],
+            "closed": "Sandbox is closed"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/execution.ts",
+            "case": "registerTool,unregisterTool,close"
+          }
+        },
+        {
+          "name": "a caller abort ends a waiting script, aborts its tool and keeps partial output",
+          "inputs": {
+            "timeoutMs": "disabled",
+            "cancellation": "AbortController"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "cancelled"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "partial"
+              }
+            ],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "cancelled"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "partial"
+              }
+            ],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "settles abort without waiting for worker exit"
+          }
+        },
+        {
+          "name": "a script that computes past its deadline is a timeout",
+          "inputs": {
+            "script": "while (true) {}",
+            "timeoutMs": 50
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "timeout",
+              "message": "Execution timed out after 50 ms"
+            },
+            "output": [],
+            "calls": []
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "timeout",
+              "message": "Execution timed out after 50 ms"
+            },
+            "output": [],
+            "calls": []
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "times out"
+          }
+        },
+        {
+          "name": "a memory-limited VM reports out of memory as a script error",
+          "inputs": {
+            "memoryLimitBytes": 8388608
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "script",
+              "name": "InternalError",
+              "message": "out of memory",
+              "stack": "InternalError: out of memory\n    at <anonymous> (codemode.js:1:82)"
+            },
+            "output": [],
+            "calls": []
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "script",
+              "name": "InternalError",
+              "message": "out of memory",
+              "stack": "InternalError: out of memory\n    at <anonymous> (codemode.js:1:82)"
+            },
+            "output": [],
+            "calls": []
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "caps the interrupt budget and memory at the remote's limits"
+          }
+        },
+        {
+          "name": "a pre-aborted execution never starts the guest and reports the caller reason",
+          "inputs": {
+            "cancellation": "already-aborted AbortSignal"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "early"
+            },
+            "output": [],
+            "calls": []
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "early"
+            },
+            "output": [],
+            "calls": []
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/sandbox.test.ts",
+            "case": "cancellation"
+          }
+        },
+        {
+          "name": "the guest prelude is the frozen sandbox prelude with output and store limits",
+          "inputs": {
+            "export": "PRELUDE_SOURCE"
+          },
+          "expected": "(function (bridge, toolsJson, globalsJson, storeJson) {\n\t\"use strict\";\n\n\t// Freeze every object reachable from the built-in globals, plus the intrinsics that are only\n\t// reachable from instances (iterator and generator prototypes, %TypedArray%).\n\t//\n\t// Freezing alone breaks ordinary code through the \"override mistake\": a data property that is\n\t// read-only on a prototype cannot be assigned on an instance either, so\n\t// this.name = \"MyError\" in an Error subclass would throw. Commonly overridden properties\n\t// become accessors whose setter defines an own property on the instance instead.\n\t(function lockdown() {\n\t\tconst OVERRIDABLE = new Set([\"constructor\", \"name\", \"message\", \"toString\", \"toLocaleString\", \"valueOf\", \"toJSON\"]);\n\t\tconst seen = new Set([globalThis]);\n\t\tconst queue = [];\n\t\tconst add = (value) => {\n\t\t\tif ((typeof value === \"object\" && value !== null) || typeof value === \"function\") {\n\t\t\t\tif (!seen.has(value)) {\n\t\t\t\t\tseen.add(value);\n\t\t\t\t\tqueue.push(value);\n\t\t\t\t}\n\t\t\t}\n\t\t};\n\n\t\t// Accessors from an object literal have no own prototype object, unlike function expressions,\n\t\t// whose prototype.constructor would be converted again without end.\n\t\tfunction allowOverride(object, key, value, enumerable) {\n\t\t\tconst { get, set } = Object.getOwnPropertyDescriptor(\n\t\t\t\t{\n\t\t\t\t\tget accessor() {\n\t\t\t\t\t\treturn value;\n\t\t\t\t\t},\n\t\t\t\t\tset accessor(next) {\n\t\t\t\t\t\tif (this === object) {\n\t\t\t\t\t\t\tthrow new TypeError(\"Cannot assign to read only property '\" + String(key) + \"' of a built-in\");\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif ((typeof this !== \"object\" || this === null) && typeof this !== \"function\") return;\n\t\t\t\t\t\tObject.defineProperty(this, key, { value: next, writable: true, enumerable: true, configurable: true });\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t\t\"accessor\",\n\t\t\t);\n\t\t\tObject.defineProperty(object, key, { get, set, enumerable, configurable: false });\n\t\t\tadd(get);\n\t\t\tadd(set);\n\t\t}\n\n\t\tfor (const key of Reflect.ownKeys(globalThis)) {\n\t\t\tconst descriptor = Object.getOwnPropertyDescriptor(globalThis, key);\n\t\t\tadd(descriptor.value);\n\t\t\tadd(descriptor.get);\n\t\t\tadd(descriptor.set);\n\t\t\tif (\"value\" in descriptor && descriptor.configurable) {\n\t\t\t\tObject.defineProperty(globalThis, key, { writable: false, configurable: false });\n\t\t\t}\n\t\t}\n\t\tadd(Object.getPrototypeOf(function* () {}));\n\t\tadd(Object.getPrototypeOf(async function () {}));\n\t\tadd(Object.getPrototypeOf(async function* () {}));\n\t\tadd(Object.getPrototypeOf(Int8Array));\n\t\tadd(Object.getPrototypeOf([][Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(new Map()[Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(new Set()[Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(\"\"[Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(/a/[Symbol.matchAll](\"\")));\n\t\tif (typeof Iterator === \"function\") {\n\t\t\tif (typeof Iterator.prototype.map === \"function\") add(Object.getPrototypeOf([].values().map((x) => x)));\n\t\t\tif (typeof Iterator.from === \"function\") add(Object.getPrototypeOf(Iterator.from({ next() {} })));\n\t\t}\n\n\t\twhile (queue.length > 0) {\n\t\t\tconst object = queue.pop();\n\t\t\tadd(Object.getPrototypeOf(object));\n\t\t\tconst descriptors = Object.getOwnPropertyDescriptors(object);\n\t\t\tfor (const key of Reflect.ownKeys(descriptors)) {\n\t\t\t\tconst descriptor = descriptors[key];\n\t\t\t\tif (\"value\" in descriptor) {\n\t\t\t\t\tadd(descriptor.value);\n\t\t\t\t\tif (\n\t\t\t\t\t\tdescriptor.writable &&\n\t\t\t\t\t\tdescriptor.configurable &&\n\t\t\t\t\t\t(object === Object.prototype || OVERRIDABLE.has(key))\n\t\t\t\t\t) {\n\t\t\t\t\t\tallowOverride(object, key, descriptor.value, descriptor.enumerable);\n\t\t\t\t\t}\n\t\t\t\t} else {\n\t\t\t\t\tadd(descriptor.get);\n\t\t\t\t\tadd(descriptor.set);\n\t\t\t\t}\n\t\t\t}\n\t\t\tObject.freeze(object);\n\t\t}\n\t})();\n\tconst stringify = JSON.stringify;\n\tconst parse = JSON.parse;\n\tconst promiseThen = Promise.prototype.then;\n\tconst ErrorCtor = Error;\n\tconst TypeErrorCtor = TypeError;\n\tconst RangeErrorCtor = RangeError;\n\tconst pending = new Map();\n\tlet nextId = 1;\n\tlet finished = false;\n\t// Thrown by exit() to unwind the script after it already reported success.\n\tconst EXIT = Object.freeze({});\n\n\tfunction done(ok, payload, writes) {\n\t\tif (finished) return;\n\t\tfinished = true;\n\t\tbridge(\"done\", ok, payload, writes);\n\t}\n\n\tfunction serialize(value) {\n\t\treturn value === undefined ? undefined : stringify(value);\n\t}\n\n\t// QuickJS stacks list frames only. Prefix \"Name: message\" like V8 so the\n\t// text reads the same as a Node error, and drop this prelude's frames.\n\tfunction errorText(error) {\n\t\tconst head = error.message ? error.name + \": \" + error.message : String(error.name);\n\t\tconst frames =\n\t\t\ttypeof error.stack === \"string\"\n\t\t\t\t? error.stack.split(\"\\n\").filter((line) => line.trim() && !line.includes(\"codemode-prelude.js\"))\n\t\t\t\t: [];\n\t\treturn [head, ...frames].join(\"\\n\");\n\t}\n\n\tfunction format(value) {\n\t\tif (typeof value === \"string\") return value;\n\t\tif (value instanceof ErrorCtor) return errorText(value);\n\t\ttry {\n\t\t\tconst json = stringify(value);\n\t\t\treturn json === undefined ? String(value) : json;\n\t\t} catch {\n\t\t\treturn String(value);\n\t\t}\n\t}\n\n\t// The host requires string fields. A script can set an error's name or message to anything, so\n\t// they are coerced, and a value whose coercion throws gets a placeholder.\n\tfunction describeError(error) {\n\t\ttry {\n\t\t\tif (error instanceof ErrorCtor) {\n\t\t\t\treturn stringify({ name: String(error.name), message: String(error.message), stack: errorText(error) });\n\t\t\t}\n\t\t\treturn stringify({ message: String(format(error)) });\n\t\t} catch {\n\t\t\treturn stringify({ message: \"The script threw a value that cannot be described\" });\n\t\t}\n\t}\n\n\tfunction caller(kind, name, spread) {\n\t\treturn (...args) =>\n\t\t\tnew Promise((resolve, reject) => {\n\t\t\t\tlet json;\n\t\t\t\ttry {\n\t\t\t\t\tjson = serialize(spread ? args : args[0]);\n\t\t\t\t} catch (error) {\n\t\t\t\t\treject(error);\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tconst id = nextId++;\n\t\t\t\tpending.set(id, { resolve, reject });\n\t\t\t\tbridge(kind, id, name, json);\n\t\t\t});\n\t}\n\n\tconst tools = Object.create(null);\n\tconst allTools = [];\n\tfor (const { name, jsName, description } of parse(toolsJson)) {\n\t\tconst fn = caller(\"call\", name);\n\t\t// The first tool wins when two names normalize to the same identifier.\n\t\tif (!(jsName in tools)) {\n\t\t\ttools[jsName] = fn;\n\t\t\tallTools.push(Object.freeze({ name: jsName, description }));\n\t\t}\n\t\tif (!(name in tools)) tools[name] = fn;\n\t}\n\tObject.freeze(tools);\n\tObject.freeze(allTools);\n\n\t// Reading a member that does not exist throws an error that names the close matches, instead of\n\t// a later \"not a function\". `in` checks still work.\n\tconst comparable = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, \"\");\n\tfunction guard(target, label, names, hint) {\n\t\treturn new Proxy(target, {\n\t\t\tget(object, property, receiver) {\n\t\t\t\tif (typeof property !== \"string\" || property in object || property in Object.prototype || property === \"then\" || property === \"toJSON\") {\n\t\t\t\t\treturn Reflect.get(object, property, receiver);\n\t\t\t\t}\n\t\t\t\tconst wanted = comparable(property);\n\t\t\t\tconst exact = names.filter((name) => comparable(name) === wanted);\n\t\t\t\tconst close = exact.length > 0 ? exact : names.filter((name) => wanted && (comparable(name).includes(wanted) || wanted.includes(comparable(name))));\n\t\t\t\tlet message = label + \".\" + property + \" does not exist.\";\n\t\t\t\tif (close.length > 0) message += \" Did you mean \" + close.slice(0, 5).map((name) => label + \".\" + name).join(\", \") + \"?\";\n\t\t\t\telse if (names.length <= 20) message += \" Available: \" + names.join(\", \") + \".\";\n\t\t\t\tif (hint) message += \" \" + hint;\n\t\t\t\tmessage += ' Check for a member with \"' + property + '\" in ' + label + \".\";\n\t\t\t\tthrow new TypeErrorCtor(message);\n\t\t\t},\n\t\t});\n\t}\n\tconst toolsProxy = guard(\n\t\ttools,\n\t\t\"tools\",\n\t\tallTools.map((tool) => tool.name),\n\t\t\"ALL_TOOLS lists every tool; searchTools(query) finds tools by topic.\",\n\t);\n\n\tconst namespaces = new Map();\n\tfor (const { name, spread } of parse(globalsJson)) {\n\t\tconst fn = caller(\"global\", name, spread);\n\t\tconst dot = name.indexOf(\".\");\n\t\tif (dot === -1) {\n\t\t\tObject.defineProperty(globalThis, name, { value: fn, enumerable: true });\n\t\t\tcontinue;\n\t\t}\n\t\tconst namespace = name.slice(0, dot);\n\t\tif (!namespaces.has(namespace)) namespaces.set(namespace, Object.create(null));\n\t\tnamespaces.get(namespace)[name.slice(dot + 1)] = fn;\n\t}\n\tfor (const [namespace, members] of namespaces) {\n\t\tObject.freeze(members);\n\t\tconst value = guard(members, namespace, Object.keys(members));\n\t\tObject.defineProperty(globalThis, namespace, { value, enumerable: true });\n\t}\n\n\t// key -> JSON text. Sizes count key and JSON characters.\n\tconst stored = new Map(Object.entries(parse(storeJson)));\n\tconst writes = new Map();\n\tlet storedChars = 0;\n\tfor (const [key, json] of stored) storedChars += key.length + json.length;\n\n\tconst STORE_HINT =\n\t\t\"store() is for small state such as IDs or summaries. Show images with image(), keep large data in variables, or write it to a file with a tool.\";\n\n\tfunction checkKey(name, key) {\n\t\tif (typeof key !== \"string\") throw new TypeError(name + \"() key must be a string\");\n\t}\n\n\tfunction store(key, value) {\n\t\tcheckKey(\"store\", key);\n\t\tconst previous = stored.has(key) ? key.length + stored.get(key).length : 0;\n\t\tif (value === undefined) {\n\t\t\tstored.delete(key);\n\t\t\tstoredChars -= previous;\n\t\t\twrites.set(key, undefined);\n\t\t\treturn;\n\t\t}\n\t\tlet json;\n\t\ttry {\n\t\t\tjson = stringify(value);\n\t\t} catch (error) {\n\t\t\tthrow new TypeError(\"store(\" + stringify(key) + \") value is not JSON-serializable: \" + format(error));\n\t\t}\n\t\tif (json === undefined) {\n\t\t\tthrow new TypeError(\"store(\" + stringify(key) + \") value is not JSON-serializable\");\n\t\t}\n\t\tif (json.length > 262144) {\n\t\t\tthrow new RangeError(\n\t\t\t\t\"store(\" + stringify(key) + \") value has \" + json.length + \" characters of JSON, more than the limit of 262144. \" +\n\t\t\t\t\tSTORE_HINT,\n\t\t\t);\n\t\t}\n\t\tconst next = storedChars - previous + key.length + json.length;\n\t\tif (next > 1048576) {\n\t\t\tthrow new RangeError(\n\t\t\t\t\"store is full: stored values would exceed 1048576 characters of JSON. Delete keys with store(key, undefined). \" +\n\t\t\t\t\tSTORE_HINT,\n\t\t\t);\n\t\t}\n\t\tstored.set(key, json);\n\t\tstoredChars = next;\n\t\twrites.set(key, json);\n\t}\n\n\tfunction load(key) {\n\t\tcheckKey(\"load\", key);\n\t\tconst json = stored.get(key);\n\t\treturn json === undefined ? undefined : parse(json);\n\t}\n\n\tfunction serializeWrites() {\n\t\tconst entries = [];\n\t\tfor (const [key, json] of writes) entries.push(json === undefined ? [key] : [key, json]);\n\t\treturn stringify(entries);\n\t}\n\n\tObject.defineProperty(globalThis, \"store\", { value: store, enumerable: true });\n\tObject.defineProperty(globalThis, \"load\", { value: load, enumerable: true });\n\n\tlet outputChars = 0;\n\tlet outputItems = 0;\n\n\t// Past the output limits the script fails: done() reports the error, so catching it does not\n\t// resume output, and the host ends the script.\n\tfunction output(kind, data, mimeType) {\n\t\tif (finished) return;\n\t\toutputChars += data.length;\n\t\toutputItems++;\n\t\tif (outputChars > 16777216 || outputItems > 100000) {\n\t\t\tconst error = new RangeErrorCtor(\n\t\t\t\t\"script output exceeded the limit of 16777216 characters or 100000 text(), image(), and console calls. \" +\n\t\t\t\t\t\"Print a summary instead, or write large data to a file with a tool.\",\n\t\t\t);\n\t\t\tdone(false, describeError(error));\n\t\t\tthrow error;\n\t\t}\n\t\tbridge(\"output\", kind, data, mimeType);\n\t}\n\n\t// Primitives become their string form, everything else JSON.\n\tfunction outputText(value) {\n\t\tif (value === undefined || value === null || typeof value !== \"object\" && typeof value !== \"function\") {\n\t\t\treturn String(value);\n\t\t}\n\t\tconst json = stringify(value);\n\t\treturn json === undefined ? String(value) : json;\n\t}\n\n\tfunction text(value) {\n\t\tlet rendered;\n\t\ttry {\n\t\t\trendered = outputText(value);\n\t\t} catch (error) {\n\t\t\tthrow new TypeErrorCtor(error instanceof ErrorCtor ? error.message : String(error));\n\t\t}\n\t\toutput(\"text\", rendered);\n\t}\n\n\tfunction imageUrl(value) {\n\t\tif (typeof value === \"string\") return value;\n\t\tif (typeof value !== \"object\" || value === null || Array.isArray(value)) {\n\t\t\tthrow new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\t}\n\t\tif (value.image_url !== undefined) {\n\t\t\tif (typeof value.image_url !== \"string\") throw new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\t\treturn value.image_url;\n\t\t}\n\t\tif (typeof value.type !== \"string\") throw new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\tif (value.type !== \"image\") {\n\t\t\tthrow new TypeErrorCtor('image only accepts image blocks, got \"' + value.type + '\"');\n\t\t}\n\t\tif (typeof value.data !== \"string\" || value.data === \"\") throw new TypeErrorCtor(\"image expected image block data\");\n\t\tif (value.data.toLowerCase().startsWith(\"data:\")) return value.data;\n\t\treturn \"data:;base64,\" + value.data;\n\t}\n\n\t// Base64 of the signatures of the formats providers accept inline (PNG, JPEG except\n\t// JPEG-LS, GIF, \"RIFF....WEBP\"). Signatures start at byte 0, so their encodings are prefixes.\n\tconst IMAGE_SIGNATURES = [\n\t\t[\"image/png\", /^iVBORw0KGg/],\n\t\t[\"image/jpeg\", /^[/]9j[/](?!9)/],\n\t\t[\"image/gif\", /^R0lGOD[dl]h/],\n\t\t[\"image/webp\", /^UklG.{8}RUJQ/],\n\t];\n\n\tfunction image(value) {\n\t\tconst url = imageUrl(value);\n\t\tif (url === \"\") throw new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\tconst colon = url.indexOf(\":\");\n\t\tconst scheme = colon === -1 ? \"\" : url.slice(0, colon).toLowerCase();\n\t\tif (scheme === \"http\" || scheme === \"https\") {\n\t\t\tthrow new TypeErrorCtor(\"remote image URLs are not supported in tool outputs. Pass a base64 data URI instead\");\n\t\t}\n\t\tconst comma = url.indexOf(\",\");\n\t\tconst header = comma === -1 ? [] : url.slice(colon + 1, comma).split(\";\");\n\t\tif (scheme !== \"data\" || comma === -1 || header.slice(1).every((part) => part.toLowerCase() !== \"base64\")) {\n\t\t\tthrow new TypeErrorCtor(\"invalid image output. Pass a base64 data URI instead\");\n\t\t}\n\t\t// Providers reject the whole request on a bad image, and a persisted image block would be\n\t\t// resent on every later turn. Line breaks from wrapped base64 are dropped. The declared type\n\t\t// is ignored in favor of the detected one, as providers also reject mismatches.\n\t\tconst data = url.slice(comma + 1).replace(/\\s+/g, \"\");\n\t\tif (data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {\n\t\t\tthrow new TypeErrorCtor(\"invalid image output. The image data is not valid base64 (truncated or corrupted?)\");\n\t\t}\n\t\tconst head = data.slice(0, 16);\n\t\tconst signature = IMAGE_SIGNATURES.find(([, pattern]) => pattern.test(head));\n\t\tif (!signature) {\n\t\t\tthrow new TypeErrorCtor(\"invalid image output. The image data is not a PNG, JPEG, GIF, or WebP image\");\n\t\t}\n\t\toutput(\"image\", data, signature[0]);\n\t}\n\n\tfunction exit() {\n\t\tlet writesJson;\n\t\ttry {\n\t\t\twritesJson = serializeWrites();\n\t\t} catch (error) {\n\t\t\tdone(false, describeError(error));\n\t\t\tthrow EXIT;\n\t\t}\n\t\tdone(true, undefined, writesJson);\n\t\tthrow EXIT;\n\t}\n\n\tconst console = {};\n\tfor (const level of [\"log\", \"info\", \"warn\", \"error\", \"debug\"]) {\n\t\tconsole[level] = (...args) => {\n\t\t\toutput(\"console\", args.map(format).join(\" \"));\n\t\t};\n\t}\n\tObject.freeze(console);\n\n\tObject.defineProperty(globalThis, \"tools\", { value: toolsProxy, enumerable: true });\n\tObject.defineProperty(globalThis, \"ALL_TOOLS\", { value: allTools, enumerable: true });\n\tObject.defineProperty(globalThis, \"console\", { value: console, enumerable: true });\n\tObject.defineProperty(globalThis, \"text\", { value: text, enumerable: true });\n\tObject.defineProperty(globalThis, \"image\", { value: image, enumerable: true });\n\tObject.defineProperty(globalThis, \"exit\", { value: exit, enumerable: true });\n\n\treturn {\n\t\tsettle(id, ok, payload, propertiesJson) {\n\t\t\tconst entry = pending.get(id);\n\t\t\tif (!entry) return;\n\t\t\tpending.delete(id);\n\t\t\tif (!ok) {\n\t\t\t\tconst error = new ErrorCtor(payload);\n\t\t\t\tif (propertiesJson !== undefined) {\n\t\t\t\t\tconst properties = parse(propertiesJson);\n\t\t\t\t\tfor (const key of Object.keys(properties)) {\n\t\t\t\t\t\tif (key === \"name\" || key === \"message\" || key === \"stack\") continue;\n\t\t\t\t\t\tObject.defineProperty(error, key, { value: properties[key], writable: true, enumerable: true, configurable: true });\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tentry.reject(error);\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tlet value;\n\t\t\ttry {\n\t\t\t\tvalue = payload === undefined ? undefined : parse(payload);\n\t\t\t} catch (error) {\n\t\t\t\tentry.reject(error);\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tentry.resolve(value);\n\t\t},\n\t\trun(fn) {\n\t\t\tlet promise;\n\t\t\ttry {\n\t\t\t\tpromise = fn(toolsProxy, console);\n\t\t\t} catch (error) {\n\t\t\t\tdone(false, describeError(error));\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tpromiseThen.call(\n\t\t\t\tpromise,\n\t\t\t\t(value) => {\n\t\t\t\t\tlet json;\n\t\t\t\t\ttry {\n\t\t\t\t\t\tjson = serialize(value);\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\tdone(false, describeError(error));\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tdone(true, json, serializeWrites());\n\t\t\t\t},\n\t\t\t\t(error) => {\n\t\t\t\t\tdone(false, describeError(error));\n\t\t\t\t},\n\t\t\t);\n\t\t},\n\t\tstalled() {\n\t\t\tif (finished || pending.size > 0) return false;\n\t\t\tdone(\n\t\t\t\tfalse,\n\t\t\t\tstringify({\n\t\t\t\t\tname: \"Error\",\n\t\t\t\t\tmessage:\n\t\t\t\t\t\t\"The script is waiting on a promise that can never settle: no tool call is pending, and timers do not exist here.\",\n\t\t\t\t}),\n\t\t\t);\n\t\t\treturn true;\n\t\t},\n\t};\n})",
+          "observed": "(function (bridge, toolsJson, globalsJson, storeJson) {\n\t\"use strict\";\n\n\t// Freeze every object reachable from the built-in globals, plus the intrinsics that are only\n\t// reachable from instances (iterator and generator prototypes, %TypedArray%).\n\t//\n\t// Freezing alone breaks ordinary code through the \"override mistake\": a data property that is\n\t// read-only on a prototype cannot be assigned on an instance either, so\n\t// this.name = \"MyError\" in an Error subclass would throw. Commonly overridden properties\n\t// become accessors whose setter defines an own property on the instance instead.\n\t(function lockdown() {\n\t\tconst OVERRIDABLE = new Set([\"constructor\", \"name\", \"message\", \"toString\", \"toLocaleString\", \"valueOf\", \"toJSON\"]);\n\t\tconst seen = new Set([globalThis]);\n\t\tconst queue = [];\n\t\tconst add = (value) => {\n\t\t\tif ((typeof value === \"object\" && value !== null) || typeof value === \"function\") {\n\t\t\t\tif (!seen.has(value)) {\n\t\t\t\t\tseen.add(value);\n\t\t\t\t\tqueue.push(value);\n\t\t\t\t}\n\t\t\t}\n\t\t};\n\n\t\t// Accessors from an object literal have no own prototype object, unlike function expressions,\n\t\t// whose prototype.constructor would be converted again without end.\n\t\tfunction allowOverride(object, key, value, enumerable) {\n\t\t\tconst { get, set } = Object.getOwnPropertyDescriptor(\n\t\t\t\t{\n\t\t\t\t\tget accessor() {\n\t\t\t\t\t\treturn value;\n\t\t\t\t\t},\n\t\t\t\t\tset accessor(next) {\n\t\t\t\t\t\tif (this === object) {\n\t\t\t\t\t\t\tthrow new TypeError(\"Cannot assign to read only property '\" + String(key) + \"' of a built-in\");\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif ((typeof this !== \"object\" || this === null) && typeof this !== \"function\") return;\n\t\t\t\t\t\tObject.defineProperty(this, key, { value: next, writable: true, enumerable: true, configurable: true });\n\t\t\t\t\t},\n\t\t\t\t},\n\t\t\t\t\"accessor\",\n\t\t\t);\n\t\t\tObject.defineProperty(object, key, { get, set, enumerable, configurable: false });\n\t\t\tadd(get);\n\t\t\tadd(set);\n\t\t}\n\n\t\tfor (const key of Reflect.ownKeys(globalThis)) {\n\t\t\tconst descriptor = Object.getOwnPropertyDescriptor(globalThis, key);\n\t\t\tadd(descriptor.value);\n\t\t\tadd(descriptor.get);\n\t\t\tadd(descriptor.set);\n\t\t\tif (\"value\" in descriptor && descriptor.configurable) {\n\t\t\t\tObject.defineProperty(globalThis, key, { writable: false, configurable: false });\n\t\t\t}\n\t\t}\n\t\tadd(Object.getPrototypeOf(function* () {}));\n\t\tadd(Object.getPrototypeOf(async function () {}));\n\t\tadd(Object.getPrototypeOf(async function* () {}));\n\t\tadd(Object.getPrototypeOf(Int8Array));\n\t\tadd(Object.getPrototypeOf([][Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(new Map()[Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(new Set()[Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(\"\"[Symbol.iterator]()));\n\t\tadd(Object.getPrototypeOf(/a/[Symbol.matchAll](\"\")));\n\t\tif (typeof Iterator === \"function\") {\n\t\t\tif (typeof Iterator.prototype.map === \"function\") add(Object.getPrototypeOf([].values().map((x) => x)));\n\t\t\tif (typeof Iterator.from === \"function\") add(Object.getPrototypeOf(Iterator.from({ next() {} })));\n\t\t}\n\n\t\twhile (queue.length > 0) {\n\t\t\tconst object = queue.pop();\n\t\t\tadd(Object.getPrototypeOf(object));\n\t\t\tconst descriptors = Object.getOwnPropertyDescriptors(object);\n\t\t\tfor (const key of Reflect.ownKeys(descriptors)) {\n\t\t\t\tconst descriptor = descriptors[key];\n\t\t\t\tif (\"value\" in descriptor) {\n\t\t\t\t\tadd(descriptor.value);\n\t\t\t\t\tif (\n\t\t\t\t\t\tdescriptor.writable &&\n\t\t\t\t\t\tdescriptor.configurable &&\n\t\t\t\t\t\t(object === Object.prototype || OVERRIDABLE.has(key))\n\t\t\t\t\t) {\n\t\t\t\t\t\tallowOverride(object, key, descriptor.value, descriptor.enumerable);\n\t\t\t\t\t}\n\t\t\t\t} else {\n\t\t\t\t\tadd(descriptor.get);\n\t\t\t\t\tadd(descriptor.set);\n\t\t\t\t}\n\t\t\t}\n\t\t\tObject.freeze(object);\n\t\t}\n\t})();\n\tconst stringify = JSON.stringify;\n\tconst parse = JSON.parse;\n\tconst promiseThen = Promise.prototype.then;\n\tconst ErrorCtor = Error;\n\tconst TypeErrorCtor = TypeError;\n\tconst RangeErrorCtor = RangeError;\n\tconst pending = new Map();\n\tlet nextId = 1;\n\tlet finished = false;\n\t// Thrown by exit() to unwind the script after it already reported success.\n\tconst EXIT = Object.freeze({});\n\n\tfunction done(ok, payload, writes) {\n\t\tif (finished) return;\n\t\tfinished = true;\n\t\tbridge(\"done\", ok, payload, writes);\n\t}\n\n\tfunction serialize(value) {\n\t\treturn value === undefined ? undefined : stringify(value);\n\t}\n\n\t// QuickJS stacks list frames only. Prefix \"Name: message\" like V8 so the\n\t// text reads the same as a Node error, and drop this prelude's frames.\n\tfunction errorText(error) {\n\t\tconst head = error.message ? error.name + \": \" + error.message : String(error.name);\n\t\tconst frames =\n\t\t\ttypeof error.stack === \"string\"\n\t\t\t\t? error.stack.split(\"\\n\").filter((line) => line.trim() && !line.includes(\"codemode-prelude.js\"))\n\t\t\t\t: [];\n\t\treturn [head, ...frames].join(\"\\n\");\n\t}\n\n\tfunction format(value) {\n\t\tif (typeof value === \"string\") return value;\n\t\tif (value instanceof ErrorCtor) return errorText(value);\n\t\ttry {\n\t\t\tconst json = stringify(value);\n\t\t\treturn json === undefined ? String(value) : json;\n\t\t} catch {\n\t\t\treturn String(value);\n\t\t}\n\t}\n\n\t// The host requires string fields. A script can set an error's name or message to anything, so\n\t// they are coerced, and a value whose coercion throws gets a placeholder.\n\tfunction describeError(error) {\n\t\ttry {\n\t\t\tif (error instanceof ErrorCtor) {\n\t\t\t\treturn stringify({ name: String(error.name), message: String(error.message), stack: errorText(error) });\n\t\t\t}\n\t\t\treturn stringify({ message: String(format(error)) });\n\t\t} catch {\n\t\t\treturn stringify({ message: \"The script threw a value that cannot be described\" });\n\t\t}\n\t}\n\n\tfunction caller(kind, name, spread) {\n\t\treturn (...args) =>\n\t\t\tnew Promise((resolve, reject) => {\n\t\t\t\tlet json;\n\t\t\t\ttry {\n\t\t\t\t\tjson = serialize(spread ? args : args[0]);\n\t\t\t\t} catch (error) {\n\t\t\t\t\treject(error);\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tconst id = nextId++;\n\t\t\t\tpending.set(id, { resolve, reject });\n\t\t\t\tbridge(kind, id, name, json);\n\t\t\t});\n\t}\n\n\tconst tools = Object.create(null);\n\tconst allTools = [];\n\tfor (const { name, jsName, description } of parse(toolsJson)) {\n\t\tconst fn = caller(\"call\", name);\n\t\t// The first tool wins when two names normalize to the same identifier.\n\t\tif (!(jsName in tools)) {\n\t\t\ttools[jsName] = fn;\n\t\t\tallTools.push(Object.freeze({ name: jsName, description }));\n\t\t}\n\t\tif (!(name in tools)) tools[name] = fn;\n\t}\n\tObject.freeze(tools);\n\tObject.freeze(allTools);\n\n\t// Reading a member that does not exist throws an error that names the close matches, instead of\n\t// a later \"not a function\". `in` checks still work.\n\tconst comparable = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, \"\");\n\tfunction guard(target, label, names, hint) {\n\t\treturn new Proxy(target, {\n\t\t\tget(object, property, receiver) {\n\t\t\t\tif (typeof property !== \"string\" || property in object || property in Object.prototype || property === \"then\" || property === \"toJSON\") {\n\t\t\t\t\treturn Reflect.get(object, property, receiver);\n\t\t\t\t}\n\t\t\t\tconst wanted = comparable(property);\n\t\t\t\tconst exact = names.filter((name) => comparable(name) === wanted);\n\t\t\t\tconst close = exact.length > 0 ? exact : names.filter((name) => wanted && (comparable(name).includes(wanted) || wanted.includes(comparable(name))));\n\t\t\t\tlet message = label + \".\" + property + \" does not exist.\";\n\t\t\t\tif (close.length > 0) message += \" Did you mean \" + close.slice(0, 5).map((name) => label + \".\" + name).join(\", \") + \"?\";\n\t\t\t\telse if (names.length <= 20) message += \" Available: \" + names.join(\", \") + \".\";\n\t\t\t\tif (hint) message += \" \" + hint;\n\t\t\t\tmessage += ' Check for a member with \"' + property + '\" in ' + label + \".\";\n\t\t\t\tthrow new TypeErrorCtor(message);\n\t\t\t},\n\t\t});\n\t}\n\tconst toolsProxy = guard(\n\t\ttools,\n\t\t\"tools\",\n\t\tallTools.map((tool) => tool.name),\n\t\t\"ALL_TOOLS lists every tool; searchTools(query) finds tools by topic.\",\n\t);\n\n\tconst namespaces = new Map();\n\tfor (const { name, spread } of parse(globalsJson)) {\n\t\tconst fn = caller(\"global\", name, spread);\n\t\tconst dot = name.indexOf(\".\");\n\t\tif (dot === -1) {\n\t\t\tObject.defineProperty(globalThis, name, { value: fn, enumerable: true });\n\t\t\tcontinue;\n\t\t}\n\t\tconst namespace = name.slice(0, dot);\n\t\tif (!namespaces.has(namespace)) namespaces.set(namespace, Object.create(null));\n\t\tnamespaces.get(namespace)[name.slice(dot + 1)] = fn;\n\t}\n\tfor (const [namespace, members] of namespaces) {\n\t\tObject.freeze(members);\n\t\tconst value = guard(members, namespace, Object.keys(members));\n\t\tObject.defineProperty(globalThis, namespace, { value, enumerable: true });\n\t}\n\n\t// key -> JSON text. Sizes count key and JSON characters.\n\tconst stored = new Map(Object.entries(parse(storeJson)));\n\tconst writes = new Map();\n\tlet storedChars = 0;\n\tfor (const [key, json] of stored) storedChars += key.length + json.length;\n\n\tconst STORE_HINT =\n\t\t\"store() is for small state such as IDs or summaries. Show images with image(), keep large data in variables, or write it to a file with a tool.\";\n\n\tfunction checkKey(name, key) {\n\t\tif (typeof key !== \"string\") throw new TypeError(name + \"() key must be a string\");\n\t}\n\n\tfunction store(key, value) {\n\t\tcheckKey(\"store\", key);\n\t\tconst previous = stored.has(key) ? key.length + stored.get(key).length : 0;\n\t\tif (value === undefined) {\n\t\t\tstored.delete(key);\n\t\t\tstoredChars -= previous;\n\t\t\twrites.set(key, undefined);\n\t\t\treturn;\n\t\t}\n\t\tlet json;\n\t\ttry {\n\t\t\tjson = stringify(value);\n\t\t} catch (error) {\n\t\t\tthrow new TypeError(\"store(\" + stringify(key) + \") value is not JSON-serializable: \" + format(error));\n\t\t}\n\t\tif (json === undefined) {\n\t\t\tthrow new TypeError(\"store(\" + stringify(key) + \") value is not JSON-serializable\");\n\t\t}\n\t\tif (json.length > 262144) {\n\t\t\tthrow new RangeError(\n\t\t\t\t\"store(\" + stringify(key) + \") value has \" + json.length + \" characters of JSON, more than the limit of 262144. \" +\n\t\t\t\t\tSTORE_HINT,\n\t\t\t);\n\t\t}\n\t\tconst next = storedChars - previous + key.length + json.length;\n\t\tif (next > 1048576) {\n\t\t\tthrow new RangeError(\n\t\t\t\t\"store is full: stored values would exceed 1048576 characters of JSON. Delete keys with store(key, undefined). \" +\n\t\t\t\t\tSTORE_HINT,\n\t\t\t);\n\t\t}\n\t\tstored.set(key, json);\n\t\tstoredChars = next;\n\t\twrites.set(key, json);\n\t}\n\n\tfunction load(key) {\n\t\tcheckKey(\"load\", key);\n\t\tconst json = stored.get(key);\n\t\treturn json === undefined ? undefined : parse(json);\n\t}\n\n\tfunction serializeWrites() {\n\t\tconst entries = [];\n\t\tfor (const [key, json] of writes) entries.push(json === undefined ? [key] : [key, json]);\n\t\treturn stringify(entries);\n\t}\n\n\tObject.defineProperty(globalThis, \"store\", { value: store, enumerable: true });\n\tObject.defineProperty(globalThis, \"load\", { value: load, enumerable: true });\n\n\tlet outputChars = 0;\n\tlet outputItems = 0;\n\n\t// Past the output limits the script fails: done() reports the error, so catching it does not\n\t// resume output, and the host ends the script.\n\tfunction output(kind, data, mimeType) {\n\t\tif (finished) return;\n\t\toutputChars += data.length;\n\t\toutputItems++;\n\t\tif (outputChars > 16777216 || outputItems > 100000) {\n\t\t\tconst error = new RangeErrorCtor(\n\t\t\t\t\"script output exceeded the limit of 16777216 characters or 100000 text(), image(), and console calls. \" +\n\t\t\t\t\t\"Print a summary instead, or write large data to a file with a tool.\",\n\t\t\t);\n\t\t\tdone(false, describeError(error));\n\t\t\tthrow error;\n\t\t}\n\t\tbridge(\"output\", kind, data, mimeType);\n\t}\n\n\t// Primitives become their string form, everything else JSON.\n\tfunction outputText(value) {\n\t\tif (value === undefined || value === null || typeof value !== \"object\" && typeof value !== \"function\") {\n\t\t\treturn String(value);\n\t\t}\n\t\tconst json = stringify(value);\n\t\treturn json === undefined ? String(value) : json;\n\t}\n\n\tfunction text(value) {\n\t\tlet rendered;\n\t\ttry {\n\t\t\trendered = outputText(value);\n\t\t} catch (error) {\n\t\t\tthrow new TypeErrorCtor(error instanceof ErrorCtor ? error.message : String(error));\n\t\t}\n\t\toutput(\"text\", rendered);\n\t}\n\n\tfunction imageUrl(value) {\n\t\tif (typeof value === \"string\") return value;\n\t\tif (typeof value !== \"object\" || value === null || Array.isArray(value)) {\n\t\t\tthrow new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\t}\n\t\tif (value.image_url !== undefined) {\n\t\t\tif (typeof value.image_url !== \"string\") throw new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\t\treturn value.image_url;\n\t\t}\n\t\tif (typeof value.type !== \"string\") throw new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\tif (value.type !== \"image\") {\n\t\t\tthrow new TypeErrorCtor('image only accepts image blocks, got \"' + value.type + '\"');\n\t\t}\n\t\tif (typeof value.data !== \"string\" || value.data === \"\") throw new TypeErrorCtor(\"image expected image block data\");\n\t\tif (value.data.toLowerCase().startsWith(\"data:\")) return value.data;\n\t\treturn \"data:;base64,\" + value.data;\n\t}\n\n\t// Base64 of the signatures of the formats providers accept inline (PNG, JPEG except\n\t// JPEG-LS, GIF, \"RIFF....WEBP\"). Signatures start at byte 0, so their encodings are prefixes.\n\tconst IMAGE_SIGNATURES = [\n\t\t[\"image/png\", /^iVBORw0KGg/],\n\t\t[\"image/jpeg\", /^[/]9j[/](?!9)/],\n\t\t[\"image/gif\", /^R0lGOD[dl]h/],\n\t\t[\"image/webp\", /^UklG.{8}RUJQ/],\n\t];\n\n\tfunction image(value) {\n\t\tconst url = imageUrl(value);\n\t\tif (url === \"\") throw new TypeErrorCtor(\"image expects a non-empty image URL string, an object with image_url, or an image block { type: \\\"image\\\", data, mimeType }\");\n\t\tconst colon = url.indexOf(\":\");\n\t\tconst scheme = colon === -1 ? \"\" : url.slice(0, colon).toLowerCase();\n\t\tif (scheme === \"http\" || scheme === \"https\") {\n\t\t\tthrow new TypeErrorCtor(\"remote image URLs are not supported in tool outputs. Pass a base64 data URI instead\");\n\t\t}\n\t\tconst comma = url.indexOf(\",\");\n\t\tconst header = comma === -1 ? [] : url.slice(colon + 1, comma).split(\";\");\n\t\tif (scheme !== \"data\" || comma === -1 || header.slice(1).every((part) => part.toLowerCase() !== \"base64\")) {\n\t\t\tthrow new TypeErrorCtor(\"invalid image output. Pass a base64 data URI instead\");\n\t\t}\n\t\t// Providers reject the whole request on a bad image, and a persisted image block would be\n\t\t// resent on every later turn. Line breaks from wrapped base64 are dropped. The declared type\n\t\t// is ignored in favor of the detected one, as providers also reject mismatches.\n\t\tconst data = url.slice(comma + 1).replace(/\\s+/g, \"\");\n\t\tif (data.length % 4 !== 0 || !/^[A-Za-z0-9+/]+={0,2}$/.test(data)) {\n\t\t\tthrow new TypeErrorCtor(\"invalid image output. The image data is not valid base64 (truncated or corrupted?)\");\n\t\t}\n\t\tconst head = data.slice(0, 16);\n\t\tconst signature = IMAGE_SIGNATURES.find(([, pattern]) => pattern.test(head));\n\t\tif (!signature) {\n\t\t\tthrow new TypeErrorCtor(\"invalid image output. The image data is not a PNG, JPEG, GIF, or WebP image\");\n\t\t}\n\t\toutput(\"image\", data, signature[0]);\n\t}\n\n\tfunction exit() {\n\t\tlet writesJson;\n\t\ttry {\n\t\t\twritesJson = serializeWrites();\n\t\t} catch (error) {\n\t\t\tdone(false, describeError(error));\n\t\t\tthrow EXIT;\n\t\t}\n\t\tdone(true, undefined, writesJson);\n\t\tthrow EXIT;\n\t}\n\n\tconst console = {};\n\tfor (const level of [\"log\", \"info\", \"warn\", \"error\", \"debug\"]) {\n\t\tconsole[level] = (...args) => {\n\t\t\toutput(\"console\", args.map(format).join(\" \"));\n\t\t};\n\t}\n\tObject.freeze(console);\n\n\tObject.defineProperty(globalThis, \"tools\", { value: toolsProxy, enumerable: true });\n\tObject.defineProperty(globalThis, \"ALL_TOOLS\", { value: allTools, enumerable: true });\n\tObject.defineProperty(globalThis, \"console\", { value: console, enumerable: true });\n\tObject.defineProperty(globalThis, \"text\", { value: text, enumerable: true });\n\tObject.defineProperty(globalThis, \"image\", { value: image, enumerable: true });\n\tObject.defineProperty(globalThis, \"exit\", { value: exit, enumerable: true });\n\n\treturn {\n\t\tsettle(id, ok, payload, propertiesJson) {\n\t\t\tconst entry = pending.get(id);\n\t\t\tif (!entry) return;\n\t\t\tpending.delete(id);\n\t\t\tif (!ok) {\n\t\t\t\tconst error = new ErrorCtor(payload);\n\t\t\t\tif (propertiesJson !== undefined) {\n\t\t\t\t\tconst properties = parse(propertiesJson);\n\t\t\t\t\tfor (const key of Object.keys(properties)) {\n\t\t\t\t\t\tif (key === \"name\" || key === \"message\" || key === \"stack\") continue;\n\t\t\t\t\t\tObject.defineProperty(error, key, { value: properties[key], writable: true, enumerable: true, configurable: true });\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\tentry.reject(error);\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tlet value;\n\t\t\ttry {\n\t\t\t\tvalue = payload === undefined ? undefined : parse(payload);\n\t\t\t} catch (error) {\n\t\t\t\tentry.reject(error);\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tentry.resolve(value);\n\t\t},\n\t\trun(fn) {\n\t\t\tlet promise;\n\t\t\ttry {\n\t\t\t\tpromise = fn(toolsProxy, console);\n\t\t\t} catch (error) {\n\t\t\t\tdone(false, describeError(error));\n\t\t\t\treturn;\n\t\t\t}\n\t\t\tpromiseThen.call(\n\t\t\t\tpromise,\n\t\t\t\t(value) => {\n\t\t\t\t\tlet json;\n\t\t\t\t\ttry {\n\t\t\t\t\t\tjson = serialize(value);\n\t\t\t\t\t} catch (error) {\n\t\t\t\t\t\tdone(false, describeError(error));\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tdone(true, json, serializeWrites());\n\t\t\t\t},\n\t\t\t\t(error) => {\n\t\t\t\t\tdone(false, describeError(error));\n\t\t\t\t},\n\t\t\t);\n\t\t},\n\t\tstalled() {\n\t\t\tif (finished || pending.size > 0) return false;\n\t\t\tdone(\n\t\t\t\tfalse,\n\t\t\t\tstringify({\n\t\t\t\t\tname: \"Error\",\n\t\t\t\t\tmessage:\n\t\t\t\t\t\t\"The script is waiting on a promise that can never settle: no tool call is pending, and timers do not exist here.\",\n\t\t\t\t}),\n\t\t\t);\n\t\t\treturn true;\n\t\t},\n\t};\n})",
+          "normalizations": [
+            "the prelude text is an exact golden; no environment variation is recorded"
+          ],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/prelude-source.ts",
+            "case": "PRELUDE_SOURCE"
+          }
+        }
+      ]
+    },
+    {
+      "path": "worker-lifetime.json",
+      "family": "audit-1053",
+      "bytes": 8722,
+      "sha256": "58cdd5c7c8eaedbf6adbcda0fd0225e479465a2cb71a8c709f78f9c0aa45286d",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/host.ts:workerLauncher,CodemodeSandbox",
+        "packages/codemode/src/runtime/execution.ts:Execution.finish,CodemodeSandboxBase.close",
+        "packages/codemode/src/types.ts:CodemodeSandboxOptions.acquireWorker,CodemodeSandboxOptions.onWorkerStarted",
+        "packages/codemode/test/worker-lifetime.test.ts:worker lifetime",
+        "packages/codemode/test/fixtures/worker-process-exit.ts:worker process exit"
+      ],
+      "scenarios": [
+        {
+          "name": "admission denial rejects before a worker starts and keeps the start hook uncalled",
+          "inputs": {
+            "acquireWorker": "throws worker capacity exhausted"
+          },
+          "expected": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "worker capacity exhausted",
+            "acquired": 1,
+            "started": 0
+          },
+          "observed": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "worker capacity exhausted",
+            "acquired": 1,
+            "started": 0
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "does not start a worker when admission is denied"
+          }
+        },
+        {
+          "name": "a wasm loading failure does not reserve admission",
+          "inputs": {
+            "wasm": "load rejects"
+          },
+          "expected": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "Failed to load QuickJS: wasm unavailable",
+            "acquired": 0
+          },
+          "observed": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "Failed to load QuickJS: wasm unavailable",
+            "acquired": 0
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "does not acquire admission when wasm loading fails"
+          }
+        },
+        {
+          "name": "a worker construction failure returns its reserved admission exactly once",
+          "inputs": {
+            "workerUrl": "https://invalid.example/worker.js"
+          },
+          "expected": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "Failed to start worker: The URL must be of scheme file",
+            "acquired": 1,
+            "released": 1
+          },
+          "observed": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "Failed to start worker: The URL must be of scheme file",
+            "acquired": 1,
+            "released": 1
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "releases admission when worker construction fails"
+          }
+        },
+        {
+          "name": "repeated abort results settle while cancelled workers remain unreleased; exits release every admission",
+          "inputs": {
+            "cancellations": 3,
+            "tool": "hang"
+          },
+          "expected": {
+            "kinds": [
+              "aborted",
+              "aborted",
+              "aborted"
+            ],
+            "releasedAtResult": [
+              0,
+              1,
+              2
+            ],
+            "acquiredAtResult": [
+              1,
+              2,
+              3
+            ],
+            "acquired": 3,
+            "started": 3,
+            "exitCount": 3,
+            "releasedAfterExit": 3
+          },
+          "observed": {
+            "kinds": [
+              "aborted",
+              "aborted",
+              "aborted"
+            ],
+            "releasedAtResult": [
+              0,
+              1,
+              2
+            ],
+            "acquiredAtResult": [
+              1,
+              2,
+              3
+            ],
+            "acquired": 3,
+            "started": 3,
+            "exitCount": 3,
+            "releasedAfterExit": 3
+          },
+          "normalizations": [
+            "the observation is the immediate release counter after each result and after all exits; wall-clock delay is not compared"
+          ],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "settles %s without waiting for worker exit"
+          }
+        },
+        {
+          "name": "close settles an in-flight run before the worker exit releases admission",
+          "inputs": {
+            "closeWhileToolHangs": true
+          },
+          "expected": {
+            "kind": "aborted",
+            "message": "Sandbox closed",
+            "releasedAtResult": 0,
+            "acquired": 1,
+            "releasedAfterExit": 1,
+            "started": 1,
+            "exitCount": 1
+          },
+          "observed": {
+            "kind": "aborted",
+            "message": "Sandbox closed",
+            "releasedAtResult": 0,
+            "acquired": 1,
+            "releasedAfterExit": 1,
+            "started": 1,
+            "exitCount": 1
+          },
+          "normalizations": [
+            "the observation is the release counter immediately after the result and after all exits"
+          ],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "settles close without waiting for worker exit"
+          }
+        },
+        {
+          "name": "a throwing lifetime hook requests termination and still releases the worker",
+          "inputs": {
+            "onWorkerStarted": "throws lifetime hook failed"
+          },
+          "expected": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "lifetime hook failed",
+            "acquired": 1,
+            "released": 1,
+            "exitDefined": true
+          },
+          "observed": {
+            "ok": false,
+            "errorKind": "sandbox",
+            "errorMessage": "lifetime hook failed",
+            "acquired": 1,
+            "released": 1,
+            "exitDefined": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "requests termination when onWorkerStarted throws"
+          }
+        },
+        {
+          "name": "execute and start each start one worker and release it only after actual exit",
+          "inputs": {
+            "runs": [
+              "execute",
+              "start"
+            ]
+          },
+          "expected": {
+            "executeValue": 1,
+            "startValue": 2,
+            "started": 2,
+            "acquired": 2,
+            "exitCount": 2,
+            "releasedAfterExit": 2,
+            "finished": true
+          },
+          "observed": {
+            "executeValue": 1,
+            "startValue": 2,
+            "started": 2,
+            "acquired": 2,
+            "exitCount": 2,
+            "releasedAfterExit": 2,
+            "finished": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "reports the actual exit of execute() and start() workers"
+          }
+        },
+        {
+          "name": "a real Node child reports the result before its worker exits and exits promptly for abort, timeout and close",
+          "inputs": {
+            "runtime": "node",
+            "modes": [
+              "abort",
+              "timeout",
+              "close"
+            ]
+          },
+          "expected": [
+            {
+              "mode": "abort",
+              "kind": "aborted",
+              "workerExitedAtResult": false,
+              "resultUnderOneSecond": true,
+              "exitGapUnderOneSecond": true
+            },
+            {
+              "mode": "timeout",
+              "kind": "timeout",
+              "workerExitedAtResult": false,
+              "resultUnderOneSecond": true,
+              "exitGapUnderOneSecond": true
+            },
+            {
+              "mode": "close",
+              "kind": "aborted",
+              "workerExitedAtResult": false,
+              "resultUnderOneSecond": true,
+              "exitGapUnderOneSecond": true
+            }
+          ],
+          "observed": [
+            {
+              "mode": "abort",
+              "kind": "aborted",
+              "workerExitedAtResult": false,
+              "resultUnderOneSecond": true,
+              "exitGapUnderOneSecond": true
+            },
+            {
+              "mode": "timeout",
+              "kind": "timeout",
+              "workerExitedAtResult": false,
+              "resultUnderOneSecond": true,
+              "exitGapUnderOneSecond": true
+            },
+            {
+              "mode": "close",
+              "kind": "aborted",
+              "workerExitedAtResult": false,
+              "resultUnderOneSecond": true,
+              "exitGapUnderOneSecond": true
+            }
+          ],
+          "normalizations": [
+            "raw elapsed milliseconds are replaced by the contract's under-one-second relations"
+          ],
+          "upstreamTest": {
+            "path": "packages/codemode/test/worker-lifetime.test.ts",
+            "case": "exits promptly after %s with a real worker"
+          }
+        }
+      ]
+    },
+    {
+      "path": "deterministic-replay.json",
+      "family": "audit-1053",
+      "bytes": 19037,
+      "sha256": "6ba9027f6becf520e85c38b6b69666b62438f66d4136e19bafb3e2634f57253a",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start,CodemodeRun.deliver",
+        "packages/codemode/src/runtime/vm.ts:startVm,deterministicWasi,DETERMINISTIC_VERSION",
+        "packages/codemode/src/runtime/protocol.ts:VmStartData,WorkerToHostMessage",
+        "packages/codemode/src/types.ts:CodemodeRunOptions,CodemodeResult.during",
+        "packages/codemode/test/deterministic.test.ts:deterministic runs"
+      ],
+      "scenarios": [
+        {
+          "name": "the same script, start time, seed and answers make the same calls and output",
+          "inputs": {
+            "startedAt": 1768471200000,
+            "seed": 1,
+            "script": "clock/random/echo"
+          },
+          "expected": {
+            "sameCalls": true,
+            "sameValue": true,
+            "sameOutput": true,
+            "calls": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "echo",
+                "args": [
+                  1768471200000,
+                  0,
+                  0.34227450605335275,
+                  0.4620546081390098,
+                  "2026-01-15T10:00:00.000Z"
+                ]
+              },
+              {
+                "id": 2,
+                "target": "tool",
+                "name": "echo",
+                "args": [
+                  1768471200000,
+                  0,
+                  0.34227450605335275,
+                  0.4620546081390098,
+                  "2026-01-15T10:00:00.000Z",
+                  0.056110785474501323
+                ]
+              }
+            ],
+            "output": [
+              {
+                "type": "text",
+                "text": "[1768471201000,1000,0.5807179129204683]"
+              }
+            ],
+            "idles": [
+              [
+                0,
+                1
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "during": {
+              "seq": 2,
+              "issued": 2
+            }
+          },
+          "observed": {
+            "sameCalls": true,
+            "sameValue": true,
+            "sameOutput": true,
+            "calls": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "echo",
+                "args": [
+                  1768471200000,
+                  0,
+                  0.34227450605335275,
+                  0.4620546081390098,
+                  "2026-01-15T10:00:00.000Z"
+                ]
+              },
+              {
+                "id": 2,
+                "target": "tool",
+                "name": "echo",
+                "args": [
+                  1768471200000,
+                  0,
+                  0.34227450605335275,
+                  0.4620546081390098,
+                  "2026-01-15T10:00:00.000Z",
+                  0.056110785474501323
+                ]
+              }
+            ],
+            "output": [
+              {
+                "type": "text",
+                "text": "[1768471201000,1000,0.5807179129204683]"
+              }
+            ],
+            "idles": [
+              [
+                0,
+                1
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "during": {
+              "seq": 2,
+              "issued": 2
+            }
+          },
+          "normalizations": [
+            "call durationMs is wall-clock and is not part of the replay equality; presence and status remain"
+          ],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "makes the same calls and output for the same start, seed, and results"
+          }
+        },
+        {
+          "name": "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
+          "inputs": {
+            "startedAt": 1768471200000,
+            "seed": 1,
+            "seeds": [
+              0,
+              1
+            ]
+          },
+          "expected": {
+            "clock": [
+              1768471200000,
+              0,
+              0.34227450605335275,
+              0,
+              0,
+              "undefined",
+              "undefined"
+            ],
+            "seedZero": [
+              0.6711372530266764,
+              0.7258461452833667
+            ]
+          },
+          "observed": {
+            "clock": [
+              1768471200000,
+              0,
+              0.34227450605335275,
+              0,
+              0,
+              "undefined",
+              "undefined"
+            ],
+            "seedZero": [
+              0.6711372530266764,
+              0.7258461452833667
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "runs in UTC whatever the host's timezone, and without WeakRef or FinalizationRegistry"
+          }
+        },
+        {
+          "name": "results are applied in seq order even when delivered in reverse order",
+          "inputs": {
+            "script": "const order = []; await Promise.all([tools.wait(\"a\").then(() => order.push(\"a\")), tools.wait(\"b\").then(() => order.push(\"b\"))]); return order;",
+            "delivery": "seq 2 then seq 1"
+          },
+          "expected": {
+            "value": [
+              "b",
+              "a"
+            ],
+            "idles": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "calls": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "wait",
+                "args": "a"
+              },
+              {
+                "id": 2,
+                "target": "tool",
+                "name": "wait",
+                "args": "b"
+              }
+            ]
+          },
+          "observed": {
+            "value": [
+              "b",
+              "a"
+            ],
+            "idles": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "calls": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "wait",
+                "args": "a"
+              },
+              {
+                "id": 2,
+                "target": "tool",
+                "name": "wait",
+                "args": "b"
+              }
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "applies results in seq order, whatever order they are delivered in"
+          }
+        },
+        {
+          "name": "the VM fingerprint arrives before calls, idles report issued calls, and a different heap changes the fingerprint",
+          "inputs": {
+            "memoryLimitBytes": [
+              67108864,
+              33554432
+            ]
+          },
+          "expected": {
+            "events": [
+              "started",
+              "call 1",
+              "idle 0",
+              "call 2",
+              "call 3",
+              "idle 1",
+              "idle 2"
+            ],
+            "idles": [
+              [
+                0,
+                1
+              ],
+              [
+                1,
+                3
+              ],
+              [
+                2,
+                3
+              ]
+            ],
+            "calls": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "echo",
+                "args": 1
+              },
+              {
+                "id": 2,
+                "target": "tool",
+                "name": "echo",
+                "args": 2
+              },
+              {
+                "id": 3,
+                "target": "tool",
+                "name": "echo",
+                "args": 3
+              }
+            ],
+            "fingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+            "sameFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+            "differentFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 33554432, budget none",
+            "finished": true,
+            "resultOk": true
+          },
+          "observed": {
+            "events": [
+              "started",
+              "call 1",
+              "idle 0",
+              "call 2",
+              "call 3",
+              "idle 1",
+              "idle 2"
+            ],
+            "idles": [
+              [
+                0,
+                1
+              ],
+              [
+                1,
+                3
+              ],
+              [
+                2,
+                3
+              ]
+            ],
+            "calls": [
+              {
+                "id": 1,
+                "target": "tool",
+                "name": "echo",
+                "args": 1
+              },
+              {
+                "id": 2,
+                "target": "tool",
+                "name": "echo",
+                "args": 2
+              },
+              {
+                "id": 3,
+                "target": "tool",
+                "name": "echo",
+                "args": 3
+              }
+            ],
+            "fingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+            "sameFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+            "differentFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 33554432, budget none",
+            "finished": true,
+            "resultOk": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "reports the fingerprint before any call and the calls issued after each result"
+          }
+        },
+        {
+          "name": "during reports the result the VM was processing when the script ended",
+          "inputs": {
+            "scripts": [
+              "return 1",
+              "await tools.echo(1); return await tools.echo(2)",
+              "await tools.echo(1); await Promise.all([tools.echo(2), tools.echo(3)]); throw new Error('x')"
+            ]
+          },
+          "expected": [
+            {
+              "ok": true,
+              "during": {
+                "seq": 0,
+                "issued": 0
+              }
+            },
+            {
+              "ok": true,
+              "during": {
+                "seq": 2,
+                "issued": 2
+              }
+            },
+            {
+              "ok": false,
+              "during": {
+                "seq": 3,
+                "issued": 3
+              }
+            },
+            {
+              "executeHasDuring": false
+            }
+          ],
+          "observed": [
+            {
+              "ok": true,
+              "during": {
+                "seq": 0,
+                "issued": 0
+              }
+            },
+            {
+              "ok": true,
+              "during": {
+                "seq": 2,
+                "issued": 2
+              }
+            },
+            {
+              "ok": false,
+              "during": {
+                "seq": 3,
+                "issued": 3
+              }
+            },
+            {
+              "executeHasDuring": false
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "reports the result the VM was processing when the script ended"
+          }
+        },
+        {
+          "name": "deliver rejects a wrong call, a reused result number and a non-finite clock without settling the run",
+          "inputs": {
+            "delivered": [
+              "Clock NaN",
+              "wrong id 99",
+              "valid"
+            ]
+          },
+          "expected": {
+            "errors": [
+              "The clock value of result 1 is not a finite number",
+              "Call 99 is not waiting for a result"
+            ],
+            "result": "fine"
+          },
+          "observed": {
+            "errors": [
+              "The clock value of result 1 is not a finite number",
+              "Call 99 is not waiting for a result"
+            ],
+            "result": "fine"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "keeps the clock monotonic and rejects a clock value that is not finite"
+          }
+        },
+        {
+          "name": "a reused result number is rejected",
+          "inputs": {
+            "delivery": "seq 1 twice"
+          },
+          "expected": {
+            "error": "Result number 1 is not a positive integer used once",
+            "value": [
+              "a",
+              "b"
+            ]
+          },
+          "observed": {
+            "error": "Result number 1 is not a positive integer used once",
+            "value": [
+              "a",
+              "b"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "rejects a call that is not waiting and a result number used twice"
+          }
+        },
+        {
+          "name": "a changed seed is a replay mismatch and changes randomness without changing the start time",
+          "inputs": {
+            "seeds": [
+              1,
+              2,
+              0
+            ],
+            "sameStartedAt": true
+          },
+          "expected": {
+            "sameSeedSame": true,
+            "reseededDifferent": true,
+            "seedZeroDiffersFromSeedOne": true,
+            "sameStartTime": [
+              1768471200000,
+              1768471200000
+            ]
+          },
+          "observed": {
+            "sameSeedSame": true,
+            "reseededDifferent": true,
+            "seedZeroDiffersFromSeedOne": true,
+            "sameStartTime": [
+              1768471200000,
+              1768471200000
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "the seed decides the random values, not the start time"
+          }
+        },
+        {
+          "name": "abort in a deterministic run is an uncatchable aborted error and finished becomes true",
+          "inputs": {
+            "cancellation": "after start, while waiting"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "diverged"
+            },
+            "output": [],
+            "calls": [
+              {
+                "name": "wait",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "diverged"
+            },
+            "output": [],
+            "calls": [
+              {
+                "name": "wait",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "ends with an error the script cannot catch when the caller aborts"
+          }
+        },
+        {
+          "name": "a nonserializable answer leaves the call waiting and a later valid answer settles it",
+          "inputs": {
+            "answers": [
+              "1n",
+              "'fine'"
+            ]
+          },
+          "expected": {
+            "error": "Do not know how to serialize a BigInt",
+            "value": "fine"
+          },
+          "observed": {
+            "error": "Do not know how to serialize a BigInt",
+            "value": "fine"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "leaves a call waiting when its answer cannot be serialized"
+          }
+        },
+        {
+          "name": "start rejects invalid start times, seeds and duplicate script names",
+          "inputs": {
+            "invalid": [
+              "startedAt -1",
+              "seed 1.5",
+              "tools a-b and a_b",
+              "same name twice"
+            ]
+          },
+          "expected": [
+            "startedAt must be a non-negative number of milliseconds since the epoch",
+            "seed must be a 32-bit unsigned integer",
+            "Tool script names must be unique",
+            "Tool names must be unique"
+          ],
+          "observed": [
+            "startedAt must be a non-negative number of milliseconds since the epoch",
+            "seed must be a 32-bit unsigned integer",
+            "Tool script names must be unique",
+            "Tool names must be unique"
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/execution.ts",
+            "case": "start validation"
+          }
+        },
+        {
+          "name": "a run-supplied jsName overrides the derived script name",
+          "inputs": {
+            "tools": [
+              {
+                "name": "my-tool",
+                "jsName": "renamed"
+              }
+            ]
+          },
+          "expected": {
+            "value": [
+              "function",
+              [
+                "renamed",
+                "my-tool"
+              ],
+              [
+                "renamed"
+              ]
+            ]
+          },
+          "observed": {
+            "value": [
+              "function",
+              [
+                "renamed",
+                "my-tool"
+              ],
+              [
+                "renamed"
+              ]
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "uses the script names the run passes"
+          }
+        },
+        {
+          "name": "globals count as issued calls and rejection properties reach the script Error",
+          "inputs": {
+            "globals": [
+              "search (spread)"
+            ],
+            "answer": "error with structuredOutput"
+          },
+          "expected": {
+            "firstCall": {
+              "id": 1,
+              "target": "global",
+              "name": "search",
+              "args": [
+                "x",
+                2
+              ]
+            },
+            "secondCall": {
+              "id": 2,
+              "target": "tool",
+              "name": "echo",
+              "args": "fail"
+            },
+            "idles": [
+              [
+                0,
+                1
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "calls": [
+              {
+                "name": "echo",
+                "status": "error",
+                "durationPresent": true
+              }
+            ],
+            "output": [
+              {
+                "type": "text",
+                "text": "no"
+              }
+            ],
+            "value": [
+              "found"
+            ]
+          },
+          "observed": {
+            "firstCall": {
+              "id": 1,
+              "target": "global",
+              "name": "search",
+              "args": [
+                "x",
+                2
+              ]
+            },
+            "secondCall": {
+              "id": 2,
+              "target": "tool",
+              "name": "echo",
+              "args": "fail"
+            },
+            "idles": [
+              [
+                0,
+                1
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "calls": [
+              {
+                "name": "echo",
+                "status": "error",
+                "durationPresent": true
+              }
+            ],
+            "output": [
+              {
+                "type": "text",
+                "text": "no"
+              }
+            ],
+            "value": [
+              "found"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "numbers calls to globals with tools, and answers errors as rejections"
+          }
+        },
+        {
+          "name": "execute() is not deterministic while start() is",
+          "inputs": {
+            "executes": 2,
+            "starts": 2
+          },
+          "expected": {
+            "nowWithinRun": true,
+            "randomDiffers": true
+          },
+          "observed": {
+            "nowWithinRun": true,
+            "randomDiffers": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "execute() is not deterministic"
+          }
+        }
+      ]
+    },
+    {
+      "path": "inline-interrupt.json",
+      "family": "audit-1053",
+      "bytes": 6717,
+      "sha256": "68f044e7b9c0b7824c83ab663b4fd52b4e64d8aabc8608452b67a54ae8d4b069",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox,inlineLauncher,DEFAULT_INTERRUPT_BUDGET,INLINE_MAX_STACK_SIZE",
+        "packages/codemode/test/portable.test.ts:InlineCodemodeSandbox"
+      ],
+      "scenarios": [
+        {
+          "name": "an inline script that computes without awaiting is stopped by its interrupt budget, not the deadline",
+          "inputs": {
+            "interruptBudget": 1000,
+            "scripts": [
+              "while (true) {}",
+              "while (true) await null"
+            ],
+            "timeoutMs": [
+              null,
+              50
+            ]
+          },
+          "expected": [
+            {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            }
+          ],
+          "observed": [
+            {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "fails a script that computes past its interrupt budget as a timeout"
+          }
+        },
+        {
+          "name": "the interrupt budget counts across awaits on tools",
+          "inputs": {
+            "interruptBudget": 1000,
+            "loop": "1e5 iterations then await tools.tick()"
+          },
+          "expected": {
+            "error": {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            "calls": 49
+          },
+          "observed": {
+            "error": {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            "calls": 49
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "counts the budget across waits on tools"
+          }
+        },
+        {
+          "name": "caller abort during an inline tool wait aborts the tool and keeps partial output",
+          "inputs": {
+            "cancellation": "AbortController while tool waits"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "cancelled"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "partial"
+              }
+            ],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "cancelled"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "partial"
+              }
+            ],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/inline.ts",
+            "case": "abort signal while a tool waits"
+          }
+        },
+        {
+          "name": "an inline deadline while a tool waits reports the deadline, not the interrupt budget",
+          "inputs": {
+            "timeoutMs": 40,
+            "tool": "hang"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "timeout",
+              "message": "Execution timed out after 40 ms"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "partial"
+              }
+            ],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "timeout",
+              "message": "Execution timed out after 40 ms"
+            },
+            "output": [
+              {
+                "type": "text",
+                "text": "partial"
+              }
+            ],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/inline.ts",
+            "case": "deadline while a tool waits"
+          }
+        },
+        {
+          "name": "an inline execution with an already-aborted signal never creates a VM",
+          "inputs": {
+            "cancellation": "pre-aborted AbortSignal"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "early"
+            },
+            "output": [],
+            "calls": []
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "early"
+            },
+            "output": [],
+            "calls": []
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/src/runtime/execution.ts",
+            "case": "signal already aborted"
+          }
+        },
+        {
+          "name": "a successful inline execution returns its value and text output",
+          "inputs": {
+            "script": "text('inline'); return 7",
+            "interruptBudget": 1000
+          },
+          "expected": {
+            "ok": true,
+            "value": 7,
+            "output": [
+              {
+                "type": "text",
+                "text": "inline"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "observed": {
+            "ok": true,
+            "value": 7,
+            "output": [
+              {
+                "type": "text",
+                "text": "inline"
+              }
+            ],
+            "calls": [],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "InlineCodemodeSandbox"
+          }
+        }
+      ]
+    },
+    {
+      "path": "remote-exchange.json",
+      "family": "audit-1053",
+      "bytes": 8809,
+      "sha256": "f463749b4123e07b9b7378799868663f9c1bd5b3a71e09a1cc79beb7fee9a8c6",
+      "sourceEndpoints": [
+        "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox,remoteLauncher,serveCodemodeRemote,CodemodeRemoteExchange",
+        "packages/codemode/src/types.ts:CodemodeRemoteRequest,CodemodeRemoteMessage,CodemodeRemoteReply",
+        "packages/codemode/test/portable.test.ts:RemoteCodemodeSandbox",
+        "packages/codemode/test/deterministic.test.ts:deterministic runs (remote transport)"
+      ],
+      "scenarios": [
+        {
+          "name": "a generic remote runs the script and calls the caller's tools across the exchange",
+          "inputs": {
+            "script": "text('hi'); return await tools.add({a: 1})",
+            "store": {
+              "k": 1
+            }
+          },
+          "expected": {
+            "ok": true,
+            "value": 2,
+            "output": [
+              {
+                "type": "text",
+                "text": "hi"
+              }
+            ],
+            "calls": [
+              {
+                "name": "add",
+                "status": "ok",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            },
+            "seen": [
+              {
+                "a": 1
+              }
+            ],
+            "exchanges": [
+              [
+                "output",
+                "call:add"
+              ],
+              [
+                "done"
+              ]
+            ],
+            "replies": [
+              "result:true",
+              "null"
+            ]
+          },
+          "observed": {
+            "ok": true,
+            "value": 2,
+            "output": [
+              {
+                "type": "text",
+                "text": "hi"
+              }
+            ],
+            "calls": [
+              {
+                "name": "add",
+                "status": "ok",
+                "durationPresent": true
+              }
+            ],
+            "storeWrites": {
+              "set": {},
+              "delete": []
+            },
+            "seen": [
+              {
+                "a": 1
+              }
+            ],
+            "exchanges": [
+              [
+                "output",
+                "call:add"
+              ],
+              [
+                "done"
+              ]
+            ],
+            "replies": [
+              "result:true",
+              "null"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "runs tools in the caller and the script on the remote"
+          }
+        },
+        {
+          "name": "remote output is buffered instead of one exchange per output item",
+          "inputs": {
+            "outputItems": 5000
+          },
+          "expected": {
+            "ok": true,
+            "outputCount": 5000,
+            "last": {
+              "type": "text",
+              "text": "4999",
+              "console": true
+            },
+            "exchanges": 6,
+            "exchangeSizes": [
+              1000,
+              1000,
+              1000,
+              1000,
+              1000,
+              1
+            ]
+          },
+          "observed": {
+            "ok": true,
+            "outputCount": 5000,
+            "last": {
+              "type": "text",
+              "text": "4999",
+              "console": true
+            },
+            "exchanges": 6,
+            "exchangeSizes": [
+              1000,
+              1000,
+              1000,
+              1000,
+              1000,
+              1
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "batches output instead of making one exchange per line"
+          }
+        },
+        {
+          "name": "the remote caps the requested interrupt budget and memory limit",
+          "inputs": {
+            "maxInterruptBudget": 1000,
+            "maxMemoryLimitBytes": 8388608,
+            "requestedInterruptBudget": 1000000000
+          },
+          "expected": {
+            "timeout": {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            "memory": {
+              "kind": "script",
+              "name": "InternalError",
+              "message": "out of memory"
+            }
+          },
+          "observed": {
+            "timeout": {
+              "kind": "timeout",
+              "message": "Execution exceeded its interrupt budget of 1000"
+            },
+            "memory": {
+              "kind": "script",
+              "name": "InternalError",
+              "message": "out of memory"
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "caps the interrupt budget and memory at the remote's limits"
+          }
+        },
+        {
+          "name": "caller abort answers the remote's exchange with stop and settles without waiting for remote compute",
+          "inputs": {
+            "cancellation": "AbortController while tool hangs"
+          },
+          "expected": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "This operation was aborted"
+            },
+            "output": [],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ],
+            "exchanges": [
+              [
+                "call:hang"
+              ]
+            ],
+            "replies": [
+              "stop"
+            ]
+          },
+          "observed": {
+            "ok": false,
+            "error": {
+              "kind": "aborted",
+              "message": "This operation was aborted"
+            },
+            "output": [],
+            "calls": [
+              {
+                "name": "hang",
+                "status": "cancelled",
+                "durationPresent": true
+              }
+            ],
+            "exchanges": [
+              [
+                "call:hang"
+              ]
+            ],
+            "replies": [
+              "stop"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "tells the remote to stop when the caller aborts"
+          }
+        },
+        {
+          "name": "a failing, silent or unreachable remote is a sandbox error with the transport reason",
+          "inputs": {
+            "remotes": [
+              "reject",
+              "silent",
+              "throw"
+            ]
+          },
+          "expected": [
+            {
+              "kind": "sandbox",
+              "message": "Remote sandbox failed: object reset"
+            },
+            {
+              "kind": "sandbox",
+              "message": "Remote sandbox returned before the script settled"
+            },
+            {
+              "kind": "sandbox",
+              "message": "Failed to reach the remote sandbox: no binding"
+            }
+          ],
+          "observed": [
+            {
+              "kind": "sandbox",
+              "message": "Remote sandbox failed: object reset"
+            },
+            {
+              "kind": "sandbox",
+              "message": "Remote sandbox returned before the script settled"
+            },
+            {
+              "kind": "sandbox",
+              "message": "Failed to reach the remote sandbox: no binding"
+            }
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/codemode/test/portable.test.ts",
+            "case": "reports a failing or vanishing remote as a sandbox error"
+          }
+        },
+        {
+          "name": "a deterministic start over a transport that reorders replies still applies results in seq order",
+          "inputs": {
+            "startedAt": 1768471200000,
+            "seed": 1,
+            "transportDelayMs": 30
+          },
+          "expected": {
+            "value": [
+              "a",
+              "b"
+            ],
+            "idles": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "exchanges": [
+              [
+                "started",
+                "call:wait"
+              ],
+              [
+                "call:wait"
+              ],
+              [
+                "idle"
+              ],
+              [
+                "idle"
+              ],
+              [
+                "done"
+              ]
+            ]
+          },
+          "observed": {
+            "value": [
+              "a",
+              "b"
+            ],
+            "idles": [
+              [
+                0,
+                2
+              ],
+              [
+                1,
+                2
+              ]
+            ],
+            "exchanges": [
+              [
+                "started",
+                "call:wait"
+              ],
+              [
+                "call:wait"
+              ],
+              [
+                "idle"
+              ],
+              [
+                "idle"
+              ],
+              [
+                "done"
+              ]
+            ]
+          },
+          "normalizations": [
+            "the VM fingerprint is recorded in the deterministic artifact; this remote scenario compares ordering only"
+          ],
+          "upstreamTest": {
+            "path": "packages/codemode/test/deterministic.test.ts",
+            "case": "applies results in seq order when the transport reorders replies sent in order"
+          }
+        }
+      ]
+    },
+    {
+      "path": "application-catalog.json",
+      "family": "audit-1053",
+      "bytes": 22793,
+      "sha256": "95f1f9e440c712bfcfa2fb1b34108601ad1988da600be94fb6b7497c61689ef9",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,toCodemodeDeclaration,getCodemodeCallableTools,createCodemodeToolDefinition",
+        "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension",
+        "packages/coding-agent/test/codemode-extension.test.ts:codemode extension"
+      ],
+      "scenarios": [
+        {
+          "name": "the empty codemode catalog still declares globals, discovery and the options grammar",
+          "inputs": {
+            "tools": []
+          },
+          "expected": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.",
+          "observed": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "createCodemodeDescription"
+          }
+        },
+        {
+          "name": "a tool declaration defaults its output schema to string and appends prompt guidelines",
+          "inputs": {
+            "tool": "read",
+            "guidelines": [
+              "Read before editing."
+            ]
+          },
+          "expected": {
+            "name": "read",
+            "description": "Read a file\n\n- Read before editing.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                }
+              }
+            },
+            "outputSchema": {
+              "type": "string"
+            }
+          },
+          "observed": {
+            "name": "read",
+            "description": "Read a file\n\n- Read before editing.",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "query": {
+                  "type": "string"
+                }
+              }
+            },
+            "outputSchema": {
+              "type": "string"
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "toCodemodeDeclaration"
+          }
+        },
+        {
+          "name": "a listed tool section carries its declaration, output type and guidelines",
+          "inputs": {
+            "tool": "mcp__docs__search",
+            "outputSchema": "object"
+          },
+          "expected": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `mcp__docs__search`\nSearch docs\n\n- Search before reading.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+          "observed": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `mcp__docs__search`\nSearch docs\n\n- Search before reading.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "renderToolSection"
+          }
+        },
+        {
+          "name": "namespaces group sections and the inline budget omits tools with an explicit marker",
+          "inputs": {
+            "tools": [
+              "read",
+              "mcp__docs__search"
+            ],
+            "namespace": "docs",
+            "inlineBudget": 40
+          },
+          "expected": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs (tools not listed)\nDocumentation tools",
+          "observed": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs (tools not listed)\nDocumentation tools",
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "selectCatalog"
+          }
+        },
+        {
+          "name": "deferred tools are never listed and do not change the description",
+          "inputs": {
+            "tools": [
+              "alpha",
+              "beta"
+            ],
+            "deferred": [
+              "beta"
+            ]
+          },
+          "expected": {
+            "deferredOmitted": true,
+            "sameAsSingleTool": true,
+            "emptyDeferredIsEmptyDescription": true
+          },
+          "observed": {
+            "deferredOmitted": true,
+            "sameAsSingleTool": true,
+            "emptyDeferredIsEmptyDescription": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "createCodemodeDescription deferred"
+          }
+        },
+        {
+          "name": "the models declaration line is present only when models are enabled",
+          "inputs": {
+            "models": [
+              false,
+              true
+            ]
+          },
+          "expected": {
+            "withoutModels": false,
+            "withModels": true,
+            "mentionsClassifiersAndImages": true
+          },
+          "observed": {
+            "withoutModels": false,
+            "withModels": true,
+            "mentionsClassifiersAndImages": true
+          },
+          "normalizations": [
+            "the docs path in the models line is host-specific and is not part of this comparison"
+          ],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "describeGlobals"
+          }
+        },
+        {
+          "name": "the callable tool set excludes codemode itself",
+          "inputs": {
+            "tools": [
+              "read",
+              "codemode",
+              "mcp__docs__search"
+            ]
+          },
+          "expected": [
+            "read",
+            "mcp__docs__search"
+          ],
+          "observed": [
+            "read",
+            "mcp__docs__search"
+          ],
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "getCodemodeCallableTools"
+          }
+        },
+        {
+          "name": "the extension registers an inactive model-only codemode tool with the source grammar",
+          "inputs": {
+            "models": false
+          },
+          "expected": {
+            "name": "codemode",
+            "label": "codemode",
+            "exposure": "model-only",
+            "defaultActive": false,
+            "grammarEqualsSource": true,
+            "snippet": "Run JavaScript that calls other tools",
+            "guidelines": [
+              "Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of many separate calls."
+            ],
+            "inlineBudget": 3000
+          },
+          "observed": {
+            "name": "codemode",
+            "label": "codemode",
+            "exposure": "model-only",
+            "defaultActive": false,
+            "grammarEqualsSource": true,
+            "snippet": "Run JavaScript that calls other tools",
+            "guidelines": [
+              "Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of many separate calls."
+            ],
+            "inlineBudget": 3000
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/index.ts",
+            "case": "createCodemodeExtension"
+          }
+        },
+        {
+          "name": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+          "inputs": {
+            "mode": "on",
+            "tools": [
+              "read (direct)",
+              "mcp__docs__search (codemode)"
+            ]
+          },
+          "expected": {
+            "hiddenDeclarations": [],
+            "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n## docs\nDocumentation tools\n\n### `mcp__docs__search`\nSearch docs\n\n- Use docs.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+            "readDescription": "Read a file\n\nCodemode: `tools.read(args)` resolves to a string.",
+            "searchDescription": "Search docs\n\nCodemode: `tools.mcp__docs__search(args)` resolves to `{ results }`."
+          },
+          "observed": {
+            "hiddenDeclarations": [],
+            "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n## docs\nDocumentation tools\n\n### `mcp__docs__search`\nSearch docs\n\n- Use docs.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+            "readDescription": "Read a file\n\nCodemode: `tools.read(args)` resolves to a string.",
+            "searchDescription": "Search docs\n\nCodemode: `tools.mcp__docs__search(args)` resolves to `{ results }`."
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "prepareCodemodeLoadout mode on"
+          }
+        },
+        {
+          "name": "the only loadout lists every callable tool and hides direct declarations",
+          "inputs": {
+            "mode": "only",
+            "tools": [
+              "read (direct)",
+              "mcp__docs__search (codemode)"
+            ]
+          },
+          "expected": {
+            "hiddenDeclarations": [
+              "read"
+            ],
+            "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs\n\n### `mcp__docs__search`\nSearch docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<string>; };\n```",
+            "descriptions": [
+              "codemode"
+            ]
+          },
+          "observed": {
+            "hiddenDeclarations": [
+              "read"
+            ],
+            "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs\n\n### `mcp__docs__search`\nSearch docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<string>; };\n```",
+            "descriptions": [
+              "codemode"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+            "case": "prepareCodemodeLoadout mode only"
+          }
+        }
+      ]
+    }
+  ]
+}

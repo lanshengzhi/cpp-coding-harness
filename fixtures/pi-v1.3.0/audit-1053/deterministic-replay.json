@@ -1,0 +1,782 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:00:12.864Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start,CodemodeRun.deliver",
+    "packages/codemode/src/runtime/vm.ts:startVm,deterministicWasi,DETERMINISTIC_VERSION",
+    "packages/codemode/src/runtime/protocol.ts:VmStartData,WorkerToHostMessage",
+    "packages/codemode/src/types.ts:CodemodeRunOptions,CodemodeResult.during",
+    "packages/codemode/test/deterministic.test.ts:deterministic runs"
+  ],
+  "scenarios": [
+    {
+      "name": "the same script, start time, seed and answers make the same calls and output",
+      "inputs": {
+        "startedAt": 1768471200000,
+        "seed": 1,
+        "script": "clock/random/echo"
+      },
+      "expected": {
+        "sameCalls": true,
+        "sameValue": true,
+        "sameOutput": true,
+        "calls": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "echo",
+            "args": [
+              1768471200000,
+              0,
+              0.34227450605335275,
+              0.4620546081390098,
+              "2026-01-15T10:00:00.000Z"
+            ]
+          },
+          {
+            "id": 2,
+            "target": "tool",
+            "name": "echo",
+            "args": [
+              1768471200000,
+              0,
+              0.34227450605335275,
+              0.4620546081390098,
+              "2026-01-15T10:00:00.000Z",
+              0.056110785474501323
+            ]
+          }
+        ],
+        "output": [
+          {
+            "type": "text",
+            "text": "[1768471201000,1000,0.5807179129204683]"
+          }
+        ],
+        "idles": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "during": {
+          "seq": 2,
+          "issued": 2
+        }
+      },
+      "observed": {
+        "sameCalls": true,
+        "sameValue": true,
+        "sameOutput": true,
+        "calls": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "echo",
+            "args": [
+              1768471200000,
+              0,
+              0.34227450605335275,
+              0.4620546081390098,
+              "2026-01-15T10:00:00.000Z"
+            ]
+          },
+          {
+            "id": 2,
+            "target": "tool",
+            "name": "echo",
+            "args": [
+              1768471200000,
+              0,
+              0.34227450605335275,
+              0.4620546081390098,
+              "2026-01-15T10:00:00.000Z",
+              0.056110785474501323
+            ]
+          }
+        ],
+        "output": [
+          {
+            "type": "text",
+            "text": "[1768471201000,1000,0.5807179129204683]"
+          }
+        ],
+        "idles": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "during": {
+          "seq": 2,
+          "issued": 2
+        }
+      },
+      "normalizations": [
+        "call durationMs is wall-clock and is not part of the replay equality; presence and status remain"
+      ],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "makes the same calls and output for the same start, seed, and results"
+      }
+    },
+    {
+      "name": "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
+      "inputs": {
+        "startedAt": 1768471200000,
+        "seed": 1,
+        "seeds": [
+          0,
+          1
+        ]
+      },
+      "expected": {
+        "clock": [
+          1768471200000,
+          0,
+          0.34227450605335275,
+          0,
+          0,
+          "undefined",
+          "undefined"
+        ],
+        "seedZero": [
+          0.6711372530266764,
+          0.7258461452833667
+        ]
+      },
+      "observed": {
+        "clock": [
+          1768471200000,
+          0,
+          0.34227450605335275,
+          0,
+          0,
+          "undefined",
+          "undefined"
+        ],
+        "seedZero": [
+          0.6711372530266764,
+          0.7258461452833667
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "runs in UTC whatever the host's timezone, and without WeakRef or FinalizationRegistry"
+      }
+    },
+    {
+      "name": "results are applied in seq order even when delivered in reverse order",
+      "inputs": {
+        "script": "const order = []; await Promise.all([tools.wait(\"a\").then(() => order.push(\"a\")), tools.wait(\"b\").then(() => order.push(\"b\"))]); return order;",
+        "delivery": "seq 2 then seq 1"
+      },
+      "expected": {
+        "value": [
+          "b",
+          "a"
+        ],
+        "idles": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "calls": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "wait",
+            "args": "a"
+          },
+          {
+            "id": 2,
+            "target": "tool",
+            "name": "wait",
+            "args": "b"
+          }
+        ]
+      },
+      "observed": {
+        "value": [
+          "b",
+          "a"
+        ],
+        "idles": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "calls": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "wait",
+            "args": "a"
+          },
+          {
+            "id": 2,
+            "target": "tool",
+            "name": "wait",
+            "args": "b"
+          }
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "applies results in seq order, whatever order they are delivered in"
+      }
+    },
+    {
+      "name": "the VM fingerprint arrives before calls, idles report issued calls, and a different heap changes the fingerprint",
+      "inputs": {
+        "memoryLimitBytes": [
+          67108864,
+          33554432
+        ]
+      },
+      "expected": {
+        "events": [
+          "started",
+          "call 1",
+          "idle 0",
+          "call 2",
+          "call 3",
+          "idle 1",
+          "idle 2"
+        ],
+        "idles": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            3
+          ]
+        ],
+        "calls": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "echo",
+            "args": 1
+          },
+          {
+            "id": 2,
+            "target": "tool",
+            "name": "echo",
+            "args": 2
+          },
+          {
+            "id": 3,
+            "target": "tool",
+            "name": "echo",
+            "args": 3
+          }
+        ],
+        "fingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+        "sameFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+        "differentFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 33554432, budget none",
+        "finished": true,
+        "resultOk": true
+      },
+      "observed": {
+        "events": [
+          "started",
+          "call 1",
+          "idle 0",
+          "call 2",
+          "call 3",
+          "idle 1",
+          "idle 2"
+        ],
+        "idles": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            3
+          ],
+          [
+            2,
+            3
+          ]
+        ],
+        "calls": [
+          {
+            "id": 1,
+            "target": "tool",
+            "name": "echo",
+            "args": 1
+          },
+          {
+            "id": 2,
+            "target": "tool",
+            "name": "echo",
+            "args": 2
+          },
+          {
+            "id": 3,
+            "target": "tool",
+            "name": "echo",
+            "args": 3
+          }
+        ],
+        "fingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+        "sameFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 67108864, budget none",
+        "differentFingerprint": "quickjs-wasi 3.6.2, quickjs 0.17.0, prelude 8c6c9242, deterministic 1, stack 524288, heap 33554432, budget none",
+        "finished": true,
+        "resultOk": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "reports the fingerprint before any call and the calls issued after each result"
+      }
+    },
+    {
+      "name": "during reports the result the VM was processing when the script ended",
+      "inputs": {
+        "scripts": [
+          "return 1",
+          "await tools.echo(1); return await tools.echo(2)",
+          "await tools.echo(1); await Promise.all([tools.echo(2), tools.echo(3)]); throw new Error('x')"
+        ]
+      },
+      "expected": [
+        {
+          "ok": true,
+          "during": {
+            "seq": 0,
+            "issued": 0
+          }
+        },
+        {
+          "ok": true,
+          "during": {
+            "seq": 2,
+            "issued": 2
+          }
+        },
+        {
+          "ok": false,
+          "during": {
+            "seq": 3,
+            "issued": 3
+          }
+        },
+        {
+          "executeHasDuring": false
+        }
+      ],
+      "observed": [
+        {
+          "ok": true,
+          "during": {
+            "seq": 0,
+            "issued": 0
+          }
+        },
+        {
+          "ok": true,
+          "during": {
+            "seq": 2,
+            "issued": 2
+          }
+        },
+        {
+          "ok": false,
+          "during": {
+            "seq": 3,
+            "issued": 3
+          }
+        },
+        {
+          "executeHasDuring": false
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "reports the result the VM was processing when the script ended"
+      }
+    },
+    {
+      "name": "deliver rejects a wrong call, a reused result number and a non-finite clock without settling the run",
+      "inputs": {
+        "delivered": [
+          "Clock NaN",
+          "wrong id 99",
+          "valid"
+        ]
+      },
+      "expected": {
+        "errors": [
+          "The clock value of result 1 is not a finite number",
+          "Call 99 is not waiting for a result"
+        ],
+        "result": "fine"
+      },
+      "observed": {
+        "errors": [
+          "The clock value of result 1 is not a finite number",
+          "Call 99 is not waiting for a result"
+        ],
+        "result": "fine"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "keeps the clock monotonic and rejects a clock value that is not finite"
+      }
+    },
+    {
+      "name": "a reused result number is rejected",
+      "inputs": {
+        "delivery": "seq 1 twice"
+      },
+      "expected": {
+        "error": "Result number 1 is not a positive integer used once",
+        "value": [
+          "a",
+          "b"
+        ]
+      },
+      "observed": {
+        "error": "Result number 1 is not a positive integer used once",
+        "value": [
+          "a",
+          "b"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "rejects a call that is not waiting and a result number used twice"
+      }
+    },
+    {
+      "name": "a changed seed is a replay mismatch and changes randomness without changing the start time",
+      "inputs": {
+        "seeds": [
+          1,
+          2,
+          0
+        ],
+        "sameStartedAt": true
+      },
+      "expected": {
+        "sameSeedSame": true,
+        "reseededDifferent": true,
+        "seedZeroDiffersFromSeedOne": true,
+        "sameStartTime": [
+          1768471200000,
+          1768471200000
+        ]
+      },
+      "observed": {
+        "sameSeedSame": true,
+        "reseededDifferent": true,
+        "seedZeroDiffersFromSeedOne": true,
+        "sameStartTime": [
+          1768471200000,
+          1768471200000
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "the seed decides the random values, not the start time"
+      }
+    },
+    {
+      "name": "abort in a deterministic run is an uncatchable aborted error and finished becomes true",
+      "inputs": {
+        "cancellation": "after start, while waiting"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "diverged"
+        },
+        "output": [],
+        "calls": [
+          {
+            "name": "wait",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ]
+      },
+      "observed": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "diverged"
+        },
+        "output": [],
+        "calls": [
+          {
+            "name": "wait",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "ends with an error the script cannot catch when the caller aborts"
+      }
+    },
+    {
+      "name": "a nonserializable answer leaves the call waiting and a later valid answer settles it",
+      "inputs": {
+        "answers": [
+          "1n",
+          "'fine'"
+        ]
+      },
+      "expected": {
+        "error": "Do not know how to serialize a BigInt",
+        "value": "fine"
+      },
+      "observed": {
+        "error": "Do not know how to serialize a BigInt",
+        "value": "fine"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "leaves a call waiting when its answer cannot be serialized"
+      }
+    },
+    {
+      "name": "start rejects invalid start times, seeds and duplicate script names",
+      "inputs": {
+        "invalid": [
+          "startedAt -1",
+          "seed 1.5",
+          "tools a-b and a_b",
+          "same name twice"
+        ]
+      },
+      "expected": [
+        "startedAt must be a non-negative number of milliseconds since the epoch",
+        "seed must be a 32-bit unsigned integer",
+        "Tool script names must be unique",
+        "Tool names must be unique"
+      ],
+      "observed": [
+        "startedAt must be a non-negative number of milliseconds since the epoch",
+        "seed must be a 32-bit unsigned integer",
+        "Tool script names must be unique",
+        "Tool names must be unique"
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/src/runtime/execution.ts",
+        "case": "start validation"
+      }
+    },
+    {
+      "name": "a run-supplied jsName overrides the derived script name",
+      "inputs": {
+        "tools": [
+          {
+            "name": "my-tool",
+            "jsName": "renamed"
+          }
+        ]
+      },
+      "expected": {
+        "value": [
+          "function",
+          [
+            "renamed",
+            "my-tool"
+          ],
+          [
+            "renamed"
+          ]
+        ]
+      },
+      "observed": {
+        "value": [
+          "function",
+          [
+            "renamed",
+            "my-tool"
+          ],
+          [
+            "renamed"
+          ]
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "uses the script names the run passes"
+      }
+    },
+    {
+      "name": "globals count as issued calls and rejection properties reach the script Error",
+      "inputs": {
+        "globals": [
+          "search (spread)"
+        ],
+        "answer": "error with structuredOutput"
+      },
+      "expected": {
+        "firstCall": {
+          "id": 1,
+          "target": "global",
+          "name": "search",
+          "args": [
+            "x",
+            2
+          ]
+        },
+        "secondCall": {
+          "id": 2,
+          "target": "tool",
+          "name": "echo",
+          "args": "fail"
+        },
+        "idles": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "calls": [
+          {
+            "name": "echo",
+            "status": "error",
+            "durationPresent": true
+          }
+        ],
+        "output": [
+          {
+            "type": "text",
+            "text": "no"
+          }
+        ],
+        "value": [
+          "found"
+        ]
+      },
+      "observed": {
+        "firstCall": {
+          "id": 1,
+          "target": "global",
+          "name": "search",
+          "args": [
+            "x",
+            2
+          ]
+        },
+        "secondCall": {
+          "id": 2,
+          "target": "tool",
+          "name": "echo",
+          "args": "fail"
+        },
+        "idles": [
+          [
+            0,
+            1
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "calls": [
+          {
+            "name": "echo",
+            "status": "error",
+            "durationPresent": true
+          }
+        ],
+        "output": [
+          {
+            "type": "text",
+            "text": "no"
+          }
+        ],
+        "value": [
+          "found"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "numbers calls to globals with tools, and answers errors as rejections"
+      }
+    },
+    {
+      "name": "execute() is not deterministic while start() is",
+      "inputs": {
+        "executes": 2,
+        "starts": 2
+      },
+      "expected": {
+        "nowWithinRun": true,
+        "randomDiffers": true
+      },
+      "observed": {
+        "nowWithinRun": true,
+        "randomDiffers": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "execute() is not deterministic"
+      }
+    }
+  ]
+}

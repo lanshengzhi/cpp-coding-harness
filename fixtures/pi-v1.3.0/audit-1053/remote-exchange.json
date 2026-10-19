@@ -1,0 +1,381 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:00:12.864Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox,remoteLauncher,serveCodemodeRemote,CodemodeRemoteExchange",
+    "packages/codemode/src/types.ts:CodemodeRemoteRequest,CodemodeRemoteMessage,CodemodeRemoteReply",
+    "packages/codemode/test/portable.test.ts:RemoteCodemodeSandbox",
+    "packages/codemode/test/deterministic.test.ts:deterministic runs (remote transport)"
+  ],
+  "scenarios": [
+    {
+      "name": "a generic remote runs the script and calls the caller's tools across the exchange",
+      "inputs": {
+        "script": "text('hi'); return await tools.add({a: 1})",
+        "store": {
+          "k": 1
+        }
+      },
+      "expected": {
+        "ok": true,
+        "value": 2,
+        "output": [
+          {
+            "type": "text",
+            "text": "hi"
+          }
+        ],
+        "calls": [
+          {
+            "name": "add",
+            "status": "ok",
+            "durationPresent": true
+          }
+        ],
+        "storeWrites": {
+          "set": {},
+          "delete": []
+        },
+        "seen": [
+          {
+            "a": 1
+          }
+        ],
+        "exchanges": [
+          [
+            "output",
+            "call:add"
+          ],
+          [
+            "done"
+          ]
+        ],
+        "replies": [
+          "result:true",
+          "null"
+        ]
+      },
+      "observed": {
+        "ok": true,
+        "value": 2,
+        "output": [
+          {
+            "type": "text",
+            "text": "hi"
+          }
+        ],
+        "calls": [
+          {
+            "name": "add",
+            "status": "ok",
+            "durationPresent": true
+          }
+        ],
+        "storeWrites": {
+          "set": {},
+          "delete": []
+        },
+        "seen": [
+          {
+            "a": 1
+          }
+        ],
+        "exchanges": [
+          [
+            "output",
+            "call:add"
+          ],
+          [
+            "done"
+          ]
+        ],
+        "replies": [
+          "result:true",
+          "null"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "runs tools in the caller and the script on the remote"
+      }
+    },
+    {
+      "name": "remote output is buffered instead of one exchange per output item",
+      "inputs": {
+        "outputItems": 5000
+      },
+      "expected": {
+        "ok": true,
+        "outputCount": 5000,
+        "last": {
+          "type": "text",
+          "text": "4999",
+          "console": true
+        },
+        "exchanges": 6,
+        "exchangeSizes": [
+          1000,
+          1000,
+          1000,
+          1000,
+          1000,
+          1
+        ]
+      },
+      "observed": {
+        "ok": true,
+        "outputCount": 5000,
+        "last": {
+          "type": "text",
+          "text": "4999",
+          "console": true
+        },
+        "exchanges": 6,
+        "exchangeSizes": [
+          1000,
+          1000,
+          1000,
+          1000,
+          1000,
+          1
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "batches output instead of making one exchange per line"
+      }
+    },
+    {
+      "name": "the remote caps the requested interrupt budget and memory limit",
+      "inputs": {
+        "maxInterruptBudget": 1000,
+        "maxMemoryLimitBytes": 8388608,
+        "requestedInterruptBudget": 1000000000
+      },
+      "expected": {
+        "timeout": {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        "memory": {
+          "kind": "script",
+          "name": "InternalError",
+          "message": "out of memory"
+        }
+      },
+      "observed": {
+        "timeout": {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        "memory": {
+          "kind": "script",
+          "name": "InternalError",
+          "message": "out of memory"
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "caps the interrupt budget and memory at the remote's limits"
+      }
+    },
+    {
+      "name": "caller abort answers the remote's exchange with stop and settles without waiting for remote compute",
+      "inputs": {
+        "cancellation": "AbortController while tool hangs"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "This operation was aborted"
+        },
+        "output": [],
+        "calls": [
+          {
+            "name": "hang",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ],
+        "exchanges": [
+          [
+            "call:hang"
+          ]
+        ],
+        "replies": [
+          "stop"
+        ]
+      },
+      "observed": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "This operation was aborted"
+        },
+        "output": [],
+        "calls": [
+          {
+            "name": "hang",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ],
+        "exchanges": [
+          [
+            "call:hang"
+          ]
+        ],
+        "replies": [
+          "stop"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "tells the remote to stop when the caller aborts"
+      }
+    },
+    {
+      "name": "a failing, silent or unreachable remote is a sandbox error with the transport reason",
+      "inputs": {
+        "remotes": [
+          "reject",
+          "silent",
+          "throw"
+        ]
+      },
+      "expected": [
+        {
+          "kind": "sandbox",
+          "message": "Remote sandbox failed: object reset"
+        },
+        {
+          "kind": "sandbox",
+          "message": "Remote sandbox returned before the script settled"
+        },
+        {
+          "kind": "sandbox",
+          "message": "Failed to reach the remote sandbox: no binding"
+        }
+      ],
+      "observed": [
+        {
+          "kind": "sandbox",
+          "message": "Remote sandbox failed: object reset"
+        },
+        {
+          "kind": "sandbox",
+          "message": "Remote sandbox returned before the script settled"
+        },
+        {
+          "kind": "sandbox",
+          "message": "Failed to reach the remote sandbox: no binding"
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "reports a failing or vanishing remote as a sandbox error"
+      }
+    },
+    {
+      "name": "a deterministic start over a transport that reorders replies still applies results in seq order",
+      "inputs": {
+        "startedAt": 1768471200000,
+        "seed": 1,
+        "transportDelayMs": 30
+      },
+      "expected": {
+        "value": [
+          "a",
+          "b"
+        ],
+        "idles": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "exchanges": [
+          [
+            "started",
+            "call:wait"
+          ],
+          [
+            "call:wait"
+          ],
+          [
+            "idle"
+          ],
+          [
+            "idle"
+          ],
+          [
+            "done"
+          ]
+        ]
+      },
+      "observed": {
+        "value": [
+          "a",
+          "b"
+        ],
+        "idles": [
+          [
+            0,
+            2
+          ],
+          [
+            1,
+            2
+          ]
+        ],
+        "exchanges": [
+          [
+            "started",
+            "call:wait"
+          ],
+          [
+            "call:wait"
+          ],
+          [
+            "idle"
+          ],
+          [
+            "idle"
+          ],
+          [
+            "done"
+          ]
+        ]
+      },
+      "normalizations": [
+        "the VM fingerprint is recorded in the deterministic artifact; this remote scenario compares ordering only"
+      ],
+      "upstreamTest": {
+        "path": "packages/codemode/test/deterministic.test.ts",
+        "case": "applies results in seq order when the transport reorders replies sent in order"
+      }
+    }
+  ]
+}

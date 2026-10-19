@@ -1,0 +1,269 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:00:12.864Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox,inlineLauncher,DEFAULT_INTERRUPT_BUDGET,INLINE_MAX_STACK_SIZE",
+    "packages/codemode/test/portable.test.ts:InlineCodemodeSandbox"
+  ],
+  "scenarios": [
+    {
+      "name": "an inline script that computes without awaiting is stopped by its interrupt budget, not the deadline",
+      "inputs": {
+        "interruptBudget": 1000,
+        "scripts": [
+          "while (true) {}",
+          "while (true) await null"
+        ],
+        "timeoutMs": [
+          null,
+          50
+        ]
+      },
+      "expected": [
+        {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        }
+      ],
+      "observed": [
+        {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "fails a script that computes past its interrupt budget as a timeout"
+      }
+    },
+    {
+      "name": "the interrupt budget counts across awaits on tools",
+      "inputs": {
+        "interruptBudget": 1000,
+        "loop": "1e5 iterations then await tools.tick()"
+      },
+      "expected": {
+        "error": {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        "calls": 49
+      },
+      "observed": {
+        "error": {
+          "kind": "timeout",
+          "message": "Execution exceeded its interrupt budget of 1000"
+        },
+        "calls": 49
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "counts the budget across waits on tools"
+      }
+    },
+    {
+      "name": "caller abort during an inline tool wait aborts the tool and keeps partial output",
+      "inputs": {
+        "cancellation": "AbortController while tool waits"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "cancelled"
+        },
+        "output": [
+          {
+            "type": "text",
+            "text": "partial"
+          }
+        ],
+        "calls": [
+          {
+            "name": "hang",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ]
+      },
+      "observed": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "cancelled"
+        },
+        "output": [
+          {
+            "type": "text",
+            "text": "partial"
+          }
+        ],
+        "calls": [
+          {
+            "name": "hang",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/src/runtime/inline.ts",
+        "case": "abort signal while a tool waits"
+      }
+    },
+    {
+      "name": "an inline deadline while a tool waits reports the deadline, not the interrupt budget",
+      "inputs": {
+        "timeoutMs": 40,
+        "tool": "hang"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "kind": "timeout",
+          "message": "Execution timed out after 40 ms"
+        },
+        "output": [
+          {
+            "type": "text",
+            "text": "partial"
+          }
+        ],
+        "calls": [
+          {
+            "name": "hang",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ]
+      },
+      "observed": {
+        "ok": false,
+        "error": {
+          "kind": "timeout",
+          "message": "Execution timed out after 40 ms"
+        },
+        "output": [
+          {
+            "type": "text",
+            "text": "partial"
+          }
+        ],
+        "calls": [
+          {
+            "name": "hang",
+            "status": "cancelled",
+            "durationPresent": true
+          }
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/src/runtime/inline.ts",
+        "case": "deadline while a tool waits"
+      }
+    },
+    {
+      "name": "an inline execution with an already-aborted signal never creates a VM",
+      "inputs": {
+        "cancellation": "pre-aborted AbortSignal"
+      },
+      "expected": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "early"
+        },
+        "output": [],
+        "calls": []
+      },
+      "observed": {
+        "ok": false,
+        "error": {
+          "kind": "aborted",
+          "message": "early"
+        },
+        "output": [],
+        "calls": []
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/src/runtime/execution.ts",
+        "case": "signal already aborted"
+      }
+    },
+    {
+      "name": "a successful inline execution returns its value and text output",
+      "inputs": {
+        "script": "text('inline'); return 7",
+        "interruptBudget": 1000
+      },
+      "expected": {
+        "ok": true,
+        "value": 7,
+        "output": [
+          {
+            "type": "text",
+            "text": "inline"
+          }
+        ],
+        "calls": [],
+        "storeWrites": {
+          "set": {},
+          "delete": []
+        }
+      },
+      "observed": {
+        "ok": true,
+        "value": 7,
+        "output": [
+          {
+            "type": "text",
+            "text": "inline"
+          }
+        ],
+        "calls": [],
+        "storeWrites": {
+          "set": {},
+          "delete": []
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/portable.test.ts",
+        "case": "InlineCodemodeSandbox"
+      }
+    }
+  ]
+}

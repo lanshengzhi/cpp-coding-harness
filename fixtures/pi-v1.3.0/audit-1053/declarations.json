@@ -1,0 +1,667 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:00:12.864Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/declarations.ts:schemaToType,renderDeclarations,renderToolSignature,renderToolSample,renderToolOutputType,constraintTags",
+    "packages/codemode/src/identifier.ts:toCodemodeIdentifier",
+    "packages/codemode/src/runtime/prelude-source.ts:MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_TOTAL_CHARS,MAX_STORE_VALUE_CHARS",
+    "packages/codemode/test/declarations.test.ts:schemaToType,renderDeclarations"
+  ],
+  "scenarios": [
+    {
+      "name": "tool identifiers replace invalid characters and preserve MCP names",
+      "inputs": {
+        "names": [
+          "mcp__docs__search",
+          "my-tool",
+          "9lives",
+          "",
+          "a b",
+          "$ok",
+          "_",
+          "naïve"
+        ]
+      },
+      "expected": [
+        "mcp__docs__search",
+        "my_tool",
+        "_lives",
+        "_",
+        "a_b",
+        "$ok",
+        "_",
+        "na_ve"
+      ],
+      "observed": [
+        "mcp__docs__search",
+        "my_tool",
+        "_lives",
+        "_",
+        "a_b",
+        "$ok",
+        "_",
+        "na_ve"
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/src/identifier.ts",
+        "case": "toCodemodeIdentifier"
+      }
+    },
+    {
+      "name": "schema primitives, literals, unions and references render as TypeScript types",
+      "inputs": {
+        "schemas": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          {
+            "const": "a"
+          },
+          {
+            "enum": [
+              "a",
+              1,
+              null
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {}
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ]
+              },
+              {
+                "const": 1
+              }
+            ]
+          },
+          {
+            "$ref": "#/defs/x"
+          },
+          true,
+          false,
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "type": "array",
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
+          {
+            "type": "array"
+          }
+        ]
+      },
+      "expected": [
+        "string",
+        "number",
+        "string | null",
+        "\"a\"",
+        "\"a\" | 1 | null",
+        "string | number",
+        "unknown",
+        "(string | number) & 1",
+        "unknown",
+        "unknown",
+        "never",
+        "Array<string>",
+        "[string, number]",
+        "unknown[]"
+      ],
+      "observed": [
+        "string",
+        "number",
+        "string | null",
+        "\"a\"",
+        "\"a\" | 1 | null",
+        "string | number",
+        "unknown",
+        "(string | number) & 1",
+        "unknown",
+        "unknown",
+        "never",
+        "Array<string>",
+        "[string, number]",
+        "unknown[]"
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "renders primitives, literals, and unions"
+      }
+    },
+    {
+      "name": "object properties are sorted on one line with quoted non-identifier keys",
+      "inputs": {
+        "schemas": [
+          {
+            "type": "object",
+            "properties": {
+              "city": {
+                "type": "string"
+              },
+              "max-lines": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "city"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          {
+            "type": "object"
+          },
+          {
+            "type": "object",
+            "properties": {},
+            "additionalProperties": false
+          }
+        ]
+      },
+      "expected": [
+        "{ city: string; \"max-lines\"?: number; }",
+        "{ [key: string]: number; }",
+        "{ [key: string]: unknown; }",
+        "{}"
+      ],
+      "observed": [
+        "{ city: string; \"max-lines\"?: number; }",
+        "{ [key: string]: number; }",
+        "{ [key: string]: unknown; }",
+        "{}"
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "renders objects on one line with sorted properties"
+      }
+    },
+    {
+      "name": "property descriptions become comment lines",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "weather": {
+              "type": "array",
+              "description": "look up weather for a given list of locations",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "location": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "location"
+                ]
+              }
+            }
+          },
+          "required": [
+            "weather"
+          ]
+        }
+      },
+      "expected": "{\n  // look up weather for a given list of locations\n  weather: Array<{ location: string; }>;\n}",
+      "observed": "{\n  // look up weather for a given list of locations\n  weather: Array<{ location: string; }>;\n}",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "puts property descriptions on comment lines"
+      }
+    },
+    {
+      "name": "constraint tags render integer bounds, defaults, patterns and deprecated markers",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "timeoutMs": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 30000,
+              "default": 0,
+              "description": "Wait in milliseconds."
+            },
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z]+$",
+              "maxLength": 8
+            },
+            "tags": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "maxItems": 5,
+              "uniqueItems": true,
+              "deprecated": true
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ]
+        }
+      },
+      "expected": "{\n  // @maxLength 8 @pattern ^[a-z]+$\n  id: string;\n  name?: string;\n  // @maxItems 5 @uniqueItems @deprecated\n  tags?: Array<string>;\n  // Wait in milliseconds.\n  // @integer @minimum 0 @maximum 30000 @default 0\n  timeoutMs?: number;\n}",
+      "observed": "{\n  // @maxLength 8 @pattern ^[a-z]+$\n  id: string;\n  name?: string;\n  // @maxItems 5 @uniqueItems @deprecated\n  tags?: Array<string>;\n  // Wait in milliseconds.\n  // @integer @minimum 0 @maximum 30000 @default 0\n  timeoutMs?: number;\n}",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "puts constraints the type cannot express on property comment lines"
+      }
+    },
+    {
+      "name": "optional non-null branches keep their constraint tags",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "limit": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 100
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": null,
+              "title": "Limit"
+            },
+            "n": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "minimum": 10,
+                  "maximum": 50,
+                  "format": "int32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "minimum": 0,
+              "maximum": 20,
+              "format": "port"
+            }
+          }
+        }
+      },
+      "expected": "{\n  // @integer @minimum 1 @maximum 100\n  limit?: number | null;\n  // @integer @minimum 10 @maximum 20 @format port @format int32\n  n?: number | null;\n}",
+      "observed": "{\n  // @integer @minimum 1 @maximum 100\n  limit?: number | null;\n  // @integer @minimum 10 @maximum 20 @format port @format int32\n  n?: number | null;\n}",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "reads constraints of optional fields from the non-null branch"
+      }
+    },
+    {
+      "name": "draft-04 boolean exclusive bounds become exclusive tags",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "n": {
+              "type": "integer",
+              "minimum": 0,
+              "exclusiveMinimum": true,
+              "maximum": 10,
+              "exclusiveMaximum": false
+            },
+            "m": {
+              "anyOf": [
+                {
+                  "type": "number",
+                  "maximum": 5,
+                  "exclusiveMaximum": true
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "maximum": 8
+            }
+          }
+        }
+      },
+      "expected": "{\n  // @maximum 8 @exclusiveMaximum 5\n  m?: number | null;\n  // @integer @exclusiveMinimum 0 @maximum 10\n  n?: number;\n}",
+      "observed": "{\n  // @maximum 8 @exclusiveMaximum 5\n  m?: number | null;\n  // @integer @exclusiveMinimum 0 @maximum 10\n  n?: number;\n}",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "reads draft-04 boolean exclusive bounds"
+      }
+    },
+    {
+      "name": "long tags are dropped, line terminators are escaped, and line breaks stay in comments",
+      "inputs": {
+        "schemas": [
+          {
+            "type": "object",
+            "properties": {
+              "config": {
+                "type": "object",
+                "default": {
+                  "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "sep": {
+                "type": "string",
+                "pattern": "^[\r\n  ]$",
+                "default": " ",
+                "description": "a b"
+              }
+            }
+          }
+        ]
+      },
+      "expected": [
+        "{ config?: { [key: string]: unknown; }; }",
+        "{\n  // a\n  // b\n  // @pattern ^[\\u000d\\u000a\\u2028\\u2029]$ @default \"\\u2028\"\n  sep?: string;\n}"
+      ],
+      "observed": [
+        "{ config?: { [key: string]: unknown; }; }",
+        "{\n  // a\n  // b\n  // @pattern ^[\\u000d\\u000a\\u2028\\u2029]$ @default \"\\u2028\"\n  sep?: string;\n}"
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "leaves out long tags and escapes line terminators"
+      }
+    },
+    {
+      "name": "types over the character budget drop tags, then become unknown",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "n": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "budgets": [
+          null,
+          20,
+          10
+        ]
+      },
+      "expected": [
+        "{\n  // @integer @minimum 1\n  n?: number;\n}",
+        "{ n?: number; }",
+        "unknown"
+      ],
+      "observed": [
+        "{\n  // @integer @minimum 1\n  n?: number;\n}",
+        "{ n?: number; }",
+        "unknown"
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "drops constraint tags before rendering a type over the budget as unknown"
+      }
+    },
+    {
+      "name": "local references resolve and recursive or remote references render unknown",
+      "inputs": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "item": {
+              "$ref": "#/$defs/Item"
+            },
+            "legacy": {
+              "$ref": "#/definitions/Legacy"
+            },
+            "remote": {
+              "$ref": "https://example.com/schema.json"
+            }
+          },
+          "required": [
+            "item"
+          ],
+          "$defs": {
+            "Item": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "parent": {
+                  "$ref": "#/$defs/Item"
+                }
+              },
+              "required": [
+                "id"
+              ]
+            }
+          },
+          "definitions": {
+            "Legacy": {
+              "enum": [
+                "a",
+                "b"
+              ]
+            }
+          }
+        }
+      },
+      "expected": "{ item: { id: string; parent?: unknown; }; legacy?: \"a\" | \"b\"; remote?: unknown; }",
+      "observed": "{ item: { id: string; parent?: unknown; }; legacy?: \"a\" | \"b\"; remote?: unknown; }",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "resolves local references and stops at recursive ones"
+      }
+    },
+    {
+      "name": "tool signatures and samples use the output schema and input budget",
+      "inputs": {
+        "tool": {
+          "name": "mcp__docs__search",
+          "description": " Search docs ",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "query": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "query"
+            ]
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "results": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": [
+              "results"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "signature": "mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>;",
+        "unknownOutput": "unknown",
+        "output": "{ [key: string]: unknown; }",
+        "sample": "Search docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>; };\n```",
+        "budgeted": "mcp__docs__search(args: unknown): Promise<{ results: Array<string>; }>;"
+      },
+      "observed": {
+        "signature": "mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>;",
+        "unknownOutput": "unknown",
+        "output": "{ [key: string]: unknown; }",
+        "sample": "Search docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query: string; }): Promise<{ results: Array<string>; }>; };\n```",
+        "budgeted": "mcp__docs__search(args: unknown): Promise<{ results: Array<string>; }>;"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "renderToolSignature"
+      }
+    },
+    {
+      "name": "renderDeclarations groups tools, globals and namespaces with doc comments",
+      "inputs": {
+        "tools": [
+          {
+            "name": "my-tool",
+            "description": "Do the thing",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "a": {
+                  "type": "string"
+                }
+              }
+            },
+            "outputSchema": {
+              "type": "string"
+            }
+          }
+        ],
+        "globals": [
+          {
+            "name": "searchTools",
+            "description": "Search tools",
+            "signature": "(query: string): Promise<string[]>"
+          },
+          {
+            "name": "models.classify",
+            "description": "Classify",
+            "signature": "(input: string): Promise<string>"
+          },
+          {
+            "name": "models.generateImages",
+            "signature": "(input: string): Promise<string[]>"
+          }
+        ]
+      },
+      "expected": "declare const tools: {\n  /** Do the thing */\n  my_tool(args: { a?: string; }): Promise<string>;\n};\n\n/** Search tools */\ndeclare function searchTools(query: string): Promise<string[]>;\n\ndeclare const models: {\n  /** Classify */\n  classify(input: string): Promise<string>;\n  generateImages(input: string): Promise<string[]>;\n};",
+      "observed": "declare const tools: {\n  /** Do the thing */\n  my_tool(args: { a?: string; }): Promise<string>;\n};\n\n/** Search tools */\ndeclare function searchTools(query: string): Promise<string[]>;\n\ndeclare const models: {\n  /** Classify */\n  classify(input: string): Promise<string>;\n  generateImages(input: string): Promise<string[]>;\n};",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/declarations.test.ts",
+        "case": "renderDeclarations"
+      }
+    },
+    {
+      "name": "default and stored limits are public constants",
+      "inputs": {
+        "exports": [
+          "DEFAULT_INPUT_SCHEMA_MAX_CHARS",
+          "MAX_OUTPUT_CHARS",
+          "MAX_OUTPUT_ITEMS",
+          "MAX_STORE_TOTAL_CHARS",
+          "MAX_STORE_VALUE_CHARS",
+          "DEFAULT_INTERRUPT_BUDGET"
+        ]
+      },
+      "expected": {
+        "inputSchemaMaxChars": 16000,
+        "outputChars": 16777216,
+        "outputItems": 100000,
+        "storeTotalChars": 1048576,
+        "storeValueChars": 262144,
+        "interruptBudget": 100000
+      },
+      "observed": {
+        "inputSchemaMaxChars": 16000,
+        "outputChars": 16777216,
+        "outputItems": 100000,
+        "storeTotalChars": 1048576,
+        "storeValueChars": 262144,
+        "interruptBudget": 100000
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/src/runtime/prelude-source.ts",
+        "case": "MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_TOTAL_CHARS,MAX_STORE_VALUE_CHARS"
+      }
+    }
+  ]
+}
