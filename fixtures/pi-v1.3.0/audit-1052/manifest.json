@@ -1,0 +1,756 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1052",
+  "family": "audit-1052",
+  "capturedAt": "2026-10-19T17:56:18.012Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1052/capture-1052.mts",
+    "sha256": "0f77bbc23b5d69866d9834c825f2d028f972a750b84b55f1b958d8a6f02ec2a9",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1052/capture-1052.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1052/capture-1052.mts",
+        "sha256": "0f77bbc23b5d69866d9834c825f2d028f972a750b84b55f1b958d8a6f02ec2a9"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1052/scenarios.mts",
+        "sha256": "208a432a51c13e611b73864d057d31d8657f1829b1551d5d7f633400cac05be3"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1052/fixtures.mts",
+        "sha256": "e2de7db81fc676acfc75eca0565c73e7289bc5c91b55578dc9cf2102441ee493"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1052/pi.mts",
+        "sha256": "6375c6a60e44ceb8d17776814ac7fec04d322716aad4d7481f31fdefb7de9e17"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "structured-content.json",
+      "family": "audit-1052",
+      "bytes": 4628,
+      "sha256": "3061724d83492738e9f0d29fd089b5fc8d940be09901339a8183319637b204e5",
+      "sourceEndpoints": [
+        "packages/mcp/src/client.ts:McpClient.callTool,validateCallToolResult",
+        "packages/mcp/src/protocol/content.ts:CallToolResult,toLlmContent",
+        "packages/coding-agent/src/extensions/mcp/tools.ts:convertMcpResult,createMcpResultSchema",
+        "packages/mcp/test/client.test.ts:accepts structured content that is not an object",
+        "packages/mcp/test/content.test.ts:falls back to the structured content as JSON when there are no blocks",
+        "packages/coding-agent/test/mcp-extension.test.ts:convertMcpResult"
+      ],
+      "scenarios": [
+        {
+          "name": "client preserves an array structuredContent when content is absent",
+          "inputs": {
+            "tool": "array",
+            "content": "absent",
+            "structuredContent": [
+              1,
+              {
+                "x": true
+              },
+              null
+            ]
+          },
+          "expected": {
+            "structuredContent": [
+              1,
+              {
+                "x": true
+              },
+              null
+            ],
+            "content": [],
+            "isError": null
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "client preserves a primitive structuredContent",
+          "inputs": {
+            "tool": "primitive",
+            "content": [],
+            "structuredContent": 7
+          },
+          "expected": {
+            "structuredContent": 7,
+            "content": [],
+            "isError": null
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "client preserves a null structuredContent",
+          "inputs": {
+            "tool": "null",
+            "content": [],
+            "structuredContent": null
+          },
+          "expected": {
+            "structuredContent": null,
+            "content": [],
+            "isError": null
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "client and tool conversion preserve an error result",
+          "inputs": {
+            "tool": "error",
+            "content": [
+              {
+                "type": "text",
+                "text": "tool failed"
+              }
+            ],
+            "isError": true,
+            "meta": {
+              "traceId": "t-1"
+            }
+          },
+          "expected": {
+            "client": {
+              "isError": true,
+              "content": [
+                {
+                  "type": "text",
+                  "text": "tool failed"
+                }
+              ],
+              "meta": {
+                "traceId": "t-1"
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "tool failed"
+                }
+              ],
+              "isError": true,
+              "structuredContent": {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "tool failed"
+                  }
+                ],
+                "isError": true
+              }
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "tool conversion serializes structuredContent into model text",
+          "inputs": {
+            "tool": "array",
+            "content": [],
+            "structuredContent": [
+              {
+                "id": 1
+              },
+              {
+                "id": 2
+              }
+            ]
+          },
+          "expected": {
+            "content": [
+              {
+                "type": "text",
+                "text": "[\n  {\n    \"id\": 1\n  },\n  {\n    \"id\": 2\n  }\n]"
+              }
+            ],
+            "structuredContent": {
+              "content": [],
+              "structuredContent": [
+                {
+                  "id": 1
+                },
+                {
+                  "id": 2
+                }
+              ]
+            },
+            "isError": null
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "oauth-lifecycle.json",
+      "family": "audit-1052",
+      "bytes": 7081,
+      "sha256": "21d20a43ddb027e1ce322d9632164776c7d6c8b5144ae8f01bee929a0eee2c47",
+      "sourceEndpoints": [
+        "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.authorizedFetch,StreamableHttpTransport.close",
+        "packages/mcp/src/oauth/discovery.ts:discoverOAuthServerInfo,discoverProtectedResourceMetadata",
+        "packages/mcp/src/oauth/flow.ts:authorizeMcp,adaptOAuthProvider,startAuthorization,exchangeAuthorizationCode",
+        "packages/mcp/src/oauth/provider.ts:McpOAuthProvider",
+        "packages/coding-agent/src/extensions/mcp/oauth.ts:createMcpAuthProvider,signInMcpServer,McpOAuthCredentialStore",
+        "packages/coding-agent/test/mcp-oauth-refresh.test.ts:refresh",
+        "packages/coding-agent/test/suite/agent-session-mcp-oauth.test.ts:OAuth",
+        "packages/mcp/test/oauth.test.ts:authorizeMcp"
+      ],
+      "scenarios": [
+        {
+          "name": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+          "inputs": {
+            "mode": "abort",
+            "seedAccessToken": "access-0",
+            "seedRefreshToken": "refresh-0",
+            "stalledEndpoint": "/token"
+          },
+          "expected": {
+            "mode": "abort",
+            "error": {
+              "name": "AbortError",
+              "message": "MCP request aborted"
+            },
+            "elapsedMs": "<1s",
+            "refreshRequests": 1,
+            "refreshResponses": 1,
+            "toolCalls": [
+              {
+                "method": "tools/call",
+                "token": "access-0",
+                "status": 401,
+                "id": 2
+              }
+            ],
+            "toolCallsAfterRefresh": 0,
+            "storedAccessTokenAfterRefresh": "access-1"
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "a tool call that times out during OAuth refresh never sends it after the refresh completes",
+          "inputs": {
+            "mode": "timeout",
+            "timeoutMs": 250,
+            "seedAccessToken": "access-0",
+            "seedRefreshToken": "refresh-0",
+            "stalledEndpoint": "/token"
+          },
+          "expected": {
+            "mode": "timeout",
+            "error": {
+              "name": "McpTimeoutError",
+              "message": "MCP request timed out after 250ms"
+            },
+            "elapsedMs": "<1s",
+            "refreshRequests": 1,
+            "refreshResponses": 1,
+            "toolCalls": [
+              {
+                "method": "tools/call",
+                "token": "access-0",
+                "status": 401,
+                "id": 2
+              }
+            ],
+            "toolCallsAfterRefresh": 0,
+            "storedAccessTokenAfterRefresh": "access-1"
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "closing while a token refresh is in flight does not wait for the refresh",
+          "inputs": {
+            "seedAccessToken": "access-0",
+            "seedRefreshToken": "refresh-0",
+            "tokenExpiry": "within REFRESH_SKEW_MS",
+            "stalledEndpoint": "/token"
+          },
+          "expected": {
+            "closeMs": "<=250ms",
+            "closeReturnedWhileRefreshStalled": true,
+            "refreshRequests": 1,
+            "refreshCompleted": true,
+            "deleteToken": "access-0"
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "authorization response from another issuer is rejected before token exchange",
+          "inputs": {
+            "authorizationCode": "code-forged",
+            "iss": "https://attacker.example"
+          },
+          "expected": {
+            "error": {
+              "name": "OAuthIssuerMismatchError",
+              "message": "OAuth issuer mismatch: expected \"<loopback>\", received \"https://attacker.example\""
+            },
+            "expectedIssuer": "<loopback>",
+            "receivedIssuer": "https://attacker.example",
+            "issuerMatchesServer": false,
+            "tokenRequests": 0,
+            "authorizationRequests": 0
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "cancellation during protected-resource discovery aborts the flow",
+          "inputs": {
+            "stalledEndpoint": "/.well-known/oauth-protected-resource/mcp",
+            "cancellation": "AbortSignal"
+          },
+          "expected": {
+            "error": {
+              "name": "AbortError",
+              "message": "This operation was aborted"
+            },
+            "stalledPath": "/.well-known/oauth-protected-resource/mcp",
+            "requestSocketDestroyed": true,
+            "tokenRequests": 0,
+            "registrations": 0
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "cancellation during dynamic client registration aborts the flow",
+          "inputs": {
+            "stalledEndpoint": "/register",
+            "cancellation": "AbortSignal"
+          },
+          "expected": {
+            "error": {
+              "name": "AbortError",
+              "message": "This operation was aborted"
+            },
+            "stalledPath": "/register",
+            "tokenRequests": 0,
+            "authorizations": 0
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "cancellation while waiting for the browser callback stops sign-in",
+          "inputs": {
+            "stalledAt": "promptForRedirectUrl",
+            "cancellation": "AbortSignal"
+          },
+          "expected": {
+            "error": {
+              "name": "McpSignInCancelledError",
+              "message": "Sign-in cancelled"
+            },
+            "authorizationUrlShown": true,
+            "authorizationUrl": {
+              "origin": "<issuer>",
+              "path": "/authorize",
+              "queryKeys": [
+                "response_type",
+                "client_id",
+                "code_challenge",
+                "code_challenge_method",
+                "redirect_uri",
+                "state",
+                "resource"
+              ],
+              "redirectUri": "http://<loopback>/callback",
+              "codeChallengeMethod": "S256",
+              "hasState": true
+            },
+            "authorizationRequests": 0,
+            "registrations": 1,
+            "tokenRequests": 0,
+            "pkceChallengePresent": true
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "transports.json",
+      "family": "audit-1052",
+      "bytes": 5006,
+      "sha256": "2edd0f5d56b27af96c06ccb6e295139ac58c898bc58c62500f69b3d461a66504",
+      "sourceEndpoints": [
+        "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport,McpAuthRequiredError",
+        "packages/mcp/src/transports/transport.ts:McpTransport",
+        "packages/coding-agent/src/extensions/mcp/config.ts:loadMcpConfig,validateMcpServerConfig",
+        "packages/mcp/test/streamable-http.test.ts:StreamableHttpTransport",
+        "packages/coding-agent/test/mcp-extension.test.ts:loadMcpConfig"
+      ],
+      "scenarios": [
+        {
+          "name": "application config accepts http and https but rejects another scheme",
+          "inputs": {
+            "urls": {
+              "plain": "http://127.0.0.1:1/mcp",
+              "tls": "https://127.0.0.1:1/mcp",
+              "rejected": "ftp://127.0.0.1/mcp"
+            }
+          },
+          "expected": {
+            "serverNames": [
+              "plain",
+              "tls"
+            ],
+            "errors": [
+              "<agent-dir>/mcp.json: server \"rejected\": url must be an http or https URL"
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "streamable HTTP transport connects over plain http",
+          "inputs": {
+            "url": "http://127.0.0.1:<port>/mcp"
+          },
+          "expected": {
+            "urlScheme": "http:",
+            "connected": "connected",
+            "serverName": "fixture",
+            "requests": [
+              {
+                "method": "POST",
+                "path": "/mcp",
+                "rpc": "initialize",
+                "status": 200
+              },
+              {
+                "method": "POST",
+                "path": "/mcp",
+                "rpc": "notifications/initialized",
+                "status": 202
+              }
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "HTTPS transport connects when its certificate is trusted",
+          "inputs": {
+            "url": "https://127.0.0.1:<port>/mcp",
+            "certificate": "self-signed RSA-2048, SAN IP:127.0.0.1"
+          },
+          "expected": {
+            "connected": "connected",
+            "serverName": "fixture",
+            "certificate": "self-signed RSA-2048, SAN IP:127.0.0.1",
+            "trust": "custom CA passed to undici Agent.connect.ca"
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "HTTPS transport rejects an untrusted certificate",
+          "inputs": {
+            "url": "https://127.0.0.1:<port>/mcp",
+            "certificate": "self-signed RSA-2048, SAN IP:127.0.0.1",
+            "trust": "default Node CA store"
+          },
+          "expected": {
+            "error": {
+              "name": "TypeError",
+              "message": "fetch failed",
+              "causeCode": "DEPTH_ZERO_SELF_SIGNED_CERT"
+            },
+            "tlsValidationEnforced": true
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "same-origin redirect is followed and keeps the request auth header",
+          "inputs": {
+            "entrypoint": "/redirect-same",
+            "target": "/mcp",
+            "redirectStatus": 307,
+            "authorization": "Bearer static"
+          },
+          "expected": {
+            "redirectStatus": 307,
+            "redirectMethod": "POST",
+            "targetPath": "/mcp",
+            "targetMethod": "POST",
+            "authorizationForwarded": true,
+            "connected": "connected"
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "cross-origin redirect is followed without Authorization and is rejected",
+          "inputs": {
+            "entrypoint": "/redirect-cross",
+            "targetOrigin": "a second loopback fixture",
+            "redirectStatus": 307,
+            "authorization": "Bearer static"
+          },
+          "expected": {
+            "sourceRedirectStatus": 307,
+            "sourceAuthorization": "Bearer static",
+            "targetAuthorization": null,
+            "targetStatus": 401,
+            "error": {
+              "name": "McpAuthRequiredError",
+              "message": "MCP server requires authentication"
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "application-initialization.json",
+      "family": "audit-1052",
+      "bytes": 5921,
+      "sha256": "71d447812fc6fbf5c95ddc423552e8dd1fa1c879924886f6987d531876346cb8",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/extensions/mcp/index.ts:createMcpExtension,startConnection,before_agent_start,waitForDirectServers",
+        "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.connectOnce,McpServerConnection.allResources,McpServerConnection.close",
+        "packages/coding-agent/src/extensions/mcp/resources.ts:createMcpResourceToolDefinitions",
+        "packages/coding-agent/test/mcp-extension.test.ts:McpExtension",
+        "packages/coding-agent/test/suite/agent-session-mcp.test.ts:MCP"
+      ],
+      "scenarios": [
+        {
+          "name": "connecting a server lists tools but not resources",
+          "inputs": {
+            "serverCapabilities": {
+              "tools": {},
+              "resources": {}
+            },
+            "transport": "in-memory"
+          },
+          "expected": {
+            "state": "connected",
+            "tools": [
+              "echo"
+            ],
+            "hasResources": true,
+            "methodsAtConnect": [
+              "initialize",
+              "tools/list"
+            ],
+            "resourcesListedAtConnect": false
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "resources are listed on demand after the connection is ready",
+          "inputs": {
+            "serverCapabilities": {
+              "tools": {},
+              "resources": {}
+            },
+            "transport": "in-memory"
+          },
+          "expected": {
+            "before": [
+              "initialize",
+              "tools/list"
+            ],
+            "after": [
+              "initialize",
+              "tools/list",
+              "resources/list"
+            ],
+            "resources": [
+              "docs://intro"
+            ],
+            "toolsStillAvailable": [
+              "echo"
+            ],
+            "state": "connected"
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "a resources/list failure leaves the server connected and usable for tools",
+          "inputs": {
+            "serverCapabilities": {
+              "tools": {},
+              "resources": {}
+            },
+            "resourcesList": "JSON-RPC error"
+          },
+          "expected": {
+            "state": "connected",
+            "error": {
+              "name": "McpError",
+              "message": "resource boom"
+            },
+            "tools": [
+              "echo"
+            ],
+            "methods": [
+              "initialize",
+              "tools/list",
+              "resources/list"
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "closing while initialize is pending returns without waiting",
+          "inputs": {
+            "server": "never answers initialize",
+            "transport": "in-memory"
+          },
+          "expected": {
+            "closeMs": "<=250ms",
+            "state": "closed",
+            "tools": [],
+            "pendingInitializeError": {
+              "name": "Error",
+              "message": "MCP server \"slow\" failed to connect: MCP client is closed"
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "first prompt does not wait for a codemode server still initializing",
+          "inputs": {
+            "exposure": "codemode",
+            "server": "never answers initialize",
+            "startupWaitMs": 10000
+          },
+          "expected": {
+            "elapsedMs": "<=250ms",
+            "startupWaitMs": 10000,
+            "notification": [],
+            "section": "MCP servers whose tools are not declared to you. Call the tools of `codemode` servers from codemode scripts.\n- mcp__slow (codemode)",
+            "activeTools": [
+              "codemode"
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "first prompt waits startupWaitMs for a direct server and reports still connecting",
+          "inputs": {
+            "exposure": "direct",
+            "server": "never answers initialize",
+            "startupWaitMs": 40
+          },
+          "expected": {
+            "elapsedMs": "40-999ms",
+            "startupWaitMs": 40,
+            "notification": [
+              {
+                "message": "MCP servers are still connecting; their tools become available once connected.",
+                "level": "info"
+              }
+            ],
+            "section": null,
+            "tools": []
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        },
+        {
+          "name": "direct server tools become available when it connects within startupWaitMs",
+          "inputs": {
+            "exposure": "direct",
+            "initializeDelayMs": 30,
+            "startupWaitMs": 500
+          },
+          "expected": {
+            "elapsedMs": "<=250ms",
+            "registeredTools": [
+              "mcp__slow__echo"
+            ],
+            "activeTools": [],
+            "notifications": [],
+            "methods": [
+              "initialize",
+              "tools/list"
+            ]
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names"
+          ]
+        }
+      ]
+    }
+  ]
+}
