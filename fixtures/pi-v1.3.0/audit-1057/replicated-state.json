@@ -1,0 +1,162 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1057",
+  "family": "audit-1057",
+  "capturedAt": "2026-10-19T21:24:37.258Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/state.ts:replicatedState,AttachedReplicatedState,ReplicatedStateSource,ReplicatedStateFrame",
+    "packages/durable/src/session/observation.ts:CommittedStateSource,CommittedWatch",
+    "packages/durable/src/session/session.ts:SessionImpl.watchDoc",
+    "packages/chord/test/replicated-state.test.ts:Replicated state",
+    "packages/chord/test/replicated-state-delivery.test.ts:Replicated state delivery",
+    "packages/durable/test/session-watches.test.ts:Session document watches"
+  ],
+  "scenarios": [
+    {
+      "name": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+      "source": "packages/chord/test/replicated-state.test.ts:hydrates at sequence zero when attaching after existing commits; publishes exact source values without applying or re-diffing; packages/chord/src/state.ts:replicatedState,AttachedReplicatedState",
+      "inputs": {
+        "snapshot": {
+          "value": 1,
+          "cursor": 0
+        },
+        "update": {
+          "value": 2,
+          "sequence": 1
+        }
+      },
+      "expected": {
+        "deliveries": [
+          {
+            "kind": "hydrate",
+            "sequence": 0,
+            "value": {
+              "value": 1
+            },
+            "abortSignal": null
+          },
+          {
+            "kind": "update",
+            "sequence": 1,
+            "value": {
+              "value": 2
+            },
+            "abortSignal": null
+          }
+        ],
+        "errors": [],
+        "disposeCalls": 1
+      }
+    },
+    {
+      "name": "a cursor gap is reported once and leaves the last good replicated value",
+      "source": "packages/chord/test/replicated-state.test.ts:reports cursor gaps, disposes the broken attachment, and ignores later frames; packages/chord/src/state.ts:AttachedReplicatedState",
+      "inputs": {
+        "snapshotCursor": 0,
+        "skippedSequence": 2,
+        "laterSequence": 3
+      },
+      "expected": {
+        "errors": [
+          {
+            "name": "Error",
+            "message": "Replicated state source cursor has a gap: expected 1, received 2"
+          }
+        ],
+        "deliveredSequences": [
+          0
+        ],
+        "lastValue": {
+          "value": 1
+        },
+        "disposeCalls": 1
+      }
+    },
+    {
+      "name": "a failing state listener is reported through onError without stopping another subscription",
+      "source": "packages/chord/test/replicated-state-delivery.test.ts:isolates a synchronous hydration failure without removing the subscription; packages/chord/test/replicated-state.test.ts:reports listener failures without throwing them into the source; packages/chord/src/state.ts:AttachedReplicatedState",
+      "inputs": {
+        "hydrationValue": 7,
+        "updateValue": 8
+      },
+      "expected": {
+        "errors": [
+          {
+            "name": "Error",
+            "message": "listener failed"
+          },
+          {
+            "name": "Error",
+            "message": "listener failed"
+          }
+        ],
+        "received": [
+          {
+            "kind": "hydrate",
+            "sequence": 0,
+            "value": {
+              "value": 7
+            }
+          },
+          {
+            "kind": "update",
+            "sequence": 1,
+            "value": {
+              "value": 8
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "a watch acquired before start buffers frames and serializes callbacks",
+      "source": "packages/durable/test/session-watches.test.ts:keeps the acquisition revision until start and delivers exact committed frames; serializes callbacks and buffers exact frames committed while one is in flight; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks",
+      "inputs": {
+        "document": "1057.watch-buffer",
+        "commitsBeforeStart": [
+          1,
+          2
+        ]
+      },
+      "expected": {
+        "valuesBeforeRelease": [
+          1
+        ],
+        "valuesAfterRelease": [
+          1,
+          2
+        ],
+        "maxConcurrentCallbacks": 1,
+        "finalValue": {
+          "value": 2
+        }
+      }
+    },
+    {
+      "name": "a watch whose pending frames overflow delivers one root replacement with the latest value",
+      "source": "packages/durable/test/session-watches.test.ts:Session document watches; packages/chord/src/state.ts:MutableReplicatedState.capture",
+      "inputs": {
+        "document": "1057.watch-overflow",
+        "commitsBeforeStart": 101
+      },
+      "expected": {
+        "frameCount": 1,
+        "rootReplacement": true,
+        "value": 101,
+        "finalValue": {
+          "value": 101
+        }
+      }
+    }
+  ]
+}

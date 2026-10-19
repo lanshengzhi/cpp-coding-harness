@@ -1,0 +1,471 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1057",
+  "family": "audit-1057",
+  "capturedAt": "2026-10-19T21:24:37.258Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/session/session.ts:createSession,SessionImpl.commit,SessionImpl.watchDoc,SessionImpl.documentState",
+    "packages/durable/src/session/transaction.ts:Transaction.doc",
+    "packages/durable/src/session/observation.ts:CommittedWatch,CommittedStateSource,RETIREMENT_OPERATIONS",
+    "packages/durable/src/documents.ts:defineDoc",
+    "packages/durable/test/session-documents.test.ts:Session document transactions",
+    "packages/durable/test/session-watches.test.ts:Session document watches",
+    "packages/durable/test/session-checkpoints-migrations.test.ts:Session document checkpoints; Session document migrations"
+  ],
+  "scenarios": [
+    {
+      "name": "exact committed frames replay from the acquisition revision",
+      "source": "packages/durable/test/session-watches.test.ts:keeps the acquisition revision until start and delivers exact committed frames; packages/chord/test/delta.test.ts:applies mutable and immutable operations",
+      "inputs": {
+        "document": "1057.frames",
+        "initial": {
+          "value": 0,
+          "items": [
+            "a"
+          ],
+          "nested": {
+            "count": 0
+          }
+        },
+        "watchedAfterCommit": 1,
+        "commits": [
+          {
+            "mutation": "value = 2"
+          },
+          {
+            "mutation": "items.push(\"c\"); nested.count = 1"
+          }
+        ]
+      },
+      "expected": {
+        "acquisitionValue": {
+          "value": 1,
+          "items": [
+            "a"
+          ],
+          "nested": {
+            "count": 0
+          }
+        },
+        "commitSeqs": [
+          2,
+          3
+        ],
+        "publications": [
+          {
+            "seq": 2,
+            "version": 1,
+            "ops": [
+              [
+                "s",
+                [
+                  "value"
+                ],
+                2
+              ]
+            ],
+            "value": {
+              "value": 2,
+              "items": [
+                "a"
+              ],
+              "nested": {
+                "count": 0
+              }
+            }
+          },
+          {
+            "seq": 3,
+            "version": 1,
+            "ops": [
+              [
+                "p",
+                [
+                  "items"
+                ],
+                1,
+                0,
+                [
+                  "c"
+                ]
+              ],
+              [
+                "s",
+                [
+                  "nested",
+                  "count"
+                ],
+                1
+              ]
+            ],
+            "value": {
+              "value": 2,
+              "items": [
+                "a",
+                "c"
+              ],
+              "nested": {
+                "count": 1
+              }
+            }
+          }
+        ],
+        "frames": [
+          {
+            "value": {
+              "value": 2,
+              "items": [
+                "a"
+              ],
+              "nested": {
+                "count": 0
+              }
+            },
+            "ops": [
+              [
+                "s",
+                [
+                  "value"
+                ],
+                2
+              ]
+            ],
+            "abortSignal": null
+          },
+          {
+            "value": {
+              "value": 2,
+              "items": [
+                "a",
+                "c"
+              ],
+              "nested": {
+                "count": 1
+              }
+            },
+            "ops": [
+              [
+                "p",
+                [
+                  "items"
+                ],
+                1,
+                0,
+                [
+                  "c"
+                ]
+              ],
+              [
+                "s",
+                [
+                  "nested",
+                  "count"
+                ],
+                1
+              ]
+            ],
+            "abortSignal": null
+          }
+        ],
+        "nonEmptyFrameOps": true,
+        "replayMatchesFinal": true,
+        "finalSnapshot": {
+          "value": 2,
+          "items": [
+            "a",
+            "c"
+          ],
+          "nested": {
+            "count": 1
+          }
+        }
+      },
+      "normalizations": [
+        "`ops` are the exact emitted tuples for this run; a C++ test compares frame order, replay of the recorded tuples onto the acquisition value, and the final value. Chord does not document operation spelling as canonical, so a C++ producer may emit an equivalent batch."
+      ]
+    },
+    {
+      "name": "a callback rollback publishes nothing and keeps the committed revision",
+      "source": "packages/durable/test/session-documents.test.ts:Session document transactions; packages/chord/test/delta.test.ts:aborts and revokes without changing the committed value",
+      "inputs": {
+        "document": "1057.rollback",
+        "committedOne": 1,
+        "failedMutation": "value = 99; nested.count = 5; throw new Error('rollback refused')",
+        "laterMutation": "value = 2"
+      },
+      "expected": {
+        "beforeRollback": {
+          "value": 1,
+          "nested": {
+            "count": 0
+          }
+        },
+        "afterRollback": {
+          "watchValue": {
+            "value": 1,
+            "nested": {
+              "count": 0
+            }
+          },
+          "snapshot": {
+            "value": 1,
+            "nested": {
+              "count": 0
+            }
+          },
+          "publications": [],
+          "frames": [],
+          "storageCommits": 1,
+          "rollbackError": {
+            "name": "Error",
+            "message": "rollback refused"
+          }
+        },
+        "afterLaterCommit": {
+          "publications": [
+            2
+          ],
+          "frameValues": [
+            {
+              "value": 2,
+              "nested": {
+                "count": 0
+              }
+            }
+          ],
+          "snapshot": {
+            "value": 2,
+            "nested": {
+              "count": 0
+            }
+          },
+          "storageCommits": 2
+        }
+      }
+    },
+    {
+      "name": "a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+      "source": "packages/durable/test/session-documents.test.ts:Session document transactions; packages/durable/test/session-checkpoints-migrations.test.ts:Session document checkpoints; Session document migrations; packages/chord/test/delta.test.ts:supports root replacement, root splice, and permutations",
+      "inputs": {
+        "document": "1057.versioned",
+        "watchedVersion": 1,
+        "commitVersion": 2,
+        "committedValue": {
+          "value": 2,
+          "extra": true
+        }
+      },
+      "expected": {
+        "publication": {
+          "seq": 2,
+          "version": 2,
+          "ops": []
+        },
+        "frame": {
+          "value": {
+            "value": 2,
+            "extra": true
+          },
+          "ops": [
+            [
+              "r",
+              {
+                "value": 2,
+                "extra": true
+              }
+            ]
+          ]
+        },
+        "frameIsRootReplacement": true,
+        "snapshotV2": {
+          "value": 2,
+          "extra": true
+        },
+        "olderVersionRead": {
+          "name": "Error",
+          "message": "Document 2 (1057.versioned) has newer version 2 than 1"
+        }
+      },
+      "normalizations": [
+        "`ops` are exact for this run; the C++ test may compare only that the frame starts with a root replacement and that applying it yields the recorded value."
+      ]
+    },
+    {
+      "name": "a structurally rewritten but value-identical commit still publishes a nonempty exact batch",
+      "source": "packages/chord/test/delta.test.ts:normalizes a deep no-op to exact previous identity; packages/durable/test/session-watches.test.ts:Session document watches",
+      "inputs": {
+        "document": "1057.noop",
+        "mutation": "items.shift(); items.unshift(\"a\")"
+      },
+      "expected": {
+        "before": {
+          "items": [
+            "a"
+          ],
+          "value": 0
+        },
+        "after": {
+          "items": [
+            "a"
+          ],
+          "value": 0
+        },
+        "operations": [
+          [
+            "p",
+            [
+              "items"
+            ],
+            0,
+            1,
+            []
+          ],
+          [
+            "p",
+            [
+              "items"
+            ],
+            0,
+            0,
+            [
+              "a"
+            ]
+          ]
+        ],
+        "operationsNonempty": true,
+        "publications": [
+          2
+        ],
+        "deliveryAbortSignal": null
+      },
+      "normalizations": [
+        "`operations` are exact for this run; a C++ test may compare `operationsNonempty`, publication order, and the unchanged value."
+      ]
+    },
+    {
+      "name": "document state hydrates from the source snapshot and then delivers the committed update with caller values",
+      "source": "packages/durable/test/session-watches.test.ts:preserves commit Context values without inheriting producer cancellation; packages/durable/src/session/session.ts:SessionImpl.documentState; packages/chord/test/state.test.ts:publishes snapshots then exact ops; derivations follow",
+      "inputs": {
+        "document": "1057.state",
+        "commitValue": 3,
+        "contextValue": "commit"
+      },
+      "expected": {
+        "deliveries": [
+          {
+            "kind": "hydrate",
+            "sequence": 0,
+            "value": {
+              "value": 0
+            },
+            "abortSignal": null,
+            "contextValue": null
+          },
+          {
+            "kind": "update",
+            "sequence": 1,
+            "value": {
+              "value": 3
+            },
+            "abortSignal": null,
+            "contextValue": "commit"
+          }
+        ]
+      }
+    },
+    {
+      "name": "committed snapshots keep earlier revisions immutable while a later commit advances the document",
+      "source": "packages/durable/test/session-documents.test.ts:returns shared immutable snapshots and keeps prior revisions stable; packages/durable/test/session-watches.test.ts:keeps earlier immutable revisions stable",
+      "inputs": {
+        "document": "1057.snapshots",
+        "firstValue": 1,
+        "secondValue": 2
+      },
+      "expected": {
+        "first": {
+          "value": 1,
+          "nested": {
+            "count": 0
+          }
+        },
+        "second": {
+          "value": 2,
+          "nested": {
+            "count": 1
+          }
+        },
+        "firstAfterSecondCommit": {
+          "value": 1,
+          "nested": {
+            "count": 0
+          }
+        },
+        "firstIsSecond": false
+      }
+    },
+    {
+      "name": "retiring a document publishes the canonical root-null batch and closes its watcher",
+      "source": "packages/durable/src/session/observation.ts:RETIREMENT_OPERATIONS,CommittedWatch; packages/durable/test/session-watches.test.ts:delivers retirement and does not follow recreation; packages/chord/test/delta.test.ts:supports root replacement, root splice, and permutations",
+      "inputs": {
+        "document": "1057.retirement",
+        "retire": "tx.retireDoc(token)"
+      },
+      "expected": {
+        "publications": [
+          {
+            "seq": 2,
+            "version": null,
+            "ops": []
+          }
+        ],
+        "frames": [
+          {
+            "value": null,
+            "ops": [
+              [
+                "r",
+                null
+              ]
+            ]
+          }
+        ],
+        "watchEnd": {
+          "reason": "retired"
+        },
+        "snapshotAfterRetirement": null
+      }
+    },
+    {
+      "name": "a storage failure publishes nothing and ends the Session without a partial commit",
+      "source": "packages/durable/test/session-documents.test.ts:Session document transactions; packages/durable/src/session/session.ts:SessionImpl.#runCommit",
+      "inputs": {
+        "document": "1057.storage-failure",
+        "failingStorageMessage": "disk vanished"
+      },
+      "expected": {
+        "publications": [],
+        "frames": [],
+        "storageCommits": 1,
+        "commitError": {
+          "name": "Error",
+          "message": "disk vanished"
+        },
+        "sessionEndReason": "failed",
+        "snapshotError": {
+          "name": "SessionFailed",
+          "message": "Session failed after a storage error; close and reopen it"
+        }
+      }
+    }
+  ]
+}

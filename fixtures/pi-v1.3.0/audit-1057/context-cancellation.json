@@ -1,0 +1,190 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1057",
+  "family": "audit-1057",
+  "capturedAt": "2026-10-19T21:24:37.258Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/context/index.ts:BACKGROUND_CONTEXT,createContextKey,withContextValue,withAbortSignal,withoutAbortSignal,withCancel,awaitWithContext",
+    "packages/durable/src/session/session.ts:SessionImpl.commit,SessionImpl.watchDoc,SessionImpl.close",
+    "packages/durable/src/session/observation.ts:CommittedWatch",
+    "packages/chord/test/context.test.ts:Context",
+    "packages/chord/test/replicated-state-delivery.test.ts:Replicated state delivery",
+    "packages/durable/test/session-watches.test.ts:Session document watches"
+  ],
+  "scenarios": [
+    {
+      "name": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+      "source": "packages/chord/test/context.test.ts:inherits parent cancellation and isolates child cancellation; packages/chord/src/context/index.ts:withCancel,withAbortSignal",
+      "inputs": {
+        "rootValue": "root",
+        "childReason": "child-only",
+        "parentReason": "parent-reason"
+      },
+      "expected": {
+        "root": {
+          "present": false,
+          "aborted": false,
+          "reason": null
+        },
+        "child": {
+          "value": "root",
+          "present": true,
+          "aborted": true,
+          "reason": "child-only"
+        },
+        "sibling": {
+          "value": "root",
+          "present": true,
+          "aborted": true,
+          "reason": "sibling-only"
+        },
+        "inheritor": {
+          "value": "child",
+          "present": true,
+          "aborted": true,
+          "reason": "parent-reason"
+        },
+        "observations": [
+          {
+            "observer": "child",
+            "aborted": true,
+            "reason": "child-only",
+            "rootAborted": false
+          },
+          {
+            "observer": "sibling",
+            "aborted": false,
+            "rootAborted": false
+          },
+          {
+            "observer": "sibling-after-cancel",
+            "aborted": true,
+            "reason": "sibling-only"
+          }
+        ]
+      }
+    },
+    {
+      "name": "withoutAbortSignal removes cancellation while preserving typed values",
+      "source": "packages/chord/test/context.test.ts:masks caller cancellation for mandatory cleanup; packages/chord/src/context/index.ts:withoutAbortSignal",
+      "inputs": {
+        "value": "cleanup"
+      },
+      "expected": {
+        "masked": {
+          "value": "cleanup",
+          "present": false,
+          "aborted": false,
+          "reason": null
+        },
+        "plainBackground": {
+          "present": false,
+          "aborted": false,
+          "reason": null
+        },
+        "withUndefinedSignal": {
+          "present": true,
+          "aborted": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "a context wait rejects with the caller abort reason while the underlying work still completes",
+      "source": "packages/chord/test/context.test.ts:stops waiting when the invocation is cancelled; packages/chord/src/context/index.ts:awaitWithContext",
+      "inputs": {
+        "abortReason": "stop waiting",
+        "workResult": "work finished"
+      },
+      "expected": {
+        "waitError": {
+          "name": "AbortError",
+          "message": "The operation was aborted",
+          "code": 20
+        },
+        "workResult": "work finished",
+        "workResolvedAfterWaitRejected": true
+      }
+    },
+    {
+      "name": "cancelling a watch ends delivery without aborting a completed callback or later commits",
+      "source": "packages/durable/test/session-watches.test.ts:Session document watches; packages/chord/test/replicated-state-delivery.test.ts:unsubscribe drops queued callbacks without joining or aborting the running callback",
+      "inputs": {
+        "document": "1057.watch-cancel",
+        "committedValues": [
+          2,
+          3
+        ],
+        "cancelReason": "stop watching"
+      },
+      "expected": {
+        "frames": [
+          {
+            "value": {
+              "value": 2
+            },
+            "abortSignal": null,
+            "contextValue": "commit-context"
+          }
+        ],
+        "closed": {
+          "reason": "cancelled"
+        },
+        "valueAfterCancel": {
+          "value": 2
+        },
+        "snapshotAfterCancel": {
+          "value": 3
+        }
+      }
+    },
+    {
+      "name": "cancelling the close caller rejects close while storage cleanup still completes",
+      "source": "packages/chord/test/context.test.ts:masks caller cancellation for mandatory cleanup; packages/durable/src/session/session.ts:SessionImpl.close",
+      "inputs": {
+        "document": "1057.close-cancel",
+        "cancelReason": "stop close"
+      },
+      "expected": {
+        "closeError": {
+          "name": "AbortError",
+          "message": "The operation was aborted",
+          "code": 20
+        },
+        "storageCloseStarted": true,
+        "storageCloseCompleted": true,
+        "sessionEnd": {
+          "reason": "closed"
+        }
+      }
+    },
+    {
+      "name": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
+      "source": "packages/durable/test/session-watches.test.ts:Session document watches; packages/chord/src/context/index.ts:awaitWithContext",
+      "inputs": {
+        "document": "1057.acquire-cancel",
+        "cancelReason": "cancel acquisition"
+      },
+      "expected": {
+        "acquisitionError": {
+          "name": "AbortError",
+          "message": "The operation was aborted",
+          "code": 20
+        },
+        "snapshotAfterCancellation": {
+          "value": 1
+        }
+      }
+    }
+  ]
+}
