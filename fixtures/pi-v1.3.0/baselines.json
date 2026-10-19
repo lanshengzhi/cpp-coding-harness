@@ -28,6 +28,10 @@
         "audit-1048": {
           "manifest": "audit-1048/manifest.json",
           "manifestSha256": "2cbc07e8d2924ff92775245cd2750545da083fb07fbb1f88abf604134669eecd"
+        },
+        "audit-1049": {
+          "manifest": "audit-1049/manifest.json",
+          "manifestSha256": "82b0ef09dc628dc2ae2107faa719998ccfaaf0fcd6ca4ad9ef78e96c06a022bf"
         }
       }
     }
