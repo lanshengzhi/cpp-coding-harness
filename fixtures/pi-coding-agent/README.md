@@ -222,7 +222,7 @@ reference material, not a specification):**
 
 Re-recording at a new baseline must never overwrite the older report. Record to a separate path
 and archive the previous one under its baseline name; `PI_BASELINE_COMMIT` re-asserts the frozen
-checkout revision, and the capture additionally requires its recorded fix commits (the #811 and
+checkout revision, and the capture additionally requires its recorded fix commits (the #811, #1024, and
 #1039 fixes at the v1.0.4 baseline) to be ancestors of the repository HEAD it runs at:
 
 ```bash
@@ -235,8 +235,10 @@ PI_CHECKOUT=../pi PI_BASELINE_COMMIT=<frozen revision> \
 For debugging one scenario without a full 17-scenario cycle, pass `--scenario <id>`: the parent
 captures both runtimes for that scenario, prints the observed and triaged classifications, and
 neither writes nor verifies a report (combining it with `--write` is rejected).
-The v0.99.2 → v1.0.0 and v1.0.0 → v1.0.4 triages each found **no classification change** across
-all 17 scenarios; successive reports are not otherwise comparable difference-by-difference, because
+The v0.99.2 → v1.0.0 and v1.0.0 → v1.0.4 baseline promotions each found **no classification change**
+across all 17 scenarios. A later triage correction classifies the `tool-result` mid-stream difference
+as `capture-timing-artifact`, since the post-completion snapshot matches; the other residual rows
+retain their product-defect classifications. Successive reports are not otherwise comparable difference-by-difference, because
 the pi-side captures moved with the baseline and the Pike-side captures moved with intervening Pike
 work. The v1.0.4 refresh additionally removes `Show hardware cursor` and `Terminal progress` from
 the `settings-selector` omission patterns (the scenario now captures both rows' false/true states),
@@ -307,14 +309,16 @@ A row's `triage.classification` is its single final review classification. The
 `profileProjection` removes exact pi runtime identity/startup-documentation rows and isolates
 provider usage for the declared response scenarios. Explicit omission patterns may remove only
 pi surfaces outside the Supported subset; they never erase a Supported row. The resolved styled
-cell projection is the authority for whether a remaining difference is intentional. The current
-product defects are tracked by #806–#812. The `scrollback` scenario's blank-row spacing defect
-was #814 and is fixed: both runtimes now render two blank rows between an assistant reply and the
-next user message, so their composed buffers grow one row per turn and
-`profileProjection.scrollbackStructureEqual` compares true. What remains on that row is the
-pi-only runtime-identity/startup-documentation block and the footer provider-usage row, which
-the profile projection already isolates. A successful `--verify` means the evidence and triage
-records are reproducible; it does not claim that the tracked product defects are fixed.
+cell projection is the authority for whether a remaining difference is intentional. The Native
+TUI residuals are tracked across #806–#812 and #1043. The `scrollback` scenario's blank-row spacing
+defect was #814 and is fixed: both runtimes now render two blank rows between an assistant reply and
+the next user message, so their composed buffers grow one row per turn. The refreshed report still
+records `profileProjection.scrollbackStructureEqual=false`; #1043 identifies a retained-row delta
+separate from the 72-column startup-help wrap family and from the profile-isolated pi identity and
+footer-usage rows. The `tool-result` mid-stream difference is now classified
+`capture-timing-artifact`: the two runtimes capture adjacent states at the barrier, and their
+post-completion snapshots match. A successful `--verify` means the evidence and triage records are
+reproducible; it does not claim that the remaining tracked product defects are fixed.
 
 For a live/manual pass, use a real terminal and credentials outside the default CTest path:
 

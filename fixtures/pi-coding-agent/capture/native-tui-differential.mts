@@ -105,6 +105,7 @@ type TriageClassification =
 	| "environment-configuration"
 	| "harness-projection-defect"
 	| "intentional-divergence"
+	| "capture-timing-artifact"
 	| "pi-only-deferred-capability";
 
 type Triage = {
@@ -179,10 +180,10 @@ const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["editor-cjk", { classification: "product-defect", evidence: ["report.json:editor-cjk"], rationale: "The mixed-width editor text wraps identically, but the 72-column startup help retains the same segment-boundary difference recorded by boot-72 after pi's runtime banner and onboarding copy are projected out." }],
 	["editor-token", { classification: "match", evidence: ["report.json:editor-token"], rationale: "Narrow unbreakable editor input matches pi: the editor text is unstyled like pi's and the composition is equal." }],
 	["user-message", { classification: "product-defect", evidence: ["report.json:user-message", "report.json:boot-72"], rationale: "After the declared footer-stats projection, the remaining visible difference is the 72-column startup-help segment boundary recorded by boot-72. The user prompt and response content match." }],
-	["tool-result", { classification: "product-defect", evidence: ["#812", "report.json:tool-result"], rationale: "The tool-result content, including the read tool title, is byte-identical: the capture now runs the pi child with FORCE_COLOR so pi emits its real styles, and the title's bold over the tool palette matches pike exactly. The residual delta is the mid-stream capture moment: pike's snapshot has already painted the next prose row (recorded as <model-prose>) where pi's same-moment frame carries the embedded Working spinner border, so snapshot 1's projected text and cursor differ while the post-completion snapshot matches. The triage taxonomy has no label for a capture-timing artifact; this row is filed as a product-defect only because no such label exists, and the recorded frames show the same content at adjacent moments." }],
+	["tool-result", { classification: "capture-timing-artifact", evidence: ["#812", "report.json:tool-result"], rationale: "The mid-stream barrier captures adjacent states: Pike has already painted the next prose row while pi still shows its Working spinner. The post-completion snapshot matches, and tool-result content and title styles are identical." }],
 	["status-footer", { classification: "match", evidence: ["report.json:status-footer", "profile:footer-stats"], rationale: "Same footer-stats projection artifact as user-message: the right-aligned row kept the padding computed around the removed token-usage prefix. With the run after the token collapsed, this scenario observes as match." }],
 	["resize-72-41", { classification: "product-defect", evidence: ["report.json:resize-72-41", "report.json:boot-72"], rationale: "After resizing, the narrow startup help wraps differently from pi at the same segment boundary recorded by boot-72; projecting the runtime banner and onboarding copy does not remove the difference." }],
-	["resize-100-72", { classification: "product-defect", evidence: ["report.json:resize-100-72", "report.json:boot-72"], rationale: "After resizing to 72 columns, the startup help wraps differently from pi at the same segment boundary recorded by boot-72; projecting the runtime banner and onboarding copy does not remove the difference." }],
+	["resize-100-72", { classification: "product-defect", evidence: ["report.json:resize-100-72", "report.json:boot-72"], rationale: "After resizing to 72 columns, the startup help wraps differently from pi at the same segment boundary recorded by boot-72; the resize behavior matches." }],
 	["resize-120-100", { classification: "match", evidence: ["report.json:resize-120-100"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
 	["scrollback", { classification: "product-defect", evidence: ["report.json:scrollback", "report.json:boot-72"], rationale: "After the declared startup and footer projections, the retained scrollback structure still differs from pi. The snapshots also retain the 72-column startup-help wrap difference recorded by boot-72; profileProjection.scrollbackStructureEqual=false confirms a separate retained-row delta." }],
 ] satisfies Array<[string, Triage]>);
@@ -1526,6 +1527,7 @@ function validateReportCaptures(report: Record<string, unknown>): void {
 		"environment-configuration",
 		"harness-projection-defect",
 		"intentional-divergence",
+		"capture-timing-artifact",
 		"pi-only-deferred-capability",
 	]);
 	if (!report.captureBase || typeof report.captureBase !== "object") {
@@ -2025,6 +2027,7 @@ const captureBase = Object.freeze({
 	// predates the fixes it claims to include.
 	includedFixes: {
 		issue811: "d467587cb5d00611aff3a642851c710069f11038",
+		issue1024: "2664ecc15bed9c1ec6ffbe646edfd9bb8054c32b",
 		issue1039: "82ea384f5a04b0d747b7cb2dee9be8c580e7f821",
 	},
 });
