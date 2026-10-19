@@ -1011,11 +1011,11 @@
       "consumer": "packages/durable/src/session/observation.ts:RETIREMENT_OPERATIONS; packages/durable/src/storage/sqlite/storage.ts",
       "boundary": null,
       "implementation_ticket": "unfiled implementation probe",
-      "scenario": "mutable application mutates in place except for a root replacement, which returns a new value; a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+      "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
-        "scenario": "mutable application mutates in place except for a root replacement, which returns a new value; a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
-        "result": "isBase([['r',...]]) true; isReplace true; root replacement returns a distinct value; watcher version mismatch yields ['r', value]."
+        "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+        "result": "isBase([['r',...]]) true; isReplace true; a root replacement returns a distinct value and leaves the old target unchanged."
       },
       "gaps": [],
       "notes": "",
