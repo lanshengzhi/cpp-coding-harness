@@ -43,7 +43,7 @@ namespace {
 /// and `cancel` drops the pending callback the way a real timer does.
 class ManualScrollbarHideTimer final : public cch::tui::ScrollbarHideTimer {
 public:
-    void start(std::chrono::milliseconds delay, std::function<void()> on_fire) override {
+    void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) override {
         ++start_count;
         last_delay = delay;
         pending_ = std::move(on_fire);
@@ -68,7 +68,7 @@ public:
     std::chrono::milliseconds last_delay{};
 
 private:
-    std::function<void()> pending_{};
+    std::move_only_function<void()> pending_{};
 };
 
 class LabeledChild final : public cch::tui::Component {

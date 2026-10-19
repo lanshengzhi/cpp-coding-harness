@@ -8,7 +8,7 @@
 
 namespace cch::tui {
 
-AltScreenFlashContainer::AltScreenFlashContainer(std::function<void()> request_render)
+AltScreenFlashContainer::AltScreenFlashContainer(std::move_only_function<void()> request_render)
     : request_render_(std::move(request_render)) {}
 
 AltScreenFlashContainer::~AltScreenFlashContainer() { dispose(); }
@@ -32,7 +32,9 @@ void AltScreenFlashContainer::set_scheduler(TuiScheduler* scheduler) {
     }
 }
 
-void AltScreenFlashContainer::set_style(std::function<std::string(std::string)> style) { style_ = std::move(style); }
+void AltScreenFlashContainer::set_style(std::move_only_function<std::string(std::string)> style) {
+    style_ = std::move(style);
+}
 
 void AltScreenFlashContainer::flash(std::string message, std::chrono::milliseconds duration) {
     Entry entry;

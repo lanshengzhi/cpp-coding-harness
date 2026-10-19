@@ -1,6 +1,6 @@
 #include "coding_agent/tui/ThemeController.hpp"
 
-#include "coding_agent/tui/theme_color_math.hpp"
+#include "coding_agent/tui/ThemeColorMath.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include <cch/support/Error.hpp>
@@ -247,10 +247,8 @@ struct ThemeController::Impl {
 
     [[nodiscard]] TerminalTheme detected_terminal_theme() {
         if (terminal_colors && terminal_colors->background) {
-            const auto appearance =
-                    theme_color_math::terminal_appearance(*terminal_colors->background, terminal_colors->foreground);
-            return appearance == theme_color_math::TerminalAppearance::Light ? TerminalTheme::Light
-                                                                             : TerminalTheme::Dark;
+            const auto appearance = terminal_appearance(*terminal_colors->background, terminal_colors->foreground);
+            return appearance == TerminalAppearance::Light ? TerminalTheme::Light : TerminalTheme::Dark;
         }
         if (terminal_scheme) return *terminal_scheme;
         return detect_terminal_theme_from_env().value_or(TerminalTheme::Dark);

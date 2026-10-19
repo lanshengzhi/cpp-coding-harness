@@ -419,7 +419,7 @@ struct ScrollbarRawCell {
 /// delay never involves wall-clock waiting.
 class ManualScrollbarHideTimer final : public cch::tui::ScrollbarHideTimer {
 public:
-    void start(std::chrono::milliseconds, std::function<void()> on_fire) override {
+    void start(std::chrono::milliseconds, std::move_only_function<void()> on_fire) override {
         on_fire_ = std::move(on_fire);
         armed_ = true;
     }
@@ -439,7 +439,7 @@ public:
     }
 
 private:
-    std::function<void()> on_fire_;
+    std::move_only_function<void()> on_fire_;
     bool armed_{false};
 };
 

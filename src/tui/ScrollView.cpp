@@ -22,7 +22,7 @@ public:
     SteadyScrollbarHideTimer() = default;
     ~SteadyScrollbarHideTimer() override { cancel(); }
 
-    void start(std::chrono::milliseconds delay, std::function<void()> on_fire) override {
+    void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) override {
         auto state = std::make_shared<State>();
         state->delay = std::max(std::chrono::milliseconds::zero(), delay);
         state->fire = std::move(on_fire);
@@ -38,7 +38,7 @@ public:
             }
             std::unique_lock lock(state->mutex);
             const auto expired = !state->condition.wait_for(lock, state->delay, [&]() { return state->stopping; });
-            auto fire = expired ? std::move(state->fire) : std::function<void()>{};
+            auto fire = expired ? std::move(state->fire) : std::move_only_function<void()>{};
             lock.unlock();
             if (fire) fire();
             lock.lock();
@@ -63,7 +63,7 @@ private:
         std::mutex mutex;
         std::condition_variable condition;
         std::chrono::milliseconds delay{0};
-        std::function<void()> fire;
+        std::move_only_function<void()> fire;
         std::thread::id thread_id;
         bool stopping{false};
         bool active{true};
@@ -262,7 +262,7 @@ void ScrollView::scroll_to_end() {
 }
 
 void ScrollView::update_layout(
-        std::size_t content_height, std::size_t viewport_height, std::function<void()> request_render) {
+        std::size_t content_height, std::size_t viewport_height, std::move_only_function<void()> request_render) {
     content_height_ = content_height;
     viewport_height_ = viewport_height;
     request_render_ = std::move(request_render);

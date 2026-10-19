@@ -55,9 +55,10 @@ class MouseProbe final : public cch::tui::Component,
                          public cch::tui::Focusable,
                          public cch::tui::InputHandler {
 public:
-    using Handler = std::function<std::optional<MouseEventResult>(const MouseEvent&)>;
+    using Handler = std::move_only_function<std::optional<MouseEventResult>(const MouseEvent&)>;
 
-    explicit MouseProbe(std::vector<std::string> lines, Handler handler = {}, std::function<void()> on_destroy = {})
+    explicit MouseProbe(
+            std::vector<std::string> lines, Handler handler = {}, std::move_only_function<void()> on_destroy = {})
         : lines_(std::move(lines)), handler_(std::move(handler)), on_destroy_(std::move(on_destroy)) {}
 
     ~MouseProbe() override {
@@ -110,7 +111,7 @@ public:
 private:
     std::vector<std::string> lines_;
     Handler handler_;
-    std::function<void()> on_destroy_;
+    std::move_only_function<void()> on_destroy_;
 };
 
 [[nodiscard]] MouseEvent pointer_event(MouseEventType type, std::ptrdiff_t x, std::ptrdiff_t y) {

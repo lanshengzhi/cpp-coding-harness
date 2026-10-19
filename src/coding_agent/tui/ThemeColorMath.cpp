@@ -1,11 +1,11 @@
-#include "theme_color_math.hpp"
+#include "ThemeColorMath.hpp"
 
 #include <cch/tui/Utils.hpp>
 
 #include <algorithm>
 #include <cmath>
 
-namespace cch::coding_agent::tui::theme_color_math {
+namespace cch::coding_agent::tui {
 namespace {
 
 constexpr double kTextMinimumWcagContrast = 4.5;
@@ -49,4 +49,4 @@ TerminalAppearance terminal_appearance(cch::tui::RgbColor background, std::optio
     return white_contrast >= black_contrast ? TerminalAppearance::Dark : TerminalAppearance::Light;
 }
 
-} // namespace cch::coding_agent::tui::theme_color_math
+} // namespace cch::coding_agent::tui

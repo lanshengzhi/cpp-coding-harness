@@ -127,14 +127,18 @@ void TuiHost::apply_focus(Component* component, const std::function<bool(Compone
 }
 
 TerminalColorSchemeListenerHandle TuiHost::on_terminal_color_scheme_change(TerminalColorSchemeListener listener) {
-    const auto id = next_scheme_listener_id_++;
+    const auto state = scheme_listeners_;
+    TerminalColorSchemeListenerId id{0};
     {
-        std::lock_guard lock(scheme_listeners_mutex_);
-        scheme_listeners_.emplace_back(id, std::move(listener));
+        std::lock_guard lock(state->mutex);
+        id = state->next_id++;
+        state->entries.emplace_back(id, std::move(listener));
     }
-    return TerminalColorSchemeListenerHandle([this, id] {
-        std::lock_guard lock(scheme_listeners_mutex_);
-        std::erase_if(scheme_listeners_, [id](const auto& pair) { return pair.first == id; });
+    return TerminalColorSchemeListenerHandle([weak = std::weak_ptr{state}, id] {
+        if (const auto listeners = weak.lock()) {
+            std::lock_guard lock(listeners->mutex);
+            std::erase_if(listeners->entries, [id](const auto& pair) { return pair.first == id; });
+        }
     });
 }
 
@@ -148,10 +152,11 @@ void TuiHost::set_terminal_color_scheme_notifications(bool enabled, bool started
 
 void TuiHost::dispatch_color_scheme_report(TerminalColorScheme scheme) {
     std::vector<TerminalColorSchemeListener> callbacks;
+    const auto state = scheme_listeners_;
     {
-        std::lock_guard lock(scheme_listeners_mutex_);
-        callbacks.reserve(scheme_listeners_.size());
-        for (const auto& [_, listener] : scheme_listeners_) {
+        std::lock_guard lock(state->mutex);
+        callbacks.reserve(state->entries.size());
+        for (const auto& [_, listener] : state->entries) {
             callbacks.push_back(listener);
         }
     }

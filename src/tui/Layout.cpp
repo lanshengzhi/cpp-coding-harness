@@ -336,7 +336,11 @@ support::Expected<LayoutBox> LayoutBuilder::layout_component(LayoutContext& cont
         const auto viewport_height = height ? *height : content_height;
         auto scroll_content = render_cached(context, *scroll->child_, content_width);
         if (!scroll_content) return std::unexpected(scroll_content.error());
-        scroll->update_layout(content_height, viewport_height, context.request_render);
+        auto request_render = std::move_only_function<void()>{};
+        if (context.request_render) {
+            request_render = [callback = context.request_render] { callback(); };
+        }
+        scroll->update_layout(content_height, viewport_height, std::move(request_render));
         translate_box(*child,
                 static_cast<std::ptrdiff_t>(previous_scroll_top) - static_cast<std::ptrdiff_t>(scroll->scroll_top()));
         if (scroll->primary_ || context.primary_scroll_view == nullptr) context.primary_scroll_view = scroll;

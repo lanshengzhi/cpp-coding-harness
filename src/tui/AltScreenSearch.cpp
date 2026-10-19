@@ -239,7 +239,7 @@ std::string alt_screen_search_match_key(const SearchMatch& match) {
            std::to_string(last.end_col);
 }
 
-AltScreenSearchComponent::AltScreenSearchComponent(std::function<void(std::string)> on_query_change,
+AltScreenSearchComponent::AltScreenSearchComponent(std::move_only_function<void(std::string)> on_query_change,
         const KeybindingRegistry& keybindings,
         std::shared_ptr<KeybindingsContext> keybinding_context,
         SearchNavigationButtonStyle navigation_button_style)

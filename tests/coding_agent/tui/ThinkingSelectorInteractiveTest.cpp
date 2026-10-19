@@ -178,6 +178,7 @@ TEST_CASE("/thinking applies a level session-only and saves the default through 
     CHECK(screen.find("Thinking Level") != std::string::npos);
     CHECK(screen.find("Shift+Tab cycles thinking levels in-session") != std::string::npos);
     CHECK(screen.find("Ctrl+S to set as default") != std::string::npos);
+    CHECK(screen.find("Moderate reasoning (~8k tokens) · default") != std::string::npos);
 
     // Ctrl+S (`app.thinking.save`) saves the highlighted level — the current
     // one — as the global default with pi's `Default thinking level:

@@ -48,8 +48,8 @@ struct ChatViewportOptions {
     /// pi `scrollbarTrackStyle` / `scrollbarThumbStyle`, applied by the
     /// transcript viewport when present; an absent hook keeps the toolkit
     /// default.
-    std::function<std::string(std::string_view)> scrollbar_track_style{};
-    std::function<std::string(std::string_view)> scrollbar_thumb_style{};
+    std::move_only_function<std::string(std::string_view)> scrollbar_track_style{};
+    std::move_only_function<std::string(std::string_view)> scrollbar_thumb_style{};
 };
 
 /// The assembled viewport. `root` is the layout root to install; `transcript`

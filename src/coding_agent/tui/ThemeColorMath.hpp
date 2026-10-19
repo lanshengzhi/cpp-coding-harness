@@ -4,7 +4,7 @@
 
 #include <optional>
 
-namespace cch::coding_agent::tui::theme_color_math {
+namespace cch::coding_agent::tui {
 
 enum class TerminalAppearance {
     Dark,
@@ -18,4 +18,4 @@ enum class TerminalAppearance {
 [[nodiscard]] TerminalAppearance terminal_appearance(
         cch::tui::RgbColor background, std::optional<cch::tui::RgbColor> foreground);
 
-} // namespace cch::coding_agent::tui::theme_color_math
+} // namespace cch::coding_agent::tui

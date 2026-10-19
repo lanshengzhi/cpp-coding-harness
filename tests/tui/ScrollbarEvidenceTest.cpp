@@ -36,7 +36,7 @@ using cch::support::JsonValue;
 /// exactly.
 class ManualScrollbarHideTimer final : public cch::tui::ScrollbarHideTimer {
 public:
-    void start(std::chrono::milliseconds delay, std::function<void()> on_fire) override {
+    void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) override {
         last_delay = delay;
         pending_ = std::move(on_fire);
     }
@@ -55,7 +55,7 @@ public:
     std::chrono::milliseconds last_delay{};
 
 private:
-    std::function<void()> pending_{};
+    std::move_only_function<void()> pending_{};
 };
 
 /// A leaf that renders the frozen overlay content: a background-painted row

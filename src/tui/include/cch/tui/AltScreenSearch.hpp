@@ -71,12 +71,12 @@ private:
 /// `alt-screen-search.ts:191-195`).
 [[nodiscard]] std::string alt_screen_search_match_key(const SearchMatch& match);
 
-using SearchNavigationButtonStyle = std::function<std::string(std::string, bool)>;
+using SearchNavigationButtonStyle = std::move_only_function<std::string(std::string, bool)>;
 
 /// Focusable three-row search panel (pi `alt-screen-search.ts:197-327`).
 class AltScreenSearchComponent final : public Component, public InputHandler, public Focusable {
 public:
-    AltScreenSearchComponent(std::function<void(std::string)> on_query_change,
+    AltScreenSearchComponent(std::move_only_function<void(std::string)> on_query_change,
             const KeybindingRegistry& keybindings,
             std::shared_ptr<KeybindingsContext> keybinding_context = {},
             SearchNavigationButtonStyle navigation_button_style = {});
@@ -100,7 +100,7 @@ private:
     Input input_;
     const KeybindingRegistry& keybindings_;
     std::shared_ptr<KeybindingsContext> keybinding_context_{};
-    std::function<void(std::string)> on_query_change_;
+    std::move_only_function<void(std::string)> on_query_change_;
     SearchNavigationButtonStyle navigation_button_style_;
     std::size_t result_count_{0};
     std::ptrdiff_t result_index_{-1};

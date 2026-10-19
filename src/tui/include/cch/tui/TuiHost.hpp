@@ -151,6 +151,12 @@ protected:
     /// Return true when the debug hook consumed the event.
     [[nodiscard]] bool invoke_debug_hook(const InputEventVariant& event);
 
+    struct SchemeListenerState {
+        std::mutex mutex;
+        std::vector<std::pair<TerminalColorSchemeListenerId, TerminalColorSchemeListener>> entries;
+        TerminalColorSchemeListenerId next_id{1};
+    };
+
     Terminal& terminal_; // must outlive this host.
     std::vector<std::unique_ptr<Component>> children_;
     std::vector<std::unique_ptr<Component>> retired_children_;
@@ -159,9 +165,7 @@ protected:
     std::size_t focus_order_counter_{0};
     OverlayFocusRestoreState overlay_focus_restore_;
     bool color_scheme_notifications_enabled_{false};
-    std::mutex scheme_listeners_mutex_;
-    std::vector<std::pair<TerminalColorSchemeListenerId, TerminalColorSchemeListener>> scheme_listeners_;
-    TerminalColorSchemeListenerId next_scheme_listener_id_{1};
+    std::shared_ptr<SchemeListenerState> scheme_listeners_{std::make_shared<SchemeListenerState>()};
     std::mutex color_queries_mutex_;
     std::deque<std::shared_ptr<QueryState>> pending_color_queries_;
     std::uint64_t next_query_id_{1};

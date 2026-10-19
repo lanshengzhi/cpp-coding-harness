@@ -70,10 +70,10 @@ struct AltScreenOptions {
     SelectionCopySink copy_selection{};
     /// Render a clickable label on the primary follow-end viewport's last row
     /// while it is scrolled away from the end (pi `scrollToEndIndicator`).
-    std::function<std::string()> scroll_to_end_indicator{};
+    std::move_only_function<std::string()> scroll_to_end_indicator{};
     /// Style a transient flash line (pi `AltScreenFlashContainer`).
     /// An empty style uses inverse video.
-    std::function<std::string(std::string)> flash_style{};
+    std::move_only_function<std::string(std::string)> flash_style{};
     /// Logical rows per wheel event; the alternate-screen frozen default is one.
     /// `AutoWheelScrollLines` enables the frozen velocity-based accelerator.
     /// Frozen pi additionally gates auto on `!terminalAcceleratesWheel()` so
@@ -85,12 +85,12 @@ struct AltScreenOptions {
     /// deterministic sequence; production defaults to `steady_clock`.
     WheelScrollClock wheel_clock{};
     /// Style a non-current transcript search match (pi `searchMatchStyle`).
-    std::function<std::string(std::string)> search_match_style{};
+    std::move_only_function<std::string(std::string)> search_match_style{};
     /// Style the selected transcript search match (pi `searchCurrentMatchStyle`).
-    std::function<std::string(std::string)> search_current_match_style{};
+    std::move_only_function<std::string(std::string)> search_current_match_style{};
     /// Style a search navigation button with its hover state (pi
     /// `searchNavigationButtonStyle`).
-    std::function<std::string(std::string, bool)> search_navigation_button_style{};
+    std::move_only_function<std::string(std::string, bool)> search_navigation_button_style{};
     /// Hardware-cursor visibility preference (pi `getShowHardwareCursor` / `setShowHardwareCursor`).
     bool show_hardware_cursor{false};
 };
@@ -183,7 +183,7 @@ public:
     void scroll_to_prompt(int direction);
     void scroll_to_bottom();
     void set_wheel_scroll_lines(WheelScrollLines lines);
-    void set_scroll_to_end_indicator(std::function<std::string()> indicator);
+    void set_scroll_to_end_indicator(std::move_only_function<std::string()> indicator);
     /// Show a transient message in the fullscreen viewport (pi `flash`).
     void flash(std::string message, std::chrono::milliseconds duration = std::chrono::milliseconds{1000});
 
@@ -527,7 +527,7 @@ private:
     /// context; frozen pi always has global keybindings, and the frontend
     /// (`InteractiveEngine`) always wires this.
     std::shared_ptr<KeybindingsContext> keybinding_context_{};
-    std::function<std::string()> scroll_to_end_indicator_{};
+    std::move_only_function<std::string()> scroll_to_end_indicator_{};
     AltScreenFlashContainer flashes_{[this] { request_render(); }};
 
     struct ScrollToEndIndicatorRect {
@@ -540,8 +540,8 @@ private:
     RightClickPasteSink right_click_paste_sink_{};
     bool copy_on_select_{true};
     SelectionCopySink selection_copy_sink_{};
-    std::function<std::string(std::string)> search_match_style_;
-    std::function<std::string(std::string)> search_current_match_style_;
+    mutable std::move_only_function<std::string(std::string)> search_match_style_;
+    mutable std::move_only_function<std::string(std::string)> search_current_match_style_;
     SearchNavigationButtonStyle search_navigation_button_style_;
     /// Captured scrollbar pointer interaction (pi `scrollbarDrag`). The weak
     /// token prevents a detached or destroyed viewport from being dereferenced.

@@ -698,7 +698,6 @@ private:
     boost::asio::steady_timer flows_settled_;
     /// SIGTSTP/SIGCONT suspend flow (pi `handleCtrlZ`); created at start.
     std::shared_ptr<SuspendController> suspend_controller_;
-    std::unique_ptr<cch::tui::Component> active_overlay_placement_;
     InteractiveView* view_{nullptr};             // aliases the current root's view instance.
     cch::tui::Overlay* active_overlay_{nullptr}; // aliases an overlay owned by tui_ and is null across switches.
     cch::tui::OverlayHandle active_overlay_handle_;

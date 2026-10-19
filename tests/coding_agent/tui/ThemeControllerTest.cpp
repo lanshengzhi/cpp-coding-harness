@@ -7,7 +7,7 @@
 // collision diagnostics, and the boot theme init (`init_boot_theme`).
 
 #include "coding_agent/tui/ThemeController.hpp"
-#include "coding_agent/tui/theme_color_math.hpp"
+#include "coding_agent/tui/ThemeColorMath.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PiTuiEvidence.hpp"
 #include "support/ProtocolRecordingTerminal.hpp"
@@ -756,10 +756,10 @@ TEST_CASE("the scheme listener keeps exactly one registration across rebind and 
 
 TEST_CASE("shared theme color math classifies terminal appearance like the frozen system theme",
         "[coding_agent][theme][color][issue991][spec]") {
-    using coding_agent::tui::theme_color_math::relative_luminance;
-    using coding_agent::tui::theme_color_math::terminal_appearance;
-    using coding_agent::tui::theme_color_math::TerminalAppearance;
-    using coding_agent::tui::theme_color_math::wcag_contrast;
+    using coding_agent::tui::relative_luminance;
+    using coding_agent::tui::terminal_appearance;
+    using coding_agent::tui::TerminalAppearance;
+    using coding_agent::tui::wcag_contrast;
     const tui::RgbColor black{.red = 0, .green = 0, .blue = 0};
     const tui::RgbColor white{.red = 255, .green = 255, .blue = 255};
     const tui::RgbColor light_background{.red = 0xf0, .green = 0xf0, .blue = 0xf0};

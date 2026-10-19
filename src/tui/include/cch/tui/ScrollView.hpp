@@ -50,7 +50,7 @@ public:
     ScrollbarHideTimer& operator=(const ScrollbarHideTimer&) = delete;
     virtual ~ScrollbarHideTimer() = default;
 
-    virtual void start(std::chrono::milliseconds delay, std::function<void()> on_fire) = 0;
+    virtual void start(std::chrono::milliseconds delay, std::move_only_function<void()> on_fire) = 0;
     virtual void cancel() = 0;
 };
 
@@ -70,10 +70,10 @@ struct ScrollViewOptions {
     ScrollbarMode scrollbar{ScrollbarMode::Hidden};
     /// pi `scrollbarTrackStyle`: wraps one track cell (`│`). The default is
     /// pi's dim gray.
-    std::function<std::string(std::string_view)> scrollbar_track_style{};
+    std::move_only_function<std::string(std::string_view)> scrollbar_track_style{};
     /// pi `scrollbarThumbStyle`: wraps one thumb cell (`┃`, or `█` while
     /// active). The default is pi's white.
-    std::function<std::string(std::string_view)> scrollbar_thumb_style{};
+    std::move_only_function<std::string(std::string_view)> scrollbar_thumb_style{};
     /// pi `scrollbarHideDelayMs`: how long an `auto` scrollbar stays after
     /// scroll activity. Negative values clamp to zero, as the frozen
     /// `Math.max(0, Math.floor(...))` does.
@@ -152,8 +152,9 @@ public:
 
     /// Frame measurement hook (pi `updateLayout`): the engine reports the
     /// heights it allocated and the callback that requests the next render.
-    void update_layout(
-            std::size_t content_height, std::size_t viewport_height, std::function<void()> request_render = {});
+    void update_layout(std::size_t content_height,
+            std::size_t viewport_height,
+            std::move_only_function<void()> request_render = {});
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
@@ -179,8 +180,8 @@ private:
     bool primary_{false};
     ScrollOverscroll overscroll_{ScrollOverscroll::Chain};
     ScrollbarMode scrollbar_{ScrollbarMode::Hidden};
-    std::function<std::string(std::string_view)> scrollbar_track_style_{};
-    std::function<std::string(std::string_view)> scrollbar_thumb_style_{};
+    mutable std::move_only_function<std::string(std::string_view)> scrollbar_track_style_{};
+    mutable std::move_only_function<std::string(std::string_view)> scrollbar_thumb_style_{};
     std::chrono::milliseconds scrollbar_hide_delay_{1000};
     std::shared_ptr<ScrollbarHideTimer> scrollbar_hide_timer_{};
     /// Expires with this viewport so roots can safely track non-owning hover.
@@ -198,7 +199,7 @@ private:
     /// follows again only after the viewport leaves the end (pi
     /// `followSuppressedAtEnd`).
     bool follow_suppressed_at_end_{false};
-    std::function<void()> request_render_{};
+    std::move_only_function<void()> request_render_{};
 };
 
 } // namespace cch::tui

@@ -12,7 +12,7 @@
 namespace cch::tui {
 
 /// One region handler's answer (pi `MouseRegionHandler`).
-using MouseRegionHandler = std::function<std::optional<MouseEventResult>(const MouseEvent&)>;
+using MouseRegionHandler = std::move_only_function<std::optional<MouseEventResult>(const MouseEvent&)>;
 
 /// Adds mouse handling to an existing component without changing its rendering
 /// (pi `components/mouse-region.ts`).

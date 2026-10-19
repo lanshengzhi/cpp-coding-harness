@@ -15,14 +15,14 @@ namespace cch::tui {
 /// Timed inverse-video messages composed by an alternate-screen root.
 class AltScreenFlashContainer final : public Component {
 public:
-    explicit AltScreenFlashContainer(std::function<void()> request_render);
+    explicit AltScreenFlashContainer(std::move_only_function<void()> request_render);
     ~AltScreenFlashContainer() override;
 
     AltScreenFlashContainer(const AltScreenFlashContainer&) = delete;
     AltScreenFlashContainer& operator=(const AltScreenFlashContainer&) = delete;
 
     void set_scheduler(TuiScheduler* scheduler);
-    void set_style(std::function<std::string(std::string)> style);
+    void set_style(std::move_only_function<std::string(std::string)> style);
     /// Post a transient message. When no scheduler is attached the entry has
     /// no timer: it persists until dispose() (frozen's setTimeout always
     /// expires regardless of TUI state — a toolkit-embedder deviation, not
@@ -46,8 +46,8 @@ private:
     void schedule_expiry(Entry& entry);
     void expire(std::size_t id, std::size_t generation);
 
-    std::function<void()> request_render_;
-    std::function<std::string(std::string)> style_;
+    std::move_only_function<void()> request_render_;
+    std::move_only_function<std::string(std::string)> style_;
     /// §7.5: non-owning; must outlive this container or be detached first via
     /// `set_scheduler(nullptr)` (also invoked by `dispose()`). All callbacks
     /// scheduled on it are cancelled (handle + generation guard) before this

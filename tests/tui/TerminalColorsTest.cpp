@@ -438,6 +438,17 @@ TEST_CASE("scheme notifications toggle mode 2031 while running and on start/stop
     CHECK(stopped_output.find("\x1b[?2031l") != std::string::npos);
 }
 
+TEST_CASE("scheme listener handles remain safe after the TUI root is destroyed", "[tui][theme][issue990]") {
+    auto host = std::make_unique<ColorQueryHost>();
+    auto handle = host->tui().on_terminal_color_scheme_change([](tui::TerminalColorScheme) {});
+    REQUIRE(handle.active());
+
+    host.reset();
+    CHECK(handle.active());
+    handle.reset();
+    CHECK_FALSE(handle.active());
+}
+
 TEST_CASE("scheme listeners fire per report and unsubscribe by handle", "[tui][theme][issue990][spec]") {
     ColorQueryHost host;
     std::vector<tui::TerminalColorScheme> observed;

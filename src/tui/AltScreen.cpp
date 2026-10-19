@@ -284,7 +284,7 @@ void AltScreen::set_wheel_scroll_lines(WheelScrollLines lines) {
     reset_wheel_scroll_acceleration();
 }
 
-void AltScreen::set_scroll_to_end_indicator(std::function<std::string()> indicator) {
+void AltScreen::set_scroll_to_end_indicator(std::move_only_function<std::string()> indicator) {
     scroll_to_end_indicator_ = std::move(indicator);
     request_render();
 }
@@ -756,7 +756,9 @@ void AltScreen::toggle_search() {
             [this](std::string query) { update_search_query(std::move(query)); },
             *default_tui_keybindings(),
             keybinding_context_,
-            search_navigation_button_style_);
+            [this](std::string text, bool hovered) {
+                return search_navigation_button_style_(std::move(text), hovered);
+            });
     auto* component_pointer = component.get();
     auto overlay = std::make_unique<Overlay>(OverlayOptions{
             .width = SizeValue::percent(40),

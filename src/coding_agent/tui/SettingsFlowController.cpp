@@ -375,10 +375,9 @@ void SettingsFlowController::show_thinking_selector() {
             levels.emplace_back(*name);
         }
     }
-    const auto default_level =
-            settings_manager_ != nullptr && settings_manager_->settings().default_thinking_level
-                    ? std::optional<std::string>{*settings_manager_->settings().default_thinking_level}
-                    : std::nullopt;
+    const auto default_level = settings_manager_ != nullptr
+                                       ? settings_manager_->settings().default_thinking_level.value_or("medium")
+                                       : std::string{"medium"};
 
     const auto weak = weak_from_this();
     auto selector = std::make_shared<ThinkingSelectorComponent>(
