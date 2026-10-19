@@ -1,245 +1,57 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 
-#include <cch/ai/Models.hpp>
+#include "coding_agent/GatewayOptions.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include <cch/coding_agent/AuthStorage.hpp>
+
 #include "support/AsyncResultBridge.hpp"
-#include "ModelConfig.hpp"
-#include "ProcessAuthContext.hpp"
-#include "ProviderComposer.hpp"
-#include "RuntimeApiKeyOverlay.hpp"
-#include "support/ExpectedMacros.hpp"
-#include "agent/harness/Process.hpp"
 
-#include <boost/asio/awaitable.hpp>
+#include <boost/asio/io_context.hpp>
 
+#include <cstdlib>
 #include <exception>
-#include <map>
-#include <memory>
-#include <optional>
-#include <set>
-#include <string>
-#include <string_view>
 #include <utility>
-#include <vector>
 
 namespace cch::coding_agent {
 namespace {
 
-[[nodiscard]] std::string join_errors(const std::vector<std::string>& errors) {
-    std::string result;
-    for (const auto& error : errors) {
-        if (!result.empty()) {
-            result += "\n\n";
-        }
-        result += error;
-    }
-    return result;
+[[nodiscard]] std::string catalog_diagnostic(std::string_view error) {
+    return "Magpie model discovery failed: " + std::string{error} +
+           ". Start the local gateway with `magpie serve`, then run `/reload`.";
 }
 
 } // namespace
 
 struct ModelRuntime::Impl {
     std::filesystem::path agent_dir;
-    std::filesystem::path models_path;
-    std::shared_ptr<ai::CredentialStore> credentials;
-    std::shared_ptr<ai::AuthContext> auth_context;
     std::shared_ptr<ai::Models> models;
-    ModelConfig config;
-    std::map<std::string, ai::ProviderDefinition, std::less<>> builtins;
-    std::map<std::string, std::string, std::less<>> composition_errors;
-    ProviderComposerOptions composer_options;
-    std::optional<std::string> config_error;
-
-    // Availability snapshot.
-    std::vector<ai::Model> all_models;
-    std::vector<ai::Model> available_models;
-    std::set<std::string, std::less<>> configured_providers;
-    std::set<std::string, std::less<>> stored_providers;
-    std::map<std::string, std::string, std::less<>> stored_auth_types;
-    std::set<std::string, std::less<>> runtime_providers;
-    std::map<std::string, ai::AuthCheck, std::less<>> auth_snapshot;
-    std::optional<std::string> availability_error;
-
-    [[nodiscard]] std::set<std::string, std::less<>> provider_ids() const {
-        std::set<std::string, std::less<>> ids;
-        for (const auto& [id, _] : builtins) {
-            ids.insert(id);
-        }
-        for (const auto& id : config.provider_ids()) {
-            ids.insert(id);
-        }
-        return ids;
-    }
-
-    void load_builtin_definitions() {
-        builtins.clear();
-        for (auto&& definition : ai::builtin_provider_definitions()) {
-            const std::string id = definition.id;
-            builtins.emplace(id, std::move(definition));
-        }
-    }
-
-    [[nodiscard]] std::optional<ai::ProviderDefinition> take_builtin_definition(std::string_view provider_id) {
-        if (const auto found = builtins.find(provider_id); found != builtins.end()) {
-            auto definition = std::move(found->second);
-            builtins.erase(found);
-            return definition;
-        }
-        for (auto&& definition : ai::builtin_provider_definitions()) {
-            if (definition.id == provider_id) {
-                return std::move(definition);
-            }
-        }
-        return std::nullopt;
-    }
-
-    void recompose_provider(std::string_view provider_id) {
-        auto base = take_builtin_definition(provider_id);
-        std::optional<std::string> error;
-        auto change = compose_provider(provider_id, std::move(base), config, composer_options, error);
-        if (error) {
-            composition_errors[std::string{provider_id}] = *error;
-        } else {
-            composition_errors.erase(std::string{provider_id});
-        }
-        if (auto applied = models->apply_provider(std::move(change)); !applied) {
-            composition_errors[std::string{provider_id}] = applied.error().message;
-        }
-    }
-
-    void rebuild_providers() {
-        models->clear_providers();
-        composition_errors.clear();
-        load_builtin_definitions();
-        for (const auto& provider_id : provider_ids()) {
-            recompose_provider(provider_id);
-        }
-        update_snapshot();
-    }
-
-    void update_snapshot() {
-        all_models = models->models();
-        // Provider definitions expose structural auth methods, not active
-        // credentials. Preserve only live auth results already established by
-        // check_auth/get_available; a refresh must not make every provider
-        // appear configured merely because it has an auth hook.
-        configured_providers.clear();
-        std::set<std::string, std::less<>> installed_providers;
-        for (const auto& provider_value : models->provider_info()) {
-            installed_providers.insert(provider_value.id);
-            if (auth_snapshot.contains(provider_value.id)) {
-                configured_providers.insert(provider_value.id);
-            }
-        }
-        for (const auto& provider_id : runtime_providers) {
-            if (installed_providers.contains(provider_id)) {
-                configured_providers.insert(provider_id);
-            }
-        }
-        recompute_available_models();
-    }
-
-    /// Rebuild `available_models` from the structural `configured_providers`
-    /// set. Used by the snapshot and by runtime API key changes.
-    void recompute_available_models() {
-        available_models.clear();
-        available_models.reserve(all_models.size());
-        for (const auto& model : all_models) {
-            if (configured_providers.contains(model.provider)) {
-                available_models.push_back(model);
-            }
-        }
-    }
+    bool injected_catalog{false};
 };
 
-ModelRuntime::ModelRuntime(std::unique_ptr<Impl> impl)
-    : impl_(std::move(impl)) {}
-
-ModelRuntime::ModelRuntime(std::shared_ptr<ai::Models> models)
-    : impl_(std::make_unique<Impl>(Impl{
-              .agent_dir = {},
-              .models_path = {},
-              .credentials = nullptr,
-              .auth_context = nullptr,
-              .models = std::move(models),
-              .config = {},
-              .builtins = {},
-              .composition_errors = {},
-              .composer_options = {},
-              .config_error = {},
-              .all_models = {},
-              .available_models = {},
-              .configured_providers = {},
-              .stored_providers = {},
-              .stored_auth_types = {},
-              .runtime_providers = {},
-              .auth_snapshot = {},
-              .availability_error = {},
-      })) {
-    if (!impl_->models) {
+ModelRuntime::ModelRuntime(std::shared_ptr<ai::Models> models) : impl_(std::make_unique<Impl>()) {
+    if (!models) {
         std::terminate();
     }
-    impl_->update_snapshot();
+    impl_->models = std::move(models);
+    impl_->injected_catalog = true;
+}
+
+std::shared_ptr<ModelRuntime> ModelRuntime::from_models(
+        std::shared_ptr<ai::Models> models, std::filesystem::path agent_dir) {
+    auto runtime = std::make_shared<ModelRuntime>(std::move(models));
+    runtime->impl_->agent_dir = std::move(agent_dir);
+    runtime->impl_->injected_catalog = false;
+    return runtime;
 }
 
 ModelRuntime::ModelRuntime(ModelRuntime&&) noexcept = default;
 ModelRuntime& ModelRuntime::operator=(ModelRuntime&&) noexcept = default;
 ModelRuntime::~ModelRuntime() = default;
 
-support::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(
-    ModelRuntimeOptions options) {
-    return create_impl(std::move(options));
-}
-
-support::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create_impl(ModelRuntimeOptions options) {
-    std::filesystem::path agent_dir = options.agent_dir.empty()
-        ? agent_config_dir()
-        : options.agent_dir;
-
-    std::optional<std::filesystem::path> configured_models_path = options.models_path;
-    std::filesystem::path models_path;
-    if (configured_models_path.has_value()) {
-        models_path = *configured_models_path;
-    } else if (!agent_dir.empty()) {
-        models_path = agent_dir / "models.json";
-    }
-
-    std::shared_ptr<ai::CredentialStore> credentials = std::move(options.credentials);
-    if (!credentials) {
-        credentials = std::make_shared<AuthStorage>(agent_dir / "auth.json");
-    }
-    auto credentials_with_overlay = std::make_shared<RuntimeApiKeyOverlay>(credentials);
-    auto auth_context = std::make_shared<ProcessAuthContext>();
-    auto models = std::make_shared<ai::Models>(credentials_with_overlay, auth_context);
-
-    std::shared_ptr<harness::AsyncProcessRunner> process_runner =
-        std::make_shared<harness::DefaultAsyncProcessRunner>();
-
-    auto impl = std::make_unique<ModelRuntime::Impl>(ModelRuntime::Impl{
-            .agent_dir = std::move(agent_dir),
-            .models_path = std::move(models_path),
-            .credentials = credentials_with_overlay,
-            .auth_context = auth_context,
-            .models = models,
-            .config = {},
-            .builtins = {},
-            .composition_errors = {},
-            .composer_options =
-                    ProviderComposerOptions{
-                            .process_runner = process_runner,
-                    },
-            .config_error = {},
-            .all_models = {},
-            .available_models = {},
-            .configured_providers = {},
-            .stored_providers = {},
-            .stored_auth_types = {},
-            .runtime_providers = {},
-            .auth_snapshot = {},
-            .availability_error = {},
-    });
-    auto runtime = std::shared_ptr<ModelRuntime>(new ModelRuntime(std::move(impl)));
+support::Expected<std::shared_ptr<ModelRuntime>> ModelRuntime::create(ModelRuntimeOptions options) {
+    auto models = std::make_shared<ai::Models>(make_gateway_models_options(options.api_key, options.magpie_base_url));
+    auto runtime = from_models(
+            std::move(models), options.agent_dir.empty() ? agent_config_dir() : std::move(options.agent_dir));
+    // Discovery failure remains a visible runtime diagnostic, allowing /reload.
     static_cast<void>(runtime->refresh());
     return runtime;
 }
@@ -248,292 +60,77 @@ const std::filesystem::path& ModelRuntime::agent_dir() const noexcept {
     return impl_->agent_dir;
 }
 
-const std::filesystem::path& ModelRuntime::models_path() const noexcept {
-    return impl_->models_path;
+support::ExpectedVoid ModelRuntime::refresh() {
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> outcome;
+    // outcome and io live until io.run drains the pending operation.
+    auto pending = support::detail::make_async_result_on(io.get_executor(),
+            [models = impl_->models,
+                    injected = impl_->injected_catalog]() -> boost::asio::awaitable<support::ExpectedVoid> {
+                if (injected) co_return support::ExpectedVoid{};
+                co_return co_await support::detail::await_async_result(models->refresh());
+            });
+    std::move(pending).start([&outcome](support::ExpectedVoid result) noexcept { outcome.emplace(std::move(result)); });
+    io.run();
+    if (!outcome) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Provider, "Magpie catalog discovery did not complete"));
+    }
+    if (!*outcome) {
+        auto error = std::move(outcome->error());
+        error.message = catalog_diagnostic(error.message);
+        return std::unexpected(std::move(error));
+    }
+    return {};
 }
 
-support::ExpectedVoid ModelRuntime::refresh() {
-    impl_->config = ModelConfig::load(impl_->models_path);
-    impl_->config_error = impl_->config.error();
-    impl_->rebuild_providers();
-    return support::ExpectedVoid{};
+support::AsyncResult<void> ModelRuntime::refresh_async(std::stop_token stop_token) {
+    const auto self = weak_from_this().lock();
+    if (!self) {
+        return support::AsyncResult<void>(std::unexpected(support::make_error(
+                support::ErrorCode::Validation, "asynchronous model runtime refresh requires shared ownership")));
+    }
+    return support::detail::make_async_result([self, stop_token]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(
+                    support::make_error(support::ErrorCode::Cancelled, "model catalog refresh cancelled"));
+        }
+        if (self->impl_->injected_catalog) co_return support::ExpectedVoid{};
+        auto result = co_await support::detail::await_async_result(self->impl_->models->refresh(stop_token));
+        if (!result && result.error().code != support::ErrorCode::Cancelled) {
+            auto error = std::move(result.error());
+            error.message = catalog_diagnostic(error.message);
+            co_return std::unexpected(std::move(error));
+        }
+        co_return result;
+    });
 }
 
 std::optional<std::string> ModelRuntime::get_error() const {
-    std::vector<std::string> errors;
-    if (impl_->config_error) {
-        errors.push_back(*impl_->config_error);
-    }
-    for (const auto& [provider_id, error] : impl_->composition_errors) {
-        errors.push_back("Provider \"" + provider_id + "\": " + error);
-    }
-    if (impl_->availability_error) {
-        errors.push_back("Availability refresh: " + *impl_->availability_error);
-    }
-    if (errors.empty()) {
-        return std::nullopt;
-    }
-    return join_errors(errors);
+    const auto error = impl_->models->discovery_error();
+    return error ? std::optional<std::string>{catalog_diagnostic(error->message)} : std::nullopt;
 }
 
-std::vector<ai::ProviderInfo> ModelRuntime::providers() const { return impl_->models->provider_info(); }
-
-std::optional<ai::ProviderInfo> ModelRuntime::provider(std::string_view provider_id) const {
-    const auto infos = impl_->models->provider_info();
-    const auto found = std::find_if(
-            infos.begin(), infos.end(), [provider_id](const ai::ProviderInfo& info) { return info.id == provider_id; });
-    if (found == infos.end()) {
-        return std::nullopt;
-    }
-    return *found;
-}
-
-ai::ModelStreamFactory ModelRuntime::stream_factory() const {
-    return ai::ModelStreamFactory{[models = impl_->models](ai::Model model,
-                                          ai::AiContext context,
-                                          ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
-        return models->stream(std::move(model), std::move(context), std::move(options));
-    }};
-}
-
-support::ExpectedVoid ModelRuntime::apply_test_models(
-        std::move_only_function<support::ExpectedVoid(ai::Models&)> configure) {
-    return configure(*impl_->models);
-}
-
-std::vector<ai::Model> ModelRuntime::models(
-    std::optional<std::string_view> provider_id) const {
+std::vector<ai::Model> ModelRuntime::models(std::optional<std::string_view> provider_id) const {
     return impl_->models->models(provider_id);
 }
 
-std::optional<ai::Model> ModelRuntime::model(
-    std::string_view provider_id,
-    std::string_view model_id) const {
+std::optional<ai::Model> ModelRuntime::model(std::string_view provider_id, std::string_view model_id) const {
     return impl_->models->model(provider_id, model_id);
 }
 
-support::AsyncResult<std::vector<ai::Model>> ModelRuntime::get_available(std::optional<std::string> provider_id) {
-    return support::detail::make_async_result(
-            [this, provider_id = std::move(provider_id)]() mutable
-                    -> boost::asio::awaitable<support::Expected<std::vector<ai::Model>>> {
-                if (provider_id) {
-                    const auto selected = provider(*provider_id);
-                    if (!selected) {
-                        co_return std::vector<ai::Model>{};
-                    }
-                    CCH_TRY(check, co_await support::detail::await_async_result(check_auth(std::string{*provider_id})));
-                    if (!check) {
-                        co_return std::vector<ai::Model>{};
-                    }
-                    co_return models(*provider_id);
-                }
-
-                // The Models test seam may replace the installed collection
-                // after construction; availability always snapshots the live
-                // catalog before filtering it by authentication.
-                impl_->all_models = impl_->models->models();
-                std::set<std::string, std::less<>> configured;
-                std::map<std::string, ai::AuthCheck, std::less<>> auth;
-                std::optional<std::string> failure;
-                for (const auto& provider_value : impl_->models->provider_info()) {
-                    const std::string provider_id{provider_value.id};
-                    auto checked = co_await support::detail::await_async_result(impl_->models->check_auth(provider_id));
-                    if (!checked) {
-                        failure = checked.error().message;
-                        continue;
-                    }
-                    if (*checked) {
-                        configured.insert(provider_id);
-                        auth.emplace(provider_id, **checked);
-                    }
-                }
-                std::vector<ai::CredentialInfo> stored;
-                if (impl_->credentials) {
-                    CCH_TRY(stored_result, co_await support::detail::await_async_result(impl_->credentials->list()));
-                    stored = std::move(stored_result);
-                }
-
-                impl_->configured_providers = std::move(configured);
-                impl_->auth_snapshot = std::move(auth);
-                impl_->stored_providers.clear();
-                impl_->stored_auth_types.clear();
-                for (const auto& entry : stored) {
-                    impl_->stored_providers.insert(entry.provider_id);
-                    impl_->stored_auth_types.emplace(entry.provider_id, entry.type);
-                }
-                impl_->recompute_available_models();
-                impl_->availability_error = std::move(failure);
-                co_return impl_->available_models;
-            });
+support::ExpectedVoid ModelRuntime::configure_startup_key(std::string api_key) {
+    return impl_->models->configure_startup_key(std::move(api_key));
 }
 
-std::vector<ai::Model> ModelRuntime::get_available_snapshot() const { return impl_->available_models; }
-
-support::AsyncResult<std::optional<ai::AuthCheck>> ModelRuntime::check_auth(std::string provider_id) {
-    return support::detail::make_async_result(
-            [this, provider_id = std::move(provider_id)]() mutable
-                    -> boost::asio::awaitable<support::Expected<std::optional<ai::AuthCheck>>> {
-                auto checked = co_await support::detail::await_async_result(impl_->models->check_auth(provider_id));
-                if (!checked) {
-                    co_return std::unexpected(checked.error());
-                }
-                if (*checked) {
-                    impl_->auth_snapshot[provider_id] = **checked;
-                    impl_->configured_providers.insert(provider_id);
-                } else {
-                    impl_->auth_snapshot.erase(provider_id);
-                    impl_->configured_providers.erase(provider_id);
-                }
-                impl_->recompute_available_models();
-                co_return *checked;
-            });
-}
-
-bool ModelRuntime::has_configured_auth(std::string_view provider_id) const {
-    return impl_->configured_providers.contains(std::string{provider_id});
-}
-
-bool ModelRuntime::is_using_oauth(std::string_view provider_id) const {
-    const auto found = impl_->auth_snapshot.find(provider_id);
-    return found != impl_->auth_snapshot.end() && found->second.type == ai::AuthType::OAuth;
-}
-
-support::ExpectedVoid ModelRuntime::set_runtime_api_key(
-    std::string provider_id,
-    std::string api_key) {
-    auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get());
-    if (overlay == nullptr) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Auth,
-            "runtime API key override unavailable for provider " + provider_id));
-    }
-    overlay->set_runtime_api_key(provider_id, std::move(api_key));
-    // Refresh the availability snapshot so the provider resolves as configured
-    // (pi `setRuntimeApiKey` refresh). Runtime keys are the highest-precedence
-    // source in Request Authentication via the credential overlay; they are
-    // never stored, so `stored_providers` is intentionally not touched.
-    impl_->runtime_providers.insert(provider_id);
-    impl_->configured_providers.insert(provider_id);
-    impl_->auth_snapshot[provider_id] = ai::AuthCheck{
-        .source = "runtime API key",
-        .type = ai::AuthType::ApiKey,
+ai::ModelStreamFactory ModelRuntime::stream_factory() const {
+    return [models = impl_->models](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options) {
+        return models->stream(std::move(model), std::move(context), std::move(options));
     };
-    impl_->recompute_available_models();
-    return support::ExpectedVoid{};
 }
 
-support::ExpectedVoid ModelRuntime::remove_runtime_api_key(
-    std::string provider_id) {
-    auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get());
-    if (overlay == nullptr) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Auth,
-            "runtime API key override unavailable for provider " + provider_id));
-    }
-    overlay->remove_runtime_api_key(provider_id);
-    impl_->runtime_providers.erase(provider_id);
-    impl_->auth_snapshot.erase(provider_id);
-    // Restore the structural availability snapshot.
-    impl_->update_snapshot();
-    return support::ExpectedVoid{};
-}
-
-bool ModelRuntime::has_runtime_api_key(std::string_view provider_id) const {
-    if (auto* overlay = dynamic_cast<RuntimeApiKeyOverlay*>(impl_->credentials.get())) {
-        return overlay->has_runtime_api_key(provider_id);
-    }
-    return false;
-}
-
-std::optional<ModelRuntimeAuthStatus> ModelRuntime::get_provider_auth_status(
-    std::string_view provider_id) const {
-    if (!provider(provider_id)) {
-        return std::nullopt;
-    }
-    if (impl_->runtime_providers.contains(std::string{provider_id})) {
-        return ModelRuntimeAuthStatus{.configured = true, .source = "runtime"};
-    }
-    if (impl_->stored_providers.contains(std::string{provider_id})) {
-        const auto stored_type = impl_->stored_auth_types.find(provider_id);
-        if (stored_type != impl_->stored_auth_types.end() && stored_type->second == "oauth") {
-            // A stored OAuth record is authoritative for this provider. If
-            // the provider has no OAuth method (Kimi), it must not fall
-            // through to an environment/configured API key.
-            return ModelRuntimeAuthStatus{.configured = false, .source = "stored_oauth"};
-        }
-        return ModelRuntimeAuthStatus{.configured = true, .source = "stored"};
-    }
-    if (const auto& configured = impl_->config.provider(provider_id)) {
-        if (auto status = configured_request_auth_status(*configured)) {
-            return status;
-        }
-    }
-    if (const auto found = impl_->auth_snapshot.find(provider_id);
-        found != impl_->auth_snapshot.end()) {
-        return ModelRuntimeAuthStatus{
-            .configured = true,
-            .source = "environment",
-            .label = found->second.source,
-        };
-    }
-    // pi `getProviderAuthStatus`: structural auth hooks alone are not a
-    // source — a provider with no runtime key, stored credential, config, or
-    // environment resolution is not configured.
-    return ModelRuntimeAuthStatus{.configured = false};
-}
-
-support::AsyncResult<std::vector<ai::CredentialInfo>> ModelRuntime::list_credentials() {
-    return support::detail::make_async_result(
-            [this]() -> boost::asio::awaitable<support::Expected<std::vector<ai::CredentialInfo>>> {
-                co_return co_await support::detail::await_async_result(impl_->credentials->list());
-            });
-}
-
-support::AsyncResult<void> ModelRuntime::login(
-        std::string provider_id, ai::AuthType type, ai::AuthInteraction interaction,
-        std::optional<ai::LoginOptions> options) {
-    return support::detail::make_async_result(
-            [this, provider_id = std::move(provider_id), type, interaction = std::move(interaction),
-                    options = std::move(options)]() mutable
-                    -> boost::asio::awaitable<support::ExpectedVoid> {
-                CCH_TRY_VOID(co_await support::detail::await_async_result(
-                        impl_->models->login(provider_id, type, std::move(interaction), std::move(options))));
-                impl_->stored_providers.insert(provider_id);
-                impl_->stored_auth_types[provider_id] = type == ai::AuthType::OAuth ? "oauth" : "api_key";
-                impl_->auth_snapshot[provider_id] = ai::AuthCheck{
-                        .source = type == ai::AuthType::OAuth ? "OAuth" : "stored credential",
-                        .type = type,
-                };
-                // Post-login refresh failures are recorded in the composition-errors
-                // map and never fail the login call (ADR 0032).
-                static_cast<void>(refresh());
-                co_return support::ExpectedVoid{};
-            });
-}
-
-support::AsyncResult<void> ModelRuntime::logout(std::string provider_id) {
-    return support::detail::make_async_result(
-            [this, provider_id = std::move(provider_id)]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                CCH_TRY_VOID(co_await support::detail::await_async_result(impl_->models->logout(provider_id)));
-                impl_->stored_providers.erase(provider_id);
-                impl_->stored_auth_types.erase(provider_id);
-                impl_->auth_snapshot.erase(provider_id);
-                // Credential-dependent composition is reset before the unconfigured
-                // provider is recomposed by refresh (pi: logout → recomposeProvider →
-                // refresh; order preserved).
-                impl_->recompose_provider(provider_id);
-                static_cast<void>(refresh());
-                co_return support::ExpectedVoid{};
-            });
-}
-
-std::vector<std::string> ModelRuntime::configured_api_key_env_names() const {
-    return ::cch::coding_agent::configured_api_key_env_names(impl_->config);
-}
-
-std::optional<std::string> ModelRuntime::default_model_for_provider(
-    std::string_view provider_id) {
-    return ::cch::coding_agent::default_model_for_provider(provider_id);
+support::AsyncResult<ai::GatewayStatus> ModelRuntime::inspect_gateway(std::stop_token stop_token) {
+    return impl_->models->inspect_gateway(std::move(stop_token));
 }
 
 } // namespace cch::coding_agent

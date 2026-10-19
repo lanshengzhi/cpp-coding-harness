@@ -57,24 +57,21 @@ TEST_CASE("parse_args leaves model selection empty when model flags omitted", "[
 
 TEST_CASE("parse_args records the pi CLI model selection surface", "[cli][parse][spec]") {
     std::vector<std::string> args{
-        "cpp-harness",
-        "--provider",
-        "deepseek",
-        "--model",
-        "deepseek-v4-flash",
-        "--models",
-        "deepseek-v4-flash,deepseek-r1:high",
-        "--api-key",
-        "sk-demo",
-        "hello",
+            "cpp-harness",
+            "--model",
+            "deepseek-v4-flash",
+            "--models",
+            "deepseek-v4-flash,deepseek-r1:high",
+            "--api-key",
+            "sk-demo",
+            "hello",
     };
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->session_facts.provider.has_value());
+    CHECK_FALSE(parsed->session_facts.provider.has_value());
     REQUIRE(parsed->session_facts.model.has_value());
     REQUIRE(parsed->session_facts.api_key.has_value());
-    CHECK(*parsed->session_facts.provider == "deepseek");
     CHECK(*parsed->session_facts.model == "deepseek-v4-flash");
     CHECK(*parsed->session_facts.api_key == "sk-demo");
     REQUIRE(parsed->session_facts.models.size() == 2);
@@ -176,13 +173,23 @@ TEST_CASE("parse_args accepts pi's -t and -xt shorts and an engaged empty allowl
     }
 }
 
-TEST_CASE("parse_args rejects --api-key without an explicit model", "[cli][parse][spec]") {
-    std::vector<std::string> args{"cpp-harness", "--api-key", "sk-demo", "hello"};
+TEST_CASE("parse_args accepts --api-key without an explicit model", "[cli][parse][gateway][spec]") {
+    std::vector<std::string> args{"pike", "--api-key", "invocation-key", "hello"};
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
-    REQUIRE_FALSE(parsed);
-    CHECK(
-        parsed.error().message.find("--api-key requires a model") != std::string::npos);
+    REQUIRE(parsed);
+    CHECK(parsed->session_facts.api_key == "invocation-key");
+    CHECK_FALSE(parsed->session_facts.model);
+}
+
+TEST_CASE("parse_args rejects the retired independent provider selector", "[cli][parse][gateway][spec]") {
+    for (const auto& option : {std::string{"--provider"}, std::string{"--provider=deepseek"}}) {
+        std::vector<std::string> args{"pike", option, "deepseek"};
+        auto argv = argv_from_strings(args);
+        auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
+        REQUIRE_FALSE(parsed);
+        CHECK(parsed.error().message.find("unknown option: --provider") != std::string::npos);
+    }
 }
 
 TEST_CASE("parse_args accepts --api-key with each explicit-model form", "[cli][parse][spec]") {
@@ -193,7 +200,8 @@ TEST_CASE("parse_args accepts --api-key with each explicit-model form", "[cli][p
         REQUIRE(parsed);
     }
     {
-        std::vector<std::string> args{"cpp-harness", "--provider", "deepseek", "--model", "deepseek-v4-flash", "--api-key", "k", "hello"};
+        std::vector<std::string> args{
+                "cpp-harness", "--model", "deepseek/deepseek-v4-flash", "--api-key", "k", "hello"};
         auto argv = argv_from_strings(args);
         auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
         REQUIRE(parsed);
@@ -946,18 +954,16 @@ TEST_CASE("parse_args treats tokens after -- as positionals verbatim", "[cli][pa
 
 TEST_CASE("parse_args accepts equals-separated values", "[cli][parse][spec]") {
     std::vector<std::string> args{
-        "cpp-harness",
-        "--provider=deepseek",
-        "--model=deepseek-v4-flash",
-        "--mode=text",
-        "hello",
+            "cpp-harness",
+            "--model=deepseek-v4-flash",
+            "--mode=text",
+            "hello",
     };
     auto argv = argv_from_strings(args);
     auto parsed = cch::cli::parse_args(static_cast<int>(argv.size()), argv.data());
     REQUIRE(parsed);
-    REQUIRE(parsed->session_facts.provider.has_value());
+    CHECK_FALSE(parsed->session_facts.provider.has_value());
     REQUIRE(parsed->session_facts.model.has_value());
-    CHECK(*parsed->session_facts.provider == "deepseek");
     CHECK(*parsed->session_facts.model == "deepseek-v4-flash");
     REQUIRE(parsed->messages.size() == 1);
     CHECK(parsed->messages[0] == "hello");

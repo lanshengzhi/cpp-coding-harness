@@ -1,9 +1,11 @@
 #pragma once
 
 #include <cch/coding_agent/ModelRuntime.hpp>
+#include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "support/ScriptedProvider.hpp"
 
 #include <functional>
+#include <exception>
 #include <memory>
 #include <stop_token>
 #include <vector>
@@ -11,25 +13,21 @@
 namespace cch::coding_agent {
 
 /// The deliberately small stream view used by the coding-agent test seam.
-/// Provider authentication and transport details stay inside cch_ai; vertical
-/// tests only need to observe cancellation on a scripted request.
+/// Request Authentication and transport stay inside cch_ai; vertical tests
+/// only need to observe cancellation on a scripted request.
 struct ModelRuntimeTestStreamOptions {
     std::stop_token stop_token{};
 };
 
-/// Private test-only provider injection. The actual Provider capability and
-/// scripted construction stay inside cch_ai's test support; callers submit
-/// complete passive definitions through this ModelRuntime seam.
+/// Private test-only catalog and stream injection. These values describe a
+/// deterministic model source, without model authentication hooks.
 struct ModelRuntimeTestProvider {
-    ai::ProviderDefinition definition{};
+    tests::ScriptedModelCatalog definition{};
     std::move_only_function<ai::ModelStream(ai::Model, ai::AiContext, ModelRuntimeTestStreamOptions)> stream{};
 };
 
-/// The two substitution points a test runtime offers, in one options value:
-/// scripted Provider Definitions replace composition outright, while
-/// scripted transports keep the real composed Providers and replace only
-/// their network endpoints. The second form is what keeps the frozen
-/// DeepSeek wire path observable end to end.
+/// Replace the passive catalog/scripted stream, or keep real gateway execution
+/// and replace its private transport.
 struct ModelRuntimeTestOptions {
     std::vector<ModelRuntimeTestProvider> providers{};
     tests::ScriptedTransportOptions transports{};
@@ -43,6 +41,27 @@ struct ModelRuntimeTestOptions {
         ai::Models& models, ModelRuntimeTestProvider provider);
 
 [[nodiscard]] support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
-        ModelRuntimeOptions options, ModelRuntimeTestOptions test_options);
+        ModelRuntimeOptions options,
+        ModelRuntimeTestOptions test_options,
+        std::shared_ptr<support::StreamTransport> catalog_transport = {});
+
+[[nodiscard]] std::shared_ptr<support::StreamTransport> make_empty_magpie_transport();
+
+/// Keep interactive / session-assembly tests off the live Magpie catalog at
+/// 127.0.0.1:3425. Production create_agent_session keeps the product default;
+/// tests must set the catalog seam explicitly.
+inline void isolate_magpie_gateway(runtime::AgentSessionCreationRequest& request) {
+    if (request.magpie_base_url.empty()) {
+        request.magpie_base_url = "http://127.0.0.1:34259";
+    }
+    if (!request.model_runtime) {
+        auto runtime = create_model_runtime_for_testing(
+                {.api_key = request.session_facts.api_key, .magpie_base_url = request.magpie_base_url},
+                {},
+                make_empty_magpie_transport());
+        if (!runtime) std::terminate();
+        request.model_runtime = std::move(*runtime);
+    }
+}
 
 } // namespace cch::coding_agent

@@ -1,7 +1,7 @@
 #include "coding_agent/cli/ListModels.hpp"
 
 #include <cch/ai/Model.hpp>
-#include <cch/coding_agent/AuthGuidance.hpp>
+#include <cch/coding_agent/ModelGuidance.hpp>
 #include <cch/tui/Fuzzy.hpp>
 #include <cch/support/Error.hpp>
 
@@ -80,19 +80,17 @@ void print_list_models(const coding_agent::ModelRuntime& runtime,
         const std::optional<std::string>& search,
         std::ostream& output,
         std::ostream& error) {
-    // pi list-models.ts: the models.json load error warns on stderr first
-    // (yellow in pi; the C++ CLI surfaces warnings without ANSI color).
-    if (auto load_error = runtime.get_error()) {
-        error << "Warning: errors loading models.json:\n" << *load_error << '\n';
+    // pi list-models.ts: runtime diagnostics warn on stderr before the model
+    // table (yellow in pi; the C++ CLI surfaces warnings without ANSI color).
+    if (auto runtime_error = runtime.get_error()) {
+        error << "Warning: model runtime errors:\n" << *runtime_error << '\n';
     }
 
     // pi: `getAvailable` — only models whose provider has configured auth.
-    auto models = runtime.get_available_snapshot();
+    auto models = runtime.models();
 
     if (models.empty()) {
-        output << coding_agent::format_no_models_available_message(
-                          std::filesystem::path{coding_agent::kDefaultAuthGuidanceDocsPath})
-               << '\n';
+        output << coding_agent::format_no_models_available_message() << '\n';
         return;
     }
 

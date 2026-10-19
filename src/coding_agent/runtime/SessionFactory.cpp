@@ -2,8 +2,7 @@
 
 #include <cch/agent/AgentContext.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include <cch/coding_agent/AuthGuidance.hpp>
-#include <cch/coding_agent/AuthStorage.hpp>
+#include <cch/coding_agent/ModelGuidance.hpp>
 #include <cch/coding_agent/ModelResolver.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
@@ -200,6 +199,8 @@ struct AssemblyPlan {
     /// the session (ADR 0029: no dispose ceremony; runtimes are reusable
     /// across sessions).
     bool model_runtime_owned{true};
+    /// Gateway URL seam for dynamic Magpie discovery.
+    std::string magpie_base_url{};
     /// Private test seam: an explicit request Model supplied through the
     /// creation request (focused session tests with deterministic models).
     std::optional<ai::Model> requested_model;
@@ -509,19 +510,17 @@ void cleanup_factory_filesystem(harness::AsyncFileSystem* filesystem) {
 /// credential-free value pointing at it.
 [[nodiscard]] ai::Model make_fake_request_model() {
     return ai::Model{
-        .id = "fake-model",
-        .name = "fake-model",
-        .api = "scripted-fake",
-        .provider = "fake",
-        .base_url = "",
-        .reasoning = false,
-        .thinking_level_map = std::nullopt,
-        .input = {ai::ModelInput::Text},
-        .cost = {},
-        .context_window = 128000,
-        .max_tokens = 16384,
-        .headers = std::nullopt,
-        .compat = std::nullopt,
+            .id = "fake-model",
+            .name = "fake-model",
+            .api = "scripted-fake",
+            .provider = "fake",
+            .reasoning = false,
+            .thinking_level_map = std::nullopt,
+            .input = {ai::ModelInput::Text},
+            .cost = {},
+            .context_window = 128000,
+            .max_tokens = 16384,
+            .headers = std::nullopt,
     };
 }
 
@@ -548,9 +547,8 @@ struct CliModelResolution {
         const ModelRuntime& runtime, const std::optional<std::string>& cli_provider, std::string_view cli_model) {
     const auto all_models = runtime.models();
     if (all_models.empty()) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::ModelValidation,
-            "No models available. Check your installation or add models to models.json."));
+        return std::unexpected(support::make_error(support::ErrorCode::ModelValidation,
+                "No models available. Start the local Magpie gateway with `magpie serve` and refresh the catalog."));
     }
 
     // Canonical provider lookup (case-insensitive).
@@ -633,7 +631,7 @@ struct CliModelResolution {
 [[nodiscard]] std::vector<cch::coding_agent::ScopedModel> resolve_model_scope(
     const std::vector<std::string>& patterns,
     const ModelRuntime& runtime) {
-    return cch::coding_agent::resolve_model_scope(patterns, runtime.get_available_snapshot());
+    return cch::coding_agent::resolve_model_scope(patterns, runtime.models());
 }
 
 /// Frozen runtime default selection (pi `findInitialModel` step 4): the
@@ -642,16 +640,19 @@ struct CliModelResolution {
 /// `DEFAULT_MODEL`) — streaming fails through normal provider lookup, so no
 /// construction-time default silently wins. The availability snapshot must
 /// be live: the factory refreshes it before the resolution chain runs.
-[[nodiscard]] ai::Model runtime_default_model(const ModelRuntime& runtime) {
-    const auto available = runtime.get_available_snapshot();
-    for (const auto* provider : {"openai-codex", "kimi-coding"}) {
-        if (auto default_id = ModelRuntime::default_model_for_provider(provider)) {
-            for (const auto& model : available) {
-                if (model.provider == provider && model.id == *default_id) {
-                    return model;
-                }
-            }
-        }
+[[nodiscard]] ai::Model runtime_default_model(const ModelRuntime& runtime, const coding_agent::UserSettings& settings) {
+    const auto available = runtime.models();
+    const auto matching = [&available](std::string_view id) -> std::optional<ai::Model> {
+        const auto found = std::find_if(available.begin(), available.end(), [id](const ai::Model& model) {
+            return model.id == id || model.provider + "/" + model.id == id;
+        });
+        return found == available.end() ? std::nullopt : std::optional<ai::Model>{*found};
+    };
+    if (settings.default_model) {
+        if (auto model = matching(*settings.default_model)) return *model;
+    }
+    if (const char* configured = std::getenv("MAGPIE_DEFAULT_MODEL"); configured && *configured != '\0') {
+        if (auto model = matching(configured)) return *model;
     }
     if (!available.empty()) {
         return available.front();
@@ -659,34 +660,26 @@ struct CliModelResolution {
     return agent::detail::kDefaultModel;
 }
 
-/// pi `sdk.ts` `createAgentSession` restore check: the stored `model_change`
-/// identity must resolve in the live runtime catalog AND its provider must
-/// have configured auth (`restoredModel && hasConfiguredAuth`). Returns true
-/// when the stored identity cannot be restored.
+/// Restore only identities still present in the discovered catalog.
 [[nodiscard]] bool resume_model_restore_failed(
     const ModelRuntime& runtime,
     const std::string& provider,
     const std::string& model_id) {
-    auto restored = runtime.model(provider, model_id);
-    if (!restored) {
-        return true;
-    }
-    return !runtime.has_configured_auth(restored->provider);
+    return !runtime.model(provider, model_id).has_value();
 }
+
 /// Build the session's ModelRuntime: the injected/adopted runtime wins; a
 /// default-created runtime derives its Agent Config Directory from the
-/// environment default.
+/// environment default and binds the invocation key before discovery.
 [[nodiscard]] support::Expected<std::shared_ptr<ModelRuntime>> build_runtime(
-    std::shared_ptr<ModelRuntime> injected) {
+        std::shared_ptr<ModelRuntime> injected, std::string magpie_base_url, std::optional<std::string> api_key) {
     if (injected) {
         return injected;
     }
     ModelRuntimeOptions options;
-    auto created = ModelRuntime::create(std::move(options));
-    if (!created) {
-        return std::unexpected(created.error());
-    }
-    return std::move(*created);
+    options.magpie_base_url = std::move(magpie_base_url);
+    options.api_key = std::move(api_key);
+    return ModelRuntime::create(std::move(options));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -833,6 +826,7 @@ struct SessionTargetNormalizationOptions {
     plan.target = std::move(*target);
 
     plan.model_runtime = std::move(request.model_runtime);
+    plan.magpie_base_url = std::move(request.magpie_base_url);
     // A host-shared ModelRuntime (ADR 0029/0030, issue #466) is never owned
     // or released by the Session: closing one Session must not stop the
     // shared Models resources the replacement Session needs. The private test
@@ -911,11 +905,7 @@ struct SessionTargetNormalizationOptions {
         std::optional<std::string>* out_model_thinking_level = nullptr) {
     const auto& selection = plan.cli_selection;
 
-    // 0. `--models` / settings `enabledModels` scope the session's Ctrl+P
-    // cycling set (pi main.ts `parsed.models ?? getEnabledModels()`; a resume
-    // re-resolves its stored identity for the initial model but keeps the
-    // scope). The scope resolves from the live availability snapshot, so
-    // keyless providers are never in scope.
+    // Resolve the scoped identities against the current gateway catalog.
     std::vector<cch::coding_agent::ScopedModel> scoped;
     std::vector<std::string> patterns = selection.models;
     if (patterns.empty() && settings.enabled_models) {
@@ -926,7 +916,7 @@ struct SessionTargetNormalizationOptions {
         if (out_scoped_models != nullptr) *out_scoped_models = scoped;
     }
 
-    // 1. CLI --model (with optional --provider) wins.
+    // 1. An explicit model identity or pattern wins.
     if (selection.model) {
         auto resolved = resolve_cli_model_pattern(runtime, selection.provider, *selection.model);
         if (!resolved) {
@@ -941,15 +931,11 @@ struct SessionTargetNormalizationOptions {
     // 2. The resolved scope selects the initial model for new sessions when
     // no explicit --model was given.
 
-    // 3. Resume: re-resolve the stored model_change identity against the live
-    // runtime catalog and require configured auth (pi `restoreModelFromSession`:
-    // `restoredModel && hasConfiguredAuth`). A restored model wins immediately;
-    // a missing/unauthenticated model continues through settings and runtime
-    // defaults without silent substitution — the boot fallback message is
-    // assembled by run_assembly after the chain lands.
+    // 3. Restore the recorded identity when it remains in the catalog.
+    // Missing identities continue through defaults; run_assembly_async
+    // records the existing boot warning without synthesizing a new identity.
     if (!resume_restore_failed && stored_provider && stored_model) {
-        if (auto restored = runtime.model(*stored_provider, *stored_model);
-            restored && runtime.has_configured_auth(restored->provider)) {
+        if (auto restored = runtime.model(*stored_provider, *stored_model); restored) {
             return *restored;
         }
     }
@@ -977,19 +963,15 @@ struct SessionTargetNormalizationOptions {
         return scoped.front().model;
     }
 
-    // 5. Settings defaultProvider/defaultModel — only when the provider has
-    // configured auth (pi findInitialModel: `found && hasConfiguredAuth`). An
-    // unauthenticated settings default falls through to the runtime default.
+    // 5. Resolve a saved default identity from the live catalog.
     if (settings.default_provider && settings.default_model) {
-        if (auto model = runtime.model(
-                *settings.default_provider, *settings.default_model);
-            model && runtime.has_configured_auth(model->provider)) {
+        if (auto model = runtime.model(*settings.default_provider, *settings.default_model); model) {
             return *model;
         }
     }
 
     // 6. Runtime default.
-    return runtime_default_model(runtime);
+    return runtime_default_model(runtime, settings);
 }
 
 /// pi `session-cwd.ts` `MissingSessionCwdError` + `formatMissingSessionCwdError`,
@@ -1447,10 +1429,13 @@ struct PreparedAssemblyTarget final {
     if (plan.model_runtime) {
         runtime = std::move(plan.model_runtime);
     } else {
-        auto built = co_await support::detail::await_async_result(submit_runtime_work<std::shared_ptr<ModelRuntime>>(
-                plan.execution_runtime_target, path_work_charge({coding_agent::agent_config_dir()}), stop_token, [] {
-                    return build_runtime(nullptr);
-                }));
+        auto built = co_await support::detail::await_async_result(
+                submit_runtime_work<std::shared_ptr<ModelRuntime>>(plan.execution_runtime_target,
+                        path_work_charge({coding_agent::agent_config_dir()}),
+                        stop_token,
+                        [base_url = plan.magpie_base_url, api_key = plan.cli_selection.api_key] {
+                            return build_runtime(nullptr, base_url, api_key);
+                        }));
         if (!built) {
             co_await discard_unpublished_session();
             co_return std::unexpected(std::move(built.error()));
@@ -1458,14 +1443,16 @@ struct PreparedAssemblyTarget final {
         runtime = std::move(*built);
     }
 
-    // 5. Resolve provider/model metadata and the request Model. Resume stores
-    // only `model_change {provider, modelId}`; the recorded identity is
-    // re-resolved against the live runtime catalog. Refresh live availability
-    // first so the resolution chain consults real configured auth (pi
-    // `refreshAvailability` at runtime creation and inside `findInitialModel`):
-    // `has_configured_auth` and the available snapshot then reflect actual
-    // credential resolution, not the structural provider composition.
-    static_cast<void>(co_await support::detail::await_async_result(runtime->get_available()));
+    // An injected Runtime already has a gateway identity. Reject a conflicting
+    // key before selecting a model or publishing any Session state (ADR 0073).
+    if (plan.cli_selection.api_key) {
+        if (auto bound = runtime->configure_startup_key(*plan.cli_selection.api_key); !bound) {
+            co_await discard_unpublished_session();
+            co_return std::unexpected(bound.error());
+        }
+    }
+
+    // Resolve passive model identities against the gateway catalog.
 
     std::optional<std::string> stored_provider;
     std::optional<std::string> stored_model;
@@ -1474,11 +1461,8 @@ struct PreparedAssemblyTarget final {
         stored_model = prepared_resume.resume.model;
     }
 
-    // Resume: record whether the stored `model_change {provider, modelId}`
-    // can be restored against the live runtime (pi `sdk.ts` `createAgentSession`:
-    // the restored model must exist AND its provider must have configured
-    // auth). An explicit `--model`/request model skips the restore check and
-    // never produces the fallback message.
+    // Record unavailable historical identities for the existing boot warning.
+    // An explicit --model/request model skips this restore check.
     bool resume_restore_failed = false;
     if (is_resume && stored_provider && stored_model &&
         !plan.cli_selection.model && !plan.requested_model && !plan.cli_fake) {
@@ -1527,16 +1511,6 @@ struct PreparedAssemblyTarget final {
         }
         request_model = std::move(*resolved);
     }
-    if (plan.cli_selection.api_key) {
-        // In-memory runtime API key override, never persisted; requires an
-        // explicit model (enforced at parse time too).
-        if (auto override_set = runtime->set_runtime_api_key(
-                request_model.provider, *plan.cli_selection.api_key);
-            !override_set) {
-            co_await discard_unpublished_session();
-            co_return std::unexpected(override_set.error());
-        }
-    }
     resolved_provider = request_model.provider;
     resolved_model = request_model.id;
 
@@ -1554,8 +1528,7 @@ struct PreparedAssemblyTarget final {
         request_model.id == agent::detail::kDefaultModel.id;
     if (resume_restore_failed) {
         if (landed_on_placeholder) {
-            model_fallback_message = coding_agent::format_no_models_available_message(
-                std::filesystem::path{coding_agent::kDefaultAuthGuidanceDocsPath});
+            model_fallback_message = coding_agent::format_no_models_available_message();
         } else {
             model_fallback_message = std::format(
                 "Could not restore model {}/{}. Using {}/{}",
@@ -1563,8 +1536,7 @@ struct PreparedAssemblyTarget final {
                 request_model.provider, request_model.id);
         }
     } else if (landed_on_placeholder) {
-        model_fallback_message = coding_agent::format_no_models_available_message(
-            std::filesystem::path{coding_agent::kDefaultAuthGuidanceDocsPath});
+        model_fallback_message = coding_agent::format_no_models_available_message();
     }
 
     // Resume: explicit provider/model metadata is allowed but warned when
@@ -1596,7 +1568,7 @@ struct PreparedAssemblyTarget final {
     // configured models.json apiKey templates. The session always owns its
     // local capabilities; the former SDK host-provided environment injection
     // is gone.
-    std::vector<std::string> secret_environment_names = runtime->configured_api_key_env_names();
+    std::vector<std::string> secret_environment_names{"MAGPIE_API_KEY"};
     // All tool paths resolve with pi `resolveToCwd` semantics (ADR 0057):
     // absolute paths are honored anywhere after normalization; there is no
     // workspace containment or skill-root allowlist.
@@ -2037,13 +2009,12 @@ struct PreparedAssemblyTarget final {
     services.runtime_target = plan.execution_runtime_target;
     services.user_shell = std::move(user_shell);
     if (!services.user_shell && plan.provide_user_shell) {
-        services.user_shell = std::make_unique<LocalUserShell>(
-            workspace,
-            services.model_runtime->configured_api_key_env_names(),
-            harness::ShellConfig{
-                .shell_path = shell_path,
-                .command_prefix = shell_command_prefix,
-            });
+        services.user_shell = std::make_unique<LocalUserShell>(workspace,
+                std::vector<std::string>{"MAGPIE_API_KEY"},
+                harness::ShellConfig{
+                        .shell_path = shell_path,
+                        .command_prefix = shell_command_prefix,
+                });
     }
     services.bash_session_environment = std::move(bash_session_environment);
     services.tools = std::move(tools);

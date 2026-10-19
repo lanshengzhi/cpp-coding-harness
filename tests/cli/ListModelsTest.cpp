@@ -1,7 +1,7 @@
 // P8 (#404): `--list-models [search]` prints pi's exact six-column table
 // (`provider model context max-out thinking images`) over the runtime's
 // available (configured-auth) models, with `formatTokenCount` K/M formatting,
-// fuzzy `[search]` filtering, the models.json warning on stderr, and
+// fuzzy `[search]` filtering, runtime diagnostics on stderr, and
 // `formatNoModelsAvailableMessage()` when no models exist — then exits 0
 // without touching session storage (the session manager is in-memory).
 
@@ -44,7 +44,6 @@ namespace {
     model.name = model.id;
     model.api = "openai-responses";
     model.provider = std::move(provider);
-    model.base_url = "https://example.invalid";
     model.reasoning = reasoning;
     model.input = images
         ? std::vector<ai::ModelInput>{ai::ModelInput::Text, ai::ModelInput::Image}
@@ -59,16 +58,15 @@ namespace {
     std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
     definitions.push_back(coding_agent::ModelRuntimeTestProvider{
             .definition =
-                    ai::ProviderDefinition{
+                    tests::ScriptedModelCatalog{
                             .id = "beta",
                             .name = "beta",
                             .models = {catalog_model("beta", "beta-1", 999, 1500, false, true)},
-                            .auth = tests::detail::fixture_auth(),
                     },
     });
     definitions.push_back(coding_agent::ModelRuntimeTestProvider{
             .definition =
-                    ai::ProviderDefinition{
+                    tests::ScriptedModelCatalog{
                             .id = "alpha",
                             .name = "alpha",
                             .models =
@@ -76,14 +74,9 @@ namespace {
                                             catalog_model("alpha", "alpha-1", 200000, 16000, false, false),
                                             catalog_model("alpha", "alpha-2", 1000000, 2000000, true, true),
                                     },
-                            .auth = tests::detail::fixture_auth(),
                     },
     });
-    auto created = coding_agent::create_model_runtime_for_testing(
-            coding_agent::ModelRuntimeOptions{
-                    .models_path = std::filesystem::path{},
-                    .credentials = std::make_shared<tests::detail::FixtureCredentialStore>(),
-            },
+    auto created = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
             coding_agent::ModelRuntimeTestOptions{
                     .providers = std::move(definitions),
             });
@@ -147,9 +140,8 @@ TEST_CASE("list-models with no models prints the no-models message and exits 0",
     auto result = run_list_models({"--list-models"}, {});
 
     REQUIRE(result.exit_code == 0);
-    CHECK(result.stdout_text == "No models available. Use /login to log into a provider via OAuth or API key. See:\n"
-                                "  ~/.pike/docs/providers.md\n"
-                                "  ~/.pike/docs/models.md\n");
+    CHECK(result.stdout_text == "No models available. Start the local Magpie gateway with `magpie serve`, "
+                                "then run `/reload` or `/gateway`.\n");
 }
 
 TEST_CASE("list-models runs in-memory: no session file is created and help/version keep precedence",
@@ -176,11 +168,8 @@ TEST_CASE("list-models runs in-memory: no session file is created and help/versi
     CHECK_FALSE(ec);
 }
 
-TEST_CASE("list-models reports the models.json load error as a stderr warning",
-        "[cli][list-models][issue404][spec][issue626]") {
-    // A real runtime over a broken models.json carries the config diagnostic;
-    // the CLI surface prints it as pi's yellow warning (colorless here). The
-    // built-in providers still compose structurally, so the table prints too.
+TEST_CASE("list-models ignores malformed legacy models.json", "[cli][list-models][issue404][spec][issue626]") {
+    // Legacy model configuration does not participate in catalog discovery.
     tests::TempWorkspace home;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_key_guard{"KIMI_API_KEY"};
@@ -188,18 +177,38 @@ TEST_CASE("list-models reports the models.json load error as a stderr warning",
     kimi_key_guard.set("dummy-kimi-key");
     home.write(".config/pike/agent/models.json", "{not valid json");
 
-    auto runtime = coding_agent::ModelRuntime::create({});
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{}, coding_agent::ModelRuntimeTestOptions{});
     REQUIRE(runtime);
-    REQUIRE(tests::run_async_result((*runtime)->get_available()));
 
     std::ostringstream output;
     std::ostringstream error;
     cli::print_list_models(**runtime, std::nullopt, output, error);
 
-    CHECK(error.str().find(
-              "Warning: errors loading models.json:\n") != std::string::npos);
-    CHECK(error.str().find("Failed to parse models.json") != std::string::npos);
-    // stdout still carries the table with pi's header, exactly like pi.
-    CHECK(output.str().find("max-out") != std::string::npos);
-    CHECK(output.str().find("images") != std::string::npos);
+    CHECK(error.str().empty());
+    CHECK(output.str().find("No models available") != std::string::npos);
+}
+
+TEST_CASE("list-models reports Magpie discovery errors as runtime stderr warnings",
+        "[cli][list-models][issue626][spec]") {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .head = {.status_code = 0, .headers = {}},
+            .chunks = {},
+            .failure = support::make_error(support::ErrorCode::Network, "gateway unavailable"),
+    });
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{}, coding_agent::ModelRuntimeTestOptions{}, transport);
+    REQUIRE(runtime);
+
+    std::ostringstream output;
+    std::ostringstream error;
+    cli::print_list_models(**runtime, std::nullopt, output, error);
+
+    INFO(error.str());
+    CHECK(error.str().find("Warning: model runtime errors:\n") != std::string::npos);
+    CHECK(error.str().find("Magpie model discovery failed") != std::string::npos);
+    CHECK(error.str().find("gateway unavailable") != std::string::npos);
+    CHECK(error.str().find("magpie serve") != std::string::npos);
+    CHECK(output.str().find("No models available") != std::string::npos);
 }

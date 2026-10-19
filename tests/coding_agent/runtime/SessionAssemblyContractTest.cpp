@@ -19,13 +19,14 @@
 // `EnvVarGuard`.
 
 #include <cch/ai/Models.hpp>
-#include <cch/coding_agent/AuthStorage.hpp>
+#include "ai/ModelsTestAccess.hpp"
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -33,6 +34,15 @@
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
+
+#include <boost/asio/co_spawn.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/use_future.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -43,8 +53,10 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <thread>
 #include <vector>
 #include "support/AgentRootFixture.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 
 using namespace cch;
 namespace runtime = cch::coding_agent::runtime;
@@ -63,6 +75,7 @@ struct AssemblyFixture {
     tests::EnvVarGuard gamma_guard{"GAMMA_KEY"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     tests::EnvVarGuard deepseek_guard{"DEEPSEEK_API_KEY"};
+    tests::ModelCatalogFixture catalog;
     tests::RuntimeFixture runtime;
 
     AssemblyFixture() {
@@ -73,10 +86,7 @@ struct AssemblyFixture {
         deepseek_guard.unset();
     }
 
-    void write_models(std::string_view json) {
-        std::ofstream out(agent_dir / "models.json", std::ios::binary);
-        out << json;
-    }
+    void write_models(std::string_view json) { catalog.set(json); }
 
     [[nodiscard]] runtime::AgentSessionCreationRequest make_request(
         std::optional<bool> trust_override = std::nullopt) const {
@@ -86,6 +96,7 @@ struct AssemblyFixture {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.workspace = workspace.path();
+        request.model_runtime = catalog.runtime;
         request.session_target = coding_agent::InMemorySessionTarget{};
         return request;
     }
@@ -255,92 +266,122 @@ TEST_CASE("project settings defaults select the model only while the project is 
     CHECK(untrusted->resolved_identity.model != "beta-2");
 }
 
-TEST_CASE("Request Authentication precedence survives assembly unchanged",
-        "[coding_agent][runtime][assembly-contract][issue509][spec]") {
+TEST_CASE("Assembly applies the gateway startup key without explicit model selection",
+        "[coding_agent][runtime][assembly-contract][gateway][spec]") {
     AssemblyFixture fix;
-    fix.write_models(R"({
-      "providers": {
-        "gamma": {
-          "baseUrl": "https://gamma.example/v1",
-          "api": "openai-responses",
-          "apiKey": "$GAMMA_KEY",
-          "models": [{"id": "gamma-1"}]
+    fix.write_models(kTwoProviderModels);
+    auto wire = std::make_shared<tests::ScriptedTransport>();
+    wire->attempts.push_back(tests::TransportAttempt{
+            .chunks = {"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n"},
+    });
+    ai::detail::ModelsTestAccess::set_transport(*fix.catalog.models, wire);
+    auto request = fix.make_request();
+    request.session_facts.api_key = "cli-startup-key";
+    auto created = fix.create(std::move(request));
+    REQUIRE(created);
+    auto& session = fix.runtime.adopt_session(std::move(created->session));
+    auto model = session.snapshot().agent_state.model;
+    model.api = "openai-completions";
+    auto stream = session.model_runtime()->stream_factory()(model, {}, {});
+    auto result = tests::run_async_result(std::move(stream).run({}));
+    REQUIRE(result);
+    CHECK(result->stop_reason == ai::AssistantStopReason::Stop);
+    REQUIRE(wire->requests.size() == 1);
+    CHECK(wire->requests.front().headers.at("Authorization") == "Bearer cli-startup-key");
+    CHECK_FALSE(std::filesystem::exists(fix.agent_dir / "auth.json"));
+}
+
+TEST_CASE("Assembly sends the CLI key on initial discovery before selecting its catalog model",
+        "[coding_agent][runtime][assembly-contract][gateway][spec]") {
+    namespace asio = boost::asio;
+    namespace http = boost::beast::http;
+    AssemblyFixture fix;
+    asio::io_context server_io;
+    asio::ip::tcp::acceptor acceptor(server_io, {asio::ip::make_address("127.0.0.1"), 0});
+    asio::ip::tcp::socket socket(server_io);
+    asio::steady_timer watchdog(server_io, std::chrono::seconds{8});
+    // All borrowed server state outlives the coroutine and its joined thread.
+    watchdog.async_wait([&acceptor, &socket](boost::system::error_code error) {
+        if (error) return;
+        boost::system::error_code ignored;
+        acceptor.close(ignored);
+        socket.close(ignored);
+    });
+    auto serve = [&acceptor, &socket, &watchdog]() -> asio::awaitable<std::pair<std::string, std::string>> {
+        boost::system::error_code error;
+        co_await acceptor.async_accept(socket, asio::redirect_error(asio::use_awaitable, error));
+        if (error) co_return std::pair<std::string, std::string>{};
+        boost::beast::flat_buffer buffer;
+        http::request<http::string_body> incoming;
+        co_await http::async_read(socket, buffer, incoming, asio::redirect_error(asio::use_awaitable, error));
+        if (error) co_return std::pair<std::string, std::string>{};
+        const std::string auth{incoming[http::field::authorization]};
+        const std::string target{incoming.target()};
+        http::response<http::string_body> response{http::status::ok, incoming.version()};
+        response.keep_alive(false);
+        response.body() =
+                auth == "Bearer discovery-key" ? R"({"data":[{"id":"key-visible-model"}]})" : R"({"data":[]})";
+        response.prepare_payload();
+        co_await http::async_write(socket, response, asio::redirect_error(asio::use_awaitable, error));
+        socket.close(error);
+        watchdog.cancel();
+        co_return std::pair{target, auth};
+    };
+    auto served = asio::co_spawn(server_io, serve(), asio::use_future);
+    std::jthread server([&server_io] { server_io.run(); });
+    auto request = fix.make_request();
+    request.model_runtime.reset();
+    request.magpie_base_url = "http://127.0.0.1:" + std::to_string(acceptor.local_endpoint().port());
+    request.session_facts.api_key = "discovery-key";
+    auto created = fix.create(std::move(request));
+    server.join();
+    const auto [target, auth] = served.get();
+    CHECK(target == "/v1/models");
+    CHECK(auth == "Bearer discovery-key");
+    REQUIRE(created);
+    CHECK(created->resolved_identity.model == "key-visible-model");
+    (void)fix.runtime.adopt_session(std::move(created->session));
+}
+
+TEST_CASE("Assembly preserves the identity of a discovered shared gateway runtime",
+        "[coding_agent][runtime][assembly-contract][gateway][spec]") {
+    AssemblyFixture fix;
+    auto wire = std::make_shared<tests::ScriptedTransport>();
+    wire->attempts = {
+            {.chunks = {R"({"data":[{"id":"shared-model"}]})"}},
+            {.chunks = {"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n"}},
+    };
+    auto shared = coding_agent::create_model_runtime_for_testing(
+            {.agent_dir = fix.agent_dir, .api_key = "bound-key"}, {}, wire);
+    REQUIRE(shared);
+    REQUIRE(wire->requests.size() == 1);
+    CHECK(wire->requests.front().headers.at("Authorization") == "Bearer bound-key");
+    for (const auto& requested : {std::optional<std::string>{},
+                 std::optional<std::string>{"bound-key"},
+                 std::optional<std::string>{"conflict-key"}}) {
+        auto request = fix.make_request();
+        request.model_runtime = *shared;
+        request.session_facts.api_key = requested;
+        auto created = fix.create(std::move(request));
+        if (requested == "conflict-key") {
+            REQUIRE_FALSE(created);
+            CHECK(created.error().message.find("create another model runtime") != std::string::npos);
+            CHECK(created.error().message.find("bound-key") == std::string::npos);
+            CHECK(created.error().message.find("conflict-key") == std::string::npos);
+        } else {
+            REQUIRE(created);
+            CHECK(created->resolved_identity.model == "shared-model");
+            (void)fix.runtime.adopt_session(std::move(created->session));
         }
-      }
-    })");
-    fix.gamma_guard.set("env-configured-key");
-
-    // Level 4 (configured key): ambient env-template key resolves when
-    // nothing is stored and no override exists.
-    auto ambient = fix.create(fix.make_request());
-    REQUIRE(ambient);
-    auto& ambient_session = fix.runtime.adopt_session(std::move(ambient->session));
-    {
-        auto checked = tests::run_async_result(ambient_session.model_runtime()->check_auth("gamma"));
-        REQUIRE(checked);
-        REQUIRE(*checked);
-        CHECK((*checked)->source == "configured API key");
-        const auto status = ambient_session.model_runtime()->get_provider_auth_status("gamma");
-        REQUIRE(status);
-        CHECK(status->configured);
-        CHECK(status->source == "environment");
-        CHECK(status->label == "GAMMA_KEY");
+        CHECK((*shared)->model("magpie", "shared-model"));
+        CHECK(wire->requests.size() == 1);
     }
-
-    // Level 2 (stored credential) beats the configured key.
-    coding_agent::AuthStorage storage(fix.agent_dir / "auth.json");
-    auto stored = tests::run_async_result(storage.modify(
-        "gamma",
-        [](std::optional<ai::Credential>)
-            -> support::AsyncResult<std::optional<ai::Credential>> {
-            return support::AsyncResult<std::optional<ai::Credential>>(
-                std::expected<std::optional<ai::Credential>, support::Error>{
-                    std::optional<ai::Credential>{
-                        ai::ApiKeyCredential{.key = "stored-key"}}});
-        }));
-    REQUIRE(stored);
-
-    auto with_stored = fix.create(fix.make_request());
-    REQUIRE(with_stored);
-    auto& stored_session = fix.runtime.adopt_session(std::move(with_stored->session));
-    {
-        auto checked = tests::run_async_result(stored_session.model_runtime()->check_auth("gamma"));
-        REQUIRE(checked);
-        REQUIRE(*checked);
-        CHECK((*checked)->source == "stored credential");
-        const auto status = stored_session.model_runtime()->get_provider_auth_status("gamma");
-        REQUIRE(status);
-        CHECK(status->configured);
-        CHECK(status->source == "stored");
-        auto listed = tests::run_async_result(stored_session.model_runtime()->list_credentials());
-        REQUIRE(listed);
-        const auto entry = std::find_if(listed->begin(), listed->end(), [](const ai::CredentialInfo& value) {
-            return value.provider_id == "gamma";
-        });
-        REQUIRE(entry != listed->end());
-        CHECK(entry->type == "api_key");
-    }
-
-    // Level 1 (runtime API key override from --api-key) beats everything and
-    // installs as the process-lifetime in-memory override.
-    auto override_request = fix.make_request();
-    override_request.session_facts.provider = "gamma";
-    override_request.session_facts.model = "gamma-1";
-    override_request.session_facts.api_key = "cli-override-key";
-    auto overridden = fix.create(std::move(override_request));
-    REQUIRE(overridden);
-    auto& overridden_session = fix.runtime.adopt_session(std::move(overridden->session));
-    CHECK(overridden_session.model_runtime()->has_runtime_api_key("gamma"));
-    {
-        auto checked = tests::run_async_result(overridden_session.model_runtime()->check_auth("gamma"));
-        REQUIRE(checked);
-        REQUIRE(*checked);
-        const auto status = overridden_session.model_runtime()->get_provider_auth_status("gamma");
-        REQUIRE(status);
-        CHECK(status->configured);
-        CHECK(status->source == "runtime");
-        CHECK(overridden_session.model_runtime()->has_runtime_api_key("gamma"));
-    }
+    auto model = (*shared)->model("magpie", "shared-model");
+    REQUIRE(model);
+    auto result = tests::run_async_result((*shared)->stream_factory()(*model, {}, {}).run({}));
+    REQUIRE(result);
+    REQUIRE(wire->requests.size() == 2);
+    CHECK(wire->requests.back().headers.at("Authorization") == "Bearer bound-key");
 }
 
 TEST_CASE("settings load errors surface as diagnostics ahead of resource diagnostics",
@@ -352,7 +393,10 @@ TEST_CASE("settings load errors surface as diagnostics ahead of resource diagnos
 
     // Broken global settings plus a duplicate project skill name: both kinds
     // of diagnostic fire in one creation attempt.
-    fix.workspace.write(".config/pike/agent/settings.json", "{ this is not json");
+    {
+        std::ofstream out(fix.agent_dir / "settings.json", std::ios::binary);
+        out << "{ this is not json";
+    }
     fix.workspace.write(
         ".pi/skills/first/SKILL.md",
         "---\nname: dupe-skill\ndescription: First skill.\n---\nFirst body.\n");

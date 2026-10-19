@@ -22,6 +22,10 @@ namespace cch::harness {
 class RuntimeTarget;
 }
 
+namespace cch::support {
+class StreamTransport;
+}
+
 namespace cch::coding_agent::runtime {
 
 /// pi in-memory `createBranchedSession`: the derived branch facts seeded into
@@ -148,6 +152,10 @@ struct AgentSessionCreationRequest {
     /// ModelRuntime with scripted Provider behavior; absent, the factory
     /// default-creates a Session-owned runtime from the Agent Config Directory.
     std::shared_ptr<coding_agent::ModelRuntime> model_runtime;
+    /// Test and embedding-host seam: gateway URL for dynamic Magpie model
+    /// discovery, status probing and inference. Empty uses the fixed production default
+    /// ("http://127.0.0.1:3425").
+    std::string magpie_base_url{};
     /// Private test seam: custom tools registered alongside the fixed built-in
     /// tool set. Production callers never set it (the fixed #331 tool set is
     /// always available); retry-continuation tests inject recording tools.

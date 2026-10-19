@@ -194,7 +194,8 @@ void print_session_diagnostics(
     // session-creation error it would have reported otherwise.
     std::shared_ptr<coding_agent::ModelRuntime> shared_runtime = std::move(model_runtime);
     if (!shared_runtime) {
-        if (auto created = coding_agent::ModelRuntime::create({}); created) {
+        // Bind the invocation key before the runtime's first discovery.
+        if (auto created = coding_agent::ModelRuntime::create({.api_key = config.session_facts.api_key}); created) {
             shared_runtime = std::move(*created);
         }
     }

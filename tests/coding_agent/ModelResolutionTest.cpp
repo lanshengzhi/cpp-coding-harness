@@ -18,7 +18,9 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "agent/harness/session/EntrySerializer.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ModelsFixture.hpp"
@@ -26,6 +28,7 @@
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/SessionEntries.hpp"
 #include "support/SessionSeeding.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/Json.hpp"
 
@@ -59,6 +62,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::ModelCatalogFixture catalog;
     tests::RuntimeFixture runtime;
 
     Fixture() {
@@ -69,10 +73,7 @@ struct Fixture {
         session_file = workspace.path() / "session.jsonl";
     }
 
-    void write_models(std::string_view json) {
-        std::ofstream out(agent_dir / "models.json", std::ios::binary);
-        out << json;
-    }
+    void write_models(std::string_view json) { catalog.set(json); }
 
     void write_settings(std::string_view json) {
         std::ofstream out(agent_dir / "settings.json", std::ios::binary);
@@ -182,6 +183,7 @@ constexpr std::string_view kFullThinkingProvider = R"({
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.execution_runtime_target = fixture.runtime.make_target();
     return request;
 }
@@ -191,6 +193,7 @@ constexpr std::string_view kFullThinkingProvider = R"({
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_target = coding_agent::ExplicitResumeSessionTarget{fixture.session_file};
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.execution_runtime_target = fixture.runtime.make_target();
     return request;
 }
@@ -353,7 +356,7 @@ TEST_CASE("CLI model resolution: settings default wins with configured auth",
     result->session->close();
 }
 
-TEST_CASE("CLI model resolution: unauthenticated settings default falls through to first available with auth",
+TEST_CASE("CLI model resolution: catalog settings default needs no upstream credential",
         "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
@@ -364,8 +367,8 @@ TEST_CASE("CLI model resolution: unauthenticated settings default falls through 
 
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
-    CHECK(result->resolved_identity.provider == "beta");
-    CHECK(result->resolved_identity.model == "beta-1");
+    CHECK(result->resolved_identity.provider == "alpha");
+    CHECK(result->resolved_identity.model == "alpha-1");
     result->session->close();
 }
 
@@ -540,28 +543,24 @@ TEST_CASE("CLI model resolution: resume without legacy model metadata emits no o
     resumed->session->close();
 }
 
-TEST_CASE("CLI model resolution: resume without configured auth falls back with pi's message",
+TEST_CASE("CLI model resolution: resume restores catalog identity without upstream credentials",
         "[coding_agent][model-resolution][resume][issue357])[spec]") {
     Fixture fixture;
     fixture.write_models(kTwoKeyedProviders);
 
     write_prior_session(fixture, "beta", "beta-1");
 
-    // The stored identity's provider loses its auth between create and resume:
-    // pi sdk.ts `createAgentSession` requires `restoredModel &&
-    // hasConfiguredAuth`, so the chain falls back to the first available model
-    // with configured auth. The `modelFallbackMessage` carries pi's exact
-    // text (no reason parenthetical at this baseline — `restoreModelFromSession`
-    // is uncalled) plus the resolved fallback identity.
+    // The stored identity is re-resolved in the discovered catalog only:
+    // credential state no longer gates restore, so the recorded beta/beta-1
+    // is kept without a fallback message. Provider key material in the
+    // legacy fixture text is ignored by catalog discovery.
     fixture.write_models(kKeylessBetaKeyedAlpha);
 
     auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
-    CHECK(resumed->resolved_identity.provider == "alpha");
-    CHECK(resumed->resolved_identity.model == "alpha-1");
-    REQUIRE(resumed->model_fallback_message.has_value());
-    CHECK(*resumed->model_fallback_message ==
-          "Could not restore model beta/beta-1. Using alpha/alpha-1");
+    CHECK(resumed->resolved_identity.provider == "beta");
+    CHECK(resumed->resolved_identity.model == "beta-1");
+    CHECK_FALSE(resumed->model_fallback_message.has_value());
     resumed->session->close();
 }
 
@@ -575,7 +574,7 @@ TEST_CASE("resume restore failure with nothing available reports the no-models m
     // The catalog disappears entirely: the restore fails and the chain lands
     // on the unknown placeholder, so pi replaces the fallback message with
     // `formatNoModelsAvailableMessage()` (sdk.ts `if (!model)` branch).
-    std::filesystem::remove(fixture.agent_dir / "models.json");
+    fixture.catalog.set(R"({"providers":{}})");
 
     auto resumed = fixture.runtime.run(coding_agent::create_agent_session_async(cli_resume_request(fixture)));
     REQUIRE(resumed.has_value());
@@ -583,7 +582,7 @@ TEST_CASE("resume restore failure with nothing available reports the no-models m
     CHECK(resumed->resolved_identity.model == "unknown");
     REQUIRE(resumed->model_fallback_message.has_value());
     CHECK(resumed->model_fallback_message->starts_with(
-        "No models available. Use /login to log into a provider via OAuth or API key. See:"));
+            "No models available. Start the local Magpie gateway with `magpie serve`"));
     resumed->session->close();
 }
 
@@ -658,7 +657,7 @@ TEST_CASE("session files persist only model_change provider/modelId, never auth 
     // cover what the pre-0064 file read checked (#327 / ADR 0031).
 }
 
-TEST_CASE("CLI model resolution: nothing configured keeps kDefaultModel and fails through provider lookup",
+TEST_CASE("CLI model resolution: an empty catalog keeps kDefaultModel and returns a stream error",
         "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     // Empty Agent Config Directory: no providers, no models, no auth. The
@@ -680,7 +679,7 @@ TEST_CASE("CLI model resolution: nothing configured keeps kDefaultModel and fail
     // boot warning.
     REQUIRE(result->model_fallback_message.has_value());
     CHECK(result->model_fallback_message->starts_with(
-        "No models available. Use /login to log into a provider via OAuth or API key. See:"));
+            "No models available. Start the local Magpie gateway with `magpie serve`"));
 
     // Streaming against it fails through the normal provider/auth lookup
     // exactly like pi's `Unknown provider: ${model.provider}`.
@@ -695,7 +694,7 @@ TEST_CASE("CLI model resolution: nothing configured keeps kDefaultModel and fail
     REQUIRE(terminal != nullptr);
     CHECK(terminal->stop_reason == ai::AssistantStopReason::Error);
     REQUIRE(terminal->error_message);
-    CHECK(terminal->error_message->find("Unknown provider: unknown") != std::string::npos);
+    CHECK(terminal->error_message->find("has no API implementation") != std::string::npos);
     result->session->close();
 }
 
@@ -730,19 +729,19 @@ TEST_CASE("a zero-model session never persists a placeholder model_change identi
 // Model resolution chain — default CLI creation profile
 // ─────────────────────────────────────────────────────────────────────────────
 
-TEST_CASE("default creation resolves the first available model with configured auth",
+TEST_CASE("default creation selects the first catalog model without upstream credentials",
         "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
 
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
-    CHECK(result->resolved_identity.provider == "beta");
-    CHECK(result->resolved_identity.model == "beta-1");
+    CHECK(result->resolved_identity.provider == "alpha");
+    CHECK(result->resolved_identity.model == "alpha-1");
     result->session->close();
 }
 
-TEST_CASE("default creation honors the settings default only with configured auth",
+TEST_CASE("default creation honors a catalog settings default without upstream credentials",
         "[coding_agent][model-resolution][issue353])[spec]") {
     Fixture fixture;
     fixture.write_models(kKeylessAlphaKeyedBeta);
@@ -751,8 +750,40 @@ TEST_CASE("default creation honors the settings default only with configured aut
 
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
     REQUIRE(result.has_value());
-    CHECK(result->resolved_identity.provider == "beta");
-    CHECK(result->resolved_identity.model == "beta-1");
+    CHECK(result->resolved_identity.provider == "alpha");
+    CHECK(result->resolved_identity.model == "alpha-1");
+    result->session->close();
+}
+
+TEST_CASE("default creation honors MAGPIE_DEFAULT_MODEL over the Magpie catalog order",
+        "[coding_agent][model-resolution][magpie][spec]") {
+    Fixture fixture;
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"data":[{"id":"group/first"},{"id":"group/preferred"}]})"},
+    });
+    transport->repeat_last_attempt = true;
+
+    auto runtime = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .agent_dir = fixture.agent_dir,
+
+                    .magpie_base_url = "http://127.0.0.1:34259",
+            },
+            coding_agent::ModelRuntimeTestOptions{},
+            transport);
+    REQUIRE(runtime);
+    REQUIRE((*runtime)->model("magpie", "group/preferred").has_value());
+
+    tests::EnvVarGuard default_model_guard{"MAGPIE_DEFAULT_MODEL"};
+    default_model_guard.set("group/preferred");
+
+    auto request = cli_request(fixture);
+    request.model_runtime = *runtime;
+    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
+    REQUIRE(result.has_value());
+    CHECK(result->resolved_identity.provider == "magpie");
+    CHECK(result->resolved_identity.model == "group/preferred");
     result->session->close();
 }
 

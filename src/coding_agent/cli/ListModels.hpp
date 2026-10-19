@@ -12,7 +12,7 @@ namespace cch::cli {
 /// `provider model context max-out thinking images` table over the runtime's
 /// available (configured-auth) models, `formatTokenCount` K/M formatting,
 /// fuzzy `[search]` filtering (`No models matching "<pattern>"` when empty),
-/// the yellow models.json warning on stderr, and
+/// runtime diagnostics on stderr, and
 /// `formatNoModelsAvailableMessage()` when no models exist. Runs post-runtime
 /// pre-stdin; the caller exits 0 after it returns.
 void print_list_models(const coding_agent::ModelRuntime& runtime,

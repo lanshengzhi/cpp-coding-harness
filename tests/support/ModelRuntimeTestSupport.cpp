@@ -1,6 +1,11 @@
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 
+#include "coding_agent/GatewayOptions.hpp"
+#include "coding_agent/ModelRuntimeTestAccess.hpp"
+#include "ai/ModelsTestAccess.hpp"
+#include <cch/coding_agent/AgentConfigDir.hpp>
 #include "support/ScriptedProvider.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ModelsFixture.hpp"
 
@@ -9,6 +14,7 @@
 #include <boost/asio/io_context.hpp>
 
 #include <optional>
+#include <cstdlib>
 #include <utility>
 
 namespace cch::coding_agent {
@@ -19,7 +25,7 @@ namespace {
     result.definition = std::move(provider.definition);
     if (provider.stream) {
         result.stream = [stream = std::move(provider.stream)](
-                                ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) mutable {
+                                ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options) mutable {
             return stream(std::move(model),
                     std::move(context),
                     ModelRuntimeTestStreamOptions{
@@ -30,63 +36,51 @@ namespace {
     return result;
 }
 
-[[nodiscard]] support::Expected<std::shared_ptr<ModelRuntime>> finish_test_runtime(
-        support::Expected<std::shared_ptr<ModelRuntime>> runtime) {
-    if (!runtime) {
-        return std::unexpected(runtime.error());
-    }
-
-    boost::asio::io_context io;
-    std::optional<support::Expected<std::vector<ai::Model>>> snapshot;
-    boost::asio::co_spawn(
-            io,
-            [&runtime, &snapshot]() -> boost::asio::awaitable<void> {
-                snapshot.emplace(co_await support::detail::await_async_result(runtime.value()->get_available()));
-                co_return;
-            },
-            boost::asio::detached);
-    io.run();
-    if (!snapshot || !*snapshot) {
-        if (snapshot) {
-            return std::unexpected(snapshot->error());
-        }
-        return std::unexpected(support::make_error(
-                support::ErrorCode::Auth, "scripted runtime availability snapshot did not complete"));
-    }
-    return runtime;
-}
-
 } // namespace
 
 support::ExpectedVoid apply_model_runtime_test_provider(ai::Models& models, ModelRuntimeTestProvider provider) {
     return tests::apply_scripted_provider(models, to_scripted_provider(std::move(provider)));
 }
 
-support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(
-        ModelRuntimeOptions options, ModelRuntimeTestOptions test_options) {
-    auto runtime = ModelRuntime::create_impl(std::move(options));
-    if (!runtime) {
-        return std::unexpected(runtime.error());
+support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testing(ModelRuntimeOptions options,
+        ModelRuntimeTestOptions test_options,
+        std::shared_ptr<support::StreamTransport> catalog_transport) {
+    if (options.magpie_base_url.empty()) {
+        options.magpie_base_url = "http://127.0.0.1:34259";
     }
-    auto providers = std::move(test_options.providers);
-    auto transports = std::move(test_options.transports);
-    if (auto configured = (*runtime)->apply_test_models(
-                [providers = std::move(providers), transports = std::move(transports)](
-                        ai::Models& models) mutable -> support::ExpectedVoid {
-                    if (!providers.empty()) {
-                        models.clear_providers();
-                    }
-                    for (auto& provider : providers) {
-                        if (auto applied = apply_model_runtime_test_provider(models, std::move(provider)); !applied) {
-                            return std::unexpected(applied.error());
-                        }
-                    }
-                    return tests::apply_scripted_transport_options(models, std::move(transports));
-                });
-            !configured) {
-        return std::unexpected(configured.error());
+    if (!catalog_transport) {
+        catalog_transport = make_empty_magpie_transport();
     }
-    return finish_test_runtime(std::move(runtime));
+    auto models = std::make_shared<ai::Models>(
+            make_gateway_models_options(std::move(options.api_key), std::move(options.magpie_base_url)));
+    ai::detail::ModelsTestAccess::set_transport(*models, std::move(catalog_transport));
+    auto runtime = ModelRuntimeTestAccess::create(
+            models, options.agent_dir.empty() ? agent_config_dir() : std::move(options.agent_dir));
+    static_cast<void>(runtime->refresh());
+    if (!test_options.providers.empty()) {
+        if (auto cleared = ai::detail::ModelsTestAccess::replace_models(*models, {}); !cleared)
+            return std::unexpected(cleared.error());
+    }
+    for (auto& provider : test_options.providers) {
+        if (auto applied = apply_model_runtime_test_provider(*models, std::move(provider)); !applied) {
+            return std::unexpected(applied.error());
+        }
+    }
+    if (auto applied = tests::apply_scripted_transport_options(*models, std::move(test_options.transports)); !applied) {
+        return std::unexpected(applied.error());
+    }
+    return runtime;
+}
+
+std::shared_ptr<support::StreamTransport> make_empty_magpie_transport() {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .head = {.status_code = 200, .headers = {}},
+            .chunks = {R"({"data":[]})"},
+            .failure = std::nullopt,
+    });
+    transport->repeat_last_attempt = true;
+    return transport;
 }
 
 } // namespace cch::coding_agent
@@ -94,8 +88,8 @@ support::Expected<std::shared_ptr<ModelRuntime>> create_model_runtime_for_testin
 namespace cch::tests {
 namespace {
 
-[[nodiscard]] ai::ProviderStreamOptions to_provider_options(coding_agent::ModelRuntimeTestStreamOptions options) {
-    ai::ProviderStreamOptions result;
+[[nodiscard]] ai::SimpleStreamOptions to_simple_options(coding_agent::ModelRuntimeTestStreamOptions options) {
+    ai::SimpleStreamOptions result;
     result.stop_token = options.stop_token;
     return result;
 }
@@ -110,7 +104,7 @@ namespace {
         result.stream = [stream = std::move(stream)](ai::Model model,
                                 ai::AiContext context,
                                 coding_agent::ModelRuntimeTestStreamOptions options) mutable {
-            return stream(std::move(model), std::move(context), to_provider_options(std::move(options)));
+            return stream(std::move(model), std::move(context), to_simple_options(std::move(options)));
         };
     }
     return result;
@@ -119,9 +113,7 @@ namespace {
 class FakeScriptedProvider final : public ScriptedProvider {
 public:
     explicit FakeScriptedProvider(std::string provider_id)
-        : ScriptedProvider(provider_id), definition_(make_ai_scripted_fake_provider_definition(provider_id)) {
-        provider_auth() = std::move(definition_.definition.auth);
-    }
+        : ScriptedProvider(provider_id), definition_(make_ai_scripted_fake_provider_definition(provider_id)) {}
 
     [[nodiscard]] std::string_view name() const noexcept override { return definition_.definition.name; }
 
@@ -129,7 +121,7 @@ public:
 
     [[nodiscard]] ai::ModelStream stream(
             ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions options) override {
-        return definition_.stream(std::move(model), std::move(context), to_provider_options(std::move(options)));
+        return definition_.stream(std::move(model), std::move(context), to_simple_options(std::move(options)));
     }
 
 private:
@@ -151,8 +143,7 @@ std::shared_ptr<ScriptedProvider> make_scripted_fake_provider(std::string provid
 }
 
 std::shared_ptr<ai::Models> make_scripted_fake_models() {
-    auto models = std::make_shared<ai::Models>(
-            std::make_shared<detail::FixtureCredentialStore>(), std::make_shared<detail::FixtureAuthContext>());
+    auto models = std::make_shared<ai::Models>();
     for (auto&& definition : make_scripted_fake_provider_definitions()) {
         if (auto added = coding_agent::apply_model_runtime_test_provider(*models, std::move(definition)); !added) {
             return nullptr;

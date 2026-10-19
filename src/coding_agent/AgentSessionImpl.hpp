@@ -74,16 +74,6 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     Impl(Impl&&) = delete;
     Impl& operator=(Impl&&) = delete;
 
-    /// Reject the prompt at admission when the current model's provider has
-    /// no configured auth (pi `agent-session.ts` `prompt()` preflight): a real
-    /// model whose provider resolves no auth fails with pi's verbatim re-auth
-    /// guidance (no-key branch, or the OAuth re-auth branch for OAuth-typed
-    /// providers). The placeholder `kDefaultModel` is skipped: "no model" is
-    /// not an auth failure, and streaming it fails through normal provider
-    /// lookup ("Unknown provider: unknown") exactly like pi. `checkAuth`
-    /// failures propagate unchanged.
-    [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> preflight_auth_guidance();
-
     /// Run one prompt on the awaiting host executor through optional prompt
     /// interpretation, the stateful Agent, persistence, and event fanout.
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> run_prompt(
@@ -140,9 +130,8 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     [[nodiscard]] support::Expected<std::string> set_thinking_level(
             std::string_view level, ModelMutationOptions options);
 
-    /// Runtime model switch (pi `AgentSession.setModel`): validates that the
-    /// target model's provider resolves auth (`No API key
-    /// for <provider>/<model>` otherwise), swaps the live Agent model,
+    /// Runtime model switch (pi `AgentSession.setModel`): validates the
+    /// target catalog identity, swaps the live Agent model,
     /// appends the `model_change` session entry (skipped for in-memory
     /// sessions, like the creation-time entry), and re-clamps the thinking
     /// level against the new model's supported set (pi's `setModel` →
@@ -503,10 +492,9 @@ struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Imp
     [[nodiscard]] boost::asio::awaitable<void> finalize_close_after_active_work();
     [[nodiscard]] std::shared_ptr<harness::AsyncFileSystem> release_close_resources() noexcept;
     void finalize_close() noexcept;
-    /// Build the session's AI-owned `ModelStream` factory: the runtime's
-    /// Models catalog composed with pi's request-time re-auth guidance
-    /// (ADR 0040 / #453). Each call returns an independent, re-invocable
-    /// factory; the Agent and the summarization seam each hold one.
+    /// Build the session's AI-owned `ModelStream` factory from the runtime's
+    /// Models catalog (ADR 0040 / #453). Each call returns an independent,
+    /// re-invocable factory; the Agent and the summarization seam each hold one.
     [[nodiscard]] ai::ModelStreamFactory make_stream_factory();
 
     runtime::RuntimeServices services_;

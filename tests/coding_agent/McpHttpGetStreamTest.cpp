@@ -8,6 +8,7 @@
 
 #include "coding_agent/mcp/McpHttpClient.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
+#include "support/StreamTransport.hpp"
 
 #include "support/Json.hpp"
 #include "support/ReleaseGate.hpp"
@@ -81,7 +82,7 @@ struct RecordedRequest {
 
 /// Scripted `StreamTransport`: answers the MCP handshake POSTs, then each GET
 /// from a queue (or the default). No network and no TLS.
-class ScriptedTransport final : public ai::providers::StreamTransport {
+class ScriptedTransport final : public support::StreamTransport {
 public:
     void push_get(GetScript script) { get_scripts_.push_back(std::move(script)); }
     void set_default_get(GetScript script) { default_get_ = std::move(script); }
@@ -147,8 +148,8 @@ public:
         return std::nullopt;
     }
 
-    boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> async_stream(
-            const ai::providers::StreamRequest& request, ai::providers::BodyChunkHandler on_body_chunk) override {
+    boost::asio::awaitable<support::Expected<support::StreamResponse>> async_stream(
+            const support::StreamRequest& request, support::BodyChunkHandler on_body_chunk) override {
         requests_.push_back(RecordedRequest{
                 request.method, request.url, request.headers, request.body, std::chrono::steady_clock::now()});
         const std::stop_token stop = request.stop_token;
@@ -196,7 +197,7 @@ public:
                     co_return std::unexpected(stream_cancelled());
                 }
             }
-            ai::providers::StreamResponse response;
+            support::StreamResponse response;
             response.head.status_code = script.status;
             response.head.headers = std::move(script.headers);
             co_return response;
@@ -216,7 +217,7 @@ public:
                 }
             }
         }
-        ai::providers::StreamResponse response;
+        support::StreamResponse response;
         if (method == "initialize") {
             support::JsonValue result{support::JsonValue::object_t{
                     {"jsonrpc", "2.0"},

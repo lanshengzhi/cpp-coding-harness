@@ -22,7 +22,7 @@
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "support/AsyncResultBridge.hpp"
 
-#include <cch/ai/Auth.hpp>
+#include "coding_agent/mcp/McpAuth.hpp"
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -787,19 +787,19 @@ struct ServerReport {
             coding_agent::mcp::McpAuthStore::default_path(options.agent_dir));
     (void)store->migrate_from_auth_json(options.agent_dir / "auth.json", entry.name, url);
     auto provider = std::make_shared<coding_agent::mcp::McpOAuthProvider>(*http->resolved_oauth);
-    ai::AuthInteraction interaction;
-    interaction.notify = [&options, open_browser, name = entry.name](const ai::AuthEvent& event) {
+    coding_agent::mcp::AuthInteraction interaction;
+    interaction.notify = [&options, open_browser, name = entry.name](const coding_agent::mcp::AuthEvent& event) {
         std::ostream& output = *options.output;
-        if (const auto* progress = std::get_if<ai::AuthProgress>(&event.kind)) {
+        if (const auto* progress = std::get_if<coding_agent::mcp::AuthProgress>(&event.kind)) {
             output << progress->message << '\n';
-        } else if (const auto* auth_url = std::get_if<ai::AuthUrl>(&event.kind)) {
+        } else if (const auto* auth_url = std::get_if<coding_agent::mcp::AuthUrl>(&event.kind)) {
             output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << auth_url->url << '\n';
             if (open_browser && *open_browser) {
                 (*open_browser)(auth_url->url);
             }
         }
     };
-    interaction.prompt = [](ai::AuthPrompt) -> support::AsyncResult<std::string> {
+    interaction.prompt = [](coding_agent::mcp::AuthPrompt) -> support::AsyncResult<std::string> {
         // The loopback callback completes the sign-in; the paste fallback is
         // not wired here (the non-interactive path pi also leaves to the
         // callback).

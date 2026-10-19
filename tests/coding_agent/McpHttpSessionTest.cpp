@@ -14,7 +14,7 @@
 // success, a non-TLS redirect is refused, and an HTTP error status surfaces.
 
 #include "ai/ModelStreamBridge.hpp"
-#include <cch/ai/BoostBeastStreamTransport.hpp>
+#include "support/BoostBeastStreamTransport.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpHttpClient.hpp"
@@ -170,7 +170,7 @@ private:
         tests::RuntimeFixture& runtime, coding_agent::mcp::McpHttpServerConfig config) {
     auto client = tests::run_awaitable(runtime,
             coding_agent::mcp::McpHttpClient::connect(
-                    std::move(config), std::make_shared<ai::providers::BoostBeastStreamTransport>()));
+                    std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
     REQUIRE(client.has_value());
     return *client;
 }
@@ -404,7 +404,7 @@ TEST_CASE("a non-TLS MCP HTTP URL is rejected at registration", "[coding_agent][
     // The gate runs before any socket work, so no server is needed.
     auto refused = tests::run_awaitable(runtime,
             coding_agent::mcp::McpHttpClient::connect(
-                    insecure, std::make_shared<ai::providers::BoostBeastStreamTransport>()));
+                    insecure, std::make_shared<support::BoostBeastStreamTransport>()));
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == support::ErrorCode::Validation);
 

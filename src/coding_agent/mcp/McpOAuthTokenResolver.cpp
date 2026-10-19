@@ -11,7 +11,7 @@
 #include "support/ExpectedMacros.hpp"
 
 #include <cch/ai/Timestamps.hpp>
-#include <cch/coding_agent/AuthGuidance.hpp>
+#include "coding_agent/mcp/McpAuth.hpp"
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -31,7 +31,7 @@ namespace {
 /// `kOAuthMinimumValidity` (ADR 0032).
 inline constexpr auto kOAuthMinimumValidity = std::chrono::minutes{5};
 
-[[nodiscard]] bool token_expires_soon(const ai::OAuthCredential& credential) {
+[[nodiscard]] bool token_expires_soon(const OAuthCredential& credential) {
     return credential.expires <= ai::current_timestamp_ms() + kOAuthMinimumValidity.count() * 1000;
 }
 
@@ -67,7 +67,7 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::
                 if (!state) {
                     co_return std::unexpected(std::move(state.error()));
                 }
-                std::optional<ai::OAuthCredential> credential;
+                std::optional<OAuthCredential> credential;
                 if (state->has_value()) {
                     credential = mcp_oauth_credential_from_state(**state);
                 }
@@ -98,15 +98,7 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::
                     // re-login is required and the resolver does not loop.
                     co_return std::unexpected(re_login_error(server_name, provider_id, "credential is expired"));
                 }
-                CCH_TRY(auth, co_await provider->to_auth(*credential));
-                std::map<std::string, std::string> headers;
-                for (const auto& [name, value] : auth.headers) {
-                    headers.insert_or_assign(name, value);
-                }
-                if (auth.api_key && !auth.api_key->empty()) {
-                    headers.insert_or_assign("Authorization", "Bearer " + *auth.api_key);
-                }
-                co_return headers;
+                co_return std::map<std::string, std::string>{{"Authorization", "Bearer " + credential->access}};
             });
 }
 

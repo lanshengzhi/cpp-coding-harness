@@ -26,10 +26,10 @@ namespace cch::tests {
 /// the scripted startup-TUI picker (pi `selectSession` host) so the test
 /// process's terminal is never touched.
 struct CliRunOptions {
-    std::vector<std::string> args;
-    std::optional<std::filesystem::path> cwd;
-    std::vector<std::pair<std::string, std::optional<std::string>>> env;
-    std::string stdin_text;
+    std::vector<std::string> args{};
+    std::optional<std::filesystem::path> cwd{std::nullopt};
+    std::vector<std::pair<std::string, std::optional<std::string>>> env{};
+    std::string stdin_text{};
     bool stdin_is_terminal{false};
     bool stdout_is_terminal{false};
     cli::ResumePickerSink resume_picker{};
@@ -184,11 +184,7 @@ private:
 }
 
 [[nodiscard]] inline CliRunResult run_cli(CliRunOptions options) {
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-            coding_agent::ModelRuntimeOptions{
-                    .models_path = std::filesystem::path{},
-                    .credentials = std::make_shared<detail::FixtureCredentialStore>(),
-            },
+    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
             coding_agent::ModelRuntimeTestOptions{
                     .providers = make_scripted_fake_provider_definitions(),
             });

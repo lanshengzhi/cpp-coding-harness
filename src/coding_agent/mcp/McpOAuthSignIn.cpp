@@ -13,15 +13,15 @@
 #include "coding_agent/mcp/McpNamespace.hpp"
 #include "coding_agent/mcp/McpOAuthFlow.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
+#include "coding_agent/mcp/OAuthCallbackServer.hpp"
+#include "coding_agent/mcp/Pkce.hpp"
 
-#include <cch/ai/OAuthCallbackServer.hpp>
-#include <cch/ai/OAuthHttpClient.hpp>
-#include <cch/ai/Pkce.hpp>
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 
 #include <cch/ai/Timestamps.hpp>
-#include <cch/coding_agent/AuthGuidance.hpp>
+#include "coding_agent/mcp/McpAuth.hpp"
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -118,7 +118,7 @@ struct HostPort {
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = ai::auth::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }
@@ -140,9 +140,8 @@ struct AuthorizationResponse {
         return std::unexpected(oauth_error("The redirect URL does not match this sign-in's redirect URI"));
     }
     const auto query_start = trimmed.find('?');
-    const auto pairs = query_start == std::string_view::npos
-                               ? std::map<std::string, std::string, std::less<>>{}
-                               : ai::auth::parse_query_pairs(trimmed.substr(query_start + 1));
+    const auto pairs = query_start == std::string_view::npos ? std::map<std::string, std::string, std::less<>>{}
+                                                             : parse_query_pairs(trimmed.substr(query_start + 1));
     if (const auto error = pairs.find("error"); error != pairs.end() && !error->second.empty()) {
         std::string message = error->second;
         if (const auto description = pairs.find("error_description");
@@ -172,7 +171,7 @@ using RaceOutcome = support::Expected<std::optional<AuthorizationResponse>>;
 /// redirect URL, whichever settles first, bounded by the sign-in timeout. The
 /// losing side is aborted.
 [[nodiscard]] boost::asio::awaitable<support::Expected<AuthorizationResponse>> wait_for_authorization_response(
-        const std::shared_ptr<ai::auth::OAuthCallbackServer>& server,
+        const std::shared_ptr<OAuthCallbackServer>& server,
         const std::string& state,
         const std::string& authorization_url,
         const std::string& redirect_url,
@@ -257,7 +256,7 @@ using RaceOutcome = support::Expected<std::optional<AuthorizationResponse>>;
     co_return std::move(**outcome);
 }
 
-[[nodiscard]] bool token_expires_soon(const ai::OAuthCredential& credential) {
+[[nodiscard]] bool token_expires_soon(const OAuthCredential& credential) {
     return credential.expires <= ai::current_timestamp_ms() + kOAuthMinimumValidity.count() * 1000;
 }
 
@@ -324,7 +323,7 @@ std::string mcp_oauth_registered_redirect_url(const std::optional<McpOAuthState>
 support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
     return support::detail::make_async_result([request = std::move(request)]() mutable
                                                       -> boost::asio::awaitable<support::ExpectedVoid> {
-        auto http = request.http ? request.http : std::make_shared<ai::auth::BoostBeastOAuthHttpClient>();
+        auto http = request.http ? request.http : std::make_shared<BoostBeastOAuthHttpClient>();
         auto loaded = request.store->load(request.server_name, request.server_url);
         if (!loaded) {
             co_return std::unexpected(std::move(loaded.error()));
@@ -335,7 +334,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
         }
         working.server_url = request.server_url;
         // Every sign-in gets a fresh `state` parameter.
-        auto state = ai::auth::create_oauth_state();
+        auto state = create_oauth_state();
         if (!state) {
             co_return std::unexpected(std::move(state.error()));
         }
@@ -360,7 +359,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
             }
             extra_paths.push_back(settings.path + "/" + *callback_id);
         }
-        auto started = co_await ai::auth::OAuthCallbackServer::start(ai::auth::OAuthCallbackServerOptions{
+        auto started = co_await OAuthCallbackServer::start(OAuthCallbackServerOptions{
                 .host = settings.host,
                 .port = settings.port.value_or(0),
                 .path = settings.path,
@@ -375,7 +374,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
         }
         auto server = *started;
         struct ServerGuard {
-            std::shared_ptr<ai::auth::OAuthCallbackServer> server;
+            std::shared_ptr<OAuthCallbackServer> server;
             ~ServerGuard() { server->close(); }
         } guard{server};
 
@@ -436,10 +435,9 @@ McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(std::shared_ptr<McpAuthStor
         std::string server_name,
         std::string server_url,
         McpOAuthConfig oauth,
-        std::shared_ptr<ai::auth::OAuthHttpClient> http)
+        std::shared_ptr<OAuthHttpClient> http)
     : store_(std::move(store)), server_name_(std::move(server_name)), server_url_(std::move(server_url)),
-      oauth_(std::move(oauth)),
-      http_(http ? std::move(http) : std::make_shared<ai::auth::BoostBeastOAuthHttpClient>()) {}
+      oauth_(std::move(oauth)), http_(http ? std::move(http) : std::make_shared<BoostBeastOAuthHttpClient>()) {}
 
 McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(McpOAuthFlowTokenResolver&&) noexcept = default;
 McpOAuthFlowTokenResolver& McpOAuthFlowTokenResolver::operator=(McpOAuthFlowTokenResolver&&) noexcept = default;

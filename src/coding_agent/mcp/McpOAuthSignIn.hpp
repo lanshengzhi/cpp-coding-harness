@@ -28,11 +28,9 @@
 #include <string>
 #include <string_view>
 
-namespace cch::ai::auth {
-class OAuthHttpClient;
-} // namespace cch::ai::auth
-
 namespace cch::coding_agent::mcp {
+
+class OAuthHttpClient;
 
 /// pi `FALLBACK_REDIRECT_URL`: the redirect URI a request-time refresh sends
 /// when the stored client registered none. Refreshing never redirects the
@@ -87,7 +85,7 @@ struct McpOAuthSignInRequest {
     /// The HTTPS client for discovery, registration, and the token grant.
     /// Defaults to the production `BoostBeastOAuthHttpClient`; tests inject a
     /// scripted one.
-    std::shared_ptr<ai::auth::OAuthHttpClient> http{nullptr};
+    std::shared_ptr<OAuthHttpClient> http{nullptr};
     McpOAuthSignInPrompt prompt;
 };
 
@@ -109,7 +107,7 @@ public:
             std::string server_name,
             std::string server_url,
             McpOAuthConfig oauth,
-            std::shared_ptr<ai::auth::OAuthHttpClient> http = nullptr);
+            std::shared_ptr<OAuthHttpClient> http = nullptr);
 
     McpOAuthFlowTokenResolver(McpOAuthFlowTokenResolver&&) noexcept;
     McpOAuthFlowTokenResolver& operator=(McpOAuthFlowTokenResolver&&) noexcept;
@@ -124,7 +122,7 @@ private:
     std::string server_name_;
     std::string server_url_;
     McpOAuthConfig oauth_;
-    std::shared_ptr<ai::auth::OAuthHttpClient> http_;
+    std::shared_ptr<OAuthHttpClient> http_;
 };
 
 } // namespace cch::coding_agent::mcp

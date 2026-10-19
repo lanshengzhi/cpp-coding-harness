@@ -10,7 +10,7 @@
 // `packages/coding-agent/src/extensions/mcp/oauth.ts` (`clientMetadataDocument`,
 // `signInMcpServer`). The credential state is pi's `mcp-auth.json` state
 // (`McpAuthStore`), the HTTPS transport is the injectable
-// `ai::auth::OAuthHttpClient`, and the authorization code itself is supplied by
+// `OAuthHttpClient`, and the authorization code itself is supplied by
 // the caller (the loopback callback or a pasted redirect URL), so this module
 // starts no browser and owns no presentation.
 
@@ -28,11 +28,9 @@
 #include <string_view>
 #include <vector>
 
-namespace cch::ai::auth {
-class OAuthHttpClient;
-} // namespace cch::ai::auth
-
 namespace cch::coding_agent::mcp {
+
+class OAuthHttpClient;
 
 /// pi `OAuthTokens`: one token-endpoint response. `scope` is recorded because a
 /// response without one grants the requested scope (RFC 6749 §5.1).
@@ -99,7 +97,7 @@ struct McpOAuthClientMetadata {
 /// does not publish one. A non-2xx response is an explicit registration error
 /// naming the status and body; no client is invented.
 [[nodiscard]] boost::asio::awaitable<support::Expected<McpOAuthClientInformation>> register_client(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         std::optional<McpAuthorizationServerMetadata> metadata,
         McpOAuthClientMetadata client_metadata,
@@ -139,7 +137,7 @@ struct McpOAuthTokenRequest {
 /// `select_client_auth_method`. An OAuth error body is read before the status,
 /// as servers report errors with any status.
 [[nodiscard]] boost::asio::awaitable<support::Expected<McpOAuthTokenResponse>> exchange_authorization_code(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         McpOAuthTokenRequest request,
         std::string code,
@@ -149,7 +147,7 @@ struct McpOAuthTokenRequest {
 /// pi `refreshAuthorization`: the refresh grant, with the rotated refresh token
 /// merged over the old one so a response that omits it does not lose the grant.
 [[nodiscard]] boost::asio::awaitable<support::Expected<McpOAuthTokenResponse>> refresh_authorization(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         McpOAuthTokenRequest request,
         std::string refresh_token);
@@ -196,7 +194,7 @@ struct McpOAuthFlowOutcome {
         std::string server_url,
         McpOAuthConfig oauth,
         std::string redirect_url,
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         McpOAuthFlowOptions options = {});
 
 } // namespace cch::coding_agent::mcp

@@ -6,7 +6,7 @@
 
 #include "coding_agent/runtime/McpProductionAdapters.hpp"
 
-#include <cch/ai/BoostBeastStreamTransport.hpp>
+#include "support/BoostBeastStreamTransport.hpp"
 #include "coding_agent/extensions/ExtensionToolRegistry.hpp"
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
@@ -315,7 +315,7 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                     source = [config, request_auth]()
                             -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
                         auto client = co_await mcp::McpHttpClient::connect(
-                                config, std::make_shared<ai::providers::BoostBeastStreamTransport>(), request_auth);
+                                config, std::make_shared<support::BoostBeastStreamTransport>(), request_auth);
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
                         }

@@ -14,6 +14,7 @@
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
@@ -103,7 +104,10 @@ public:
 /// — everything `/reload` re-reads.
 struct ReloadFixture {
     tests::TempWorkspace workspace;
+    tests::TempWorkspace agent_home;
     std::shared_ptr<ReloadRecordingProvider> client;
+    std::shared_ptr<tests::ScriptedTransport> catalog_transport;
+    std::shared_ptr<coding_agent::ModelRuntime> model_runtime;
     tests::RuntimeFixture runtime;
     coding_agent::AgentSession* session{
             nullptr}; // borrows a Session owned by runtime; runtime must outlive this pointer.
@@ -131,17 +135,34 @@ struct ReloadFixture {
         options.session_target =
             coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
         options.workspace = workspace.path();
-        options.models = cch::tests::models_from_provider(client);
         options.request_model =
             cch::tests::scripted_request_model("sdk-host", "sdk-model");
         options.project_trust_override = trusted;
 
-        auto models = std::move(options.models);
         coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
         request.execution_runtime_target = runtime.make_target();
-        auto overrides = cch::tests::cli_fake_overrides(std::move(models));
-        auto created = runtime.run(
-                coding_agent::create_agent_session_async(std::move(request), std::nullopt, std::move(overrides)));
+        catalog_transport = std::make_shared<tests::ScriptedTransport>();
+        catalog_transport->attempts.push_back(tests::TransportAttempt{
+                .chunks = {R"({"data":[]})"},
+        });
+        request.magpie_base_url = "http://127.0.0.1:34259";
+        // Build a host-owned runtime with a scripted transport-backed catalog.
+        std::vector<coding_agent::ModelRuntimeTestProvider> providers;
+        providers.push_back(cch::tests::make_test_provider_definition(client, "sdk-host", {}));
+        auto runtime_created = coding_agent::create_model_runtime_for_testing(
+                coding_agent::ModelRuntimeOptions{
+                        .agent_dir = agent_home.path() / "agent",
+
+                        .magpie_base_url = "http://127.0.0.1:34259",
+                },
+                coding_agent::ModelRuntimeTestOptions{
+                        .providers = std::move(providers),
+                },
+                catalog_transport);
+        REQUIRE(runtime_created);
+        model_runtime = std::move(*runtime_created);
+        request.model_runtime = model_runtime;
+        auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
         REQUIRE(created.has_value());
         session = &runtime.adopt_session(std::move(created->session));
     }
@@ -279,7 +300,11 @@ TEST_CASE("reload re-reads skills, templates, context files, and SYSTEM/APPEND a
 
     // The next prompt streams the rebuilt System Prompt (pi
     // `AgentContext.system_prompt`).
-    REQUIRE(run_prompt(fixture.runtime, *session, "hello").has_value());
+    auto prompt_result = run_prompt(fixture.runtime, *session, "hello");
+    if (!prompt_result) {
+        UNSCOPED_INFO(prompt_result.error().message);
+    }
+    REQUIRE(prompt_result.has_value());
     REQUIRE_FALSE(fixture.client->requests.empty());
     CHECK(fixture.client->requests.back().system_prompt == reloaded_prompt);
 
@@ -317,6 +342,25 @@ TEST_CASE(
         CHECK(session->skills().empty());
         CHECK(session->templates().empty());
     }
+}
+
+TEST_CASE("reload keeps resource refresh successful and reports Magpie catalog failures",
+        "[coding_agent][reload][magpie][diagnostics][spec]") {
+    ReloadFixture fixture;
+    fixture.create(/*trusted*/ true);
+    fixture.catalog_transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {},
+            .failure = support::make_error(support::ErrorCode::Network, "gateway unavailable"),
+    });
+
+    auto result = run_reload(fixture.runtime, *fixture.session);
+    REQUIRE(result.has_value());
+    REQUIRE(result->model_runtime_error.has_value());
+    CHECK(result->model_runtime_error->find("Magpie model discovery failed") != std::string::npos);
+    CHECK(result->model_runtime_error->find("gateway unavailable") != std::string::npos);
+    CHECK(result->model_runtime_error->find("magpie serve") != std::string::npos);
+    CHECK(result->model_runtime_error->find("models.json error") == std::string::npos);
+    CHECK(fixture.session->skills().size() == 1);
 }
 
 TEST_CASE("reload returns theme documents for re-registration and reports a fatal explicit-resource failure",

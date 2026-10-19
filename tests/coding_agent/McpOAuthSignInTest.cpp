@@ -13,9 +13,9 @@
 // request with the shared re-login error rather than reach the server
 // unauthenticated.
 
-#include <cch/ai/JsonAccess.hpp>
-#include <cch/ai/OAuthHttpClient.hpp>
-#include <cch/ai/Pkce.hpp>
+#include <cch/support/JsonAccess.hpp>
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
+#include "coding_agent/mcp/Pkce.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -86,7 +86,7 @@ const std::string kTokenUrl = "https://auth.example.com/token";
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = ai::auth::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }

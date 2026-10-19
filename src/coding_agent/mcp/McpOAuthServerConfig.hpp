@@ -9,10 +9,10 @@ namespace cch::coding_agent::mcp {
 
 /// OAuth sign-in configuration for one streamable-HTTP MCP server (spec #865,
 /// ticket #875). The credential itself is not stored here: it lives in the
-/// shared `auth.json` through AuthStorage under the server's OAuth provider id
-/// (`mcp_oauth_provider_id`), so no second credential store exists. This value
+/// `mcp-auth.json` through `McpAuthStore` under the server's OAuth provider id
+/// (`mcp_oauth_provider_id`). This value
 /// carries only the authorization-server endpoints and the pre-registered
-/// client identity, reusing the existing `ai::OAuthCredential` semantics.
+/// client identity, reusing the existing `OAuthCredential` semantics.
 ///
 /// The shape maps to a plain `mcp.json` server entry gaining an OAuth block
 /// (ticket #876): `auth: "oauth"` plus `authorizationUrl`, `tokenUrl`,

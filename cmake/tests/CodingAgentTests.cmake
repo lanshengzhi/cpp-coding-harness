@@ -91,10 +91,8 @@ include_guard(GLOBAL)
         tests/coding_agent/CodemodeOutputPresentationTest.cpp
         tests/coding_agent/AgentSessionCompactionTest.cpp
         tests/coding_agent/AgentSessionSnapshotTest.cpp
-        tests/coding_agent/AuthStorageTest.cpp
         tests/coding_agent/BuiltinSlashCommandsTest.cpp
         tests/coding_agent/ImageInputTest.cpp
-        tests/coding_agent/ModelConfigTest.cpp
         tests/coding_agent/ModelCycleTest.cpp
         tests/coding_agent/ModelResolutionTest.cpp
         tests/coding_agent/ModelResolverTest.cpp
@@ -105,7 +103,6 @@ include_guard(GLOBAL)
         tests/coding_agent/PromptExpansionTest.cpp
         tests/coding_agent/PromptTemplateLoaderTest.cpp
         tests/coding_agent/PromptTemplateProcessingTest.cpp
-        tests/coding_agent/ProviderComposerTest.cpp
         tests/coding_agent/ReAuthGuidanceTest.cpp
         tests/coding_agent/SessionDiscoveryTest.cpp
         tests/coding_agent/SessionPathPolicyTest.cpp

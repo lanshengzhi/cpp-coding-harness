@@ -14,12 +14,11 @@
 
 #include "coding_agent/mcp/McpHttpClient.hpp"
 #include "coding_agent/mcp/McpStdioClient.hpp"
+#include "coding_agent/mcp/Pkce.hpp"
 
 #include <cch/ai/Content.hpp>
 
-#include <cch/ai/Pkce.hpp>
-
-#include <cch/ai/BoostBeastStreamTransport.hpp>
+#include "support/BoostBeastStreamTransport.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
@@ -281,7 +280,7 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
     std::string input{server};
     input.push_back('\0');
     input += tool;
-    auto digest = ai::auth::sha256_digest(input);
+    auto digest = sha256_digest(input);
     if (!digest || digest->size() < 4) {
         // pi cannot fail here; a digest failure degrades to the truncated
         // plain name rather than failing tool registration.
@@ -375,7 +374,7 @@ McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>> McpExtensionToolSource::connect_http(
         McpHttpServerConfig config, std::shared_ptr<McpRequestAuthSource> request_auth) {
     auto client = co_await McpHttpClient::connect(
-            std::move(config), std::make_shared<ai::providers::BoostBeastStreamTransport>(), std::move(request_auth));
+            std::move(config), std::make_shared<support::BoostBeastStreamTransport>(), std::move(request_auth));
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }

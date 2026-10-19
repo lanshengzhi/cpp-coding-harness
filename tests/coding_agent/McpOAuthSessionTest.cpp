@@ -1,7 +1,7 @@
 // Spec #865 fourth slice (#875), reworked for #884: MCP OAuth through the
 // existing credential semantics. The provider reuses the shared `ai::auth`
 // PKCE/callback helpers, the existing `AuthInteraction` presentation, and the
-// existing `ai::OAuthCredential` contract; the state is stored in
+// existing `mcp::OAuthCredential` contract; the state is stored in
 // `<agentDir>/mcp-auth.json` under `mcp__<server>|<url>` and resolved per
 // request. The committed loopback exchange replay is
 // `fixtures/pi-mcp/oauth/replay.json`; the token transport is the scripted
@@ -13,10 +13,10 @@
 // second attempt (not a loop), and a server configured without OAuth is never
 // sent a credential.
 
-#include <cch/ai/JsonAccess.hpp>
-#include <cch/ai/OAuthHttpClient.hpp>
-#include <cch/ai/Pkce.hpp>
-#include <cch/ai/BoostBeastStreamTransport.hpp>
+#include <cch/support/JsonAccess.hpp>
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
+#include "coding_agent/mcp/Pkce.hpp"
+#include "support/BoostBeastStreamTransport.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpHttpClient.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
@@ -30,8 +30,7 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/ai/Auth.hpp>
-#include <cch/ai/CredentialStore.hpp>
+#include "coding_agent/mcp/McpAuth.hpp"
 #include <cch/ai/Timestamps.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -91,15 +90,15 @@ namespace {
 }
 
 [[nodiscard]] support::JsonValue::object_t fixture_object(const support::JsonValue& fixture, std::string_view key) {
-    const auto* object = ai::json_object(fixture);
+    const auto* object = support::json_object(fixture);
     REQUIRE(object != nullptr);
-    const auto* member = ai::json_object_member(*object, key);
+    const auto* member = support::json_object_member(*object, key);
     REQUIRE(member != nullptr);
     return *member;
 }
 
 [[nodiscard]] std::string fixture_string(const support::JsonValue::object_t& object, std::string_view key) {
-    const auto value = ai::json_string_member(object, key);
+    const auto value = support::json_string_member(object, key);
     REQUIRE(value.has_value());
     return std::string{*value};
 }
@@ -148,7 +147,7 @@ struct CallbackEndpoint {
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = ai::auth::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }
@@ -183,8 +182,8 @@ struct LoginHarness {
     std::string server_name{"echo"};
     std::string server_url{"https://echo.example.com/mcp"};
     std::optional<std::string> auth_url{std::nullopt};
-    std::vector<ai::AuthEvent> events{};
-    std::vector<ai::AuthPrompt> prompts{};
+    std::vector<mcp::AuthEvent> events{};
+    std::vector<mcp::AuthPrompt> prompts{};
     bool manual_prompt_cancelled{false};
 
     /// Runs the loop to completion. `on_auth_url` (if set) drives the loopback
@@ -196,14 +195,14 @@ struct LoginHarness {
         tests::EnvVarGuard callback_host_guard{"PI_OAUTH_CALLBACK_HOST"};
         callback_host_guard.unset();
 
-        ai::AuthInteraction interaction;
-        interaction.notify = [this](const ai::AuthEvent& event) {
+        mcp::AuthInteraction interaction;
+        interaction.notify = [this](const mcp::AuthEvent& event) {
             events.push_back(event);
-            if (const auto* url = std::get_if<ai::AuthUrl>(&event.kind)) {
+            if (const auto* url = std::get_if<mcp::AuthUrl>(&event.kind)) {
                 auth_url = url->url;
             }
         };
-        interaction.prompt = [this, executor](ai::AuthPrompt prompt) -> support::AsyncResult<std::string> {
+        interaction.prompt = [this, executor](mcp::AuthPrompt prompt) -> support::AsyncResult<std::string> {
             auto cancelled = std::make_shared<SignalChannel>(executor, 1);
             return support::detail::make_async_result(
                     [this, cancelled, prompt = std::move(prompt)]() mutable
@@ -230,11 +229,11 @@ struct LoginHarness {
                         executor, 1);
         auto original_notify = std::move(interaction.notify);
         interaction.notify = [url_seen, original_notify = std::move(original_notify)](
-                                     const ai::AuthEvent& event) mutable {
+                                     const mcp::AuthEvent& event) mutable {
             if (original_notify) {
                 original_notify(event);
             }
-            if (const auto* url = std::get_if<ai::AuthUrl>(&event.kind)) {
+            if (const auto* url = std::get_if<mcp::AuthUrl>(&event.kind)) {
                 url_seen->try_send(boost::system::error_code{}, url->url);
             }
         };
@@ -411,7 +410,7 @@ private:
         std::shared_ptr<mcp::McpRequestAuthSource> request_auth = nullptr) {
     auto client = tests::run_awaitable(runtime,
             mcp::McpHttpClient::connect(std::move(config),
-                    std::make_shared<ai::providers::BoostBeastStreamTransport>(),
+                    std::make_shared<support::BoostBeastStreamTransport>(),
                     std::move(request_auth)));
     REQUIRE(client.has_value());
     return *client;
@@ -596,7 +595,7 @@ TEST_CASE("an invalid_grant refresh is an explicit re-login error with no retry 
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     http->responses[config.token_url] = {
-            {static_cast<int>(*ai::json_integer_member(response, "status")), fixture_string(response, "body")}};
+            {static_cast<int>(*support::json_integer_member(response, "status")), fixture_string(response, "body")}};
     auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
     auto resolver =
             std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);

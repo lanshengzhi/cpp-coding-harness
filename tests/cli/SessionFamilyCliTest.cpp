@@ -244,15 +244,8 @@ TEST_CASE("CLI model thinking suffix reaches the persisted session state", "[cli
     };
     std::vector<cch::coding_agent::ModelRuntimeTestProvider> providers;
     providers.push_back(cch::tests::make_test_provider_definition(
-            cch::tests::make_scripted_fake_provider("alpha"),
-            "alpha",
-            {std::move(model)},
-            cch::tests::detail::fixture_auth()));
-    auto runtime = cch::coding_agent::create_model_runtime_for_testing(
-            cch::coding_agent::ModelRuntimeOptions{
-                    .models_path = std::filesystem::path{},
-                    .credentials = std::make_shared<cch::tests::detail::FixtureCredentialStore>(),
-            },
+            cch::tests::make_scripted_fake_provider("alpha"), "alpha", {std::move(model)}));
+    auto runtime = cch::coding_agent::create_model_runtime_for_testing(cch::coding_agent::ModelRuntimeOptions{},
             cch::coding_agent::ModelRuntimeTestOptions{
                     .providers = std::move(providers),
             });

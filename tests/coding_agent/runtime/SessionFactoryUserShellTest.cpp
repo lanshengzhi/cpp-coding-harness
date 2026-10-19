@@ -32,7 +32,7 @@ namespace {
     request.session_facts.no_prompt_templates = true;
     request.workspace = workspace.path();
     request.session_target = coding_agent::InMemorySessionTarget{};
-    auto model_runtime = tests::detail::scripted_fake_runtime();
+    auto model_runtime = tests::scripted_fake_runtime();
     if (!model_runtime) {
         return std::unexpected(model_runtime.error());
     }

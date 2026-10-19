@@ -196,6 +196,20 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
 
         std::stop_callback stop_bridge(stop_token, [this]() noexcept { (void)reload_stop_source_.request_stop(); });
 
+        // Refresh the shared model runtime as part of the awaited `/reload`
+        // operation. The session owns it through `services_`; its AsyncResult
+        // also retains shared ownership through network suspension.
+        std::optional<std::string> model_runtime_error;
+        if (services_.model_runtime) {
+            auto model_refresh =
+                    co_await support::detail::await_async_result(services_.model_runtime->refresh_async(reload_token));
+            if (!model_refresh) {
+                if (model_refresh.error().code == support::ErrorCode::Cancelled) {
+                    co_return co_await finish_reload(std::unexpected(cancelled_error()));
+                }
+                model_runtime_error = model_refresh.error().message;
+            }
+        }
         // pi `AgentSession.reload()`: `settingsManager.reload()` first
         // (preserving `projectTrusted`), then `resourceLoader.reload()` — the
         // retained discovery request re-run with the creation-time trust state.
@@ -284,6 +298,11 @@ boost::asio::awaitable<support::Expected<AgentSessionReloadResult>> AgentSession
         result.prompt_diagnostics = config_.prompt_diagnostics;
         result.theme_diagnostics = config_.theme_diagnostics;
         result.themes = std::move(loading->resources.themes);
+        if (model_runtime_error) {
+            result.model_runtime_error = std::move(model_runtime_error);
+        } else if (services_.model_runtime) {
+            result.model_runtime_error = services_.model_runtime->get_error();
+        }
         co_return co_await finish_reload(std::move(result));
 }
 
@@ -592,16 +611,6 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::set_model(
         co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "session is closed"));
     }
 
-    // pi setModel: `if (!(await checkAuth(model.provider))) throw`.
-    auto checked = co_await support::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
-    if (!checked) {
-        co_return std::unexpected(std::move(checked.error()));
-    }
-    if (!*checked) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Auth, "No API key for " + model.provider + "/" + model.id));
-    }
-
     // pi `_getThinkingLevelForModelSwitch`: the fallback level for the new
     // model resolves through the shared chain (settings default, then the
     // live level) and re-clamps against the new model below.
@@ -727,17 +736,13 @@ boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> Agent
     }
     const bool forward = direction != "backward";
 
-    // Scoped path (pi `_cycleScopedModel`): filter the scoped set by
-    // configured auth, then cycle within it.
+    // Scoped cycling keeps only identities still present in the catalog.
     if (!scoped_models_.empty()) {
         std::vector<ScopedModel> eligible;
         for (const auto& scoped : scoped_models_) {
-            auto checked = co_await support::detail::await_async_result(
-                    services_.model_runtime->check_auth(scoped.model.provider));
-            if (!checked) {
-                co_return std::unexpected(std::move(checked.error()));
+            if (services_.model_runtime->model(scoped.model.provider, scoped.model.id)) {
+                eligible.push_back(scoped);
             }
-            if (*checked) eligible.push_back(scoped);
         }
         if (eligible.size() <= 1) {
             co_return std::optional<ModelCycleResult>{};
@@ -765,27 +770,23 @@ boost::asio::awaitable<support::Expected<std::optional<ModelCycleResult>>> Agent
         };
     }
 
-    // Available path (pi `_cycleAvailableModel`): cycle within the
-    // auth-filtered availability snapshot.
-    auto available = co_await support::detail::await_async_result(services_.model_runtime->get_available());
-    if (!available) {
-        co_return std::unexpected(std::move(available.error()));
-    }
-    if (available->size() <= 1) {
+    // Unscoped cycling uses the discovered catalog directly.
+    const auto available = services_.model_runtime->models();
+    if (available.size() <= 1) {
         co_return std::optional<ModelCycleResult>{};
     }
 
     const auto& current = agent_->state().model;
     std::size_t current_index = 0;
-    for (std::size_t index = 0; index < available->size(); ++index) {
-        if ((*available)[index].provider == current.provider && (*available)[index].id == current.id) {
+    for (std::size_t index = 0; index < available.size(); ++index) {
+        if (available[index].provider == current.provider && available[index].id == current.id) {
             current_index = index;
             break;
         }
     }
-    const auto next_index = forward ? (current_index + 1) % available->size()
-                                    : (current_index + available->size() - 1) % available->size();
-    const auto& next_model = (*available)[next_index];
+    const auto next_index = forward ? (current_index + 1) % available.size()
+                                    : (current_index + available.size() - 1) % available.size();
+    const auto& next_model = available[next_index];
     const auto thinking_level = resolve_thinking_level_for_switch(std::nullopt);
     if (auto applied = co_await apply_model_switch(next_model, thinking_level, options); !applied) {
         co_return std::unexpected(std::move(applied.error()));
@@ -1032,7 +1033,7 @@ AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
             providers.insert(scoped.model.provider);
         }
     } else if (runtime) {
-        for (const auto& available : runtime->get_available_snapshot()) {
+        for (const auto& available : runtime->models()) {
             providers.insert(available.provider);
         }
     }
@@ -1043,8 +1044,7 @@ AgentSessionSnapshot AgentSession::Impl::create_snapshot() const {
             .topology = session_.topology,
             .session_path = session_path_,
             .workspace = session_.workspace,
-            .using_subscription = !state.model.id.empty() && runtime && state.model.provider != "openrouter" &&
-                                  runtime->is_using_oauth(state.model.provider),
+            .using_subscription = false,
             .available_provider_count = providers.size(),
             .tool_executions = tool_executions_,
             .run_state = run_state_,

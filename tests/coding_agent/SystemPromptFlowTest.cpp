@@ -10,7 +10,6 @@
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
-#include <cch/coding_agent/AuthGuidance.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"

@@ -8,9 +8,9 @@
 // dead refresh token must invalidate the tokens and re-authorize instead of
 // looping, and a code from another issuer must never reach the token endpoint.
 
-#include <cch/ai/JsonAccess.hpp>
-#include <cch/ai/OAuthHttpClient.hpp>
-#include <cch/ai/Pkce.hpp>
+#include <cch/support/JsonAccess.hpp>
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
+#include "coding_agent/mcp/Pkce.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthFlow.hpp"
 #include "support/FakeOAuthHttpClient.hpp"
@@ -102,7 +102,7 @@ struct Harness {
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = ai::auth::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }
@@ -126,16 +126,17 @@ TEST_CASE("an oauth-configured server with no client id discovers, registers, an
     const auto& registration = harness.http->requests.front();
     CHECK(registration.url == kRegistrationUrl);
     const auto registration_request = parse_json(registration.body);
-    const auto* object = ai::json_object(registration_request);
+    const auto* object = support::json_object(registration_request);
     REQUIRE(object != nullptr);
-    const auto* redirect_uris = ai::json_array_member(*object, "redirect_uris");
+    const auto* redirect_uris = support::json_array_member(*object, "redirect_uris");
     REQUIRE(redirect_uris != nullptr);
     REQUIRE(redirect_uris->size() == 1);
     CHECK(redirect_uris->front().get_string() == kRedirectUrl);
-    CHECK(ai::json_string_member(*object, "application_type") == std::optional<std::string_view>{"native"});
-    CHECK(ai::json_string_member(*object, "scope") == std::optional<std::string_view>{"mcp.read mcp.write"});
-    CHECK(ai::json_string_member(*object, "client_name") == std::optional<std::string_view>{"pi"});
-    CHECK(ai::json_string_member(*object, "token_endpoint_auth_method") == std::optional<std::string_view>{"none"});
+    CHECK(support::json_string_member(*object, "application_type") == std::optional<std::string_view>{"native"});
+    CHECK(support::json_string_member(*object, "scope") == std::optional<std::string_view>{"mcp.read mcp.write"});
+    CHECK(support::json_string_member(*object, "client_name") == std::optional<std::string_view>{"pi"});
+    CHECK(support::json_string_member(*object, "token_endpoint_auth_method") ==
+            std::optional<std::string_view>{"none"});
 
     // The authorization URL carries the registered client, PKCE S256, the
     // redirect URI, a fresh state, the resource, and the same scope.

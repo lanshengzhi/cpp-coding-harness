@@ -19,11 +19,9 @@
 #include <string_view>
 #include <vector>
 
-namespace cch::ai::auth {
-class OAuthHttpClient;
-} // namespace cch::ai::auth
-
 namespace cch::coding_agent::mcp {
+
+class OAuthHttpClient;
 
 /// pi `OAuthProtectedResourceMetadata` (RFC 9728): the document at
 /// `/.well-known/oauth-protected-resource<path>`.
@@ -125,7 +123,7 @@ struct McpOAuthDiscoveryOptions {
 /// The document must parse, else the error is explicit.
 [[nodiscard]] boost::asio::awaitable<support::Expected<McpProtectedResourceMetadata>>
 discover_protected_resource_metadata(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options = {});
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options = {});
 
 /// pi `discoverAuthorizationServerMetadata`: try the candidate URLs in order
 /// until one answers with metadata; a 4xx or 502 is a miss, any other failure
@@ -133,7 +131,7 @@ discover_protected_resource_metadata(
 /// `issuer` differs from the authorization server URL (trailing-slash
 /// insensitive) is rejected unless `skip_issuer_validation`.
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::optional<McpAuthorizationServerMetadata>>>
-discover_authorization_server_metadata(std::shared_ptr<ai::auth::OAuthHttpClient> http,
+discover_authorization_server_metadata(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         McpOAuthDiscoveryOptions options = {});
 
@@ -143,6 +141,6 @@ discover_authorization_server_metadata(std::shared_ptr<ai::auth::OAuthHttpClient
 /// metadata. A configured `authorization_server_metadata_url` is fetched
 /// instead and its `issuer` is the authorization-server URL.
 [[nodiscard]] boost::asio::awaitable<support::Expected<McpOAuthServerInfo>> discover_oauth_server_info(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options = {});
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options = {});
 
 } // namespace cch::coding_agent::mcp

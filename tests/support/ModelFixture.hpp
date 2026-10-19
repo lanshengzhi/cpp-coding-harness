@@ -13,19 +13,17 @@ namespace cch::tests {
     std::string provider = "fake",
     std::string api = "scripted-fake") {
     return ai::Model{
-        .id = id,
-        .name = std::move(id),
-        .api = std::move(api),
-        .provider = std::move(provider),
-        .base_url = "https://example.invalid",
-        .reasoning = false,
-        .thinking_level_map = std::nullopt,
-        .input = {ai::ModelInput::Text},
-        .cost = {},
-        .context_window = 100000,
-        .max_tokens = 4096,
-        .headers = std::nullopt,
-        .compat = std::nullopt,
+            .id = id,
+            .name = std::move(id),
+            .api = std::move(api),
+            .provider = std::move(provider),
+            .reasoning = false,
+            .thinking_level_map = std::nullopt,
+            .input = {ai::ModelInput::Text},
+            .cost = {},
+            .context_window = 100000,
+            .max_tokens = 4096,
+            .headers = std::nullopt,
     };
 }
 

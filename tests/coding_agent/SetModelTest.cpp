@@ -1,17 +1,18 @@
 // Runtime `setModel` (pi `agent-session.ts` `setModel`): the in-session
-// model switch validates provider auth (`No API key for
-// <provider>/<model>`), swaps the live Agent model, persists the
+// model switch selects the target catalog identity, swaps the live Agent
+// model, persists the
 // `model_change` session entry, and re-clamps the thinking level against the
 // new model — session-only by default (pi `ModelMutationOptions`), with the
 // global settings default and scope promotion under an explicit persist.
 // All sessions run against a default-created ModelRuntime over a temp Agent
-// Config Directory with dummy-only values — no live credentials, no network
-// validation.
+// Config Directory with an explicit passive catalog — no live credentials, no
+// network validation.
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -42,6 +43,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::ModelCatalogFixture catalog;
     tests::RuntimeFixture runtime;
 
     Fixture() {
@@ -52,10 +54,7 @@ struct Fixture {
         session_file = workspace.path() / "session.jsonl";
     }
 
-    void write_models(std::string_view json) {
-        std::ofstream out(agent_dir / "models.json", std::ios::binary);
-        out << json;
-    }
+    void write_models(std::string_view json) { catalog.set(json); }
 
     void write_settings(std::string_view json) {
         std::ofstream out(agent_dir / "settings.json", std::ios::binary);
@@ -150,6 +149,7 @@ constexpr std::string_view kTwoReasoningProviders = R"({
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.execution_runtime_target = fixture.runtime.make_target();
@@ -164,35 +164,24 @@ constexpr std::string_view kTwoReasoningProviders = R"({
 
 } // namespace
 
-TEST_CASE("set_model rejects a switch to a provider with no configured auth",
-        "[coding_agent][set-model][issue406][spec]") {
+TEST_CASE("set_model selects catalog models without upstream credentials in Pike",
+        "[coding_agent][set-model][gateway][spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedAlphaKeylessBeta);
-
     auto result = fixture.runtime.run(coding_agent::create_agent_session_async(cli_request(fixture)));
-    REQUIRE(result.has_value());
-    REQUIRE(result->resolved_identity.model == "alpha-1");
-
+    REQUIRE(result);
     const auto target = result->session->model_runtime()->model("beta", "beta-1");
-    REQUIRE(target.has_value());
-    auto switched = result->session->set_model_blocking(*target);
-    REQUIRE_FALSE(switched.has_value());
-    CHECK(switched.error().message == "No API key for beta/beta-1");
-
-    // The live model is unchanged and no model_change entry was recorded.
-    // ADR 0064 defers the session file to the first user or assistant
-    // message, so the recorded entries are observed on the live tree (pi
-    // `SessionManager.getEntries()`).
-    CHECK(result->session->snapshot().agent_state.model.id == "alpha-1");
+    REQUIRE(target);
+    REQUIRE(result->session->set_model_blocking(*target));
+    CHECK(result->session->snapshot().agent_state.model.id == "beta-1");
     const auto recorded = result->session->session_entries();
-    REQUIRE(recorded.has_value());
-    result->session->close();
-
+    REQUIRE(recorded);
     const auto* entry = tests::find_last_model_change(*recorded);
-    REQUIRE(entry != nullptr);
+    REQUIRE(entry);
     const auto& value = std::get<harness::session::ModelChangeValue>(entry->value);
-    CHECK(value.provider == "alpha");
-    CHECK(value.model_id == "alpha-1");
+    CHECK(value.provider == "beta");
+    CHECK(value.model_id == "beta-1");
+    result->session->close();
 }
 
 TEST_CASE("set_model switches the live model and persists the model_change entry session-only by default",
@@ -539,6 +528,7 @@ TEST_CASE("set_model on an in-memory session skips the model_change entry and wr
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.execution_runtime_target = fixture.runtime.make_target();
 

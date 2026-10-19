@@ -1,794 +1,160 @@
-#include "ai/ModelStreamBridge.hpp"
 #include <cch/coding_agent/ModelRuntime.hpp>
-#include <cch/coding_agent/AgentConfigDir.hpp>
-#include <cch/coding_agent/AuthStorage.hpp>
+
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "support/EnvVarGuard.hpp"
-#include "support/ModelsFixture.hpp"
-#include "support/PiEventSnapshot.hpp"
-#include "support/PiFixture.hpp"
-#include "support/ReadyResult.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
-#include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/use_future.hpp>
 
-#include <fstream>
-#include <algorithm>
+#include <filesystem>
 #include <memory>
-#include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
-#include <vector>
-#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 
 namespace {
 
-using tests::run_awaitable;
-using tests::run_async_result;
-using tests::ScriptedTransport;
-using tests::TransportAttempt;
-
-[[nodiscard]] std::string read_fixture_text(std::string_view relative_path) {
-    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-ai/" +
-                             std::string{relative_path};
-    std::ifstream input(path, std::ios::binary);
-    return std::string{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
-}
-
-class MemoryCredentialStore final : public ai::CredentialStore {
-public:
-    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(
-        std::string provider_id) override {
-        std::optional<ai::Credential> value;
-        if (const auto found = records.find(provider_id); found != records.end()) {
-            value = found->second;
-        }
-        return cch::support::AsyncResult<std::optional<ai::Credential>>(
-            std::expected<std::optional<ai::Credential>, cch::support::Error>{std::move(value)});
-    }
-
-    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override {
-        std::vector<ai::CredentialInfo> result;
-        for (const auto& [id, credential] : records) {
-            result.push_back(ai::CredentialInfo{
-                .provider_id = id,
-                .type = std::holds_alternative<ai::OAuthCredential>(credential) ? "oauth" : "api_key",
-            });
-        }
-        return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
-            std::expected<std::vector<ai::CredentialInfo>, cch::support::Error>{std::move(result)});
-    }
-
-    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
-        std::string provider_id,
-        ai::CredentialModifyHook modifier) override {
-        std::optional<ai::Credential> current;
-        if (const auto found = records.find(provider_id); found != records.end()) {
-            current = found->second;
-        }
-        auto updated = tests::run_hook(modifier(std::move(current)));
-        if (!updated) {
-            return cch::support::AsyncResult<std::optional<ai::Credential>>(
-                std::expected<std::optional<ai::Credential>, cch::support::Error>{
-                    std::unexpect, std::move(updated.error())});
-        }
-        if (*updated) {
-            records.insert_or_assign(provider_id, **updated);
-        }
-        return cch::support::AsyncResult<std::optional<ai::Credential>>(
-            std::expected<std::optional<ai::Credential>, cch::support::Error>{
-                std::move(current)});
-    }
-
-    [[nodiscard]] cch::support::AsyncResult<void> remove(
-        std::string provider_id) override {
-        records.erase(provider_id);
-        return cch::support::AsyncResult<void>(
-            std::expected<void, cch::support::Error>{});
-    }
-
-    std::map<std::string, ai::Credential, std::less<>> records;
-};
-
-/// Provider Definition with a scripted api-key login that always succeeds
-/// and a resolve hook that returns the stored key.
-ai::ProviderDefinition login_provider_definition() {
-    ai::ApiKeyAuth api_key;
-    api_key.name = "scripted";
-    api_key.login = [](ai::AuthInteraction) -> cch::support::AsyncResult<ai::ApiKeyCredential> {
-        ai::ApiKeyCredential credential;
-        credential.key = "dummy-login-key";
-        return cch::support::AsyncResult<ai::ApiKeyCredential>(
-                std::expected<ai::ApiKeyCredential, cch::support::Error>{credential});
-    };
-    api_key.check = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
-            -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
-        if (credential && credential->key) {
-            return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                    std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
-                            ai::AuthCheck{.source = "stored credential", .type = ai::AuthType::ApiKey}});
-        }
-        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{std::optional<ai::AuthCheck>{}});
-    };
-    api_key.resolve = [](const ai::AuthContext&, std::optional<ai::ApiKeyCredential> credential)
-            -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        if (credential && credential->key) {
-            return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                    std::expected<std::optional<ai::AuthResult>, cch::support::Error>{ai::AuthResult{
-                            .auth = ai::ModelAuth{.api_key = *credential->key},
-                            .source = "stored credential",
-                    }});
-        }
-        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{std::optional<ai::AuthResult>{}});
-    };
-    return ai::ProviderDefinition{
-            .id = "login-provider",
-            .name = "Login Provider",
-            .models = {},
-            .auth = ai::ProviderAuth{.api_key = std::move(api_key)},
-    };
-}
-
-[[nodiscard]] std::vector<coding_agent::ModelRuntimeTestProvider> login_test_providers() {
-    std::vector<coding_agent::ModelRuntimeTestProvider> providers;
-    providers.emplace_back(coding_agent::ModelRuntimeTestProvider{
-            .definition = login_provider_definition(),
+std::shared_ptr<tests::ScriptedTransport> catalog_transport() {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"data":[{"id":"anthropic/claude-x","context_window":200000,"max_output_tokens":8192}]})"},
     });
-    return providers;
-}
-
-[[nodiscard]] ai::AiContext request_context() {
-    ai::AiContext context;
-    context.system_prompt = "system";
-    context.messages.push_back(ai::UserMessage{
-        .content = std::vector<ai::Content>{
-            ai::text_content("hi"),
-            ai::image_content("YWJj", "image/png"),
-        },
-        .timestamp = 1,
-    });
-    context.tools.push_back(ai::Tool{
-        .name = "lookup",
-        .description = "Look up a value",
-        .parameters = support::JsonValue::object_t{
-            {"properties", support::JsonValue::object_t{
-                {"q", support::JsonValue::object_t{{"type", "string"}}},
-            }},
-            {"required", support::JsonValue::array_t{"q"}},
-            {"type", "object"},
-        },
-    });
-    return context;
+    transport->repeat_last_attempt = true;
+    return transport;
 }
 
 } // namespace
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ModelRuntime: composition, refresh, availability, login/logout, vertical path
-// ─────────────────────────────────────────────────────────────────────────────
-
-TEST_CASE("ModelRuntime default-created runtime composes the built-in providers",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    CHECK((*runtime)->agent_dir() == (tests::agent_root_under_home(home.path())));
-    CHECK((*runtime)->models_path() == (tests::agent_root_under_home(home.path()) / "models.json"));
-    CHECK_FALSE((*runtime)->get_error().has_value());
-    CHECK((*runtime)->model("openai-codex", "gpt-5.5").has_value());
-    CHECK((*runtime)->model("kimi-coding", "kimi-for-coding").has_value());
-    CHECK((*runtime)->model("deepseek", "deepseek-v4-pro").has_value());
-
-    const auto providers = (*runtime)->providers();
-    REQUIRE(providers.size() == 6);
-    const auto codex = (*runtime)->provider("openai-codex");
-    REQUIRE(codex.has_value());
-    CHECK(codex->id == "openai-codex");
-    CHECK(codex->name == "OpenAI Codex");
-    REQUIRE(codex->auth_methods.size() == 1);
-    CHECK(codex->auth_methods.front().type == ai::AuthType::OAuth);
-    CHECK(codex->auth_methods.front().has_login);
-    CHECK_FALSE((*runtime)->provider("missing-provider").has_value());
-}
-
-TEST_CASE("ModelRuntime never reads a legacy pi config tree", "[coding_agent][model-runtime][issue626][diverge]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    home.write(".pi/agent/models.json", "{not valid json");
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    CHECK((*runtime)->agent_dir() == tests::agent_root_under_home(home.path()));
-    CHECK_FALSE((*runtime)->get_error().has_value());
-}
-
-TEST_CASE("ModelRuntime invalid models.json becomes empty user config plus diagnostics",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    home.write(".config/pike/agent/models.json", "{not valid json");
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    // Built-ins still compose; the config diagnostic is exposed.
-    CHECK((*runtime)->model("openai-codex", "gpt-5.5").has_value());
-    REQUIRE((*runtime)->get_error().has_value());
-    CHECK((*runtime)->get_error()->find("Failed to parse models.json") != std::string::npos);
-}
-
-TEST_CASE("ModelRuntime per-provider composition failure falls back to the built-in and records the error",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {"kimi-coding": {"name": "Broken Kimi"}}
-    })");
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    // The broken overlay falls back to the built-in kimi provider.
-    CHECK((*runtime)->model("kimi-coding", "kimi-for-coding").has_value());
-    REQUIRE((*runtime)->get_error().has_value());
-    CHECK((*runtime)->get_error()->find("kimi-coding") != std::string::npos);
-    CHECK((*runtime)->get_error()->find("must specify") != std::string::npos);
-}
-
-TEST_CASE("ModelRuntime refresh reloads models.json and recomposes providers",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    CHECK((*runtime)->model("deepseek", "deepseek-v4-pro").has_value());
-
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {
-        "deepseek": {
-          "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
-          "apiKey": "dummy-deepseek-key",
-          "models": [{"id": "deepseek-v4-flash"}]
-        }
-      }
-    })");
-    REQUIRE((*runtime)->refresh());
-    const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
-    REQUIRE(model.has_value());
-    CHECK(model->api == "openai-responses");
-    CHECK(model->provider == "deepseek");
-}
-
-TEST_CASE("ModelRuntime config-only provider streams the frozen deepseek wire path",
-        "[coding_agent][model-runtime][issue345][vertical][spec]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    const auto sse = read_fixture_text("wire/openai-responses-deepseek.sse");
-    REQUIRE_FALSE(sse.empty());
-    const auto split = sse.size() / 2;
-    transport->attempts.push_back(TransportAttempt{
-        .chunks = {sse.substr(0, split), sse.substr(split)},
-    });
-
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    const auto models_json = read_fixture_text("models/models.json");
-    REQUIRE_FALSE(models_json.empty());
-    home.write(".config/pike/agent/models.json", models_json);
-
-    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
-            coding_agent::ModelRuntimeTestOptions{
-                    .transports =
-                            tests::ScriptedTransportOptions{
-                                    .http_transport = transport,
-                            },
-            });
-    REQUIRE(runtime);
-    CHECK_FALSE((*runtime)->get_error().has_value());
-
-    const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
-    REQUIRE(model.has_value());
-    CHECK(model->reasoning == true);
-    CHECK(model->input == std::vector<ai::ModelInput>{ai::ModelInput::Text});
-
-    ai::SimpleStreamOptions options;
-    options.temperature = 0.2;
-    options.max_tokens = 123;
-    options.reasoning = ai::ThinkingLevel::High;
-    options.session_id = "session-1";
-    options.cache_retention = ai::CacheRetention::Long;
-    options.timeout_ms = 4321;
-
-    std::vector<ai::AssistantStreamEvent> events;
-    auto result = run_async_result((*runtime)
-                    ->stream_factory()(*model, request_context(), std::move(options))
-                    .run([&events](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-                        events.push_back(event);
-                        return {};
-                    }));
-
-    REQUIRE(result);
-    CHECK(result->stop_reason == ai::AssistantStopReason::ToolUse);
-    CHECK(result->response_id == "resp_deepseek");
-
-    CHECK_FALSE(tests::pi_event_snapshot_mismatch(
-        events,
-        "wire/openai-responses-deepseek-ts-events.json"));
-
-    REQUIRE(transport->requests.size() == 1);
-    const auto& request = transport->requests.front();
-    CHECK(request.url == "https://api.deepseek.example/v1/responses");
-    CHECK(request.timeout == std::chrono::milliseconds{4321});
-    CHECK(request.headers.at("Authorization") == "Bearer dummy-deepseek-key");
-    CHECK(request.headers.at("session_id") == "session-1");
-    CHECK(request.headers.at("x-client-request-id") == "session-1");
-
-    auto expected_request_bytes = read_fixture_text(
-        "wire/openai-responses-deepseek-ts-request.json");
-    REQUIRE_FALSE(expected_request_bytes.empty());
-    if (expected_request_bytes.back() == '\n') {
-        expected_request_bytes.pop_back();
+TEST_CASE("ModelRuntime ignores malformed and executable model configuration files",
+        "[coding_agent][model-runtime][gateway]") {
+    for (const auto& config : {std::string{"{malformed"},
+                 std::string{
+                         R"({"providers":{"direct":{"api":"openai-completions","baseUrl":"https://direct.invalid/v1","apiKey":"!touch marker","models":[{"id":"forbidden"}]}}})"}}) {
+        tests::TempWorkspace workspace;
+        workspace.write("models.json", config);
+        auto transport = catalog_transport();
+        auto created = coding_agent::create_model_runtime_for_testing(
+                {.agent_dir = workspace.path(), .magpie_base_url = "http://127.0.0.1:34259"}, {}, transport);
+        REQUIRE(created);
+        auto runtime = *created;
+        CHECK_FALSE(runtime->get_error());
+        REQUIRE(runtime->models().size() == 1);
+        CHECK(runtime->model("magpie", "anthropic/claude-x"));
+        CHECK_FALSE(runtime->model("direct", "forbidden"));
+        REQUIRE(runtime->refresh());
+        CHECK_FALSE(runtime->get_error());
+        CHECK_FALSE(std::filesystem::exists(workspace.path() / "auth.json"));
+        CHECK_FALSE(std::filesystem::exists(workspace.path() / "marker"));
+        CHECK(std::filesystem::exists(workspace.path() / "models.json"));
     }
-    CHECK(request.body == expected_request_bytes);
 }
 
-TEST_CASE("ModelRuntime login persists the credential and refresh failures never fail the call",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    // Invalid models.json makes the post-login refresh fail, which must not
-    // fail the login call.
-    home.write(".config/pike/agent/models.json", "{not valid json");
-
-    auto store = std::make_shared<MemoryCredentialStore>();
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-            coding_agent::ModelRuntimeOptions{
-                    .credentials = store,
-            },
-            coding_agent::ModelRuntimeTestOptions{
-                    .providers = login_test_providers(),
-            });
-    REQUIRE(runtime);
-
-    ai::AuthInteraction interaction;
-    auto result = run_async_result((*runtime)->login("login-provider", ai::AuthType::ApiKey, std::move(interaction)));
-    REQUIRE(result);
-    // The credential was persisted inside the injected CredentialStore; the
-    // Runtime login outcome itself carries only success or failure.
-    const auto stored = run_async_result(store->read("login-provider"));
-    REQUIRE(stored);
-    REQUIRE(stored->has_value());
-    CHECK(std::get<ai::ApiKeyCredential>(**stored).key == "dummy-login-key");
-    // The failed refresh is recorded in the composition-errors map.
-    REQUIRE((*runtime)->get_error().has_value());
-    CHECK((*runtime)->get_error()->find("Failed to parse models.json") != std::string::npos);
-}
-
-TEST_CASE(
-        "ModelRuntime logout removes the credential and recomposes", "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-
-    auto store = std::make_shared<MemoryCredentialStore>();
-    store->records["login-provider"] = ai::ApiKeyCredential{.key = "dummy-login-key"};
-    auto runtime = coding_agent::create_model_runtime_for_testing(
-            coding_agent::ModelRuntimeOptions{
-                    .credentials = store,
-            },
-            coding_agent::ModelRuntimeTestOptions{
-                    .providers = login_test_providers(),
-            });
-    REQUIRE(runtime);
-
-    REQUIRE(run_async_result((*runtime)->logout("login-provider")));
-    const auto stored = run_async_result(store->read("login-provider"));
-    REQUIRE(stored);
-    CHECK_FALSE(stored->has_value());
-}
-
-TEST_CASE("ModelRuntime availability reflects configured providers", "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard kimi_key{"KIMI_API_KEY"};
-    home_guard.set(home.path().string());
-    kimi_key.unset();
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    const auto available = run_async_result((*runtime)->get_available());
-    REQUIRE(available);
-    // With no stored credentials and no ambient env keys, the OAuth-only
-    // openai-codex provider and the API-key kimi-coding provider are not
-    // configured; no models are available.
-    CHECK(available->empty());
-    CHECK_FALSE((*runtime)->has_configured_auth("openai-codex"));
-    CHECK((*runtime)->get_available_snapshot().empty());
-}
-
-TEST_CASE("ModelRuntime rejects stale Kimi OAuth without fallback or deletion",
-        "[coding_agent][model-runtime][auth][issue763][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard kimi_key{"KIMI_API_KEY"};
-    home_guard.set(home.path().string());
-    kimi_key.set("ambient-kimi-key");
-
-    auto store = std::make_shared<MemoryCredentialStore>();
-    store->records.emplace("kimi-coding",
-            ai::Credential{ai::OAuthCredential{
-                    .refresh = "dummy-stale-refresh",
-                    .access = "dummy-stale-access",
-                    .expires = 1,
-            }});
-    auto runtime = coding_agent::ModelRuntime::create(coding_agent::ModelRuntimeOptions{.credentials = store});
-    REQUIRE(runtime);
-
-    const auto available = run_async_result((*runtime)->get_available());
-    REQUIRE(available);
-    CHECK(std::none_of(available->begin(), available->end(), [](const ai::Model& model) {
-        return model.provider == "kimi-coding";
-    }));
-
-    auto checked = run_async_result((*runtime)->check_auth("kimi-coding"));
-    REQUIRE(checked);
-    CHECK_FALSE(*checked);
-    CHECK_FALSE((*runtime)->is_using_oauth("kimi-coding"));
-    const auto status = (*runtime)->get_provider_auth_status("kimi-coding");
-    REQUIRE(status);
-    CHECK_FALSE(status->configured);
-    CHECK(status->source == "stored_oauth");
-
-    const auto preserved = run_async_result(store->read("kimi-coding"));
-    REQUIRE(preserved);
-    REQUIRE(preserved->has_value());
-    CHECK(std::holds_alternative<ai::OAuthCredential>(**preserved));
-
-    // Explicit API-key login is the replacement path; ambient KIMI_API_KEY
-    // above must not be consumed while the stale record exists.
-    ai::AuthInteraction interaction;
-    interaction.prompt = [](ai::AuthPrompt) -> cch::support::AsyncResult<std::string> {
-        return tests::ready_result<std::string>("replacement-kimi-key");
-    };
-    REQUIRE(run_async_result((*runtime)->login("kimi-coding", ai::AuthType::ApiKey, std::move(interaction))));
-    const auto replaced = run_async_result(store->read("kimi-coding"));
-    REQUIRE(replaced);
-    REQUIRE(replaced->has_value());
-    CHECK(std::get<ai::ApiKeyCredential>(**replaced).key == "replacement-kimi-key");
-    CHECK_FALSE((*runtime)->is_using_oauth("kimi-coding"));
-    const auto replaced_status = (*runtime)->get_provider_auth_status("kimi-coding");
-    REQUIRE(replaced_status);
-    CHECK(replaced_status->configured);
-    CHECK(replaced_status->source == "stored");
-
-    REQUIRE(run_async_result((*runtime)->logout("kimi-coding")));
-    const auto removed = run_async_result(store->read("kimi-coding"));
-    REQUIRE(removed);
-    CHECK_FALSE(removed->has_value());
-}
-
-TEST_CASE("ModelRuntime default-model table selects the runtime default",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {
-        "deepseek": {
-          "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
-          "apiKey": "dummy-deepseek-key",
-          "models": [{"id": "deepseek-v4-flash"}]
-        }
-      }
-    })");
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    CHECK(coding_agent::ModelRuntime::default_model_for_provider("openai-codex") == std::optional<std::string>{"gpt-5.5"});
-    CHECK(coding_agent::ModelRuntime::default_model_for_provider("kimi-coding") == std::optional<std::string>{"kimi-for-coding"});
-    CHECK_FALSE(coding_agent::ModelRuntime::default_model_for_provider("deepseek").has_value());
-}
-
-TEST_CASE("ModelRuntime configured apiKey env templates surface for secret filtering",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {
-        "deepseek": {
-          "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
-          "apiKey": "$DEEPSEEK_SECRET",
-          "models": [{"id": "deepseek-v4-flash"}]
-        }
-      }
-    })");
-
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    const auto names = (*runtime)->configured_api_key_env_names();
-    REQUIRE(names.size() == 1);
-    CHECK(names.front() == "DEEPSEEK_SECRET");
-}
-
-TEST_CASE(
-        "ModelRuntime env-template apiKey resolves at request time", "[coding_agent][model-runtime][issue345][spec]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{
-        .chunks = {"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n"},
+TEST_CASE("ModelRuntime never falls back to static models when gateway discovery fails",
+        "[coding_agent][model-runtime][gateway]") {
+    tests::TempWorkspace workspace;
+    workspace.write("models.json", R"({"providers":{"magpie":{"models":[{"id":"static-model"}]}}})");
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .failure = support::make_error(support::ErrorCode::Network, "gateway unavailable"),
     });
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard secret_guard{"DEEPSEEK_SECRET"};
-    home_guard.set(home.path().string());
-    secret_guard.set("dummy-env-key");
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {
-        "deepseek": {
-          "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
-          "apiKey": "$DEEPSEEK_SECRET",
-          "models": [{"id": "deepseek-v4-flash"}]
-        }
-      }
-    })");
-
-    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
-            coding_agent::ModelRuntimeTestOptions{
-                    .transports =
-                            tests::ScriptedTransportOptions{
-                                    .http_transport = transport,
-                            },
-            });
+    auto runtime = coding_agent::create_model_runtime_for_testing({.agent_dir = workspace.path()}, {}, transport);
     REQUIRE(runtime);
-    const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
-    REQUIRE(model.has_value());
-
-    ai::SimpleStreamOptions options;
-    options.max_tokens = 16;
-    auto result = run_async_result(
-            (*runtime)->stream_factory()(*model, {}, std::move(options)).run([](const ai::AssistantStreamEvent&) {
-                return support::ExpectedVoid{};
-            }));
-    REQUIRE(result);
-    REQUIRE(transport->requests.size() == 1);
-    CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-env-key");
+    CHECK((*runtime)->models().empty());
+    REQUIRE((*runtime)->get_error());
+    CHECK((*runtime)->get_error()->find("magpie serve") != std::string::npos);
+    CHECK((*runtime)->get_error()->find("/reload") != std::string::npos);
 }
 
-TEST_CASE("ModelRuntime resolves the pi 4-level auth precedence chain",
-        "[coding_agent][model-runtime][issue346][precedence][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard secret{"DEEPSEEK_SECRET"};
-    tests::EnvVarGuard kimi{"KIMI_API_KEY"};
-    home_guard.set(home.path().string());
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {
-        "deepseek": {
-          "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
-          "apiKey": "$DEEPSEEK_SECRET",
-          "models": [{"id": "deepseek-v4-flash"}]
-        }
-      }
-    })");
+TEST_CASE("ModelRuntime cancellation preserves its catalog and failed discovery clears it until recovery",
+        "[coding_agent][model-runtime][gateway][cancellation]") {
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{.chunks = {R"({"data":[{"id":"old"}]})"}});
+    transport->attempts.push_back(tests::TransportAttempt{
+            .failure = support::make_error(support::ErrorCode::Network, "gateway unavailable"),
+    });
+    transport->attempts.push_back(tests::TransportAttempt{.chunks = {R"({"data":[{"id":"new"}]})"}});
+    tests::TempWorkspace workspace;
+    auto created = coding_agent::create_model_runtime_for_testing({.agent_dir = workspace.path()}, {}, transport);
+    REQUIRE(created);
+    auto runtime = *created;
+    REQUIRE(runtime->model("magpie", "old"));
+    std::stop_source stop;
+    stop.request_stop();
+    auto cancelled = tests::run_async_result(runtime->refresh_async(stop.get_token()));
+    REQUIRE_FALSE(cancelled);
+    CHECK(cancelled.error().code == support::ErrorCode::Cancelled);
+    CHECK(runtime->model("magpie", "old"));
+    CHECK(transport->requests.size() == 1);
+    auto failed = tests::run_async_result(runtime->refresh_async());
+    REQUIRE_FALSE(failed);
+    CHECK(runtime->models().empty());
+    REQUIRE(runtime->get_error());
+    CHECK(runtime->get_error()->find("gateway unavailable") != std::string::npos);
+    REQUIRE(tests::run_async_result(runtime->refresh_async()));
+    CHECK(runtime->model("magpie", "new"));
+    CHECK_FALSE(runtime->get_error());
+}
 
-    auto storage = std::make_shared<coding_agent::AuthStorage>(tests::agent_root_under_home(home.path()) / "auth.json");
-    auto transport = std::make_shared<ScriptedTransport>();
-    constexpr std::string_view completed_response =
-            "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n";
-    for (int i = 0; i < 4; ++i) {
-        transport->attempts.push_back(TransportAttempt{
-                .chunks = {std::string{completed_response}},
+TEST_CASE("ModelRuntime binds invocation key precedence without persistent model credentials",
+        "[coding_agent][model-runtime][gateway]") {
+    tests::EnvVarGuard key{"MAGPIE_API_KEY"};
+    key.set("environment-key");
+    for (const bool explicit_override : {false, true}) {
+        tests::TempWorkspace workspace;
+        auto wire = catalog_transport();
+        wire->attempts.push_back(tests::TransportAttempt{
+                .chunks = {"data: {\"choices\":[{\"delta\":{\"content\":\"ok\"},\"finish_reason\":\"stop\"}]}\n\n"},
         });
-    }
-    auto runtime =
-            coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{.credentials = storage},
-                    coding_agent::ModelRuntimeTestOptions{
-                            .transports =
-                                    tests::ScriptedTransportOptions{
-                                            .http_transport = transport,
-                                    },
-                    });
-    REQUIRE(runtime);
-    const auto deepseek = (*runtime)->model("deepseek", "deepseek-v4-flash");
-    REQUIRE(deepseek);
-
-    const auto stream_deepseek = [&]() {
-        ai::SimpleStreamOptions options;
-        options.max_tokens = 16;
-        return run_async_result((*runtime)
-                        ->stream_factory()(*deepseek, {}, std::move(options))
-                        .run([](const ai::AssistantStreamEvent&) { return support::ExpectedVoid{}; }));
-    };
-    const auto store_key = [&](std::string provider_id, std::string key) {
-        auto stored = run_async_result(storage->modify(std::move(provider_id),
-                [key = std::move(key)](
-                        std::optional<ai::Credential>) -> cch::support::AsyncResult<std::optional<ai::Credential>> {
-                    return cch::support::AsyncResult<std::optional<ai::Credential>>(
-                            std::expected<std::optional<ai::Credential>, cch::support::Error>{
-                                    std::optional<ai::Credential>{ai::ApiKeyCredential{.key = key}}});
-                }));
-        REQUIRE(stored);
-    };
-
-    // Level 4 (models.json configured key): an env-template apiKey is
-    // unconfigured until its environment variable is present. The status is
-    // non-secret; the stream request below observes the resolved header at the
-    // AI-owned transport test seam.
-    secret.unset();
-    auto unconfigured = run_async_result((*runtime)->check_auth("deepseek"));
-    REQUIRE(unconfigured);
-    CHECK_FALSE(*unconfigured);
-
-    secret.set("env-configured-key");
-    auto configured = run_async_result((*runtime)->check_auth("deepseek"));
-    REQUIRE(configured);
-    REQUIRE(*configured);
-    CHECK((*configured)->source == "configured API key");
-    auto configured_status = (*runtime)->get_provider_auth_status("deepseek");
-    REQUIRE(configured_status);
-    CHECK(configured_status->configured);
-    CHECK(configured_status->source == "environment");
-    CHECK(configured_status->label == "DEEPSEEK_SECRET");
-    auto configured_stream = stream_deepseek();
-    REQUIRE(configured_stream);
-    REQUIRE(transport->requests.size() == 1);
-    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer env-configured-key");
-
-    // Level 3 (environment): the built-in kimi provider resolves its ambient
-    // KIMI_API_KEY chain when nothing is stored.
-    kimi.set("kimi-env-key");
-    auto kimi_env = run_async_result((*runtime)->check_auth("kimi-coding"));
-    REQUIRE(kimi_env);
-    REQUIRE(*kimi_env);
-    CHECK((*kimi_env)->source == "KIMI_API_KEY");
-    REQUIRE(run_async_result((*runtime)->get_available()));
-    auto kimi_status = (*runtime)->get_provider_auth_status("kimi-coding");
-    REQUIRE(kimi_status);
-    CHECK(kimi_status->configured);
-    CHECK(kimi_status->source == "environment");
-    CHECK(kimi_status->label == "KIMI_API_KEY");
-
-    // Level 2 (stored auth.json credential) beats env and configured keys.
-    store_key("deepseek", "stored-key");
-    store_key("kimi-coding", "stored-kimi-key");
-    REQUIRE(run_async_result((*runtime)->get_available()));
-    auto deepseek_stored = run_async_result((*runtime)->check_auth("deepseek"));
-    REQUIRE(deepseek_stored);
-    REQUIRE(*deepseek_stored);
-    CHECK((*deepseek_stored)->source == "stored credential");
-    auto kimi_stored = run_async_result((*runtime)->check_auth("kimi-coding"));
-    REQUIRE(kimi_stored);
-    REQUIRE(*kimi_stored);
-    CHECK((*kimi_stored)->source == "stored credential");
-    auto stored_status = (*runtime)->get_provider_auth_status("deepseek");
-    REQUIRE(stored_status);
-    CHECK(stored_status->configured);
-    CHECK(stored_status->source == "stored");
-    auto stored_stream = stream_deepseek();
-    REQUIRE(stored_stream);
-    REQUIRE(transport->requests.size() == 2);
-    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer stored-key");
-
-    // Level 1 (runtime API key override, in-memory) beats the stored credential
-    // and never persists.
-    REQUIRE((*runtime)->set_runtime_api_key("deepseek", "runtime-key"));
-    CHECK((*runtime)->has_runtime_api_key("deepseek"));
-    CHECK((*runtime)->has_configured_auth("deepseek"));
-    auto runtime_status = (*runtime)->get_provider_auth_status("deepseek");
-    REQUIRE(runtime_status);
-    CHECK(runtime_status->configured);
-    CHECK(runtime_status->source == "runtime");
-    auto runtime_stream = stream_deepseek();
-    REQUIRE(runtime_stream);
-    REQUIRE(transport->requests.size() == 3);
-    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer runtime-key");
-
-    // list_credentials stays metadata-only but reports the runtime override.
-    auto listed = run_async_result((*runtime)->list_credentials());
-    REQUIRE(listed);
-    const auto deepseek_entry = std::find_if(listed->begin(), listed->end(), [](const ai::CredentialInfo& entry) {
-        return entry.provider_id == "deepseek";
-    });
-    REQUIRE(deepseek_entry != listed->end());
-    CHECK(deepseek_entry->type == "api_key");
-    CHECK(deepseek_entry->provider_id == "deepseek");
-
-    REQUIRE((*runtime)->remove_runtime_api_key("deepseek"));
-    CHECK_FALSE((*runtime)->has_runtime_api_key("deepseek"));
-    auto restored_status = (*runtime)->get_provider_auth_status("deepseek");
-    REQUIRE(restored_status);
-    CHECK(restored_status->configured);
-    CHECK(restored_status->source == "stored");
-    auto restored_stream = stream_deepseek();
-    REQUIRE(restored_stream);
-    REQUIRE(transport->requests.size() == 4);
-    CHECK(transport->requests.back().headers.at("Authorization") == "Bearer stored-key");
-}
-
-TEST_CASE("ModelRuntime !command apiKey resolves through the shell with a process-lifetime cache",
-        "[coding_agent][model-runtime][issue345][spec]") {
-    auto transport = std::make_shared<ScriptedTransport>();
-    transport->attempts.push_back(TransportAttempt{
-        .chunks = {"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"r\",\"status\":\"completed\"}}\n\n"},
-    });
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {
-        "deepseek": {
-          "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
-          "apiKey": "!printf dummy-command-key",
-          "models": [{"id": "deepseek-v4-flash"}]
+        auto created = coding_agent::create_model_runtime_for_testing(
+                {.agent_dir = workspace.path(),
+                        .api_key = explicit_override ? std::optional<std::string>{"invocation-key"} : std::nullopt},
+                {},
+                wire);
+        REQUIRE(created);
+        auto runtime = *created;
+        auto model = runtime->model("magpie", "anthropic/claude-x");
+        REQUIRE(model);
+        auto stream = runtime->stream_factory()(*model, {}, {});
+        runtime.reset();
+        auto result = tests::run_async_result(std::move(stream).run({}));
+        REQUIRE(result);
+        CHECK(result->stop_reason == ai::AssistantStopReason::Stop);
+        REQUIRE(wire->requests.size() == 2);
+        for (const auto& request : wire->requests) {
+            CHECK(request.headers.at("Authorization") ==
+                    (explicit_override ? "Bearer invocation-key" : "Bearer environment-key"));
         }
-      }
-    })");
-
-    auto runtime = coding_agent::create_model_runtime_for_testing(coding_agent::ModelRuntimeOptions{},
-            coding_agent::ModelRuntimeTestOptions{
-                    .transports =
-                            tests::ScriptedTransportOptions{
-                                    .http_transport = transport,
-                            },
-            });
-    REQUIRE(runtime);
-    const auto model = (*runtime)->model("deepseek", "deepseek-v4-flash");
-    REQUIRE(model.has_value());
-
-    ai::SimpleStreamOptions options;
-    options.max_tokens = 16;
-    auto result = run_async_result(
-            (*runtime)->stream_factory()(*model, {}, std::move(options)).run([](const ai::AssistantStreamEvent&) {
-                return support::ExpectedVoid{};
-            }));
-    REQUIRE(result);
-    REQUIRE(transport->requests.size() == 1);
-    CHECK(transport->requests.front().headers.at("Authorization") == "Bearer dummy-command-key");
+        CHECK_FALSE(std::filesystem::exists(workspace.path() / "auth.json"));
+    }
 }
 
-TEST_CASE("ModelRuntime auth status reports an unconfigured builtin as not configured",
-        "[coding_agent][model-runtime][issue406][spec]") {
-    tests::TempWorkspace home;
-    tests::EnvVarGuard home_guard{"HOME"};
-    home_guard.set(home.path().string());
-    tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
-    kimi_guard.unset();
+TEST_CASE("ModelRuntime inspect_gateway forwards status and honors stop_token",
+        "[coding_agent][model-runtime][gateway][cancellation]") {
+    tests::TempWorkspace workspace;
+    auto wire = catalog_transport();
+    auto created = coding_agent::create_model_runtime_for_testing(
+            {.agent_dir = workspace.path(), .magpie_base_url = "http://127.0.0.1:34259"}, {}, wire);
+    REQUIRE(created);
+    auto runtime = *created;
 
-    auto runtime = coding_agent::ModelRuntime::create({});
-    REQUIRE(runtime);
-    static_cast<void>(run_async_result((*runtime)->get_available()));
-    auto status = (*runtime)->get_provider_auth_status("openai-codex");
-    REQUIRE(status.has_value());
-    // pi `getProviderAuthStatus`: no runtime key, no stored credential, no
-    // config, no environment → `{ configured: false }` (the selector renders
-    // "• unconfigured"); structural auth hooks alone are not a source.
-    CHECK_FALSE(status->configured);
+    std::stop_source stopped;
+    stopped.request_stop();
+    auto cancelled = tests::run_async_result(runtime->inspect_gateway(stopped.get_token()));
+    REQUIRE_FALSE(cancelled);
+    CHECK(cancelled.error().code == support::ErrorCode::Cancelled);
 
-    auto missing = (*runtime)->get_provider_auth_status("no-such-provider");
-    CHECK_FALSE(missing.has_value());
+    wire->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"name":"magpie-srv","version":"2.0"})"},
+    });
+    wire->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"data":[{"id":"runtime-model"}]})"},
+    });
+    auto status = tests::run_async_result(runtime->inspect_gateway());
+    REQUIRE(status);
+    CHECK(status->name == "magpie-srv");
+    CHECK(status->version == "2.0");
+    REQUIRE(status->models.size() == 1);
+    CHECK(status->models.front().id == "runtime-model");
 }

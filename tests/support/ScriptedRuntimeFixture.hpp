@@ -27,23 +27,6 @@
 
 namespace cch::tests {
 
-[[nodiscard]] inline ai::ProviderAuth unconfigured_fixture_auth() {
-    ai::ApiKeyAuth api_key;
-    api_key.name = "unconfigured scripted provider";
-    api_key.check = [](const ai::AuthContext&,
-                            std::optional<ai::ApiKeyCredential>) -> support::AsyncResult<std::optional<ai::AuthCheck>> {
-        return support::AsyncResult<std::optional<ai::AuthCheck>>(
-                std::expected<std::optional<ai::AuthCheck>, support::Error>{std::optional<ai::AuthCheck>{}});
-    };
-    api_key.resolve =
-            [](const ai::AuthContext&,
-                    std::optional<ai::ApiKeyCredential>) -> support::AsyncResult<std::optional<ai::AuthResult>> {
-        return support::AsyncResult<std::optional<ai::AuthResult>>(
-                std::expected<std::optional<ai::AuthResult>, support::Error>{std::optional<ai::AuthResult>{}});
-    };
-    return ai::ProviderAuth{.api_key = std::move(api_key)};
-}
-
 /// One recorded request at the concrete Provider seam.
 struct RecordedRuntimeCall {
     ai::Model model;
@@ -92,20 +75,20 @@ class ScriptedRuntimeProvider final : public ScriptedProvider {
 public:
     ScriptedRuntimeProvider(std::string provider_id,
             std::shared_ptr<ScriptedProviderControl> control,
-            bool configured,
+            bool advertised,
             std::vector<ai::Model> catalog = {})
-        : ScriptedProvider(std::move(provider_id), configured ? detail::fixture_auth() : unconfigured_fixture_auth()),
-          control_(std::move(control)), catalog_(std::move(catalog)) {}
+        : ScriptedProvider(std::move(provider_id)), control_(std::move(control)), catalog_(std::move(catalog)),
+          advertised_(advertised) {}
 
     [[nodiscard]] std::string_view name() const noexcept override { return provider_id(); }
     [[nodiscard]] std::vector<ai::Model> models() const override {
+        if (!advertised_) return {};
         if (!catalog_.empty()) return catalog_;
         ai::Model model;
         model.id = "fake-model";
         model.name = "fake-model";
         model.api = "scripted-fake";
         model.provider = provider_id();
-        model.base_url = "";
         model.reasoning = false;
         model.thinking_level_map = std::nullopt;
         model.input = {ai::ModelInput::Text};
@@ -113,7 +96,6 @@ public:
         model.context_window = 128000;
         model.max_tokens = 16384;
         model.headers = std::nullopt;
-        model.compat = std::nullopt;
         return {std::move(model)};
     }
 
@@ -273,14 +255,14 @@ public:
 private:
     std::shared_ptr<ScriptedProviderControl> control_;
     std::vector<ai::Model> catalog_;
+    bool advertised_;
 };
 
 [[nodiscard]] inline coding_agent::ModelRuntimeTestProvider scripted_runtime_definition(
         std::shared_ptr<ScriptedRuntimeProvider> provider) {
     const std::string provider_id{provider->id()};
     auto models = provider->models();
-    auto auth = std::move(provider->auth());
-    return make_test_provider_definition(std::move(provider), provider_id, std::move(models), std::move(auth));
+    return make_test_provider_definition(std::move(provider), provider_id, std::move(models));
 }
 
 /// Test fixture that owns a concrete ModelRuntime and separate scripted
@@ -307,8 +289,6 @@ struct ScriptedRuntimeFixture final {
             }
         }
         coding_agent::ModelRuntimeOptions options;
-        options.models_path = std::filesystem::path{};
-        options.credentials = std::make_shared<detail::FixtureCredentialStore>();
         std::vector<coding_agent::ModelRuntimeTestProvider> definitions;
         if (!custom_catalog) {
             definitions.push_back(
@@ -329,20 +309,19 @@ struct ScriptedRuntimeFixture final {
         runtime = std::move(*created);
 
         if (!custom_catalog) {
-            if (!runtime->model("fake", "fake-model") || !runtime->model("sdk-host", "fake-model")) {
+            if (!runtime->model("fake", "fake-model")) {
                 std::terminate();
             }
-            const auto available = run_async_result(runtime->get_available());
-            if (!available || available->size() != 1 || available->front().provider != "fake") {
+            const auto available = runtime->models();
+            if (available.size() != 1 || available.front().provider != "fake") {
                 std::terminate();
             }
         } else {
             for (const auto& id : catalog_ids) {
                 if (!runtime->model(catalog_provider, id)) std::terminate();
             }
-            const auto available = run_async_result(runtime->get_available());
-            if (!available || available->size() != catalog_ids.size() ||
-                    available->front().provider != catalog_provider) {
+            const auto available = runtime->models();
+            if (available.size() != catalog_ids.size() || available.front().provider != catalog_provider) {
                 std::terminate();
             }
         }

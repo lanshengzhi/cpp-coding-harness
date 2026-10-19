@@ -271,7 +271,7 @@ TEST_CASE("print mode falls back to Request <stopReason> without an error messag
 
     CHECK(exit_code == 1);
     CHECK(output.str().empty());
-    CHECK(error.str() == "Request error\n");
+    CHECK(error.str() == "Provider stream failed\n");
 }
 
 TEST_CASE("print mode reports a terminal aborted outcome on stderr and exits 1", "[cli][print][spec]") {

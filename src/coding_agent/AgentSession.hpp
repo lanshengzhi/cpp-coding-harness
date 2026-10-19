@@ -164,6 +164,7 @@ struct AgentSessionReloadResult {
     std::vector<ResourceDiagnostic> prompt_diagnostics;
     std::vector<ResourceDiagnostic> theme_diagnostics;
     std::vector<LoadedThemeResource> themes;
+    std::optional<std::string> model_runtime_error;
 };
 
 // ── EventSubscription ────────────────────────────────────────────────────────
@@ -343,9 +344,8 @@ public:
     [[nodiscard]] support::Expected<std::string> set_thinking_level(
             std::string_view level, ModelMutationOptions options = {});
 
-    /// Runtime model switch (pi `AgentSession.setModel`): validates that the
-    /// target model's provider resolves auth (`No API key for
-    /// <provider>/<model>` otherwise), swaps the live Agent model, persists
+    /// Runtime model switch (pi `AgentSession.setModel`): validates the
+    /// catalog identity, swaps the live Agent model, persists
     /// the `model_change` session entry, and re-clamps the thinking level
     /// against the new model. Session-only by default (pi
     /// `ModelMutationOptions`): with `options.persist` the global settings
@@ -360,10 +360,10 @@ public:
     [[nodiscard]] support::ExpectedVoid set_model_blocking(ai::Model model, ModelMutationOptions options = {});
 
     /// Runtime model cycle (pi `AgentSession.cycleModel`): when the session
-    /// carries scoped models, cycle within the auth-filtered scoped set
-    /// (models whose provider resolves no auth are dropped; a scoped model's
+    /// carries scoped models, cycle within the scoped identities still present
+    /// in the catalog (a scoped model's
     /// explicit thinking level overrides the current preference); otherwise
-    /// cycle within the available models. A set with zero or one eligible
+    /// cycle within the catalog models. A set with zero or one eligible
     /// model yields `std::nullopt`. Session-only by default (pi
     /// `ModelMutationOptions`); `options.persist` also writes the global
     /// settings default like `set_model`. Same impl_ copying contract as
@@ -552,9 +552,9 @@ public:
     /// Resolved model name.
     [[nodiscard]] const std::string& model() const;
 
-    /// The session's canonical model/auth runtime (ADR 0029). Held as a
-    /// `shared_ptr`; runtimes are reusable across sessions and expose live
-    /// `refresh()`/`login()`/`logout()` to all holders.
+    /// The session's canonical model runtime (ADR 0029). Held as a
+    /// `shared_ptr` and reusable across sessions; provider login/logout is
+    /// retired.
     [[nodiscard]] std::shared_ptr<ModelRuntime> model_runtime() const;
 
     /// Workspace path.

@@ -1,12 +1,17 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "support/CliRunFixture.hpp"
+#include "support/EnvVarGuard.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/ImageFixture.hpp"
 #include "support/PseudoTerminal.hpp"
 #include "support/ShellQuoting.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/TextHelpers.hpp"
 
+#include "coding_agent/ModelRuntimeTestAccess.hpp"
+#include "ai/ModelsTestAccess.hpp"
+#include "support/ModelFixture.hpp"
 #include "coding_agent/cli/AsyncCliRuntime.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "support/Json.hpp"
@@ -39,6 +44,27 @@
 namespace {
 
 using cch::tests::shell_quote;
+
+struct GatewayCliFixture {
+    cch::tests::TempWorkspace config;
+    cch::tests::EnvVarGuard key{"MAGPIE_API_KEY", std::nullopt};
+    std::shared_ptr<cch::tests::ScriptedTransport> wire{std::make_shared<cch::tests::ScriptedTransport>()};
+    std::shared_ptr<cch::coding_agent::ModelRuntime> runtime;
+
+    GatewayCliFixture() {
+        wire->attempts.push_back(cch::tests::TransportAttempt{
+                .chunks = {"data: {\"choices\":[{\"delta\":{\"content\":\"gateway "
+                           "reply\"},\"finish_reason\":\"stop\"}]}\n\n"},
+        });
+        wire->repeat_last_attempt = true;
+        auto models =
+                std::make_shared<cch::ai::Models>(cch::ai::ModelsOptions{.gateway_url = "http://127.0.0.1:34259"});
+        cch::ai::detail::ModelsTestAccess::set_transport(*models, wire);
+        REQUIRE(cch::ai::detail::ModelsTestAccess::replace_models(
+                *models, {cch::tests::make_model("upstream/model", "magpie", "openai-completions")}));
+        runtime = cch::coding_agent::ModelRuntimeTestAccess::create(models, config.path());
+    }
+};
 
 struct CommandResult {
     int exit_code{0};
@@ -660,7 +686,7 @@ TEST_CASE("CLI interactive boot Continue recovers a vanished session cwd",
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
+          "api": "openai-completions",
           "apiKey": "configured-key",
           "models": [{"id": "deepseek-v4-flash"}]
         }
@@ -815,7 +841,7 @@ TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",
       "providers": {
         "deepseek": {
           "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
+          "api": "openai-completions",
           "apiKey": "configured-key",
           "models": [{"id": "deepseek-v4-flash"}]
         }
@@ -950,71 +976,57 @@ TEST_CASE("CLI --session opens-or-creates at the target path", "[cli][u6][spec]"
     CHECK(content.find("\"text\":\"second\"") != std::string::npos);
 }
 
-TEST_CASE("CLI real-provider mode reports missing API key as a terminal auth outcome", "[cli][u6][issue338][spec]") {
+TEST_CASE("CLI gateway mode uses zero-state credentials without model configuration", "[cli][gateway][spec]") {
     cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace home;
-    auto session = workspace.path() / "real.jsonl";
-    auto result = run_command_split(
-        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-        " env -u KIMI_API_KEY " + bin() +
-        " --session " + shell_quote(session) +
-        " hello");
-
-    REQUIRE(result.exit_code == 1);
-    // Nothing resolves as configured: the Agent holds pi's unknown
-    // kDefaultModel and fails through normal provider lookup (T04); the
-    // terminal outcome's errorMessage reaches stderr with exit 1.
-    CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("Unknown provider: unknown") != std::string::npos);
-}
-
-TEST_CASE("CLI Kimi path reports missing KIMI_API_KEY through API-key guidance",
-        "[cli][kimi][u3][issue338][issue360][spec]") {
-    cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace home;
-    auto session = workspace.path() / "kimi-missing-key.jsonl";
-    auto result = run_command(
-        "cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-        " env -u KIMI_API_KEY " + bin() +
-        " --session " + shell_quote(session) +
-        " --model kimi-for-coding hello");
-
-    // T11 preflight (pi `prompt()` hasConfiguredAuth check): a real model
-    // whose provider resolves no auth fails the prompt before any stream with
-    // the provider-specific API-key guidance.
-    REQUIRE(result.exit_code == 1);
-    CHECK(result.output.find("loop failed: No API key found for kimi-coding") != std::string::npos);
-    CHECK(result.output.find("Use /login to log into a provider via API key.") != std::string::npos);
-    CHECK(result.output.find("OAuth") == std::string::npos);
-    // ADR 0064: the prompt fails the auth preflight before any user message
-    // is recorded, so the deferred first flush never happens and no session
-    // file exists — pi's delayed first flush behaves the same.
-    CHECK_FALSE(std::filesystem::exists(session));
-}
-
-TEST_CASE("CLI terminal auth failure after malformed settings keeps the warning visible",
-        "[cli][settings][issue338][spec]") {
-    cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace agent_root;
-    const auto agent_dir = cch::tests::agent_root_under_home(agent_root.path());
-    std::filesystem::create_directories(agent_dir);
-    std::filesystem::create_directories(agent_dir);
-    {
-        std::ofstream settings(agent_dir / "settings.json");
-        settings << "{not valid json";
-    }
-    auto session = workspace.path() / "settings-fallback-failure.jsonl";
-    auto result = run_command_split("cd " + shell_quote(workspace.path()) +
-                                    " && HOME=" + shell_quote(agent_root.path().string()) + " env -u KIMI_API_KEY " +
-                                    bin() + " --session " + shell_quote(session) + " hello");
-
-    REQUIRE(result.exit_code == 1);
-    // Nothing resolves as configured: the Agent holds kDefaultModel and the
-    // terminal auth outcome names the unknown provider (T04) on stderr.
-    CHECK(result.stdout_text.empty());
-    CHECK(result.stderr_text.find("Unknown provider: unknown") != std::string::npos);
-    CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
+    GatewayCliFixture gateway;
+    const auto session = workspace.path() / "gateway.jsonl";
+    auto result = cch::tests::run_cli_with_runtime(
+            {
+                    .args = {"--session", session.string(), "hello"},
+                    .cwd = workspace.path(),
+            },
+            gateway.runtime);
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text == "gateway reply\n");
+    REQUIRE(gateway.wire->requests.size() == 1);
+    CHECK(gateway.wire->requests.front().headers.at("Authorization") == "Bearer magpie");
     CHECK(std::filesystem::exists(session));
+}
+
+TEST_CASE("CLI ignores legacy custom providers instead of requesting model login", "[cli][gateway][spec]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    home.write(
+            ".config/pike/agent/models.json", R"({"providers":{"kimi-coding":{"models":[{"id":"kimi-for-coding"}]}}})");
+    GatewayCliFixture gateway;
+    auto result = cch::tests::run_cli_with_runtime(
+            {
+                    .args = {"--model", "kimi-for-coding", "hello"},
+                    .cwd = workspace.path(),
+                    .env = {{"HOME", home.path().string()}},
+            },
+            gateway.runtime);
+    CHECK(result.exit_code == 1);
+    CHECK(result.stderr_text.find("/login") == std::string::npos);
+    CHECK(result.stderr_text.find("No API key") == std::string::npos);
+    CHECK(gateway.wire->requests.empty());
+}
+
+TEST_CASE("CLI gateway success after malformed settings keeps the warning visible", "[cli][settings][gateway][spec]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    home.write(".config/pike/agent/settings.json", "{not valid json");
+    GatewayCliFixture gateway;
+    auto result = cch::tests::run_cli_with_runtime(
+            {
+                    .args = {"--session", (workspace.path() / "session.jsonl").string(), "hello"},
+                    .cwd = workspace.path(),
+                    .env = {{"HOME", home.path().string()}},
+            },
+            gateway.runtime);
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stdout_text == "gateway reply\n");
+    CHECK(result.stderr_text.find("could not load global settings") != std::string::npos);
 }
 
 TEST_CASE("CLI skips project skills by default when project trust is unknown", "[cli][project-trust][spec][issue626]") {
@@ -1471,39 +1483,25 @@ TEST_CASE("CLI --session open without override retains stored provider and model
     CHECK(second.stdout_text == "fake: second\n");
 }
 
-TEST_CASE("CLI resume falls back with a diagnostic when the stored model no longer resolves",
-        "[cli][resume][issue346][spec][issue626]") {
+TEST_CASE("CLI resume keeps legacy history and selects the gateway default when its model is missing",
+        "[cli][resume][gateway][spec]") {
     cch::tests::TempWorkspace workspace;
-    cch::tests::TempWorkspace home;
-    const auto models_path = cch::tests::agent_root_under_home(home.path()) / "models.json";
-    home.write(".config/pike/agent/models.json", R"({
-      "providers": {
-        "deepseek": {
-          "baseUrl": "https://api.deepseek.example/v1",
-          "api": "openai-responses",
-          "apiKey": "configured-key",
-          "models": [{"id": "deepseek-v4-flash"}]
-        }
-      }
-    })");
-    auto session = workspace.path() / "resume-unresolved.jsonl";
-
-    // Create a session that records deepseek/deepseek-v4-flash without
-    // streaming: a no-prompt print run still creates the session (pi).
-    auto first = run_command_split("cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-                                   " " + bin() + " --session " + shell_quote(session) + " --model deepseek-v4-flash");
-    REQUIRE(first.exit_code == 0);
-
-    // Remove the configured model, then resume: the stored identity no longer
-    // resolves, so the chain falls back through the runtime default. The
-    // fallback message is an interactive boot warning only (pi
-    // `modelFallbackMessage`); print mode drops it entirely.
-    std::filesystem::remove(models_path);
-    auto second = run_command_split("cd " + shell_quote(workspace.path()) + " && HOME=" + shell_quote(home.path()) +
-                                    " " + bin() + " --session " + shell_quote(session));
-
-    REQUIRE(second.exit_code == 0);
-    CHECK(second.stderr_text.find("Could not restore model") == std::string::npos);
+    const auto session = workspace.path() / "resume-unresolved.jsonl";
+    seed_session_file(session, workspace.path(), "legacy", "removed-model", "seed");
+    auto store = cch::harness::session::SessionStore::open_existing(session);
+    REQUIRE(store);
+    REQUIRE(store->append_model_change(std::nullopt, "legacy", "removed-model"));
+    GatewayCliFixture gateway;
+    auto result = cch::tests::run_cli_with_runtime(
+            {
+                    .args = {"--session", session.string()},
+                    .cwd = workspace.path(),
+            },
+            gateway.runtime);
+    REQUIRE(result.exit_code == 0);
+    CHECK(result.stderr_text.find("Could not restore model") == std::string::npos);
+    CHECK(read_file(session).find("removed-model") != std::string::npos);
+    CHECK(gateway.wire->requests.empty());
 }
 
 TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli][api-key][issue346][spec]") {
@@ -1511,12 +1509,21 @@ TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli]
     cch::tests::TempWorkspace home;
     auto session = workspace.path() / "api-key-session.jsonl";
 
-    auto result = cch::tests::run_cli(cch::tests::CliRunOptions{
-            .args = {"--session", session.string(), "--model", "fake-model", "--api-key", "sk-runtime-hello", "hello"},
-            .cwd = workspace.path(),
-            .env = {{"HOME", home.path().string()}},
-            .stdin_text = {},
-    });
+    auto result = cch::tests::run_cli_with_runtime(
+            cch::tests::CliRunOptions{
+                    .args = {"--session",
+                            session.string(),
+                            "--model",
+                            "fake-model",
+                            "--api-key",
+                            "sk-runtime-hello",
+                            "hello"},
+                    .cwd = workspace.path(),
+                    .env = {{"HOME", home.path().string()}},
+                    .stdin_text = {},
+            },
+            cch::tests::runtime_from_models(cch::tests::make_scripted_fake_models()),
+            true);
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text.find("fake: hello") != std::string::npos);
@@ -1525,13 +1532,19 @@ TEST_CASE("CLI --api-key installs an in-memory runtime API key override", "[cli]
     CHECK(content.find("sk-runtime-hello") == std::string::npos);
 }
 
-TEST_CASE("CLI rejects --api-key without an explicit model", "[cli][api-key][issue346][spec]") {
+TEST_CASE("CLI accepts --api-key with default gateway model selection", "[cli][api-key][gateway][spec]") {
     cch::tests::TempWorkspace workspace;
-    auto result = run_command_split(
-        "cd " + shell_quote(workspace.path()) + " && " + bin() + " --api-key sk-nomodel hello");
-    REQUIRE(result.exit_code == 1);
-    CHECK(
-        result.stderr_text.find("--api-key requires a model") != std::string::npos);
+    GatewayCliFixture gateway;
+    auto result = cch::tests::run_cli_with_runtime(
+            {
+                    .args = {"--no-session", "--api-key", "invocation-only", "hello"},
+                    .cwd = workspace.path(),
+            },
+            gateway.runtime);
+    REQUIRE(result.exit_code == 0);
+    REQUIRE(gateway.wire->requests.size() == 1);
+    CHECK(gateway.wire->requests.front().headers.at("Authorization") == "Bearer invocation-only");
+    CHECK(result.stdout_text == "gateway reply\n");
 }
 
 TEST_CASE("CLI print mode slash text reaches AgentSession and the session file", "[cli][commands][spec]") {

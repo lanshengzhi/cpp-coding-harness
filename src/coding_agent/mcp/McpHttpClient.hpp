@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/ai/StreamTransport.hpp>
+#include "support/StreamTransport.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "coding_agent/mcp/McpRequestAuthSource.hpp"
 #include "coding_agent/mcp/McpServerConnection.hpp"
@@ -49,7 +49,7 @@ struct McpHttpGetStreamOptions {
 /// request, an `application/json` or `text/event-stream` response, and an
 /// `mcp-session-id` captured from the server and echoed on later requests.
 /// The HTTPS round trip reuses the existing outbound client transport
-/// (`ai::providers::StreamTransport`, ADR 0054) — this client owns only the
+/// (`support::StreamTransport`, ADR 0054) — this client owns only the
 /// MCP protocol on top of it and opens no second HTTP stack.
 ///
 /// requests and notifications are queued and served one at a time, so the one
@@ -76,7 +76,7 @@ public:
     /// silent empty connection.
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> connect(
             McpHttpServerConfig config,
-            std::shared_ptr<ai::providers::StreamTransport> transport,
+            std::shared_ptr<support::StreamTransport> transport,
             std::shared_ptr<McpRequestAuthSource> request_auth = nullptr,
             McpHttpGetStreamOptions get_stream_options = {});
 
@@ -92,7 +92,7 @@ public:
     McpHttpClient(ConstructionKey,
             boost::asio::any_io_executor executor,
             McpHttpServerConfig config,
-            std::shared_ptr<ai::providers::StreamTransport> transport,
+            std::shared_ptr<support::StreamTransport> transport,
             std::shared_ptr<McpRequestAuthSource> request_auth,
             McpHttpGetStreamOptions get_stream_options);
 
@@ -208,8 +208,8 @@ private:
     /// response body (JSON or SSE). `stop_token` is carried on the request so
     /// the transport can cancel it. `on_body_chunk` observes the response
     /// stream as it arrives (pi `consumeResponseStream`'s progress events).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> post(
-            std::string_view body, std::stop_token stop_token, ai::providers::BodyChunkHandler on_body_chunk = {});
+    [[nodiscard]] boost::asio::awaitable<support::Expected<support::StreamResponse>> post(
+            std::string_view body, std::stop_token stop_token, support::BodyChunkHandler on_body_chunk = {});
 
     /// The disposition of one server-to-client GET stream attempt (pi
     /// `runGetStream`'s loop body).
@@ -281,9 +281,9 @@ private:
     /// source's current headers resolved for this request.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
     request_headers_for_call();
-    void capture_session(const ai::providers::StreamResponse& response);
+    void capture_session(const support::StreamResponse& response);
     [[nodiscard]] support::Expected<support::JsonValue> interpret_response(
-            int id, const ai::providers::StreamResponse& response) const;
+            int id, const support::StreamResponse& response) const;
 
     void enqueue_frame(std::string frame,
             int id,
@@ -295,7 +295,7 @@ private:
 
     boost::asio::any_io_executor executor_;
     McpHttpServerConfig config_;
-    std::shared_ptr<ai::providers::StreamTransport> transport_;
+    std::shared_ptr<support::StreamTransport> transport_;
     std::shared_ptr<McpRequestAuthSource> request_auth_;
     std::deque<std::unique_ptr<QueuedFrame>> queue_;
     std::string session_id_;

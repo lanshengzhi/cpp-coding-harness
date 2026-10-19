@@ -1,6 +1,5 @@
 #include "coding_agent/AgentSessionImpl.hpp"
 
-#include <cch/coding_agent/AuthGuidance.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
 #include <cch/ai/Timestamps.hpp>
 
@@ -12,7 +11,6 @@
 #include "coding_agent/mcp/McpServersSection.hpp"
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
-#include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 
@@ -126,24 +124,7 @@ ai::UserMessage detail::make_admitted_user_message(std::string text,
     return message;
 }
 
-ai::ModelStreamFactory AgentSession::Impl::make_stream_factory() {
-    auto runtime = services_.model_runtime;
-    auto factory = runtime->stream_factory();
-    return ai::ModelStreamFactory{[factory = std::move(factory), runtime](ai::Model model,
-                                          ai::AiContext context,
-                                          ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
-        // The provider identity must survive the move into the Models
-        // call; the forwarding sink may fire after the model argument is
-        // already moved-from.
-        const std::string provider{model.provider};
-        auto inner = factory(std::move(model), std::move(context), std::move(options));
-        return runtime::apply_auth_guidance(std::move(inner),
-                provider,
-                runtime::OAuthProviderPredicate{
-                        [runtime](std::string_view provider_id) { return runtime->is_using_oauth(provider_id); }},
-                std::filesystem::path{kDefaultAuthGuidanceDocsPath});
-    }};
-}
+ai::ModelStreamFactory AgentSession::Impl::make_stream_factory() { return services_.model_runtime->stream_factory(); }
 
 AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     : services_(std::move(assembly.services)), session_(std::move(assembly.session)),
@@ -482,40 +463,6 @@ support::ExpectedVoid AgentSession::Impl::reject_if_user_bash_busy() const {
     return {};
 }
 
-boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::preflight_auth_guidance() {
-    if (!agent_ || !services_.model_runtime) {
-        co_return support::ExpectedVoid{};
-    }
-    const auto& model = agent_->state().model;
-    // The placeholder kDefaultModel is the C++ "no model" state; "no model"
-    // is not an auth failure, and streaming it fails through normal provider
-    // lookup ("Unknown provider: unknown") exactly like pi.
-    if (model.id == agent::detail::kDefaultModel.id) {
-        co_return support::ExpectedVoid{};
-    }
-    // pi `prompt()`: `hasConfiguredAuth(provider) ||
-    // (await checkAuth(provider)) !== undefined`. The live `checkAuth` is the
-    // authoritative backstop (the snapshot may be stale); it is
-    // side-effect-free and never refreshes OAuth.
-    if (services_.model_runtime->has_configured_auth(model.provider)) {
-        co_return support::ExpectedVoid{};
-    }
-    auto checked = co_await support::detail::await_async_result(services_.model_runtime->check_auth(model.provider));
-    if (!checked) {
-        co_return std::unexpected(std::move(checked.error()));
-    }
-    if (*checked) {
-        co_return support::ExpectedVoid{};
-    }
-    const std::string provider{model.provider};
-    if (services_.model_runtime->is_using_oauth(provider)) {
-        co_return std::unexpected(
-                support::make_error(support::ErrorCode::Auth, format_oauth_reauthenticate_message(provider)));
-    }
-    co_return std::unexpected(support::make_error(support::ErrorCode::Auth,
-            format_no_api_key_found_message(provider, std::filesystem::path{kDefaultAuthGuidanceDocsPath})));
-}
-
 boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
         std::string prompt, std::vector<ai::ImageContent> images, bool expand_prompt_templates) {
     if (auto rejected = reject_if_closed(); !rejected) {
@@ -550,14 +497,6 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
     ai::UserMessage user_message = detail::make_admitted_user_message(
             std::move(prompt), skills_, templates_, std::move(images), expand_prompt_templates);
 
-    // pi `prompt()` auth preflight: a real model whose provider has no
-    // configured auth fails with pi's verbatim re-auth guidance
-    // before the run starts (the `kDefaultModel` placeholder is
-    // skipped and keeps its ordinary "Unknown provider: unknown"
-    // streaming failure).
-    if (auto admitted = co_await preflight_auth_guidance(); !admitted) {
-        result = std::unexpected(admitted.error());
-    } else {
         // pi AgentSession.prompt pre-send compaction check (catches
         // aborted responses and unhandled error terminals from the
         // previous run): the last assistant message may still push context
@@ -575,33 +514,32 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::run_prompt(
         // attempt's state.
         overflow_recovery_attempted_ = false;
         result = co_await run_agent_loop(std::move(user_message), *active_stop_source_);
-    }
 
-    active_stop_source_.reset();
-    // The whole run (including steering and follow-up continuations) has
-    // settled: commit every Bash that completed mid-run exactly once, in
-    // completion order, before close finalization releases the store. This is
-    // also the flush point that guarantees a later idle Prompt builds provider
-    // context only after every completed Bash committed.
-    flush_pending_user_bash();
-    prompt_active_ = false;
-    settle_run_projection(result);
-    // Publish the settled run state (ADR 0052): the Agent flips its running
-    // flag after the final event delivery, so the Projection Stream learns
-    // the settled value — drained queues included — through the degenerate
-    // whole-snapshot patch published here.
-    update_projection();
-    if (prompt_settled_signal_) {
-        (void)prompt_settled_signal_->cancel();
-        // Release the host-executor timer with the run. cancel() completes
-        // every queued waiter (wait_for_idle/compact); their posted
-        // completions do not touch the timer afterwards. Resetting here keeps
-        // the Asio object inside the live host loop's lifetime: the host
-        // io_context (e.g. prompt_blocking's per-call loop) may be destroyed
-        // before the session, and a timer destructed after its context reads
-        // a freed service registry (ASan, issue #473).
-        prompt_settled_signal_.reset();
-    }
+        active_stop_source_.reset();
+        // The whole run (including steering and follow-up continuations) has
+        // settled: commit every Bash that completed mid-run exactly once, in
+        // completion order, before close finalization releases the store. This is
+        // also the flush point that guarantees a later idle Prompt builds provider
+        // context only after every completed Bash committed.
+        flush_pending_user_bash();
+        prompt_active_ = false;
+        settle_run_projection(result);
+        // Publish the settled run state (ADR 0052): the Agent flips its running
+        // flag after the final event delivery, so the Projection Stream learns
+        // the settled value — drained queues included — through the degenerate
+        // whole-snapshot patch published here.
+        update_projection();
+        if (prompt_settled_signal_) {
+            (void)prompt_settled_signal_->cancel();
+            // Release the host-executor timer with the run. cancel() completes
+            // every queued waiter (wait_for_idle/compact); their posted
+            // completions do not touch the timer afterwards. Resetting here keeps
+            // the Asio object inside the live host loop's lifetime: the host
+            // io_context (e.g. prompt_blocking's per-call loop) may be destroyed
+            // before the session, and a timer destructed after its context reads
+            // a freed service registry (ASan, issue #473).
+            prompt_settled_signal_.reset();
+        }
     if (lifecycle_ == Lifecycle::Closing) {
         // The prompt awaitable is the existing observation seam for active
         // close: owned environment cleanup finishes before it settles. An

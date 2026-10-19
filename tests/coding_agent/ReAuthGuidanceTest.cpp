@@ -1,115 +1,24 @@
-// T11 re-auth guidance evidence (#360): pi's two verbatim re-auth guidance
-// branches — no key → `formatNoApiKeyFoundMessage` ("No API key found for X
-// … Use /login to log into a provider via OAuth or API key"), OAuth
-// credential missing/expired → "Authentication failed for X. Credentials may
-// have expired or network is unavailable. Run '/login X' to re-authenticate."
-// — at both trigger points. Kimi's API-key-only guidance is asserted
-// separately. Preflight mirrors pi `agent-session.ts`
-// `prompt()`'s `hasConfiguredAuth || checkAuth` check; request time mirrors
-// `_getRequiredRequestAuth` through the session-layer stream decorator
-// (`apply_auth_guidance`) driven by scripted auth terminals on the narrow
-// `ModelStream` fake and scripted-client seams. No live keys or network:
-// every request is served by scripted runtimes.
+#include <cch/ai/Models.hpp>
 
 #include "ai/ModelStreamBridge.hpp"
-#include <cch/ai/Content.hpp>
-#include <cch/ai/Message.hpp>
-#include <cch/ai/Models.hpp>
-#include <cch/coding_agent/AuthGuidance.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include <cch/support/Error.hpp>
-#include "coding_agent/runtime/AuthGuidanceStream.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "support/EnvVarGuard.hpp"
-#include "support/FakeModelStream.hpp"
+#include "support/ExpectedMacros.hpp"
 #include "support/ModelsFixture.hpp"
-#include "support/ModelFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
-#include "support/ExpectedMacros.hpp"
 
 #include <catch2/catch_test_macros.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/detached.hpp>
-#include <boost/asio/io_context.hpp>
 
-#include <cstddef>
-#include <filesystem>
-#include <fstream>
 #include <memory>
-#include <optional>
 #include <string>
-#include <string_view>
 #include <utility>
-#include <variant>
-#include <vector>
-#include "support/AgentRootFixture.hpp"
 
 using namespace cch;
 
 namespace {
 
-/// One isolated assembly fixture for the preflight tests: a temp workspace
-/// for the session file and a temp Agent Config Directory (`HOME`)
-/// whose models.json drives resolution deterministically. Ambient
-/// KIMI_API_KEY is unset so the built-in kimi-coding provider never resolves
-/// as configured unless the test says so.
-struct Fixture {
-    cch::tests::TempWorkspace workspace;
-    std::filesystem::path agent_dir;
-    tests::EnvVarGuard home_guard{"HOME"};
-    tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
-    std::filesystem::path session_file;
-    tests::RuntimeFixture runtime;
-
-    Fixture() {
-        home_guard.set(workspace.path().string());
-        agent_dir = tests::agent_root_under_home(workspace.path());
-        std::filesystem::create_directories(agent_dir);
-        kimi_guard.unset();
-        session_file = workspace.path() / "session.jsonl";
-    }
-
-    void write_models(std::string_view json) {
-        std::ofstream out(agent_dir / "models.json", std::ios::binary);
-        out << json;
-    }
-};
-
-/// `alpha` is keyless (never resolves as configured); `beta` carries a key.
-constexpr std::string_view kKeylessAlphaKeyedBeta = R"({
-  "providers": {
-    "alpha": {
-      "baseUrl": "https://alpha.example/v1",
-      "api": "openai-responses",
-      "models": [{"id": "alpha-1"}]
-    },
-    "beta": {
-      "baseUrl": "https://beta.example/v1",
-      "api": "openai-responses",
-      "apiKey": "dummy-beta-key",
-      "models": [{"id": "beta-1"}]
-    }
-  }
-})";
-
-/// CLI creation request for the preflight tests.
-[[nodiscard]] coding_agent::runtime::AgentSessionCreationRequest cli_request(
-    const Fixture& fixture) {
-    coding_agent::runtime::AgentSessionCreationRequest request;
-    request.session_target =
-        coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
-    request.execution_runtime_target = fixture.runtime.make_target();
-    request.workspace = fixture.workspace.path();
-    return request;
-}
-
-/// A FIFO scripted chat client that answers every request with one scripted
-/// auth-category terminal (exactly one `error` terminal event plus the
-/// agreeing final AssistantMessage — the #326 terminal contract), driving the
-/// request-time guidance through the session's stream seam.
 class AuthTerminalProvider final : public tests::ScriptedProvider {
 public:
     AuthTerminalProvider(support::ErrorCode code,
@@ -176,346 +85,25 @@ private:
             std::move(options), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
 }
 
-template <typename T>
-[[nodiscard]] T run_awaitable(boost::asio::awaitable<T> awaitable) {
-    boost::asio::io_context io;
-    std::optional<T> result;
-    std::exception_ptr exception;
-    boost::asio::co_spawn(
-            io,
-            [&]() -> boost::asio::awaitable<void> {
-                result = co_await std::move(awaitable);
-                co_return;
-            },
-            boost::asio::detached);
-    io.run();
-    REQUIRE(result.has_value());
-    return std::move(*result);
-}
-
-[[nodiscard]] std::string read_golden_text(std::string_view name) {
-    const std::string path = std::string{CCH_SOURCE_DIR} +
-                             "/fixtures/pi-agent-core/" +
-                             std::string{name};
-    std::ifstream input(path, std::ios::binary);
-    return std::string{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
-}
-
-[[nodiscard]] std::string default_no_key_guidance(std::string_view provider) {
-    return coding_agent::format_no_api_key_found_message(
-        provider,
-        std::filesystem::path{
-            coding_agent::kDefaultAuthGuidanceDocsPath});
-}
-
-[[nodiscard]] std::string default_oauth_guidance(std::string_view provider) {
-    return coding_agent::format_oauth_reauthenticate_message(provider);
-}
-
-[[nodiscard]] ai::AssistantMessage terminal_message(std::string error_message) {
-    auto terminal = ai::assistant_text_message("");
-    terminal.stop_reason = ai::AssistantStopReason::Error;
-    terminal.error_message = std::move(error_message);
-    return terminal;
-}
-
-/// Drive one decorated stream end to end: produce the inner ModelStream from
-/// the narrow fake factory, wrap it with `apply_auth_guidance`, and consume it
-/// with `ai::consume`, recording every forwarded event.
-struct GuidedRun {
-    support::Expected<ai::AssistantMessage> result;
-    std::vector<ai::AssistantStreamEvent> events;
-};
-
-[[nodiscard]] GuidedRun run_guided(
-    std::shared_ptr<tests::FakeModelStream> fake,
-    bool is_using_oauth) {
-    // Produce and consume the stream on one executor: the narrow fake's
-    // factory captures the consuming executor, so the ModelStream it returns
-    // must be consumed on that same io_context.
-    boost::asio::io_context io;
-    GuidedRun out;
-    std::exception_ptr exception;
-    boost::asio::co_spawn(
-        io,
-        [&]() -> boost::asio::awaitable<void> {
-            auto factory = fake->factory();
-            auto inner = factory(
-                tests::make_model("gpt-test"),
-                ai::AiContext{},
-                ai::SimpleStreamOptions{});
-            auto decorated = coding_agent::runtime::apply_auth_guidance(
-                std::move(inner),
-                "fake",
-                [is_using_oauth](std::string_view) { return is_using_oauth; });
-            out.result = co_await support::detail::await_async_result(
-                    std::move(decorated).run([&out](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-                        out.events.push_back(event);
-                        return {};
-                    }));
-            co_return;
-        },
-        boost::asio::detached);
-    io.run();
-    return out;
-}
-
 } // namespace
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Preflight (pi `agent-session.ts` prompt() `hasConfiguredAuth` check)
-// ─────────────────────────────────────────────────────────────────────────────
-
-TEST_CASE("preflight no-key branch fails the prompt with pi's verbatim formatNoApiKeyFoundMessage",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
-    Fixture fixture;
-    fixture.write_models(kKeylessAlphaKeyedBeta);
-
-    auto request = cli_request(fixture);
-    request.session_facts.provider = "alpha";
-    request.session_facts.model = "alpha-1";
-    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-    REQUIRE(result.has_value());
-    CHECK(result->resolved_identity.provider == "alpha");
-    CHECK(result->resolved_identity.model == "alpha-1");
-
-    // A real model whose provider resolves no auth fails at preflight, before
-    // any stream: pi's verbatim no-key branch through the auth category of the
-    // single Expected channel (no second exception hierarchy).
-    auto prompted = result->session->prompt_blocking("hello");
-    REQUIRE_FALSE(prompted.has_value());
-    CHECK(prompted.error().code == support::ErrorCode::Auth);
-    CHECK(prompted.error().message ==
-          read_golden_text("re-auth-guidance-preflight-no-key.txt"));
-    CHECK(prompted.error().message == default_no_key_guidance("alpha"));
-    result->session->close();
-}
-
-TEST_CASE("preflight Kimi API-key branch does not suggest OAuth",
-        "[coding_agent][re-auth-guidance][issue360][issue763][spec]") {
-    Fixture fixture;
-
-    // No models.json: the built-in API-key-only Kimi provider resolves with no
-    // stored credential and no KIMI_API_KEY.
-    auto request = cli_request(fixture);
-    request.session_facts.provider = "kimi-coding";
-    request.session_facts.model = "kimi-for-coding";
-    auto result = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request)));
-    REQUIRE(result.has_value());
-    CHECK(result->resolved_identity.provider == "kimi-coding");
-
-    auto prompted = result->session->prompt_blocking("hello");
-    REQUIRE_FALSE(prompted.has_value());
-    CHECK(prompted.error().code == support::ErrorCode::Auth);
-    CHECK(prompted.error().message == default_no_key_guidance("kimi-coding"));
-    CHECK(prompted.error().message.find("OAuth") == std::string::npos);
-    result->session->close();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Request time (pi `_getRequiredRequestAuth`, session-layer stream decorator)
-// ─────────────────────────────────────────────────────────────────────────────
-
-TEST_CASE("request-time no-key branch surfaces pi's verbatim guidance through the terminal assistant message",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
+TEST_CASE("Session preserves gateway authentication diagnostics without model login guidance",
+        "[coding_agent][gateway][auth]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    // The scripted Session's turn work is admitted to the fixture Runtime
-    // loop; drive it for the Session's lifetime so prompt_blocking can make
-    // progress between run() calls.
-    auto client = std::make_shared<AuthTerminalProvider>(
-        support::ErrorCode::Auth, "Provider is not configured: sdk-host");
-    auto created = create_scripted_session(
-            runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
-    REQUIRE(created.has_value());
+    const std::string diagnostic = "Gateway rejected the invocation key";
+    auto client = std::make_shared<AuthTerminalProvider>(support::ErrorCode::Auth, diagnostic);
+    auto created = create_scripted_session(runtime, client, workspace.path() / "session.jsonl", workspace.path());
+    REQUIRE(created);
+    tests::RuntimeLoopDriver driver(runtime);
     auto* session = created->session.get();
-    tests::RuntimeLoopDriver runtime_driver(runtime);
-
-    // Preflight passes (the scripted provider resolves as configured); the
-    // request-time auth terminal is rewritten to the verbatim no-key branch
-    // with the category preserved (six-category channel).
-    auto prompted = session->prompt_blocking("hello");
-    REQUIRE(prompted.has_value());
-    const auto& messages = session->snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 3);
-    CHECK(std::holds_alternative<ai::SystemMessage>(messages[0]));
-    const auto* terminal = std::get_if<ai::AssistantMessage>(&messages.back());
-    REQUIRE(terminal != nullptr);
+    REQUIRE(session->prompt_blocking("hello"));
+    CHECK(client->request_count == 1);
+    const auto snapshot = session->snapshot();
+    REQUIRE_FALSE(snapshot.agent_state.messages.empty());
+    const auto* terminal = std::get_if<ai::AssistantMessage>(&snapshot.agent_state.messages.back());
+    REQUIRE(terminal);
+    CHECK(terminal->error_message == diagnostic);
     CHECK(terminal->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(terminal->error_message.has_value());
-    CHECK(*terminal->error_message == read_golden_text("re-auth-guidance-request-no-key.txt"));
-    CHECK(*terminal->error_message == default_no_key_guidance("sdk-host"));
-    session->close();
-}
-
-TEST_CASE("request-time OAuth branch surfaces pi's verbatim re-auth guidance for dead credentials",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
-    tests::TempWorkspace workspace;
-    tests::RuntimeFixture runtime;
-    // The scripted Session's turn work is admitted to the fixture Runtime
-    // loop; drive it for the Session's lifetime so prompt_blocking can make
-    // progress between run() calls.
-    auto client = std::make_shared<AuthTerminalProvider>(
-        support::ErrorCode::OAuth, "OAuth refresh failed for sdk-host");
-    auto created = create_scripted_session(
-            runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
-    REQUIRE(created.has_value());
-    auto* session = created->session.get();
-    tests::RuntimeLoopDriver runtime_driver(runtime);
-
-    // Dead credentials stay in auth.json and every subsequent request fails
-    // with the re-auth guidance (pi `_getRequiredRequestAuth` OAuth branch).
-    auto prompted = session->prompt_blocking("hello");
-    REQUIRE(prompted.has_value());
-    const auto& messages = session->snapshot().agent_state.messages;
-    REQUIRE(messages.size() == 3);
-    CHECK(std::holds_alternative<ai::SystemMessage>(messages[0]));
-    const auto* terminal = std::get_if<ai::AssistantMessage>(&messages.back());
-    REQUIRE(terminal != nullptr);
-    CHECK(terminal->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(terminal->error_message.has_value());
-    CHECK(*terminal->error_message == read_golden_text("re-auth-guidance-request-oauth.txt"));
-    CHECK(*terminal->error_message == default_oauth_guidance("sdk-host"));
-    session->close();
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Request-time decorator (pi `_getRequiredRequestAuth`): `apply_auth_guidance`
-// wraps one AI-owned ModelStream produced by the narrow fake factory, rewriting
-// auth/oauth-category terminals. No virtual Models Runtime surface is involved.
-
-TEST_CASE("request-time decorator maps an auth terminal to the no-key branch through a ModelStream",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
-    auto fake = std::make_shared<tests::FakeModelStream>();
-    fake->terminal_failure_code = support::ErrorCode::Auth;
-    fake->responses.push_back(
-        terminal_message("Provider is not configured: gpt-test"));
-
-    auto run = run_guided(fake, /*is_using_oauth=*/false);
-
-    // Exactly one rewritten error terminal plus the agreeing final message,
-    // with the auth category flowing through the single Expected channel.
-    REQUIRE(run.result.has_value());
-    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
-    REQUIRE(run.result->error_message.has_value());
-    CHECK(*run.result->error_message == default_no_key_guidance("fake"));
-    REQUIRE(run.events.size() == 1);
-    const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
-    REQUIRE(error != nullptr);
-    REQUIRE(error->failure.has_value());
-    CHECK(error->failure->code == support::ErrorCode::Auth);
-    REQUIRE(error->error.error_message.has_value());
-    CHECK(*error->error.error_message == default_no_key_guidance("fake"));
-    CHECK(fake->terminal_events == 1);
-}
-
-TEST_CASE("request-time decorator maps an auth terminal on an OAuth provider to the re-auth branch",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
-    auto fake = std::make_shared<tests::FakeModelStream>();
-    fake->terminal_failure_code = support::ErrorCode::Auth;
-    fake->responses.push_back(
-        terminal_message("Provider is not configured: gpt-test"));
-
-    auto run = run_guided(fake, /*is_using_oauth=*/true);
-
-    REQUIRE(run.result.has_value());
-    REQUIRE(run.result->error_message.has_value());
-    CHECK(*run.result->error_message == default_oauth_guidance("fake"));
-    REQUIRE(run.events.size() == 1);
-    const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
-    REQUIRE(error != nullptr);
-    REQUIRE(error->failure.has_value());
-    CHECK(error->failure->code == support::ErrorCode::Auth);
-    REQUIRE(error->error.error_message.has_value());
-    CHECK(*error->error.error_message == default_oauth_guidance("fake"));
-}
-
-TEST_CASE("request-time decorator maps an oauth terminal (dead credentials) to the re-auth branch",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
-    auto fake = std::make_shared<tests::FakeModelStream>();
-    fake->terminal_failure_code = support::ErrorCode::OAuth;
-    fake->responses.push_back(
-        terminal_message("OAuth refresh failed for gpt-test"));
-
-    auto run = run_guided(fake, /*is_using_oauth=*/false);
-
-    REQUIRE(run.result.has_value());
-    REQUIRE(run.result->error_message.has_value());
-    CHECK(*run.result->error_message == default_oauth_guidance("fake"));
-    REQUIRE(run.events.size() == 1);
-    const auto* error = std::get_if<ai::AssistantErrorEvent>(&run.events[0]);
-    REQUIRE(error != nullptr);
-    REQUIRE(error->failure.has_value());
-    CHECK(error->failure->code == support::ErrorCode::OAuth);
-    REQUIRE(error->error.error_message.has_value());
-    CHECK(*error->error.error_message == default_oauth_guidance("fake"));
-}
-
-TEST_CASE("request-time decorator passes non-auth terminals and successes through unchanged",
-        "[coding_agent][re-auth-guidance][issue360][compat-pi]") {
-    {
-        auto fake = std::make_shared<tests::FakeModelStream>();
-        fake->terminal_failure_code = support::ErrorCode::Stream;
-        fake->responses.push_back(terminal_message("provider request failed"));
-        auto run = run_guided(fake, /*is_using_oauth=*/false);
-        REQUIRE(run.result.has_value());
-        REQUIRE(run.result->error_message.has_value());
-        CHECK(*run.result->error_message == "provider request failed");
-    }
-    {
-        auto fake = std::make_shared<tests::FakeModelStream>();
-        fake->responses.push_back(ai::assistant_text_message("hello user"));
-        auto run = run_guided(fake, /*is_using_oauth=*/false);
-        REQUIRE(run.result.has_value());
-        CHECK(ai::text_from_assistant_content(run.result->content) ==
-              "hello user");
-    }
-}
-
-// Summarization seam (pi `_getSummarizationRequestAuth` → `_getRequiredRequestAuth`)
-// ─────────────────────────────────────────────────────────────────────────────
-
-TEST_CASE("summarization requests carry the request-time guidance when auth fails",
-        "[coding_agent][re-auth-guidance][compaction][issue360][compat-pi]") {
-    // A persisted session whose live history reaches the 20000-token
-    // keepRecentTokens budget (three 20K-char user/assistant pairs, each
-    // ~5001 estimated tokens), then a manual compaction whose summarization
-    // request fails with an auth terminal: the guidance surfaces through the
-    // compaction outcome.
-    tests::TempWorkspace workspace;
-    tests::RuntimeFixture runtime;
-    // The scripted Session's turn work is admitted to the fixture Runtime
-    // loop; drive it for the Session's lifetime so the compaction prompt can
-    // make progress between run() calls.
-    const std::string big(20000, 'x');
-    auto client = std::make_shared<AuthTerminalProvider>(
-        support::ErrorCode::Auth,
-        "Provider is not configured: sdk-host",
-        "a" + big);
-    auto* client_ptr = client.get();
-    auto created = create_scripted_session(
-            runtime, std::move(client), workspace.path() / "test-session.jsonl", workspace.path());
-    REQUIRE(created.has_value());
-    auto* session = created->session.get();
-    tests::RuntimeLoopDriver runtime_driver(runtime);
-
-    // Preflight passes; the first three prompts stream normally (the scripted
-    // client serves every request with the auth terminal, which is what the
-    // request-time mapping expects — but preflight must not fire first).
-    REQUIRE(session->prompt_blocking(big + " u1").has_value());
-    REQUIRE(session->prompt_blocking(big + " u2").has_value());
-    REQUIRE(session->prompt_blocking(big + " u3").has_value());
-    CHECK(client_ptr->request_count == 3);
-
-    auto compacted = run_awaitable(session->compact());
-    REQUIRE_FALSE(compacted.has_value());
-    // The fourth request (summarization) failed with the auth terminal, which
-    // the decorator rewrote to the verbatim guidance; the compaction machinery
-    // reports it as a summarization failure carrying the guidance.
-    CHECK(client_ptr->request_count == 4);
-    CHECK(compacted.error().message.find(
-              default_no_key_guidance("sdk-host")) != std::string::npos);
     session->close();
 }

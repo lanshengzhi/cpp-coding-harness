@@ -6,7 +6,7 @@
 // captured from the server and echoed on later requests, plus the long-lived
 // server-to-client GET stream (pi `runGetStream`) opened after
 // `notifications/initialized`. The HTTPS round trip itself reuses the existing
-// outbound client transport (`ai::providers::StreamTransport`, ADR 0054); this
+// outbound client transport (`support::StreamTransport`, ADR 0054); this
 // file owns only the MCP protocol and opens no second HTTP stack.
 //
 // The transport is private to cch_coding_agent and is reached only through
@@ -17,11 +17,11 @@
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
 #include "coding_agent/mcp/McpProtocol.hpp"
 
-#include <cch/coding_agent/AuthGuidance.hpp>
+#include "coding_agent/mcp/McpAuth.hpp"
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
-#include <cch/ai/SseParser.hpp>
+#include <cch/support/SseParser.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -95,7 +95,7 @@ constexpr std::size_t kErrorBodyChars = 500;
 /// streamable-http is TLS-only (ADR 0054), so following `Location` could
 /// downgrade the connection to plaintext.
 [[nodiscard]] support::Error http_status_error(
-        const std::string& server, const ai::providers::StreamResponse& response, bool session_known = false) {
+        const std::string& server, const support::StreamResponse& response, bool session_known = false) {
     const int status = response.head.status_code;
     if (status == 401) {
         // A rejected credential is an explicit re-login error (never a silent
@@ -171,8 +171,8 @@ constexpr std::size_t kErrorBodyChars = 500;
 /// consumption (`consumeResponseStream`).
 [[nodiscard]] support::Expected<support::JsonValue> response_from_sse_body(
         const std::string& server, int id, const std::string& body) {
-    ai::providers::SseParser parser;
-    std::vector<ai::providers::SseEvent> events;
+    support::SseParser parser;
+    std::vector<support::SseEvent> events;
     if (auto appended = parser.append(body); !appended) {
         return std::unexpected(transport_error(server, "sent an unparsable event stream", appended.error().detail));
     } else {
@@ -331,7 +331,7 @@ private:
 McpHttpClient::McpHttpClient(ConstructionKey,
         boost::asio::any_io_executor executor,
         McpHttpServerConfig config,
-        std::shared_ptr<ai::providers::StreamTransport> transport,
+        std::shared_ptr<support::StreamTransport> transport,
         std::shared_ptr<McpRequestAuthSource> request_auth,
         McpHttpGetStreamOptions get_stream_options)
     : executor_(std::move(executor)), config_(std::move(config)), transport_(std::move(transport)),
@@ -363,7 +363,7 @@ McpHttpClient::McpHttpClient(ConstructionKey,
 
 boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHttpClient::connect(
         McpHttpServerConfig config,
-        std::shared_ptr<ai::providers::StreamTransport> transport,
+        std::shared_ptr<support::StreamTransport> transport,
         std::shared_ptr<McpRequestAuthSource> request_auth,
         McpHttpGetStreamOptions get_stream_options) {
     if (auto valid = validate_mcp_http_server_config(config); !valid) {
@@ -518,10 +518,10 @@ void McpHttpClient::complete_frame(QueuedFrame& frame, support::Expected<support
     }
 }
 
-boost::asio::awaitable<support::Expected<ai::providers::StreamResponse>> McpHttpClient::post(
-        std::string_view body, std::stop_token stop_token, ai::providers::BodyChunkHandler on_body_chunk) {
+boost::asio::awaitable<support::Expected<support::StreamResponse>> McpHttpClient::post(
+        std::string_view body, std::stop_token stop_token, support::BodyChunkHandler on_body_chunk) {
     CCH_TRY(headers, co_await request_headers_for_call());
-    ai::providers::StreamRequest request;
+    support::StreamRequest request;
     request.method = "POST";
     request.url = config_.url;
     request.headers = std::move(headers);
@@ -569,7 +569,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::sen
     // listens on every stream).
     auto executor = co_await boost::asio::this_coro::executor;
     using OutcomeChannel = boost::asio::experimental::channel<void(
-            boost::system::error_code, support::Expected<ai::providers::StreamResponse>)>;
+            boost::system::error_code, support::Expected<support::StreamResponse>)>;
     auto outcome = std::make_shared<OutcomeChannel>(executor, 1);
     auto settled = std::make_shared<std::atomic_bool>(false);
     auto rearm = std::make_shared<std::atomic_bool>(false);
@@ -606,7 +606,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::sen
                         }
                         post_stop->request_stop();
                         co_await outcome->async_send(boost::system::error_code{},
-                                support::Expected<ai::providers::StreamResponse>{
+                                support::Expected<support::StreamResponse>{
                                         std::unexpected(detail::timeout_error(server, timeout))},
                                 boost::asio::use_awaitable);
                         co_return;
@@ -631,8 +631,8 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::sen
                 // `consumeResponseStream`'s progress events).
                 auto reader = std::make_shared<GetStreamSseReader>();
                 auto buffered_body = std::make_shared<std::string>();
-                ai::providers::BodyChunkHandler chunk = [self, reader, rearm, deadline, id, buffered_body](
-                                                                std::string_view bytes) -> support::ExpectedVoid {
+                support::BodyChunkHandler chunk = [self, reader, rearm, deadline, id, buffered_body](
+                                                          std::string_view bytes) -> support::ExpectedVoid {
                     buffered_body->append(bytes.data(), bytes.size());
                     auto events = reader->append(bytes);
                     if (!events) {
@@ -899,7 +899,7 @@ boost::asio::awaitable<std::pair<McpHttpClient::GetStreamAttempt, support::Error
     if (!headers) {
         co_return std::pair{GetStreamAttempt::FatalFailure, std::move(headers.error())};
     }
-    ai::providers::StreamRequest request;
+    support::StreamRequest request;
     request.method = "GET";
     request.url = config_.url;
     request.headers = std::move(*headers);
@@ -1051,7 +1051,7 @@ boost::asio::awaitable<void> McpHttpClient::delete_session() {
         // Resolving auth headers failed; the session expires on the server.
         co_return;
     }
-    ai::providers::StreamRequest request;
+    support::StreamRequest request;
     request.method = "DELETE";
     request.url = config_.url;
     request.headers = std::move(*resolved);
@@ -1074,14 +1074,14 @@ void McpHttpClient::close() noexcept {
     }
 }
 
-void McpHttpClient::capture_session(const ai::providers::StreamResponse& response) {
+void McpHttpClient::capture_session(const support::StreamResponse& response) {
     if (std::string session = header_value(response.head.headers, "mcp-session-id"); !session.empty()) {
         session_id_ = std::move(session);
     }
 }
 
 support::Expected<support::JsonValue> McpHttpClient::interpret_response(
-        int id, const ai::providers::StreamResponse& response) const {
+        int id, const support::StreamResponse& response) const {
     const int status = response.head.status_code;
     if (status < 200 || status >= 300) {
         return std::unexpected(http_status_error(config_.name, response, !session_id_.empty()));

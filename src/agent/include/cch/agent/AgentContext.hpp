@@ -25,19 +25,17 @@ namespace detail {
 /// been resolved; streaming against it fails through normal provider lookup
 /// until a real model is selected (ADR 0034 / #326).
 inline const ai::Model kDefaultModel{
-    .id = "unknown",
-    .name = "unknown",
-    .api = "unknown",
-    .provider = "unknown",
-    .base_url = "",
-    .reasoning = false,
-    .thinking_level_map = std::nullopt,
-    .input = {},
-    .cost = {},
-    .context_window = 0,
-    .max_tokens = 0,
-    .headers = std::nullopt,
-    .compat = std::nullopt,
+        .id = "unknown",
+        .name = "unknown",
+        .api = "unknown",
+        .provider = "unknown",
+        .reasoning = false,
+        .thinking_level_map = std::nullopt,
+        .input = {},
+        .cost = {},
+        .context_window = 0,
+        .max_tokens = 0,
+        .headers = std::nullopt,
 };
 
 } // namespace detail

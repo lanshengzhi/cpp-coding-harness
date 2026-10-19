@@ -15,7 +15,6 @@ cch_parity_declare_target(
         src/coding_agent/AgentSessionCompaction.cpp
         src/coding_agent/AgentSessionExecution.cpp
         src/coding_agent/AgentSessionInteraction.cpp
-        src/coding_agent/AuthStorage.cpp
         src/coding_agent/compat/pi/PiImport.cpp
         src/coding_agent/extensions/ExtensionToolRegistry.cpp
         src/coding_agent/extensions/tool_search/ToolSearch.cpp
@@ -37,6 +36,9 @@ cch_parity_declare_target(
         src/coding_agent/mcp/McpServersSection.cpp
         src/coding_agent/mcp/McpStdioClient.cpp
         src/coding_agent/mcp/McpUrl.cpp
+        src/coding_agent/mcp/OAuthCallbackServer.cpp
+        src/coding_agent/mcp/OAuthHttpClient.cpp
+        src/coding_agent/mcp/Pkce.cpp
         src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp
         src/coding_agent/extensions/codemode/CodemodeSandbox.cpp
         src/coding_agent/extensions/codemode/CodemodeSource.cpp
@@ -44,15 +46,12 @@ cch_parity_declare_target(
         src/coding_agent/extensions/codemode/CodemodeToolSource.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
         src/coding_agent/ImageInput.cpp
-        src/coding_agent/ModelConfig.cpp
         src/coding_agent/ModelResolver.cpp
         src/coding_agent/ModelRuntime.cpp
         src/coding_agent/ProjectResourceLoader.cpp
         src/coding_agent/ProjectResources.cpp
         src/coding_agent/ProjectTrust.cpp
         src/coding_agent/PromptTemplateLoader.cpp
-        src/coding_agent/ProviderComposer.cpp
-        src/coding_agent/RuntimeApiKeyOverlay.cpp
         src/coding_agent/SessionDiscovery.cpp
         src/coding_agent/SessionPathPolicy.cpp
         src/coding_agent/SettingsManager.cpp
@@ -63,7 +62,6 @@ cch_parity_declare_target(
         src/coding_agent/prompt/PromptExpansion.cpp
         src/coding_agent/prompt/PromptTemplateExpander.cpp
         src/coding_agent/prompt/SystemPromptBuilder.cpp
-        src/coding_agent/runtime/AuthGuidanceStream.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
         src/coding_agent/runtime/McpProductionAdapters.cpp
         src/coding_agent/runtime/McpSessionManager.cpp
@@ -82,6 +80,7 @@ cch_parity_declare_target(
         Threads::Threads@threads
         WebP::webpdecoder@webp
         wasmedge@wasmedge
+        OpenSSL::Crypto@openssl
     INTERFACE_DEPENDS
         cch_agent_core
         cch_ai

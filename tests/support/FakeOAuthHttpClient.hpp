@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/ai/OAuthHttpClient.hpp>
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
 
 #include <cch/support/Error.hpp>
 
@@ -29,7 +29,7 @@ namespace cch::tests {
 /// GET responses (OAuth discovery, #884) are scripted independently of the
 /// POST queues, so a test can give the same URL different answers to a
 /// metadata fetch and a token exchange.
-class FakeOAuthHttpClient final : public ai::auth::OAuthHttpClient {
+class FakeOAuthHttpClient final : public coding_agent::mcp::OAuthHttpClient {
 public:
     struct Request {
         std::string url;
@@ -47,7 +47,7 @@ public:
         std::string body;
     };
 
-    boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>>
+    boost::asio::awaitable<support::Expected<coding_agent::mcp::OAuthHttpResponse>>
     get(std::string url, std::map<std::string, std::string, std::less<>> headers, std::stop_token stop_token) override {
         get_requests.push_back(GetRequest{
                 std::move(url),
@@ -64,13 +64,13 @@ public:
         if (stop_token.stop_requested()) {
             co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "fake client cancelled"));
         }
-        co_return ai::auth::OAuthHttpResponse{
+        co_return coding_agent::mcp::OAuthHttpResponse{
                 .status_code = scripted.status,
                 .body = std::move(scripted.body),
         };
     }
 
-    boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>> post(std::string url,
+    boost::asio::awaitable<support::Expected<coding_agent::mcp::OAuthHttpResponse>> post(std::string url,
             std::map<std::string, std::string, std::less<>> headers,
             std::string body,
             std::stop_token stop_token) override {
@@ -109,7 +109,7 @@ public:
         if (stop_token.stop_requested()) {
             co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "fake client cancelled"));
         }
-        co_return ai::auth::OAuthHttpResponse{
+        co_return coding_agent::mcp::OAuthHttpResponse{
                 .status_code = scripted.status,
                 .body = std::move(scripted.body),
         };

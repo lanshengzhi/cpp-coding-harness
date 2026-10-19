@@ -1,9 +1,7 @@
 #pragma once
 
 #include <cch/ai/Models.hpp>
-#include "ai/providers/Provider.hpp"
-#include <cch/ai/StreamTransport.hpp>
-#include "ai/providers/WebSocketTransport.hpp"
+#include "support/StreamTransport.hpp"
 
 #include <functional>
 #include <memory>
@@ -12,29 +10,34 @@
 
 namespace cch::tests {
 
-/// Test-only Provider Definition plus a private stream implementation. The
-/// public Provider Definition remains passive; this carrier lets tests inject
-/// deterministic stream behavior through the AI-owned construction helper.
+/// Private transport substitution for inference tests.
 struct ScriptedTransportOptions {
-    std::shared_ptr<ai::providers::StreamTransport> http_transport{nullptr};
-    std::shared_ptr<ai::providers::WebSocketTransport> ws_transport{nullptr};
-    ai::providers::CodexWebSocketCacheConfig codex_cache_config{};
+    std::shared_ptr<support::StreamTransport> http_transport{nullptr};
+};
+
+/// Passive identity/catalog data used only by scripted test streams.
+struct ScriptedModelCatalog {
+    std::string id{};
+    std::string name{};
+    std::vector<ai::Model> models{};
 };
 
 struct ScriptedProviderDefinition {
-    ai::ProviderDefinition definition{};
-    std::move_only_function<ai::ModelStream(ai::Model, ai::AiContext, ai::ProviderStreamOptions)> stream{};
+    ScriptedModelCatalog definition{};
+    // The same factory shape ai::Models::stream exposes: a scripted stream is
+    // a fake adapter over the Models stream seam, not a Provider install
+    // (ADR 0072) — the Caller's options stay exactly what it passed.
+    std::move_only_function<ai::ModelStream(ai::Model, ai::AiContext, ai::SimpleStreamOptions)> stream{};
     ScriptedTransportOptions transport{};
 };
 
-/// Install one scripted definition in an existing Models runtime. Provider
-/// construction stays inside cch_ai; tests never need to register a Provider
-/// pointer or construct a transport themselves.
+/// Add passive model values and a scripted stream to private test support.
+/// Production Models has no Provider installation or authentication graph.
 [[nodiscard]] support::ExpectedVoid apply_scripted_provider(ai::Models& models, ScriptedProviderDefinition definition);
 
-/// Replace composed providers in a test runtime with deterministic transports.
+/// Configure a test runtime with a deterministic transport.
 /// This helper is private test support; production Models construction always
-/// selects its own HTTP/WebSocket transports.
+/// selects its own HTTP transport.
 [[nodiscard]] support::ExpectedVoid apply_scripted_transport_options(
         ai::Models& models, ScriptedTransportOptions options);
 

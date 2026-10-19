@@ -209,12 +209,14 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
     CHECK(staged_help.stdout_text.find("Usage:") != std::string::npos);
     CHECK(staged_help.stdout_text.find("--print") != std::string::npos);
 
-    // ── Offline staged run without credentials fails deterministically ──
+    // ── Offline staged run without a reachable gateway fails deterministically ──
+    // The product default is the local Magpie gateway; with no catalog the
+    // placeholder model fails through the one AI stream contract.
     const auto offline =
         run_command(relocated_run + " --print ping < /dev/null", captures);
     INFO(offline.stdout_text + offline.stderr_text);
     CHECK(offline.exit_code == 1);
-    CHECK(offline.stderr_text.find("Unknown provider") != std::string::npos);
+    CHECK(offline.stderr_text.find("has no API implementation") != std::string::npos);
 
     // ── Offline fake-provider smoke outside the build tree (in-process seam) ──
     auto smoke = cch::tests::run_cli(cch::tests::CliRunOptions{

@@ -30,6 +30,7 @@ TEST_CASE(
             "trust",
             "login",
             "logout",
+            "gateway",
             "new",
             "compact",
             "resume",
@@ -58,8 +59,12 @@ TEST_CASE(
 
     const auto* login = by_name("login");
     REQUIRE(login != nullptr);
-    CHECK(login->description == "Configure provider authentication");
-    CHECK(login->argument_hint == "<provider>");
+    CHECK(login->description == "Show Magpie gateway authentication guidance");
+    CHECK(login->argument_hint.empty());
+
+    const auto* gateway = by_name("gateway");
+    REQUIRE(gateway != nullptr);
+    CHECK(gateway->description == "Check Magpie local gateway connection and model catalog");
 
     const auto* hotkeys = by_name("hotkeys");
     REQUIRE(hotkeys != nullptr);

@@ -114,12 +114,10 @@ struct NormalizedArgv {
                        "                                 OAuth servers\n"
                        "\n"
                        "Options:\n"
-                       "  --provider <name>              Provider name\n"
-                       "  --model <pattern>              Model pattern or ID (supports \"provider/id\"\n"
-                       "                                 and optional \":<thinking>\")\n"
+                       "  --model <pattern>              Gateway model pattern or ID (including /)\n"
+                       "                                 and optional \":<thinking>\" suffix\n"
                        "  --models <patterns>            Comma-separated model patterns for cycling\n"
-                       "  --api-key <key>                API key (in-memory runtime override, never\n"
-                       "                                 persisted; requires an explicit model)\n"
+                       "  --api-key <key>                Gateway key for this invocation; never stored\n"
                        "  --thinking <level>             Set thinking level: off, minimal, low, medium,\n"
                        "                                 high, xhigh, max\n"
                        "  --print, -p                    Non-interactive mode: process prompt and exit\n"
@@ -404,7 +402,6 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::string session_text;
     std::string session_dir_text;
     std::vector<std::string> prompt_parts;
-    std::string provider_text;
     std::string model_text;
     std::string models_text;
     std::string tools_text;
@@ -418,7 +415,6 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     std::string mode_text{"text"};
     bool session_seen = false;
     bool session_dir_seen = false;
-    bool provider_seen = false;
     bool model_seen = false;
     bool models_seen = false;
     bool tools_seen = false;
@@ -622,15 +618,6 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
             }
             continue;
         }
-        if (option.name == "provider") {
-            if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
-                return std::unexpected(std::move(value.error()));
-            } else {
-                provider_text = std::move(*value);
-                provider_seen = true;
-            }
-            continue;
-        }
         if (option.name == "model") {
             if (auto value = consume_option_value(option.name, option, normalized.tokens, index); !value) {
                 return std::unexpected(std::move(value.error()));
@@ -772,9 +759,6 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
     if (model_seen) {
         config.session_facts.model = std::move(model_text);
     }
-    if (provider_seen) {
-        config.session_facts.provider = std::move(provider_text);
-    }
     if (models_seen) {
         config.session_facts.models = split_comma_separated(models_text);
     }
@@ -815,13 +799,6 @@ cch::support::Expected<CliConfig> parse_args(int argc, char** argv) {
         if (auto parsed_mode = validate_output_mode(mode_text); !parsed_mode) {
             return std::unexpected(std::move(parsed_mode.error()));
         }
-    }
-
-    // `--api-key` requires an explicit model (pi): it cannot name a provider
-    // without a model, and never applies to a resume/default selection.
-    if (api_key_seen && !model_seen && !provider_seen && !models_seen) {
-        return std::unexpected(
-                cli_error("--api-key requires a model to be specified via --model, --provider/--model, or --models"));
     }
 
     std::vector<std::string> prompt_text_parts;

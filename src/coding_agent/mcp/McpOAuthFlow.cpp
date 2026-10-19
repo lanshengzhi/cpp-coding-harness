@@ -3,14 +3,14 @@
 // `packages/coding-agent/src/extensions/mcp/oauth.ts`. The wire requests, the
 // parameter set, the client-authentication choice, the error codes, and the
 // retry rules are pi's; the state is the `mcp-auth.json` record, the transport
-// is the injectable `ai::auth::OAuthHttpClient`, and the authorization code
+// is the injectable `OAuthHttpClient`, and the authorization code
 // arrives from the caller, so no browser is started here.
 
 #include "coding_agent/mcp/McpOAuthFlow.hpp"
+#include "coding_agent/mcp/Pkce.hpp"
 
-#include <cch/ai/JsonAccess.hpp>
-#include <cch/ai/OAuthHttpClient.hpp>
-#include <cch/ai/Pkce.hpp>
+#include <cch/support/JsonAccess.hpp>
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
 
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -188,7 +188,7 @@ struct SplitUrl {
     url += url.find('?') == std::string::npos ? '?' : '&';
     url += key;
     url += '=';
-    url += ai::auth::url_query_encode(value);
+    url += url_query_encode(value);
     return url;
 }
 
@@ -198,9 +198,9 @@ struct SplitUrl {
         if (!body.empty()) {
             body += '&';
         }
-        body += ai::auth::url_query_encode(key);
+        body += url_query_encode(key);
         body += '=';
-        body += ai::auth::url_query_encode(value);
+        body += url_query_encode(value);
     }
     return body;
 }
@@ -219,22 +219,22 @@ struct SplitUrl {
     if (!parsed) {
         return std::unexpected(plain_error(invalid("Invalid OAuth token response", "response is not JSON")));
     }
-    const auto* object = ai::json_object(*parsed);
+    const auto* object = support::json_object(*parsed);
     if (object == nullptr) {
         return std::unexpected(plain_error(invalid("Invalid OAuth token response")));
     }
-    const auto access = ai::json_string_member(*object, "access_token");
+    const auto access = support::json_string_member(*object, "access_token");
     if (!access || access->empty()) {
         return std::unexpected(plain_error(invalid("Invalid access_token")));
     }
-    const auto token_type = ai::json_string_member(*object, "token_type");
+    const auto token_type = support::json_string_member(*object, "token_type");
     if (!token_type || token_type->empty()) {
         return std::unexpected(plain_error(invalid("Invalid token_type")));
     }
     McpOAuthTokenResponse tokens;
     tokens.access_token = std::string{*access};
     tokens.token_type = std::string{*token_type};
-    if (const auto* expires = ai::json_member(*object, "expires_in"); expires != nullptr) {
+    if (const auto* expires = support::json_member(*object, "expires_in"); expires != nullptr) {
         const auto* text = expires->get_if<std::string>();
         const auto* number = expires->get_if<double>();
         const bool absent = (text != nullptr && text->empty()) || expires->holds<support::JsonValue::null_t>();
@@ -258,7 +258,7 @@ struct SplitUrl {
         }
     }
     const auto optional_text = [&](std::string_view key) -> std::optional<std::string> {
-        const auto* member = ai::json_member(*object, key);
+        const auto* member = support::json_member(*object, key);
         if (member == nullptr) {
             return std::nullopt;
         }
@@ -277,7 +277,7 @@ struct SplitUrl {
 /// pi `tokenRequest`: the OAuth error body is read before the status, because
 /// servers report OAuth errors with any status.
 [[nodiscard]] boost::asio::awaitable<FlowResult<McpOAuthTokenResponse>> token_request(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         const McpOAuthTokenRequest& request,
         std::vector<std::pair<std::string, std::string>> params) {
@@ -304,7 +304,7 @@ struct SplitUrl {
                     plain_error(invalid("client_secret_basic requires a client secret", request.client.client_id)));
         }
         headers.insert_or_assign("Authorization",
-                "Basic " + ai::auth::base64_encode(request.client.client_id + ":" + *request.client.client_secret));
+                "Basic " + base64_encode(request.client.client_id + ":" + *request.client.client_secret));
     } else {
         params.emplace_back("client_id", request.client.client_id);
         if (method == "client_secret_post" && request.client.client_secret) {
@@ -316,12 +316,12 @@ struct SplitUrl {
         co_return std::unexpected(plain_error(std::move(response.error())));
     }
     if (const auto parsed = support::read_json(response->body); parsed) {
-        if (const auto* object = ai::json_object(*parsed); object != nullptr) {
-            if (const auto code = ai::json_string_member(*object, "error"); code && !code->empty()) {
-                const auto description = ai::json_string_member(*object, "error_description");
+        if (const auto* object = support::json_object(*parsed); object != nullptr) {
+            if (const auto code = support::json_string_member(*object, "error"); code && !code->empty()) {
+                const auto description = support::json_string_member(*object, "error_description");
                 auto error = oauth_error(
                         description && !description->empty() ? std::string{*description} : std::string{*code});
-                if (const auto uri = ai::json_string_member(*object, "error_uri"); uri && !uri->empty()) {
+                if (const auto uri = support::json_string_member(*object, "error_uri"); uri && !uri->empty()) {
                     error.detail = std::string{*uri};
                 }
                 co_return std::unexpected(oauth_code_error(std::string{*code}, std::move(error)));
@@ -340,7 +340,7 @@ struct SplitUrl {
 
 /// The authorization-code grant, in the flow's error channel.
 [[nodiscard]] boost::asio::awaitable<FlowResult<McpOAuthTokenResponse>> exchange_code_flow(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         McpOAuthTokenRequest request,
         std::string code,
@@ -360,7 +360,7 @@ struct SplitUrl {
 /// The refresh grant, in the flow's error channel, with pi's merge of the old
 /// refresh token under the response.
 [[nodiscard]] boost::asio::awaitable<FlowResult<McpOAuthTokenResponse>> refresh_flow(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         McpOAuthTokenRequest request,
         std::string refresh_token) {
@@ -387,11 +387,11 @@ struct SplitUrl {
     if (!split) {
         return std::unexpected(invalid("Invalid MCP server URL", std::string{server_url}));
     }
-    auto digest = ai::auth::sha256_digest(split->origin + split->path);
+    auto digest = sha256_digest(split->origin + split->path);
     if (!digest) {
         return std::unexpected(std::move(digest.error()));
     }
-    return ai::auth::base64url_encode(digest->substr(0, 9));
+    return base64url_encode(digest->substr(0, 9));
 }
 
 /// A state for a server with no stored record yet.
@@ -456,7 +456,7 @@ enum class InvalidateKind {
         std::string server_url,
         McpOAuthConfig oauth,
         std::string redirect_url,
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         McpOAuthFlowOptions options) {
     const std::optional<std::string> metadata_url = oauth.auth_server_metadata_url;
     if (metadata_url) {
@@ -586,7 +586,7 @@ enum class InvalidateKind {
     }
     // pi `provider.state()`: reuse the stored state, or make one.
     if (!working.oauth_state || working.oauth_state->empty()) {
-        auto created = ai::auth::create_oauth_state();
+        auto created = create_oauth_state();
         if (!created) {
             co_return std::unexpected(plain_error(std::move(created.error())));
         }
@@ -698,7 +698,7 @@ support::Expected<McpOAuthClientMetadataDocument> client_metadata_document(std::
 }
 
 boost::asio::awaitable<support::Expected<McpOAuthClientInformation>> register_client(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         std::optional<McpAuthorizationServerMetadata> metadata,
         McpOAuthClientMetadata client_metadata,
@@ -753,23 +753,23 @@ boost::asio::awaitable<support::Expected<McpOAuthClientInformation>> register_cl
     if (!parsed) {
         co_return std::unexpected(invalid("Invalid OAuth client registration response", "response is not JSON"));
     }
-    const auto* object = ai::json_object(*parsed);
+    const auto* object = support::json_object(*parsed);
     if (object == nullptr) {
         co_return std::unexpected(invalid("Invalid OAuth client registration response"));
     }
-    const auto client_id = ai::json_string_member(*object, "client_id");
+    const auto client_id = support::json_string_member(*object, "client_id");
     if (!client_id || client_id->empty()) {
         co_return std::unexpected(invalid("Invalid client_id"));
     }
     McpOAuthClientInformation client{.client_id = std::string{*client_id}, .client_secret = std::nullopt};
-    if (const auto secret = ai::json_string_member(*object, "client_secret"); secret && !secret->empty()) {
+    if (const auto secret = support::json_string_member(*object, "client_secret"); secret && !secret->empty()) {
         client.client_secret = std::string{*secret};
     }
     // pi `registeredRedirectUrls`: the registration names the redirect URIs the
     // client may use. A server that echoes none is taken to accept the ones
     // the registration requested, so a later sign-in or refresh still knows
     // which redirect URI the client is bound to.
-    if (const auto* uris = ai::json_array_member(*object, "redirect_uris"); uris != nullptr) {
+    if (const auto* uris = support::json_array_member(*object, "redirect_uris"); uris != nullptr) {
         for (const auto& uri : *uris) {
             if (const auto* text = uri.get_if<std::string>(); text != nullptr && !text->empty()) {
                 client.redirect_uris.push_back(*text);
@@ -797,7 +797,7 @@ support::Expected<McpOAuthAuthorizationRequest> start_authorization(std::string_
         return std::unexpected(invalid("Authorization server does not support PKCE S256"));
     }
     std::string url = metadata ? metadata->authorization_endpoint : origin_of(authorization_server_url) + "/authorize";
-    auto pkce = ai::auth::generate_pkce();
+    auto pkce = generate_pkce();
     if (!pkce) {
         return std::unexpected(std::move(pkce.error()));
     }
@@ -822,7 +822,7 @@ support::Expected<McpOAuthAuthorizationRequest> start_authorization(std::string_
 }
 
 boost::asio::awaitable<support::Expected<McpOAuthTokenResponse>> exchange_authorization_code(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         McpOAuthTokenRequest request,
         std::string code,
@@ -841,7 +841,7 @@ boost::asio::awaitable<support::Expected<McpOAuthTokenResponse>> exchange_author
 }
 
 boost::asio::awaitable<support::Expected<McpOAuthTokenResponse>> refresh_authorization(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         McpOAuthTokenRequest request,
         std::string refresh_token) {
@@ -858,7 +858,7 @@ boost::asio::awaitable<support::Expected<McpOAuthFlowOutcome>> authorize_mcp(std
         std::string server_url,
         McpOAuthConfig oauth,
         std::string redirect_url,
-        std::shared_ptr<ai::auth::OAuthHttpClient> http,
+        std::shared_ptr<OAuthHttpClient> http,
         McpOAuthFlowOptions options) {
     auto attempt = co_await run_flow(store, server_name, server_url, oauth, redirect_url, http, options);
     if (attempt) {

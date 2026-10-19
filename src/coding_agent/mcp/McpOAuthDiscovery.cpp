@@ -2,15 +2,15 @@
 // authorization-server discovery (spec #882, ticket #884). pi source at
 // `7c10bd43` (v1.0.4): `packages/mcp/src/oauth/discovery.ts`. The candidate
 // URLs, the 4xx/502 miss rule, the parsing messages, and the issuer check are
-// pi's; the transport is the shared injectable `ai::auth::OAuthHttpClient`, so
+// pi's; the transport is the shared injectable `OAuthHttpClient`, so
 // the discovery speaks the same HTTPS client as the rest of the OAuth flow and
 // a test scripts it without a network.
 
 #include "coding_agent/mcp/McpOAuthDiscovery.hpp"
 #include "coding_agent/mcp/McpUrl.hpp"
 
-#include <cch/ai/JsonAccess.hpp>
-#include <cch/ai/OAuthHttpClient.hpp>
+#include <cch/support/JsonAccess.hpp>
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
 
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -122,8 +122,8 @@ struct DiscoveryUrl {
     return std::optional<std::vector<std::string>>{std::move(strings)};
 }
 
-[[nodiscard]] boost::asio::awaitable<support::Expected<ai::auth::OAuthHttpResponse>> fetch_metadata(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http, std::string url, std::string protocol_version) {
+[[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> fetch_metadata(
+        std::shared_ptr<OAuthHttpClient> http, std::string url, std::string protocol_version) {
     std::map<std::string, std::string, std::less<>> headers{
             {"Accept", "application/json"},
             {"MCP-Protocol-Version", std::move(protocol_version)},
@@ -145,11 +145,11 @@ struct DiscoveryUrl {
 } // namespace
 
 support::Expected<McpProtectedResourceMetadata> parse_protected_resource_metadata(const support::JsonValue& value) {
-    const auto* object = ai::json_object(value);
+    const auto* object = support::json_object(value);
     if (object == nullptr) {
         return std::unexpected(invalid("OAuth protected resource metadata"));
     }
-    const auto* resource = ai::json_member(*object, "resource");
+    const auto* resource = support::json_member(*object, "resource");
     const auto resource_text = resource != nullptr ? required_string(*resource) : std::nullopt;
     if (!resource_text) {
         return std::unexpected(invalid("OAuth protected resource metadata resource"));
@@ -159,7 +159,7 @@ support::Expected<McpProtectedResourceMetadata> parse_protected_resource_metadat
     }
     McpProtectedResourceMetadata metadata;
     metadata.resource = *resource_text;
-    if (const auto* servers = ai::json_member(*object, "authorization_servers"); servers != nullptr) {
+    if (const auto* servers = support::json_member(*object, "authorization_servers"); servers != nullptr) {
         auto strings = optional_strings(*servers);
         if (!strings) {
             return std::unexpected(invalid("authorization_servers"));
@@ -176,7 +176,7 @@ support::Expected<McpProtectedResourceMetadata> parse_protected_resource_metadat
             metadata.authorization_servers = std::move(urls);
         }
     }
-    if (const auto* scopes = ai::json_member(*object, "scopes_supported"); scopes != nullptr) {
+    if (const auto* scopes = support::json_member(*object, "scopes_supported"); scopes != nullptr) {
         auto strings = optional_strings(*scopes);
         if (!strings) {
             return std::unexpected(invalid("scopes_supported"));
@@ -187,18 +187,18 @@ support::Expected<McpProtectedResourceMetadata> parse_protected_resource_metadat
 }
 
 support::Expected<McpAuthorizationServerMetadata> parse_authorization_server_metadata(const support::JsonValue& value) {
-    const auto* object = ai::json_object(value);
+    const auto* object = support::json_object(value);
     if (object == nullptr) {
         return std::unexpected(invalid("authorization server metadata"));
     }
-    const auto* response_types = ai::json_member(*object, "response_types_supported");
+    const auto* response_types = support::json_member(*object, "response_types_supported");
     auto response_type_list = response_types != nullptr ? optional_strings(*response_types)
                                                         : std::optional<std::optional<std::vector<std::string>>>{};
     if (!response_type_list || !response_type_list->has_value() || (**response_type_list).empty()) {
         return std::unexpected(invalid("response_types_supported"));
     }
     const auto url_field = [&](std::string_view key, std::string_view name) -> support::Expected<std::string> {
-        const auto* member = ai::json_member(*object, key);
+        const auto* member = support::json_member(*object, key);
         const auto text = member != nullptr ? required_string(*member) : std::nullopt;
         if (!text || !is_safe_url(*text)) {
             return std::unexpected(invalid(std::string{name}));
@@ -222,7 +222,7 @@ support::Expected<McpAuthorizationServerMetadata> parse_authorization_server_met
     metadata.issuer = std::move(*issuer);
     metadata.authorization_endpoint = std::move(*authorization_endpoint);
     metadata.token_endpoint = std::move(*token_endpoint);
-    if (const auto* registration = ai::json_member(*object, "registration_endpoint"); registration != nullptr) {
+    if (const auto* registration = support::json_member(*object, "registration_endpoint"); registration != nullptr) {
         const auto text = optional_string(*registration);
         if (!text || !is_safe_url(*text)) {
             return std::unexpected(invalid("registration endpoint"));
@@ -233,7 +233,7 @@ support::Expected<McpAuthorizationServerMetadata> parse_authorization_server_met
     const auto list_field =
             [&](std::string_view key,
                     std::string_view name) -> support::Expected<std::optional<std::vector<std::string>>> {
-        const auto* member = ai::json_member(*object, key);
+        const auto* member = support::json_member(*object, key);
         if (member == nullptr) {
             return std::optional<std::vector<std::string>>{};
         }
@@ -261,10 +261,10 @@ support::Expected<McpAuthorizationServerMetadata> parse_authorization_server_met
     metadata.grant_types_supported = std::move(lists[1]);
     metadata.token_endpoint_auth_methods_supported = std::move(lists[2]);
     metadata.code_challenge_methods_supported = std::move(lists[3]);
-    if (const auto* flag = ai::json_member(*object, "client_id_metadata_document_supported"); flag != nullptr) {
+    if (const auto* flag = support::json_member(*object, "client_id_metadata_document_supported"); flag != nullptr) {
         metadata.client_id_metadata_document_supported = flag->get_if<bool>();
     }
-    if (const auto* flag = ai::json_member(*object, "authorization_response_iss_parameter_supported");
+    if (const auto* flag = support::json_member(*object, "authorization_response_iss_parameter_supported");
             flag != nullptr) {
         metadata.authorization_response_iss_parameter_supported = flag->get_if<bool>();
     }
@@ -379,7 +379,7 @@ std::vector<std::string> authorization_server_discovery_urls(std::string_view au
 }
 
 boost::asio::awaitable<support::Expected<McpProtectedResourceMetadata>> discover_protected_resource_metadata(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options) {
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options) {
     const auto server = parse_discovery_url(server_url);
     if (!server) {
         co_return std::unexpected(invalid("MCP server URL", server_url));
@@ -406,9 +406,8 @@ boost::asio::awaitable<support::Expected<McpProtectedResourceMetadata>> discover
 }
 
 boost::asio::awaitable<support::Expected<std::optional<McpAuthorizationServerMetadata>>>
-discover_authorization_server_metadata(std::shared_ptr<ai::auth::OAuthHttpClient> http,
-        std::string authorization_server_url,
-        McpOAuthDiscoveryOptions options) {
+discover_authorization_server_metadata(
+        std::shared_ptr<OAuthHttpClient> http, std::string authorization_server_url, McpOAuthDiscoveryOptions options) {
     for (const auto& url : authorization_server_discovery_urls(authorization_server_url)) {
         CCH_TRY(response, co_await fetch_metadata(http, url, options.protocol_version));
         if (response.status_code < 200 || response.status_code >= 300) {
@@ -442,7 +441,7 @@ discover_authorization_server_metadata(std::shared_ptr<ai::auth::OAuthHttpClient
 }
 
 boost::asio::awaitable<support::Expected<McpOAuthServerInfo>> discover_oauth_server_info(
-        std::shared_ptr<ai::auth::OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options) {
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options) {
     std::optional<McpProtectedResourceMetadata> resource_metadata;
     auto discovered = co_await discover_protected_resource_metadata(http, server_url, options);
     if (discovered) {

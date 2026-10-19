@@ -3,10 +3,7 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Models.hpp>
 #include "ai/ModelStreamBridge.hpp"
-#include <cch/ai/BoostBeastStreamTransport.hpp>
-#include "ai/providers/BoostBeastWebSocketTransport.hpp"
-#include "ai/providers/ComposedProvider.hpp"
-#include "ai/providers/ProviderTestAccess.hpp"
+#include "ai/ModelsTestAccess.hpp"
 #include "ai/providers/RetryPolicy.hpp"
 #include "ai/providers/StreamEmit.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -169,61 +166,6 @@ struct FakeToolCallSpec {
     return emit_complete_lifecycle(assistant, sink);
 }
 
-class EmptyCredentialStore final : public ai::CredentialStore {
-public:
-    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> read(std::string) override {
-        return cch::support::AsyncResult<std::optional<ai::Credential>>(
-                std::expected<std::optional<ai::Credential>, cch::support::Error>{std::optional<ai::Credential>{}});
-    }
-
-    [[nodiscard]] cch::support::AsyncResult<std::vector<ai::CredentialInfo>> list() override {
-        return cch::support::AsyncResult<std::vector<ai::CredentialInfo>>(
-                std::expected<std::vector<ai::CredentialInfo>, cch::support::Error>{std::vector<ai::CredentialInfo>{}});
-    }
-
-    [[nodiscard]] cch::support::AsyncResult<std::optional<ai::Credential>> modify(
-            std::string, ai::CredentialModifyHook) override {
-        return cch::support::AsyncResult<std::optional<ai::Credential>>(
-                std::expected<std::optional<ai::Credential>, cch::support::Error>{std::optional<ai::Credential>{}});
-    }
-
-    [[nodiscard]] cch::support::AsyncResult<void> remove(std::string) override {
-        return cch::support::AsyncResult<void>(std::expected<void, cch::support::Error>{});
-    }
-};
-
-class EmptyAuthContext final : public ai::AuthContext {
-public:
-    [[nodiscard]] cch::support::AsyncResult<std::optional<std::string>> environment(std::string) const override {
-        return cch::support::AsyncResult<std::optional<std::string>>(
-                std::expected<std::optional<std::string>, cch::support::Error>{std::optional<std::string>{}});
-    }
-
-    [[nodiscard]] cch::support::AsyncResult<bool> file_exists(std::string) const override {
-        return cch::support::AsyncResult<bool>(std::expected<bool, cch::support::Error>{false});
-    }
-};
-
-ai::ProviderAuth fake_auth() {
-    ai::ApiKeyAuth api_key;
-    api_key.name = "scripted fake";
-    api_key.check =
-            [](const ai::AuthContext&,
-                    std::optional<ai::ApiKeyCredential>) -> cch::support::AsyncResult<std::optional<ai::AuthCheck>> {
-        return cch::support::AsyncResult<std::optional<ai::AuthCheck>>(
-                std::expected<std::optional<ai::AuthCheck>, cch::support::Error>{
-                        ai::AuthCheck{.source = "scripted fake", .type = ai::AuthType::ApiKey}});
-    };
-    api_key.resolve =
-            [](const ai::AuthContext&,
-                    std::optional<ai::ApiKeyCredential>) -> cch::support::AsyncResult<std::optional<ai::AuthResult>> {
-        return cch::support::AsyncResult<std::optional<ai::AuthResult>>(
-                std::expected<std::optional<ai::AuthResult>, cch::support::Error>{
-                        ai::AuthResult{.source = "scripted fake"}});
-    };
-    return ai::ProviderAuth{.api_key = std::move(api_key)};
-}
-
 [[nodiscard]] std::optional<support::ErrorCode> scripted_failure_code(std::string_view prompt) {
     if (prompt == "fail model_source") {
         return support::ErrorCode::ModelSource;
@@ -246,105 +188,57 @@ ai::ProviderAuth fake_auth() {
     return std::nullopt;
 }
 
-class ScriptedDefinitionProvider final : public ai::Provider {
-public:
-    explicit ScriptedDefinitionProvider(ScriptedProviderDefinition definition)
-        : id_(std::move(definition.definition.id)), name_(std::move(definition.definition.name)),
-          models_(std::move(definition.definition.models)), auth_(std::move(definition.definition.auth)),
-          stream_(std::move(definition.stream)) {}
-    ScriptedDefinitionProvider(ScriptedDefinitionProvider&&) noexcept = default;
-    ScriptedDefinitionProvider& operator=(ScriptedDefinitionProvider&&) noexcept = default;
-    ~ScriptedDefinitionProvider() override = default;
-    ScriptedDefinitionProvider(const ScriptedDefinitionProvider&) = delete;
-    ScriptedDefinitionProvider& operator=(const ScriptedDefinitionProvider&) = delete;
-
-    [[nodiscard]] std::string_view id() const noexcept override { return id_; }
-    [[nodiscard]] std::string_view name() const noexcept override { return name_; }
-    [[nodiscard]] ai::ProviderAuth& auth() noexcept override { return auth_; }
-    [[nodiscard]] std::vector<ai::Model> models() const override { return models_; }
-
-    [[nodiscard]] ai::ModelStream stream(
-            ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) override {
-        return stream_(std::move(model), std::move(context), std::move(options));
-    }
-
-private:
-    std::string id_;
-    std::string name_;
-    std::vector<ai::Model> models_;
-    ai::ProviderAuth auth_;
-    std::move_only_function<ai::ModelStream(ai::Model, ai::AiContext, ai::ProviderStreamOptions)> stream_;
-};
-
-[[nodiscard]] bool has_custom_cache_config(const ScriptedTransportOptions& options) {
-    return options.codex_cache_config.idle_close != std::chrono::minutes{5} ||
-           options.codex_cache_config.max_age != std::chrono::minutes{55};
-}
-
-[[nodiscard]] std::shared_ptr<ai::Provider> make_scripted_provider(ScriptedProviderDefinition definition) {
-    if (definition.stream) {
-        return std::make_shared<ScriptedDefinitionProvider>(std::move(definition));
-    }
-
-    auto http_transport = std::move(definition.transport.http_transport);
-    if (!http_transport) {
-        http_transport = std::make_shared<providers::BoostBeastStreamTransport>();
-    }
-    auto ws_transport = std::move(definition.transport.ws_transport);
-    if (!ws_transport) {
-        ws_transport = std::make_shared<providers::BoostBeastWebSocketTransport>();
-    }
-    return providers::make_composed_provider(std::move(definition.definition.id),
-            std::move(definition.definition.name),
-            std::move(definition.definition.models),
-            std::move(definition.definition.auth),
-            std::move(http_transport),
-            std::move(ws_transport),
-            definition.transport.codex_cache_config);
-}
-
 } // namespace
 
 support::ExpectedVoid apply_scripted_provider(ai::Models& models, ScriptedProviderDefinition definition) {
-    if (definition.definition.id.empty()) {
-        return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
+    auto catalog = models.models();
+    for (auto& model : definition.definition.models) {
+        catalog.push_back(std::move(model));
     }
-    const std::string provider_id = definition.definition.id;
-    if (definition.stream || definition.transport.http_transport || definition.transport.ws_transport ||
-            has_custom_cache_config(definition.transport)) {
-        return providers::ProviderTestAccess::install(models, make_scripted_provider(std::move(definition)));
+    if (auto replaced = ai::detail::ModelsTestAccess::replace_models(models, std::move(catalog)); !replaced) {
+        return replaced;
     }
-    return models.apply_provider(ai::ProviderChange{
-            .provider_id = provider_id,
-            .definition = std::move(definition.definition),
-    });
+    if (definition.transport.http_transport) {
+        ai::detail::ModelsTestAccess::set_transport(models, std::move(definition.transport.http_transport));
+    }
+    if (definition.stream) {
+        auto previous = ai::detail::ModelsTestAccess::take_stream(models);
+        ai::detail::ModelsTestAccess::set_stream(models,
+                [id = std::move(definition.definition.id),
+                        stream = std::move(definition.stream),
+                        previous = std::move(previous)](ai::Model model,
+                        ai::AiContext context,
+                        ai::SimpleStreamOptions options) mutable -> ai::ModelStream {
+                    if (model.provider == id) {
+                        return stream(std::move(model), std::move(context), std::move(options));
+                    }
+                    if (previous) {
+                        return previous(std::move(model), std::move(context), std::move(options));
+                    }
+                    return ai::detail::make_model_stream(
+                            [](ai::AssistantEventSink)
+                                    -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                                co_return std::unexpected(support::make_error(
+                                        support::ErrorCode::Provider, "No scripted stream for model identity"));
+                            });
+                });
+    }
+    return {};
 }
 
 support::ExpectedVoid apply_scripted_transport_options(ai::Models& models, ScriptedTransportOptions options) {
-    const bool custom_cache = has_custom_cache_config(options);
-    if (!options.http_transport && !options.ws_transport && !custom_cache) {
+    if (!options.http_transport) {
         return {};
     }
-
-    auto http_transport = std::move(options.http_transport);
-    if (!http_transport) {
-        http_transport = std::make_shared<providers::BoostBeastStreamTransport>();
-    }
-    auto ws_transport = std::move(options.ws_transport);
-    if (!ws_transport) {
-        ws_transport = std::make_shared<providers::BoostBeastWebSocketTransport>();
-    }
-
-    return providers::ProviderTestAccess::replace_transports(
-            models, std::move(http_transport), std::move(ws_transport), options.codex_cache_config);
+    ai::detail::ModelsTestAccess::set_transport(models, std::move(options.http_transport));
+    return {};
 }
 
 ScriptedProviderDefinition make_ai_scripted_fake_provider_definition(std::string provider_id) {
     ScriptedProviderDefinition definition;
     definition.definition.id = provider_id;
     definition.definition.name = "Fake";
-    definition.definition.auth = fake_auth();
-    definition.stream = [](ai::Model model, ai::AiContext context, ai::ProviderStreamOptions options) {
+    definition.stream = [](ai::Model model, ai::AiContext context, ai::SimpleStreamOptions options) {
         return ai::detail::make_model_stream(
                 [model = std::move(model), context = std::move(context), options = std::move(options)](
                         ai::AssistantEventSink sink)
@@ -458,8 +352,7 @@ std::vector<ScriptedProviderDefinition> make_ai_scripted_fake_provider_definitio
 }
 
 std::shared_ptr<ai::Models> make_ai_scripted_fake_models() {
-    auto models = std::make_shared<ai::Models>(
-            std::make_shared<EmptyCredentialStore>(), std::make_shared<EmptyAuthContext>());
+    auto models = std::make_shared<ai::Models>();
     for (auto&& definition : make_ai_scripted_fake_provider_definitions()) {
         if (auto added = apply_scripted_provider(*models, std::move(definition)); !added) {
             return nullptr;

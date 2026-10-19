@@ -11,7 +11,9 @@
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -42,6 +44,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::ModelCatalogFixture catalog;
     tests::RuntimeFixture runtime;
 
     Fixture() {
@@ -52,10 +55,7 @@ struct Fixture {
         session_file = workspace.path() / "session.jsonl";
     }
 
-    void write_models(std::string_view json) {
-        std::ofstream out(agent_dir / "models.json", std::ios::binary);
-        out << json;
-    }
+    void write_models(std::string_view json) { catalog.set(json); }
 
     void write_settings(std::string_view json) {
         std::ofstream out(agent_dir / "settings.json", std::ios::binary);
@@ -160,9 +160,11 @@ constexpr std::string_view kNonReasoningProvider = R"({
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.execution_runtime_target = fixture.runtime.make_target();
+    request.magpie_base_url = "http://127.0.0.1:34259";
     return request;
 }
 
@@ -264,7 +266,7 @@ TEST_CASE("cycle_model returns nullopt with a single available model", "[coding_
     result->session->close();
 }
 
-TEST_CASE("cycle_model cycles within the scoped set and drops unauthenticated scoped models",
+TEST_CASE("cycle_model cycles within the scoped set without upstream credential filtering",
         "[coding_agent][model-cycle][issue407][spec]") {
     Fixture fixture;
     fixture.write_models(kKeyedAlphaKeylessBetaKeyedGamma);
@@ -278,7 +280,7 @@ TEST_CASE("cycle_model cycles within the scoped set and drops unauthenticated sc
     REQUIRE(result.has_value());
     REQUIRE(result->resolved_identity.model == "alpha-1");
 
-    REQUIRE(result->session->scoped_models().size() == 1);
+    REQUIRE(result->session->scoped_models().size() == 2);
     CHECK(result->session->scoped_models()[0].model.id == "alpha-1");
 
     // A session-only scope that includes an unauthenticated model drops it at
@@ -290,8 +292,8 @@ TEST_CASE("cycle_model cycles within the scoped set and drops unauthenticated sc
     });
     auto filtered = result->session->cycle_model_blocking("forward");
     REQUIRE(filtered.has_value());
-    CHECK_FALSE(filtered->has_value());
-    CHECK(result->session->snapshot().agent_state.model.id == "alpha-1");
+    REQUIRE(filtered->has_value());
+    CHECK(result->session->snapshot().agent_state.model.id == "beta-1");
 
     // Session-only scoped changes (pi setScopedModels): replacing the scope
     // with alpha + gamma enables cycling between them.
