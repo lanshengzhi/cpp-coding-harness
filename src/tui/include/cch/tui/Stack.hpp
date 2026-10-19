@@ -32,7 +32,7 @@ struct StackEntryOptions {
     std::size_t max_size{kStackUnboundedSize};
     /// Evaluated once per allocation with that layout's viewport, so a stack
     /// can drop entries that do not fit (pi `visibleStackEntries`).
-    std::function<bool(const LayoutViewport&)> visible{};
+    std::move_only_function<bool(const LayoutViewport&) const> visible{};
 };
 
 /// Stack constructor options (pi `StackOptions`).

@@ -302,6 +302,26 @@ TEST_CASE(
     CHECK(late_colors.foreground.has_value());
 }
 
+TEST_CASE("a late color callback can stop the Tui without deadlocking", "[tui][theme][issue990][spec]") {
+    ColorQueryHost host;
+    std::atomic<int> late_calls{0};
+    std::atomic<bool> stopped{false};
+    auto future = host.tui().query_terminal_colors(tui::TerminalColorsQueryOptions{
+            .timeout = std::chrono::milliseconds(30),
+            .on_late_reply =
+                    [&](tui::TerminalColors) {
+                        ++late_calls;
+                        stopped.store(static_cast<bool>(host.tui().stop()));
+                    },
+    });
+
+    REQUIRE(future.wait_for(std::chrono::seconds(2)) == std::future_status::ready);
+    (void)future.get();
+    REQUIRE(host.type("\x1b]11;#040506\x07"));
+    CHECK(late_calls.load() == 1);
+    CHECK(stopped.load());
+}
+
 TEST_CASE("stopping the Tui cancels pending query callbacks", "[tui][theme][issue990][spec]") {
     tui::VirtualTerminal terminal({.columns = 40, .rows = 6});
     tui::Tui tui(terminal);

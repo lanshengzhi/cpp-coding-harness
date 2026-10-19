@@ -44,6 +44,8 @@ struct TerminalColorsQueryOptions {
     TerminalColorsCallback on_late_reply{};
 };
 
+/// Copyable because scheme dispatch snapshots observers under the registry
+/// lock, then invokes them after releasing it.
 using TerminalColorSchemeListener = std::function<void(TerminalColorScheme)>;
 using TerminalColorSchemeListenerId = std::uint64_t;
 

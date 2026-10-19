@@ -399,9 +399,12 @@ TEST_CASE("constrained VStack honors the responsive visibility predicate", "[tui
     // viewport, so the same stack grows or drops an entry with the frame.
     cch::tui::VStack stack;
     REQUIRE(stack.add_child(std::make_unique<LabeledChild>(std::vector<std::string>{"head"})));
+    auto minimum_height = std::make_unique<std::size_t>(5);
     REQUIRE(stack.add_child(std::make_unique<LabeledChild>(std::vector<std::string>{"menu"}),
             cch::tui::StackEntryOptions{
-                    .visible = [](const cch::tui::LayoutViewport& viewport) { return viewport.height >= 5; }}));
+                    .visible = [minimum_height = std::move(minimum_height)](const cch::tui::LayoutViewport& viewport) {
+                        return viewport.height >= *minimum_height;
+                    }}));
     REQUIRE(stack.add_child(std::make_unique<LabeledChild>(std::vector<std::string>{"foot"})));
 
     auto tall = render_frame(stack, 6, 5);

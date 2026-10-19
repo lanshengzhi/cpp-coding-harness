@@ -271,9 +271,9 @@ bool TuiHost::consume_terminal_color_response(const OscColorResponse& response) 
     }
 
     TerminalColors current_result;
-    bool should_notify_late = false;
     bool should_complete = false;
     TerminalColorsCallback on_complete_cb;
+    TerminalColorsCallback on_late_reply_cb;
 
     {
         std::lock_guard lock(query->mutex);
@@ -307,20 +307,10 @@ bool TuiHost::consume_terminal_color_response(const OscColorResponse& response) 
                 query->promise.set_value(current_result);
                 on_complete_cb = std::move(query->on_complete);
             } else if (query->on_late_reply) {
-                should_notify_late = true;
+                on_late_reply_cb = std::move(query->on_late_reply);
             }
         } else if (query->promise_resolved && query->on_late_reply) {
-            should_notify_late = true;
-        }
-    }
-
-    if (on_complete_cb) {
-        on_complete_cb(current_result);
-    }
-    if (should_notify_late) {
-        std::lock_guard lock(query->mutex);
-        if (query->on_late_reply) {
-            query->on_late_reply(current_result);
+            on_late_reply_cb = std::move(query->on_late_reply);
         }
     }
 
@@ -328,6 +318,19 @@ bool TuiHost::consume_terminal_color_response(const OscColorResponse& response) 
         std::lock_guard lock(color_queries_mutex_);
         if (!pending_color_queries_.empty() && pending_color_queries_.front() == query) {
             pending_color_queries_.pop_front();
+        }
+    }
+
+    if (on_complete_cb) {
+        on_complete_cb(current_result);
+    }
+    if (on_late_reply_cb) {
+        on_late_reply_cb(current_result);
+        if (!should_complete) {
+            std::lock_guard lock(query->mutex);
+            if (!query->cancelled && !query->completed && !query->on_late_reply) {
+                query->on_late_reply = std::move(on_late_reply_cb);
+            }
         }
     }
 
@@ -344,8 +347,8 @@ bool TuiHost::consume_terminal_device_attributes() {
     }
 
     TerminalColors result;
-    bool should_notify_late = false;
     TerminalColorsCallback on_complete_cb;
+    TerminalColorsCallback on_late_reply_cb;
 
     {
         std::lock_guard lock(query->mutex);
@@ -359,18 +362,15 @@ bool TuiHost::consume_terminal_device_attributes() {
             query->promise.set_value(result);
             on_complete_cb = std::move(query->on_complete);
         } else if (query->on_late_reply) {
-            should_notify_late = true;
+            on_late_reply_cb = std::move(query->on_late_reply);
         }
     }
 
     if (on_complete_cb) {
         on_complete_cb(result);
     }
-    if (should_notify_late) {
-        std::lock_guard lock(query->mutex);
-        if (query->on_late_reply) {
-            query->on_late_reply(result);
-        }
+    if (on_late_reply_cb) {
+        on_late_reply_cb(result);
     }
 
     return true;
