@@ -1,0 +1,253 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/env/node.ts:NodeExecutionEnv",
+    "packages/durable/src/tools/index.ts:createCodingTools",
+    "packages/durable/src/tools/bash.ts:createBashTool",
+    "packages/durable/src/tools/read.ts:readImage",
+    "packages/durable/src/tools/image.ts:detectSupportedImageMimeType",
+    "packages/durable/src/images/node.ts:createNodePhotonImages"
+  ],
+  "scenarios": [
+    {
+      "name": "the real Node ExecutionEnv reads, appends, lists, executes split streams and reports timeout",
+      "source": "packages/durable/src/env/node.ts:NodeExecutionEnv;packages/durable/src/env/index.ts:ExecutionEnv",
+      "inputs": {
+        "root": "temporary directory",
+        "shell": "printf stdout/stderr then exit 3",
+        "timeoutSeconds": 0.1
+      },
+      "expected": {
+        "absolutePathIsUnderRoot": true,
+        "absoluteBasename": "file.txt",
+        "text": "hello",
+        "lines": [
+          "hello"
+        ],
+        "file": {
+          "kind": "file",
+          "size": 5
+        },
+        "dir": [
+          [
+            "file.txt",
+            "file"
+          ]
+        ],
+        "missing": {
+          "ok": false,
+          "code": "not_found",
+          "message": "ENOENT: no such file or directory, open '<root>/missing.txt'"
+        },
+        "shell": {
+          "exitCode": 3,
+          "stdout": "out\n",
+          "stderr": "err\n"
+        },
+        "direct": 0,
+        "timeout": {
+          "ok": false,
+          "code": "timeout",
+          "message": "timeout:0.1"
+        },
+        "tempDirPrefix": true
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values",
+        "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+      ]
+    },
+    {
+      "name": "the built-in read, write, edit and bash tools run over a real injected local environment",
+      "source": "packages/durable/src/tools/index.ts:createCodingTools;packages/durable/src/tools/bash.ts:createBashTool;packages/durable/src/harness/types.ts:ToolExecutionApi.env",
+      "inputs": {
+        "toolRound": [
+          "write notes.txt",
+          "read notes.txt",
+          "edit alpha->omega",
+          "read notes.txt",
+          "bash cat notes.txt"
+        ],
+        "environment": "NodeExecutionEnv over a temporary directory"
+      },
+      "expected": {
+        "settled": "done",
+        "tools": [
+          {
+            "callId": "w1",
+            "toolName": "write",
+            "isError": false,
+            "text": "Successfully wrote to notes.txt"
+          },
+          {
+            "callId": "r1",
+            "toolName": "read",
+            "isError": false,
+            "text": "alpha\n"
+          },
+          {
+            "callId": "e1",
+            "toolName": "edit",
+            "isError": false,
+            "text": "Successfully replaced 1 block(s) in notes.txt."
+          },
+          {
+            "callId": "r2",
+            "toolName": "read",
+            "isError": false,
+            "text": "omega\n"
+          },
+          {
+            "callId": "b1",
+            "toolName": "bash",
+            "isError": false,
+            "text": "omega\n"
+          }
+        ],
+        "fileOnDisk": "omega\n"
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values",
+        "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+      ]
+    },
+    {
+      "name": "the Photon image processor passes an upright inline image through and resizes one over the limits",
+      "source": "packages/durable/src/images/node.ts:createNodePhotonImages;packages/durable/src/images/index.ts:createPhotonImages",
+      "inputs": {
+        "source": "40x20 RGBA PNG",
+        "limits": [
+          "default 2000x2000",
+          "10x10 with 1MiB base64"
+        ],
+        "invalidBytes": 4
+      },
+      "expected": {
+        "sourceBytes": 1897,
+        "asIs": {
+          "mimeType": "image/png",
+          "base64Length": 2532,
+          "sameAsSource": true,
+          "resized": null,
+          "convertedFrom": null
+        },
+        "shrunk": {
+          "mimeType": "image/png",
+          "base64Length": 216,
+          "resized": {
+            "from": {
+              "width": 40,
+              "height": 20
+            },
+            "to": {
+              "width": 10,
+              "height": 5
+            }
+          }
+        },
+        "invalid": null
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values",
+        "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+      ]
+    },
+    {
+      "name": "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
+      "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image-processor.ts:ImageProcessor",
+      "inputs": {
+        "file": "40x20 PNG",
+        "modelImageLimit": "10x10",
+        "processor": "Photon, calling thread"
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "image",
+            "mimeType": "image/png",
+            "base64Length": 216
+          },
+          {
+            "type": "text",
+            "text": "<harness>\n[info] Read image file [image/png]. Resized from 40x20 to 10x5. Multiply coordinates by 4.00 to map them to the original.\n</harness>"
+          }
+        ],
+        "diagnostics": null
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values",
+        "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+      ]
+    },
+    {
+      "name": "reading a BMP without an image processor is an explicit unsupported-image result",
+      "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:detectSupportedImageMimeType",
+      "inputs": {
+        "file": "1x1 24-bit BMP",
+        "processor": "none"
+      },
+      "expected": {
+        "isError": true,
+        "content": [
+          {
+            "type": "text",
+            "text": "<harness>\n[error] image.bmp is an image (image/bmp) that needs converting, and no image processor is configured\n</harness>"
+          }
+        ],
+        "diagnostics": null
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values",
+        "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+      ]
+    },
+    {
+      "name": "an inline image within the limits passes through unchanged without a processor",
+      "source": "packages/durable/src/tools/read.ts:readImage;packages/durable/src/tools/image.ts:imageDimensions",
+      "inputs": {
+        "file": "2x2 PNG",
+        "processor": "none"
+      },
+      "expected": {
+        "isError": false,
+        "content": [
+          {
+            "type": "image",
+            "mimeType": "image/png",
+            "base64Length": 112
+          },
+          {
+            "type": "text",
+            "text": "<harness>\n[info] Read image file [image/png].\n</harness>"
+          }
+        ],
+        "originalBase64Length": 112,
+        "diagnostics": null
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values",
+        "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+      ]
+    }
+  ]
+}

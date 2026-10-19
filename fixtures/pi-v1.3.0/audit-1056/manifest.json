@@ -1,0 +1,1610 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1056/capture-1056.mts",
+    "sha256": "c05f077bca6a19998cc62533f87827412a0e7d2c05f302026e8e93b6c2fa862c",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1056/capture-1056.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/capture-1056.mts",
+        "sha256": "c05f077bca6a19998cc62533f87827412a0e7d2c05f302026e8e93b6c2fa862c"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/pi.mts",
+        "sha256": "45123d51d4d3b281fb7e908bd7f8ee61043ac815d3ae5078c78264d981fe26a2"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/support.mts",
+        "sha256": "6761d8f97de85f6821f77ecb9e33e2aa1dd6ccfb87ea5d6841bcce61da4e349c"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/workflow.mts",
+        "sha256": "df7bbf295578cf255387cd3dad286c8b4421eeaee087624b5332a0f1687ade7c"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/conversations.mts",
+        "sha256": "ab81bdb79b69d0ea7bea85882d6c7c450f2efe5158ddd4fc99741c0a18636cd4"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/compaction.mts",
+        "sha256": "455ead0d196867b7a3d742c7c12b1f893d37807ccb00ea4c750725e347032db5"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/observability.mts",
+        "sha256": "63d20ee9dbda65018c3545dabee17b2036bd4be7497705d34ff49f18ab96062b"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/environment.mts",
+        "sha256": "09d3159993288b86bfca71af940d4cd15d302cbbda4120d9781618edbd789ec9"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.mts",
+        "sha256": "039fdd72e6db8591c66a8de293f878ac16e7197ef482c3fb77ecc5abd6a12bad"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1056/generation-storage.mts",
+        "sha256": "472b0e2bda28f1013dbb9c7841f2f2188506b84db980564d6619f244b62fa47e"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "workflow.json",
+      "family": "audit-1056",
+      "bytes": 6221,
+      "sha256": "3ef37a379a370a3b3d6fb60539fb9cff65b74a2a6ae5159c54b80167ab57dd05",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/harness.ts:Harness.open",
+        "packages/durable/src/harness/generation.ts:GenerationTask",
+        "packages/durable/src/harness/tool.ts:ToolTask",
+        "packages/durable/src/harness/registry.ts:Registry.install",
+        "packages/durable/src/harness/agent.ts:resolveAgent",
+        "packages/durable/test/harness-lifecycle.test.ts:conversation workflow"
+      ],
+      "scenarios": [
+        {
+          "name": "a scripted model drives admission, one real injected tool, committed entries and final settlement",
+          "source": "packages/durable/src/harness/harness.ts:Harness.open;packages/durable/src/harness/generation.ts:GenerationTask;packages/durable/src/harness/tool.ts:ToolTask",
+          "inputs": {
+            "storage": "MemoryStorage",
+            "model": "faux/faux-1",
+            "turns": [
+              "toolUse echo {text:hello}",
+              "stop finished"
+            ],
+            "tool": "echo",
+            "section": "audit-note"
+          },
+          "expected": {
+            "admission": {
+              "submissionIdIsSettledId": true,
+              "conversationIsRoot": true,
+              "requestId": null
+            },
+            "settlement": {
+              "status": "done",
+              "entryIsUser": "pi.user",
+              "answerIsAssistant": "pi.assistant"
+            },
+            "entries": [
+              [
+                "pi.user",
+                "run the echo tool"
+              ],
+              [
+                "pi.system",
+                [
+                  "audit-note"
+                ],
+                [
+                  "echo"
+                ]
+              ],
+              [
+                "pi.assistant",
+                ""
+              ],
+              [
+                "pi.tool-result",
+                "echo",
+                "call-1",
+                false,
+                true,
+                "echo:hello"
+              ],
+              [
+                "pi.assistant",
+                "finished"
+              ]
+            ],
+            "tool": {
+              "executions": [
+                {
+                  "text": "hello"
+                }
+              ],
+              "callId": "call-1",
+              "toolName": "echo",
+              "text": "echo:hello",
+              "isError": false,
+              "durationPresent": true,
+              "resultTaskPresent": true
+            },
+            "offeredTools": [
+              "echo"
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "a registry install after conversation creation changes the next request's tools and prompt sections",
+          "source": "packages/durable/src/harness/registry.ts:Registry.install;packages/durable/src/harness/agent.ts:resolveAgent",
+          "inputs": {
+            "installedBeforeCreation": [
+              "first"
+            ],
+            "installedAfterCreation": [
+              "second",
+              "late-section"
+            ],
+            "requests": 1
+          },
+          "expected": {
+            "before": [
+              "first"
+            ],
+            "afterInstall": [
+              "first",
+              "second"
+            ],
+            "sectionsAdded": [
+              "late-section"
+            ],
+            "toolsAdded": [
+              "first",
+              "second"
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "a generation onYield hook appends a user message and continues the same admitted run",
+          "source": "packages/durable/src/harness/generation.ts:GenerationTask.onYield;packages/durable/src/harness/types.ts:GenerationHooks",
+          "inputs": {
+            "hook": "GenerationTask.onYield",
+            "firstAnswer": "first answer",
+            "continuesWith": "go on",
+            "scriptedAnswers": [
+              "first answer",
+              "second answer"
+            ]
+          },
+          "expected": {
+            "status": "done",
+            "yields": [
+              "first answer",
+              "second answer"
+            ],
+            "callCount": 2,
+            "entries": [
+              [
+                "pi.user",
+                "start"
+              ],
+              [
+                "pi.assistant",
+                "first answer"
+              ],
+              [
+                "pi.user",
+                "go on"
+              ],
+              [
+                "pi.assistant",
+                "second answer"
+              ]
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "tool hooks rewrite arguments before execution and observe the committed result",
+          "source": "packages/durable/src/harness/tool.ts:ToolTask;packages/durable/src/harness/types.ts:ToolHooks",
+          "inputs": {
+            "call": {
+              "name": "echo",
+              "arguments": {
+                "text": "original"
+              }
+            },
+            "beforeTool": "replace arguments with {text:'rewritten'}",
+            "afterTool": "observe result"
+          },
+          "expected": {
+            "hooks": [
+              {
+                "phase": "beforeTool",
+                "id": "call-1",
+                "arguments": {
+                  "text": "original"
+                }
+              },
+              {
+                "phase": "afterTool",
+                "id": "call-1",
+                "text": "echo:rewritten"
+              }
+            ],
+            "resultText": "echo:rewritten",
+            "isError": false
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "conversations.json",
+      "family": "audit-1056",
+      "bytes": 8827,
+      "sha256": "09b36b4a4744ed36a0b8d60b1c0748b3953b72378d21aec3cc6095dfd3fb3d51",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/harness.ts:HarnessImpl.root",
+        "packages/durable/src/harness/harness.ts:ConversationImpl.fork",
+        "packages/durable/src/harness/harness.ts:ConversationImpl.reset",
+        "packages/durable/src/session/transaction.ts:Transaction.createConversation",
+        "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+        "packages/durable/test/harness-conversations.test.ts:conversation lifecycle"
+      ],
+      "scenarios": [
+        {
+          "name": "the root conversation is created lazily in one commit with its five built-in documents",
+          "source": "packages/durable/src/harness/harness.ts:HarnessImpl.root,#create;packages/durable/src/harness/agent.ts:AgentDoc",
+          "inputs": {
+            "storage": "MemoryStorage",
+            "rootCreationOptions": "thinkingLevel high",
+            "secondRoot": "thinkingLevel low"
+          },
+          "expected": {
+            "rootId": 1,
+            "sameRoot": true,
+            "commits": 1,
+            "changes": [
+              "conversation",
+              "document:pi.agent:v1",
+              "document:pi.inbox:v1",
+              "document:pi.live:v1",
+              "document:pi.provider:v1",
+              "document:pi.usage:v1"
+            ],
+            "agent": {
+              "thinkingLevel": "high"
+            }
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "provider session identifiers are compared for stability, not printed"
+          ]
+        },
+        {
+          "name": "a fork copies the transcript and agent state as of its entry and stays independent",
+          "source": "packages/durable/src/harness/harness.ts:ConversationImpl.fork;#create;packages/durable/src/harness/agent.ts:AgentDoc.asOf",
+          "inputs": {
+            "turns": [
+              "u1",
+              "u2"
+            ],
+            "configure": [
+              "low before u1",
+              "high before u2"
+            ],
+            "forkAt": [
+              "first entry",
+              "last entry"
+            ],
+            "forkOwnership": "ownerless"
+          },
+          "expected": {
+            "rootEntries": [
+              [
+                "pi.user",
+                "u1"
+              ],
+              [
+                "pi.assistant",
+                "a1"
+              ],
+              [
+                "pi.user",
+                "u2"
+              ],
+              [
+                "pi.assistant",
+                "a2"
+              ]
+            ],
+            "beforeEntries": [
+              [
+                "pi.user",
+                "u1"
+              ],
+              [
+                "fork.note",
+                ""
+              ]
+            ],
+            "afterEntries": [
+              [
+                "pi.user",
+                "u1"
+              ],
+              [
+                "pi.assistant",
+                "a1"
+              ],
+              [
+                "pi.user",
+                "u2"
+              ],
+              [
+                "pi.assistant",
+                "a2"
+              ]
+            ],
+            "beforeThinking": "low",
+            "afterThinking": "high",
+            "rootStillHasTwoTurns": true,
+            "forksAreDistinct": true
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "provider session identifiers are compared for stability, not printed"
+          ]
+        },
+        {
+          "name": "reset starts a new context and carries its handoff text as the first user message",
+          "source": "packages/durable/src/harness/harness.ts:ConversationImpl.reset;packages/durable/src/entries.ts:ResetEntry",
+          "inputs": {
+            "turns": [
+              "u1",
+              "u2"
+            ],
+            "resetHandoff": "carry this forward"
+          },
+          "expected": {
+            "entries": [
+              [
+                "pi.user",
+                "u1"
+              ],
+              [
+                "pi.assistant",
+                "a1"
+              ],
+              [
+                "pi.reset",
+                "carry this forward"
+              ],
+              [
+                "pi.user",
+                "u2"
+              ],
+              [
+                "pi.system",
+                [],
+                []
+              ],
+              [
+                "pi.assistant",
+                "a2"
+              ]
+            ],
+            "reset": [
+              {
+                "kind": "pi.reset",
+                "headIsSelf": true,
+                "modelText": "carry this forward"
+              }
+            ],
+            "contextRoles": [
+              "system",
+              "user",
+              "user",
+              "assistant"
+            ],
+            "contextTexts": [
+              "system",
+              "carry this forward",
+              "u2",
+              "a2"
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "provider session identifiers are compared for stability, not printed"
+          ]
+        },
+        {
+          "name": "a task-created conversation records its task owner and stays addressable by ID",
+          "source": "packages/durable/src/session/transaction.ts:Transaction.createConversation;packages/durable/src/types.ts:ConversationOwnership",
+          "inputs": {
+            "ownership": "task",
+            "taskPhase": "create conversation and one note, then complete"
+          },
+          "expected": {
+            "outcome": "completed",
+            "childIdMatchesRecord": true,
+            "ownerIsTask": true,
+            "ownerConversationIsRoot": true,
+            "childEntries": [
+              [
+                "owner.note",
+                ""
+              ]
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "provider session identifiers are compared for stability, not printed"
+          ]
+        },
+        {
+          "name": "conversation abort stops the busy generation and settles its input unanswered",
+          "source": "packages/durable/src/harness/harness.ts:ConversationImpl.abort;packages/durable/src/harness/scheduler.ts:abortConversation",
+          "inputs": {
+            "generation": "unanswered",
+            "abort": "Conversation.abort"
+          },
+          "expected": {
+            "beforeTasks": [
+              "pi.generation:running"
+            ],
+            "settled": {
+              "status": "unanswered",
+              "reason": "aborted"
+            },
+            "afterScheduling": "running",
+            "afterTasks": 0,
+            "live": {}
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "provider session identifiers are compared for stability, not printed"
+          ]
+        },
+        {
+          "name": "close and reopen keeps conversations, fork identity, agent choices and provider state",
+          "source": "packages/durable/src/harness/harness.ts:Harness.open,root,conversation;packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+          "inputs": {
+            "storage": "node:sqlite",
+            "conversations": [
+              "root",
+              "ownerless child",
+              "fork at first entry"
+            ],
+            "reopenRegistry": "empty"
+          },
+          "expected": {
+            "rootEntries": [
+              [
+                "pi.user",
+                "persisted question"
+              ],
+              [
+                "pi.system",
+                [],
+                [
+                  "present"
+                ]
+              ],
+              [
+                "pi.assistant",
+                "persisted answer"
+              ]
+            ],
+            "childEntries": [],
+            "forkEntries": [
+              [
+                "pi.user",
+                "persisted question"
+              ]
+            ],
+            "before": {
+              "thinking": "medium",
+              "providerIdsDistinct": true
+            },
+            "after": {
+              "rootId": 1,
+              "childFound": true,
+              "forkFound": true,
+              "thinking": "medium",
+              "tools": [],
+              "entries": [
+                [
+                  "pi.user",
+                  "persisted question"
+                ],
+                [
+                  "pi.system",
+                  [],
+                  [
+                    "present"
+                  ]
+                ],
+                [
+                  "pi.assistant",
+                  "persisted answer"
+                ]
+              ],
+              "providerIdsStable": true
+            }
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "provider session identifiers are compared for stability, not printed"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "compaction.json",
+      "family": "audit-1056",
+      "bytes": 10110,
+      "sha256": "99ba881d3f37fd9ae19e5b549fae5776625a276801011f6da3a9b627c69920ab",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/compaction.ts:CompactionTask",
+        "packages/durable/src/harness/harness.ts:ConversationImpl.compact",
+        "packages/durable/src/harness/generation.ts:#prepare",
+        "packages/durable/test/harness-compaction.test.ts:compaction policy"
+      ],
+      "scenarios": [
+        {
+          "name": "manual compaction summarizes old context, keeps raw history, and places one summary marker at the cut",
+          "source": "packages/durable/src/harness/compaction.ts:CompactionTask;packages/durable/src/harness/harness.ts:ConversationImpl.compact",
+          "inputs": {
+            "turns": [
+              "u1/a1",
+              "u2/a2",
+              "u3/a3"
+            ],
+            "tokensPerMessage": 100,
+            "instructions": "focus on files",
+            "modelWindow": 100000,
+            "compaction": {
+              "enabled": false,
+              "reserveTokens": 1000,
+              "keepRecentTokens": 150,
+              "backgroundTokens": 0
+            }
+          },
+          "expected": {
+            "outcome": "completed",
+            "placed": {
+              "status": "done",
+              "entryMatchesMarker": true
+            },
+            "rawHistoryPreserved": [
+              [
+                "pi.user",
+                "u1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              ],
+              [
+                "pi.assistant",
+                "a1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              ],
+              [
+                "pi.user",
+                "u2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              ],
+              [
+                "pi.assistant",
+                "a2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              ],
+              [
+                "pi.user",
+                "u3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              ],
+              [
+                "pi.assistant",
+                "a3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              ]
+            ],
+            "marker": {
+              "kind": "pi.compaction",
+              "reason": "manual",
+              "headKind": "pi.user",
+              "text": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>"
+            },
+            "context": {
+              "roles": [
+                "user",
+                "user",
+                "assistant"
+              ],
+              "texts": [
+                "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>",
+                "u3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "a3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+              ]
+            },
+            "summaryRequest": {
+              "messages": 2,
+              "firstPromptStartsWith": "<conversation>\n[User",
+              "containsA2": true,
+              "excludesU3": true,
+              "endsWithFocus": true,
+              "options": {
+                "cacheRetention": "none",
+                "maxTokens": 800,
+                "sessionIdPresent": true,
+                "deferred": null
+              }
+            },
+            "usageIncreased": true
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "summary text is the scripted model output"
+          ]
+        },
+        {
+          "name": "a blocking threshold compaction appends its summary before the request it protects",
+          "source": "packages/durable/src/harness/compaction.ts:CompactionTask,#prepare;packages/durable/src/harness/generation.ts:#prepare",
+          "inputs": {
+            "turns": [
+              "u1/a1",
+              "u2/a2",
+              "u3/a3",
+              "u4/a4"
+            ],
+            "tokensPerMessage": [
+              100,
+              100,
+              100,
+              200
+            ],
+            "modelWindow": 1000,
+            "compaction": {
+              "enabled": true,
+              "reserveTokens": 300,
+              "keepRecentTokens": 150,
+              "backgroundTokens": 0
+            }
+          },
+          "expected": {
+            "settled": "done",
+            "tailKinds": [
+              "pi.compaction",
+              "pi.system",
+              "pi.assistant"
+            ],
+            "compactionTask": [],
+            "marker": [
+              {
+                "reason": "threshold",
+                "text": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>"
+              }
+            ],
+            "request": {
+              "firstUserText": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>",
+              "systemSections": [
+                []
+              ]
+            }
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "summary text is the scripted model output"
+          ]
+        },
+        {
+          "name": "a compaction beforeCompact hook can decline the cut and the request goes out uncompacted",
+          "source": "packages/durable/src/harness/compaction.ts:CompactionTask.beforeCompact;packages/durable/src/harness/types.ts:CompactionHooks",
+          "inputs": {
+            "compaction": {
+              "enabled": true,
+              "reserveTokens": 300,
+              "keepRecentTokens": 150,
+              "backgroundTokens": 0
+            },
+            "hook": "beforeCompact -> {decline:true}",
+            "extraTurnTokens": 200
+          },
+          "expected": {
+            "settled": "done",
+            "markers": 0,
+            "firstUserText": "u1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "summaryRequests": 0
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "summary text is the scripted model output"
+          ]
+        },
+        {
+          "name": "manual compaction with no eligible cut completes without a summary or a marker",
+          "source": "packages/durable/src/harness/compaction.ts:#selectCut,CompactionTask",
+          "inputs": {
+            "turn": [
+              "hello",
+              "hi"
+            ],
+            "instructions": null,
+            "compaction": {
+              "enabled": false,
+              "reserveTokens": 1000,
+              "keepRecentTokens": 150,
+              "backgroundTokens": 0
+            }
+          },
+          "expected": {
+            "outcome": {
+              "status": "completed",
+              "result": {}
+            },
+            "markers": 0,
+            "summaryRequests": 0
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "summary text is the scripted model output"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "observability.json",
+      "family": "audit-1056",
+      "bytes": 9440,
+      "sha256": "a4177786ff8e522766c080c5804c18b661937a69a3023be8df6c368ba5593e45",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/harness.ts:Harness.inspect",
+        "packages/durable/src/harness/scheduler.ts:TaskScheduler",
+        "packages/durable/src/harness/task-graph.ts:TaskGraphView",
+        "packages/durable/src/harness/view.ts:ConversationViews",
+        "packages/durable/src/harness/events.ts:watchEvents",
+        "packages/durable/src/harness/context.ts:readContext",
+        "packages/durable/test/harness-inspect.test.ts:inspection",
+        "packages/durable/test/harness-events.test.ts:event stream",
+        "packages/durable/test/harness-view.test.ts:view frames",
+        "packages/durable/test/harness-task-graph.test.ts:task graph"
+      ],
+      "scenarios": [
+        {
+          "name": "inspect derives ready, running, waiting and blocked task states without running task code",
+          "source": "packages/durable/src/harness/harness.ts:Harness.inspect;packages/durable/src/harness/scheduler.ts:#inspect",
+          "inputs": {
+            "tasks": [
+              "gate",
+              "dependent waiting on gate",
+              "missing definition"
+            ],
+            "pausedBeforeResume": true,
+            "gateResolvedAfterInspection": true
+          },
+          "expected": {
+            "paused": {
+              "scheduling": "paused",
+              "gate": {
+                "kind": "ready",
+                "migrates": false
+              },
+              "dependent": {
+                "kind": "ready",
+                "migrates": false
+              },
+              "missing": {
+                "kind": "blocked",
+                "reason": "missing_task"
+              }
+            },
+            "running": {
+              "scheduling": "running",
+              "gate": {
+                "kind": "running"
+              },
+              "dependent": {
+                "kind": "waiting",
+                "onLength": 1,
+                "onIsGate": true
+              }
+            },
+            "settled": {
+              "liveTaskKinds": [
+                "audit.inspect-missing"
+              ],
+              "missing": {
+                "kind": "blocked",
+                "reason": "missing_task"
+              }
+            }
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+          ]
+        },
+        {
+          "name": "inspect lists the placed submission and the generation task that owns it",
+          "source": "packages/durable/src/harness/harness.ts:Harness.inspect;packages/durable/src/harness/submissions.ts:Submissions.status",
+          "inputs": {
+            "generation": "unanswered",
+            "inspection": "while busy"
+          },
+          "expected": {
+            "submissions": [
+              {
+                "idMatches": true,
+                "conversationIsRoot": true,
+                "type": "input",
+                "status": "placed"
+              }
+            ],
+            "status": {
+              "type": "input",
+              "status": "placed"
+            },
+            "tasks": [
+              {
+                "kind": "pi.generation",
+                "state": "running"
+              }
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+          ]
+        },
+        {
+          "name": "the task graph follows owner edges, owned conversations, waits and completion to empty",
+          "source": "packages/durable/src/harness/task-graph.ts:TaskGraphView;packages/durable/src/harness/harness.ts:Harness.taskGraph",
+          "inputs": {
+            "parent": "creates child and owned conversation, waits allSettled",
+            "child": "gated",
+            "observation": "state"
+          },
+          "expected": {
+            "before": {},
+            "running": {
+              "parent": {
+                "status": "waiting",
+                "onOwnsChild": true,
+                "conversations": 1
+              },
+              "child": {
+                "status": "running",
+                "ownerIsParent": true
+              }
+            },
+            "after": {}
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+          ]
+        },
+        {
+          "name": "conversation watch publishes delta frames whose final view equals a fresh hydration",
+          "source": "packages/durable/src/harness/view.ts:ConversationViews;packages/durable/src/harness/harness.ts:ConversationImpl.watch",
+          "inputs": {
+            "turn": [
+              "hi",
+              "hello"
+            ],
+            "observation": "viewState + watch + fresh"
+          },
+          "expected": {
+            "initial": {
+              "conversation": {
+                "id": 1
+              },
+              "entries": 0,
+              "docs": [
+                "pi.agent",
+                "pi.inbox",
+                "pi.live",
+                "pi.provider",
+                "pi.usage"
+              ],
+              "live": {},
+              "inbox": {
+                "items": []
+              }
+            },
+            "frames": 3,
+            "firstFrameOps": [
+              "s",
+              "p"
+            ],
+            "final": {
+              "entries": [
+                [
+                  "pi.user",
+                  "hi"
+                ],
+                [
+                  "pi.assistant",
+                  [
+                    {
+                      "type": "text",
+                      "text": "hello"
+                    }
+                  ]
+                ]
+              ],
+              "docs": [
+                "pi.agent",
+                "pi.inbox",
+                "pi.live",
+                "pi.provider",
+                "pi.usage"
+              ],
+              "live": {},
+              "inbox": {
+                "items": []
+              }
+            }
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+          ]
+        },
+        {
+          "name": "the agent event stream reports run, turn, message, tool and submission lifecycle in order",
+          "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+          "inputs": {
+            "turn": [
+              "go",
+              "print tool then done"
+            ],
+            "tool": "print"
+          },
+          "expected": {
+            "snapshot": {
+              "type": "snapshot",
+              "entries": 0,
+              "tools": [],
+              "inbox": []
+            },
+            "distinctTypes": [
+              "message_start",
+              "message_end",
+              "submission",
+              "run_start",
+              "turn_start",
+              "message_start",
+              "message_end",
+              "message_start",
+              "message_end",
+              "usage_changed",
+              "tool_execution_start",
+              "tool_execution_update",
+              "tool_execution_end",
+              "message_start",
+              "message_end",
+              "turn_end",
+              "turn_start",
+              "message_start",
+              "message_end",
+              "turn_end",
+              "run_end",
+              "submission",
+              "usage_changed"
+            ],
+            "counts": {
+              "run_start": 1,
+              "run_end": 1,
+              "turn_start": 2,
+              "turn_end": 2,
+              "submission": 2
+            },
+            "toolStart": {
+              "toolCallId": "c1",
+              "toolName": "print",
+              "args": {
+                "n": 1
+              }
+            },
+            "toolEnd": {
+              "toolCallId": "c1",
+              "toolName": "print",
+              "entryKind": "pi.tool-result"
+            },
+            "endFollowedByResultMessage": [
+              "message_start",
+              "message_end"
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+          ]
+        },
+        {
+          "name": "context with an entry cursor returns the same committed view a fork would start from",
+          "source": "packages/durable/src/harness/harness.ts:ConversationImpl.context;packages/durable/src/harness/context.ts:readContext",
+          "inputs": {
+            "turns": [
+              "u1",
+              "u2"
+            ],
+            "at": "first entry"
+          },
+          "expected": {
+            "atEntry": {
+              "entries": [
+                [
+                  "pi.user",
+                  "u1"
+                ]
+              ],
+              "messages": [
+                "u1"
+              ],
+              "head": null
+            },
+            "forkStartsWith": [
+              [
+                "pi.user",
+                "u1"
+              ]
+            ],
+            "rootHasBothTurns": true
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "environment.json",
+      "family": "audit-1056",
+      "bytes": 8831,
+      "sha256": "46143667f23d728c6ee901d8d9b02fa6dda032f0748c3f49e3e28de438e71824",
+      "sourceEndpoints": [
+        "packages/durable/src/env/node.ts:NodeExecutionEnv",
+        "packages/durable/src/tools/index.ts:createCodingTools",
+        "packages/durable/src/tools/bash.ts:createBashTool",
+        "packages/durable/src/tools/read.ts:readImage",
+        "packages/durable/src/tools/image.ts:detectSupportedImageMimeType",
+        "packages/durable/src/images/node.ts:createNodePhotonImages"
+      ],
+      "scenarios": [
+        {
+          "name": "the real Node ExecutionEnv reads, appends, lists, executes split streams and reports timeout",
+          "source": "packages/durable/src/env/node.ts:NodeExecutionEnv;packages/durable/src/env/index.ts:ExecutionEnv",
+          "inputs": {
+            "root": "temporary directory",
+            "shell": "printf stdout/stderr then exit 3",
+            "timeoutSeconds": 0.1
+          },
+          "expected": {
+            "absolutePathIsUnderRoot": true,
+            "absoluteBasename": "file.txt",
+            "text": "hello",
+            "lines": [
+              "hello"
+            ],
+            "file": {
+              "kind": "file",
+              "size": 5
+            },
+            "dir": [
+              [
+                "file.txt",
+                "file"
+              ]
+            ],
+            "missing": {
+              "ok": false,
+              "code": "not_found",
+              "message": "ENOENT: no such file or directory, open '<root>/missing.txt'"
+            },
+            "shell": {
+              "exitCode": 3,
+              "stdout": "out\n",
+              "stderr": "err\n"
+            },
+            "direct": 0,
+            "timeout": {
+              "ok": false,
+              "code": "timeout",
+              "message": "timeout:0.1"
+            },
+            "tempDirPrefix": true
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values",
+            "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+          ]
+        },
+        {
+          "name": "the built-in read, write, edit and bash tools run over a real injected local environment",
+          "source": "packages/durable/src/tools/index.ts:createCodingTools;packages/durable/src/tools/bash.ts:createBashTool;packages/durable/src/harness/types.ts:ToolExecutionApi.env",
+          "inputs": {
+            "toolRound": [
+              "write notes.txt",
+              "read notes.txt",
+              "edit alpha->omega",
+              "read notes.txt",
+              "bash cat notes.txt"
+            ],
+            "environment": "NodeExecutionEnv over a temporary directory"
+          },
+          "expected": {
+            "settled": "done",
+            "tools": [
+              {
+                "callId": "w1",
+                "toolName": "write",
+                "isError": false,
+                "text": "Successfully wrote to notes.txt"
+              },
+              {
+                "callId": "r1",
+                "toolName": "read",
+                "isError": false,
+                "text": "alpha\n"
+              },
+              {
+                "callId": "e1",
+                "toolName": "edit",
+                "isError": false,
+                "text": "Successfully replaced 1 block(s) in notes.txt."
+              },
+              {
+                "callId": "r2",
+                "toolName": "read",
+                "isError": false,
+                "text": "omega\n"
+              },
+              {
+                "callId": "b1",
+                "toolName": "bash",
+                "isError": false,
+                "text": "omega\n"
+              }
+            ],
+            "fileOnDisk": "omega\n"
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values",
+            "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+          ]
+        },
+        {
+          "name": "the Photon image processor passes an upright inline image through and resizes one over the limits",
+          "source": "packages/durable/src/images/node.ts:createNodePhotonImages;packages/durable/src/images/index.ts:createPhotonImages",
+          "inputs": {
+            "source": "40x20 RGBA PNG",
+            "limits": [
+              "default 2000x2000",
+              "10x10 with 1MiB base64"
+            ],
+            "invalidBytes": 4
+          },
+          "expected": {
+            "sourceBytes": 1897,
+            "asIs": {
+              "mimeType": "image/png",
+              "base64Length": 2532,
+              "sameAsSource": true,
+              "resized": null,
+              "convertedFrom": null
+            },
+            "shrunk": {
+              "mimeType": "image/png",
+              "base64Length": 216,
+              "resized": {
+                "from": {
+                  "width": 40,
+                  "height": 20
+                },
+                "to": {
+                  "width": 10,
+                  "height": 5
+                }
+              }
+            },
+            "invalid": null
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values",
+            "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+          ]
+        },
+        {
+          "name": "the read tool returns a resized image content block with its coordinate-mapping diagnostic",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image-processor.ts:ImageProcessor",
+          "inputs": {
+            "file": "40x20 PNG",
+            "modelImageLimit": "10x10",
+            "processor": "Photon, calling thread"
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "base64Length": 216
+              },
+              {
+                "type": "text",
+                "text": "<harness>\n[info] Read image file [image/png]. Resized from 40x20 to 10x5. Multiply coordinates by 4.00 to map them to the original.\n</harness>"
+              }
+            ],
+            "diagnostics": null
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values",
+            "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+          ]
+        },
+        {
+          "name": "reading a BMP without an image processor is an explicit unsupported-image result",
+          "source": "packages/durable/src/tools/read.ts:createReadTool,readImage;packages/durable/src/tools/image.ts:detectSupportedImageMimeType",
+          "inputs": {
+            "file": "1x1 24-bit BMP",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": true,
+            "content": [
+              {
+                "type": "text",
+                "text": "<harness>\n[error] image.bmp is an image (image/bmp) that needs converting, and no image processor is configured\n</harness>"
+              }
+            ],
+            "diagnostics": null
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values",
+            "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+          ]
+        },
+        {
+          "name": "an inline image within the limits passes through unchanged without a processor",
+          "source": "packages/durable/src/tools/read.ts:readImage;packages/durable/src/tools/image.ts:imageDimensions",
+          "inputs": {
+            "file": "2x2 PNG",
+            "processor": "none"
+          },
+          "expected": {
+            "isError": false,
+            "content": [
+              {
+                "type": "image",
+                "mimeType": "image/png",
+                "base64Length": 112
+              },
+              {
+                "type": "text",
+                "text": "<harness>\n[info] Read image file [image/png].\n</harness>"
+              }
+            ],
+            "originalBase64Length": 112,
+            "diagnostics": null
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values",
+            "temporary directory roots are omitted; the missing-file diagnostic replaces one with <root>"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "codemode-toolsearch.json",
+      "family": "audit-1056",
+      "bytes": 5603,
+      "sha256": "0a8e8fc8f0bce061517542a0eede0ab231c53941b396828f27b455b506776473",
+      "sourceEndpoints": [
+        "packages/durable/src/codemode/codemode.ts:createCodemodeTool",
+        "packages/durable/src/codemode/codemode.ts:CodemodeStoreDoc",
+        "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
+        "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool",
+        "packages/durable/src/harness/tool.ts:ToolTask",
+        "packages/durable/test/codemode.test.ts:code mode",
+        "packages/durable/test/tool-search.test.ts:deferred tools"
+      ],
+      "scenarios": [
+        {
+          "name": "code mode runs a script that calls a real nested tool and keeps its store across turns",
+          "source": "packages/durable/src/codemode/codemode.ts:createCodemodeTool,CodemodeStoreDoc;packages/codemode/src/runtime/host.ts:CodemodeSandbox",
+          "inputs": {
+            "scripts": [
+              "double 21 then store",
+              "load the stored answer"
+            ],
+            "sandbox": "CodemodeSandbox QuickJS"
+          },
+          "expected": {
+            "calls": [
+              {
+                "isError": false,
+                "text": "Script completed\nWall time <seconds>\nOutput:\n42",
+                "details": {
+                  "calls": [
+                    {
+                      "id": 1,
+                      "name": "double",
+                      "args": "{\"n\":21}",
+                      "status": "ok",
+                      "durationPresent": true
+                    }
+                  ],
+                  "fullOutputPathPresent": false
+                }
+              },
+              {
+                "isError": false,
+                "text": "Script completed\nWall time <seconds>\nOutput:\n42",
+                "details": {
+                  "calls": [],
+                  "fullOutputPathPresent": false
+                }
+              }
+            ],
+            "store": {
+              "values": {
+                "answer": "42"
+              }
+            }
+          },
+          "normalizations": [
+            "wall time replaced by <seconds>",
+            "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+          ]
+        },
+        {
+          "name": "a failed code mode script reports its error and the nested calls already made",
+          "source": "packages/durable/src/codemode/codemode.ts:CodemodeCall.execute;packages/durable/src/codemode/output.ts:formatResult",
+          "inputs": {
+            "script": "call double then throw boom"
+          },
+          "expected": {
+            "isError": true,
+            "text": "Script failed\nWall time <seconds>\nOutput:\nScript error:\nError: boom\n    at <anonymous> (codemode.js:1:69)\n\nTool calls made before the failure (they are not undone): double (ok)",
+            "details": {
+              "calls": [
+                {
+                  "id": 1,
+                  "name": "double",
+                  "args": "{\"n\":2}",
+                  "status": "ok",
+                  "durationPresent": true
+                }
+              ],
+              "fullOutputPathPresent": false
+            }
+          },
+          "normalizations": [
+            "wall time replaced by <seconds>",
+            "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+          ]
+        },
+        {
+          "name": "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+          "source": "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool;packages/durable/src/harness/tool.ts:ToolTask",
+          "inputs": {
+            "query": "github issue",
+            "limit": 1,
+            "deferred": [
+              "github_get_issue",
+              "github_list_repos"
+            ]
+          },
+          "expected": {
+            "offeredBefore": [
+              "alpha",
+              "tool_search"
+            ],
+            "deferredBefore": [
+              "github_get_issue",
+              "github_list_repos"
+            ],
+            "searchResult": "Loaded 1 tool. They are available from your next call:\n- github_get_issue: Get a GitHub issue by number",
+            "toolResult": "github_get_issue ran",
+            "offeredAfter": [
+              "alpha",
+              "tool_search",
+              "github_get_issue"
+            ],
+            "deferredAfter": [
+              "github_list_repos"
+            ],
+            "modelTools": {
+              "add": [
+                "github_get_issue"
+              ]
+            },
+            "systemToolsAdded": [
+              {
+                "added": [
+                  "alpha",
+                  "tool_search"
+                ],
+                "removed": []
+              },
+              {
+                "added": [
+                  "github_get_issue"
+                ],
+                "removed": []
+              }
+            ]
+          },
+          "normalizations": [
+            "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+          ]
+        },
+        {
+          "name": "an unrelated tool_search query loads nothing and leaves the offered set unchanged",
+          "source": "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool",
+          "inputs": {
+            "query": "weather forecast",
+            "deferred": [
+              "github_get_issue"
+            ]
+          },
+          "expected": {
+            "searchResult": "No matching tools found.",
+            "modelTools": null,
+            "offered": [
+              "tool_search"
+            ],
+            "assistantText": "done"
+          },
+          "normalizations": [
+            "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "generation-storage.json",
+      "family": "audit-1056",
+      "bytes": 3363,
+      "sha256": "035ec08f79b623fe62a8c2a5ed0a59e2ea8734e0a435997a97446d079ad31d43",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/generation.ts:GenerationTask",
+        "packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY",
+        "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage",
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage"
+      ],
+      "scenarios": [
+        {
+          "name": "a retryable provider error is appended and the same run retries to a completed answer",
+          "source": "packages/durable/src/harness/generation.ts:GenerationTask.#response;packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY",
+          "inputs": {
+            "responses": [
+              "rate limit exceeded",
+              "recovered"
+            ],
+            "retry": {
+              "enabled": true,
+              "maxRetries": 2,
+              "baseDelayMs": 1,
+              "maxAgentDelayMs": 1000
+            }
+          },
+          "expected": {
+            "status": "done",
+            "callCount": 2,
+            "entries": [
+              [
+                "pi.user",
+                "go"
+              ],
+              [
+                "pi.assistant",
+                ""
+              ],
+              [
+                "pi.assistant",
+                "recovered"
+              ]
+            ],
+            "assistant": [
+              {
+                "stopReason": "error",
+                "errorMessage": "rate limit exceeded",
+                "text": ""
+              },
+              {
+                "stopReason": "stop",
+                "errorMessage": null,
+                "text": "recovered"
+              }
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "the retry delay is configured to 1ms; no wall-clock wait is recorded"
+          ]
+        },
+        {
+          "name": "JSONL storage writes its files and reopens the same conversation and transcript",
+          "source": "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage;packages/durable/src/storage/jsonl/storage.ts:JsonlStorage",
+          "inputs": {
+            "storage": "node:jsonl directory",
+            "turn": [
+              "jsonl question",
+              "jsonl answer"
+            ],
+            "reopen": true
+          },
+          "expected": {
+            "files": [
+              "doc-2.jsonl",
+              "doc-3.jsonl",
+              "doc-4.jsonl",
+              "doc-5.jsonl",
+              "doc-6.jsonl",
+              "main.jsonl"
+            ],
+            "before": [
+              [
+                "pi.user",
+                "jsonl question"
+              ],
+              [
+                "pi.assistant",
+                "jsonl answer"
+              ]
+            ],
+            "after": [
+              [
+                "pi.user",
+                "jsonl question"
+              ],
+              [
+                "pi.assistant",
+                "jsonl answer"
+              ]
+            ],
+            "rootId": 1
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "the retry delay is configured to 1ms; no wall-clock wait is recorded"
+          ]
+        }
+      ]
+    }
+  ]
+}

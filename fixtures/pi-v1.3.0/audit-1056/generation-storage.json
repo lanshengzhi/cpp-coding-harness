@@ -1,0 +1,121 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/generation.ts:GenerationTask",
+    "packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY",
+    "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage",
+    "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage"
+  ],
+  "scenarios": [
+    {
+      "name": "a retryable provider error is appended and the same run retries to a completed answer",
+      "source": "packages/durable/src/harness/generation.ts:GenerationTask.#response;packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY",
+      "inputs": {
+        "responses": [
+          "rate limit exceeded",
+          "recovered"
+        ],
+        "retry": {
+          "enabled": true,
+          "maxRetries": 2,
+          "baseDelayMs": 1,
+          "maxAgentDelayMs": 1000
+        }
+      },
+      "expected": {
+        "status": "done",
+        "callCount": 2,
+        "entries": [
+          [
+            "pi.user",
+            "go"
+          ],
+          [
+            "pi.assistant",
+            ""
+          ],
+          [
+            "pi.assistant",
+            "recovered"
+          ]
+        ],
+        "assistant": [
+          {
+            "stopReason": "error",
+            "errorMessage": "rate limit exceeded",
+            "text": ""
+          },
+          {
+            "stopReason": "stop",
+            "errorMessage": null,
+            "text": "recovered"
+          }
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "the retry delay is configured to 1ms; no wall-clock wait is recorded"
+      ]
+    },
+    {
+      "name": "JSONL storage writes its files and reopens the same conversation and transcript",
+      "source": "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage;packages/durable/src/storage/jsonl/storage.ts:JsonlStorage",
+      "inputs": {
+        "storage": "node:jsonl directory",
+        "turn": [
+          "jsonl question",
+          "jsonl answer"
+        ],
+        "reopen": true
+      },
+      "expected": {
+        "files": [
+          "doc-2.jsonl",
+          "doc-3.jsonl",
+          "doc-4.jsonl",
+          "doc-5.jsonl",
+          "doc-6.jsonl",
+          "main.jsonl"
+        ],
+        "before": [
+          [
+            "pi.user",
+            "jsonl question"
+          ],
+          [
+            "pi.assistant",
+            "jsonl answer"
+          ]
+        ],
+        "after": [
+          [
+            "pi.user",
+            "jsonl question"
+          ],
+          [
+            "pi.assistant",
+            "jsonl answer"
+          ]
+        ],
+        "rootId": 1
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "the retry delay is configured to 1ms; no wall-clock wait is recorded"
+      ]
+    }
+  ]
+}

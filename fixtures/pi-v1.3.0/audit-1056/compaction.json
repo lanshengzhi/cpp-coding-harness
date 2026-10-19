@@ -1,0 +1,216 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/compaction.ts:CompactionTask",
+    "packages/durable/src/harness/harness.ts:ConversationImpl.compact",
+    "packages/durable/src/harness/generation.ts:#prepare",
+    "packages/durable/test/harness-compaction.test.ts:compaction policy"
+  ],
+  "scenarios": [
+    {
+      "name": "manual compaction summarizes old context, keeps raw history, and places one summary marker at the cut",
+      "source": "packages/durable/src/harness/compaction.ts:CompactionTask;packages/durable/src/harness/harness.ts:ConversationImpl.compact",
+      "inputs": {
+        "turns": [
+          "u1/a1",
+          "u2/a2",
+          "u3/a3"
+        ],
+        "tokensPerMessage": 100,
+        "instructions": "focus on files",
+        "modelWindow": 100000,
+        "compaction": {
+          "enabled": false,
+          "reserveTokens": 1000,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 0
+        }
+      },
+      "expected": {
+        "outcome": "completed",
+        "placed": {
+          "status": "done",
+          "entryMatchesMarker": true
+        },
+        "rawHistoryPreserved": [
+          [
+            "pi.user",
+            "u1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "pi.assistant",
+            "a1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "pi.user",
+            "u2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "pi.assistant",
+            "a2 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "pi.user",
+            "u3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ],
+          [
+            "pi.assistant",
+            "a3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ]
+        ],
+        "marker": {
+          "kind": "pi.compaction",
+          "reason": "manual",
+          "headKind": "pi.user",
+          "text": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>"
+        },
+        "context": {
+          "roles": [
+            "user",
+            "user",
+            "assistant"
+          ],
+          "texts": [
+            "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>",
+            "u3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+            "a3 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+          ]
+        },
+        "summaryRequest": {
+          "messages": 2,
+          "firstPromptStartsWith": "<conversation>\n[User",
+          "containsA2": true,
+          "excludesU3": true,
+          "endsWithFocus": true,
+          "options": {
+            "cacheRetention": "none",
+            "maxTokens": 800,
+            "sessionIdPresent": true,
+            "deferred": null
+          }
+        },
+        "usageIncreased": true
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "summary text is the scripted model output"
+      ]
+    },
+    {
+      "name": "a blocking threshold compaction appends its summary before the request it protects",
+      "source": "packages/durable/src/harness/compaction.ts:CompactionTask,#prepare;packages/durable/src/harness/generation.ts:#prepare",
+      "inputs": {
+        "turns": [
+          "u1/a1",
+          "u2/a2",
+          "u3/a3",
+          "u4/a4"
+        ],
+        "tokensPerMessage": [
+          100,
+          100,
+          100,
+          200
+        ],
+        "modelWindow": 1000,
+        "compaction": {
+          "enabled": true,
+          "reserveTokens": 300,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 0
+        }
+      },
+      "expected": {
+        "settled": "done",
+        "tailKinds": [
+          "pi.compaction",
+          "pi.system",
+          "pi.assistant"
+        ],
+        "compactionTask": [],
+        "marker": [
+          {
+            "reason": "threshold",
+            "text": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>"
+          }
+        ],
+        "request": {
+          "firstUserText": "The conversation history before this point was compacted into the following summary:\n\n<summary>\nSUMMARY\n</summary>",
+          "systemSections": [
+            []
+          ]
+        }
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "summary text is the scripted model output"
+      ]
+    },
+    {
+      "name": "a compaction beforeCompact hook can decline the cut and the request goes out uncompacted",
+      "source": "packages/durable/src/harness/compaction.ts:CompactionTask.beforeCompact;packages/durable/src/harness/types.ts:CompactionHooks",
+      "inputs": {
+        "compaction": {
+          "enabled": true,
+          "reserveTokens": 300,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 0
+        },
+        "hook": "beforeCompact -> {decline:true}",
+        "extraTurnTokens": 200
+      },
+      "expected": {
+        "settled": "done",
+        "markers": 0,
+        "firstUserText": "u1 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "summaryRequests": 0
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "summary text is the scripted model output"
+      ]
+    },
+    {
+      "name": "manual compaction with no eligible cut completes without a summary or a marker",
+      "source": "packages/durable/src/harness/compaction.ts:#selectCut,CompactionTask",
+      "inputs": {
+        "turn": [
+          "hello",
+          "hi"
+        ],
+        "instructions": null,
+        "compaction": {
+          "enabled": false,
+          "reserveTokens": 1000,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 0
+        }
+      },
+      "expected": {
+        "outcome": {
+          "status": "completed",
+          "result": {}
+        },
+        "markers": 0,
+        "summaryRequests": 0
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "summary text is the scripted model output"
+      ]
+    }
+  ]
+}
