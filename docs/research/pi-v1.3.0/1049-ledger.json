@@ -1,0 +1,530 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-ledger/1",
+  "ticket": "1049",
+  "title": "Resources, configuration, native extensions and print mode",
+  "baseline": {
+    "name": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+    "platform": "linux-x86_64-glibc"
+  },
+  "evidence": {
+    "family": "audit-1049",
+    "manifest": "fixtures/pi-v1.3.0/audit-1049/manifest.json",
+    "report": "docs/research/pi-v1.3.0/1049-resources-configuration-extensions-print-mode.md"
+  },
+  "statusVocabulary": {
+    "membership": [
+      "supported",
+      "excluded",
+      "no-decision"
+    ],
+    "implementation": [
+      "implemented",
+      "partial",
+      "missing"
+    ],
+    "verification": [
+      "verified",
+      "upstream-captured",
+      "unverified",
+      "not-applicable"
+    ]
+  },
+  "rows": [
+    {
+      "id": "prompt-quoted-empty",
+      "capability": "Prompt template argument quoting",
+      "operation": "`/name <args>` parses quoted arguments before `$1..$N`, `$@` and `${N:-default}` substitution; `\"\"` and `''` are retained as empty positional arguments and therefore do not shift later positions.",
+      "consumer": "`prompt-templates.ts:parseCommandArgs` and `expandPromptTemplate`; the session consumes the expansion in `AgentSession.prompt` before the model call.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/prompt-templates.ts:parseCommandArgs,substituteArgs,expandPromptTemplate",
+          "packages/coding-agent/src/core/agent-session.ts:prompt",
+          "packages/coding-agent/test/prompt-templates.test.ts:expandPromptTemplate"
+        ],
+        "scenarios": [
+          "quoted-empty arguments are retained by the prompt argument parser",
+          "quoted-empty argument does not shift positional defaults in template expansion",
+          "session prompt expands the quoted-empty template before the model call"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/prompt/PromptTemplateExpander.cpp:parse_command_args` and `try_expand_prompt_template`.",
+      "cppEvidence": "`tests/coding_agent/PromptTemplateProcessingTest.cpp:85-90` expects the shifted `$10` result (`[][ten]`) instead of upstream's `[][j]` with the same input; the parser only pushes a token when `current` is non-empty.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Track whether a token started, not whether its buffer is non-empty, and add the captured quoted-empty cases to the prompt processing test. Do not change the documented substitution forms in the same fix.",
+      "blockers": []
+    },
+    {
+      "id": "prompt-substitution-forms",
+      "capability": "Prompt template positional, collection, default and slice substitution",
+      "operation": "`$1..$N`, `$@`, `$ARGUMENTS`, `${N:-default}`, `${@:-default}`/`${ARGUMENTS:-default}`, `${@:N}` and `${@:N:L}` substitution without recursive expansion.",
+      "consumer": "`prompt-templates.ts:substituteArgs`; the expanded text becomes the user message in `AgentSession.prompt`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/prompt-templates.ts:parseCommandArgs,substituteArgs,expandPromptTemplate"
+        ],
+        "scenarios": [
+          "positional, collection and default substitution forms",
+          "quoted-empty argument does not shift positional defaults in template expansion"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/prompt/PromptTemplateExpander.cpp:substitute_args`.",
+      "cppEvidence": "Positional, collection, `${N:-default}`, `${@:N}` and `${@:N:L}` are implemented and tested in `tests/coding_agent/PromptTemplateProcessingTest.cpp:31-60`. The C++ branch handles `${...}` defaults only when the left side is numeric; `${@:-...}` and `${ARGUMENTS:-...}` are absent, while upstream retains them (`substituteArgs` scenario).",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add the two collection-default forms after the quoted-empty parser fix. Keep the existing no-recursive-expansion contract.",
+      "blockers": []
+    },
+    {
+      "id": "prompt-template-resources",
+      "capability": "Prompt template discovery and explicit prompt paths",
+      "operation": "Load prompt templates from the agent/project `.pi/prompts` sources and explicit CLI prompt-template paths; a template named `review` expands `/review ...` at the session boundary.",
+      "consumer": "`DefaultResourceLoader` prompt selection and the CLI `--prompt-template` path; `AgentSession.prompt` expands the loaded template.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/resource-loader.ts:DefaultResourceLoader",
+          "packages/coding-agent/src/core/prompt-templates.ts:expandPromptTemplate"
+        ],
+        "scenarios": [
+          "session prompt expands the quoted-empty template before the model call",
+          "explicit resource paths load prompts, skills and themes"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/ProjectResourceLoader.cpp` prompt discovery plus the CLI `--prompt-template` path (`src/coding_agent/cli/CliParse.cpp:528`); expansion lives in `PromptExpansion.cpp`.",
+      "cppEvidence": "`tests/coding_agent/ProjectResourceLoaderTest.cpp:271-350` covers `--no-prompt-templates`, explicit prompt inputs and precedence; `tests/coding_agent/PromptTemplateLoaderTest.cpp` covers loading.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "None for discovery; the quoted-empty expansion gap is tracked separately.",
+      "blockers": []
+    },
+    {
+      "id": "context-file-candidate-order",
+      "capability": "Project context-file candidate selection",
+      "operation": "The first existing regular file among `AGENTS.override.md`, `AGENTS.md`, `AGENTS.MD`, `CLAUDE.md`, `CLAUDE.MD` wins in each directory; ancestor files load root-to-leaf and the agent-config file loads first.",
+      "consumer": "`resource-loader.ts:loadContextFileFromDir` and `loadProjectContextFiles`, consumed by `DefaultResourceLoader.getAgentsFiles` and the system-prompt project-context section.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/resource-loader.ts:loadProjectContextFiles",
+          "packages/coding-agent/src/core/resource-loader.ts:DefaultResourceLoader"
+        ],
+        "scenarios": [
+          "AGENTS.override.md wins over AGENTS.md and ancestor context is root-to-leaf"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/ProjectResourceLoader.cpp:38` `kContextFileCandidates`.",
+      "cppEvidence": "The C++ array has four candidates and starts at `AGENTS.md`; `AGENTS.override.md` is absent. `tests/coding_agent/ProjectResourceLoaderTest.cpp:1086` only checks that `AGENTS.md` wins over `CLAUDE.md`, so the existing suite cannot distinguish the override case.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add `AGENTS.override.md` as the first candidate and add the captured override-vs-AGENTS.md case. This is a v1.3.0 context-loader delta, not a new resource surface.",
+      "blockers": []
+    },
+    {
+      "id": "context-worktree-shadowing",
+      "capability": "Nested linked-worktree context-file shadowing",
+      "operation": "When cwd is inside a linked worktree nested under the main repository, the worktree's context file shadows the main repo's same-named file; the main repo copy is not loaded twice. Symlinked worktree paths are compared by canonical directory path.",
+      "consumer": "`resource-loader.ts:findShadowedContextFile` and `loadProjectContextFiles`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/resource-loader.ts:loadProjectContextFiles",
+          "packages/coding-agent/src/utils/paths.ts:resolvePath,isLocalPath"
+        ],
+        "scenarios": [
+          "nested linked worktree shadows the main repo context file",
+          "worktree context file symlink is loaded once and not duplicated from the main repo"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/ProjectResourceLoader.cpp:568-650` `find_shadowed_context_file_task` and the canonicalized ancestor walk.",
+      "cppEvidence": "`tests/coding_agent/ProjectResourceLoaderTest.cpp:1181-1209` covers the nested-worktree copy; `:1211-1260` covers the no-worktree-copy and different-filename dedupe cases. The C++ test uses a synthetic git layout, while the capture uses real `git worktree add` metadata.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "None. Keep the existing dedupe tests as the comparison seed; the capture adds real git metadata and the symlink observation.",
+      "blockers": []
+    },
+    {
+      "id": "resource-path-modifiers",
+      "capability": "Local resource path modifiers",
+      "operation": "Resolve explicit resource paths with tilde expansion, leading `@` handling, Unicode-space normalization, relative/absolute normalization and `file:` URL conversion; package-source prefixes (`git:`, `npm:`, `github:`, `http(s):`, `ssh:`, `builtin:`) bypass local resolution.",
+      "consumer": "`utils/paths.ts:resolvePath,isLocalPath` and `main.ts:resolveCliPaths` for `--extensions/--skills/--prompt-templates/--themes`; `InitialPrompt` separately handles `@file` and tilde expansion.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/utils/paths.ts:resolvePath,isLocalPath",
+          "packages/coding-agent/src/main.ts:resolveCliPaths"
+        ],
+        "scenarios": [
+          "local path modifiers expand tilde and strip a leading @",
+          "package source prefixes bypass local path resolution"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/WorkspacePathResolution.cpp:resolve_to_cwd` (Unicode spaces, leading `@`, `~`/`$HOME`, absolute/relative lexical resolution). Explicit `--skill`/`--prompt-template`/`--theme` paths call `absolutePath`, which uses this operation.",
+      "cppEvidence": "The C++ operation implements Unicode-space normalization, `@` stripping and `~` expansion and is used by explicit resource paths. It deliberately does not convert `file:` URLs (`resolve_to_cwd` comment and ADR 0057); upstream `resolvePath` converts them. Upstream `resolveCliPaths` calls `resolvePath` without `stripAtPrefix`, so upstream keeps a literal leading `@` for these resource flags, while C++ strips it by ADR 0057.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Record the file-URL exclusion as ADR 0057 authority and do not add a URL path seam in this ticket. Decide separately whether the resource-flag `@` divergence needs an owner ruling; the current `@` behavior is the supported filesystem contract, not an accidental parser gap.",
+      "blockers": [
+        "file: URL conversion is explicitly excluded by ADR 0057.",
+        "The resource-flag `@` outcome differs between upstream `resolveCliPaths` and the C++ `resolveToCwd` seam; no accepted comparison yet."
+      ]
+    },
+    {
+      "id": "resource-explicit-sources",
+      "capability": "Explicit skill, prompt-template and theme path sources",
+      "operation": "Explicit paths load resources in addition to discovery; `--no-skills`, `--no-prompt-templates` and `--no-themes` drop discovery but keep explicit inputs.",
+      "consumer": "`DefaultResourceLoader` additional paths and the C++ `--skill`, `--prompt-template`, `--theme` flags.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/resource-loader.ts:DefaultResourceLoader",
+          "packages/coding-agent/src/main.ts:resolveCliPaths"
+        ],
+        "scenarios": [
+          "explicit resource paths load prompts, skills and themes"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/cli/CliParse.cpp:528-550`, `ProjectResourceLoader.cpp:1107-1205` and `tests/coding_agent/ProjectResourceLoaderTest.cpp:163-350,802-875`.",
+      "cppEvidence": "The C++ flags are singular (`--skill`, `--prompt-template`, `--theme`); the upstream plural flags are the same resource families. `--extensions`/`--no-extensions` are deliberately absent per ADR 0036 G1, and no arbitrary extension path source exists.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the existing flag spelling; do not add `--extensions` as part of this audit.",
+      "blockers": []
+    },
+    {
+      "id": "settings-schema",
+      "capability": "Published settings schema shape",
+      "operation": "The published `SettingsSchema` accepts the supported field shape and unknown top-level keys, and rejects invalid enum/range values; it includes resource-source fields (`packages`, `extensions`, `skills`, `prompts`, `themes`) and model/thinking/compaction/retry fields.",
+      "consumer": "`settings-schema.ts:SettingsSchema` (generated JSON Schema / repository config artifact), not the runtime `SettingsManager` loader.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/settings-schema.ts:SettingsSchema",
+          "packages/coding-agent/src/core/settings-manager.ts:SettingsManager"
+        ],
+        "scenarios": [
+          "settings schema accepts the supported shape and unknown top-level keys",
+          "settings schema rejects invalid thinking level and negative compaction reserve"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/include/cch/coding_agent/Settings.hpp:UserSettings` and `src/coding_agent/SettingsManager.cpp:parse_settings` manual field parsing; there is no generated C++ `SettingsSchema` counterpart.",
+      "cppEvidence": "The C++ subset has typed fields for the model/thinking/session/shell/theme/compaction/retry/presentation values and rejects an invalid `defaultThinkingLevel` (`tests/coding_agent/SettingsManagerTest.cpp:195`). It does not describe the upstream resource-source fields or publish a schema.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "If a machine-readable C++ settings contract is needed, generate it from the supported C++ fields; do not adopt the upstream schema wholesale because `packages`/`extensions` markers are explicitly deleted.",
+      "blockers": []
+    },
+    {
+      "id": "settings-runtime",
+      "capability": "Settings runtime consumption and reload",
+      "operation": "`SettingsManager.create` merges global and project scopes; reads package sources and local resource path lists; reads model/thinking/enabled-model/compaction/retry fields; `reload()` re-reads changed values.",
+      "consumer": "`settings-manager.ts:SettingsManager` and the resource loader's settings-backed path selection.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/settings-manager.ts:SettingsManager",
+          "packages/coding-agent/src/core/resource-loader.ts:DefaultResourceLoader"
+        ],
+        "scenarios": [
+          "settings manager reads package and local resource paths and reloads changed values",
+          "settings manager consumes values the published schema rejects"
+        ]
+      },
+      "cppSeam": "`SettingsManager::create`/`reload` (`src/coding_agent/SettingsManager.cpp:382,1067`) and the two-scope merge; `UserSettings` fields.",
+      "cppEvidence": "C++ consumes the model/thinking/session/shell/theme/compaction/retry subset and reloads both scopes; `tests/coding_agent/SettingsManagerTest.cpp:437` covers reload. C++ does not consume upstream `packages`, `extensions`, `prompts`, `themes` or a `skills` path list. Unknown fields are preserved on surgical writes but ignored by the typed view (`:84`).",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Split this row before any implementation: model/thinking/compaction/retry/theme-name reload is implemented; resource-source fields are either deleted (`packages`/`extensions`) or unruled (`prompts`/`themes`/`skills` path lists). Keep only the currently supported provider/model selection; this audit does not restore retired provider or model settings.",
+      "blockers": [
+        "`packages` and `extensions` resource markers are explicitly deleted by ADR 0036 G4.",
+        "`prompts`, `themes` and `skills` settings path lists have no owner ruling for the C++ application."
+      ]
+    },
+    {
+      "id": "settings-runtime-validation",
+      "capability": "Settings runtime versus published-schema validation",
+      "operation": "The runtime `SettingsManager` consumes a stored `defaultThinkingLevel: \"bogus\"` and spreads a string `packages` value into characters, even though `SettingsSchema` rejects both shapes.",
+      "consumer": "`settings-manager.ts` runtime getters, independent of `settings-schema.ts`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/settings-manager.ts:SettingsManager",
+          "packages/coding-agent/src/core/settings-schema.ts:SettingsSchema"
+        ],
+        "scenarios": [
+          "settings manager consumes values the published schema rejects"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/SettingsManager.cpp:parse_settings` validates selected fields (`defaultThinkingLevel`) and has no `packages` consumer.",
+      "cppEvidence": "C++ is not a copy of the upstream runtime bug: it rejects invalid thinking levels (`SettingsManagerTest.cpp:195`) and does not parse `packages`. Do not add validation behavior to match this upstream runtime acceptance.",
+      "status": {
+        "membership": "excluded",
+        "implementation": "not-applicable",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Use `SettingsSchema` as the validation reference where a C++ schema is needed; do not mirror the runtime's unvalidated consumption.",
+      "blockers": []
+    },
+    {
+      "id": "keybindings-config",
+      "capability": "Keybindings configuration parsing, migration and diagnostics",
+      "operation": "Load `<agentDir>/keybindings.json` with BOM stripping, legacy-name migration, valid-key filtering, unknown-action retention, conflict reporting and replace-all user binding semantics.",
+      "consumer": "`keybindings.ts:KeybindingsManager.create`/`getEffectiveConfig`; the interactive TUI dispatcher consumes the resolved registry.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/keybindings.ts:KeybindingsManager",
+          "packages/coding-agent/src/core/keybindings-schema.ts:KeybindingsSchema"
+        ],
+        "scenarios": [
+          "keybindings schema accepts unknown action ids with valid keys and rejects malformed values",
+          "keybindings manager migrates legacy names, keeps unknown actions, drops invalid values and reloads"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/tui/KeybindingsManager.cpp:load_keybindings_manager` and the diagnostics at `:301,321`; table in `app_keybinding_definitions`.",
+      "cppEvidence": "C++ reads only the Agent Config Directory, migrates known names, validates values, bounds diagnostics and reports conflicts. It diagnoses `unknown_action`/`unavailable_action` instead of retaining an unknown action in the user map; the upstream schema allows an unknown action id with a valid key value and the manager retains it without installing it. The C++ 43-action app table matches the upstream v1.3.0 43 `app.*` entries (`tests/coding_agent/tui/KeybindingsManagerTest.cpp:281`).",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Decide whether unknown-action diagnostics should remain a deliberate C++ hardening divergence or align with the upstream schema's unknown-key acceptance. The known-action, migration, BOM, conflict and reload behaviors already match.",
+      "blockers": []
+    },
+    {
+      "id": "keybindings-reload",
+      "capability": "Keybindings reload consumer",
+      "operation": "`/reload` re-reads `keybindings.json` and replaces the active user bindings; removed entries fall back to defaults.",
+      "consumer": "`KeybindingsManager.reload()` and the C++ `/reload` re-catalog path (`InteractiveEngine` keybinding re-catalog).",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/keybindings.ts:KeybindingsManager"
+        ],
+        "scenarios": [
+          "keybindings manager migrates legacy names, keeps unknown actions, drops invalid values and reloads"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/tui/KeybindingsManager.cpp` reload path and `InteractiveEngine`/`app_keybinding_definitions` re-catalog.",
+      "cppEvidence": "C++ implements the re-catalog and replace-all behavior; `tests/coding_agent/tui/KeybindingsManagerTest.cpp` covers startup and diagnostics but not the reload transition specifically.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add a C++ reload transition test seeded by the captured before/after bindings; no production change is implied.",
+      "blockers": []
+    },
+    {
+      "id": "theme-schema",
+      "capability": "Theme validation schema and runtime loading",
+      "operation": "`validateThemeJson` accepts a 56-token theme, rejects an unknown color token, a missing required token and a name containing `/`; `loadThemeFromPath` throws on an unknown token but accepts a missing required token and a slash name.",
+      "consumer": "`theme-schema.ts:validateThemeJson` for the published schema; `theme.ts:loadThemeFromPath` for runtime loading and `/reload`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/modes/interactive/theme/theme-schema.ts:validateThemeJson",
+          "packages/coding-agent/src/modes/interactive/theme/theme.ts:loadThemeFromPath",
+          "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts:THEME_TOKENS"
+        ],
+        "scenarios": [
+          "theme schema accepts the 56-token built-in shape",
+          "theme schema rejects an unknown color token while runtime loading throws",
+          "theme runtime accepts a missing required token and a slash name that the schema rejects"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/tui/Theme.cpp:resolve_theme_value/parse_theme_json` and `src/coding_agent/tui/ThemeTokens.inc`.",
+      "cppEvidence": "C++ requires `text` and rejects a slash name, but accepts unknown color tokens passively (`ThemeTest.cpp:346` says `like pi`). It also accepts a missing required token with the schema wording test (`:264`). The runtime/schema split in upstream is not a single behavior to copy: the schema rejects unknown/missing/slash cases, while the runtime has the observed TypeError/missing/slash outcomes.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Re-pin the theme tests to the v1.3.0 schema: reject unknown color tokens, reject a missing required token, reject a slash name. Keep runtime loading's own error handling separate from the published-schema contract; do not copy the upstream runtime's missing-token acceptance.",
+      "blockers": []
+    },
+    {
+      "id": "theme-token-set",
+      "capability": "Theme token inventory",
+      "operation": "The v1.3.0 theme token set has 56 entries: 51 required and optional `scrollbarTrack`, `scrollbarThumb`, `searchMatchBg`, `searchMatchText`, `thinkingMax` fallbacks.",
+      "consumer": "`theme-tokens.ts:THEME_TOKENS`, the published theme schema, built-in dark/light themes and runtime resolution.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts:THEME_TOKENS"
+        ],
+        "scenarios": [
+          "theme schema accepts the 56-token built-in shape"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/tui/ThemeTokens.inc` (53 entries).",
+      "cppEvidence": "C++ has 53 tokens. Missing relative to v1.3.0: `scrollbarTrack`, `searchMatchBg`, `searchMatchText`. Required count (51) and optional `scrollbarThumb`/`thinkingMax` already match.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add the three v1.3.0 optional tokens with their documented fallbacks (`muted`, `selectedBg`, `text`) and retain the existing required-token validation. This is a schema-shape delta, not a new theme UI feature.",
+      "blockers": []
+    },
+    {
+      "id": "extension-native-tool-source",
+      "capability": "Native extension Tool Source foundation",
+      "operation": "Extension sources contribute model-facing tools through a registry; the runner converts each into the Agent's ordinary ToolRegistry path, preserving policy and collision rejection.",
+      "consumer": "The C++ Native extension seam; upstream equivalent is `registerTool`/loader/runner.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/extensions/loader.ts:loadExtensionFromFactory",
+          "packages/coding-agent/src/core/extensions/runner.ts:emitBeforeAgentStart",
+          "packages/coding-agent/src/core/extensions/types.ts:BeforeAgentStartEvent"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/extensions/ExtensionTool.hpp`, `ExtensionToolRegistry.hpp/.cpp`, `src/coding_agent/runtime/SessionFactory.cpp:1774-1783`, and `src/coding_agent/runtime/McpProductionAdapters.cpp:494-508`.",
+      "cppEvidence": "`tests/coding_agent/ExtensionToolSourceTest.cpp:181-319` covers registry collection, duplicate rejection, Agent ToolRegistry conversion, assembly visibility and callability. This is the approved minimal foundation from ADR 0066; direct third-party TS/JS execution is not part of it.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Map future extension-triggered work to this seam only when the owner approves lifecycle hooks; do not add a TS plugin loader.",
+      "blockers": []
+    },
+    {
+      "id": "extension-lifecycle-hooks",
+      "capability": "Extension-triggered runs and `before_agent_start` contributions",
+      "operation": "A `before_agent_start` handler observes a busy context (`ctx.isIdle() === false`), can replace the system prompt and inject a custom message; an extension `sendMessage(..., {triggerTurn:true})` from an idle session starts another run; the contributed message and tool result are retained across a tool turn.",
+      "consumer": "Upstream extension runner and `AgentSession._prepareRun`; the native C++ equivalent is only the Extension Tool Source foundation.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/extensions/loader.ts:loadExtensionFromFactory",
+          "packages/coding-agent/src/core/extensions/runner.ts:emitBeforeAgentStart",
+          "packages/coding-agent/src/core/agent-session.ts:_prepareRun",
+          "packages/coding-agent/src/core/extensions/types.ts:BeforeAgentStartEvent"
+        ],
+        "scenarios": [
+          "before_agent_start observes busy state and contributes prompt plus custom message",
+          "extension-triggered run starts from an idle session and retains contributions across a tool turn"
+        ]
+      },
+      "cppSeam": "No general extension lifecycle hook. `src/coding_agent/AgentSessionExecution.cpp:401` only builds the MCP server system-prompt section; `ExtensionToolRegistry` is a tool-contribution seam, not a `before_agent_start`/`sendMessage` seam.",
+      "cppEvidence": "C++ has no `before_agent_start`, custom-message trigger, or extension-driven run API. The native extension tool seam is wired at Session Assembly; no third-party extension runtime is present.",
+      "status": {
+        "membership": "no-decision",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Treat the lifecycle hook as unresolved application membership, not an implementation defect in the approved tool seam. Any future slice must define a native lifecycle contract; direct TS/JS execution stays excluded.",
+      "blockers": [
+        "ADR 0066 approves only the minimal Extension Tool Source foundation; lifecycle hooks and extension-triggered custom messages have no owner ruling."
+      ]
+    },
+    {
+      "id": "print-mode-text",
+      "capability": "Print-mode text outcome",
+      "operation": "Text mode prints only the final assistant text blocks; a completed `stop` response prints text and exits 0; a terminal `error`/`aborted` response writes a stderr diagnostic and exits 1.",
+      "consumer": "`print-mode.ts:runPrintMode` and the CLI `--print`/`--mode text` path.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/modes/print-mode.ts:runPrintMode"
+        ],
+        "scenarios": [
+          "complete text response prints final text and exits 0"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/cli/PrintMode.cpp:print_final_assistant_text` and `tests/cli/PrintModeTest.cpp:214-277`.",
+      "cppEvidence": "C++ prints final text blocks and handles Error/Aborted with stderr + exit 1; tests cover those outcomes and signal exit codes. `--mode json`/`rpc` are rejected per ADR 0036 G1.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "None; the length-truncated branch is tracked separately.",
+      "blockers": []
+    },
+    {
+      "id": "print-mode-length-truncated",
+      "capability": "Print-mode length-truncated outcome",
+      "operation": "A final assistant response with `stopReason: \"length\"` prints its partial text to stdout, writes `Response was truncated: the model reached its output token limit.` to stderr and exits 1.",
+      "consumer": "`print-mode.ts:runPrintMode` text branch.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/modes/print-mode.ts:runPrintMode",
+          "packages/coding-agent/src/modes/interactive/components/assistant-message.ts:Response was truncated"
+        ],
+        "scenarios": [
+          "length-truncated text response prints partial stdout, warning stderr and exits 1"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/cli/PrintMode.cpp:print_final_assistant_text` handles only Error/Aborted, then prints every text block and returns true; `tests/cli/PrintModeTest.cpp` has no `length` case.",
+      "cppEvidence": "C++ has `AssistantStopReason::Length` in the shared AI type and an interactive warning in `AssistantMessageComponent.cpp:520`, but print mode does not test it. The captured upstream process result is stdout `partial answer\\n`, stderr warning, exit 1; the C++ branch would currently print the partial text and exit 0.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add the length branch to the print final-text outcome: print the partial text, write the exact warning to stderr and return exit 1; add a scripted C++ test matching the captured process outcome.",
+      "blockers": []
+    },
+    {
+      "id": "print-mode-json",
+      "capability": "Print-mode JSON event stream",
+      "operation": "`--mode json` emits the session header/event stream; upstream has it, C++ rejects it.",
+      "consumer": "`print-mode.ts:runPrintMode` JSON branch.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/modes/print-mode.ts:runPrintMode"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/cli/CliParse.cpp` rejects `json`/`rpc` modes; `PrintMode.cpp` is text-only.",
+      "cppEvidence": "ADR 0036 G1 explicitly rejects `--mode json` and `--mode rpc`; this is not a missing outcome of the supported text mode.",
+      "status": {
+        "membership": "excluded",
+        "implementation": "not-applicable",
+        "verification": "not-applicable"
+      },
+      "recommendation": "Do not restore JSON print mode under this audit.",
+      "blockers": []
+    },
+    {
+      "id": "system-prompt-command-claims",
+      "capability": "System-prompt/docs/command claims about resources and extensions",
+      "operation": "Audit references and commands that could imply absent packages/extensions/themes/prompt-template capabilities.",
+      "consumer": "`SystemPromptBuilder.cpp:build_docs`, `BuiltinSlashCommands.cpp` and `docs/usage.md`/`docs/keybindings.md`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/resource-loader.ts:DefaultResourceLoader"
+        ],
+        "scenarios": [
+          "explicit resource paths load prompts, skills and themes"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/prompt/SystemPromptBuilder.cpp:107-127` lists only pike docs (`usage`, `keybindings`, `agent-lifecycle`, `runtime-capacities`, `architecture`); `src/coding_agent/prompt/BuiltinSlashCommands.cpp:29-32` explicitly drops `extensions` from `/reload`; `docs/usage.md` lists the supported agent files.",
+      "cppEvidence": "No C++ system-prompt text or built-in command claims package/extension loading or a `before_agent_start` hook. `/reload` claims keybindings, skills, prompts, themes and context files, all of which have C++ reload paths. The only affected claim found is the C++ theme test wording `like pi` for unknown color tokens, which is false at v1.3.0 and belongs to the theme row.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep the docs/commands free of package/extension claims. Re-pin the theme test wording rather than adding a package surface.",
+      "blockers": []
+    }
+  ]
+}

@@ -1,0 +1,203 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T16:39:27.925Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/resource-loader.ts:loadProjectContextFiles,DefaultResourceLoader",
+    "packages/coding-agent/src/utils/paths.ts:resolvePath,isLocalPath",
+    "packages/coding-agent/src/main.ts:resolveCliPaths"
+  ],
+  "scenarios": [
+    {
+      "name": "AGENTS.override.md wins over AGENTS.md and ancestor context is root-to-leaf",
+      "inputs": {
+        "precedenceFiles": [
+          "AGENTS.override.md",
+          "AGENTS.md",
+          "CLAUDE.md"
+        ],
+        "nestedFiles": [
+          "tree/AGENTS.md",
+          "tree/nested/AGENTS.md"
+        ],
+        "workspace": "controlled temporary workspace"
+      },
+      "expected": {
+        "precedence": {
+          "paths": [
+            "<workspace>/precedence/AGENTS.override.md"
+          ],
+          "contents": [
+            "override marker\n"
+          ]
+        },
+        "ancestors": {
+          "paths": [
+            "<workspace>/tree/AGENTS.md",
+            "<workspace>/tree/nested/AGENTS.md"
+          ],
+          "contents": [
+            "root marker\n",
+            "nested marker\n"
+          ]
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/resource-loader.test.ts",
+        "case": "should prefer AGENTS.override.md within each directory while preserving ancestor layering"
+      }
+    },
+    {
+      "name": "nested linked worktree shadows the main repo context file",
+      "inputs": {
+        "repository": "worktree/main",
+        "linkedWorktree": "worktree/main/nested",
+        "files": [
+          "worktree/main/AGENTS.md",
+          "worktree/main/nested/AGENTS.md"
+        ],
+        "workspace": "controlled temporary workspace"
+      },
+      "expected": {
+        "paths": [
+          "<workspace>/worktree/main/nested/AGENTS.md"
+        ],
+        "contents": [
+          "nested worktree marker\n"
+        ],
+        "mainContextFileExists": true,
+        "mainContextLoadedSeparately": false
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/resource-loader.test.ts",
+        "case": "should skip the main repo's duplicate when the worktree root has its own context"
+      }
+    },
+    {
+      "name": "worktree context file symlink is loaded once and not duplicated from the main repo",
+      "inputs": {
+        "repository": "worktree/main",
+        "linkedWorktree": "worktree/main/linked",
+        "symlinkTarget": "../AGENTS.md",
+        "workspace": "controlled temporary workspace"
+      },
+      "expected": {
+        "paths": [
+          "<workspace>/worktree/main/linked/AGENTS.md"
+        ],
+        "contents": [
+          "main marker\n"
+        ],
+        "mainContextLoadedSeparately": false
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/resource-loader.test.ts",
+        "case": "should load the worktree's context once when it symlinks to the main repo's file"
+      }
+    },
+    {
+      "name": "local path modifiers expand tilde and strip a leading @",
+      "inputs": {
+        "cwd": "controlled temporary workspace",
+        "home": "controlled temporary home",
+        "input": "~/templates",
+        "variants": [
+          "expandTilde:false",
+          "trim",
+          "normalizeUnicodeSpaces",
+          "default @",
+          "stripAtPrefix",
+          "file: URL"
+        ]
+      },
+      "expected": {
+        "tilde": "<home>/templates",
+        "tildeDisabled": "<workspace>/~/templates",
+        "relative": "<workspace>/templates",
+        "trimmed": "<temp-root>/templates",
+        "unicodeTrimmed": "<workspace>/templates",
+        "atDefault": "<workspace>/@templates",
+        "atPrefixed": "<workspace>/templates",
+        "fileUrl": "<workspace>/home/templates",
+        "isLocal": {
+          "git": false,
+          "npm": false,
+          "fileUrl": true
+        },
+        "packageSources": {
+          "git": {
+            "isLocal": false,
+            "resolved": null
+          },
+          "npm": {
+            "isLocal": false,
+            "resolved": null
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "package source prefixes bypass local path resolution",
+      "inputs": {
+        "values": [
+          "git:github.com/example/repo",
+          "npm:@scope/pkg"
+        ],
+        "localPathPolicy": "isLocalPath"
+      },
+      "expected": {
+        "git": {
+          "isLocal": false,
+          "resolved": null
+        },
+        "npm": {
+          "isLocal": false,
+          "resolved": null
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "explicit resource paths load prompts, skills and themes",
+      "inputs": {
+        "promptPath": "resources/prompts",
+        "skillPath": "resources/skills",
+        "themePath": "resources/themes",
+        "discoveryFlags": [
+          "noSkills",
+          "noPromptTemplates",
+          "noThemes",
+          "noExtensions"
+        ]
+      },
+      "expected": {
+        "prompts": [
+          "review"
+        ],
+        "promptDiagnostics": 0,
+        "skills": [
+          "audit-skill"
+        ],
+        "skillDiagnostics": 0,
+        "themes": [
+          "audit-1049-dark"
+        ],
+        "themeDiagnostics": 0
+      },
+      "normalizations": []
+    }
+  ]
+}

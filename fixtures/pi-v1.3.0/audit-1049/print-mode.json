@@ -1,0 +1,74 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T16:39:27.925Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/modes/print-mode.ts:runPrintMode",
+    "packages/coding-agent/src/modes/interactive/components/assistant-message.ts:Response was truncated"
+  ],
+  "scenarios": [
+    {
+      "name": "length-truncated text response prints partial stdout, warning stderr and exits 1",
+      "inputs": {
+        "mode": "text",
+        "scriptedResponse": "partial answer",
+        "scriptedStopReason": "length",
+        "modelMaxTokens": 4
+      },
+      "expected": {
+        "processExitCode": 1,
+        "stdout": "partial answer\n",
+        "stderr": "Response was truncated: the model reached its output token limit.\n",
+        "finalAssistant": {
+          "stopReason": "length",
+          "text": "partial answer",
+          "outputTokens": 4
+        },
+        "sessionRoles": [
+          "system",
+          "user",
+          "assistant"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/print-mode.test.ts",
+        "case": "warns on stderr and returns non-zero when the response was truncated"
+      }
+    },
+    {
+      "name": "complete text response prints final text and exits 0",
+      "inputs": {
+        "mode": "text",
+        "scriptedResponse": "complete answer",
+        "scriptedStopReason": "stop",
+        "modelMaxTokens": 4
+      },
+      "expected": {
+        "processExitCode": 0,
+        "stdout": "complete answer\n",
+        "stderr": "",
+        "finalAssistant": {
+          "stopReason": "stop",
+          "text": "complete answer",
+          "outputTokens": 4
+        },
+        "sessionRoles": [
+          "system",
+          "user",
+          "assistant"
+        ]
+      },
+      "normalizations": []
+    }
+  ]
+}

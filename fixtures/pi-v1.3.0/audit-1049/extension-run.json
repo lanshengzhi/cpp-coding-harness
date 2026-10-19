@@ -1,0 +1,201 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T16:39:27.925Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/extensions/loader.ts:loadExtensionFromFactory",
+    "packages/coding-agent/src/core/extensions/runner.ts:emitBeforeAgentStart",
+    "packages/coding-agent/src/core/agent-session.ts:_prepareRun",
+    "packages/coding-agent/src/core/extensions/types.ts:BeforeAgentStartEvent"
+  ],
+  "scenarios": [
+    {
+      "name": "before_agent_start observes busy state and contributes prompt plus custom message",
+      "inputs": {
+        "extension": "inline before_agent_start handler",
+        "firstPrompt": "start",
+        "handlerReturn": [
+          "systemPrompt replacement",
+          "custom message"
+        ],
+        "workspace": "controlled temporary workspace"
+      },
+      "expected": {
+        "invocations": [
+          {
+            "phase": "user-prompt",
+            "isIdle": false,
+            "messageType": "user",
+            "prompt": "start",
+            "customText": null
+          },
+          {
+            "phase": "extension-triggered",
+            "isIdle": false,
+            "messageType": "custom",
+            "prompt": null,
+            "customText": "extension-triggered"
+          }
+        ],
+        "firstRunRequest": {
+          "roles": [
+            "system",
+            "user",
+            "user"
+          ],
+          "hasSystemContribution": true,
+          "contributionCount": 1,
+          "hasToolResult": false,
+          "toolResultText": null
+        },
+        "idleAfterFirstRun": true,
+        "firstRunMessages": [
+          {
+            "role": "system",
+            "customType": null,
+            "text": ""
+          },
+          {
+            "role": "user",
+            "customType": null,
+            "text": "start"
+          },
+          {
+            "role": "custom",
+            "customType": "audit-1049-contribution",
+            "text": "audit-1049 custom contribution"
+          },
+          {
+            "role": "assistant",
+            "customType": null,
+            "text": ""
+          },
+          {
+            "role": "toolResult",
+            "customType": null,
+            "text": "tool content\n"
+          },
+          {
+            "role": "assistant",
+            "customType": null,
+            "text": "first run complete"
+          }
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/suite/agent-session-model-extension.test.ts",
+        "case": "allows before_agent_start handlers to inject custom messages and modify the system prompt"
+      }
+    },
+    {
+      "name": "extension-triggered run starts from an idle session and retains contributions across a tool turn",
+      "inputs": {
+        "trigger": "pi.sendMessage({ triggerTurn: true })",
+        "triggerCustomType": "audit-1049-trigger",
+        "priorToolTurn": "read note.txt",
+        "workspace": "controlled temporary workspace"
+      },
+      "expected": {
+        "triggerInvocation": {
+          "phase": "extension-triggered",
+          "isIdle": false,
+          "messageType": "custom",
+          "prompt": null,
+          "customText": "extension-triggered"
+        },
+        "priorRunRequest": {
+          "roles": [
+            "system",
+            "user",
+            "user",
+            "assistant",
+            "toolResult"
+          ],
+          "hasSystemContribution": true,
+          "contributionCount": 1,
+          "hasToolResult": true,
+          "toolResultText": "tool content\n"
+        },
+        "triggeredRunRequest": {
+          "roles": [
+            "system",
+            "user",
+            "user",
+            "assistant",
+            "toolResult",
+            "assistant",
+            "user",
+            "user"
+          ],
+          "hasSystemContribution": true,
+          "contributionCount": 2,
+          "hasToolResult": true,
+          "toolResultText": "tool content\n"
+        },
+        "finalMessages": [
+          {
+            "role": "system",
+            "customType": null,
+            "text": ""
+          },
+          {
+            "role": "user",
+            "customType": null,
+            "text": "start"
+          },
+          {
+            "role": "custom",
+            "customType": "audit-1049-contribution",
+            "text": "audit-1049 custom contribution"
+          },
+          {
+            "role": "assistant",
+            "customType": null,
+            "text": ""
+          },
+          {
+            "role": "toolResult",
+            "customType": null,
+            "text": "tool content\n"
+          },
+          {
+            "role": "assistant",
+            "customType": null,
+            "text": "first run complete"
+          },
+          {
+            "role": "custom",
+            "customType": "audit-1049-trigger",
+            "text": "extension-triggered"
+          },
+          {
+            "role": "custom",
+            "customType": "audit-1049-contribution",
+            "text": "audit-1049 custom contribution"
+          },
+          {
+            "role": "assistant",
+            "customType": null,
+            "text": "extension-triggered run complete"
+          }
+        ],
+        "isIdleAfterTriggeredRun": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/suite/agent-session-prompt.test.ts",
+        "case": "sendUserMessage while idle triggers a turn"
+      }
+    }
+  ]
+}
