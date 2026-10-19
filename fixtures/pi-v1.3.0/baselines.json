@@ -1,0 +1,27 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-baselines/1",
+  "comment": [
+    "Named-baseline registry for the pi-v1.3.0 audit evidence families (#1046, ADR 0075).",
+    "A baseline name resolves to exactly one full 40-character revision. Ticket families are",
+    "registered under that baseline by name; each record pins its manifest SHA-256.",
+    "Use scripts/evidence/audit_evidence.py to check, register, verify and read. There is no",
+    "free-form revision input: an ad-hoc revision lets an operator verify one family against",
+    "another baseline's checkout while every individual check still passes.",
+    "Audit lanes own their audit-<ticket> bundle directory; only the serial merger edits this",
+    "registry through the register command. Historical pi-ai/pi-tui registries are separate."
+  ],
+  "default": "pi-v1.3.0",
+  "baselines": {
+    "pi-v1.3.0": {
+      "label": "v1.3.0",
+      "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+      "platform": "linux-x86_64-glibc",
+      "bundles": {
+        "audit-1046": {
+          "manifest": "audit-1046/manifest.json",
+          "manifestSha256": "db14038aff4315eb84f12a46af3fcee63b80214b456d5870ef1d956dc285daea"
+        }
+      }
+    }
+  }
+}

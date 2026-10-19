@@ -1,0 +1,84 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T15:30:56.095Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter",
+    "packages/tui/test/fuzzy.test.ts:fuzzyMatch,fuzzyFilter"
+  ],
+  "scenarios": [
+    {
+      "name": "empty query matches everything with score zero",
+      "inputs": {
+        "query": "",
+        "text": "anything"
+      },
+      "expected": {
+        "matches": true,
+        "score": 0
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/tui/test/fuzzy.test.ts",
+        "case": "empty query matches everything with score 0"
+      }
+    },
+    {
+      "name": "word boundary scores better than interior match",
+      "inputs": {
+        "query": "fb",
+        "texts": {
+          "boundary": "foo-bar",
+          "interior": "afbx"
+        }
+      },
+      "expected": {
+        "boundary": {
+          "matches": true,
+          "score": -18.6
+        },
+        "interior": {
+          "matches": true,
+          "score": -4.7
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/tui/test/fuzzy.test.ts",
+        "case": "word boundary matches score better"
+      }
+    },
+    {
+      "name": "filter sorts results by match quality",
+      "inputs": {
+        "query": "app",
+        "items": [
+          "a_p_p",
+          "app",
+          "application"
+        ]
+      },
+      "expected": {
+        "order": [
+          "app",
+          "application",
+          "a_p_p"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/tui/test/fuzzy.test.ts",
+        "case": "sorts results by match quality"
+      }
+    }
+  ]
+}

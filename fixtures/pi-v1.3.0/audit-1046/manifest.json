@@ -1,0 +1,105 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1046",
+  "family": "audit-1046",
+  "capturedAt": "2026-10-19T15:30:56.095Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1046/capture-extension-example.mts",
+    "sha256": "ede82a725ba7ca5c72a89a4131bc4ab554d7f3c6359d5607da37805448bc199c",
+    "command": "PI_CHECKOUT=/home/lansy/Work/github/coding-agent/pi PI_BASELINE=pi-v1.3.0 /home/lansy/Work/github/coding-agent/pi/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1046/capture-extension-example.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1046/capture-extension-example.mts",
+        "sha256": "ede82a725ba7ca5c72a89a4131bc4ab554d7f3c6359d5607da37805448bc199c"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "fuzzy-match.json",
+      "family": "audit-1046",
+      "bytes": 1970,
+      "sha256": "5a31493abee0d47bd1d23a07822abe4abc87c22c1413c7974e10ed848cd15ff2",
+      "sourceEndpoints": [
+        "packages/tui/src/fuzzy.ts:fuzzyMatch,fuzzyFilter",
+        "packages/tui/test/fuzzy.test.ts:fuzzyMatch,fuzzyFilter"
+      ],
+      "scenarios": [
+        {
+          "name": "empty query matches everything with score zero",
+          "inputs": {
+            "query": "",
+            "text": "anything"
+          },
+          "expected": {
+            "matches": true,
+            "score": 0
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/tui/test/fuzzy.test.ts",
+            "case": "empty query matches everything with score 0"
+          }
+        },
+        {
+          "name": "word boundary scores better than interior match",
+          "inputs": {
+            "query": "fb",
+            "texts": {
+              "boundary": "foo-bar",
+              "interior": "afbx"
+            }
+          },
+          "expected": {
+            "boundary": {
+              "matches": true,
+              "score": -18.6
+            },
+            "interior": {
+              "matches": true,
+              "score": -4.7
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/tui/test/fuzzy.test.ts",
+            "case": "word boundary matches score better"
+          }
+        },
+        {
+          "name": "filter sorts results by match quality",
+          "inputs": {
+            "query": "app",
+            "items": [
+              "a_p_p",
+              "app",
+              "application"
+            ]
+          },
+          "expected": {
+            "order": [
+              "app",
+              "application",
+              "a_p_p"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/tui/test/fuzzy.test.ts",
+            "case": "sorts results by match quality"
+          }
+        }
+      ]
+    }
+  ]
+}
