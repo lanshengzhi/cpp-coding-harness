@@ -1,0 +1,216 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/harness.ts:Harness.open",
+    "packages/durable/src/harness/generation.ts:GenerationTask",
+    "packages/durable/src/harness/tool.ts:ToolTask",
+    "packages/durable/src/harness/registry.ts:Registry.install",
+    "packages/durable/src/harness/agent.ts:resolveAgent",
+    "packages/durable/test/harness-lifecycle.test.ts:conversation workflow"
+  ],
+  "scenarios": [
+    {
+      "name": "a scripted model drives admission, one real injected tool, committed entries and final settlement",
+      "source": "packages/durable/src/harness/harness.ts:Harness.open;packages/durable/src/harness/generation.ts:GenerationTask;packages/durable/src/harness/tool.ts:ToolTask",
+      "inputs": {
+        "storage": "MemoryStorage",
+        "model": "faux/faux-1",
+        "turns": [
+          "toolUse echo {text:hello}",
+          "stop finished"
+        ],
+        "tool": "echo",
+        "section": "audit-note"
+      },
+      "expected": {
+        "admission": {
+          "submissionIdIsSettledId": true,
+          "conversationIsRoot": true,
+          "requestId": null
+        },
+        "settlement": {
+          "status": "done",
+          "entryIsUser": "pi.user",
+          "answerIsAssistant": "pi.assistant"
+        },
+        "entries": [
+          [
+            "pi.user",
+            "run the echo tool"
+          ],
+          [
+            "pi.system",
+            [
+              "audit-note"
+            ],
+            [
+              "echo"
+            ]
+          ],
+          [
+            "pi.assistant",
+            ""
+          ],
+          [
+            "pi.tool-result",
+            "echo",
+            "call-1",
+            false,
+            true,
+            "echo:hello"
+          ],
+          [
+            "pi.assistant",
+            "finished"
+          ]
+        ],
+        "tool": {
+          "executions": [
+            {
+              "text": "hello"
+            }
+          ],
+          "callId": "call-1",
+          "toolName": "echo",
+          "text": "echo:hello",
+          "isError": false,
+          "durationPresent": true,
+          "resultTaskPresent": true
+        },
+        "offeredTools": [
+          "echo"
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values"
+      ]
+    },
+    {
+      "name": "a registry install after conversation creation changes the next request's tools and prompt sections",
+      "source": "packages/durable/src/harness/registry.ts:Registry.install;packages/durable/src/harness/agent.ts:resolveAgent",
+      "inputs": {
+        "installedBeforeCreation": [
+          "first"
+        ],
+        "installedAfterCreation": [
+          "second",
+          "late-section"
+        ],
+        "requests": 1
+      },
+      "expected": {
+        "before": [
+          "first"
+        ],
+        "afterInstall": [
+          "first",
+          "second"
+        ],
+        "sectionsAdded": [
+          "late-section"
+        ],
+        "toolsAdded": [
+          "first",
+          "second"
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values"
+      ]
+    },
+    {
+      "name": "a generation onYield hook appends a user message and continues the same admitted run",
+      "source": "packages/durable/src/harness/generation.ts:GenerationTask.onYield;packages/durable/src/harness/types.ts:GenerationHooks",
+      "inputs": {
+        "hook": "GenerationTask.onYield",
+        "firstAnswer": "first answer",
+        "continuesWith": "go on",
+        "scriptedAnswers": [
+          "first answer",
+          "second answer"
+        ]
+      },
+      "expected": {
+        "status": "done",
+        "yields": [
+          "first answer",
+          "second answer"
+        ],
+        "callCount": 2,
+        "entries": [
+          [
+            "pi.user",
+            "start"
+          ],
+          [
+            "pi.assistant",
+            "first answer"
+          ],
+          [
+            "pi.user",
+            "go on"
+          ],
+          [
+            "pi.assistant",
+            "second answer"
+          ]
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values"
+      ]
+    },
+    {
+      "name": "tool hooks rewrite arguments before execution and observe the committed result",
+      "source": "packages/durable/src/harness/tool.ts:ToolTask;packages/durable/src/harness/types.ts:ToolHooks",
+      "inputs": {
+        "call": {
+          "name": "echo",
+          "arguments": {
+            "text": "original"
+          }
+        },
+        "beforeTool": "replace arguments with {text:'rewritten'}",
+        "afterTool": "observe result"
+      },
+      "expected": {
+        "hooks": [
+          {
+            "phase": "beforeTool",
+            "id": "call-1",
+            "arguments": {
+              "text": "original"
+            }
+          },
+          {
+            "phase": "afterTool",
+            "id": "call-1",
+            "text": "echo:rewritten"
+          }
+        ],
+        "resultText": "echo:rewritten",
+        "isError": false
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "elapsed durations are recorded as presence, not wall-clock values"
+      ]
+    }
+  ]
+}

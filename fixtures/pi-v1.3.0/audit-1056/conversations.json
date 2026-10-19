@@ -1,0 +1,313 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/harness.ts:HarnessImpl.root",
+    "packages/durable/src/harness/harness.ts:ConversationImpl.fork",
+    "packages/durable/src/harness/harness.ts:ConversationImpl.reset",
+    "packages/durable/src/session/transaction.ts:Transaction.createConversation",
+    "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+    "packages/durable/test/harness-conversations.test.ts:conversation lifecycle"
+  ],
+  "scenarios": [
+    {
+      "name": "the root conversation is created lazily in one commit with its five built-in documents",
+      "source": "packages/durable/src/harness/harness.ts:HarnessImpl.root,#create;packages/durable/src/harness/agent.ts:AgentDoc",
+      "inputs": {
+        "storage": "MemoryStorage",
+        "rootCreationOptions": "thinkingLevel high",
+        "secondRoot": "thinkingLevel low"
+      },
+      "expected": {
+        "rootId": 1,
+        "sameRoot": true,
+        "commits": 1,
+        "changes": [
+          "conversation",
+          "document:pi.agent:v1",
+          "document:pi.inbox:v1",
+          "document:pi.live:v1",
+          "document:pi.provider:v1",
+          "document:pi.usage:v1"
+        ],
+        "agent": {
+          "thinkingLevel": "high"
+        }
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "provider session identifiers are compared for stability, not printed"
+      ]
+    },
+    {
+      "name": "a fork copies the transcript and agent state as of its entry and stays independent",
+      "source": "packages/durable/src/harness/harness.ts:ConversationImpl.fork;#create;packages/durable/src/harness/agent.ts:AgentDoc.asOf",
+      "inputs": {
+        "turns": [
+          "u1",
+          "u2"
+        ],
+        "configure": [
+          "low before u1",
+          "high before u2"
+        ],
+        "forkAt": [
+          "first entry",
+          "last entry"
+        ],
+        "forkOwnership": "ownerless"
+      },
+      "expected": {
+        "rootEntries": [
+          [
+            "pi.user",
+            "u1"
+          ],
+          [
+            "pi.assistant",
+            "a1"
+          ],
+          [
+            "pi.user",
+            "u2"
+          ],
+          [
+            "pi.assistant",
+            "a2"
+          ]
+        ],
+        "beforeEntries": [
+          [
+            "pi.user",
+            "u1"
+          ],
+          [
+            "fork.note",
+            ""
+          ]
+        ],
+        "afterEntries": [
+          [
+            "pi.user",
+            "u1"
+          ],
+          [
+            "pi.assistant",
+            "a1"
+          ],
+          [
+            "pi.user",
+            "u2"
+          ],
+          [
+            "pi.assistant",
+            "a2"
+          ]
+        ],
+        "beforeThinking": "low",
+        "afterThinking": "high",
+        "rootStillHasTwoTurns": true,
+        "forksAreDistinct": true
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "provider session identifiers are compared for stability, not printed"
+      ]
+    },
+    {
+      "name": "reset starts a new context and carries its handoff text as the first user message",
+      "source": "packages/durable/src/harness/harness.ts:ConversationImpl.reset;packages/durable/src/entries.ts:ResetEntry",
+      "inputs": {
+        "turns": [
+          "u1",
+          "u2"
+        ],
+        "resetHandoff": "carry this forward"
+      },
+      "expected": {
+        "entries": [
+          [
+            "pi.user",
+            "u1"
+          ],
+          [
+            "pi.assistant",
+            "a1"
+          ],
+          [
+            "pi.reset",
+            "carry this forward"
+          ],
+          [
+            "pi.user",
+            "u2"
+          ],
+          [
+            "pi.system",
+            [],
+            []
+          ],
+          [
+            "pi.assistant",
+            "a2"
+          ]
+        ],
+        "reset": [
+          {
+            "kind": "pi.reset",
+            "headIsSelf": true,
+            "modelText": "carry this forward"
+          }
+        ],
+        "contextRoles": [
+          "system",
+          "user",
+          "user",
+          "assistant"
+        ],
+        "contextTexts": [
+          "system",
+          "carry this forward",
+          "u2",
+          "a2"
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "provider session identifiers are compared for stability, not printed"
+      ]
+    },
+    {
+      "name": "a task-created conversation records its task owner and stays addressable by ID",
+      "source": "packages/durable/src/session/transaction.ts:Transaction.createConversation;packages/durable/src/types.ts:ConversationOwnership",
+      "inputs": {
+        "ownership": "task",
+        "taskPhase": "create conversation and one note, then complete"
+      },
+      "expected": {
+        "outcome": "completed",
+        "childIdMatchesRecord": true,
+        "ownerIsTask": true,
+        "ownerConversationIsRoot": true,
+        "childEntries": [
+          [
+            "owner.note",
+            ""
+          ]
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "provider session identifiers are compared for stability, not printed"
+      ]
+    },
+    {
+      "name": "conversation abort stops the busy generation and settles its input unanswered",
+      "source": "packages/durable/src/harness/harness.ts:ConversationImpl.abort;packages/durable/src/harness/scheduler.ts:abortConversation",
+      "inputs": {
+        "generation": "unanswered",
+        "abort": "Conversation.abort"
+      },
+      "expected": {
+        "beforeTasks": [
+          "pi.generation:running"
+        ],
+        "settled": {
+          "status": "unanswered",
+          "reason": "aborted"
+        },
+        "afterScheduling": "running",
+        "afterTasks": 0,
+        "live": {}
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "provider session identifiers are compared for stability, not printed"
+      ]
+    },
+    {
+      "name": "close and reopen keeps conversations, fork identity, agent choices and provider state",
+      "source": "packages/durable/src/harness/harness.ts:Harness.open,root,conversation;packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+      "inputs": {
+        "storage": "node:sqlite",
+        "conversations": [
+          "root",
+          "ownerless child",
+          "fork at first entry"
+        ],
+        "reopenRegistry": "empty"
+      },
+      "expected": {
+        "rootEntries": [
+          [
+            "pi.user",
+            "persisted question"
+          ],
+          [
+            "pi.system",
+            [],
+            [
+              "present"
+            ]
+          ],
+          [
+            "pi.assistant",
+            "persisted answer"
+          ]
+        ],
+        "childEntries": [],
+        "forkEntries": [
+          [
+            "pi.user",
+            "persisted question"
+          ]
+        ],
+        "before": {
+          "thinking": "medium",
+          "providerIdsDistinct": true
+        },
+        "after": {
+          "rootId": 1,
+          "childFound": true,
+          "forkFound": true,
+          "thinking": "medium",
+          "tools": [],
+          "entries": [
+            [
+              "pi.user",
+              "persisted question"
+            ],
+            [
+              "pi.system",
+              [],
+              [
+                "present"
+              ]
+            ],
+            [
+              "pi.assistant",
+              "persisted answer"
+            ]
+          ],
+          "providerIdsStable": true
+        }
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "provider session identifiers are compared for stability, not printed"
+      ]
+    }
+  ]
+}

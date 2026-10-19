@@ -1,0 +1,318 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/harness.ts:Harness.inspect",
+    "packages/durable/src/harness/scheduler.ts:TaskScheduler",
+    "packages/durable/src/harness/task-graph.ts:TaskGraphView",
+    "packages/durable/src/harness/view.ts:ConversationViews",
+    "packages/durable/src/harness/events.ts:watchEvents",
+    "packages/durable/src/harness/context.ts:readContext",
+    "packages/durable/test/harness-inspect.test.ts:inspection",
+    "packages/durable/test/harness-events.test.ts:event stream",
+    "packages/durable/test/harness-view.test.ts:view frames",
+    "packages/durable/test/harness-task-graph.test.ts:task graph"
+  ],
+  "scenarios": [
+    {
+      "name": "inspect derives ready, running, waiting and blocked task states without running task code",
+      "source": "packages/durable/src/harness/harness.ts:Harness.inspect;packages/durable/src/harness/scheduler.ts:#inspect",
+      "inputs": {
+        "tasks": [
+          "gate",
+          "dependent waiting on gate",
+          "missing definition"
+        ],
+        "pausedBeforeResume": true,
+        "gateResolvedAfterInspection": true
+      },
+      "expected": {
+        "paused": {
+          "scheduling": "paused",
+          "gate": {
+            "kind": "ready",
+            "migrates": false
+          },
+          "dependent": {
+            "kind": "ready",
+            "migrates": false
+          },
+          "missing": {
+            "kind": "blocked",
+            "reason": "missing_task"
+          }
+        },
+        "running": {
+          "scheduling": "running",
+          "gate": {
+            "kind": "running"
+          },
+          "dependent": {
+            "kind": "waiting",
+            "onLength": 1,
+            "onIsGate": true
+          }
+        },
+        "settled": {
+          "liveTaskKinds": [
+            "audit.inspect-missing"
+          ],
+          "missing": {
+            "kind": "blocked",
+            "reason": "missing_task"
+          }
+        }
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+      ]
+    },
+    {
+      "name": "inspect lists the placed submission and the generation task that owns it",
+      "source": "packages/durable/src/harness/harness.ts:Harness.inspect;packages/durable/src/harness/submissions.ts:Submissions.status",
+      "inputs": {
+        "generation": "unanswered",
+        "inspection": "while busy"
+      },
+      "expected": {
+        "submissions": [
+          {
+            "idMatches": true,
+            "conversationIsRoot": true,
+            "type": "input",
+            "status": "placed"
+          }
+        ],
+        "status": {
+          "type": "input",
+          "status": "placed"
+        },
+        "tasks": [
+          {
+            "kind": "pi.generation",
+            "state": "running"
+          }
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+      ]
+    },
+    {
+      "name": "the task graph follows owner edges, owned conversations, waits and completion to empty",
+      "source": "packages/durable/src/harness/task-graph.ts:TaskGraphView;packages/durable/src/harness/harness.ts:Harness.taskGraph",
+      "inputs": {
+        "parent": "creates child and owned conversation, waits allSettled",
+        "child": "gated",
+        "observation": "state"
+      },
+      "expected": {
+        "before": {},
+        "running": {
+          "parent": {
+            "status": "waiting",
+            "onOwnsChild": true,
+            "conversations": 1
+          },
+          "child": {
+            "status": "running",
+            "ownerIsParent": true
+          }
+        },
+        "after": {}
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+      ]
+    },
+    {
+      "name": "conversation watch publishes delta frames whose final view equals a fresh hydration",
+      "source": "packages/durable/src/harness/view.ts:ConversationViews;packages/durable/src/harness/harness.ts:ConversationImpl.watch",
+      "inputs": {
+        "turn": [
+          "hi",
+          "hello"
+        ],
+        "observation": "viewState + watch + fresh"
+      },
+      "expected": {
+        "initial": {
+          "conversation": {
+            "id": 1
+          },
+          "entries": 0,
+          "docs": [
+            "pi.agent",
+            "pi.inbox",
+            "pi.live",
+            "pi.provider",
+            "pi.usage"
+          ],
+          "live": {},
+          "inbox": {
+            "items": []
+          }
+        },
+        "frames": 3,
+        "firstFrameOps": [
+          "s",
+          "p"
+        ],
+        "final": {
+          "entries": [
+            [
+              "pi.user",
+              "hi"
+            ],
+            [
+              "pi.assistant",
+              [
+                {
+                  "type": "text",
+                  "text": "hello"
+                }
+              ]
+            ]
+          ],
+          "docs": [
+            "pi.agent",
+            "pi.inbox",
+            "pi.live",
+            "pi.provider",
+            "pi.usage"
+          ],
+          "live": {},
+          "inbox": {
+            "items": []
+          }
+        }
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+      ]
+    },
+    {
+      "name": "the agent event stream reports run, turn, message, tool and submission lifecycle in order",
+      "source": "packages/durable/src/harness/events.ts:watchEvents,AgentEvent;packages/durable/src/harness/harness.ts:ConversationImpl.id",
+      "inputs": {
+        "turn": [
+          "go",
+          "print tool then done"
+        ],
+        "tool": "print"
+      },
+      "expected": {
+        "snapshot": {
+          "type": "snapshot",
+          "entries": 0,
+          "tools": [],
+          "inbox": []
+        },
+        "distinctTypes": [
+          "message_start",
+          "message_end",
+          "submission",
+          "run_start",
+          "turn_start",
+          "message_start",
+          "message_end",
+          "message_start",
+          "message_end",
+          "usage_changed",
+          "tool_execution_start",
+          "tool_execution_update",
+          "tool_execution_end",
+          "message_start",
+          "message_end",
+          "turn_end",
+          "turn_start",
+          "message_start",
+          "message_end",
+          "turn_end",
+          "run_end",
+          "submission",
+          "usage_changed"
+        ],
+        "counts": {
+          "run_start": 1,
+          "run_end": 1,
+          "turn_start": 2,
+          "turn_end": 2,
+          "submission": 2
+        },
+        "toolStart": {
+          "toolCallId": "c1",
+          "toolName": "print",
+          "args": {
+            "n": 1
+          }
+        },
+        "toolEnd": {
+          "toolCallId": "c1",
+          "toolName": "print",
+          "entryKind": "pi.tool-result"
+        },
+        "endFollowedByResultMessage": [
+          "message_start",
+          "message_end"
+        ]
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+      ]
+    },
+    {
+      "name": "context with an entry cursor returns the same committed view a fork would start from",
+      "source": "packages/durable/src/harness/harness.ts:ConversationImpl.context;packages/durable/src/harness/context.ts:readContext",
+      "inputs": {
+        "turns": [
+          "u1",
+          "u2"
+        ],
+        "at": "first entry"
+      },
+      "expected": {
+        "atEntry": {
+          "entries": [
+            [
+              "pi.user",
+              "u1"
+            ]
+          ],
+          "messages": [
+            "u1"
+          ],
+          "head": null
+        },
+        "forkStartsWith": [
+          [
+            "pi.user",
+            "u1"
+          ]
+        ],
+        "rootHasBothTurns": true
+      },
+      "normalizations": [
+        "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+        "event frames may be delivered in batches; the recorded sequence is the flattened event order"
+      ]
+    }
+  ]
+}

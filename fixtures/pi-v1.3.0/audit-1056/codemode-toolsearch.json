@@ -1,0 +1,178 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1056",
+  "family": "audit-1056",
+  "capturedAt": "2026-10-19T21:09:52.289Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/codemode/codemode.ts:createCodemodeTool",
+    "packages/durable/src/codemode/codemode.ts:CodemodeStoreDoc",
+    "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
+    "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool",
+    "packages/durable/src/harness/tool.ts:ToolTask",
+    "packages/durable/test/codemode.test.ts:code mode",
+    "packages/durable/test/tool-search.test.ts:deferred tools"
+  ],
+  "scenarios": [
+    {
+      "name": "code mode runs a script that calls a real nested tool and keeps its store across turns",
+      "source": "packages/durable/src/codemode/codemode.ts:createCodemodeTool,CodemodeStoreDoc;packages/codemode/src/runtime/host.ts:CodemodeSandbox",
+      "inputs": {
+        "scripts": [
+          "double 21 then store",
+          "load the stored answer"
+        ],
+        "sandbox": "CodemodeSandbox QuickJS"
+      },
+      "expected": {
+        "calls": [
+          {
+            "isError": false,
+            "text": "Script completed\nWall time <seconds>\nOutput:\n42",
+            "details": {
+              "calls": [
+                {
+                  "id": 1,
+                  "name": "double",
+                  "args": "{\"n\":21}",
+                  "status": "ok",
+                  "durationPresent": true
+                }
+              ],
+              "fullOutputPathPresent": false
+            }
+          },
+          {
+            "isError": false,
+            "text": "Script completed\nWall time <seconds>\nOutput:\n42",
+            "details": {
+              "calls": [],
+              "fullOutputPathPresent": false
+            }
+          }
+        ],
+        "store": {
+          "values": {
+            "answer": "42"
+          }
+        }
+      },
+      "normalizations": [
+        "wall time replaced by <seconds>",
+        "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+      ]
+    },
+    {
+      "name": "a failed code mode script reports its error and the nested calls already made",
+      "source": "packages/durable/src/codemode/codemode.ts:CodemodeCall.execute;packages/durable/src/codemode/output.ts:formatResult",
+      "inputs": {
+        "script": "call double then throw boom"
+      },
+      "expected": {
+        "isError": true,
+        "text": "Script failed\nWall time <seconds>\nOutput:\nScript error:\nError: boom\n    at <anonymous> (codemode.js:1:69)\n\nTool calls made before the failure (they are not undone): double (ok)",
+        "details": {
+          "calls": [
+            {
+              "id": 1,
+              "name": "double",
+              "args": "{\"n\":2}",
+              "status": "ok",
+              "durationPresent": true
+            }
+          ],
+          "fullOutputPathPresent": false
+        }
+      },
+      "normalizations": [
+        "wall time replaced by <seconds>",
+        "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+      ]
+    },
+    {
+      "name": "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+      "source": "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool;packages/durable/src/harness/tool.ts:ToolTask",
+      "inputs": {
+        "query": "github issue",
+        "limit": 1,
+        "deferred": [
+          "github_get_issue",
+          "github_list_repos"
+        ]
+      },
+      "expected": {
+        "offeredBefore": [
+          "alpha",
+          "tool_search"
+        ],
+        "deferredBefore": [
+          "github_get_issue",
+          "github_list_repos"
+        ],
+        "searchResult": "Loaded 1 tool. They are available from your next call:\n- github_get_issue: Get a GitHub issue by number",
+        "toolResult": "github_get_issue ran",
+        "offeredAfter": [
+          "alpha",
+          "tool_search",
+          "github_get_issue"
+        ],
+        "deferredAfter": [
+          "github_list_repos"
+        ],
+        "modelTools": {
+          "add": [
+            "github_get_issue"
+          ]
+        },
+        "systemToolsAdded": [
+          {
+            "added": [
+              "alpha",
+              "tool_search"
+            ],
+            "removed": []
+          },
+          {
+            "added": [
+              "github_get_issue"
+            ],
+            "removed": []
+          }
+        ]
+      },
+      "normalizations": [
+        "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+      ]
+    },
+    {
+      "name": "an unrelated tool_search query loads nothing and leaves the offered set unchanged",
+      "source": "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool",
+      "inputs": {
+        "query": "weather forecast",
+        "deferred": [
+          "github_get_issue"
+        ]
+      },
+      "expected": {
+        "searchResult": "No matching tools found.",
+        "modelTools": null,
+        "offered": [
+          "tool_search"
+        ],
+        "assistantText": "done"
+      },
+      "normalizations": [
+        "code mode wall times are replaced by <seconds>; nested call durations are recorded as presence"
+      ]
+    }
+  ]
+}
