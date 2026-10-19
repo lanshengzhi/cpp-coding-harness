@@ -1,0 +1,568 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1054",
+  "family": "audit-1054",
+  "capturedAt": "2026-10-19T19:57:03.655Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.commit",
+    "packages/durable/src/storage/sqlite/schema.ts:createSqliteSchema,validateSqliteSchemaPrefix",
+    "packages/durable/src/storage/sqlite/migrations.ts:createSqliteMigrations,applySqliteMigrationsForSchema",
+    "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+    "packages/durable/test/sqlite-migrations.test.ts:Durable SQLite migrations",
+    "packages/durable/test/sqlite-storage.test.ts:SqliteStorage conformance"
+  ],
+  "scenarios": [
+    {
+      "name": "the SQLite schema records the durable tables, metadata and document revisions",
+      "inputs": {
+        "backend": "SqliteStorage",
+        "prefix": null,
+        "operations": [
+          "conversation",
+          "entry",
+          "document base",
+          "document delta",
+          "document checkpoint",
+          "pending task"
+        ]
+      },
+      "expected": {
+        "rows": {
+          "tables": [
+            {
+              "name": "conversations"
+            },
+            {
+              "name": "document_revisions"
+            },
+            {
+              "name": "documents"
+            },
+            {
+              "name": "durable_metadata"
+            },
+            {
+              "name": "durable_schema"
+            },
+            {
+              "name": "entries"
+            },
+            {
+              "name": "record_ids"
+            },
+            {
+              "name": "submissions"
+            },
+            {
+              "name": "tasks"
+            }
+          ],
+          "indexes": [
+            {
+              "name": "conversations_by_owner_conversation"
+            },
+            {
+              "name": "conversations_by_owner_task"
+            },
+            {
+              "name": "document_revisions_by_kind"
+            },
+            {
+              "name": "documents_by_address"
+            },
+            {
+              "name": "documents_by_scope"
+            },
+            {
+              "name": "documents_by_scope_kind"
+            },
+            {
+              "name": "entries_by_conversation"
+            },
+            {
+              "name": "entry_heads_by_conversation"
+            },
+            {
+              "name": "sqlite_autoindex_document_revisions_1"
+            },
+            {
+              "name": "submissions_by_conversation"
+            },
+            {
+              "name": "submissions_by_request"
+            },
+            {
+              "name": "submissions_by_status"
+            },
+            {
+              "name": "tasks_by_abort_requested"
+            },
+            {
+              "name": "tasks_by_background"
+            },
+            {
+              "name": "tasks_by_conversation"
+            },
+            {
+              "name": "tasks_by_kind"
+            },
+            {
+              "name": "tasks_by_status"
+            }
+          ],
+          "strict": [
+            {
+              "name": "conversations",
+              "strict": 1
+            },
+            {
+              "name": "document_revisions",
+              "strict": 1
+            },
+            {
+              "name": "documents",
+              "strict": 1
+            },
+            {
+              "name": "durable_metadata",
+              "strict": 1
+            },
+            {
+              "name": "durable_schema",
+              "strict": 1
+            },
+            {
+              "name": "entries",
+              "strict": 1
+            },
+            {
+              "name": "record_ids",
+              "strict": 1
+            },
+            {
+              "name": "submissions",
+              "strict": 1
+            },
+            {
+              "name": "tasks",
+              "strict": 1
+            }
+          ],
+          "journalMode": [
+            {
+              "journal_mode": "wal"
+            }
+          ],
+          "schema": [
+            {
+              "singleton": 1,
+              "version": 1
+            }
+          ],
+          "metadata": [
+            {
+              "singleton": 1,
+              "next_id": "6",
+              "next_seq": 5
+            }
+          ],
+          "recordIds": [
+            {
+              "id": 2,
+              "record_type": "conversation"
+            },
+            {
+              "id": 3,
+              "record_type": "entry"
+            },
+            {
+              "id": 4,
+              "record_type": "document"
+            },
+            {
+              "id": 5,
+              "record_type": "task"
+            }
+          ],
+          "conversations": [
+            {
+              "id": 2,
+              "owner_conversation_id": null,
+              "owner_task_id": null,
+              "record": "{\"id\":2}"
+            }
+          ],
+          "entries": [
+            {
+              "id": 3,
+              "conversation_id": 2,
+              "head": null,
+              "commit_seq": 2,
+              "record": "{\"kind\":\"audit1054.note\",\"data\":{\"n\":1},\"id\":3,\"conversationId\":2}"
+            }
+          ],
+          "tasks": [
+            {
+              "id": 5,
+              "conversation_id": 2,
+              "kind": "\"audit1054.work\"",
+              "status": "pending",
+              "abort_requested": 0,
+              "background": 0,
+              "record": "{\"id\":5,\"conversationId\":2,\"kind\":\"audit1054.work\",\"version\":1,\"input\":{\"n\":7},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\",\"n\":7}}}"
+            }
+          ],
+          "submissions": [],
+          "documents": [
+            {
+              "id": 4,
+              "kind": "\"audit1054.latest\"",
+              "family": 0,
+              "key_value": "\"\"",
+              "scope_kind": "conversation",
+              "owner_id": 2,
+              "created_at": 2,
+              "retired_at": null,
+              "record": "{\"id\":4,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\",\"createdAt\":2}"
+            }
+          ],
+          "documentRevisions": [
+            {
+              "document_id": 4,
+              "seq": 4,
+              "kind": "base",
+              "version": 1,
+              "content": "{\"text\":\"checkpoint\",\"revision\":3}"
+            }
+          ]
+        },
+        "fixture": {
+          "file": "storage.sqlite",
+          "bytes": 118784,
+          "sha256": "e4075d606928371f2535f97cd39fca1bf57e9910d0e8d0b249927a6b2a662d51",
+          "encoding": "gzip+base64",
+          "gzipBase64": "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"
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+      "inputs": {
+        "backend": "SqliteStorage",
+        "prefix": "t1054_",
+        "secondOpen": "the same file without a prefix"
+      },
+      "expected": {
+        "prefixedTables": [
+          {
+            "name": "t1054_conversations"
+          },
+          {
+            "name": "t1054_document_revisions"
+          },
+          {
+            "name": "t1054_documents"
+          },
+          {
+            "name": "t1054_durable_metadata"
+          },
+          {
+            "name": "t1054_durable_schema"
+          },
+          {
+            "name": "t1054_entries"
+          },
+          {
+            "name": "t1054_record_ids"
+          },
+          {
+            "name": "t1054_submissions"
+          },
+          {
+            "name": "t1054_tasks"
+          }
+        ],
+        "prefixedIndexes": [
+          {
+            "name": "t1054_conversations_by_owner_conversation"
+          },
+          {
+            "name": "t1054_conversations_by_owner_task"
+          },
+          {
+            "name": "t1054_document_revisions_by_kind"
+          },
+          {
+            "name": "t1054_documents_by_address"
+          },
+          {
+            "name": "t1054_documents_by_scope"
+          },
+          {
+            "name": "t1054_documents_by_scope_kind"
+          },
+          {
+            "name": "t1054_entries_by_conversation"
+          },
+          {
+            "name": "t1054_entry_heads_by_conversation"
+          },
+          {
+            "name": "t1054_submissions_by_conversation"
+          },
+          {
+            "name": "t1054_submissions_by_request"
+          },
+          {
+            "name": "t1054_submissions_by_status"
+          },
+          {
+            "name": "t1054_tasks_by_abort_requested"
+          },
+          {
+            "name": "t1054_tasks_by_background"
+          },
+          {
+            "name": "t1054_tasks_by_conversation"
+          },
+          {
+            "name": "t1054_tasks_by_kind"
+          },
+          {
+            "name": "t1054_tasks_by_status"
+          }
+        ],
+        "unprefixedRead": null,
+        "prefixedRead": {
+          "id": 2
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+      "inputs": {
+        "backend": "SqliteStorage",
+        "firstCommit": "conversation 2",
+        "failingCommit": "conversation 3 followed by a task row that violates the status CHECK"
+      },
+      "expected": {
+        "firstSeq": 1,
+        "failure": {
+          "rejected": true,
+          "name": "Error",
+          "message": "CHECK constraint failed: status IN ('pending', 'running', 'waiting', 'completing', 'terminal')"
+        },
+        "secondSeq": 2,
+        "rows": {
+          "tables": [
+            {
+              "name": "conversations"
+            },
+            {
+              "name": "document_revisions"
+            },
+            {
+              "name": "documents"
+            },
+            {
+              "name": "durable_metadata"
+            },
+            {
+              "name": "durable_schema"
+            },
+            {
+              "name": "entries"
+            },
+            {
+              "name": "record_ids"
+            },
+            {
+              "name": "submissions"
+            },
+            {
+              "name": "tasks"
+            }
+          ],
+          "indexes": [
+            {
+              "name": "conversations_by_owner_conversation"
+            },
+            {
+              "name": "conversations_by_owner_task"
+            },
+            {
+              "name": "document_revisions_by_kind"
+            },
+            {
+              "name": "documents_by_address"
+            },
+            {
+              "name": "documents_by_scope"
+            },
+            {
+              "name": "documents_by_scope_kind"
+            },
+            {
+              "name": "entries_by_conversation"
+            },
+            {
+              "name": "entry_heads_by_conversation"
+            },
+            {
+              "name": "sqlite_autoindex_document_revisions_1"
+            },
+            {
+              "name": "submissions_by_conversation"
+            },
+            {
+              "name": "submissions_by_request"
+            },
+            {
+              "name": "submissions_by_status"
+            },
+            {
+              "name": "tasks_by_abort_requested"
+            },
+            {
+              "name": "tasks_by_background"
+            },
+            {
+              "name": "tasks_by_conversation"
+            },
+            {
+              "name": "tasks_by_kind"
+            },
+            {
+              "name": "tasks_by_status"
+            }
+          ],
+          "strict": [
+            {
+              "name": "conversations",
+              "strict": 1
+            },
+            {
+              "name": "document_revisions",
+              "strict": 1
+            },
+            {
+              "name": "documents",
+              "strict": 1
+            },
+            {
+              "name": "durable_metadata",
+              "strict": 1
+            },
+            {
+              "name": "durable_schema",
+              "strict": 1
+            },
+            {
+              "name": "entries",
+              "strict": 1
+            },
+            {
+              "name": "record_ids",
+              "strict": 1
+            },
+            {
+              "name": "submissions",
+              "strict": 1
+            },
+            {
+              "name": "tasks",
+              "strict": 1
+            }
+          ],
+          "journalMode": [
+            {
+              "journal_mode": "wal"
+            }
+          ],
+          "schema": [
+            {
+              "singleton": 1,
+              "version": 1
+            }
+          ],
+          "metadata": [
+            {
+              "singleton": 1,
+              "next_id": "5",
+              "next_seq": 3
+            }
+          ],
+          "recordIds": [
+            {
+              "id": 2,
+              "record_type": "conversation"
+            },
+            {
+              "id": 4,
+              "record_type": "conversation"
+            }
+          ],
+          "conversations": [
+            {
+              "id": 2,
+              "owner_conversation_id": null,
+              "owner_task_id": null,
+              "record": "{\"id\":2}"
+            },
+            {
+              "id": 4,
+              "owner_conversation_id": null,
+              "owner_task_id": null,
+              "record": "{\"id\":4}"
+            }
+          ],
+          "entries": [],
+          "tasks": [],
+          "submissions": [],
+          "documents": [],
+          "documentRevisions": []
+        },
+        "fixture": {
+          "file": "storage.sqlite",
+          "bytes": 118784,
+          "sha256": "866062c09c7f694965da8056b3f43fa73a57031ba01c90df0bf9e9bcc2b07efe",
+          "encoding": "gzip+base64",
+          "gzipBase64": "H4sIAAAAAAAAA+3cy2/bRh4HcI4si5YfUR5Opo1beFK3kIQoTbzdINsWaTdV1MQbx8nKKpKcVFqcJqwl0iapON5Fu6BT5LboYYECi/0DFuhpb0H/gl4K7KGXPXWB/gPF9tRFD11w+BBHomzDdRGs8P0cInJmOA/yN3zAZFZ/v2y4nH1g2R3NZa8pR5VMRvktY4qiZBRFeVHpeV5RlGxinSh7yyiv/vUf437hwo/++guFH6e/mj4/9fnkl5O3819MTKlP1Zu5n3Kf5l4dz2WfZMfGPiPfkavK1/uoexjrlEoX54k3Z5g6f6RbrW6Hm67TXNtuOi1rg8cptFqvXWnU2NLK1dpdNliQ3VrppbKSSGuuG6ZeYdaWye2moVeYoZe90kmVXpwnO/nBFjVdt7njxGmnhrcZFp3M5/Nyw0GT6c1/oHWM9naFrfPt5kOt3eUV1rK55nK9qbnsam21WmE2dw1bJJQfvzyr0vl58oS62lq7tyvihZNh/xpX3lmuJTvhd8vQ2dJKo3atVme360s3r9TvsRu1exU/y+8Xa9TuNtjKrQZbeW95WSQH3Yu3ivJY9XqteoOV4mxWulBhi+VyUFc0lpQKe3tBzoxqTOT7tRYd7jiGZRYrrNiyzIfcdjQ3XHc1Z70YNhnt0IGeitzEHk3N7+3gKD9Mbln2kH5+6FimP0hDLwXFyuXJfL7MVhv1pWpj/YRKLy0QLwgop7vWMcQwgth0NbfrJBJnpZhKLe2HciKDlYLkIHyV4yqtLhCvmNZacq8lsk7s1mZym4GWk5nRDPr4mEpfXyDeubQe2Hyzyx03kXp8t8bD4nu3GxZsGnp555WjKl1YIJ8cE9MisV1i8Zg0NaS695gcfU0PC6KoOyJigmgPDl56pAd5Iso3u7zLdT+oN9paK1jSLZP7v11TM50tbnM9CvaDx2WzoNLXKPGIOE7+BBK7fE1rrd+3ra6pi6Sj0uFJKeUfG5HMSr1EEQjmEZVepsQ7KTegrVm2Gx1ZHrRSSG+lr2iiqb4c0d7yTI4WKTHk5vzTh1g5kt6GOL30Kg7OyYZefjCt0kuUeAW5uuThF4kz6dX2T5uw+rQJU5/K0bOUbMoNBSEhVqfTm+idDcLKE+eBx2cnVUopeXJRTAJRQPwzJQV+uOFhhPyQi8Z+o36Dm7ph3veD3O6aZri4pRluuNiyOhttHq253O4YptaOpkF/pAy7SA2Wk65WibAeVoNURNr44FPRm82rtDpHvDsiBrjp2tvNB1zTB0LJzzK4MylFxC7l/egIt0kNPnFXUWZ3rtfqNebXwJZW4853J1T65hzxzsS9MviwHuUHepRSdn+98d5XVTo3Rx4H9zXhBuHPhBS/cWWHEcHB8BPX/JbV6Rhu0+Gbw87yBz7gmZxKq8XoMi1dl/2dFtzC+LNTylKlnbzLVv6OlrJZqZcZ3+qeHlfpapF413brRDJZKpLbT2f6j35qp9JOit7drEqLRbJjiSCQtpNWxqWA6Kt/j7BIbV4KAWmvHdINoXd7TKVnzpCddTG0oETT0J3eUlYaVC99zxGFRd3tDZ7etWQBceLtv5MWJ5P4lrrCir2bo+BOJHiKKMpDejej0nPnyM7bwaNI1/Z/mh3uarrmav3rY/KDSV9uMEjHMO+3uWuZaWONryBxoctsMTgLm/xRfN8lT1eRkzaZkwN5g6i0XCY756WBOK0HvKPJa5nUQQR5P28I/vEwElv1H8Mo/63L7EJ4FPxH+qmZ8Nk8eDwHAAAAAAAAgBEzRsaUfPD8/4NS+OFZdwcAAAAAAAAADluOZJUCuTjmP/9nCt8ohe8K3zzrPgEAAAAAAADAQRSyY8orya81Cpm+hOD5/1ul8J/Ct8+6twAAAAAAAABwUDNZ///fe/GPLxn6S2/8+qOZTGL1Vx9Niuf/75XCfwvfP+ueAgAAAAAAAMBhyWUVQrJZ8ZPJ4PkfAAAAAAAAYBTJz//++//K0WfdJwAAAAAAAAD4Jfl//8fzPwAAAAAAAMBow/M/AAAAAAAAwOjD+/8AAAAAAAAAow9//wcAAAAAAAAYfXj+BwAAAAAAABh9eP4HAAAAAAAAGH14/gcAAAAAAAAYfXj+BwAAAAAAABh9+P//AQAAAAAAAEYf/v4PAAAAAAAAMPrw/A8AAAAAAAAw+vD8DwAAAAAAADD68P0/AAAAAAAAwOjD3/8BAAAAAAAARh+e/wEAAAAAAABGH57/AQAAAAAAAEaf//3/lPpUKVSP/GHm79NfTZ+f+nzyy8nb+S8mptSn6s3cT7lPc6+O57JPsmNjn5HvyFXla6Wu/G6wptxzOfH7J6rSN+eJt2iYOn+kW61uh5uu01zbbjota4M31w1Tj5Ofq9ZrVxo1trRytXaXDSnNbq30slipl1Fh1pbJ7aahV1iwbuhl65RKF+eJNzekA3EK3aPtfTVr6GWvdFKlF+fJTn6wRU3Xbe44cdqp4W2GRSfz+bzccNBkevMfaB2jvV1h63y7+VBrd3mFtWyuuVxvai67WlutVpjNXcMWCeXHL8+qdH6ePKGuttbu7Yp44WTYv8aVd5ZryU743TJ0trTSqF2r1dnt+tLNK/V77EbtXsXPEoepUbvbYCu3GmzlveVlkRx0L94qymPV67XqDVaKs1npQoUtlstBXdFYUipMBIWUGdWYyPdrLTrccQzLLFZYsWWZD7ntaG647mrOejFsMtqhAz0VuYk9mprf28FRfpjcsuwh/fzQsUx/kIZeCoqVy5P5fJmtNupL1cb6CZVeWiBeEFBOd61jiGEEselqbtdJJM5KMZVa2g/lRAYrBclB+CrHVVpdIF4xrbXkXktknditzeQ2Ay0nM6MZ9PExlb6+QLxzaT2w+WaXO24i9fhujYfF9243LNg09PLOK0dVurBAPjkmpkViu8TiMWlqSHXvMTn6mh4WRFF3RMQE0R4cvPRID/JElG92eZfrflBvtLVWsKRbJvd/u6ZmOlvc5noU7AePy2ZBpa9R4hFxnPwJJHb5mtZav29bXVMXSUelw5NSyj82IpmVeokiEMwjKr1MiXdSbkBbs2w3OrI8aKWQ3kpf0URTfTmiveWZHC1SYsjN+acPsXIkvY3omhRWHF95Hkyr9BIlXkGuLnn4ReJMerX90yasPm3C1Kdy9Cwlm3JDQUiI1en0Jnpng7DyxHng8dlJlVJKnlwUk0AUEP9MSYEfbngYIT/korHfqN/gpm6Y9/0gt7umGS5uaYYbLraszkabR2sutzuGqbWjadAfKcMuUoPlpKtVIqyH1SAVkTY++FT0ZvMqrc4R746IAW669nbzAdf0gVDyswzuTEoRsUt5PzrCbVKDT9xVlNmd67V6jfk1sKXVuPPdCZW+OUe8M3GvDD6sR/mBHqWU3V9vvPdVlc7NkcfBfU24QfgzIcVvXNlhRHAw/MQ1v2V1OobbdPjmsLP8gQ94JqfSajG6TEvXZX+nBbcw/uyUslRpJ++ylb+jpWxW6mXGt7qnx1W6WiTetd06kUyWiuT205n+o5/aqbSTonc3q9JikexYIgik7aSVcSkg+urfIyxSm5dCQNprh3RD6N0eU+mZM2RnXQwtKNE0dKe3lJUG1Uvfc0RhUXd7g6d3LVlAnHj776TFySS+pa6wYu/mKLgTCZ4iivKQ3s2o9Nw5svN28CjStf2fZoe7mq65Wv/6mPxg0pcbDNIxzPtt7lpm2ljjK0hc6DJbDM7CJn8U33fJ01XkpE3m5EDeICotl8nOeWkgTusB72jyWiZ1EEHezxuCfzyMxFb9xzDKf+syu5A8Cvj//wAAAAAAAABGH97/BwAAAAAAABh9MxN/UQo5Syl8Vrh+5F9HtmZuTf9zennq35O/yf85/8LE39TcxErOeta9BACA/3Pe7GmVXlkkXlX6VKpp84dG/AVH8gOxXs6LqV9ODW6Z/Gqrl8tKcVrvYzH/xT7x+vBO7TmVLi6STy5Kn0X1Nh9MOZ36oVSyQf+1vESj6e8DD31RePgnTr2Pm9Y0R3ziofO2q0WvtQ97EzB6qdnlprvnK6hhubDK5CuI8n50+GbybcLq8zl6Z5EowWc8m23D5U2t61pivZlyzBYH0+YURZlQ8CEhPiTEh4T4kBAfEuJDQnxI+Mt9SIi//wMAAAAAAACMvv8BVxCGWgDQAQA="
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "SQLite refuses a store written by a newer durable schema version",
+      "inputs": {
+        "backend": "SqliteStorage",
+        "mutation": "set durable_schema.version to 2 outside the runtime after close"
+      },
+      "expected": {
+        "versionAfterMutation": [
+          {
+            "version": 2
+          }
+        ],
+        "open": {
+          "rejected": true,
+          "name": "Error",
+          "message": "Durable SQLite schema version 2 is newer than supported version 1"
+        }
+      },
+      "normalizations": []
+    }
+  ]
+}

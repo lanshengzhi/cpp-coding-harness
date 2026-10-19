@@ -1,0 +1,2916 @@
+{
+  "schema": "pike/pi-v1.3.0-capability-ledger/1",
+  "ticket": "1054",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "platform": "linux-x86_64-glibc",
+  "counts": {
+    "rows": 111,
+    "membership": {
+      "supported": 109,
+      "excluded": 2
+    },
+    "implementation": {
+      "missing": 95,
+      "partial": 16
+    },
+    "verification": {
+      "verified": 0,
+      "upstream-captured": 83,
+      "unverified": 26,
+      "not-applicable": 2
+    }
+  },
+  "rows": [
+    {
+      "id": "cch_durable:Session:create",
+      "capability": "Open a durable Session over a Storage backend",
+      "source": [
+        "packages/durable/src/session/session.ts:createSession,SessionImpl"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/backend-contract.json",
+        "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
+        "result": "createSession opened memory, JSONL and SQLite stores with identical observations."
+      },
+      "gaps": [
+        "createSession options now/documentRetentionMs are unused by the current application runtime.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:commit",
+      "capability": "Atomic Session transaction line and one commit sequence per adopted batch",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.commit,SessionImpl.#runCommit",
+        "packages/durable/src/session/transaction.ts:Transaction"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "One commit appended entry 3, created four documents and published commit seq 2 with an identical committed snapshot."
+      },
+      "gaps": [
+        "Current SessionStore commits entries through a different append API and has no document or multi-record transaction.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:commit:settlement-visibility",
+      "capability": "Prepared drafts become observable only after Storage settles the commit",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#runCommit",
+        "packages/durable/test/session-documents.test.ts:keeps the previous revision unchanged through Storage settlement"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a prepared draft is not observable before Storage settles its commit",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a prepared draft is not observable before Storage settles its commit",
+        "result": "While Storage.commit was held, snapshot returned the previous revision and no publication occurred; after release the committed revision and one publication appeared."
+      },
+      "gaps": [
+        "No C++ Session transaction line or committed-revision adoption exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:commit:callback-rollback",
+      "capability": "A failed transaction callback writes and publishes nothing",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#runCommit",
+        "packages/durable/src/session/transaction.ts:Transaction.settleFailure",
+        "packages/durable/test/session-documents.test.ts:aborts every change when the callback fails"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a failed transaction callback publishes nothing and leaves the Session usable",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a failed transaction callback publishes nothing and leaves the Session usable",
+        "result": "The callback rejection left the committed snapshot, entries and publication count unchanged; a later commit succeeded."
+      },
+      "gaps": [
+        "No C++ transaction callback or escaped-draft revocation exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:commit:storage-failure",
+      "capability": "A failed Storage.commit fails the Session and publishes nothing",
+      "source": [
+        "packages/durable/src/session/session.ts:GuardedStorage,SessionImpl.fail",
+        "packages/durable/test/session-documents.test.ts:fails the Session after a Storage failure and publishes nothing"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a failed Storage commit fails the Session and publishes nothing",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a failed Storage commit fails the Session and publishes nothing",
+        "result": "The commit rejected with the backend error, publication count stayed unchanged, later snapshot/commit rejected SessionFailed, and Session.closed reported failed with that error."
+      },
+      "gaps": [
+        "Pike has no Session-level fatal-storage latch; failures surface as per-call errors.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:close",
+      "capability": "Seal admission, settle admitted commits and close Storage",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.close,SessionImpl.#notifyClose"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "closing seals admission and notifies close subscribers once",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "closing seals admission and notifies close subscribers once",
+        "result": "Close notified once, a later commit rejected 'Session is closed', and Session.closed reported closed."
+      },
+      "gaps": [
+        "Current SessionStore has no close lifecycle or admission seal.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:subscribeCommits",
+      "capability": "Synchronous post-adoption commit publications",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.subscribeCommits,SessionImpl.#publish"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "The listener observed two publications whose changes matched the admitted entry and document creations."
+      },
+      "gaps": [
+        "No C++ publication channel exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:subscribeClose",
+      "capability": "Synchronous close notification",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.subscribeClose"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "closing seals admission and notifies close subscribers once",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "closing seals admission and notifies close subscribers once",
+        "result": "The close listener ran exactly once."
+      },
+      "gaps": [
+        "No C++ close listener exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:snapshot",
+      "capability": "Read a committed document snapshot without creating it",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.snapshot",
+        "packages/durable/test/session-documents.test.ts:never creates on snapshot and returns undefined when absent"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "Snapshots returned the committed latest, counter, family and rewindable document values."
+      },
+      "gaps": [
+        "Pike has no durable document reader.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:snapshotAsOf",
+      "capability": "Read a rewindable conversation document at a visible entry commit",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.snapshotAsOf",
+        "packages/durable/src/session/observation.ts:CommittedStateSource"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+        "result": "The same document read v1 at entry 3, v2 at entry 4, and still v1 at entry 3 after retirement."
+      },
+      "gaps": [
+        "No as-of document history exists in Pike.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:documentState",
+      "capability": "Attach a read-only Chord state to a committed document incarnation",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.documentState",
+        "packages/durable/src/session/observation.ts:CommittedStateSource",
+        "packages/durable/test/session-states.test.ts:documentState"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "document watches and states deliver only committed frames",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "document watches and states deliver only committed frames",
+        "result": "documentState(CounterDoc).value observed the committed count 2 after the second commit."
+      },
+      "gaps": [
+        "Requires the cch_chord replicated-state contract (#1057) before it can exist.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": "The Chord contract goes to cch_chord; the Session binding stays in cch_durable."
+    },
+    {
+      "id": "cch_durable:Session:watchDoc",
+      "capability": "Acquire a committed document watch with exact value/ops frames and stop reasons",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.watchDoc",
+        "packages/durable/src/session/observation.ts:CommittedWatch",
+        "packages/durable/test/session-watches.test.ts:Session document watches"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "document watches and states deliver only committed frames",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "document watches and states deliver only committed frames",
+        "result": "One frame carried the committed value and both set ops; stop returned stopped and Session close returned session_closed."
+      },
+      "gaps": [
+        "No C++ document watch or cancellation contract exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Session:document-retention",
+      "capability": "Bounded document cache retention and reload from Storage",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.documentRetention,documentRetention",
+        "packages/durable/test/session-document-retention.test.ts:document cache retention"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "document retention controls whether a committed document is reloaded from Storage",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "document retention controls whether a committed document is reloaded from Storage",
+        "result": "Retention 0 caused two document reads and three address lookups; the default retention caused zero document reads and one lookup."
+      },
+      "gaps": [
+        "No C++ document cache or retention setting exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:conversation",
+      "capability": "Read one conversation inside a transaction",
+      "source": [
+        "packages/durable/src/types.ts:Tx.conversation",
+        "packages/durable/test/session-tables.test.ts:Session transaction tables"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+        "result": "tx.conversation returned the record under the matching prefixed schema and null under the unprefixed schema."
+      },
+      "gaps": [
+        "No C++ transaction read surface exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:entry",
+      "capability": "Read an entry untyped and through a typed entry token",
+      "source": [
+        "packages/durable/src/types.ts:Tx.entry",
+        "packages/durable/test/session-tables.test.ts:typed entry read"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "tx.entry(NoteKind, id) returned the committed typed entry and its guard narrowed."
+      },
+      "gaps": [
+        "Current SessionStore reads entries by ID without typed kinds.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:task",
+      "capability": "Read one task record inside a transaction",
+      "source": [
+        "packages/durable/src/types.ts:Tx.task"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/interchange.json",
+        "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+        "result": "After both reopens tx.task returned the same pending task record and checkpoint."
+      },
+      "gaps": [
+        "No C++ durable task record reader exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:scanConversations",
+      "capability": "Scan conversations by owner filters, order and cursor",
+      "source": [
+        "packages/durable/src/types.ts:Tx.scanConversations,ConversationQuery",
+        "packages/durable/src/storage/scan.ts:scanStart,nextCursor"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "An ascending scan returned the single conversation record with no next cursor."
+      },
+      "gaps": [
+        "Owner-filtered scans and cursor objects are not implemented in C++.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:scanEntries",
+      "capability": "Scan entry history by inclusive bounds, order and cursor",
+      "source": [
+        "packages/durable/src/types.ts:Tx.scanEntries,EntryQuery",
+        "packages/durable/test/session-tables.test.ts:scan limits and cursors"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "Descending page one returned entries 5 and 4 with cursor {after:4,order:descending}; page two returned entry 3."
+      },
+      "gaps": [
+        "Current Pike tree queries are not a cursor contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:latestHeadMarker",
+      "capability": "Find the newest visible entry carrying a head marker",
+      "source": [
+        "packages/durable/src/types.ts:Tx.latestHeadMarker",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.findLatestHeadMarker"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "The marker returned entry 5 with head 5 (self)."
+      },
+      "gaps": [
+        "No C++ head-marker query exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:scanTasks",
+      "capability": "Scan task records by conversation, kind, status, abort and background filters",
+      "source": [
+        "packages/durable/src/types.ts:Tx.scanTasks,TaskQuery"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ Tx.scanTasks over a reopened JSONL/SQLite store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ Tx.scanTasks over a reopened JSONL/SQLite store",
+        "result": "Not captured: this ticket captures task identity through tx.task, not filtered task scans (task scheduling belongs to #1055)."
+      },
+      "gaps": [
+        "Task scan behavior is owned together with the task runtime in #1055; no query exists in Pike.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:read:submissionByRequest",
+      "capability": "Look up a submission by its conversation-scoped request ID",
+      "source": [
+        "packages/durable/src/types.ts:Tx.submissionByRequest",
+        "packages/durable/src/storage/sqlite/schema.ts:submissionsByRequest index"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "cch_agent_core TaskStore deduplicates submissions by request ID",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ TaskStore deduplication versus a durable submission request key",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ TaskStore deduplication versus a durable submission request key",
+        "result": "Not captured here; current TaskStore has request deduplication but no conversation-scoped submission record."
+      },
+      "gaps": [
+        "Submission lifecycle is owned with durable tasks (#1055); current text IDs and table shape differ.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:createConversation",
+      "capability": "Create a conversation with explicitly selected ownership",
+      "source": [
+        "packages/durable/src/types.ts:Tx.createConversation,ConversationOwnership",
+        "packages/durable/src/session/transaction.ts:Transaction.createConversation"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "The ownerless conversation was minted as ID 2 and persisted with the same commit as its entry and documents."
+      },
+      "gaps": [
+        "Current SessionStore creates a session file/header, not a conversation row with ownership.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:forkConversation",
+      "capability": "Fork a conversation at one visible entry with selected ownership",
+      "source": [
+        "packages/durable/src/types.ts:Tx.forkConversation",
+        "packages/durable/src/session/forks.ts:copyConversationDocuments",
+        "packages/durable/test/session-forks.test.ts:Session conversation document forks"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "cch_coding_agent fork flow (SessionStore.create_from_entries)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
+        "result": "Child conversation 8 inherited rewindable v1 and latest c2, published document.copy changes for both, and left the initial-only document absent until first access."
+      },
+      "gaps": [
+        "Pike forks an application transcript file; it has no document copy or conversation ancestry record.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:appendEntry",
+      "capability": "Append a typed or untyped entry inside a transaction",
+      "source": [
+        "packages/durable/src/types.ts:Tx.appendEntry,EntryDraft",
+        "packages/durable/src/session/transaction.ts:Transaction.appendEntry"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "cch_coding_agent SessionStore.append/commit_batch",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "The entry received ID 3, was returned by the same commit and was visible in the committed scan."
+      },
+      "gaps": [
+        "Current appends are application transcript entries with string IDs and no task attribution or head/edits contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:createTask",
+      "capability": "Create a durable task record with input and initial checkpoint",
+      "source": [
+        "packages/durable/src/types.ts:Tx.createTask,TaskOptions",
+        "packages/durable/src/tasks.ts:defineTask"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "cch_agent_core TaskScheduler/TaskStore",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/interchange.json",
+        "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+        "result": "Both backends stored task 6 with checkpoint {phase:start,n:7} and returned it unchanged after two reopens."
+      },
+      "gaps": [
+        "Task execution and scheduling are audited by #1055; only the Session persistence side is captured here.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:createSubmission",
+      "capability": "Create a raw submission record with a fresh ID",
+      "source": [
+        "packages/durable/src/types.ts:Tx.createSubmission,SubmissionCreate"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ Tx.createSubmission over a durable store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ Tx.createSubmission over a durable store",
+        "result": "Not captured: submission admission and lifecycle are audited with durable tasks (#1055)."
+      },
+      "gaps": [
+        "No C++ submission record or conversation-scoped request key exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:placeSubmission",
+      "capability": "Place a queued submission at an entry",
+      "source": [
+        "packages/durable/src/types.ts:Tx.placeSubmission"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ Tx.placeSubmission over a queued record",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ Tx.placeSubmission over a queued record",
+        "result": "Not captured: admission boundaries belong to the task/harness audits (#1055/#1056)."
+      },
+      "gaps": [
+        "No C++ placement boundary exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:settleSubmission",
+      "capability": "Settle a placed submission with an answer",
+      "source": [
+        "packages/durable/src/types.ts:Tx.settleSubmission,SubmissionSettlement"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ Tx.settleSubmission over a placed record",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ Tx.settleSubmission over a placed record",
+        "result": "Not captured: submission lifecycle belongs to the task/harness audits (#1055/#1056)."
+      },
+      "gaps": [
+        "No C++ settlement contract exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:doc",
+      "capability": "Read a document draft by scope and family key, creating it on first access",
+      "source": [
+        "packages/durable/src/types.ts:Tx.doc",
+        "packages/durable/src/session/transaction.ts:Transaction.doc",
+        "packages/durable/src/documents.ts:defineDoc,defineDocFamily"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "First access created a session, latest conversation, family member and rewindable document in the same commit."
+      },
+      "gaps": [
+        "Pike has no durable document API or Chord drafts.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:retireDoc",
+      "capability": "Retire a document incarnation",
+      "source": [
+        "packages/durable/src/types.ts:Tx.retireDoc",
+        "packages/durable/src/session/transaction.ts:Transaction.retireDoc"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+        "result": "Retirement made current snapshots undefined while the historical entry cutoff stayed readable."
+      },
+      "gaps": [
+        "No C++ document retirement or history retention exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:write-before-read",
+      "capability": "Table reads are allowed only before the first table write",
+      "source": [
+        "packages/durable/src/session/transaction.ts:Transaction.snapshot,ReadAfterWrite",
+        "packages/durable/test/session-tables.test.ts:allows table reads only before the first table write"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ transaction rejecting a table read after a table write",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ transaction rejecting a table read after a table write",
+        "result": "Not captured: the capture exercises resolved reads before writes and does not assert the rejection path."
+      },
+      "gaps": [
+        "No C++ transaction write ordering rule exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Tx:task-attribution",
+      "capability": "Entries appended by a task carry byTaskId and task scoped documents bind taskId",
+      "source": [
+        "packages/durable/src/types.ts:EntryRecord.byTaskId,TaskDocToken",
+        "packages/durable/src/session/session.ts:commitWith"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ task-attributed entry and task document",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ task-attributed entry and task document",
+        "result": "Not captured: task invocation and attribution are audited with the durable Harness (#1056)."
+      },
+      "gaps": [
+        "Current Pike appends carry no durable task attribution.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Entry:defineEntry",
+      "capability": "Define a typed entry kind with a narrowing guard",
+      "source": [
+        "packages/durable/src/entries.ts:defineEntry",
+        "packages/durable/test/session-definitions.test.ts:types every owner, key, and seed overload"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "NoteKind.is() narrowed the committed entry to the audit1054.note data shape."
+      },
+      "gaps": [
+        "Current SessionEntry is a closed variant without user-defined typed entry kinds.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Entry:builtin-kinds",
+      "capability": "Built-in pi.user, pi.assistant, pi.system, pi.tool-result, pi.reset and pi.compaction entry kinds",
+      "source": [
+        "packages/durable/src/entries.ts:UserEntry,AssistantEntry,SystemEntry,ToolResultEntry,ResetEntry,CompactionEntry"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "cch_coding_agent SessionStore entry kinds",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ built-in durable entry kinds round-tripping through a store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ built-in durable entry kinds round-tripping through a store",
+        "result": "Not captured individually: the current capture records application-defined audit1054 kinds; current Pike has application message/model/label/compaction kinds, not the durable pi.* set."
+      },
+      "gaps": [
+        "Durable pi.* kinds and their model/data contracts are absent; application transcript kinds cannot substitute.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Entry:record",
+      "capability": "Entry identity, kind, model messages, data, head, edits and byTaskId",
+      "source": [
+        "packages/durable/src/types.ts:EntryRecord,EntryDraft,TypedEntry"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "cch_coding_agent SessionEntry/SessionTree",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "The self head marker stored head 5 and the scan returned the persisted id, conversationId, kind, data and head fields."
+      },
+      "gaps": [
+        "Context edits, byTaskId and durable integer entry IDs are absent from the current application entry record.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Entry:head-marker",
+      "capability": "Head self markers select the active context start",
+      "source": [
+        "packages/durable/src/types.ts:EntryDraft.head,EntryRecord.head",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.findLatestHeadMarker"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "appendEntry({head:'self'}) returned entry 5 with head 5 and the marker query returned it."
+      },
+      "gaps": [
+        "Current Pike uses a separate leaf entry and SessionTree, not durable head markers.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Entry:edits",
+      "capability": "Immutable context-only omit/replace edits of earlier entries",
+      "source": [
+        "packages/durable/src/types.ts:ContextEdit,EntryRecord.edits"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ entry context edits surviving a reopen",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ entry context edits surviving a reopen",
+        "result": "Not captured: no scenario exercises ContextEdit."
+      },
+      "gaps": [
+        "No C++ context edit representation exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Entry:fork-ancestry",
+      "capability": "Visible entry history follows conversation fork ancestry",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.entry,resolveAddress",
+        "packages/durable/test/session-forks.test.ts:uses final document state from the fork entry commit"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ scan of a forked conversation's inherited and own entries",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ scan of a forked conversation's inherited and own entries",
+        "result": "Not captured: the fork scenario validates document copies, not entry ancestry visibility."
+      },
+      "gaps": [
+        "Current transcript forks copy a file; there is no ancestry-aware entry read.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Entry:append-typed",
+      "capability": "Typed appendEntry returns the typed committed record",
+      "source": [
+        "packages/durable/src/types.ts:Tx.appendEntry<D>",
+        "packages/durable/test/session-tables.test.ts:typed append"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "The untyped append returned the committed record and the typed read guard narrowed it."
+      },
+      "gaps": [
+        "Current append has no typed token overload.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:defineDoc",
+      "capability": "Define a singleton document with scope, history, fork behavior and version",
+      "source": [
+        "packages/durable/src/documents.ts:defineDoc,validateDefinition",
+        "packages/durable/test/session-definitions.test.ts:document definitions"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "Session, latest-conversation and rewindable singleton definitions each created the expected base."
+      },
+      "gaps": [
+        "No document definition or validation exists in Pike.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:defineDocFamily",
+      "capability": "Define a keyed document family initialized from its first seed",
+      "source": [
+        "packages/durable/src/documents.ts:defineDocFamily,resolveAddress",
+        "packages/durable/src/session/observation.ts"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "Members alpha and beta kept their first seeds after a later access supplied a different seed."
+      },
+      "gaps": [
+        "No family member identity or seed contract exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:scopes",
+      "capability": "Session, conversation, task, and family document address scopes",
+      "source": [
+        "packages/durable/src/types.ts:DocumentAddress,DocumentSemantics",
+        "packages/durable/src/documents.ts:addressId,documentCreate"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "The latest record stored scope {kind:conversation,conversationId:2}, history latest and fork current with createdAt 2."
+      },
+      "gaps": [
+        "Task-scoped documents are not captured here because they bind the durable Harness (#1056).",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:version-migrate",
+      "capability": "Stored document version checks and migrate callback",
+      "source": [
+        "packages/durable/src/documents.ts:checkRecordVersion,materializeDocument",
+        "packages/durable/test/session-checkpoints-migrations.test.ts:Session document checkpoints and migrations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ reopen of a document stored at an older version",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ reopen of a document stored at an older version",
+        "result": "Not captured: all captured documents use version 1; migration is exercised only by frozen tests."
+      },
+      "gaps": [
+        "No versioned document schema or migration path exists in C++.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:create-base",
+      "capability": "First access stores a complete base at a new incarnation",
+      "source": [
+        "packages/durable/src/session/transaction.ts:Transaction.doc",
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.encodeCommit"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL commit appends every sidecar before the main marker",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL commit appends every sidecar before the main marker",
+        "result": "document.create wrote a base {text:'ordered',revision:1} sidecar record before the main marker."
+      },
+      "gaps": [
+        "No C++ document incarnation or base record exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:delta",
+      "capability": "Ordinary document updates store Chord operations as deltas",
+      "source": [
+        "packages/durable/src/session/transaction.ts:Transaction.settleSuccess",
+        "packages/durable/src/storage/jsonl/storage.ts:SidecarPayload",
+        "packages/durable/test/session-documents.test.ts:adopts by pointer swap"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
+        "result": "The second update appended a delta record with ops [['s',['text'],'two']] after the base."
+      },
+      "gaps": [
+        "Requires the cch_chord delta vocabulary and tracker (#1057).",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:checkpoint",
+      "capability": "checkpointWhen replaces accumulated deltas with a new base",
+      "source": [
+        "packages/durable/src/types.ts:CheckpointInfo,CommonDocDefinition.checkpointWhen",
+        "packages/durable/test/session-checkpoints-migrations.test.ts:selects bases only for nonempty ordinary batches"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
+        "result": "A third update at text 'checkpoint' replaced base+delta with one base line; SQLite likewise retained only the checkpoint base revision."
+      },
+      "gaps": [
+        "No C++ checkpoint policy or reclaim exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:as-of",
+      "capability": "Rewindable documents retain revisions addressable by entry commit",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.snapshotAsOf",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.findDocument"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+        "result": "Entry 3 read v1 and entry 4 read v2 from the same rewindable document."
+      },
+      "gaps": [
+        "No revision history or entry-commit addressing exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:fork-copy",
+      "capability": "Fork initialization modes current, initial and asOf",
+      "source": [
+        "packages/durable/src/session/forks.ts:copyConversationDocuments",
+        "packages/durable/test/session-forks.test.ts:copies as-of and current singleton and family bases"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
+        "result": "asOf copied v1 at the fork entry, current copied c2, and initial created no copy until first access."
+      },
+      "gaps": [
+        "No document fork copy exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:copy-record",
+      "capability": "Document copy creation records the exact source id and point",
+      "source": [
+        "packages/durable/src/types.ts:DocumentCopySource,DocumentCommitChange",
+        "packages/durable/src/session/forks.ts"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
+        "result": "The publication recorded sources {id:4,at:2} and {id:5,at:'current'} for the two copies."
+      },
+      "gaps": [
+        "No document copy provenance exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:retire",
+      "capability": "Retire an incarnation without reusing its ID",
+      "source": [
+        "packages/durable/src/session/transaction.ts:Transaction.retireDoc",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.applyDocumentActions"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+        "result": "Retirement published value null with empty ops and made current reads undefined."
+      },
+      "gaps": [
+        "No retirement marker or incarnation identity exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:address-identity",
+      "capability": "Stable logical address identity and record incarnation identity",
+      "source": [
+        "packages/durable/src/documents.ts:addressId,documentCreate,checkRecordScope",
+        "packages/durable/src/types.ts:DocumentRecord"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "The stored record carried id 4, kind audit1054.latest, conversation scope and createdAt 2."
+      },
+      "gaps": [
+        "No document address or incarnation ID exists in C++.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Document:task-scope",
+      "capability": "Task-scoped documents bind a TaskId and follow task lifetime",
+      "source": [
+        "packages/durable/src/types.ts:TaskDocToken,DocumentSemantics",
+        "packages/durable/src/session/transaction.ts:Transaction.doc"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ task document created and read through a task invocation",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ task document created and read through a task invocation",
+        "result": "Not captured: task invocation APIs belong to the durable Harness audit (#1056)."
+      },
+      "gaps": [
+        "No task document scope exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Identity:id-namespace",
+      "capability": "Session-global numeric ID namespace shared by records and documents, monotonic across reopen",
+      "source": [
+        "packages/durable/src/types.ts:Id,DocumentId,ConversationId,TaskId",
+        "packages/durable/src/storage/memory.ts:MemoryStorage.mintId",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.mintId"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/interchange.json",
+        "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+        "result": "Both JSONL and SQLite minted 8 after reopening the fixture (max stored ID 7) and 10 after the continued store."
+      },
+      "gaps": [
+        "Current Pike uses random 8-character hex entry IDs and TEXT session/task IDs; it has no global numeric namespace.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Identity:seq",
+      "capability": "One strictly increasing commit sequence per adopted batch, with gaps permitted",
+      "source": [
+        "packages/durable/src/types.ts:Seq,CommitPublication",
+        "packages/durable/src/storage/jsonl/storage.ts:MainMarker"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL commit appends every sidecar before the main marker",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL commit appends every sidecar before the main marker",
+        "result": "The main marker recorded seq 2 for the entry and document commit; the SQLite rollback case resumed at seq 2 after a failed batch."
+      },
+      "gaps": [
+        "Current Pike session entries have no commit sequence.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Query:cursor",
+      "capability": "Backend-owned JSON cursor continuation with scan order",
+      "source": [
+        "packages/durable/src/types.ts:Cursor,Page,ScanOrder",
+        "packages/durable/src/storage/scan.ts:scanStart,nextCursor"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "The descending cursor {after:4,order:descending} continued page two at entry 3."
+      },
+      "gaps": [
+        "Pike SessionTree queries have no cursor contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Query:filters",
+      "capability": "Conversation owner, task status/kind/abort/background and submission status filters",
+      "source": [
+        "packages/durable/src/types.ts:ConversationQuery,TaskQuery,SubmissionQuery",
+        "packages/durable/src/storage/sqlite/storage.ts:scanConversations,scanTasks,scanSubmissions"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ filtered scans over a durable store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ filtered scans over a durable store",
+        "result": "Only the conversation ascending order and entry range were captured; task/submission filters are task-audit scope."
+      },
+      "gaps": [
+        "No filtered durable scans exist in C++.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:commit",
+      "capability": "Atomically persist one write batch and return its commit sequence",
+      "source": [
+        "packages/durable/src/types.ts:Storage.commit,StorageWrite",
+        "packages/durable/src/storage/memory.ts:MemoryStorage.commit,prepareCommit",
+        "packages/durable/src/testing/storage-conformance.ts:registerStorageConformance"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current SqliteSessionStore batch transaction only",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+        "result": "A conversation insert followed by a task CHECK failure rolled back both writes; the next successful batch returned seq 2."
+      },
+      "gaps": [
+        "Current Pike transactions exist only inside SqliteSessionStore/TaskStore, not as a shared durable Storage contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:mintId",
+      "capability": "Mint a fresh Session-global ID greater than every stored ID",
+      "source": [
+        "packages/durable/src/types.ts:Storage.mintId",
+        "packages/durable/src/storage/memory.ts:MemoryStorage.mintId"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/backend-contract.json",
+        "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
+        "result": "JSONL and SQLite minted 9 after reopen with identical observations; memory matched the pre-reopen ID space."
+      },
+      "gaps": [
+        "No shared C++ ID allocator exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:conversation",
+      "capability": "Look up one conversation by exact ID",
+      "source": [
+        "packages/durable/src/types.ts:Storage.conversation"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+        "result": "The prefixed schema returned conversation 2 while the unprefixed schema returned null."
+      },
+      "gaps": [
+        "No conversation record exists in C++.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:scanConversations",
+      "capability": "Scan conversations by ID order and owner filters",
+      "source": [
+        "packages/durable/src/types.ts:Storage.scanConversations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "The ascending scan returned [{id:2}] with no next cursor."
+      },
+      "gaps": [
+        "No conversation scan exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:entry",
+      "capability": "Look up an entry globally and through conversation visibility, with its commit sequence",
+      "source": [
+        "packages/durable/src/types.ts:Storage.entry"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "The global lookup returned entry 3 with commitSeq 2."
+      },
+      "gaps": [
+        "Current SessionStore entry lookup returns no commit sequence or ancestry visibility.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:head-marker",
+      "capability": "Find the newest visible head marker at or below a cutoff",
+      "source": [
+        "packages/durable/src/types.ts:Storage.findLatestHeadMarker"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "The marker lookup returned entry 5 (head self)."
+      },
+      "gaps": [
+        "No head-marker query exists; Pike uses a leaf entry.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:entries",
+      "capability": "Scan an inclusive entry range in a selected order",
+      "source": [
+        "packages/durable/src/types.ts:Storage.scanEntries"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "table scans continue by cursor and family members initialize from their first seed",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "table scans continue by cursor and family members initialize from their first seed",
+        "result": "Two descending pages covered entries 5,4,3 exactly once."
+      },
+      "gaps": [
+        "No durable entry range scan exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:task",
+      "capability": "Look up the latest complete task record",
+      "source": [
+        "packages/durable/src/types.ts:Storage.task"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "cch_agent_core TaskStore.load_task",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/interchange.json",
+        "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+        "result": "The pending task and checkpoint survived two reopens on both backends."
+      },
+      "gaps": [
+        "Current TaskStore uses TEXT ids and its own task state vocabulary; see #1055.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:scanTasks",
+      "capability": "Scan task records with all query filters",
+      "source": [
+        "packages/durable/src/types.ts:Storage.scanTasks"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ filtered task scan over a durable store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ filtered task scan over a durable store",
+        "result": "Not captured; task scheduling and scan semantics are audited with #1055."
+      },
+      "gaps": [
+        "No durable task scan exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:submission",
+      "capability": "Look up a submission by ID",
+      "source": [
+        "packages/durable/src/types.ts:Storage.submission"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ submission lookup over a durable store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ submission lookup over a durable store",
+        "result": "Not captured; submission lifecycle is audited with #1055."
+      },
+      "gaps": [
+        "No submission record exists in the durable form.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:scanSubmissions",
+      "capability": "Scan submissions by conversation and status",
+      "source": [
+        "packages/durable/src/types.ts:Storage.scanSubmissions"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ filtered submission scan over a durable store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ filtered submission scan over a durable store",
+        "result": "Not captured; submission lifecycle is audited with #1055."
+      },
+      "gaps": [
+        "No submission scan exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:submissionByRequest",
+      "capability": "Find a submission by conversation-scoped request key",
+      "source": [
+        "packages/durable/src/types.ts:Storage.submissionByRequest",
+        "packages/durable/src/storage/sqlite/schema.ts:submissionsByRequest"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "cch_agent_core TaskStore.submit/load_submission",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ TaskStore deduplication versus the durable request key",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ TaskStore deduplication versus the durable request key",
+        "result": "Not captured; current TaskStore deduplicates by request ID but stores a TEXT task-scoped submission, not a conversation-scoped record."
+      },
+      "gaps": [
+        "Table columns and scope differ; see #1055.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:findDocument",
+      "capability": "Resolve the document incarnation at an address and point",
+      "source": [
+        "packages/durable/src/types.ts:Storage.findDocument,DocumentAddress,DocumentPoint"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a commit that changes an entry and documents observes one committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "a commit that changes an entry and documents observes one committed revision",
+        "result": "findDocument returned record 4 with createdAt 2 at the current point."
+      },
+      "gaps": [
+        "No document address resolution exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:document",
+      "capability": "Materialize a specific document incarnation at a point",
+      "source": [
+        "packages/durable/src/types.ts:Storage.document,StoredDocument"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "rewindable history reads an entry revision and retirement keeps it addressable",
+        "result": "As-of reads materialized the v1 incarnation at entry commit 2 after later revisions and retirement."
+      },
+      "gaps": [
+        "No stored-document materialization exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:scanDocuments",
+      "capability": "Scan document incarnations alive in one scope at a point",
+      "source": [
+        "packages/durable/src/types.ts:Storage.scanDocuments,DocumentQuery"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ scan of live versus retired documents at a commit point",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ scan of live versus retired documents at a commit point",
+        "result": "Not captured: the scenarios resolve exact addresses rather than scanning a scope."
+      },
+      "gaps": [
+        "No document scope scan exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:close",
+      "capability": "Close a backend and reject every later operation",
+      "source": [
+        "packages/durable/src/types.ts:Storage.close"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "closing seals admission and notifies close subscribers once",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "closing seals admission and notifies close subscribers once",
+        "result": "Session close settled the backend and a later commit rejected 'Session is closed'."
+      },
+      "gaps": [
+        "Pike has no uniform Storage close contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:memory",
+      "capability": "In-memory implementation of the full Storage contract",
+      "source": [
+        "packages/durable/src/storage/memory.ts:MemoryStorage",
+        "packages/durable/test/memory-storage.test.ts:MemoryStorage"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/backend-contract.json",
+        "scenario": "the same public operation yields the same records on memory, JSONL and SQLite",
+        "result": "MemoryStorage produced the same records, cursors and task/document observations as both file backends."
+      },
+      "gaps": [
+        "No standalone memory Storage exists; Pike in-memory SessionStore is an application store.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:memory:prepare",
+      "capability": "A prepared memory commit stays invisible until apply",
+      "source": [
+        "packages/durable/src/storage/memory.ts:MemoryStorage.prepareCommit,PreparedMemoryCommit",
+        "packages/durable/test/memory-storage.test.ts:does not expose retained state through a prepared commit"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ prepared batch before apply",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ prepared batch before apply",
+        "result": "Not captured: the public Session scenarios observe settlement, not MemoryStorage.prepareCommit directly."
+      },
+      "gaps": [
+        "No C++ prepared-commit boundary exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:open",
+      "capability": "Open or create a JSONL store directory with main.jsonl",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.open",
+        "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current JsonlSessionStore/SessionJournal application transcript",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL commit appends every sidecar before the main marker",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL commit appends every sidecar before the main marker",
+        "result": "The store directory contained main.jsonl and doc-4.jsonl after two commits; open created it when absent."
+      },
+      "gaps": [
+        "Current Pike JSONL is one application transcript file with header/entry lines, not a directory of commit markers and sidecars.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:main-marker",
+      "capability": "main.jsonl commit marker format 1 with seq and write list",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:MainMarker,parseMainMarker,encodeCommit"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL commit appends every sidecar before the main marker",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL commit appends every sidecar before the main marker",
+        "result": "The marker was {format:1,type:'commit',seq:2,writes:[entry, document.create ordinal 0]}."
+      },
+      "gaps": [
+        "No commit marker or format version exists in the application transcript.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:sidecar",
+      "capability": "doc-N.jsonl and task-N.jsonl sidecar record format 1",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:SidecarRecord,SidecarPayload"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL commit appends every sidecar before the main marker",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL commit appends every sidecar before the main marker",
+        "result": "doc-4.jsonl held one record {format:1,type:'record',seq:2,ordinal:0,payload:{type:'document',...}}."
+      },
+      "gaps": [
+        "Current Pike has no sidecars at all.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:ordering",
+      "capability": "Sidecar appends and fsync precede the main marker",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.commit",
+        "packages/durable/test/jsonl-storage.test.ts:publishes every commit before reclaiming"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL commit appends every sidecar before the main marker",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL commit appends every sidecar before the main marker",
+        "result": "Append order was doc-4.jsonl then main.jsonl; with fsync the sidecar was flushed before the marker append."
+      },
+      "gaps": [
+        "Current application journal append order is single-file only.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:reclaim-document",
+      "capability": "Reclaim current-only document sidecars after a base or retirement",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:planReclamations,replaceSidecar",
+        "packages/durable/test/jsonl-storage.test.ts:publication and recovery"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
+        "result": "Base+delta became one base line at the checkpoint, and retirement removed the sidecar while main.jsonl kept the retire marker."
+      },
+      "gaps": [
+        "No document sidecar or reclaim exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:reclaim-task",
+      "capability": "Remove a live task sidecar when its terminal record is published",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:planReclamations,liveTaskSidecars"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ terminal task reclaim in a JSONL store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ terminal task reclaim in a JSONL store",
+        "result": "Not captured: terminal task transitions belong to #1055; the interchange fixture keeps a pending task sidecar."
+      },
+      "gaps": [
+        "No durable task sidecar exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:recovery-torn",
+      "capability": "Truncate a torn final main line and an unconfirmed sidecar tail on open",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.readLines,recover",
+        "packages/durable/test/jsonl-storage.test.ts:removes a complete-plus-torn unconfirmed multi-record sidecar append"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail",
+        "result": "Reopen returned the last committed value and restored both files to their pre-crash bytes."
+      },
+      "gaps": [
+        "Current SessionJournal read_lines does not implement durable torn-tail truncation semantics.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:corruption",
+      "capability": "Fail closed on a missing confirmed sidecar, non-increasing seq, or mismatched data",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlCorruptionError,confirmRecord,parseMainMarker",
+        "packages/durable/test/jsonl-storage.test.ts:declares corruption"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "JSONL refuses a main marker whose confirmed sidecar record is missing",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "JSONL refuses a main marker whose confirmed sidecar record is missing",
+        "result": "Opening without doc-3.jsonl rejected JsonlCorruptionError 'Missing confirmed sidecar record doc-3.jsonl at sequence 2'."
+      },
+      "gaps": [
+        "No fail-closed durable corruption check exists; the application journal reports malformed lines differently.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:poison",
+      "capability": "Poison a JSONL instance after a commit I/O failure and recover on reopen",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.poison,JsonlStoragePoisonedError",
+        "packages/durable/test/jsonl-storage.test.ts:poisons after failure"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL main-marker I/O failure poisons the instance while reopen recovers the published prefix",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL main-marker I/O failure poisons the instance while reopen recovers the published prefix",
+        "result": "The commit and later read rejected JsonlStoragePoisonedError; reopen recovered the published conversation and discarded the unconfirmed entry."
+      },
+      "gaps": [
+        "No durable poison state or reopen recovery exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:fsync",
+      "capability": "Optional fsync flushes sidecar bytes and the main marker before publication",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorageOptions.fsync,JsonlStorage.commit"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "JSONL fsync flushes sidecar bytes before the main marker is appended",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "JSONL fsync flushes sidecar bytes before the main marker is appended",
+        "result": "With fsync true, doc-3.jsonl was flushed before main.jsonl was appended."
+      },
+      "gaps": [
+        "Current application journal has owner-only file permissions but no durable fsync ordering option.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:jsonl:node",
+      "capability": "Node filesystem adapter for a JSONL store",
+      "source": [
+        "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a JSONL commit appends every sidecar before the main marker",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+        "scenario": "a JSONL commit appends every sidecar before the main marker",
+        "result": "openNodeJsonlStorage created and reopened the captured directory through the public FileSystem adapter."
+      },
+      "gaps": [
+        "C++ needs its own Linux FileSystem adapter; the Node adapter is not a C++ contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:open",
+      "capability": "Open or create a SQLite store and apply contiguous migrations",
+      "source": [
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.open",
+        "packages/durable/src/storage/sqlite/migrations.ts:applySqliteMigrationsForSchema",
+        "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current SqliteDatabase/SqliteSessionStore (different schema)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "Open created a STRICT WAL schema with durable_schema version 1 and the nine durable tables."
+      },
+      "gaps": [
+        "Current Pike creates conversations/entries/inbox/tasks/submissions tables with TEXT ids and no durable metadata, documents or revisions.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:schema-version",
+      "capability": "durable_schema singleton version and refusal of newer stores",
+      "source": [
+        "packages/durable/src/storage/sqlite/migrations.ts:applySqliteMigrationsForSchema",
+        "packages/durable/src/storage/sqlite/schema.ts:CURRENT_SQLITE_SCHEMA_VERSION",
+        "packages/durable/test/sqlite-migrations.test.ts:Durable SQLite migrations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "SQLite refuses a store written by a newer durable schema version",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "SQLite refuses a store written by a newer durable schema version",
+        "result": "durable_schema recorded version 1; setting version 2 made reopen reject 'schema version 2 is newer than supported version 1'."
+      },
+      "gaps": [
+        "Current Pike has no schema version table or forward-version refusal.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:prefix",
+      "capability": "Prefix every durable table and index with a validated identifier",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:createSqliteSchema,validateSqliteSchemaPrefix"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+        "result": "Prefix t1054_ produced t1054_ tables and indexes; an unprefixed open saw no conversation, and reopening with the prefix saw it."
+      },
+      "gaps": [
+        "Current Pike table names are fixed and share one schema.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:metadata",
+      "capability": "durable_metadata next_id and next_seq allocation",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:durableMetadata",
+        "packages/durable/src/storage/sqlite/migrations.ts:initialSchema"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "durable_metadata held next_id '6' as TEXT and next_seq 5 after the captured commits."
+      },
+      "gaps": [
+        "No durable ID/sequence allocator exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:record-ids",
+      "capability": "Global record ID ownership in record_ids",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:recordIds",
+        "packages/durable/src/storage/sqlite/storage.ts:checkGlobalIds,claimId"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+        "result": "After rollback record_ids held only conversations 2 and 4; the failed conversation 3 and task 5 left no ownership rows."
+      },
+      "gaps": [
+        "No global record ID ownership exists in C++.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:conversations",
+      "capability": "conversations table with owner columns and JSON record",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:conversations"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current conversations table (session_id TEXT)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "The row stored id 2, null owner columns and record {id:2}."
+      },
+      "gaps": [
+        "Current conversations schema uses session_id TEXT plus created_at/updated_at; it is not interchangeable.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:entries",
+      "capability": "entries table with conversation, head and commit_seq plus JSON record",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:entries"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current entries table (id TEXT, session_id, parent_id, entry_type, payload)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "Entry 3 stored conversation_id 2, head null, commit_seq 2 and the JSON record."
+      },
+      "gaps": [
+        "Current entries schema stores a parent text id and no commit sequence, head or durable JSON record shape.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:tasks",
+      "capability": "tasks table with conversation, kind, status, abort and background columns",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:tasks"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current tasks table (id TEXT, owner_session, checkpoint TEXT)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "The pending task row stored conversation_id 2, kind '\"audit1054.work\"', status pending, abort 0, background 0 and the JSON record."
+      },
+      "gaps": [
+        "Current Pike state vocabulary is pending/running/completing/completed/failed/aborted with a TEXT checkpoint and no background/record columns.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:submissions",
+      "capability": "submissions table with conversation, request_id and status",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:submissions"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current submissions table (id TEXT, task_id, payload, kind, state)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "The captured stores had no submission rows; the empty table and its indexes are recorded."
+      },
+      "gaps": [
+        "Columns, status vocabulary and scope differ from the current task-scoped submissions table; see #1055.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:documents",
+      "capability": "documents table with kind, family/key, scope, owner and created/retired sequence",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:documents",
+        "packages/durable/src/storage/sqlite/storage.ts:addressParts,currentDocumentId"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "Document 4 stored kind '\"audit1054.latest\"', family 0, key_value '\"\"', scope conversation, owner 2, created_at 2 and retired_at null."
+      },
+      "gaps": [
+        "No documents table exists in current Pike.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:revisions",
+      "capability": "document_revisions table with base/delta kind, version and JSON content",
+      "source": [
+        "packages/durable/src/storage/sqlite/schema.ts:documentRevisions",
+        "packages/durable/src/storage/sqlite/storage.ts:applyDocumentActions"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "After the checkpoint only revision seq 4 kind base version 1 content {text:'checkpoint',revision:3} remained for document 4."
+      },
+      "gaps": [
+        "No document revision table or base/delta lifecycle exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:transaction",
+      "capability": "One immediate transaction per commit with rollback on any failure",
+      "source": [
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.commit",
+        "packages/durable/src/storage/sqlite/node.ts:NodeSqliteDatabase.transaction"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current SqliteDatabase.begin_transaction/commit/rollback",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+        "result": "A conversation insert followed by a task status CHECK failure left no conversation row and the next batch returned seq 2."
+      },
+      "gaps": [
+        "Current Pike wraps session/inbox and task batches in transactions but has no unified durable commit contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:strict",
+      "capability": "STRICT tables and JSON validity checks in the durable schema",
+      "source": [
+        "packages/durable/src/storage/sqlite/migrations.ts:initialSchema"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "PRAGMA table_list reported strict=1 for all nine durable tables."
+      },
+      "gaps": [
+        "Current Pike tables are not declared STRICT.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:close",
+      "capability": "Close checkpoints the WAL and releases the connection",
+      "source": [
+        "packages/durable/src/storage/sqlite/node.ts:NodeSqliteDatabase.close",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.close"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "Current SqliteDatabase destructor",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+        "scenario": "the SQLite schema records the durable tables, metadata and document revisions",
+        "result": "The closed store reopened as journal_mode wal; the fixture is a single storage.sqlite file with the WAL checkpointed."
+      },
+      "gaps": [
+        "Current Pike closes SQLite without a public storage-close contract.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:options",
+      "capability": "WAL auto-checkpoint page threshold and busy timeout options",
+      "source": [
+        "packages/durable/src/storage/sqlite/node.ts:NodeSqliteDatabaseOptions"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ SQLite open with non-default WAL checkpoint and busy timeout",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ SQLite open with non-default WAL checkpoint and busy timeout",
+        "result": "Not captured; the capture uses adapter defaults and records the resulting WAL journal mode."
+      },
+      "gaps": [
+        "No configurable SQLite connection options exist.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Storage:sqlite:cloudflare",
+      "capability": "Cloudflare SQLite host adapter",
+      "source": [
+        "packages/durable/src/storage/sqlite/cloudflare.ts:SqliteCloudflareStorage"
+      ],
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": "Cloudflare-specific host/deployment adapters are excluded by ADR 0075; generic SQLite semantics remain included.",
+      "implementation_ticket": null,
+      "scenario": null,
+      "evidence": {
+        "artifact": null,
+        "scenario": null,
+        "result": "Excluded by ADR 0075 as a Cloudflare-specific deployment adapter; it cannot excuse the generic SQLite contract."
+      },
+      "gaps": [],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Chord:context",
+      "capability": "Context values, abort signals, cancellation and background context",
+      "source": [
+        "packages/chord/src/context/index.ts:Context,BACKGROUND_CONTEXT,withAbortSignal,withoutAbortSignal,awaitWithContext"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "cch_durable Session/documents (planned)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ Session cancellation and close with a Context",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ Session cancellation and close with a Context",
+        "result": "Not captured directly; the capture passed BACKGROUND_CONTEXT through every public call and observed close/settlement."
+      },
+      "gaps": [
+        "Pike has no Chord Context; the audit's cancellation rows stay unverified until #1057 lands.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Chord:draft",
+      "capability": "Draft tracking, operation batches and escaped-draft revocation",
+      "source": [
+        "packages/chord/src/delta/index.ts:Draft,track,Op",
+        "packages/chord/src/delta/tracker.ts:Tracker",
+        "packages/durable/test/session-documents.test.ts:revokes escaped drafts when the callback settles"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "cch_durable document transactions (planned)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ transaction draft revocation after callback settlement",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ transaction draft revocation after callback settlement",
+        "result": "Not captured; the session capture observes committed values and ops, not revoked escaped drafts."
+      },
+      "gaps": [
+        "No C++ Draft/tracker exists; owned by #1057.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Chord:delta",
+      "capability": "Chord delta operations and apply semantics",
+      "source": [
+        "packages/chord/src/delta/index.ts:Op,apply",
+        "packages/durable/src/storage/jsonl/storage.ts:DocumentContent"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "cch_durable document storage and watches (planned)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "document watches and states deliver only committed frames",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "document watches and states deliver only committed frames",
+        "result": "The watch carried the exact set ops [['s',['text'],'b'],['s',['revision'],2]] and the JSONL delta stored [['s',['text'],'two']]."
+      },
+      "gaps": [
+        "No C++ Chord delta vocabulary or apply implementation exists.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Chord:state",
+      "capability": "Attached replicated state with immutable values, delivery and dispose",
+      "source": [
+        "packages/chord/src/state.ts:replicatedState,AttachedReplicatedState"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "cch_durable documentState (planned)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "document watches and states deliver only committed frames",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+        "scenario": "document watches and states deliver only committed frames",
+        "result": "documentState(CounterDoc).value reported count 2 and dispose released it."
+      },
+      "gaps": [
+        "No C++ replicated state exists; owned by #1057.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Chord:json",
+      "capability": "Strict JSON values and immutable ownership transfer",
+      "source": [
+        "packages/chord/src/json.ts:JsonValue,copyJson",
+        "packages/durable/src/documents.ts:materializeDocument"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "cch_durable records and documents (planned)",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++ JSON value ownership across a durable store",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++ JSON value ownership across a durable store",
+        "result": "Not captured directly; committed snapshot identity/immutability is asserted by frozen tests, not this capture."
+      },
+      "gaps": [
+        "Current Pike JSON support is pi-neutral support code; the durable-required copy/ownership contract is audited with #1057.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Interchange:jsonl-pi-create",
+      "capability": "pi-created JSONL store reopens and continues in pi with unfinished task, documents and checkpoint state",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.recover",
+        "packages/durable/test/jsonl-storage.test.ts:Pico JsonlStorage publication and recovery"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": "pi-durable transactional main/sidecar format; not the application JSONL transcript.",
+      "implementation_ticket": "#1058-draft",
+      "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/interchange.json",
+        "scenario": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+        "result": "Fixture main/doc/task files reopened to latest checkpoint, rewindable r2/as-of r1 and pending task 6; pi then appended entry 9 and updated both documents."
+      },
+      "gaps": [
+        "No C++ JSONL durable store can consume the retained fixture.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Interchange:sqlite-pi-create",
+      "capability": "pi-created SQLite store reopens and continues in pi with unfinished task, documents and checkpoint state",
+      "source": [
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.open",
+        "packages/durable/test/sqlite-storage.test.ts:SqliteStorage conformance across reopen"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": "durable schema v1 with prefix/version/metadata obligations; not the current Pike session/task tables.",
+      "implementation_ticket": "#1058-draft",
+      "scenario": "sqlite store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1054/interchange.json",
+        "scenario": "sqlite store created by pi reopens with unfinished task, documents and checkpoints and continues",
+        "result": "The gzip+base64 fixture reopened to the same observations as JSONL; pi then continued with entry 9 and document revisions 4/r3."
+      },
+      "gaps": [
+        "No C++ SQLite durable store exists to open the retained fixture.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Interchange:cpp-create",
+      "capability": "C++-created JSONL or SQLite store continues in pi and reopens in C++",
+      "source": [
+        "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.open",
+        "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.open",
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md:bidirectional opening and continued operation"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": "No simultaneous independent writers beyond upstream guarantees.",
+      "implementation_ticket": "#1058-draft",
+      "scenario": "C++-create, pi-continue, C++-reopen acceptance scenario",
+      "evidence": {
+        "artifact": null,
+        "scenario": "C++-create, pi-continue, C++-reopen acceptance scenario",
+        "result": "Not run: no C++ durable writer exists. The acceptance steps and expected pi observations are specified in the report."
+      },
+      "gaps": [
+        "Blocked on the cch_durable implementation; must not be claimed from pi-only captures.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Interchange:alternating-writers",
+      "capability": "Alternating pi/C++ writers continue a store across close/reopen without losing state",
+      "source": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md:alternating pi/C++ writers",
+        "packages/durable/src/session/session.ts:createSession"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "none (cch_durable owner not introduced)",
+      "boundary": "Alternating writers after close/reopen only; simultaneous independent writers are not promised by upstream.",
+      "implementation_ticket": "#1058-draft",
+      "scenario": "pi-create, C++-continue, pi-reopen/continue, C++-reopen acceptance scenario",
+      "evidence": {
+        "artifact": null,
+        "scenario": "pi-create, C++-continue, pi-reopen/continue, C++-reopen acceptance scenario",
+        "result": "Not run: both C++ legs are unimplemented; the report defines the exact alternating sequence and fixtures."
+      },
+      "gaps": [
+        "Requires cch_durable JSONL and SQLite implementations plus crash/recovery comparisons.",
+        "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
+        "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
+      ],
+      "notes": ""
+    },
+    {
+      "id": "cch_durable:Interchange:history",
+      "capability": "Historical Pike durable formats are not imported or dual-read",
+      "source": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md:no old-Pike migration"
+      ],
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
+      "owner": "cch_durable",
+      "consumer": "none (explicit exclusion)",
+      "boundary": "Old Pike import, migration, automatic upgrade, dual-format reads/fallback are excluded; existing user data is not deleted.",
+      "implementation_ticket": null,
+      "scenario": null,
+      "evidence": {
+        "artifact": null,
+        "scenario": null,
+        "result": "Excluded by ADR 0075: no import/migration/dual reads; existing user data is preserved, not deleted."
+      },
+      "gaps": [],
+      "notes": ""
+    }
+  ],
+  "evidence": {
+    "family": "audit-1054",
+    "manifest": "fixtures/pi-v1.3.0/audit-1054/manifest.json",
+    "manifestSha256": "e9039b53cfccdf6caf62e09702377ca45e53e91cedbea4dee6d1b92d18e38a44",
+    "artifacts": [
+      "fixtures/pi-v1.3.0/audit-1054/session-transactions.json",
+      "fixtures/pi-v1.3.0/audit-1054/backend-contract.json",
+      "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json",
+      "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json",
+      "fixtures/pi-v1.3.0/audit-1054/interchange.json"
+    ]
+  }
+}
