@@ -40,6 +40,10 @@
         "audit-1051": {
           "manifest": "audit-1051/manifest.json",
           "manifestSha256": "2fd33f43d8626805314898308a5b4d1e4eef575e61e3c445a8fba4c789a8ba48"
+        },
+        "audit-1052": {
+          "manifest": "audit-1052/manifest.json",
+          "manifestSha256": "15acbbfe81dbb9a226f6e5f963953b354b5823d892868a2d134fb5418c629eb9"
         }
       }
     }
