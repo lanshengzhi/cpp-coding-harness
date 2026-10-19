@@ -1,0 +1,344 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1055",
+  "family": "audit-1055",
+  "capturedAt": "2026-10-19T20:21:46.773Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/submissions.ts:Submissions,admitSubmission",
+    "packages/durable/src/harness/inbox.ts:InboxDoc,prepareBoundary,applyBoundary",
+    "packages/durable/src/harness/harness.ts:Harness.submit,abortSubmission",
+    "packages/durable/test/harness-inbox.test.ts:inbox",
+    "packages/durable/test/harness-submissions.test.ts:submissions"
+  ],
+  "scenarios": [
+    {
+      "name": "an idle input is placed and answered by a run",
+      "inputs": {
+        "submission": "input",
+        "busy": false
+      },
+      "expected": {
+        "status": "done",
+        "type": "input",
+        "entryKind": "pi.user",
+        "transcript": [
+          "pi.user:hi",
+          "pi.assistant:hello"
+        ],
+        "messages": [
+          "user",
+          "assistant"
+        ]
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "an idle passive write is appended and settled done without starting a run",
+      "inputs": {
+        "submission": "write",
+        "entry": "audit.note",
+        "busy": false
+      },
+      "expected": {
+        "status": "done",
+        "entryKind": "audit.note",
+        "entryData": {
+          "text": "passive"
+        },
+        "messages": 0
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a busy input queues as a follow-up and is placed at the final boundary",
+      "inputs": {
+        "submission": "input",
+        "busy": true,
+        "whenBusy": "followUp"
+      },
+      "expected": {
+        "before": {
+          "first": "placed",
+          "followUp": "queued",
+          "inbox": [
+            {
+              "mode": "followUp",
+              "isFollowUp": true
+            }
+          ]
+        },
+        "followUpStatus": "done",
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first",
+          "pi.user:f1",
+          "pi.assistant:second"
+        ]
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a busy steer input queues in steer mode and a conversation abort withdraws it",
+      "inputs": {
+        "submission": "input",
+        "busy": true,
+        "whenBusy": "steer"
+      },
+      "expected": {
+        "before": {
+          "first": "placed",
+          "steer": "queued",
+          "inbox": [
+            {
+              "mode": "steer",
+              "isSteer": true
+            }
+          ]
+        },
+        "after": {
+          "status": "unanswered",
+          "reason": "aborted"
+        },
+        "live": {}
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a display-only write is appended and settled while the conversation is busy",
+      "inputs": {
+        "submission": "write",
+        "entry": "display-only",
+        "busy": true
+      },
+      "expected": {
+        "status": "done",
+        "inboxLength": 0
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a duplicate request ID returns the existing submission without a storage write",
+      "inputs": {
+        "requestId": "req-9",
+        "duplicateType": "input vs write"
+      },
+      "expected": {
+        "sameId": true,
+        "duplicateBatches": 0,
+        "originalStatus": "placed",
+        "wrongType": {
+          "name": "Error",
+          "message": "Request req-9 already identifies a submission of type input"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a busy input with whenBusy reject throws ConversationBusy and writes no submission",
+      "inputs": {
+        "whenBusy": "reject",
+        "busy": true
+      },
+      "expected": {
+        "error": {
+          "name": "ConversationBusy",
+          "message": "Conversation 1 is busy",
+          "isConversationBusy": true
+        },
+        "submissionsBefore": 1,
+        "submissionsAfter": 1,
+        "inboxLength": 0
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "admission commits the queued submission and its inbox change in one storage batch",
+      "inputs": {
+        "storage": "recording MemoryStorage",
+        "submission": "busy input"
+      },
+      "expected": {
+        "batchTypes": [
+          "submission",
+          "document.change"
+        ],
+        "submissionStatus": "queued",
+        "submissionType": "input",
+        "documentKind": "delta",
+        "documentVersion": 1,
+        "inboxPath": "items"
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "queue modes decide whether all follow-ups or one are placed at the final boundary",
+      "inputs": {
+        "followUpMode": [
+          "all",
+          "one-at-a-time"
+        ],
+        "followUps": 2
+      },
+      "expected": {
+        "all": {
+          "twoAfterFirst": "done",
+          "transcript": [
+            "pi.user:a",
+            "pi.assistant:first",
+            "pi.user:f1",
+            "pi.user:f2",
+            "pi.assistant:a"
+          ]
+        },
+        "oneAtATime": {
+          "twoAfterFirst": "placed",
+          "transcript": [
+            "pi.user:a",
+            "pi.assistant:first",
+            "pi.user:f1",
+            "pi.assistant:a",
+            "pi.user:f2",
+            "pi.assistant:b"
+          ]
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "abort reports queued, placed and settled outcomes and removes the queued item",
+      "inputs": {
+        "submissions": [
+          "placed input",
+          "queued input"
+        ]
+      },
+      "expected": {
+        "results": {
+          "placed": "already_placed",
+          "wrongConversation": "not_found",
+          "queued": "aborted",
+          "again": "settled",
+          "unknown": "not_found"
+        },
+        "queuedRecord": {
+          "status": "unanswered",
+          "reason": "aborted"
+        },
+        "inboxLength": 0
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "conversation abort withdraws queued inputs, keeps queued writes and settles the placed input unanswered",
+      "inputs": {
+        "submissions": [
+          "placed input",
+          "queued input",
+          "queued write"
+        ]
+      },
+      "expected": {
+        "before": [
+          "placed",
+          "queued",
+          "queued"
+        ],
+        "after": [
+          {
+            "status": "unanswered",
+            "reason": "aborted"
+          },
+          {
+            "status": "unanswered",
+            "reason": "aborted"
+          },
+          {
+            "status": "queued",
+            "reason": null
+          }
+        ],
+        "inbox": [
+          {
+            "mode": "write",
+            "isWrite": true
+          }
+        ],
+        "live": {}
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "cancelling a submission wait leaves the submission placed until it settles",
+      "inputs": {
+        "cancellation": "Submission.wait AbortSignal"
+      },
+      "expected": {
+        "error": {
+          "name": "Error",
+          "message": "stop waiting"
+        },
+        "afterCancel": "placed",
+        "settled": "done"
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    }
+  ]
+}

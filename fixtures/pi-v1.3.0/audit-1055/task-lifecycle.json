@@ -1,0 +1,164 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1055",
+  "family": "audit-1055",
+  "capturedAt": "2026-10-19T20:21:46.773Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/tasks.ts:defineTask",
+    "packages/durable/src/harness/scheduler.ts:TaskScheduler",
+    "packages/durable/src/session/transaction.ts:Transaction.createTask",
+    "packages/durable/test/harness-tasks.test.ts:task phases",
+    "packages/durable/test/harness-ownership.test.ts:structured concurrency"
+  ],
+  "scenarios": [
+    {
+      "name": "a multi-phase task replaces checkpoint state and reports a typed terminal result",
+      "inputs": {
+        "task": "audit.counter",
+        "input": {
+          "to": 3
+        },
+        "clockMs": 1000
+      },
+      "expected": {
+        "phasesSeen": [
+          0,
+          1,
+          2
+        ],
+        "invocations": 1,
+        "result": 3,
+        "record": {
+          "kind": "audit.counter",
+          "version": 1,
+          "status": "terminal"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "task lifecycle times come from the Harness clock and survive a durable wait",
+      "inputs": {
+        "task": "audit.clock",
+        "waitingOn": "audit.hold-child",
+        "clockMs": [
+          1000,
+          3000,
+          4000
+        ]
+      },
+      "expected": {
+        "startedAt": 1000,
+        "endedAt": 4000,
+        "terminal": "terminal",
+        "waitingStatus": "waiting"
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a task memo survives checkpoint replacement and is absent from the terminal record",
+      "inputs": {
+        "task": "audit.memo",
+        "memo": {
+          "requested": 7
+        }
+      },
+      "expected": {
+        "runningMemos": {
+          "requested": 7
+        },
+        "runningCheckpoint": {
+          "phase": "apply"
+        },
+        "terminalStatus": "terminal",
+        "terminalHasMemos": false
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a completing owner holds its terminal outcome until ordinary owned work drains",
+      "inputs": {
+        "task": "audit.hold-parent",
+        "child": "audit.hold-child"
+      },
+      "expected": {
+        "before": [
+          {
+            "kind": "audit.hold-parent",
+            "recordStatus": "completing",
+            "inspection": "completing"
+          },
+          {
+            "kind": "audit.hold-child",
+            "recordStatus": "running",
+            "inspection": "running"
+          }
+        ],
+        "parentOutcome": {
+          "status": "completed",
+          "result": "parent"
+        },
+        "childOutcome": {
+          "status": "completed",
+          "result": "child"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "task hooks run in extension order and an ordinary throw is reported while the task continues",
+      "inputs": {
+        "task": "audit.hooked",
+        "hooks": [
+          "hook-throw",
+          "hook-observer"
+        ]
+      },
+      "expected": {
+        "log": [
+          "hook-1",
+          "hook-2",
+          "task"
+        ],
+        "reports": [
+          "hook boom"
+        ],
+        "outcome": {
+          "status": "completed",
+          "result": "done"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    }
+  ]
+}

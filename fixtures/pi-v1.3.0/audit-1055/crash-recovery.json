@@ -1,0 +1,204 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1055",
+  "family": "audit-1055",
+  "capturedAt": "2026-10-19T20:21:46.773Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/scheduler.ts:Harness.open,#reconcile,#runAbort",
+    "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+    "packages/durable/src/harness/submissions.ts:Submissions.wait",
+    "packages/durable/test/harness-tasks-recovery.test.ts:crash recovery",
+    "packages/durable/test/harness-submissions.test.ts:reacquires a submission after reopen"
+  ],
+  "scenarios": [
+    {
+      "name": "a killed process leaves an admitted input and its generation task recoverable without a duplicate submission",
+      "inputs": {
+        "worker": "generation",
+        "kill": "SIGKILL after request dispatch",
+        "storage": "node:sqlite",
+        "requestId": "crash-1"
+      },
+      "expected": {
+        "killSignal": "SIGKILL",
+        "schedulingAfterOpen": "paused",
+        "taskAfterOpen": [
+          {
+            "kind": "pi.generation",
+            "recordStatus": "pending",
+            "inspection": "ready",
+            "checkpointPhase": "request",
+            "abortRequested": false
+          }
+        ],
+        "submissionAfterOpen": {
+          "status": "placed",
+          "requestId": "crash-1"
+        },
+        "settled": {
+          "status": "done",
+          "hasAnswer": true
+        },
+        "duplicateSameId": true,
+        "transcriptAfterSettle": [
+          "pi.user:crash input",
+          "pi.assistant:after reopen"
+        ],
+        "settledAfterThird": "done",
+        "answerCountAfterThird": 1
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
+      "inputs": {
+        "worker": "effect",
+        "kill": "SIGKILL after effect, before outcome commit",
+        "storage": "node:sqlite"
+      },
+      "expected": {
+        "killSignal": "SIGKILL",
+        "ready": {
+          "key": "transfer-7",
+          "receipt": 70
+        },
+        "afterOpen": {
+          "status": "pending",
+          "checkpoint": {
+            "phase": "apply",
+            "key": "transfer-7"
+          },
+          "memos": {
+            "requested": 7
+          },
+          "startedAtPresent": true
+        },
+        "effectAfterCrash": {
+          "calls": 1,
+          "applied": 1
+        },
+        "outcome": {
+          "status": "completed",
+          "result": {
+            "receipt": 70
+          }
+        },
+        "effectAfterResume": {
+          "calls": 2,
+          "applied": 1
+        },
+        "terminalAfterThird": "terminal",
+        "effectAfterThird": {
+          "calls": 2,
+          "applied": 1
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "an abort mark survives a killed process and only the abort handler runs after reopen",
+      "inputs": {
+        "worker": "abort",
+        "kill": "SIGKILL inside the abort handler before its terminal commit"
+      },
+      "expected": {
+        "killSignal": "SIGKILL",
+        "workerLog": [
+          "run",
+          "abort"
+        ],
+        "afterOpen": {
+          "status": "pending",
+          "abortRequested": true,
+          "checkpoint": {
+            "phase": "run"
+          }
+        },
+        "reopenedLog": [
+          "abort"
+        ],
+        "outcome": {
+          "status": "aborted",
+          "reason": "recovered"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a killed process after a terminal commit does not rerun the task or duplicate the submission",
+      "inputs": {
+        "worker": "terminal",
+        "kill": "SIGKILL after terminal task and write settlement"
+      },
+      "expected": {
+        "killSignal": "SIGKILL",
+        "workerLog": [
+          "run"
+        ],
+        "taskStatus": "terminal",
+        "outcome": {
+          "status": "completed",
+          "result": "once"
+        },
+        "submissionStatus": "done",
+        "rerunLog": [],
+        "duplicateSameId": true
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a task abandoned on restart is aborted with reason restart after reopen",
+      "inputs": {
+        "option": "abandonOnRestart",
+        "reopen": "clean close then open"
+      },
+      "expected": {
+        "afterOpen": {
+          "status": "pending",
+          "checkpoint": {
+            "phase": "run"
+          }
+        },
+        "abortReason": "restart",
+        "outcome": {
+          "status": "aborted",
+          "reason": "restart"
+        },
+        "log": [
+          "abort:restart"
+        ]
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    }
+  ]
+}
