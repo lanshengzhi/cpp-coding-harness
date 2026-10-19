@@ -136,6 +136,8 @@ Use fake Providers and deterministic local resources by default. Use live API ke
 
 `/implement` includes review and a task-scoped commit on the current branch. Push, merge, branch switching, worktree creation/removal, and branch deletion require explicit user authorization.
 
+Before deleting ticket branches or removing their worktrees, audit them with `scripts/branch-audit.sh <integration-branch>`: a branch reporting `UNAPPLIED` commits holds work that landed nowhere and must be resolved (or explicitly kept) first. Close-out comments reference the merged commit on the integration branch, never a branch tip that may never merge.
+
 ## Closing a completed implementation issue
 
 Use this completion path after implementation; triage and `wontfix` outcomes follow the `/triage` workflow instead. Close-out is ordered:

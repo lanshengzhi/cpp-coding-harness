@@ -1335,7 +1335,8 @@ def parse_direct_includes(data: Any) -> DirectIncludes:
         _fail(
             RULE_STALE_PRODUCER_SCHEMA,
             f"stale evidence: direct-includes schema_version {schema_version} is older than "
-            f"{DIRECT_INCLUDES_SCHEMA_VERSION}; rescan the direct-include evidence",
+            f"{DIRECT_INCLUDES_SCHEMA_VERSION}; reconfigure with VCPKG_ROOT=<root> cmake "
+            f"--preset <preset> to rewrite the direct-include evidence",
         )
     if schema_version > DIRECT_INCLUDES_SCHEMA_VERSION:
         _fail(
@@ -2144,7 +2145,8 @@ def _check_includes(
                     Diagnostic(
                         RULE_STALE_INCLUDE_EVIDENCE,
                         f"source '{scanned.path}' include directives no longer match the "
-                        f"recorded scan; rescan the direct-include evidence",
+                        f"recorded scan; reconfigure with VCPKG_ROOT=<root> cmake "
+                        f"--preset <preset> to rescan the direct-include evidence",
                         path=scanned.path,
                     )
                 )

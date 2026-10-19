@@ -37,6 +37,7 @@
 - [#1021](https://github.com/lanshengzhi/cpp-coding-harness/issues/1021) — kitty 0.49.2 (Hyprland/Wayland, 2026-10-18): IME placement and hardware-cursor rows accepted; raw captures in the #1021 notes.
 - [#1022](https://github.com/lanshengzhi/cpp-coding-harness/issues/1022) — kitty image protocol (2026-10-18): display, scrolling crop, resize, removal, and switching accepted; recorded divergences stay raw.
 - **iTerm2-protocol row: unverified-by-environment** — no iTerm2-protocol emulator exists on this host; recorded as unverified, not passed.
+- Host-local raw captures: `/home/lansy/.local/share/spec-946-notes/` (`issue-1021-*`, `issue-1022-*` reports and their per-scenario directories; not committed to the repository).
 
 ## Remaining risk / open blockers
 
