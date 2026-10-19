@@ -194,6 +194,8 @@ void InteractiveView::set_editor_replacement(std::shared_ptr<cch::tui::Component
     }
 }
 
+std::shared_ptr<cch::tui::Component> InteractiveView::editor_replacement() const { return editor_replacement_; }
+
 void InteractiveView::restore_editor() { editor_replacement_.reset(); }
 
 void InteractiveView::set_custom_editor(std::shared_ptr<cch::tui::EditorComponent> editor) {

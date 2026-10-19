@@ -3487,6 +3487,10 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                     return phase1_bytes.find("fake: hello persistent exit test") != std::string::npos;
                 },
                 std::chrono::seconds(10)));
+        // The streaming frontend paints assistant text before the Agent Session
+        // commit lands; wait for the committed turn the persistence assertions
+        // below describe.
+        REQUIRE(pump_until(io, [&] { return session.message_count() == 3; }, std::chrono::seconds(10)));
         CHECK(session.message_count() == 3);
 
         REQUIRE(session.session_path().has_value());
@@ -3665,6 +3669,10 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                     return phase1_bytes.find("fake: hello hint exit test") != std::string::npos;
                 },
                 std::chrono::seconds(10)));
+        // The streaming frontend paints assistant text before the Agent Session
+        // commit lands; wait for the committed turn the persistence assertions
+        // below describe.
+        REQUIRE(pump_until(io, [&] { return session.message_count() == 3; }, std::chrono::seconds(10)));
         CHECK(session.message_count() == 3);
 
         REQUIRE(session.session_path().has_value());
@@ -3818,6 +3826,9 @@ TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent s
                     return phase1_bytes.find("fake: hello failure prompt") != std::string::npos;
                 },
                 std::chrono::seconds(10)));
+        // The streaming frontend paints assistant text before the Agent Session
+        // commit lands; the durability assertions below need the committed turn.
+        REQUIRE(pump_until(io, [&] { return session.message_count() == 3; }, std::chrono::seconds(10)));
 
         REQUIRE(session.session_path().has_value());
         const auto actual_session_path = *session.session_path();

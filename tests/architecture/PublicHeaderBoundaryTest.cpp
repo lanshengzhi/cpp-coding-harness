@@ -11,7 +11,6 @@
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/ai/Usage.hpp>
-#include <cch/ai/StreamTransport.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/AgentSessionSnapshot.hpp>
 #include <cch/coding_agent/Settings.hpp>
@@ -48,6 +47,8 @@
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/support/JsonAccess.hpp>
+#include <cch/support/SseParser.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -71,19 +72,17 @@ TEST_CASE("public headers compile from the include contract surface", "[architec
     agent::AsyncAgentOptions options;
     options.max_turns = 2;
     options.model = ai::Model{
-        .id = "gpt-test",
-        .name = "GPT Test",
-        .api = "scripted-fake",
-        .provider = "fake",
-        .base_url = "https://example.invalid",
-        .reasoning = false,
-        .thinking_level_map = std::nullopt,
-        .input = {ai::ModelInput::Text},
-        .cost = {},
-        .context_window = 100000,
-        .max_tokens = 4096,
-        .headers = std::nullopt,
-        .compat = std::nullopt,
+            .id = "gpt-test",
+            .name = "GPT Test",
+            .api = "scripted-fake",
+            .provider = "fake",
+            .reasoning = false,
+            .thinking_level_map = std::nullopt,
+            .input = {ai::ModelInput::Text},
+            .cost = {},
+            .context_window = 100000,
+            .max_tokens = 4096,
+            .headers = std::nullopt,
     };
 
     harness::session::SessionMetadata metadata;
@@ -100,13 +99,12 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
     static_assert(std::is_aggregate_v<agent::AgentInitialState>);
     static_assert(std::is_aggregate_v<ai::Model>);
     static_assert(std::is_aggregate_v<ai::SimpleStreamOptions>);
-    static_assert(std::is_aggregate_v<ai::ProviderDefinition>);
-    static_assert(std::is_move_constructible_v<ai::ProviderDefinition>);
-    static_assert(!std::is_copy_constructible_v<ai::ProviderDefinition>);
-    static_assert(std::is_aggregate_v<ai::ProviderChange>);
-    static_assert(std::is_aggregate_v<ai::AuthMethodInfo>);
-    static_assert(std::is_aggregate_v<ai::ProviderInfo>);
-    static_assert(std::is_copy_constructible_v<ai::ProviderInfo>);
+    static_assert(std::is_aggregate_v<ai::ModelsOptions>);
+    static_assert(std::is_aggregate_v<ai::GatewayStatus>);
+    static_assert(std::is_same_v<decltype(std::declval<ai::Models&>().refresh()), support::AsyncResult<void>>);
+    static_assert(std::is_same_v<decltype(std::declval<ai::Models&>().inspect_gateway()),
+            support::AsyncResult<ai::GatewayStatus>>);
+    static_assert(std::is_copy_constructible_v<ai::ModelsOptions>);
     static_assert(std::is_copy_constructible_v<agent::AgentState>);
     static_assert(std::is_same_v<
                   decltype(std::declval<const agent::Agent&>().state()),
@@ -124,7 +122,7 @@ TEST_CASE("public contracts remain value and interface oriented", "[architecture
                   coding_agent::AgentSessionSnapshot>);
     static_assert(std::is_move_constructible_v<ai::MessageVariant>);
     static_assert(std::is_move_constructible_v<ai::Content>);
-    static_assert(std::is_abstract_v<ai::providers::StreamTransport>);
+    static_assert(std::is_default_constructible_v<support::SseParser>);
     static_assert(std::is_abstract_v<harness::AsyncFileSystem>);
     static_assert(std::is_abstract_v<harness::AsyncShell>);
     static_assert(!std::is_base_of_v<harness::AsyncShell, harness::AsyncFileSystem>);

@@ -182,8 +182,6 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ExtensionUiHostTest.cpp
         tests/coding_agent/tui/KeybindingsManagerTest.cpp
         tests/coding_agent/tui/LoadedResourcesTest.cpp
-        tests/coding_agent/tui/LoginDialogTest.cpp
-        tests/coding_agent/tui/LoginInteractiveModeTest.cpp
         tests/coding_agent/tui/McpManagerFlowTest.cpp
         tests/coding_agent/tui/McpSlashCommandInteractiveTest.cpp
         tests/coding_agent/tui/McpManagerPresenterTest.cpp
@@ -192,7 +190,6 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ModelSelectorInteractiveTest.cpp
         tests/coding_agent/tui/ModelSelectorTest.cpp
         tests/coding_agent/tui/NativeTuiDifferentialTest.cpp
-        tests/coding_agent/tui/OAuthSelectorTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ProductCursorEvidenceTest.cpp
         tests/coding_agent/tui/ProductProgressEvidenceTest.cpp

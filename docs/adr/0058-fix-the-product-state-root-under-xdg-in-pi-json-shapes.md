@@ -4,6 +4,14 @@ status: accepted
 
 # Fix the product state root under XDG in pi's JSON shapes
 
+> **Amendment (gateway model transplant).** [ADR 0068](0068-retire-cloud-provider-adapters-and-delegate-routing-to-magpie.md)
+> and [ADR 0072](0072-narrow-models-to-a-single-local-llm-router.md) retire the embedded model
+> providers and model-provider credentials, but they do not relocate the state root: the XDG
+> Agent Config Directory, its `sessions/` storage, `pike import`, and the no-environment-override
+> rule below remain in force. `models.json` and `auth.json` stay in the tree as legacy data —
+> model execution ignores the former, and the latter is read only for the one-way MCP OAuth
+> migration.
+>
 Pike's user-level state needs one predictable location that nothing can reroute, in a shape the
 repository already speaks. Issue [#754](https://github.com/lanshengzhi/cpp-coding-harness/issues/754)
 follows a rejected TOML direction (#753) whose cost was a hand-rolled 584-line parser, a writer

@@ -318,7 +318,7 @@ class ManifestSchemaTest(unittest.TestCase):
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
         self.assertIn("wasmedge", manifest.external_families)
 
-    def test_provider_capability_is_outside_ai_interface_root(self):
+    def test_provider_stream_option_kernel_is_retired_with_gateway_adapter(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
         ai_owner = manifest.owners["cch_ai"]
@@ -330,7 +330,10 @@ class ManifestSchemaTest(unittest.TestCase):
         self.assertNotIn("Provider.hpp", interface_headers)
         public_text = "\n".join(path.read_text() for path in interface_root.rglob("*.hpp"))
         self.assertNotIn("ProviderStreamOptions", public_text)
-        self.assertTrue((REPO_ROOT / ai_owner.root / "providers" / "Provider.hpp").is_file())
+        # #1041: the provider-installation vocabulary is retired with the one
+        # gateway adapter (ADR 0074) — the ProviderStreamOptions reshuffle
+        # kernel and its Provider.hpp home must stay absent.
+        self.assertFalse((REPO_ROOT / ai_owner.root / "providers" / "Provider.hpp").is_file())
 
     def test_valid_manifest_parses(self):
         manifest = valid_manifest()
@@ -1346,14 +1349,14 @@ class ArchitectureContractTest(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             project_root = make_project_tree(tmp)
-            header = project_root / "src/ai/include/cch/ai/StreamTransport.hpp"
+            header = project_root / "src/ai/include/cch/ai/Models.hpp"
             header.parent.mkdir(parents=True, exist_ok=True)
             header.write_text("#pragma once\\n")
             diagnostics = run_include_case(
                 tmp,
                 "cch_coding_agent",
                 "coding_agent/mcp/McpHttpClient.hpp",
-                "cch/ai/StreamTransport.hpp",
+                "cch/ai/Models.hpp",
                 spelling="angle",
                 manifest=manifest,
             )

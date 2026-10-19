@@ -211,9 +211,27 @@ TEST_CASE("staged install contains only the relocatable Runtime and behaves afte
 
     // ── Offline staged run without a reachable gateway fails deterministically ──
     // The product default is the local Magpie gateway; with no catalog the
-    // placeholder model fails through the one AI stream contract.
-    const auto offline =
-        run_command(relocated_run + " --print ping < /dev/null", captures);
+    // placeholder model fails through the one AI stream contract. The check
+    // must not observe a gateway that happens to be listening on the developer
+    // host: run it in an isolated network namespace when the host permits one,
+    // and otherwise skip only when something already owns the loopback
+    // endpoint (a live service makes the offline premise untestable).
+    const auto namespace_probe = run_command("unshare -rn true", captures);
+    const bool network_isolation_available = namespace_probe.exit_code == 0;
+    if (!network_isolation_available) {
+        const auto gateway_probe =
+                run_command(shell_quote(CCH_PYTHON3) + " -c \"import socket,sys;s=socket.socket();s.settimeout(0.25);"
+                                                       "sys.exit(0 if s.connect_ex(('127.0.0.1',3425))==0 else 1)\"",
+                        captures);
+        if (gateway_probe.exit_code == 0) {
+            SKIP("a service is listening on the default Magpie endpoint 127.0.0.1:3425 and this host "
+                 "cannot create an isolated network namespace");
+        }
+    }
+    const std::string offline_run = "cd " + shell_quote(root.path()) + " && " +
+                                    (network_isolation_available ? std::string{"unshare -rn "} : std::string{}) +
+                                    clean_env + shell_quote(relocated_binary) + " --print ping < /dev/null";
+    const auto offline = run_command(offline_run, captures);
     INFO(offline.stdout_text + offline.stderr_text);
     CHECK(offline.exit_code == 1);
     CHECK(offline.stderr_text.find("has no API implementation") != std::string::npos);

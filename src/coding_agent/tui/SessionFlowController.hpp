@@ -96,7 +96,7 @@ struct SessionFlowHostHooks {
     /// Apply one successful `/reload` result: run the fresh extension
     /// registrations, re-catalog keybindings,
     /// re-register themes, re-apply settings, rebuild autocomplete, refresh
-    /// loaded resources, and surface the models.json diagnostic.
+    /// loaded resources, and surface the model-runtime diagnostic.
     std::move_only_function<support::ExpectedVoid(AgentSessionReloadResult)> apply_reload_result{nullptr};
     /// Mark the manual compaction as admitted or completed so host shutdown
     /// waits for it exactly like prompt/User Bash work.

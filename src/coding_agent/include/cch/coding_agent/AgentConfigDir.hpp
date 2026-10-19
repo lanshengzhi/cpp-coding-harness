@@ -34,8 +34,9 @@ namespace cch::coding_agent {
 /// `agent_config_dir()/auth.json` — user authentication entries (pi: `auth.json`).
 [[nodiscard]] std::filesystem::path auth_file_path();
 
-/// `agent_config_dir()/models.json` — user model configuration (pi: `models.json`).
-/// Never written by the runtime; `ModelRuntime` reads and composes it.
+/// `agent_config_dir()/models.json` — legacy pi model configuration (pi: `models.json`).
+/// Model execution never reads it (ADR 0072); the path is kept for the fixed
+/// pi file vocabulary of ADR 0058.
 [[nodiscard]] std::filesystem::path models_file_path();
 
 /// `agent_config_dir()/settings.json` — user settings (pi: `settings.json`).

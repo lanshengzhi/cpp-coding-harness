@@ -59,35 +59,35 @@ Normal Pike startup never consults the old pi directory or its environment overr
 
 ## Models and authentication
 
-Built-in and custom models are composed from the runtime catalog and the Agent Config Directory's `models.json`. Select with `--model`, optionally qualified as `provider/model`; use `--provider` to narrow an unqualified model pattern.
+Model requests are delegated to the local Magpie gateway at `http://127.0.0.1:3425`
+([ADR 0071](adr/0071-streamline-pike-for-local-magpie-gateway.md)). Magpie supplies the live model
+catalog and manages upstream authentication, model routing, account rotation, and rate-limit
+failover. Start it with `magpie serve`.
 
-A custom `models.json` provider key also selects that provider's wire protocol behavior. Name the entry after the service it fronts — `openrouter`, `deepseek`, `openai` — whatever `baseUrl` points at, so a gateway or relay in front of a vendor keeps that vendor's request fields; an entry named something else is treated as a plain OpenAI-compatible endpoint. `baseUrl` selects where the request goes, never what it contains.
-
-Kimi Code is built in as provider `kimi-coding`, model `kimi-for-coding`:
+The catalog is discovered at startup and during `/reload`. Pike ignores model `models.json`
+entirely, including custom provider entries, key commands, and malformed files; existing files are
+left untouched ([ADR 0072](adr/0072-narrow-models-to-a-single-local-llm-router.md)). Select a
+gateway model ID with `--model`; an ID containing `/` does not configure a direct cloud provider.
+The independent `--provider` option is removed:
 
 ```bash
-KIMI_API_KEY=... $BIN --model kimi-for-coding "summarize README.md"
+$BIN --model cursor/claude-sonnet-5-5@300k "summarize README.md"
+$BIN --model group/sub-worker "refactor module"
 ```
 
-OpenRouter account authorization is available alongside its API-key
-environment variable:
+The local gateway accepts the default `magpie` API key. Effective authentication uses the startup
+`--api-key` override, then a nonempty `MAGPIE_API_KEY`, then `magpie`. `--api-key` also works with
+default or resumed model selection and is never persisted. Discovery and inference use the same
+key and gateway connection; the key is fixed after the first gateway request, including a failed
+request ([ADR 0073](adr/0073-concentrate-gateway-operations-in-models.md)). Pike does not read or
+write model-provider credentials in `auth.json`. MCP server OAuth remains separate and stores its
+state in `mcp-auth.json`; legacy MCP OAuth entries in `auth.json` are imported there when needed.
 
-```text
-/login openrouter
-```
-
-Credentials can instead be stored in the Agent Config Directory's `auth.json`:
-
-```json
-{
-  "kimi-coding": { "type": "api_key", "key": "..." },
-  "deepseek": { "type": "api_key", "key": "..." }
-}
-```
-
-Request authentication resolves in this order: `--api-key`, stored `auth.json` credential, provider environment variables, then a configured `models.json` `apiKey`. `--api-key` is process-local and requires an explicit model selection. OAuth providers use `/login [provider]` and `/logout` in the Native TUI.
-
-Kimi's `ANTHROPIC_BASE_URL` and `ANTHROPIC_API_KEY` examples target Anthropic-shaped clients; this harness does not read those variables. Live use sends prompts, selected file content, and tool output to the provider. Keep credentials out of prompts, files, tool-visible content, and logs.
+For a new session, model selection uses the configured settings default, then
+`MAGPIE_DEFAULT_MODEL`, then the first catalog model. An empty catalog reports that the local
+gateway needs to be started; Pike has no static model fallback. Live use sends prompts, selected
+file content, and tool output to the gateway. Keep credentials out of prompts, files, tool-visible
+content, and logs.
 
 ## Agent configuration
 
@@ -95,9 +95,10 @@ The **Agent Config Directory** is `$XDG_CONFIG_HOME/pike/agent/`, defaulting to 
 
 | Path | Purpose |
 | --- | --- |
-| `auth.json` | API-key and OAuth credentials |
+| `auth.json` | legacy pi credentials; old MCP OAuth entries are imported into `mcp-auth.json` |
+| `mcp-auth.json` | MCP server OAuth state |
 | `settings.json` | model, thinking, session, shell, trust, theme, and presentation settings |
-| `models.json` | custom providers and model definitions |
+| `models.json` | ignored by Pike; existing pi model configuration is left untouched |
 | `keybindings.json` | Native TUI bindings |
 | `trust.json` | persisted project trust decisions |
 | `themes/` | user themes |
@@ -120,8 +121,8 @@ Project settings in `.pi/settings.json` load only after Project Trust and overri
 | `/fork` | Fork at a selected user message. |
 | `/tree` | Navigate the session tree. |
 | `/trust` | Change the project trust decision. |
-| `/login [provider]` | Authenticate a provider. |
-| `/logout` | Remove an OAuth login. |
+| `/login [provider]` | Show local Magpie gateway authentication guidance. |
+| `/logout` | Show local Magpie gateway authentication guidance. |
 | `/new` | Start a new session (alias `/clear`). |
 | `/clear` | Start a new session (alias `/new`). |
 | `/compact [instructions]` | Compact context, optionally with instructions. |

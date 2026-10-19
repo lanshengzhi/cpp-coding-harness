@@ -1564,10 +1564,10 @@ struct PreparedAssemblyTarget final {
 
     // 7. Resolve the Execution Environment: Session Assembly supplies the
     // complete filesystem and Shell capabilities directly to the callers that
-    // need them (ADR 0048). Secret environment names come from the runtime's
-    // configured models.json apiKey templates. The session always owns its
-    // local capabilities; the former SDK host-provided environment injection
-    // is gone.
+    // need them (ADR 0048). The sanitized shell environment removes the
+    // gateway key (`MAGPIE_API_KEY`) and the project's other secret names. The
+    // session always owns its local capabilities; the former SDK host-provided
+    // environment injection is gone.
     std::vector<std::string> secret_environment_names{"MAGPIE_API_KEY"};
     // All tool paths resolve with pi `resolveToCwd` semantics (ADR 0057):
     // absolute paths are honored anywhere after normalization; there is no

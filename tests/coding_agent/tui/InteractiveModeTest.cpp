@@ -1937,7 +1937,12 @@ TEST_CASE("Native TUI fullscreen dock stays fixed while the transcript scrolls i
     REQUIRE(terminal.inject_input("draft"));
     REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("draft") != std::string::npos; }));
     REQUIRE(terminal.inject_input("\r"));
-    REQUIRE(pump_until(io, [&] { return visible_screen(terminal).find("fake: draft") != std::string::npos; }));
+    // The streamed answer can paint while the turn is still running; the dock
+    // snapshot below must be taken from the settled idle status row.
+    REQUIRE(pump_until(io, [&] {
+        const auto screen = visible_screen(terminal);
+        return screen.find("fake: draft") != std::string::npos && screen.find("Working") == std::string::npos;
+    }));
 
     // The dock sits under the transcript and covers the last six rows
     // (widget spacer, editor, footer); the clip's last row above it carries

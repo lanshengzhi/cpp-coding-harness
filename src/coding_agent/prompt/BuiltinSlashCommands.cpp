@@ -25,7 +25,6 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
             {"trust", "Save project trust decision for future sessions", {}},
             {"login", "Show Magpie gateway authentication guidance", {}},
             {"logout", "Show Magpie gateway authentication guidance", {}},
-            {"gateway", "Check Magpie local gateway connection and model catalog", {}},
             {"new", "Start a new session", {}},
             {"compact", "Manually compact the session context", {}},
             {"resume", "Resume a different session", {}},

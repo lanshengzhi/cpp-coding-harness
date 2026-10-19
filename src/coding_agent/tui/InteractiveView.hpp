@@ -261,6 +261,8 @@ public:
     /// while a replacement is set it renders and receives input in place of
     /// the editor, exactly like pi's focused dialog/selector.
     void set_editor_replacement(std::shared_ptr<cch::tui::Component> component);
+    /// Current modal slot, used by the presenter to notify components before removal.
+    [[nodiscard]] std::shared_ptr<cch::tui::Component> editor_replacement() const;
     void restore_editor();
 
     /// Install or clear the active extension prompt editor (pi

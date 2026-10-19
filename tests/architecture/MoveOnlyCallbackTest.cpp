@@ -5,7 +5,7 @@
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/RequestOptions.hpp>
 #include <cch/ai/StreamEvent.hpp>
-#include <cch/ai/StreamTransport.hpp>
+#include "support/StreamTransport.hpp"
 
 #include <memory>
 #include <type_traits>
@@ -48,18 +48,17 @@ TEST_CASE("event sink contracts are move-only", "[architecture][u5][spec]") {
 
     static_assert(!std::is_copy_constructible_v<ai::AssistantEventSink>);
     static_assert(std::is_move_constructible_v<ai::AssistantEventSink>);
-    static_assert(!std::is_copy_constructible_v<ai::TransformHeadersHook>);
-    static_assert(std::is_move_constructible_v<ai::TransformHeadersHook>);
-    static_assert(!std::is_copy_constructible_v<ai::SimpleStreamOptions>);
+    static_assert(std::is_copy_constructible_v<ai::SimpleStreamOptions>);
     static_assert(std::is_move_constructible_v<ai::SimpleStreamOptions>);
 
-    static_assert(!std::is_copy_constructible_v<ai::providers::BodyChunkHandler>);
-    static_assert(std::is_move_constructible_v<ai::providers::BodyChunkHandler>);
+    static_assert(!std::is_copy_constructible_v<support::BodyChunkHandler>);
+    static_assert(std::is_move_constructible_v<support::BodyChunkHandler>);
 }
 
 TEST_CASE("move-only event sinks can own unique state", "[architecture][u5][spec]") {
     int observed = 0;
-    agent::AgentEventSink sink = [state = std::make_unique<int>(41), &observed](const agent::AgentLifecycleEvent&) mutable {
+    agent::AgentEventSink sink = [state = std::make_unique<int>(41), &observed](
+                                         const agent::AgentLifecycleEvent&) mutable {
         observed = *state + 1;
         return support::ExpectedVoid{};
     };
@@ -73,7 +72,8 @@ TEST_CASE("move-only event sinks can own unique state", "[architecture][u5][spec
 
 TEST_CASE("move-only body handlers can own unique buffers", "[architecture][u5][spec]") {
     int observed = 0;
-    ai::providers::BodyChunkHandler handler = [buffer = std::make_unique<std::string>(), &observed](std::string_view chunk) mutable {
+    support::BodyChunkHandler handler = [buffer = std::make_unique<std::string>(), &observed](
+                                                std::string_view chunk) mutable {
         *buffer += chunk;
         observed = static_cast<int>(buffer->size());
         return support::ExpectedVoid{};

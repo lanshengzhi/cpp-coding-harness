@@ -77,23 +77,27 @@ _Avoid_: Singleton scheduler, executor hierarchy, event bus, one thread or loop 
 ### Models and authentication
 
 **Model**:
-The credential-free description of one model's identity, capabilities, limits, and cost.
+The credential-free description of one model's identity, capabilities, limits, and cost, independent of the connection used to request it.
 _Avoid_: Model name string, client configuration, optional model
 
+**Local LLM Router**:
+The local OpenAI-compatible routing service (such as Magpie) acting as the authoritative gateway for model requests, owning upstream authentication, account rotation, failover, and wire protocol normalization.
+_Avoid_: Cloud provider, proxy shim, external gateway
+
 **Provider**:
-The live capability responsible for one provider identity's model catalog, authentication, and model requests.
+The source identity recorded with a Model and its messages; Pike's live model requests go through the Local LLM Router. The former independently authenticated model-request capability is retired.
 _Avoid_: Provider factory, per-request client, hard-coded provider list
 
 **Provider Definition**:
-The complete description from which a Provider is established, including its identity, display name, model catalog, and authentication behavior.
-_Avoid_: Provider factory options, adapter config bag, transport config
+The historical description of a separately installed model Provider, including its catalog and authentication behavior; this concept is retired from the single-router model runtime.
+_Avoid_: Passive model catalog, adapter config bag, transport config
 
 **Provider Info**:
-The displayable description of an installed Provider and its authentication methods, distinct from access to that Provider's capabilities.
-_Avoid_: Provider handle, runtime provider pointer, auth snapshot
+The historical displayable description of an installed model Provider and its authentication methods; the installed-Provider concept is retired.
+_Avoid_: Model identity, runtime provider pointer, gateway connectivity
 
 **Models Runtime**:
-The shared model and authentication capability serving Agent Sessions associated with one Agent Config Directory.
+The shared application model capability serving Agent Sessions associated with one Agent Config Directory, using a Local LLM Router connection with a stable request identity.
 _Avoid_: Provider registry, session-scoped client, configuration snapshot
 
 **Provider Message**:
@@ -101,48 +105,52 @@ A model-facing conversation value accepted or produced at a Provider boundary.
 _Avoid_: Agent Message, Session Entry
 
 **Compat Field**:
-A Model's API-specific compatibility setting that expresses a supported variation in provider behavior.
+The historical Model member that expressed API-specific provider-behavior alternatives for `openai-completions`; retired — the adapter executes exactly the Local LLM Router wire contract (ADR 0074), and surviving capability variation travels in the Model's thinking map.
 _Avoid_: Capability flag bag, models.json compat override
 
 **Session Affinity**:
-The association that lets a Provider correlate model requests belonging to the same Agent Session.
+The association that lets the Local LLM Router correlate model requests belonging to the same Agent Session (ADR 0074).
 _Avoid_: Session metadata, resume state
 
+**OpenAI Completions API**:
+The OpenAI-compatible Chat Completions wire contract the Local LLM Router accepts and returns for every Model (ADR 0074).
+_Avoid_: Provider protocol, adapter family list, known API vocabulary
+
 **Credential**:
-A stored authentication value for one Provider, distinct from its catalog or displayable metadata.
-_Avoid_: Provider config field, session metadata
+A stored authentication value for an MCP server, distinct from a Model or a Runtime API Key Override. Upstream model Credentials are owned by the Local LLM Router.
+_Avoid_: Model configuration, session metadata, invocation key
 
 **Request Authentication**:
 The resolution of effective authentication for a particular model request.
 _Avoid_: Login-time snapshot, startup authentication
 
 **Runtime API Key Override**:
-An API key supplied for the current Pike invocation rather than saved as a Credential.
-_Avoid_: Saved key, default key
+An API key supplied for the current Pike invocation to authenticate requests to the Local LLM Router, distinct from stored upstream Credentials.
+_Avoid_: Saved key, upstream provider credential, default key
 
 **Configured API Key**:
-An API-key source declared in provider configuration rather than in the credential store.
+A historical API-key source declared in provider configuration rather than in the credential store; it is retired from Pike's local-router model configuration.
 _Avoid_: Stored credential, hardcoded key
 
 **Auth Interaction**:
-The exchange of prompts and events between provider-owned authentication and host-owned presentation.
-_Avoid_: Login callback, rendered dialog, provider UI
+The exchange of prompts and events between an MCP OAuth flow and host-owned presentation, distinct from the Local LLM Router's upstream authentication.
+_Avoid_: Model-provider login, rendered dialog, provider UI
 
 **OAuth Login**:
-An explicit user authorization flow that obtains a Provider Credential.
-_Avoid_: Auto-login, implicit authentication, login snapshot
+An explicit user authorization flow that obtains an MCP server Credential; upstream model authorization belongs to the Local LLM Router.
+_Avoid_: Auto-login, implicit authentication, model-provider login
 
 **Login Cancellation**:
-The user's withdrawal from an in-progress OAuth Login, distinct from an authentication failure.
+The user's withdrawal from an in-progress MCP OAuth Login, distinct from an authentication failure.
 _Avoid_: Failed login, error dialog
 
 **Credential Refresh**:
-Request-time renewal of an expiring stored OAuth Credential for a Provider that supports renewal.
-_Avoid_: Background refresh, proactive expiry notification
+The renewal of an expiring MCP server Credential. Upstream model credential renewal belongs to the Local LLM Router.
+_Avoid_: Model startup authentication, login snapshot
 
 **Re-auth Guidance**:
-The user-facing instruction to authenticate when a model request has no usable Credential.
-_Avoid_: Generic auth failure, silent credential fallback
+The instruction to sign in to an MCP server when its Credential is missing or expired, distinct from gateway model-request diagnostics.
+_Avoid_: Model-provider login prompt, silent credential fallback
 
 **Resume Model Resolution**:
 The matching of a resumed Agent Session's recorded model identity to the current Models Runtime.

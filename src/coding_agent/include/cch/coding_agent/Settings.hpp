@@ -87,8 +87,8 @@ struct UserCodemodeSettings {
 
 /// User settings following pi's two-scope `settings.json` contract (ADR 0031).
 /// All fields are optional — CLI flags and built-in defaults fill any gaps.
-/// Settings never carry secrets or secret references; `apiKey` appears only in
-/// `models.json`.
+/// Settings never carry secrets or secret references; the gateway key is
+/// supplied per invocation (`--api-key` or `MAGPIE_API_KEY`) and never persisted.
 struct UserSettings {
     /// pi `defaultProvider` — default provider name (e.g. `openai-codex`).
     std::optional<std::string> default_provider{std::nullopt};

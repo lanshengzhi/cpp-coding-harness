@@ -108,7 +108,6 @@ cch_parity_declare_target(
     SOURCES
         src/coding_agent/tui/AltScreenHost.cpp
         src/coding_agent/tui/AssistantMessageComponent.cpp
-        src/coding_agent/tui/AuthFlowController.cpp
         src/coding_agent/tui/BashExecutionComponent.cpp
         src/coding_agent/tui/ChatContainer.cpp
         src/coding_agent/tui/ChatViewport.cpp
@@ -133,14 +132,11 @@ cch_parity_declare_target(
         src/coding_agent/tui/KeybindingsManager.cpp
         src/coding_agent/tui/LinuxClipboard.cpp
         src/coding_agent/tui/LoadedResources.cpp
-        src/coding_agent/tui/LoginDialog.cpp
-        src/coding_agent/tui/LoginPresentation.cpp
         src/coding_agent/tui/McpManagerFlow.cpp
         src/coding_agent/tui/McpManagerPresenter.cpp
         src/coding_agent/tui/McpManagerView.cpp
         src/coding_agent/tui/ModelFlowController.cpp
         src/coding_agent/tui/ModelSelector.cpp
-        src/coding_agent/tui/OAuthSelector.cpp
         src/coding_agent/tui/OpenBrowser.cpp
         src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/ScopedModelsSelector.cpp

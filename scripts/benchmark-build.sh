@@ -50,12 +50,12 @@ Options:
   --prod-source FILE   Production source for the typical incremental scenario
                        (default: src/coding_agent/SettingsManager.cpp).
   --test-source FILE   Test source for the typical test-source incremental
-                       scenario (default: tests/coding_agent/ModelConfigTest.cpp).
+                       scenario (default: tests/coding_agent/ModelRuntimeTest.cpp).
                        The owning package shard is built, not the
                        aggregate.
   --hotspot-source FILE
                        Leading-hotspot translation unit
-                       (default: src/ai/providers/BoostBeastWebSocketTransport.cpp).
+                       (default: src/support/BoostBeastStreamTransport.cpp).
   --compiler PATH      C++ compiler to use (default: CMake's default).
   --vcpkg-root DIR     vcpkg checkout (default: $VCPKG_ROOT or <repo>/.deps/vcpkg).
   --allow-network      Permit vcpkg to download dependencies when the binary
@@ -97,8 +97,8 @@ build_type="Debug"
 jobs=4
 samples=3
 prod_source="src/coding_agent/SettingsManager.cpp"
-test_source="tests/coding_agent/ModelConfigTest.cpp"
-hotspot_source="src/ai/providers/BoostBeastWebSocketTransport.cpp"
+test_source="tests/coding_agent/ModelRuntimeTest.cpp"
+hotspot_source="src/support/BoostBeastStreamTransport.cpp"
 compiler=""
 vcpkg_root_arg=""
 allow_network=0

@@ -141,7 +141,7 @@ TEST_CASE("list-models with no models prints the no-models message and exits 0",
 
     REQUIRE(result.exit_code == 0);
     CHECK(result.stdout_text == "No models available. Start the local Magpie gateway with `magpie serve`, "
-                                "then run `/reload` or `/gateway`.\n");
+                                "then run `/reload`.\n");
 }
 
 TEST_CASE("list-models runs in-memory: no session file is created and help/version keep precedence",
