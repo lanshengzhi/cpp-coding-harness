@@ -6,6 +6,12 @@ status: accepted
 
 The cch_ai client transports (the Codex WebSocket transport, the HTTPS stream transport, and the OAuth HTTP client) instantiated Boost.Beast machinery over two stream types — plain `websocket::stream<basic_stream<tcp, any_io_executor, ...>>` and its TLS counterpart — with every operation keyed on the type-erased `any_io_executor`, the `beast::tcp_stream` default. Production traffic is TLS-only, so the plain instantiation was dead weight in the distribution binary, and the erased executor multiplied instantiation keys. This decision implements issue [#638](https://github.com/lanshengzhi/cpp-coding-harness/issues/638) and changes a Supported surface of [ADR 0033](0033-own-the-supported-api-adapter-surface-for-the-three-provider-paths.md): the client URL surface narrows to TLS schemes only.
 
+> Target amendment: [ADR 0075](0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
+> supersedes the TLS-only/no-redirect restrictions where they prevent selected pi-v1.3.0 MCP behavior.
+> HTTP/HTTPS, redirect and request-authentication outcomes follow frozen pi for that selected scope;
+> applicable certificate validation remains required. The concrete-executor Beast stream mechanics
+> and unrelated transport guarantees recorded here are retained.
+
 ## Decisions
 
 - Client transports are TLS-only. The WebSocket transport accepts `wss://` only; the HTTPS stream transport and the OAuth HTTP client already accepted `https://` only. `ws://` and `http://` client URLs fail at the transport boundary with a Validation error, and the plain WebSocket branch is removed so its instantiations are unreachable and reclaimed by the release link's `--gc-sections`/ICF.

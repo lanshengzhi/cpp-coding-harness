@@ -6,6 +6,12 @@ status: accepted
 
 Steering and follow-up queues deliberately add configurable item-count and byte-size limits beyond pi's queue semantics. Long-lived embedded C++ processes benefit from deterministic memory bounds; the divergence is limited to admission, while queue modes, ordering, and consumption follow pi. Capacity rejection is reported by the enqueue operation and never silently drops input or aborts an unrelated active run.
 
+> Target amendment: [ADR 0075](0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
+> supersedes the extra queue-capacity defaults and rejection divergence for the selected pi-v1.3.0
+> target. Agent queue admission follows frozen pi; retaining this record's bounded default is a
+> migration obligation, not accepted final behavior. Queue modes, ordering and consumption remain
+> authoritative unless the new baseline changes them.
+
 ## Considered options
 
 - Use unbounded queues like pi: rejected because host-controlled input could grow process memory without an explicit resource policy.

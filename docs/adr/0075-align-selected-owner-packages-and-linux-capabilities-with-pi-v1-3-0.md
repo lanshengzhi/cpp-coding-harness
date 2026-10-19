@@ -11,6 +11,10 @@ an independent runtime with the complete Linux capability target, rather than a 
 Pike's existing task implementation. Acceptance of this target does not claim implementation or
 verification is complete.
 
+[Spec #1044](https://github.com/lanshengzhi/cpp-coding-harness/issues/1044) carries the executable
+scope and acceptance contract for this decision; [#1045](https://github.com/lanshengzhi/cpp-coding-harness/issues/1045)
+records this authority in version control.
+
 ## Baseline and comparison contract
 
 The target Named Baseline is **`pi-v1.3.0`**, exact revision
@@ -25,8 +29,11 @@ remains Linux x86-64 with glibc and the repository's strict C++ toolchain.
   capability or justify a different observable result. Exact wire and storage contracts require
   exact comparison of their contractual data, without demanding byte-identical terminal output
   or database files where the contract does not require it.
-- Capability selection and implementation status are separate. An accepted target may still have
-  an implementation or verification gap; it cannot be reclassified Deferred to close the work.
+- Target membership, implementation status and verification status are three separate records.
+  Membership places a capability in the selected target; implementation records whether the
+  configured graph and observable behavior provide it; verification records whether independent
+  frozen-pi evidence accepts the comparison. An accepted target may still have an implementation
+  or verification gap; it cannot be reclassified Deferred to close the work.
 - Outside the complete targets and explicit additions below, new application capabilities need
   an owner membership ruling. Unresolved membership remains No decision, not implicitly Supported
   or Deferred.
