@@ -188,7 +188,8 @@ const artifacts: ArtifactDefinition[] = [
         sourceEndpoints: [
             "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,toCodemodeDeclaration,getCodemodeCallableTools,createCodemodeToolDefinition",
             "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension",
-            "packages/coding-agent/test/codemode-extension.test.ts:codemode extension",
+            "packages/coding-agent/test/tool-search.test.ts:createCodemodeDescription",
+            "packages/coding-agent/test/suite/agent-session-codemode.test.ts:createCodemodeExtension,createCodemodeTool",
         ],
         scenarios: applicationScenarios,
     },

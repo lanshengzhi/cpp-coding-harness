@@ -29,40 +29,40 @@
   "evidence": {
     "family": "audit-1053",
     "manifest": "fixtures/pi-v1.3.0/audit-1053/manifest.json",
-    "manifestSha256": "1977003915725dfd3db9af928779abc402688d9b0e9afd4365df95a415e6e882",
+    "manifestSha256": "f4c48cc5db9bf4a0e40db6651e5c43e17023d9635a1dd9f85f2b9a472cb793bf",
     "capture": "fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
     "artifacts": {
       "source-options.json": {
         "scenarios": 7,
-        "sha256": "16b441ec5fe420fa1e4a6dc9b850a54ddea4ca8e15079fcafddc65a4478b3e1e"
+        "sha256": "664109294d1f852cee1b142acf8de400d9066861dc10b81e7e210f24e42c8f56"
       },
       "declarations.json": {
         "scenarios": 13,
-        "sha256": "64758b1d6035ca2661886d57d8253b9c84c9c31a355acbd18c9e8bccafd903d7"
+        "sha256": "a29f7a798b15cb4dacce608f4018a5c917162ce16f4ee5a4e37f86f6f34939c5"
       },
       "script-execution.json": {
         "scenarios": 18,
-        "sha256": "c95338f7eadd9e71cebe2587ad679528ca5aa780257dc4761e06372ca7fd1fd3"
+        "sha256": "267ba6f2774da433809a783e0656b7d3703f4457906ab8bb54e5c9b1c209f0c9"
       },
       "worker-lifetime.json": {
         "scenarios": 8,
-        "sha256": "58cdd5c7c8eaedbf6adbcda0fd0225e479465a2cb71a8c709f78f9c0aa45286d"
+        "sha256": "1ca3ecef15ea78d9e4fbec315a8640ba09a50f2f114cd796ce59aee49a426dcf"
       },
       "deterministic-replay.json": {
         "scenarios": 14,
-        "sha256": "6ba9027f6becf520e85c38b6b69666b62438f66d4136e19bafb3e2634f57253a"
+        "sha256": "24105ec690559628886d9431c98c11c5598f70f25e738f318b2bb714e031e329"
       },
       "inline-interrupt.json": {
         "scenarios": 6,
-        "sha256": "68f044e7b9c0b7824c83ab663b4fd52b4e64d8aabc8608452b67a54ae8d4b069"
+        "sha256": "b01e9ff3b21d6d47bf7b2009b1cc5a79e503116e8ad5ca5b18d55e827cdb401d"
       },
       "remote-exchange.json": {
         "scenarios": 6,
-        "sha256": "f463749b4123e07b9b7378799868663f9c1bd5b3a71e09a1cc79beb7fee9a8c6"
+        "sha256": "0292c4f696715a46f87442203a949c65006e60b991cd864351f9d1cf0f57b2ab"
       },
       "application-catalog.json": {
         "scenarios": 10,
-        "sha256": "95f1f9e440c712bfcfa2fb1b34108601ad1988da600be94fb6b7497c61689ef9"
+        "sha256": "68a7e9716755ef5ebba97948b3ad9343b1621c1bdf72517248554d0927f52fb6"
       }
     },
     "scenarioCount": 82
@@ -153,7 +153,7 @@
         "sources": [
           "packages/codemode/src/source.ts:CodemodeSourceOptions",
           "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode",
-          "packages/codemode/test/sandbox.test.ts:deadline"
+          "packages/codemode/test/sandbox.test.ts:terminates a synchronous infinite loop on timeout"
         ],
         "scenarios": [
           "a script that computes past its deadline is a timeout",
@@ -187,7 +187,7 @@
       "status": {
         "membership": "supported",
         "implementation": "missing",
-        "verification": "upstream-captured"
+        "verification": "unverified"
       },
       "recommendation": "Implement the Application formatter before adding a differential output-budget test; keep the library parser behavior unchanged.",
       "blockers": []
@@ -200,7 +200,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/identifier.ts:toCodemodeIdentifier",
-          "packages/codemode/test/declarations.test.ts:toCodemodeIdentifier"
+          "packages/codemode/test/declarations.test.ts:renders signatures with normalized identifiers"
         ],
         "scenarios": [
           "tool identifiers replace invalid characters and preserve MCP names"
@@ -280,8 +280,7 @@
       "consumer": "Tool declarations, discovery samples, catalog sections and script signatures.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/declarations.ts:DEFAULT_INPUT_SCHEMA_MAX_CHARS",
-          "packages/codemode/test/declarations.test.ts:DEFAULT_INPUT_SCHEMA_MAX_CHARS"
+          "packages/codemode/src/declarations.ts:DEFAULT_INPUT_SCHEMA_MAX_CHARS"
         ],
         "scenarios": [
           "tool signatures and samples use the output schema and input budget"
@@ -305,7 +304,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,renderToolSection,selectCatalog",
-          "packages/coding-agent/test/codemode-extension.test.ts:createCodemodeDescription"
+          "packages/coding-agent/test/tool-search.test.ts:createCodemodeDescription"
         ],
         "scenarios": [
           "the empty codemode catalog still declares globals, discovery and the options grammar",
@@ -350,27 +349,48 @@
       "blockers": []
     },
     {
-      "id": "codemode-models-globals",
-      "capability": "Codemode `models.*` namespace",
-      "operation": "Declare and implement the `models.classify`/`models.generateImages` globals, including model selection, usage accounting, image generation, call limits and prompt text, when the application creates the tool with model access.",
+      "id": "codemode-models-provider-execution",
+      "capability": "Codemode `models.*` provider execution",
+      "operation": "When the application enables model access, `models.getAvailableOfType`/`getModelsOfType`/`getModelOfType`/`classify`/`generateImages` select catalog models, account usage, enforce call limits and turn classifier results into prompt text.",
       "consumer": "Application codemode tool with a model registry; scripts that classify or generate images.",
       "upstreamEvidence": {
         "sources": [
-          "packages/coding-agent/src/extensions/codemode/execute.ts:createModelGlobals",
-          "packages/coding-agent/src/extensions/codemode/tool.ts:describeGlobals"
+          "packages/coding-agent/src/extensions/codemode/execute.ts:createModelGlobals"
         ],
-        "scenarios": [
-          "the models declaration line is present only when models are enabled"
-        ]
+        "scenarios": []
       },
-      "cppSeam": "`CodemodeTool.hpp` explicitly states Pike has no `models.*` namespace; `CodemodeTool.cpp:codemode_description` never emits the models line.",
-      "cppEvidence": "Out of the A09 declarations/execution/replay/Remote scope: `models.*` is the application model-orchestration feature, not a codemode VM or transport contract. Pike has no model-global implementation and no C++ equivalent.",
+      "cppSeam": "`CodemodeTool.hpp` states Pike has no `models.*` namespace; there is no provider, classifier or image-generation implementation.",
+      "cppEvidence": "Excluded from A09: provider execution belongs to the retained AI/model-orchestration contract, not to codemode declaration/execution/replay/Remote. The description-gate capture does not prove provider execution.",
       "status": {
         "membership": "excluded",
         "implementation": "not-applicable",
         "verification": "not-applicable"
       },
-      "recommendation": "Do not implement models in the codemode port. Record it as an excluded application feature in #1058 consolidation; revisit only if the product requires model calls from scripts.",
+      "recommendation": "Do not implement `models.*` provider execution in the codemode port. Track it under the retained AI contract if the product needs it; do not cite the gate capture as proof.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-models-description-gate",
+      "capability": "Codemode `models` description gate",
+      "operation": "Emit the `models` globals line and classifier/image wording in the `codemode` description only when the tool is created with model access; omit it when models are disabled or absent.",
+      "consumer": "Model-facing codemode description and system prompt.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:describeGlobals",
+          "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension"
+        ],
+        "scenarios": [
+          "the models declaration line is present only when models are enabled"
+        ]
+      },
+      "cppSeam": "`CodemodeTool.cpp:codemode_description` never emits the models line. Pike has no model globals, so the capability-absent branch is the only reachable behavior.",
+      "cppEvidence": "The absent branch matches the captured gate (`withoutModels: false`), but the enabled branch (`withModels: true`, classifier/image wording) is unsupported. This row covers only that capability-absent behavior; provider execution is the separate excluded row.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the absent branch correct and add a differential assertion when the catalog is ported. Do not use this row as a demand to implement model providers.",
       "blockers": []
     },
     {
@@ -483,7 +503,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/prelude-source.ts:store,load,serializeWrites",
-          "packages/codemode/test/sandbox.test.ts:store",
+          "packages/codemode/test/sandbox.test.ts:store and load",
           "packages/coding-agent/src/extensions/codemode/execute.ts:readCodemodeStore,appendEntry"
         ],
         "scenarios": [
@@ -586,7 +606,7 @@
         "sources": [
           "packages/codemode/src/types.ts:CodemodeError",
           "packages/codemode/src/runtime/prelude-source.ts:describeError,errorText",
-          "packages/codemode/test/sandbox.test.ts:errors"
+          "packages/codemode/test/sandbox.test.ts:script execution"
         ],
         "scenarios": [
           "a script failure keeps prior output and reports the script error with its line",
@@ -613,7 +633,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/prelude-source.ts:MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_VALUE_CHARS,MAX_STORE_TOTAL_CHARS",
-          "packages/codemode/test/sandbox.test.ts:limits"
+          "packages/codemode/test/sandbox.test.ts:limits and lifetime"
         ],
         "scenarios": [
           "the guest prelude is the frozen sandbox prelude with output and store limits"
@@ -636,7 +656,7 @@
       "consumer": "Scripts that fire-and-forget, the Application nested-call record and the TUI status row.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/test/sandbox.test.ts:cancels calls still running",
+          "packages/codemode/test/sandbox.test.ts:aborts unawaited calls when the script returns",
           "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode"
         ],
         "scenarios": [
@@ -661,7 +681,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/vm.ts:startVm",
-          "packages/codemode/test/deterministic.test.ts:execute is not deterministic"
+          "packages/codemode/test/deterministic.test.ts:execute() is not deterministic"
         ],
         "scenarios": [
           "execute() is not deterministic while start() is",
@@ -686,8 +706,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/types.ts:CodemodeSandboxBaseOptions.memoryLimitBytes",
-          "packages/coding-agent/src/extensions/codemode/execute.ts:CODEMODE_MEMORY_LIMIT_BYTES",
-          "packages/codemode/test/sandbox.test.ts:out of memory"
+          "packages/coding-agent/src/extensions/codemode/execute.ts:CODEMODE_MEMORY_LIMIT_BYTES"
         ],
         "scenarios": [
           "a memory-limited VM reports out of memory as a script error"
@@ -710,9 +729,9 @@
       "consumer": "Application signal handling, direct sandbox callers and the TUI status.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/execution.ts:startExecution",
-          "packages/codemode/test/sandbox.test.ts:aborted",
-          "packages/codemode/test/deterministic.test.ts:caller aborts"
+          "packages/codemode/src/runtime/execution.ts:Execution,CodemodeSandboxBase.start",
+          "packages/codemode/test/sandbox.test.ts:aborts via signal and cancels in-flight calls",
+          "packages/codemode/test/deterministic.test.ts:ends with an error the script cannot catch when the caller aborts"
         ],
         "scenarios": [
           "a caller abort ends a waiting script, aborts its tool and keeps partial output",
@@ -738,7 +757,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/extensions/codemode/execute.ts:MAX_CONCURRENT_CODEMODE_WORKERS,acquireWorker",
-          "packages/codemode/test/worker-lifetime.test.ts:admission"
+          "packages/codemode/test/worker-lifetime.test.ts:does not start a worker when admission is denied"
         ],
         "scenarios": [
           "admission denial rejects before a worker starts and keeps the start hook uncalled",
@@ -765,7 +784,8 @@
         "sources": [
           "packages/codemode/src/runtime/execution.ts:finish,close",
           "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
-          "packages/codemode/test/worker-lifetime.test.ts:result before exit"
+          "packages/codemode/test/worker-lifetime.test.ts:settles %s without waiting for worker exit",
+          "packages/codemode/test/worker-lifetime.test.ts:reports the actual exit of execute() and start() workers"
         ],
         "scenarios": [
           "close settles an in-flight run before the worker exit releases admission",
@@ -791,8 +811,7 @@
       "consumer": "Application concurrency accounting and `CodemodeSandbox.close()`.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/test/worker-lifetime.test.ts:repeated abort",
-          "packages/codemode/test/worker-lifetime.test.ts:close"
+          "packages/codemode/test/worker-lifetime.test.ts:settles %s without waiting for worker exit"
         ],
         "scenarios": [
           "repeated abort results settle while cancelled workers remain unreleased; exits release every admission"
@@ -816,7 +835,8 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
-          "packages/codemode/test/worker-lifetime.test.ts:construction failure"
+          "packages/codemode/test/worker-lifetime.test.ts:releases admission when worker construction fails",
+          "packages/codemode/test/worker-lifetime.test.ts:does not acquire admission when wasm loading fails"
         ],
         "scenarios": [
           "a wasm loading failure does not reserve admission",
@@ -840,9 +860,9 @@
       "consumer": "Application `finally { await sandbox.close() }`, session teardown and reuse tests.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/host.ts:CodemodeSandbox.close",
-          "packages/codemode/test/sandbox.test.ts:closed",
-          "packages/codemode/test/worker-lifetime.test.ts:close"
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.close",
+          "packages/codemode/test/sandbox.test.ts:rejects execute after close",
+          "packages/codemode/test/worker-lifetime.test.ts:settles %s without waiting for worker exit"
         ],
         "scenarios": [
           "the public tool table can be registered, listed and unregistered; close rejects later runs",
@@ -868,7 +888,7 @@
         "sources": [
           "packages/codemode/src/types.ts:CodemodeResult",
           "packages/codemode/src/runtime/execution.ts:execute",
-          "packages/codemode/test/sandbox.test.ts:result shape"
+          "packages/codemode/test/sandbox.test.ts:returns the script's return value after a JSON round trip"
         ],
         "scenarios": [
           "a script returns a JSON value after top-level await and collects output in order",
@@ -896,9 +916,7 @@
           "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
           "packages/coding-agent/src/extensions/codemode/execute.lazy.ts"
         ],
-        "scenarios": [
-          "a missing guest module is an explicit create error, not a deferred failure"
-        ]
+        "scenarios": []
       },
       "cppSeam": "`CodemodeSandbox::create` parses/validates the module and returns `Expected`; `GuestHolder::ensure` loads on first execute. `CodemodeSandboxTest.cpp:257` covers a missing module; `CodemodeParityTest.cpp` covers lazy load.",
       "cppEvidence": "Implemented and tested at the seam. The Application still creates a fresh sandbox per tool call (`executeCodemode`) rather than reusing the source holder, so the captured source-level lazy reuse is not the same object lifetime.",
@@ -918,7 +936,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start,CodemodeRun.deliver",
-          "packages/codemode/test/deterministic.test.ts:start"
+          "packages/codemode/test/deterministic.test.ts:makes the same calls and output for the same start, seed, and results"
         ],
         "scenarios": [
           "the same script, start time, seed and answers make the same calls and output",
@@ -944,7 +962,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/vm.ts:startVm",
-          "packages/codemode/test/deterministic.test.ts:clock and seed"
+          "packages/codemode/test/deterministic.test.ts:runs in UTC whatever the host's timezone, and without WeakRef or FinalizationRegistry"
         ],
         "scenarios": [
           "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
@@ -969,7 +987,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/execution.ts:Execution.deliver",
-          "packages/codemode/test/deterministic.test.ts:order and delivery errors"
+          "packages/codemode/test/deterministic.test.ts:applies results in seq order, whatever order they are delivered in"
         ],
         "scenarios": [
           "results are applied in seq order even when delivered in reverse order",
@@ -995,7 +1013,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/types.ts:CodemodeDuring",
-          "packages/codemode/test/deterministic.test.ts:during"
+          "packages/codemode/test/deterministic.test.ts:reports the result the VM was processing when the script ended"
         ],
         "scenarios": [
           "during reports the result the VM was processing when the script ended",
@@ -1019,9 +1037,9 @@
       "consumer": "Replay admission, durable execution and deterministic tests.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/vm.ts:vmFingerprint",
+          "packages/codemode/src/runtime/vm.ts:startVm,PRELUDE_HASH",
           "packages/codemode/src/runtime/execution.ts:onStarted",
-          "packages/codemode/test/deterministic.test.ts:fingerprint"
+          "packages/codemode/test/deterministic.test.ts:reports the fingerprint before any call and the calls issued after each result"
         ],
         "scenarios": [
           "the VM fingerprint arrives before calls, idles report issued calls, and a different heap changes the fingerprint"
@@ -1044,8 +1062,8 @@
       "consumer": "Replay callers and tests.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/execution.ts:start validation",
-          "packages/codemode/test/deterministic.test.ts:start rejects"
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start",
+          "packages/codemode/test/deterministic.test.ts:rejects a call that is not waiting and a result number used twice"
         ],
         "scenarios": [
           "start rejects invalid start times, seeds and duplicate script names",
@@ -1072,7 +1090,7 @@
         "sources": [
           "packages/codemode/src/runtime/prelude-source.ts:settle",
           "packages/codemode/src/runtime/protocol.ts:HostToWorkerMessage.properties",
-          "packages/codemode/test/deterministic.test.ts:properties"
+          "packages/codemode/test/deterministic.test.ts:rejects with an Error carrying the answer's properties"
         ],
         "scenarios": [
           "globals count as issued calls and rejection properties reach the script Error"
@@ -1120,7 +1138,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox,DEFAULT_INTERRUPT_BUDGET",
-          "packages/codemode/test/portable.test.ts:interrupt budget"
+          "packages/codemode/test/portable.test.ts:fails a script that computes past its interrupt budget as a timeout"
         ],
         "scenarios": [
           "an inline script that computes without awaiting is stopped by its interrupt budget, not the deadline",
@@ -1144,8 +1162,7 @@
       "consumer": "Portable hosts and tests.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/inline.ts:inlineLauncher",
-          "packages/codemode/test/portable.test.ts:inline deadline and abort"
+          "packages/codemode/src/runtime/inline.ts:inlineLauncher"
         ],
         "scenarios": [
           "caller abort during an inline tool wait aborts the tool and keeps partial output",
@@ -1154,7 +1171,7 @@
         ]
       },
       "cppSeam": "No Inline class; the worker sandbox has a deadline/stop path with different abort messages and no pre-VM creation guarantee.",
-      "cppEvidence": "The deadline-vs-budget distinction cannot be represented. Pike\u2019s worker path does abort a tool wait and keep prior output, but it starts a thread and reports its own cancellation text.",
+      "cppEvidence": "The deadline-vs-budget distinction cannot be represented. Pike’s worker path does abort a tool wait and keep prior output, but it starts a thread and reports its own cancellation text.",
       "status": {
         "membership": "supported",
         "implementation": "missing",
@@ -1170,7 +1187,8 @@
       "consumer": "Portable hosts and direct callers.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox.execute",
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.execute",
+          "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox",
           "packages/codemode/test/portable.test.ts:InlineCodemodeSandbox"
         ],
         "scenarios": [
@@ -1194,7 +1212,8 @@
       "consumer": "Portable/Cloudflare hosts and tests.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox.close",
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.close",
+          "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox",
           "packages/codemode/src/portable.ts"
         ],
         "scenarios": [
@@ -1220,7 +1239,7 @@
         "sources": [
           "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox,serveCodemodeRemote",
           "packages/codemode/src/runtime/protocol.ts",
-          "packages/codemode/test/portable.test.ts:remote"
+          "packages/codemode/test/portable.test.ts:RemoteCodemodeSandbox"
         ],
         "scenarios": [
           "a generic remote runs the script and calls the caller's tools across the exchange",
@@ -1245,7 +1264,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox",
-          "packages/codemode/test/portable.test.ts:batches output"
+          "packages/codemode/test/portable.test.ts:batches output instead of making one exchange per line"
         ],
         "scenarios": [
           "remote output is buffered instead of one exchange per output item"
@@ -1269,7 +1288,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/remote.ts:serveCodemodeRemote",
-          "packages/codemode/test/portable.test.ts:caps"
+          "packages/codemode/test/portable.test.ts:caps the interrupt budget and memory at the remote's limits"
         ],
         "scenarios": [
           "the remote caps the requested interrupt budget and memory limit"
@@ -1293,15 +1312,15 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox.abort",
-          "packages/codemode/src/runtime/protocol.ts:stop reply",
-          "packages/codemode/test/portable.test.ts:abort"
+          "packages/codemode/src/runtime/remote.ts:CodemodeRemoteReply",
+          "packages/codemode/test/portable.test.ts:tells the remote to stop when the caller aborts"
         ],
         "scenarios": [
           "caller abort answers the remote's exchange with stop and settles without waiting for remote compute"
         ]
       },
       "cppSeam": "No Remote protocol or stop reply; worker cancellation stops a local thread and joins it.",
-      "cppEvidence": "The captured non-blocking `stop` behavior is the opposite of Pike\u2019s local join-before-result model. Remote abort cannot be implemented until result/worker settlement is separated.",
+      "cppEvidence": "The captured non-blocking `stop` behavior is the opposite of Pike’s local join-before-result model. Remote abort cannot be implemented until result/worker settlement is separated.",
       "status": {
         "membership": "supported",
         "implementation": "missing",
@@ -1318,7 +1337,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox",
-          "packages/codemode/test/portable.test.ts:failing remote"
+          "packages/codemode/test/portable.test.ts:reports a failing or vanishing remote as a sandbox error"
         ],
         "scenarios": [
           "a failing, silent or unreachable remote is a sandbox error with the transport reason"
@@ -1342,7 +1361,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox.start",
-          "packages/codemode/test/portable.test.ts:remote deterministic"
+          "packages/codemode/test/deterministic.test.ts:applies results in seq order when the transport reorders replies sent in order"
         ],
         "scenarios": [
           "a deterministic start over a transport that reorders replies still applies results in seq order"
@@ -1396,7 +1415,7 @@
           "the public options prefix and grammar constants are fixed"
         ]
       },
-      "cppSeam": "Pike\u2019s codemode code lives inside `src/coding_agent/extensions/codemode` and depends on WasmEdge, Boost.Asio, `std::thread` and session types; there is no separate `cch_codemode` library or portable build target.",
+      "cppSeam": "Pike’s codemode code lives inside `src/coding_agent/extensions/codemode` and depends on WasmEdge, Boost.Asio, `std::thread` and session types; there is no separate `cch_codemode` library or portable build target.",
       "cppEvidence": "There is no package boundary, no portable target and no Node-free subset. This is an architecture gap that prevents reuse by a remote/durable host without the whole coding-agent runtime.",
       "status": {
         "membership": "supported",
@@ -1419,13 +1438,13 @@
         "scenarios": []
       },
       "cppSeam": "No Cloudflare/Durable Object target in Pike; the runtime is a native CLI with WasmEdge.",
-      "cppEvidence": "Out of the immediate native CLI path but part of the upstream Remote/durable contract. Pike cannot deploy this wrapper or honor its per-object caps.",
+      "cppEvidence": "Excluded by ADR 0075: Cloudflare-specific deployment is not part of the Linux native CLI contract. Generic Remote execution remains supported and is captured separately.",
       "status": {
-        "membership": "supported",
-        "implementation": "missing",
-        "verification": "upstream-captured"
+        "membership": "excluded",
+        "implementation": "not-applicable",
+        "verification": "not-applicable"
       },
-      "recommendation": "Treat this as a deployment target after the generic Remote seam; do not implement Cloudflare-specific code before the portable library split. Record the target as missing in #1058.",
+      "recommendation": "Do not implement the Cloudflare wrapper. Keep it as excluded provenance; implement only the generic Linux Remote seam captured by this audit.",
       "blockers": []
     },
     {
@@ -1436,7 +1455,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension",
-          "packages/coding-agent/test/codemode-extension.test.ts:createCodemodeExtension"
+          "packages/coding-agent/test/suite/agent-session-codemode.test.ts:createCodemodeExtension"
         ],
         "scenarios": [
           "the extension registers an inactive model-only codemode tool with the source grammar",
@@ -1460,8 +1479,8 @@
       "consumer": "Application settings and codemode loadout.",
       "upstreamEvidence": {
         "sources": [
-          "packages/coding-agent/src/config.ts:getCodemodeMode,getCodemodeInlineBudget",
-          "packages/coding-agent/src/extensions/codemode/tool.ts"
+          "packages/coding-agent/src/core/settings-schema.ts:CodemodeSettingsSchema",
+          "packages/coding-agent/src/extensions/codemode/index.ts:readMode,readInlineBudget"
         ],
         "scenarios": [
           "the on loadout lists only non-direct callable tools and adds script-call descriptions",
@@ -1486,7 +1505,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription",
-          "packages/coding-agent/src/extensions/mcp/index.ts:syncTools"
+          "packages/coding-agent/src/extensions/mcp/index.ts:registerTools"
         ],
         "scenarios": [
           "the empty codemode catalog still declares globals, discovery and the options grammar",
@@ -1532,12 +1551,12 @@
     {
       "id": "codemode-store-entry",
       "capability": "Codemode session store entry",
-      "operation": "Read the branch\u2019s `codemode-store` entries into the next script\u2019s store snapshot; after a successful script, append one entry with `{set,delete}` only when there are writes. The entry is durable/session state, not part of the library sandbox.",
+      "operation": "Read the branch’s `codemode-store` entries into the next script’s store snapshot; after a successful script, append one entry with `{set,delete}` only when there are writes. The entry is durable/session state, not part of the library sandbox.",
       "consumer": "Application session manager, branch replay/fork and scripts using `store()`/`load()`.",
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/extensions/codemode/execute.ts:readCodemodeStore,CODEMODE_STORE_ENTRY_TYPE",
-          "packages/coding-agent/src/tools/output-files.ts:writeOutputFile"
+          "packages/coding-agent/src/utils/output-files.ts:writeOutputFile"
         ],
         "scenarios": [
           "store and load use a JSON snapshot and only successful executions report writes",
@@ -1600,13 +1619,13 @@
         "implementation": "partial",
         "verification": "unverified"
       },
-      "recommendation": "Add the Application save/label step after the output formatter; keep the sandbox\u2019s image bytes unchanged. Test a duplicate image and a write failure.",
+      "recommendation": "Add the Application save/label step after the output formatter; keep the sandbox’s image bytes unchanged. Test a duplicate image and a write failure.",
       "blockers": []
     },
     {
       "id": "codemode-application-tool-guidelines",
       "capability": "Tool prompt guidelines in declarations",
-      "operation": "Append each callable tool\u2019s trimmed prompt guidelines as `- ...` bullets to its declaration description; empty/whitespace guidelines are ignored; the system prompt only contains guidelines for declared tools.",
+      "operation": "Append each callable tool’s trimmed prompt guidelines as `- ...` bullets to its declaration description; empty/whitespace guidelines are ignored; the system prompt only contains guidelines for declared tools.",
       "consumer": "Codemode catalog, `ALL_TOOLS` samples, discovery descriptions and direct-tool script descriptions.",
       "upstreamEvidence": {
         "sources": [
@@ -1635,7 +1654,7 @@
       "consumer": "Codemode catalog/loadout and MCP late-registration behavior.",
       "upstreamEvidence": {
         "sources": [
-          "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription deferred",
+          "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,selectCatalog",
           "packages/coding-agent/src/core/extensions/types.ts:ToolExposure"
         ],
         "scenarios": [
@@ -1660,7 +1679,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/extensions/codemode/tool.ts:DEFAULT_CODEMODE_INLINE_BUDGET,CodemodeDescriptionOptions.inlineBudget",
-          "packages/coding-agent/src/config.ts:getCodemodeInlineBudget"
+          "packages/coding-agent/src/extensions/codemode/index.ts:readInlineBudget"
         ],
         "scenarios": [
           "namespaces group sections and the inline budget omits tools with an explicit marker"
@@ -1734,7 +1753,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/extensions/codemode/execute.ts:formatError,formatCallSummary",
-          "packages/coding-agent/test/codemode-extension.test.ts:formatError"
+          "packages/coding-agent/test/suite/agent-session-codemode.test.ts:reports script failures as results that keep partial output and the calls that ran"
         ],
         "scenarios": [
           "a script failure keeps prior output and reports the script error with its line",

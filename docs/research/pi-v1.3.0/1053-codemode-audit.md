@@ -10,11 +10,11 @@ close any capability gap.
 - **Capture host:** Linux x86-64, glibc 2.44, Node v26.12.0, tsx 4.22.1
 - **Private frozen checkout:** `/tmp/cch-1053-pi-frozen`; tracked tree clean and `HEAD` verified as
   the full baseline SHA before the capture wrote anything
-- **Integration base:** `e8cf93dd1e062f522c55613b1c634653fb371edd` (`integration/1044-pi-v1.3.0`,
-  including the landed #1045–#1052 audit bundles)
+- **Integration base:** `7bbb04cb5` (`integration/1044-pi-v1.3.0`, including the landed
+  #1045–#1054 audit bundles; the ticket work was originally cut from `e8cf93dd1`)
 - **Ticket branch:** `ticket/1053-audit`
-- **Machine ledger:** [1053-codemode-audit-ledger.json](1053-codemode-audit-ledger.json) — 67
-  capability rows, one exclusion, implementation/verification states, consumer chains and exact
+- **Machine ledger:** [1053-codemode-audit-ledger.json](1053-codemode-audit-ledger.json) — 68
+  capability rows, two exclusions, implementation/verification states, consumer chains and exact
   C++/upstream seams
 - **Evidence family:** `fixtures/pi-v1.3.0/audit-1053/` — eight artifacts, 82 scenarios
 - **Capture source:** `fixtures/pi-v1.3.0/audit-1053/capture-1053.mts`,
@@ -27,16 +27,16 @@ observed contracts, the C++ gap classes and the slices that follow.
 
 | Artifact | Scenarios | SHA-256 |
 |---|---:|---|
-| `source-options.json` | 7 | `16b441ec5fe420fa1e4a6dc9b850a54ddea4ca8e15079fcafddc65a4478b3e1e` |
-| `declarations.json` | 13 | `64758b1d6035ca2661886d57d8253b9c84c9c31a355acbd18c9e8bccafd903d7` |
-| `script-execution.json` | 18 | `c95338f7eadd9e71cebe2587ad679528ca5aa780257dc4761e06372ca7fd1fd3` |
-| `worker-lifetime.json` | 8 | `58cdd5c7c8eaedbf6adbcda0fd0225e479465a2cb71a8c709f78f9c0aa45286d` |
-| `deterministic-replay.json` | 14 | `6ba9027f6becf520e85c38b6b69666b62438f66d4136e19bafb3e2634f57253a` |
-| `inline-interrupt.json` | 6 | `68f044e7b9c0b7824c83ab663b4fd52b4e64d8aabc8608452b67a54ae8d4b069` |
-| `remote-exchange.json` | 6 | `f463749b4123e07b9b7378799868663f9c1bd5b3a71e09a1cc79beb7fee9a8c6` |
-| `application-catalog.json` | 10 | `95f1f9e440c712bfcfa2fb1b34108601ad1988da600be94fb6b7497c61689ef9` |
+| `source-options.json` | 7 | `664109294d1f852cee1b142acf8de400d9066861dc10b81e7e210f24e42c8f56` |
+| `declarations.json` | 13 | `a29f7a798b15cb4dacce608f4018a5c917162ce16f4ee5a4e37f86f6f34939c5` |
+| `script-execution.json` | 18 | `267ba6f2774da433809a783e0656b7d3703f4457906ab8bb54e5c9b1c209f0c9` |
+| `worker-lifetime.json` | 8 | `1ca3ecef15ea78d9e4fbec315a8640ba09a50f2f114cd796ce59aee49a426dcf` |
+| `deterministic-replay.json` | 14 | `24105ec690559628886d9431c98c11c5598f70f25e738f318b2bb714e031e329` |
+| `inline-interrupt.json` | 6 | `b01e9ff3b21d6d47bf7b2009b1cc5a79e503116e8ad5ca5b18d55e827cdb401d` |
+| `remote-exchange.json` | 6 | `0292c4f696715a46f87442203a949c65006e60b991cd864351f9d1cf0f57b2ab` |
+| `application-catalog.json` | 10 | `68a7e9716755ef5ebba97948b3ad9343b1621c1bdf72517248554d0927f52fb6` |
 
-`manifest.json` SHA-256: `1977003915725dfd3db9af928779abc402688d9b0e9afd4365df95a415e6e882`.
+`manifest.json` SHA-256: `f4c48cc5db9bf4a0e40db6651e5c43e17023d9635a1dd9f85f2b9a472cb793bf`.
 
 The exact capture command (run from the repository root; the capture re-executes itself under the
 frozen checkout's `tsx`):
@@ -55,14 +55,15 @@ accepted the bundle and printed this registry record:
 {
   "audit-1053": {
     "manifest": "audit-1053/manifest.json",
-    "manifestSha256": "1977003915725dfd3db9af928779abc402688d9b0e9afd4365df95a415e6e882"
+    "manifestSha256": "f4c48cc5db9bf4a0e40db6651e5c43e17023d9635a1dd9f85f2b9a472cb793bf"
   }
 }
 ```
 
 Serial registration in `fixtures/pi-v1.3.0/baselines.json` is left to the parent/serial merger. The
 lane did not edit the registry, the shared evidence checker, the README or the boundary test. Until
-registration lands, every row remains `upstream-captured`, never `verified`.
+registration lands, no row is `verified`; evidence is `upstream-captured`, source-only
+`unverified`, or `not-applicable` for the two exclusions.
 
 ### Frozen-checkout resolution topology
 
@@ -86,7 +87,7 @@ target distinct. This is the boundary the later extraction must preserve.
 | VM execution | `runtime/execution.ts`, `host.ts`, `worker.ts`, `vm.ts`, `prelude-source.ts`, `protocol.ts` | `CodemodeSandbox.{hpp,cpp}` over WasmEdge | Application `CodemodeToolSource` |
 | Portable/Inline | `runtime/inline.ts`, `portable.ts` | — | Workers/browsers; no native CLI dependency |
 | Remote | `runtime/remote.ts`, `protocol.ts` | — | Durable Object/isolate boundary |
-| Cloudflare | `cloudflare.ts` | — | Deployment target, not the native CLI |
+| Cloudflare | `cloudflare.ts` | — | Excluded deployment target (ADR 0075); generic Remote remains in scope |
 | Application tool | `coding-agent/src/extensions/codemode/{tool,execute,index,renderer,worker}.ts` | `CodemodeToolSource`, `CodemodeTool`, `McpProductionAdapters`, `SettingsManager` | Session prompt/tool registry, MCP refresh, TUI |
 | Application store | `codemode-store` session entry | constant only (`CodemodeTool.hpp:24`) | Branch replay/fork and scripts using `store()` |
 | Worker capacity | `MAX_CONCURRENT_CODEMODE_WORKERS=2`, `acquireWorker` | — | Application concurrency policy |
@@ -94,7 +95,8 @@ target distinct. This is the boundary the later extraction must preserve.
 The proposed `cch_codemode` owner boundary starts at source/declarations/prelude and the generic
 execution interfaces. `codemode-store`, settings, loadout/prompt assembly, MCP exposure and the TUI
 are application integrations, not part of the reusable VM contract. Inline and Remote are library
-destinations; the Cloudflare Durable Object wrapper is a deployment consumer of Remote.
+destinations; the Cloudflare Durable Object wrapper is a deployment consumer of Remote and is
+**excluded** by ADR 0075, not a missing Pike slice.
 
 The largest structural finding is that Pike has no such library boundary: all codemode code lives
 under `src/coding_agent/extensions/codemode`, uses WasmEdge, Boost.Asio, `std::thread` and
@@ -126,7 +128,9 @@ dedicated C++ source test, so even the accepted-form behavior is `upstream-captu
 The application option consumer has a larger gap. `max_output_tokens` is parsed into
 `CodemodeSourceOptions` and then ignored: `CodemodeToolSource::to_extension_result` has no joining,
 truncation, temp-file spill or `fullOutputPath`. The timeout is used, but only the worker deadline;
-the application default-infinite rule is correctly mirrored by `limits_for`.
+the application default-infinite rule is correctly mirrored by `limits_for`. The output-token row is
+source-only evidence (`codemode-source-output-token-option`): no artifact scenario consumes it, so
+its verification is `unverified`.
 
 ## 3. Declarations and the model-facing catalog
 
@@ -155,8 +159,11 @@ split. Pike has no loadout hook at all: a direct tool is both model-visible and 
 codemode catalog, and an `only` project cannot hide direct declarations. That is application row
 `codemode-description-loadout` (missing), not a formatting difference.
 
-`models.*` is the one excluded row: it is the application model-orchestration feature, not a
-codemode VM/transport contract in A09. Pike has no model globals and no C++ equivalent.
+`models.*` provider execution is excluded: it is the application model-orchestration feature, not a
+codemode VM/transport contract in A09. Pike has no model globals and no C++ equivalent. A separate
+supported row, `codemode-models-description-gate`, records the capability-absent behavior: the
+catalog omits the `models` line when model access is absent. The enabled branch is unsupported, but
+this audit does not demand provider execution.
 
 ## 4. Script execution, output, store and errors
 
@@ -245,6 +252,10 @@ real API contract:
 - repeated aborts settle results while cancelled workers remain unreleased;
 - a real Node child can report its result before its worker exits.
 
+The guest-module create-error row is source-only and `unverified`: Pike's `CodemodeSandboxTest`
+covers a missing module, but no frozen upstream artifact observes that failure, so the C++ test is
+not attached as upstream evidence.
+
 Pike has no admission, no `onWorkerStarted`, no close state and no result-versus-exit separation.
 `CodemodeSandbox.cpp:928` creates a `std::thread`, and `:967-968` joins it before returning the
 result. The application has no two-worker cap. A burst of codemode calls can create an unbounded
@@ -304,13 +315,13 @@ The Remote contract is small and precise:
 - failing, silent and unreachable remotes produce distinct `kind: "sandbox"` messages;
 - deterministic start over a reordering transport still applies replies in seq order;
 - the protocol data types are plain JSON, not class instances;
-- `portable` exports the no-Node subset; `cloudflare` wraps Remote in a Durable Object with its own
-  caps.
+- `portable` exports the no-Node subset. The upstream `cloudflare` wrapper is excluded by ADR 0075;
+  it is not part of the Linux deployment contract.
 
 Pike has no Remote class, protocol type, exchange callback, serve function, batching policy, cap
 negotiation or stop reply. Its in-process `SandboxLink` is a condition-variable/C++ struct channel,
-not a wire protocol. The native CLI also has no portable/no-Node build target and no Durable Object
-wrapper. These are library/durable misses, not application formatting gaps.
+not a wire protocol. The native CLI also has no portable/no-Node build target. These are library
+misses. The absent Cloudflare wrapper is not a gap because ADR 0075 excludes that deployment.
 
 ## 10. Application registration, settings and result consumer
 
@@ -339,9 +350,9 @@ missing; the constant is not a store.
 
 ## 11. C++ gap summary
 
-The ledger has 67 rows: 66 supported (one `models.*` exclusion), 10 `implemented`, 19 `partial`,
-37 `missing` and one `not-applicable`. This table groups the rows by the slice a follow-up should
-take, not by file.
+The ledger has 68 rows: 66 supported (two exclusions: `models.*` provider execution and
+Cloudflare deployment), 10 `implemented`, 20 `partial`, 36 `missing` and two `not-applicable`. This
+table groups the rows by the slice a follow-up should take, not by file.
 
 | Slice | Current C++ state | Captured contract missing |
 |---|---|---|
@@ -358,7 +369,7 @@ take, not by file.
 | Deterministic | None | `start`/`deliver`, virtual clock/seed, fingerprint, seq/idle/during, validation, properties |
 | Inline | None | Poll budget, budget-vs-deadline, abort/pre-abort, no-thread destination |
 | Remote | In-process `SandboxLink` only | JSON request/exchange/reply protocol, batching, caps, stop, failure taxonomy, deterministic start |
-| Library/durable | Embedded in coding_agent | `cch_codemode` library boundary, portable entry, Cloudflare Durable Object |
+| Library/durable | Embedded in coding_agent | `cch_codemode` library boundary, portable entry |
 | Application result | Fallback content only | Formatter, nested-call details, call summary, renderer, output truncation, store entry |
 
 A critical ordering constraint follows: discovery cannot be tested or used until globals are passed;
@@ -373,9 +384,10 @@ implementation look more complete than the end-to-end contract.
 - `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1053/manifest.json`
   passed and printed the registry record above.
 - Earlier captures of the eight artifacts were compared with scenario payloads normalized for the
-  envelope `capturedAt`; they were byte-identical. The committed bundle is the final recapture after
-  adding the upstream source pin. `manifest.json` itself changes per run because artifact SHA-256s
-  include the envelope timestamp; the pinned SHA above is the committed capture.
+  envelope `capturedAt`; the scenario payloads were byte-identical. The final recapture corrects the
+  application test source endpoint (and therefore `application-catalog.json`'s `sourceEndpoints`),
+  and refreshes every envelope timestamp. `manifest.json` itself changes per run because artifact
+  SHA-256s include the envelope timestamp; the pinned SHA above is the committed capture.
 - The capture asserts the private checkout is at `71023aec...`, has a clean tracked tree, is
   linux-x64/glibc, and has `packages/codemode/src/index.ts`; it refuses to overwrite a registered
   family.
@@ -404,14 +416,15 @@ implementation look more complete than the end-to-end contract.
    the separated execution state; port the 14 deterministic scenarios before using it in the
    Application.
 6. **Inline and Remote.** Add the portable Inline launcher and the JSON Remote protocol/serve
-   function after the library split; add batching, caps, stop and failure taxonomy. The Cloudflare
-   wrapper follows Remote.
+   function after the library split; add batching, caps, stop and failure taxonomy. Cloudflare
+   deployment is excluded by ADR 0075 and is not a follow-up slice.
 7. **Application consumer.** Port the output formatter, nested-call details, renderer,
    output-token truncation, image save labels and `codemode-store` branch persistence. Keep the
    current fallback for unregistered tools but give codemode its real details.
 
-Do not implement `models.*` in this port; it is recorded as excluded. Do not close #1053 from this
-audit; the missing C++ slices are the explicit next tickets.
+Do not implement `models.*` provider execution or the Cloudflare wrapper in this port; both are
+excluded. Keep the capability-absent `models` description gate and the generic Linux Remote contract.
+Do not close #1053 from this audit; the missing C++ slices are the explicit next tickets.
 
 ## Reproduction
 

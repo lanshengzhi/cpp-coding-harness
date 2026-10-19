@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1053",
   "family": "audit-1053",
-  "capturedAt": "2026-10-19T20:00:12.864Z",
+  "capturedAt": "2026-10-19T20:39:02.332Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -15,12 +15,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
-    "sha256": "6ac5731255c021d8cbafca8cc1cbe349e4df60b1c60903c9705fa6843644333b",
+    "sha256": "8a65ecba521b564ddccba379735844bde321c9c8a60af9aa3bd403cf9a33a405",
     "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
-        "sha256": "6ac5731255c021d8cbafca8cc1cbe349e4df60b1c60903c9705fa6843644333b"
+        "sha256": "8a65ecba521b564ddccba379735844bde321c9c8a60af9aa3bd403cf9a33a405"
       },
       {
         "path": "fixtures/pi-v1.3.0/audit-1053/scenarios.mts",
@@ -37,7 +37,7 @@
       "path": "source-options.json",
       "family": "audit-1053",
       "bytes": 12907,
-      "sha256": "16b441ec5fe420fa1e4a6dc9b850a54ddea4ca8e15079fcafddc65a4478b3e1e",
+      "sha256": "664109294d1f852cee1b142acf8de400d9066861dc10b81e7e210f24e42c8f56",
       "sourceEndpoints": [
         "packages/codemode/src/source.ts:parseCodemodeSource,parseOptions,CodemodeSourceError,CODEMODE_OPTIONS_PREFIX,CODEMODE_SOURCE_GRAMMAR",
         "packages/codemode/test/source.test.ts:parseCodemodeSource"
@@ -420,7 +420,7 @@
       "path": "declarations.json",
       "family": "audit-1053",
       "bytes": 19824,
-      "sha256": "64758b1d6035ca2661886d57d8253b9c84c9c31a355acbd18c9e8bccafd903d7",
+      "sha256": "a29f7a798b15cb4dacce608f4018a5c917162ce16f4ee5a4e37f86f6f34939c5",
       "sourceEndpoints": [
         "packages/codemode/src/declarations.ts:schemaToType,renderDeclarations,renderToolSignature,renderToolSample,renderToolOutputType,constraintTags",
         "packages/codemode/src/identifier.ts:toCodemodeIdentifier",
@@ -1077,7 +1077,7 @@
       "path": "script-execution.json",
       "family": "audit-1053",
       "bytes": 61462,
-      "sha256": "c95338f7eadd9e71cebe2587ad679528ca5aa780257dc4761e06372ca7fd1fd3",
+      "sha256": "267ba6f2774da433809a783e0656b7d3703f4457906ab8bb54e5c9b1c209f0c9",
       "sourceEndpoints": [
         "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.execute,CodemodeSandboxBase.registerTool,CodemodeSandboxBase.close",
         "packages/codemode/src/runtime/prelude-source.ts:MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_TOTAL_CHARS,MAX_STORE_VALUE_CHARS",
@@ -1985,7 +1985,7 @@
       "path": "worker-lifetime.json",
       "family": "audit-1053",
       "bytes": 8722,
-      "sha256": "58cdd5c7c8eaedbf6adbcda0fd0225e479465a2cb71a8c709f78f9c0aa45286d",
+      "sha256": "1ca3ecef15ea78d9e4fbec315a8640ba09a50f2f114cd796ce59aee49a426dcf",
       "sourceEndpoints": [
         "packages/codemode/src/runtime/host.ts:workerLauncher,CodemodeSandbox",
         "packages/codemode/src/runtime/execution.ts:Execution.finish,CodemodeSandboxBase.close",
@@ -2283,7 +2283,7 @@
       "path": "deterministic-replay.json",
       "family": "audit-1053",
       "bytes": 19037,
-      "sha256": "6ba9027f6becf520e85c38b6b69666b62438f66d4136e19bafb3e2634f57253a",
+      "sha256": "24105ec690559628886d9431c98c11c5598f70f25e738f318b2bb714e031e329",
       "sourceEndpoints": [
         "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start,CodemodeRun.deliver",
         "packages/codemode/src/runtime/vm.ts:startVm,deterministicWasi,DETERMINISTIC_VERSION",
@@ -3055,7 +3055,7 @@
       "path": "inline-interrupt.json",
       "family": "audit-1053",
       "bytes": 6717,
-      "sha256": "68f044e7b9c0b7824c83ab663b4fd52b4e64d8aabc8608452b67a54ae8d4b069",
+      "sha256": "b01e9ff3b21d6d47bf7b2009b1cc5a79e503116e8ad5ca5b18d55e827cdb401d",
       "sourceEndpoints": [
         "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox,inlineLauncher,DEFAULT_INTERRUPT_BUDGET,INLINE_MAX_STACK_SIZE",
         "packages/codemode/test/portable.test.ts:InlineCodemodeSandbox"
@@ -3314,7 +3314,7 @@
       "path": "remote-exchange.json",
       "family": "audit-1053",
       "bytes": 8809,
-      "sha256": "f463749b4123e07b9b7378799868663f9c1bd5b3a71e09a1cc79beb7fee9a8c6",
+      "sha256": "0292c4f696715a46f87442203a949c65006e60b991cd864351f9d1cf0f57b2ab",
       "sourceEndpoints": [
         "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox,remoteLauncher,serveCodemodeRemote,CodemodeRemoteExchange",
         "packages/codemode/src/types.ts:CodemodeRemoteRequest,CodemodeRemoteMessage,CodemodeRemoteReply",
@@ -3684,12 +3684,13 @@
     {
       "path": "application-catalog.json",
       "family": "audit-1053",
-      "bytes": 22793,
-      "sha256": "95f1f9e440c712bfcfa2fb1b34108601ad1988da600be94fb6b7497c61689ef9",
+      "bytes": 22907,
+      "sha256": "68a7e9716755ef5ebba97948b3ad9343b1621c1bdf72517248554d0927f52fb6",
       "sourceEndpoints": [
         "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,toCodemodeDeclaration,getCodemodeCallableTools,createCodemodeToolDefinition",
         "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension",
-        "packages/coding-agent/test/codemode-extension.test.ts:codemode extension"
+        "packages/coding-agent/test/tool-search.test.ts:createCodemodeDescription",
+        "packages/coding-agent/test/suite/agent-session-codemode.test.ts:createCodemodeExtension,createCodemodeTool"
       ],
       "scenarios": [
         {

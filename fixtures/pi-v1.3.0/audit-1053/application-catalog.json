@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1053",
   "family": "audit-1053",
-  "capturedAt": "2026-10-19T20:00:12.864Z",
+  "capturedAt": "2026-10-19T20:39:02.332Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -16,7 +16,8 @@
   "sourceEndpoints": [
     "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,toCodemodeDeclaration,getCodemodeCallableTools,createCodemodeToolDefinition",
     "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension",
-    "packages/coding-agent/test/codemode-extension.test.ts:codemode extension"
+    "packages/coding-agent/test/tool-search.test.ts:createCodemodeDescription",
+    "packages/coding-agent/test/suite/agent-session-codemode.test.ts:createCodemodeExtension,createCodemodeTool"
   ],
   "scenarios": [
     {
