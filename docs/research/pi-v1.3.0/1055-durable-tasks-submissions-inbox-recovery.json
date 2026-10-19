@@ -287,7 +287,7 @@
         ]
       },
       "cppSeam": "`src/agent/harness/TaskScheduler.cpp:run`; `src/agent/harness/TranscriptExport.cpp:transcript_export_handler`",
-      "cppEvidence": "`TaskSchedulerTest.cpp:195` recovers a running transcript export and proves the file effect is idempotent by replay; the handler is the one task kind wired to the scheduler. There is no generic intent/effect/outcome API or effect receipt. The frozen capture measured the boundary directly: the killed worker's effect ran once; after reopen the handler called the effect a second time, and the application-side keyed store applied it only once (`calls: 2, applied: 1`).",
+      "cppEvidence": "`TaskSchedulerTest.cpp:195` recovers a running transcript export and proves the file effect is idempotent by replay; it is the only concrete task handler in the tree. There is no generic intent/effect/outcome API or effect receipt. The frozen capture measured the boundary directly: the killed worker's effect ran once; after reopen the handler called the effect a second time, and the application-side keyed store applied it only once (`calls: 2, applied: 1`).",
       "status": {
         "membership": "supported",
         "implementation": "partial",
@@ -904,7 +904,7 @@
         ]
       },
       "cppSeam": "`src/agent/harness/session/TaskStore.cpp:recover_tasks,submit`; `src/agent/harness/TaskScheduler.cpp:resume`",
-      "cppEvidence": "`TaskStoreTest.cpp:46` proves submission dedup across reopen; `TaskSchedulerTest.cpp:135` proves recovered work waits for `resume`. There is no generation task, transcript answer or high-level submit retry; the only wired task is transcript export.",
+      "cppEvidence": "`TaskStoreTest.cpp:46` proves submission dedup across reopen; `TaskSchedulerTest.cpp:135` proves recovered work waits for `resume`. There is no generation task, transcript answer or high-level submit retry; the only concrete task handler is transcript export.",
       "status": {
         "membership": "supported",
         "implementation": "partial",
