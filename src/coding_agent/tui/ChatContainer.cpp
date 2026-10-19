@@ -739,7 +739,7 @@ struct ChatContainer::Impl {
 
     [[nodiscard]] std::string tool_failure_detail(const ai::AssistantMessage& assistant) {
         if (assistant.stop_reason == ai::AssistantStopReason::Aborted) {
-            if (assistant.error_message && *assistant.error_message != "Request was aborted") {
+            if (assistant.error_message && !assistant.uses_default_abort_diagnostic()) {
                 return *assistant.error_message;
             }
             return "Operation aborted";

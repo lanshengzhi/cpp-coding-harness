@@ -5,7 +5,6 @@
 
 #include "InteractiveEngine.hpp"
 
-#include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
@@ -425,10 +424,15 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
         settings_flows_->show_thinking_selector();
         return;
     case SlashCommandId::Login:
-        auth_flows_->open_login(std::move(invocation.argument));
-        return;
     case SlashCommandId::Logout:
-        auth_flows_->open_logout();
+        // Model provider login/logout was retired with the Magpie gateway
+        // migration; both commands now state the gateway-only guidance.
+        if (view_) {
+            view_->append_frontend_message(
+                    "Pike is dedicated to the local Magpie gateway (127.0.0.1:3425) with zero-state loopback "
+                    "authentication; no provider login is required.");
+            invalidate_frame();
+        }
         return;
     case SlashCommandId::Resume:
         session_flows_->open_resume();

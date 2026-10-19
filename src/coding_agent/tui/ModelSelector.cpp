@@ -15,6 +15,7 @@
 #include <boost/asio/post.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 #include <utility>
 
@@ -91,14 +92,11 @@ ModelSelectorComponent::ModelSelectorComponent(const LiveTheme& theme,
     applied_items_revision_ = items_revision_;
 }
 
-ModelSelectorComponent::~ModelSelectorComponent() {
-    std::lock_guard lock(mutex_);
-    close();
-}
+ModelSelectorComponent::~ModelSelectorComponent() { close(); }
 
 void ModelSelectorComponent::load_models_from_snapshot() {
     // Callers hold the mutex (the constructor runs before publication).
-    const auto snapshot = runtime_ ? runtime_->get_available_snapshot() : std::vector<ai::Model>{};
+    const auto snapshot = runtime_ ? runtime_->models() : std::vector<ai::Model>{};
     std::vector<ModelItem> all;
     all.reserve(snapshot.size());
     for (const auto& model : snapshot) {
@@ -132,14 +130,16 @@ void ModelSelectorComponent::load_models_from_snapshot() {
 
 void ModelSelectorComponent::start_refresh() {
     if (!runtime_) return;
-    // Keep the component (and the runtime) alive through the refresh: the
-    // editor slot may restore (destroying the last host reference) while the
-    // availability refresh is still in flight. The spawn is posted so the
-    // coroutine never starts inline under a held component mutex (co_spawn
-    // uses dispatch semantics on the current executor).
+    // Keep the component alive until the posted spawn starts; the coroutine
+    // then retains only a weak component reference so removing the prompt
+    // slot can destroy the selector and request cancellation. The spawn is
+    // posted to avoid starting under the component mutex (co_spawn dispatches
+    // on the current executor).
     const auto self = shared_from_this();
+    const auto weak = weak_from_this();
     const auto runtime = runtime_;
-    boost::asio::post(executor_, [self, runtime] {
+    const auto stop_token = refresh_stop_source_.get_token();
+    boost::asio::post(executor_, [self, weak, runtime, stop_token] {
         // The completion is fire-and-forget: refresh failures are diagnostic
         // observations, and the selector stays usable with the snapshot list.
         // Invalidate on both success and failure paths so the status/error
@@ -148,18 +148,25 @@ void ModelSelectorComponent::start_refresh() {
         auto on_invalidate = std::move(self->on_invalidate_);
         boost::asio::co_spawn(
                 self->executor_,
-                [runtime, self, on_invalidate = std::move(on_invalidate)]() mutable -> boost::asio::awaitable<void> {
-                    auto available = co_await support::detail::await_async_result(runtime->get_available());
+                [runtime, weak, stop_token, on_invalidate = std::move(on_invalidate)]() mutable
+                        -> boost::asio::awaitable<void> {
+                    auto catalog_refresh =
+                            co_await support::detail::await_async_result(runtime->refresh_async(stop_token));
+                    if (stop_token.stop_requested()) co_return;
+                    std::optional<support::Error> refresh_error;
+                    if (!catalog_refresh) {
+                        refresh_error = catalog_refresh.error();
+                    }
+                    const auto self = weak.lock();
+                    if (!self) co_return;
                     {
                         std::lock_guard lock(self->mutex_);
-                        if (self->closed_) co_return;
+                        if (self->closed_.load(std::memory_order_acquire)) co_return;
                         self->refresh_status_message_.clear();
-                        if (!available) {
-                            self->error_message_ = "Could not refresh model catalogs; showing cached models.";
+                        if (refresh_error) {
+                            self->error_message_ = refresh_error->message;
                         } else {
-                            // pi: after a clean refresh, the runtime's own error
-                            // (models.json diagnostics) still surfaces; otherwise the
-                            // success status.
+                            // Discovery diagnostics share the runtime's catalog result.
                             self->error_message_ = runtime->get_error();
                             if (!self->error_message_) {
                                 self->refresh_status_message_ = "Model catalogs refreshed.";
@@ -179,8 +186,9 @@ void ModelSelectorComponent::start_refresh() {
     });
 }
 
-void ModelSelectorComponent::close() {
-    closed_ = true;
+void ModelSelectorComponent::close() noexcept {
+    closed_.store(true, std::memory_order_release);
+    static_cast<void>(refresh_stop_source_.request_stop());
 }
 
 void ModelSelectorComponent::set_scope(bool scoped) {
@@ -336,8 +344,9 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
     if (scoped_model_items_.empty()) {
         // pi adds the provider hint unpadded: the leading column belongs to
         // the model rows' own marker, not to this line.
-        cch::tui::Text hint(theme_.foreground(ThemeToken::Warning,
-                                    "Only showing models from configured providers. Use /login to add providers."),
+        cch::tui::Text hint(
+                theme_.foreground(ThemeToken::Warning,
+                        "Only showing models from the local Magpie gateway. Use /login for gateway guidance."),
                 0,
                 0);
         if (auto appended = append(hint); !appended) return std::unexpected(appended.error());

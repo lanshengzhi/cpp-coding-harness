@@ -5,7 +5,6 @@
 #include "InteractiveEngine.hpp"
 
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/AltScreenHost.hpp"
 #include "coding_agent/tui/EditorAutocomplete.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
@@ -15,6 +14,7 @@
 #include "coding_agent/tui/LoadedResources.hpp"
 #include "coding_agent/tui/McpManagerFlow.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
+#include "coding_agent/tui/ModelSelector.hpp"
 #include "coding_agent/tui/SessionFlowController.hpp"
 #include "coding_agent/tui/SessionUiBinding.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
@@ -293,7 +293,6 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     // the initial `/model` completion snapshot follows (nothing reads it
     // before view composition).
     model_flows_ = make_model_flow_controller();
-    auth_flows_ = make_auth_flow_controller();
     mcp_flows_ = make_mcp_flow_controller();
     session_flows_ = make_session_flow_controller();
     session_ui_ = make_session_ui_binding();
@@ -744,8 +743,8 @@ boost::asio::awaitable<support::ExpectedVoid> InteractiveEngine::finish() {
     // Cancel extracted modal/session flows before terminal restoration;
     // their host-lifetime captures then let their coroutines quiesce
     // without touching a stopped presenter.
-    if (auth_flows_) auth_flows_->close();
     if (session_flows_) session_flows_->close();
+    if (model_flows_) model_flows_->close();
 
     // Suppress theme dispatch and unregister listeners before quiescence and final presentation:
     if (theme_controller_) theme_controller_->dispose();
@@ -1295,6 +1294,10 @@ void InteractiveEngine::show_overlay(std::unique_ptr<cch::tui::Overlay> overlay)
 
 void InteractiveEngine::replace_prompt_slot(std::shared_ptr<cch::tui::Component> component) {
     if (view_ == nullptr) return;
+    if (auto* previous = dynamic_cast<ModelSelectorComponent*>(view_->editor_replacement().get());
+            previous != nullptr) {
+        previous->close();
+    }
     view_->set_editor_replacement(std::move(component));
     invalidate_frame();
 }
@@ -1335,6 +1338,10 @@ void InteractiveEngine::dispose_extension_ui() {
 
 void InteractiveEngine::restore_prompt_slot() {
     if (view_ == nullptr) return;
+    if (auto* previous = dynamic_cast<ModelSelectorComponent*>(view_->editor_replacement().get());
+            previous != nullptr) {
+        previous->close();
+    }
     view_->restore_editor();
     invalidate_frame();
 }

@@ -682,7 +682,7 @@ TEST_CASE("Process Terminal replacement dialog slash input under a shrink resize
     const bool selector_shown = cch::tests::wait_until(
             [&] {
                 output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(50)));
-                return output.find("Only showing models from configured providers.", before_selector) !=
+                return output.find("Only showing models from the local Magpie gateway.", before_selector) !=
                        std::string::npos;
             },
             std::chrono::seconds(10));

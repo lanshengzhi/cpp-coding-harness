@@ -63,7 +63,6 @@
 namespace cch::coding_agent::tui {
 
 class AltScreenHost;
-class AuthFlowController;
 class InteractiveView;
 class McpManagerFlow;
 class ModelFlowController;
@@ -465,7 +464,6 @@ private:
     // engine's lifetime.
 
     [[nodiscard]] std::shared_ptr<ModelFlowController> make_model_flow_controller();
-    [[nodiscard]] std::shared_ptr<AuthFlowController> make_auth_flow_controller();
     [[nodiscard]] std::shared_ptr<McpManagerFlow> make_mcp_flow_controller();
     [[nodiscard]] std::shared_ptr<SessionFlowController> make_session_flow_controller();
     [[nodiscard]] std::shared_ptr<SessionUiBinding> make_session_ui_binding();
@@ -473,7 +471,8 @@ private:
     [[nodiscard]] std::shared_ptr<SuspendController> make_suspend_controller();
 
     /// Spawn one detached executor flow; a frame failure becomes a chat
-    /// diagnostic (the user-bash precedent; the login flows use this too).
+    /// diagnostic (the user-bash precedent; the extracted modal flows use
+    /// this too).
     /// Every admitted flow is counted so `finish()` can await quiescence
     /// (ADR 0040: terminal restoration never races a controller coroutine).
     void spawn_flow(std::move_only_function<boost::asio::awaitable<void>()> start, std::string failure_label);
@@ -625,7 +624,7 @@ private:
     /// the settings selector. The view's chat renders with these values.
     bool hide_thinking_block_{false};
     std::size_t output_pad_{1};
-    /// The extracted model, authentication, session, and settings flows,
+    /// The extracted model, session, and settings flows,
     /// created once startup resources (live theme, settings manager,
     /// keybindings) exist.
     std::shared_ptr<ModelFlowController> model_flows_;
@@ -635,7 +634,6 @@ private:
     void bind_session_progress(AgentSession& session);
     void unbind_session_progress() noexcept;
 
-    std::shared_ptr<AuthFlowController> auth_flows_;
     /// The `/mcp` manager flow (spec #882, ticket #884): the manage panel,
     /// the login/logout/reconnect subcommands, the argument-completion
     /// snapshot, and the manager's warning surfacing.

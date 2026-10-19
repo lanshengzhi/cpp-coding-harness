@@ -11,10 +11,12 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -72,6 +74,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::ModelCatalogFixture catalog;
 
     Fixture() {
         home_guard.set(workspace.path().string());
@@ -81,8 +84,7 @@ struct Fixture {
         std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
         session_file = workspace.path() / "session.jsonl";
-        std::ofstream models(agent_dir / "models.json", std::ios::binary);
-        models << kKeyedModels;
+        catalog.set(kKeyedModels);
     }
 
     /// Write a resumed session file (header + messages) at `path`.
@@ -151,6 +153,7 @@ struct Running {
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
 
     // The replacement Runtime Root shares the interactive loop: assembly
@@ -163,6 +166,7 @@ struct Running {
     // loop, so pump until creation completes rather than draining).
     request.execution_runtime_target = runtime_root->make_target();
     std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> booted;
+    coding_agent::isolate_magpie_gateway(request);
     boost::asio::co_spawn(running.io,
             support::detail::await_async_result(coding_agent::create_agent_session_async(std::move(request))),
             [&](std::exception_ptr exception, support::Expected<coding_agent::CreateAgentSessionResult> created) {
@@ -180,6 +184,7 @@ struct Running {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.execution_runtime_target = runtime_root->make_target();
+        coding_agent::isolate_magpie_gateway(request);
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
                 coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .user_shell = nullptr},
@@ -318,6 +323,7 @@ struct StreamingFixture {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.model_runtime = runtime;
+        coding_agent::isolate_magpie_gateway(request);
         auto created =
                 runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
         REQUIRE(created);
@@ -478,9 +484,11 @@ TEST_CASE("a fresh in-memory session opens the tree on its initial thinking entr
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.execution_runtime_target = runtime_root->make_target();
     std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> booted;
+    coding_agent::isolate_magpie_gateway(request);
     boost::asio::co_spawn(running.io,
             support::detail::await_async_result(coding_agent::create_agent_session_async(std::move(request))),
             [&](std::exception_ptr exception, support::Expected<coding_agent::CreateAgentSessionResult> created) {
@@ -498,6 +506,7 @@ TEST_CASE("a fresh in-memory session opens the tree on its initial thinking entr
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.execution_runtime_target = runtime_root->make_target();
+        coding_agent::isolate_magpie_gateway(request);
         return coding_agent::create_agent_session_async(std::move(request),
                 std::nullopt,
                 coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr, .user_shell = nullptr},

@@ -7,6 +7,7 @@
 #include "support/TempWorkspace.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
 #include <cch/coding_agent/ModelRuntime.hpp>
 
@@ -103,6 +104,7 @@ TEST_CASE("InteractiveSessionRunBuilder assembles BindExistingSession and DeferB
     options.session_facts.no_prompt_templates = true;
     tests::RuntimeFixture runtime;
     options.execution_runtime_target = runtime.make_target();
+    coding_agent::isolate_magpie_gateway(options);
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(options), std::nullopt, {}));
     REQUIRE(created.has_value());
 
@@ -140,7 +142,8 @@ TEST_CASE("InteractiveSessionRun's asynchronous replacement sink installs runtim
     tests::TempWorkspace workspace;
     auto io = std::make_shared<boost::asio::io_context>();
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(io, harness::RuntimeLimits{});
-    auto shared_runtime = coding_agent::ModelRuntime::create({});
+    auto shared_runtime = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{}, coding_agent::ModelRuntimeTestOptions{});
     REQUIRE(shared_runtime.has_value());
 
     coding_agent::runtime::InteractiveSessionFacts facts;

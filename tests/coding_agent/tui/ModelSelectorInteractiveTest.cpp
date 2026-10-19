@@ -7,8 +7,10 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/PumpUntil.hpp"
@@ -46,6 +48,7 @@ struct Fixture {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
+    tests::ModelCatalogFixture catalog;
     tests::RuntimeFixture runtime;
     std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
 
@@ -59,10 +62,7 @@ struct Fixture {
         session_file = workspace.path() / "session.jsonl";
     }
 
-    void write_models(std::string_view json) {
-        std::ofstream out(agent_dir / "models.json", std::ios::binary);
-        out << json;
-    }
+    void write_models(std::string_view json) { catalog.set(json); }
 
     [[nodiscard]] std::string read_settings() const {
         std::ifstream in(agent_dir / "settings.json", std::ios::binary);
@@ -111,9 +111,11 @@ struct Running {
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = fixture.workspace.path();
+    request.model_runtime = fixture.catalog.runtime;
     request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.session_facts.models = std::move(models);
     request.execution_runtime_target = fixture.runtime.make_target();
+    coding_agent::isolate_magpie_gateway(request);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created.has_value());
 
@@ -148,7 +150,7 @@ TEST_CASE("Ctrl+L opens the model selector and Enter selects a model with the Mo
     REQUIRE(running.terminal.inject_input("\x0c"));
     drain_ready(running.io);
     auto screen = visible_screen(running.terminal);
-    CHECK(screen.find("Only showing models from configured providers.") != std::string::npos);
+    CHECK(screen.find("Only showing models from the local Magpie gateway.") != std::string::npos);
     CHECK(screen.find("✓ alpha-1 [alpha]") != std::string::npos);
     CHECK(screen.find("beta-1 [beta]") != std::string::npos);
 
@@ -250,7 +252,7 @@ TEST_CASE("/model switches on an exact reference and opens the selector pre-filt
     REQUIRE(running.terminal.inject_input("/model zzz\r"));
     drain_ready(running.io);
     screen = visible_screen(running.terminal);
-    CHECK(screen.find("Only showing models from configured providers.") != std::string::npos);
+    CHECK(screen.find("Only showing models from the local Magpie gateway.") != std::string::npos);
     CHECK(screen.find("zzz") != std::string::npos);
     CHECK(screen.find("No matching models") != std::string::npos);
 

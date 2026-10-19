@@ -1,21 +1,24 @@
 // Headless ModelFlowController coverage (#503): the `/model` selector flow,
 // the `/models` scoped-models flow, and Ctrl+P cycling run against a
 // recording ModalPresenter and a real AgentSession over a temp Agent Config
-// Directory — no virtual terminal, no live credentials, no network.
+// Directory — no virtual terminal, no live gateway, no network.
 
 #include "coding_agent/tui/ModelFlowController.hpp"
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
 #include "coding_agent/tui/ModelSelector.hpp"
 #include "coding_agent/tui/ScopedModelsSelector.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/ModelResolver.hpp>
@@ -35,6 +38,8 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -63,6 +68,10 @@ public:
         ++slot_replacements;
     }
     void restore_prompt_slot() override {
+        if (auto* selector = dynamic_cast<coding_agent::tui::ModelSelectorComponent*>(slot.get());
+                selector != nullptr) {
+            selector->close();
+        }
         slot.reset();
         ++slot_restores;
     }
@@ -128,7 +137,7 @@ constexpr std::string_view kReasoningAndPlainKeyed = R"({
 }
 
 /// One isolated assembly: a temp workspace for the session file and a temp
-/// Agent Config Directory (`HOME`) whose models.json and
+/// Agent Config Directory (`HOME`) whose in-memory passive catalog and
 /// settings.json drive runtime creation deterministically, plus the host
 /// hooks wired to the fixture's io_context like the interactive host's
 /// executor.
@@ -146,6 +155,7 @@ struct ModelFlowFixture {
     std::shared_ptr<void> host_token{std::make_shared<int>(0)};
 
     tests::RuntimeFixture runtime;
+    tests::ModelCatalogFixture catalog;
     std::unique_ptr<coding_agent::AgentSession> session;
     std::optional<tests::RuntimeLoopDriver> runtime_driver{std::nullopt};
     std::optional<coding_agent::SettingsManager> settings{std::nullopt};
@@ -161,10 +171,7 @@ struct ModelFlowFixture {
         kimi_guard.unset();
     }
 
-    void write_models(std::string_view json) {
-        std::ofstream out(agent_dir / "models.json", std::ios::binary);
-        out << json;
-    }
+    void write_models(std::string_view json) { catalog.set(json); }
 
     [[nodiscard]] std::string read_settings() const {
         std::ifstream in(agent_dir / "settings.json", std::ios::binary);
@@ -173,7 +180,7 @@ struct ModelFlowFixture {
             std::istreambuf_iterator<char>{}};
     }
 
-    void boot(std::vector<std::string> models = {}) {
+    void boot(std::vector<std::string> models = {}, std::shared_ptr<support::StreamTransport> catalog_transport = {}) {
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
@@ -182,6 +189,14 @@ struct ModelFlowFixture {
             coding_agent::ExplicitOpenOrCreateSessionTarget{workspace.path() / "session.jsonl"};
         request.session_facts.models = std::move(models);
         request.execution_runtime_target = runtime.make_target();
+        if (!catalog_transport) {
+            request.model_runtime = catalog.runtime;
+        } else {
+            auto created_runtime = coding_agent::create_model_runtime_for_testing({}, {}, std::move(catalog_transport));
+            REQUIRE(created_runtime);
+            request.model_runtime = std::move(*created_runtime);
+        }
+        coding_agent::isolate_magpie_gateway(request);
         auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
         REQUIRE(created.has_value());
         session = std::move(created->session);
@@ -304,27 +319,19 @@ TEST_CASE("ModelFlowController switches on an exact /model reference and opens t
     CHECK(fixture.presenter.errors.empty());
 }
 
-TEST_CASE("ModelFlowController surfaces a runtime catalog diagnostic after a /model refresh",
+TEST_CASE("ModelFlowController surfaces a gateway diagnostic after a /model refresh",
         "[coding_agent][tui][model-flows][model-refresh-diagnostic][spec]") {
     ModelFlowFixture fixture;
     fixture.write_models(kReasoningAndPlainKeyed);
-    fixture.kimi_guard.set("dummy-kimi-key");
+    fixture.refresh_result_for_test = coding_agent::tui::ModelCatalogRefreshResult{
+            .error_message = "Gateway catalog unavailable",
+    };
     fixture.boot();
-
-    // This malformed built-in overlay falls back to the built-in provider
-    // while ModelRuntime keeps the provider-composition diagnostic.
-    fixture.write_models(R"({"providers":{"kimi-coding":{"name":"Broken Kimi"}}})");
-    // A cache miss follows pi's refresh path. `get_available()` succeeds with
-    // the cached models even though provider recomposition kept a diagnostic.
     fixture.flows->open_model_selector("no-such-model");
     fixture.drain();
-
     REQUIRE(fixture.warnings.size() == 1);
-    CHECK(fixture.warnings.front().find("must specify") != std::string::npos);
+    CHECK(fixture.warnings.front() == "Could not refresh model catalogs: Gateway catalog unavailable");
     CHECK(fixture.presenter.errors.empty());
-    CHECK(std::count(fixture.presenter.statuses.begin(),
-                  fixture.presenter.statuses.end(),
-                  std::string{"Refreshing model catalogs…"}) == 1);
     CHECK(std::dynamic_pointer_cast<coding_agent::tui::ModelSelectorComponent>(fixture.presenter.slot) != nullptr);
 }
 
@@ -343,6 +350,53 @@ TEST_CASE("ModelFlowController opens the scoped-models selector through the pres
     CHECK(fixture.presenter.errors.empty());
     // Opening the selector never mutates the session scope.
     CHECK(fixture.session->scoped_models().empty());
+}
+
+TEST_CASE("ModelFlowController refreshes Magpie before opening the scoped-models selector",
+        "[coding_agent][tui][model-flows][magpie][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    tests::EnvVarGuard magpie_guard{"MAGPIE_API_KEY"};
+    magpie_guard.set("dummy-magpie-key");
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"data":[]})"},
+    });
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"data":[{"id":"group/new-model","display_name":"New Model"}]})"},
+    });
+    fixture.boot({}, transport);
+
+    fixture.flows->open_scoped_models_selector();
+    fixture.drain();
+    auto selector = std::dynamic_pointer_cast<coding_agent::tui::ScopedModelsSelectorComponent>(fixture.presenter.slot);
+    REQUIRE(selector != nullptr);
+    const auto rendered = selector->render(100);
+    REQUIRE(rendered);
+    CHECK(std::ranges::any_of(rendered->lines,
+            [](const std::string& line) { return line.find("group/new-model") != std::string::npos; }));
+    REQUIRE(transport->requests.size() == 2);
+    CHECK(fixture.presenter.errors.empty());
+}
+
+TEST_CASE("ModelFlowController close cancels scoped selector catalog discovery",
+        "[coding_agent][tui][model-flows][cancel][spec]") {
+    ModelFlowFixture fixture;
+    fixture.write_models(kReasoningAndPlainKeyed);
+    auto transport = std::make_shared<tests::StopAwareBlockingTransport>();
+    fixture.boot({}, transport);
+
+    fixture.flows->open_scoped_models_selector();
+    fixture.drain();
+    CHECK(transport->request_count.load(std::memory_order_acquire) == 2);
+    CHECK(transport->observed_stop_token.load(std::memory_order_acquire));
+    CHECK(fixture.presenter.slot == nullptr);
+
+    fixture.flows->close();
+    fixture.drain();
+    CHECK(transport->cancelled_requests.load(std::memory_order_acquire) == 1);
+    CHECK(fixture.presenter.slot == nullptr);
+    CHECK(fixture.presenter.errors.empty());
 }
 
 TEST_CASE("ModelFlowController applies scoped-models selector changes to the session scope only",
@@ -433,7 +487,7 @@ TEST_CASE("ModelFlowController builds the /model completion snapshot from the sc
     CHECK((*completion)[1].id == "beta-1");
 
     // A session scope narrows the candidates (pi's scoped candidate set).
-    const auto available = fixture.session->model_runtime()->get_available_snapshot();
+    const auto available = fixture.session->model_runtime()->models();
     fixture.session->set_scoped_models(
         coding_agent::resolve_model_scope({"alpha/alpha-1"}, available));
     fixture.flows->update_model_completion();

@@ -27,6 +27,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stop_token>
 #include <string>
 #include <utility>
 #include <vector>
@@ -69,47 +70,56 @@ namespace {
     return hooks.current_session != nullptr ? hooks.current_session() : nullptr;
 }
 
-/// One bounded catalog refresh (pi `findExactModelMatch`'s miss path): pi's
-/// `refreshModelCatalogs` races an abort signal that a 15 s timer fires, so
-/// the C++ refresh races pi's timeout on the flow executor and the loser of
-/// the race never resolves the shared outcome. The C++ runtime exposes no
-/// per-refresh cancellation, so a refresh that settles after the timeout
-/// still updates the runtime's availability snapshot for the fallback
-/// search (pi aborts it instead).
+/// One bounded catalog refresh (pi `findExactModelMatch`'s miss path):
+/// `refresh_async()` keeps network work off the TUI executor and receives a
+/// cancellation token when the 15 s UI timeout wins, so a departed flow never
+/// resolves the shared outcome after its host has closed.
 [[nodiscard]] boost::asio::awaitable<ModelCatalogRefreshResult> refresh_catalogs_with_timeout(
-        std::shared_ptr<cch::coding_agent::ModelRuntime> runtime, std::chrono::steady_clock::duration timeout) {
+        std::shared_ptr<cch::coding_agent::ModelRuntime> runtime,
+        std::chrono::steady_clock::duration timeout,
+        std::stop_token stop_token) {
     struct RaceState {
         bool settled{false};
         std::optional<std::string> error_message{std::nullopt};
     };
     const auto state = std::make_shared<RaceState>();
+    const auto stop_source = std::make_shared<std::stop_source>();
     const auto executor = co_await boost::asio::this_coro::executor;
     const auto timer = std::make_shared<boost::asio::steady_timer>(executor, timeout);
+    const auto close_timer = timer;
+    const auto close_executor = executor;
+    const std::stop_callback host_close(stop_token, [stop_source, close_timer, close_executor]() noexcept {
+        static_cast<void>(stop_source->request_stop());
+        boost::asio::post(close_executor, [close_timer] { static_cast<void>(close_timer->cancel()); });
+    });
     // Detached spawn (the ModelSelector start-refresh shape): the refresh
     // rides the spawned frame, the runtime rides it too, and the completion
     // resolves the race through the shared state.
     boost::asio::co_spawn(
             executor,
-            [runtime = std::move(runtime), state, timer]() mutable -> boost::asio::awaitable<void> {
-                // `refresh()` recomposes the provider catalogs from the Agent
-                // Config Directory (a bounded local pass); `get_available()`
-                // then refreshes the auth-filtered snapshot the search
-                // matches against, pi's `refreshModelCatalogs` result.
-                static_cast<void>(runtime->refresh());
-                auto refreshed = co_await support::detail::await_async_result(runtime->get_available());
-                if (state->settled) co_return;
-                state->settled = true;
-                if (!refreshed)
-                    state->error_message = refreshed.error().message;
-                else
+            [runtime = std::move(runtime), state, stop_source, timer]() mutable -> boost::asio::awaitable<void> {
+                auto catalog_refresh =
+                        co_await support::detail::await_async_result(runtime->refresh_async(stop_source->get_token()));
+                if (state->settled || stop_source->stop_requested()) co_return;
+                if (!catalog_refresh) {
+                    state->error_message = catalog_refresh.error().message;
+                } else {
                     state->error_message = runtime->get_error();
-                timer->cancel();
+                }
+                if (state->settled || stop_source->stop_requested()) co_return;
+                state->settled = true;
+                static_cast<void>(timer->cancel());
             },
             boost::asio::detached);
     boost::system::error_code wait_error;
     co_await timer->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+    if (stop_token.stop_requested()) {
+        static_cast<void>(stop_source->request_stop());
+        co_return ModelCatalogRefreshResult{};
+    }
     if (!state->settled) {
         state->settled = true;
+        static_cast<void>(stop_source->request_stop());
         co_return ModelCatalogRefreshResult{.timed_out = true};
     }
     co_return ModelCatalogRefreshResult{.timed_out = false, .error_message = state->error_message};
@@ -130,6 +140,8 @@ ModelFlowController::ModelFlowController(
       hooks_(std::move(hooks)),
       keybindings_(std::move(keybindings)),
       settings_manager_(settings_manager) {}
+
+void ModelFlowController::close() noexcept { static_cast<void>(stop_source_.request_stop()); }
 
 // ── Entries ──────────────────────────────────────────────────────────────
 
@@ -199,7 +211,7 @@ void ModelFlowController::update_model_completion() {
             });
         }
     } else {
-        for (const auto& model : runtime->get_available_snapshot()) {
+        for (const auto& model : runtime->models()) {
             snapshot->push_back(ModelCompletionItem{
                 .id = model.id,
                 .provider = model.provider,
@@ -288,7 +300,7 @@ boost::asio::awaitable<void> ModelFlowController::handle_model_command(std::stri
         candidates.reserve(scoped.size());
         for (const auto& entry : scoped) candidates.push_back(entry.model);
     } else if (auto runtime = session->model_runtime()) {
-        candidates = runtime->get_available_snapshot();
+        candidates = runtime->models();
     }
     if (auto matched = find_exact_model_reference_match(term, candidates)) {
         co_return co_await switch_model_session_only(std::move(*matched));
@@ -308,7 +320,9 @@ boost::asio::awaitable<void> ModelFlowController::handle_model_command(std::stri
     presenter_->show_status("Refreshing model catalogs…");
     const auto refresh = hooks_.refresh_model_catalogs != nullptr
                                  ? co_await hooks_.refresh_model_catalogs(runtime)
-                                 : co_await refresh_catalogs_with_timeout(runtime, std::chrono::seconds{15});
+                                 : co_await refresh_catalogs_with_timeout(
+                                           runtime, std::chrono::seconds{15}, stop_source_.get_token());
+    if (stop_source_.stop_requested()) co_return;
     if (refresh.timed_out) {
         if (hooks_.show_warning != nullptr) hooks_.show_warning("Model refresh timed out; searching cached models.");
     } else if (refresh.error_message) {
@@ -319,10 +333,10 @@ boost::asio::awaitable<void> ModelFlowController::handle_model_command(std::stri
         }
     }
 
-    // pi's post-refresh search runs against the refreshed snapshot; a
+    // pi's post-refresh search runs against the refreshed catalog; a
     // session replacement during the refresh is resolved by the switch
     // itself (`switch_model_session_only` re-reads the current session).
-    if (auto matched = find_exact_model_reference_match(term, runtime->get_available_snapshot())) {
+    if (auto matched = find_exact_model_reference_match(term, runtime->models())) {
         co_return co_await switch_model_session_only(std::move(*matched));
     }
     show_model_selector(term);
@@ -410,19 +424,24 @@ boost::asio::awaitable<void> ModelFlowController::run_scoped_models_selector() {
     if (session == nullptr || !session->is_open()) co_return;
     auto runtime = session->model_runtime();
     if (!runtime) co_return;
-    // pi: refresh() then getAvailable().
-    (void)runtime->refresh();
-    auto available = co_await support::detail::await_async_result(runtime->get_available());
-    if (!available) {
-        presenter_->show_error(combined_error_text(available.error()));
-        co_return;
-    }
+    // Refresh the live model catalog off the blocking synchronous runtime
+    // path before deriving the current selectable model set. The host Close
+    // signal cancels an admitted discovery request before terminal teardown.
+    auto catalog_refresh =
+            co_await support::detail::await_async_result(runtime->refresh_async(stop_source_.get_token()));
+    if (stop_source_.stop_requested()) co_return;
+    const bool catalog_error = !catalog_refresh;
     // Re-resolve the session after the availability suspension: a session
     // replacement may have swapped the active session while the refresh was
     // in flight (the pre-extraction member re-read shape).
     session = current_session(hooks_);
     if (session == nullptr) co_return;
-    const auto all_models = std::move(*available);
+    const auto all_models = runtime->models();
+    if (catalog_error && hooks_.show_warning != nullptr) {
+        hooks_.show_warning(catalog_refresh.error().message);
+    } else if (const auto runtime_error = runtime->get_error(); runtime_error && hooks_.show_warning != nullptr) {
+        hooks_.show_warning(*runtime_error);
+    }
     std::set<std::string, std::less<>> all_model_ids;
     for (const auto& model : all_models) {
         all_model_ids.insert(model.provider + "/" + model.id);

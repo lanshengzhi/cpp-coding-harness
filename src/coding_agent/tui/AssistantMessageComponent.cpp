@@ -226,6 +226,7 @@ AssistantMessageComponent::~AssistantMessageComponent() = default;
 void AssistantMessageComponent::update_content(const ai::AssistantMessage& message) {
     stop_reason_ = message.stop_reason;
     error_message_ = message.error_message;
+    default_abort_diagnostic_ = message.uses_default_abort_diagnostic();
     consume_message(message);
     update_suffix();
 }
@@ -506,12 +507,13 @@ void AssistantMessageComponent::settle_tail() {
 }
 void AssistantMessageComponent::update_suffix() {
     if (suffix_cache_valid_ && built_stop_reason_ == stop_reason_ && built_error_message_ == error_message_ &&
-            built_tool_calls_ == has_tool_calls_) {
+            built_default_abort_diagnostic_ == default_abort_diagnostic_ && built_tool_calls_ == has_tool_calls_) {
         return;
     }
     suffix_cache_valid_ = true;
     built_stop_reason_ = stop_reason_;
     built_error_message_ = error_message_;
+    built_default_abort_diagnostic_ = default_abort_diagnostic_;
     built_tool_calls_ = has_tool_calls_;
     suffix_content_.clear();
 
@@ -522,9 +524,8 @@ void AssistantMessageComponent::update_suffix() {
     } else if (!has_tool_calls_) {
         std::optional<std::string> notice;
         if (stop_reason_ == ai::AssistantStopReason::Aborted) {
-            const auto abort_message = error_message_ && *error_message_ != "Request was aborted"
-                                               ? *error_message_
-                                               : std::string{"Operation aborted"};
+            const auto abort_message =
+                    error_message_ && !default_abort_diagnostic_ ? *error_message_ : std::string{"Operation aborted"};
             notice = theme_.foreground(ThemeToken::Error, abort_message);
         } else if (stop_reason_ == ai::AssistantStopReason::Error) {
             notice = theme_.foreground(

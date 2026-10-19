@@ -1,13 +1,16 @@
 // The model selector (pi `model-selector.ts`): renders the model list with
 // fuzzy search and the all/scoped scope toggle, selects through the callback,
-// cancels on Escape/Ctrl+C, and refreshes availability in the background.
-// Component-level coverage over a real ModelRuntime with dummy-only
-// models.json values — no live credentials, no network validation.
+// cancels on Escape/Ctrl+C, and refreshes the Magpie catalog in the
+// background. Component-level coverage over a real ModelRuntime with an
+// in-memory passive catalog — no live gateway, no network validation.
 
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/tui/ModelSelector.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/OverlayWidthBound.hpp"
+#include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/coding_agent/ModelRuntime.hpp>
@@ -23,6 +26,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -149,9 +153,9 @@ private:
     bool started_{false};
 };
 
-/// A runtime over a temp Agent Config Directory with dummy-only models.json.
-/// Ambient KIMI_API_KEY is unset so the built-in kimi-coding provider never
-/// resolves as configured unless a test says so.
+/// A runtime over a temp Agent Config Directory with an in-memory passive
+/// catalog. Ambient KIMI_API_KEY is unset so the built-in kimi-coding
+/// provider never resolves as configured unless a test says so.
 struct RuntimeFixture {
     tests::TempWorkspace agent_dir;
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
@@ -159,36 +163,9 @@ struct RuntimeFixture {
 
     explicit RuntimeFixture(std::string_view models_json = kThreeKeyedProviders) {
         kimi_guard.unset();
-        {
-            std::ofstream out(agent_dir.path() / "models.json", std::ios::binary);
-            out << models_json;
-        }
-        auto created = coding_agent::ModelRuntime::create({
-            .agent_dir = agent_dir.path(),
-        });
-        REQUIRE(created);
-        runtime = std::move(*created);
-    }
-
-    /// Populate the availability snapshot before the component renders.
-    void prime(boost::asio::io_context& io) {
-        auto result = std::optional<support::ExpectedVoid>{};
-        boost::asio::co_spawn(
-                io,
-                [runtime = runtime]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                    auto available = co_await support::detail::await_async_result(runtime->get_available());
-                    if (!available) {
-                        co_return std::unexpected(available.error());
-                    }
-                    co_return support::ExpectedVoid{};
-                },
-                [&](std::exception_ptr exception, support::ExpectedVoid outcome) {
-                    REQUIRE(exception == nullptr);
-                    result.emplace(std::move(outcome));
-                });
-        io.run();
-        REQUIRE(result.has_value());
-        REQUIRE(*result);
+        tests::ModelCatalogFixture catalog;
+        catalog.set(models_json);
+        runtime = std::move(catalog.runtime);
     }
 };
 
@@ -198,7 +175,6 @@ TEST_CASE("ModelSelector renders the scope text, search input, and sorted list w
         "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     const auto current = fixture.runtime->model("alpha", "alpha-2");
@@ -225,8 +201,7 @@ TEST_CASE("ModelSelector renders the scope text, search input, and sorted list w
     REQUIRE(rendered);
     const auto screen = join_lines(rendered->lines);
     // The hint renders wrapped at narrow widths; assert the leading part.
-    CHECK(screen.find("Only showing models from configured providers.") !=
-        std::string::npos);
+    CHECK(screen.find("Only showing models from the local Magpie gateway.") != std::string::npos);
     CHECK(screen.find("Refreshing model catalogs…") != std::string::npos);
     const auto current_position = screen.find("alpha-2 [alpha]");
     const auto other_position = screen.find("alpha-1 [alpha]");
@@ -249,11 +224,96 @@ TEST_CASE("ModelSelector renders the scope text, search input, and sorted list w
     CHECK(cancellations == 0);
 }
 
+TEST_CASE("ModelSelector refreshes the live Magpie catalog in the background",
+        "[coding_agent][tui][model-selector][magpie][spec]") {
+    tests::TempWorkspace agent_dir;
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"data":[]})"},
+    });
+    transport->repeat_last_attempt = true;
+    auto created = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .agent_dir = agent_dir.path(),
+                    .magpie_base_url = "http://127.0.0.1:34259",
+            },
+            coding_agent::ModelRuntimeTestOptions{},
+            transport);
+    REQUIRE(created);
+    auto runtime = std::move(*created);
+    transport->attempts.clear();
+    transport->attempt_index = 0;
+    transport->repeat_last_attempt = false;
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {R"({"data":[{"id":"group/new-model","display_name":"New Model"}]})"},
+    });
+
+    boost::asio::io_context io;
+    auto theme = test_theme();
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            nullptr,
+            runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{},
+            [](ai::Model) {},
+            [] {},
+            [] {});
+
+    transport->repeat_last_attempt = false;
+    auto initial = selector->render(90);
+    REQUIRE(initial);
+    CHECK(join_lines(initial->lines).find("group/new-model") == std::string::npos);
+    while (io.poll() != 0) {
+    }
+    auto refreshed = selector->render(90);
+    REQUIRE(refreshed);
+    CHECK(join_lines(refreshed->lines).find("group/new-model [magpie]") != std::string::npos);
+    REQUIRE(transport->requests.size() == 2);
+    CHECK(transport->requests.back().url == "http://127.0.0.1:34259/v1/models");
+}
+
+TEST_CASE("ModelSelector close cancels the in-flight Magpie catalog request",
+        "[coding_agent][tui][model-selector][cancel][spec]") {
+    tests::TempWorkspace agent_dir;
+    auto transport = std::make_shared<tests::StopAwareBlockingTransport>();
+    auto created = coding_agent::create_model_runtime_for_testing(
+            coding_agent::ModelRuntimeOptions{
+                    .agent_dir = agent_dir.path(),
+                    .magpie_base_url = "http://127.0.0.1:34259",
+            },
+            coding_agent::ModelRuntimeTestOptions{},
+            transport);
+    REQUIRE(created);
+    auto runtime = std::move(*created);
+
+    boost::asio::io_context io;
+    auto theme = test_theme();
+    auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
+            theme,
+            test_keybindings(),
+            nullptr,
+            runtime,
+            io.get_executor(),
+            std::vector<cch::coding_agent::ScopedModel>{},
+            [](ai::Model) {},
+            [] {},
+            [] {});
+    REQUIRE(selector->render(90));
+    io.poll();
+    CHECK(transport->request_count.load(std::memory_order_acquire) == 2);
+    CHECK(transport->observed_stop_token.load(std::memory_order_acquire));
+
+    selector->close();
+    io.run();
+    CHECK(transport->cancelled_requests.load(std::memory_order_acquire) == 1);
+}
+
 TEST_CASE("ModelSelector initially selects the current model inside a scoped list",
         "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     const auto first = fixture.runtime->model("alpha", "alpha-1");
@@ -289,7 +349,6 @@ TEST_CASE("ModelSelector fuzzy search filters, moves the selection to the top ma
         "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     std::optional<ai::Model> selected;
@@ -343,7 +402,6 @@ TEST_CASE(
         "ModelSelector up/down wrap and Escape/Ctrl+C cancel", "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     std::size_t cancellations = 0;
@@ -385,7 +443,6 @@ TEST_CASE("ModelSelector toggles the all/scoped scope on Tab when scoped models 
         "[coding_agent][tui][model-selector][issue407][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     const auto scoped_model = fixture.runtime->model("alpha", "alpha-1");
@@ -436,7 +493,6 @@ TEST_CASE("ModelSelector never emits a line wider than the render width",
         "[coding_agent][tui][model-selector][issue426][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
@@ -471,7 +527,6 @@ TEST_CASE("ModelSelector wraps the save-as-default hint instead of dropping the 
         "[coding_agent][tui][model-selector][issue426][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
 
@@ -520,7 +575,6 @@ TEST_CASE("ModelSelector delegates search editing to SearchableSelectList and re
         "[coding_agent][tui][model-selector][issue589][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     auto selector = std::make_shared<coding_agent::tui::ModelSelectorComponent>(
@@ -565,7 +619,6 @@ TEST_CASE("ModelSelector selects session-only on Enter and saves the default thr
         "[coding_agent][tui][model-selector][issue774][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     const auto current = fixture.runtime->model("alpha", "alpha-1");
@@ -648,7 +701,6 @@ TEST_CASE("ModelSelector renders pi's model row marker column, unpadded provider
         "[coding_agent][tui][model-selector][issue808][spec]") {
     RuntimeFixture fixture;
     boost::asio::io_context io;
-    fixture.prime(io);
 
     auto theme = test_theme();
     const auto current = fixture.runtime->model("alpha", "alpha-1");
@@ -686,7 +738,7 @@ TEST_CASE("ModelSelector renders pi's model row marker column, unpadded provider
         // The provider hint starts in the first column: the leading column
         // belongs to the model rows' marker, not to this line.
         CHECK(cells.row("Only showing models") ==
-                "Only showing models from configured providers. Use /login to add providers.");
+                "Only showing models from the local Magpie gateway. Use /login for gateway guidance.");
         CHECK(cells.color_at("Only showing models") == "38;2;205;154;34");
         // pi draws the save hint with `theme.fg("dim", ...)`, a different gray
         // from the `muted` `Model Name:` line under the list.

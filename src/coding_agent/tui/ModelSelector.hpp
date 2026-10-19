@@ -10,10 +10,12 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/any_io_executor.hpp>
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -28,13 +30,13 @@ using ModelSelectorInvalidateSink = std::move_only_function<void()>;
 
 /// The model selector (pi `model-selector.ts`): replaces the editor during
 /// `app.model.select` (Ctrl+L) and renders the model list with fuzzy search
-/// and the all/scoped scope toggle. The list renders the current availability
-/// snapshot immediately, then refreshes availability in the background
-/// (pi `refreshModels`); the subset's availability refresh is local and
-/// side-effect-free, so pi's 15s timeout path is unreachable and omitted, and
-/// a refresh failure collapses to one generic message (the C++ runtime
-/// exposes a single composition-diagnostics channel rather than pi's
-/// per-provider error counts).
+/// and the all/scoped scope toggle. The list renders the current gateway
+/// catalog immediately, then refreshes the live Magpie catalog in the
+/// background (`refresh_async`); closing the selector requests the refresh's
+/// cancellation token, so a departed selector neither blocks terminal
+/// teardown nor mutates the list after close. A failed refresh clears the
+/// active catalog and surfaces the typed discovery error; a cancelled
+/// refresh preserves it.
 ///
 /// The list rows are delegated to `SearchableSelectList`, which owns the
 /// search Input and passes filtered rows into the toolkit SelectList. This
@@ -80,6 +82,11 @@ public:
     ModelSelectorComponent(const ModelSelectorComponent&) = delete;
     ModelSelectorComponent& operator=(const ModelSelectorComponent&) = delete;
 
+    /// Mark the selector closed (no further refresh mutation) and request the
+    /// cancellation of an in-flight catalog refresh. Idempotent; called by the
+    /// destructor and by the engine when the prompt slot is replaced.
+    void close() noexcept;
+
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;
     void invalidate() override {}
     cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override;
@@ -101,9 +108,6 @@ private:
 
     void load_models_from_snapshot();
     void start_refresh();
-    /// Mark the selector closed so an in-flight refresh stops mutating state.
-    /// Callers hold the mutex.
-    void close();
     void set_scope(bool scoped);
     /// The current scope's models as SelectList items: value is the unique
     /// `provider/id` reference, the label is the `✓ id [provider]` row whose
@@ -147,7 +151,9 @@ private:
     std::size_t cursor_row_offset_{0};
     /// Set on the first render to start the one-shot background refresh.
     bool refresh_started_{false};
-    bool closed_{false};
+    /// Cancels the in-flight catalog request when the selector closes.
+    std::stop_source refresh_stop_source_;
+    std::atomic<bool> closed_{false};
     bool focused_{false};
 };
 

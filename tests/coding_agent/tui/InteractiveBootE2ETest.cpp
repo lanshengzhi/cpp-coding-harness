@@ -15,6 +15,7 @@
 //   `diff` renderer;
 // - `app.interrupt` follows pi's precedence with the stale-generation guard.
 
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/ScriptedRuntimeFixture.hpp"
@@ -170,6 +171,7 @@ struct E2eSession {
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture->scripted.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created = fixture->runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
     fixture->session = std::move(created->session);

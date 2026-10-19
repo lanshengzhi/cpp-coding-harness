@@ -2,6 +2,7 @@
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 
 #include "support/EnvVarGuard.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -17,6 +18,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>
@@ -107,6 +109,7 @@ struct ResumedSessionFixture {
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
         request.model_runtime = runtime;
+        coding_agent::isolate_magpie_gateway(request);
         auto created =
                 runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
         REQUIRE(created);
@@ -170,11 +173,12 @@ TEST_CASE("Native TUI startup status shows the provider-qualified model thinking
     const tests::EnvVarGuard xdg_guard{"XDG_CONFIG_HOME", std::nullopt};
     const auto agent_dir = tests::agent_root_under_home(home.path());
     std::filesystem::create_directories(agent_dir);
-    home.write(".config/pike/agent/models.json", R"({
+    tests::ModelCatalogFixture catalog;
+    catalog.set(R"({
       "providers": {
         "alpha": {
           "baseUrl": "https://alpha.example/v1",
-          "api": "openai-responses",
+          "api": "openai-completions",
           "apiKey": "dummy-alpha-key",
           "models": [{
             "id": "k3-256k",
@@ -201,6 +205,8 @@ TEST_CASE("Native TUI startup status shows the provider-qualified model thinking
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.execution_runtime_target = runtime.make_target();
+    request.model_runtime = catalog.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
     CHECK(created->resolved_identity.provider == "alpha");
@@ -317,6 +323,7 @@ TEST_CASE("Native TUI shows the Working indicator while a prompt streams and cle
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created =
             fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
@@ -464,6 +471,7 @@ TEST_CASE("Native TUI shows the overflow Compaction indicator and rebuilds the c
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created =
             fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
@@ -558,6 +566,7 @@ TEST_CASE("Native TUI /reload refuses during auto-compaction with pi's streaming
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created =
             fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
@@ -640,6 +649,7 @@ TEST_CASE("Native TUI /reload refuses during a manual compaction with pi's compa
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = gated.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created =
             fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
@@ -839,6 +849,7 @@ TEST_CASE("Native TUI editor border color transitions for bash mode and thinking
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created = fixture.runtime_fixture.run(coding_agent::create_agent_session_async(std::move(request),
             std::nullopt,
             coding_agent::runtime::AssemblyOverrides{.model_runtime = nullptr,

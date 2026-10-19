@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <set>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -133,6 +134,10 @@ public:
     /// Executor-confined.
     void cycle_model(std::string direction);
 
+    /// Cancel refresh work admitted by this controller. Called by the host
+    /// before it waits for its in-flight flows to settle.
+    void close() noexcept;
+
     /// Rebuild the shared immutable `/model` completion snapshot on the
     /// executor (pi's candidate set: session scoped models when a scope
     /// exists, else the availability snapshot). Called on session bind and
@@ -184,6 +189,8 @@ private:
     /// The `/model` completion snapshot, replaced only by
     /// `update_model_completion()` on the executor.
     std::shared_ptr<const ModelCompletionSnapshot> model_completion_{};
+    /// Cancels refresh work admitted by this controller (host close).
+    std::stop_source stop_source_;
 };
 
 } // namespace cch::coding_agent::tui

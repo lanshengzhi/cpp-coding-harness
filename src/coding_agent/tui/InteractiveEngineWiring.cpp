@@ -1,5 +1,5 @@
 // InteractiveEngine collaborator-wiring unit (#506): the factories that
-// wire the ModalFlowControllers (Model/Auth/Session/Settings), the
+// wire the ModalFlowControllers (Model/Session/Settings), the
 // SessionUiBinding adapter, and the SuspendController to the engine's
 // executor, lifetime, and gate seams, plus the detached-flow spawn
 // machinery those hooks post through. See InteractiveEngine.hpp for the
@@ -9,7 +9,6 @@
 
 #include "support/AsyncResultBridge.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
-#include "coding_agent/tui/AuthFlowController.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/McpManagerFlow.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
@@ -108,45 +107,6 @@ std::shared_ptr<ModelFlowController> InteractiveEngine::make_model_flow_controll
             std::move(hooks),
             keybindings_,
             settings_manager_ ? &*settings_manager_ : nullptr);
-}
-
-std::shared_ptr<AuthFlowController> InteractiveEngine::make_auth_flow_controller() {
-    const auto weak = weak_from_this();
-    AuthFlowHostHooks hooks;
-    hooks.post_on_executor = [weak](std::move_only_function<void()> action) mutable {
-        if (const auto self = weak.lock()) {
-            self->post_from_view([action = std::move(action)](InteractiveEngine&) mutable { action(); });
-        }
-    };
-    hooks.spawn_flow = [weak](std::move_only_function<boost::asio::awaitable<void>()> start,
-                               std::string failure_label) mutable {
-        if (const auto self = weak.lock()) {
-            self->spawn_flow(std::move(start), std::move(failure_label));
-        }
-    };
-    hooks.current_session = [weak]() -> AgentSession* {
-        const auto self = weak.lock();
-        return self != nullptr ? self->session_ : nullptr;
-    };
-    hooks.live_theme = [theme = &*theme_controller_]() -> const LiveTheme& { return theme->live_theme(); };
-    hooks.action_generation = [weak] {
-        const auto self = weak.lock();
-        return self != nullptr ? self->action_generation_ : 0;
-    };
-    hooks.open_browser = [weak](std::size_t generation, std::string url) {
-        if (const auto self = weak.lock()) {
-            (void)self->deliver_action(generation, TuiActionVariant{OpenBrowserAction{std::move(url)}});
-        }
-    };
-    hooks.get_device_id = [weak] {
-        const auto self = weak.lock();
-        if (self && self->settings_manager_) {
-            return self->settings_manager_->get_or_create_device_id();
-        }
-        return std::string{};
-    };
-    return std::make_shared<AuthFlowController>(
-            executor_, *this, std::weak_ptr<void>{weak_from_this()}, std::move(hooks), keybindings_);
 }
 
 std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_controller() {
@@ -290,10 +250,8 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         }
         self->rebuild_autocomplete_provider();
         self->refresh_loaded_resources();
-        if (auto runtime = self->session_->model_runtime()) {
-            if (auto error = runtime->get_error(); error && !error->empty()) {
-                self->show_error("models.json error: " + *error);
-            }
+        if (result.model_runtime_error && !result.model_runtime_error->empty()) {
+            self->show_error(*result.model_runtime_error);
         }
         return {};
     };

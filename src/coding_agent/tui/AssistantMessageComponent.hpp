@@ -102,6 +102,9 @@ private:
 
     ai::AssistantStopReason stop_reason_{ai::AssistantStopReason::Stop};
     std::optional<std::string> error_message_;
+    /// True while the abort diagnostic is the canonical one, so the component
+    /// chooses its own wording instead of comparing diagnostic text.
+    bool default_abort_diagnostic_{false};
     bool has_tool_calls_{false};
     bool has_visible_content_{false};
 
@@ -134,6 +137,7 @@ private:
     cch::tui::Container suffix_content_;
     ai::AssistantStopReason built_stop_reason_{ai::AssistantStopReason::Pending};
     std::optional<std::string> built_error_message_;
+    bool built_default_abort_diagnostic_{false};
     bool built_tool_calls_{false};
     bool suffix_cache_valid_{false};
 

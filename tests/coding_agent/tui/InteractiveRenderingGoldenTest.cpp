@@ -27,10 +27,12 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "coding_agent/tui/TestTuiActionSink.hpp"
 #include "support/EnvVarGuard.hpp"
+#include "support/ModelCatalogFixture.hpp"
 #include "support/Json.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -407,6 +409,7 @@ struct ModelFixture {
     std::filesystem::path workspace;
     std::filesystem::path agent_dir;
     tests::RuntimeFixture runtime;
+    tests::ModelCatalogFixture catalog;
     tests::EnvVarGuard home_guard{"HOME"};
     tests::EnvVarGuard kimi_guard{"KIMI_API_KEY"};
     std::filesystem::path session_file;
@@ -418,8 +421,7 @@ struct ModelFixture {
         std::filesystem::create_directories(agent_dir);
         kimi_guard.unset();
         session_file = workspace / "model-switch.jsonl";
-        std::ofstream models(agent_dir / "models.json", std::ios::binary);
-        models << kReasoningAndPlainKeyed;
+        catalog.set(kReasoningAndPlainKeyed);
     }
 };
 
@@ -489,6 +491,7 @@ struct InterruptSession {
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.model_runtime = fixture->scripted.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created = fixture->runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created);
     fixture->session = std::move(created->session);
@@ -691,8 +694,10 @@ TEST_CASE("rendering golden: Ctrl+L model selector switches the model with the p
     request.session_facts.no_prompt_templates = true;
     request.execution_runtime_target = fixture.runtime.make_target();
     request.workspace = fixture.workspace;
+    request.model_runtime = fixture.catalog.runtime;
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
+    coding_agent::isolate_magpie_gateway(request);
     auto created = fixture.runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created.has_value());
     auto* session = created->session.get();
@@ -750,9 +755,9 @@ TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
     std::filesystem::create_directories(agent_dir);
     kimi_guard.unset();
     const auto session_file = workspace / "fork-session.jsonl";
+    tests::ModelCatalogFixture catalog;
     {
-        std::ofstream models(agent_dir / "models.json", std::ios::binary);
-        models << R"({
+        catalog.set(R"({
   "providers": {
     "alpha": {
       "baseUrl": "https://alpha.example/v1",
@@ -761,7 +766,7 @@ TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
       "models": [{"id": "alpha-1", "name": "Alpha Reasoning", "reasoning": true}]
     }
   }
-})";
+})");
         // The `app.session.fork` main-editor action is recognized-but-unbound
         // (pi defaultKeys []); a user-assigned keybinding triggers the flow.
         std::ofstream keybindings(agent_dir / "keybindings.json", std::ios::binary);
@@ -803,9 +808,11 @@ TEST_CASE("rendering golden: the fork flow's user-message selector overlay",
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
     request.workspace = workspace;
+    request.model_runtime = catalog.runtime;
     request.execution_runtime_target = runtime.make_target();
     request.session_target =
         coding_agent::ExplicitOpenOrCreateSessionTarget{session_file};
+    coding_agent::isolate_magpie_gateway(request);
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created.has_value());
     REQUIRE(created->session->message_count() == 5);

@@ -10,6 +10,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
+#include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
@@ -262,14 +263,12 @@ void write_capture(const std::filesystem::path& path,
     reasoning.provider = "faux";
     reasoning.api = "faux";
     reasoning.name = "Faux Reasoning";
-    reasoning.base_url = "http://localhost:0";
     reasoning.input = {ai::ModelInput::Text, ai::ModelInput::Image};
     reasoning.context_window = 128000;
     reasoning.max_tokens = 16384;
 
     auto plain = tests::make_model("faux-2", "faux", "faux");
     plain.name = "Faux Plain";
-    plain.base_url = "http://localhost:0";
     plain.input = {ai::ModelInput::Text, ai::ModelInput::Image};
     plain.context_window = 128000;
     plain.max_tokens = 16384;
@@ -329,6 +328,7 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
     request.session_facts.thinking = "off";
     request.execution_runtime_target = runtime.make_target();
     request.model_runtime = scripted.runtime;
+    coding_agent::isolate_magpie_gateway(request);
     auto created = runtime.run(coding_agent::create_agent_session_async(std::move(request), std::nullopt, {}));
     REQUIRE(created.has_value());
     return std::move(created->session);
