@@ -126,10 +126,10 @@ Machine ledger: `docs/research/pi-v1.3.0/1056-durable-harness-workflows.json`.
 It follows the `pike/pi-v1.3.0-audit-ledger/1` lane shape used by #1054/#1055 and keeps membership,
 implementation and verification as separate values.
 
-- Rows: **57** — 53 supported, 4 excluded.
-- Implementation: **40 partial**, **13 missing**, **4 not-applicable**.
-- Verification: **43 upstream-captured**, **10 unverified**, **4 not-applicable**, **0 verified**.
-- Scenario references: **55**; every referenced name exists in the artifact manifest.
+- Rows: **70** — 66 supported, 4 excluded.
+- Implementation: **51 partial**, **15 missing**, **4 not-applicable**.
+- Verification: **47 upstream-captured**, **19 unverified**, **4 not-applicable**, **0 verified**.
+- Scenario references: **64**; every referenced name exists in the artifact manifest.
 - No supported row is marked `verified`: this lane captured frozen observations only. C++ comparison
   against the same scenario is still required.
 
@@ -137,15 +137,15 @@ Coverage families:
 
 | Family | Representative rows | Captured evidence |
 | --- | --- | --- |
-| Harness lifecycle/configuration | `harness-open-close`, `harness-settings-defaults`, `harness-documents`, `commit-subscription` | open/root/close, five documents, commit publication |
-| Conversations/ownership | `conversation-ownership`, `conversation-fork`, `reset-handoff`, `conversation-abort`, `conversation-reopen` | all six conversation scenarios |
+| Harness lifecycle/configuration | `harness-open-close`, `harness-settings-defaults`, `harness-documents`, `commit-subscription`, `memory-storage`, `harness-run-control` | open/root/close, five documents, commit publication, in-memory storage, run control |
+| Conversations/ownership | `conversation-ownership`, `conversation-fork`, `reset-handoff`, `conversation-abort`, `conversation-reopen`, `conversation-entries-config` | all six conversation scenarios |
 | Generation/context/retry/prompt | `generation-admission`, `retry-policy`, `prompt-context`, `steering-followup` | public workflow, retry, prompt sections |
 | Compaction | `manual-compaction`, `threshold-compaction`, `background-compaction`, `compaction-decline`, `overflow-compaction-retry`, `compaction-no-cut` | four compaction scenarios; background/overflow remain gaps |
-| Registries/extensions/hooks | `registry-transition`, `registry-task-definitions`, `extension-sections`, `generation-onYield`, `tool-hooks`, `native-run-triggering` | live transition, task graph, onYield, tool hooks |
+| Registries/extensions/hooks | `registry-transition`, `registry-task-definitions`, `extension-sections`, `generation-onYield`, `tool-hooks`, `native-run-triggering`, `task-hooks`, `task-versioning` | live transition, task graph, onYield, tool hooks |
 | Views/events/task graph/inspection | `inspect-task-states`, `inspect-submissions`, `task-graph`, `conversation-view-delta`, `event-stream`, `context-at-entry` | all six observation scenarios |
-| Environment/tools/images | `node-filesystem`, `node-exec`, `builtin-tools`, `image-processor`, `read-image`, `image-capability-absent` | all six environment scenarios |
-| Codemode/tool search | `codemode-script`, `codemode-store`, `codemode-failure`, `codemode-replay`, `codemode-remote`, `codemode-models`, `toolsearch-load`, `toolsearch-no-match`, `toolsearch-persistence` | four code mode/tool-search scenarios |
-| Durable dependencies/storage | `chord-documents`, `chord-delta`, `sqlite-storage`, `jsonl-storage`, `task-recovery` | SQLite/JSONL reopen, task graph |
+| Environment/tools/images | `node-filesystem`, `node-exec`, `builtin-tools`, `builtin-tool-limits`, `node-env-watch`, `image-processor`, `image-orientation-conversion`, `read-image`, `image-capability-absent` | all six environment scenarios |
+| Codemode/tool search | `codemode-script`, `codemode-store`, `codemode-failure`, `codemode-replay`, `codemode-remote`, `codemode-models`, `codemode-limits`, `codemode-output`, `toolsearch-load`, `toolsearch-no-match`, `toolsearch-persistence` | four code mode/tool-search scenarios |
+| Durable dependencies/storage | `chord-documents`, `chord-delta`, `sqlite-storage`, `jsonl-storage`, `task-recovery`, `task-outcomes`, `tool-execution-timing`, `tool-task-cancellation` | SQLite/JSONL reopen, task graph |
 | Explicit boundaries | `cloudflare-excluded`, `ssh-daemon-excluded`, `ai-image-provider-excluded`, `thirdparty-plugins-excluded` | Not applicable |
 
 ## C++ mapping and ownership conclusions
@@ -201,6 +201,15 @@ Deferred and not exclusions:
 - `codemode-remote` — generic remote exchange and working Linux host.
 - `codemode-models` — capability-gated `models.*` under the retained Magpie contract.
 - `toolsearch-persistence` — loaded tools across forks/reset and durable `modelTools` persistence.
+- `task-versioning`, `task-outcomes`, `task-hooks` — typed migration/versioning, structured terminal
+  outcomes/completing holds, and typed task hooks.
+- `tool-task-cancellation`, `tool-execution-timing` — durable ToolTask cancellation and top-level
+  monotonic duration.
+- `builtin-tool-limits` — durable truncation/spill/diagnostic result contract.
+- `node-env-watch` — ExecutionEnv file watching.
+- `image-orientation-conversion` — durable EXIF orientation and format conversion.
+- `codemode-limits`, `codemode-output` — durable timeout/interrupt/output-limit and output-file/image
+  sidecars.
 
 Further implementation gaps visible in captured rows but with upstream evidence only: the public
 Harness/document/commit/registry/view/task-graph/inspect APIs are wholly absent; manual/threshold

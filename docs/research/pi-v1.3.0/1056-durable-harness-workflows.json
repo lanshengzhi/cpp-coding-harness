@@ -1562,6 +1562,361 @@
       ]
     },
     {
+      "id": "memory-storage",
+      "capability": "In-memory durable Storage",
+      "operation": "Open a Harness over MemoryStorage, commit conversations/entries/documents/tasks and address them for the process lifetime without disk persistence.",
+      "consumer": "Tests, ephemeral callers and adapters.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/storage/memory.ts:MemoryStorage",
+          "packages/durable/src/harness/harness.ts:Harness.open"
+        ],
+        "scenarios": [
+          "a scripted model drives admission, one real injected tool, committed entries and final settlement",
+          "the root conversation is created lazily in one commit with its five built-in documents"
+        ]
+      },
+      "cppSeam": "`SessionStore::in_memory` provides an application in-memory session store; there is no durable Storage implementation or document/task store.",
+      "cppEvidence": "`SessionStoreTest.cpp` covers application in-memory entries. No durable Storage conformance test.",
+      "recommendation": "Implement MemoryStorage behind the durable Storage interface and run the same conformance scenarios as SQLite/JSONL.",
+      "blockers": [
+        "no durable MemoryStorage"
+      ]
+    },
+    {
+      "id": "harness-run-control",
+      "capability": "Harness run control, waits, snapshots and task/submission lookup",
+      "operation": "Resume scheduling, wait for idle or a named task, look up a submission, snapshot a document, commit a transaction and report non-fatal errors.",
+      "consumer": "Durable callers, recovery and tests.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/harness.ts:Harness.resume,waitForIdle,waitForTask,submission,snapshot,commit",
+          "packages/durable/src/harness/harness.ts:HarnessImpl.onReport"
+        ],
+        "scenarios": [
+          "inspect derives ready, running, waiting and blocked task states without running task code",
+          "the task graph follows owner edges, owned conversations, waits and completion to empty",
+          "close and reopen keeps conversations, fork identity, agent choices and provider state"
+        ]
+      },
+      "cppSeam": "`TaskScheduler::resume/close` and `AgentSession::snapshot` cover parts of run control; no public durable waitForIdle/waitForTask/submission/snapshot/commit/onReport values.",
+      "cppEvidence": "`TaskSchedulerTest.cpp` covers resume/close; `AgentSessionSnapshotTest.cpp` covers application snapshots. No durable run-control API.",
+      "recommendation": "Expose run control over the durable scheduler/store with named waits and typed error reports; keep application AgentSession snapshots separate.",
+      "blockers": [
+        "no durable run-control API"
+      ]
+    },
+    {
+      "id": "conversation-entries-config",
+      "capability": "Conversation entries, agent resolution and configuration",
+      "operation": "Read committed entries, resolve the current agent/tools/sections from AgentDoc and the registry, and configure model/thinking/extensions/tools/instructions/cwd as one commit.",
+      "consumer": "Views, callers and extension hosts.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/harness.ts:ConversationImpl.entries,agent,configure",
+          "packages/durable/src/harness/agent.ts:applyChange"
+        ],
+        "scenarios": [
+          "the root conversation is created lazily in one commit with its five built-in documents",
+          "a fork copies the transcript and agent state as of its entry and stays independent",
+          "a registry install after conversation creation changes the next request's tools and prompt sections"
+        ]
+      },
+      "cppSeam": "`SessionStore::entries`, `AgentSession` model/thinking configuration and `SessionTree` cover application entry/config resolution. No durable AgentDoc change contract or durable agent resolution.",
+      "cppEvidence": "`SessionStoreTest.cpp` and AgentSession model/thinking tests cover application behavior. No durable configure/agent test.",
+      "recommendation": "Use the durable AgentDoc and registry snapshot for configure/agent; do not expose SessionStore entries as the durable entry API.",
+      "blockers": [
+        "no durable conversation configuration API"
+      ]
+    },
+    {
+      "id": "task-versioning",
+      "capability": "Task definition versioning and migration",
+      "operation": "Store kind/version, migrate an older checkpoint before reservation, keep a newer stored version blocked, and hand a running task over at a phase boundary.",
+      "consumer": "Task authors, scheduler and recovery.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/tasks.ts:defineTask.migrate",
+          "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`TaskStore::migrate_task`/`TaskScheduler::migrate_task` support a flat definition version; there is no typed migrate callback, old/new checkpoint contract or phase-boundary handover.",
+      "cppEvidence": "`TaskStoreTest.cpp` covers pending-task migration and version rejection; `TaskSchedulerTest.cpp` covers future-definition replacement. No typed migration test.",
+      "recommendation": "Add typed migration and phase-boundary definition resolution to the durable task contract; capture migration success/failure and version-too-new outcomes.",
+      "blockers": [
+        "no public durable versioning scenario"
+      ]
+    },
+    {
+      "id": "task-outcomes",
+      "capability": "Structured task outcomes and completion holds",
+      "operation": "Commit completed/failed/aborted outcomes with result/error/reason, and hold a completing owner until ordinary owned work drains.",
+      "consumer": "Harness callers, joins and inspection.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskOutcome,TaskState,TaskRecord",
+          "packages/durable/src/harness/scheduler.ts:#decide,#terminate"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`TaskStore` stores flat state strings and a checkpoint; there is no structured outcome, completing hold or failed/aborted result snapshot.",
+      "cppEvidence": "`TaskStoreTest.cpp`/`TaskSchedulerTest.cpp` cover transitions and abort, not structured outcomes or completing holds.",
+      "recommendation": "Persist the terminal outcome beside state and expose it through inspect/wait; prove a completing owner holds until children drain.",
+      "blockers": [
+        "no structured durable task outcomes"
+      ]
+    },
+    {
+      "id": "task-hooks",
+      "capability": "Task before/after hooks and hook isolation",
+      "operation": "Run task hooks in extension order around terminalization, isolate ordinary hook throws, and keep the task running.",
+      "consumer": "Extension authors and task lifecycle observers.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/types.ts:TaskHooks",
+          "packages/durable/src/harness/scheduler.ts:#runBeforeHooks,#runAfterHooks"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`TaskScheduler::register_before_hook/register_after_hook` runs flat hooks around handler execution and isolates failures; there is no durable typed task-hook contract or extension ordering.",
+      "cppEvidence": "`TaskSchedulerTest.cpp:306` covers hook failure isolation and ordering. No durable TaskHooks test.",
+      "recommendation": "Place typed task hooks in the durable task definition/extension model and capture order/isolation at the public Harness.",
+      "blockers": [
+        "no durable typed task hooks"
+      ]
+    },
+    {
+      "id": "tool-execution-timing",
+      "capability": "Tool execute duration",
+      "operation": "Measure tool `execute()` with a monotonic clock, exclude hooks and environment construction, omit duration for calls that never execute, and carry it through the tool result/event.",
+      "consumer": "Inspection, events, persistence and durable callers.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/tool.ts:#call,durationMs",
+          "packages/durable/src/harness/events.ts:tool_execution_end"
+        ],
+        "scenarios": [
+          "a scripted model drives admission, one real injected tool, committed entries and final settlement"
+        ]
+      },
+      "cppSeam": "`NestedToolCalls` records nested `duration_ms`; top-level `AsyncToolExecutionResult` has no duration field and there is no durable tool result/event duration.",
+      "cppEvidence": "`ToolCallExecutorTest.cpp` covers tool execution; nested call tests cover nested duration. No top-level durable duration test.",
+      "recommendation": "Add a monotonic duration to the durable ToolTask result/event, measured only around `execute()`, and compare presence and hook exclusion.",
+      "blockers": [
+        "no top-level durable tool duration"
+      ]
+    },
+    {
+      "id": "tool-task-cancellation",
+      "capability": "Tool task cancellation and owned work",
+      "operation": "Cancel an executing tool task without committing a misleading result, abort owned nested calls, and keep the conversation consistent.",
+      "consumer": "Conversation abort, tool policy and recovery.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/tool.ts:ToolTask",
+          "packages/durable/src/harness/scheduler.ts:abortConversation"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`Agent` tool executor honors cancellation and `TaskScheduler` aborts flat tasks; no durable ToolTask cancellation/owned-work contract exists.",
+      "cppEvidence": "`ToolCallExecutorTest.cpp` covers application cancellation; `TaskSchedulerTest.cpp` covers task abort. No durable tool-task cancellation test.",
+      "recommendation": "Implement cancellation in the durable ToolTask checkpoint and prove no false tool result is committed; include owned nested calls.",
+      "blockers": [
+        "no durable tool cancellation"
+      ]
+    },
+    {
+      "id": "builtin-tool-limits",
+      "capability": "Built-in tool truncation, spill and diagnostics",
+      "operation": "Apply read/write/edit/bash output limits, truncate with metadata, spill complete output to a file, and surface typed diagnostics without changing model content semantics.",
+      "consumer": "Durable tools and callers.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/tools/bash.ts:runCommand",
+          "packages/durable/src/truncate.ts:DEFAULT_MAX_BYTES,DEFAULT_MAX_LINES"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`AsyncToolFactories.cpp` implements application truncation/spill/diagnostics using `support::OutputLimiter`; no durable tool output-limit contract or result metadata.",
+      "cppEvidence": "Application bash/read tool tests cover truncation/spill. No durable built-in tool limit test.",
+      "recommendation": "Move the output-limit behavior behind the durable tool contract; prove truncation/spill/diagnostic ordering in a public scenario.",
+      "blockers": [
+        "no durable built-in tool limit scenario"
+      ]
+    },
+    {
+      "id": "node-env-watch",
+      "capability": "ExecutionEnv file watching",
+      "operation": "Watch files/directories, deliver changes, and cancel/close watches without leaking OS handles.",
+      "consumer": "Durable tools, code mode and callers.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/env/index.ts:ExecutionEnv.watch",
+          "packages/durable/src/env/node.ts:NodeExecutionEnv.watch"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`WorkspaceFileSystem`/`AsyncLocalFileSystem` have no watch contract exposed; no C++ file watcher seam exists for the durable environment.",
+      "cppEvidence": "No C++ ExecutionEnv watch test.",
+      "recommendation": "Add a watch operation to the durable ExecutionEnv and a Linux adapter with cancellation/close semantics; capture one real change and one cancellation.",
+      "blockers": [
+        "no durable watch contract"
+      ]
+    },
+    {
+      "id": "image-orientation-conversion",
+      "capability": "Image orientation and format conversion",
+      "operation": "Apply EXIF orientation, convert BMP/JPEG/WebP/APNG-unsupported inputs to an inline format, and report convertedFrom/resized metadata.",
+      "consumer": "Durable read tool and model image input.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/images/index.ts:prepare,exifOrientation",
+          "packages/durable/src/tools/image.ts:detectSupportedImageMimeType"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/ImageInput.cpp` applies EXIF orientation and decodes JPEG/WebP via STB/WebP for application image input, but there is no durable ImageProcessor conversion contract or APNG/animated-PNG policy.",
+      "cppEvidence": "`ImageInputTest.cpp` covers resizing/orientation/invalid WebP. No durable conversion or APNG test.",
+      "recommendation": "Implement orientation/conversion in the durable ImageProcessor and capture one oriented image, one converted format and one animated-PNG rejection.",
+      "blockers": [
+        "no durable orientation/conversion scenario"
+      ]
+    },
+    {
+      "id": "codemode-limits",
+      "capability": "Code mode interrupt, timeout and output limits",
+      "operation": "Enforce script timeout/interrupt budget, abort a pre-cancelled run, enforce output limits and report the typed error kind.",
+      "consumer": "Durable codemode callers.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [
+        "cch_codemode"
+      ],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/codemode/codemode.ts:createCodemodeTool",
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeSandbox.*` enforces application interrupt/timeout limits; no durable call checkpoint, cancellation outcome or replay-safe limit result exists.",
+      "cppEvidence": "`CodemodeSandboxTest.cpp` covers timeout, pre-cancelled runs and escape rejection. No durable codemode limit/cancellation test.",
+      "recommendation": "Carry timeout/interrupt budget and output limits in the durable codemode run and prove cancellation without a false successful result.",
+      "blockers": [
+        "no durable codemode limits"
+      ]
+    },
+    {
+      "id": "codemode-output",
+      "capability": "Code mode output files and image outputs",
+      "operation": "Return text/value output with token-budget truncation, spill full output to a file, save image outputs and include them as content blocks.",
+      "consumer": "Durable codemode callers and diagnostics.",
+      "owner": "cch_durable",
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "boundary": null,
+      "dependencies": [
+        "cch_codemode"
+      ],
+      "implementationTicket": null,
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/codemode/output.ts:formatResult,OutputFile",
+          "packages/durable/src/codemode/codemode.ts:OUTPUT_LIMITS"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "Application codemode output mapping exists, but no durable output file/image sidecar contract or token-budget truncation in the durable result.",
+      "cppEvidence": "`CodemodeOutputPresentationTest.cpp` covers application output rendering; no durable output-file test.",
+      "recommendation": "Implement durable output formatting, truncation and image/file sidecars, and capture both text truncation and image saving.",
+      "blockers": [
+        "no durable codemode output files"
+      ]
+    },
+    {
       "id": "cloudflare-excluded",
       "capability": "Cloudflare-specific deployment adapters",
       "operation": "Cloudflare Durable Object/Worker adapters are outside the selected Linux target.",
