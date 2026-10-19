@@ -1,0 +1,1773 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-ledger/1",
+  "title": "Codemode declarations, execution, replay and Remote capability ledger",
+  "ticket": "1053",
+  "baseline": {
+    "name": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+    "platform": "linux-x86_64-glibc"
+  },
+  "statusVocabulary": {
+    "membership": [
+      "supported",
+      "excluded",
+      "no-decision"
+    ],
+    "implementation": [
+      "implemented",
+      "partial",
+      "missing",
+      "not-applicable"
+    ],
+    "verification": [
+      "verified",
+      "upstream-captured",
+      "unverified",
+      "not-applicable"
+    ]
+  },
+  "evidence": {
+    "family": "audit-1053",
+    "manifest": "fixtures/pi-v1.3.0/audit-1053/manifest.json",
+    "manifestSha256": "f4c48cc5db9bf4a0e40db6651e5c43e17023d9635a1dd9f85f2b9a472cb793bf",
+    "capture": "fixtures/pi-v1.3.0/audit-1053/capture-1053.mts",
+    "artifacts": {
+      "source-options.json": {
+        "scenarios": 7,
+        "sha256": "664109294d1f852cee1b142acf8de400d9066861dc10b81e7e210f24e42c8f56"
+      },
+      "declarations.json": {
+        "scenarios": 13,
+        "sha256": "a29f7a798b15cb4dacce608f4018a5c917162ce16f4ee5a4e37f86f6f34939c5"
+      },
+      "script-execution.json": {
+        "scenarios": 18,
+        "sha256": "267ba6f2774da433809a783e0656b7d3703f4457906ab8bb54e5c9b1c209f0c9"
+      },
+      "worker-lifetime.json": {
+        "scenarios": 8,
+        "sha256": "1ca3ecef15ea78d9e4fbec315a8640ba09a50f2f114cd796ce59aee49a426dcf"
+      },
+      "deterministic-replay.json": {
+        "scenarios": 14,
+        "sha256": "24105ec690559628886d9431c98c11c5598f70f25e738f318b2bb714e031e329"
+      },
+      "inline-interrupt.json": {
+        "scenarios": 6,
+        "sha256": "b01e9ff3b21d6d47bf7b2009b1cc5a79e503116e8ad5ca5b18d55e827cdb401d"
+      },
+      "remote-exchange.json": {
+        "scenarios": 6,
+        "sha256": "0292c4f696715a46f87442203a949c65006e60b991cd864351f9d1cf0f57b2ab"
+      },
+      "application-catalog.json": {
+        "scenarios": 10,
+        "sha256": "68a7e9716755ef5ebba97948b3ad9343b1621c1bdf72517248554d0927f52fb6"
+      }
+    },
+    "scenarioCount": 82
+  },
+  "rows": [
+    {
+      "id": "codemode-source-constants",
+      "capability": "Codemode source grammar and options prefix",
+      "operation": "Export the exact `// @options:` prefix and the Lark grammar for the model-facing `code` argument; the grammar only fixes the shape of the optional options line and leaves JSON/code validation to the parser.",
+      "consumer": "Model-facing `codemode` tool definition, constrained-sampling adapters, and every source parser call.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/source.ts:CODEMODE_OPTIONS_PREFIX,CODEMODE_SOURCE_GRAMMAR",
+          "packages/coding-agent/src/extensions/codemode/tool.ts:codemodeSchema"
+        ],
+        "scenarios": [
+          "the public options prefix and grammar constants are fixed"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeSource.hpp:kCodemodeOptionsPrefix,kCodemodeSourceGrammar`; `CodemodeTool.cpp:codemode_tool_definition` attaches the grammar variant.",
+      "cppEvidence": "`CodemodeParityTest.cpp:107` compares the grammar byte for byte with `fixtures/pi-v1.3.0/codemode-source-grammar.lark`; `CodemodeTool.cpp:69` declares the single `code` string parameter. The capture pins prefix/grammar against v1.3.0.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the constants; derive the grammar fixture and the constrained-sampling variant from the same source so a future upstream grammar change cannot update one face only.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-source-parse",
+      "capability": "Codemode source body and first-line options parsing",
+      "operation": "Treat the first line as options only when it starts (after leading whitespace) with `// @options:`; replace that line with an empty line so script line numbers do not move; return the untouched input when there is no options line; accept CRLF, an empty object, leading whitespace and a zero token budget.",
+      "consumer": "The model-facing `codemode` tool execution path, the Application `executeCodemode` wrapper, and any direct parser caller.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/source.ts:parseCodemodeSource",
+          "packages/codemode/test/source.test.ts:parseCodemodeSource"
+        ],
+        "scenarios": [
+          "source keeps plain JavaScript and a leading ordinary comment unchanged",
+          "first-line options are parsed and replaced by an empty line to preserve line numbers",
+          "options accept leading whitespace, CRLF, an empty object and a zero token budget",
+          "only the first line is an options line"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeSource.cpp:parse_codemode_source` (line 91), `CodemodeSource.hpp:CodemodeSourceOptions`; no dedicated C++ source test.",
+      "cppEvidence": "The C++ parser implements plain code, first-line options, empty-line replacement, CRLF normalization, zero `max_output_tokens`, and the same SAFE-integer/timeout bounds. Pike has no test for the accepted forms; the capture is upstream-only.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the parser. Add the captured accepted-form cases to a focused source test when the parity suite can call the public parser (the module currently has no dedicated test).",
+      "blockers": []
+    },
+    {
+      "id": "codemode-source-placement-errors",
+      "capability": "Codemode options placement and typed validation errors",
+      "operation": "Reject an `// @options:` line found after the first line with the exact line number, and reject empty input, invalid JSON, non-object options, unknown fields, invalid `max_output_tokens`/`timeout_ms`, and an options line with no following source as typed `CodemodeSourceError` values.",
+      "consumer": "The model-facing tool and every caller that turns a validation failure into a `Script error:` result.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/source.ts:parseCodemodeSource,CodemodeSourceError",
+          "packages/codemode/test/source.test.ts:parseCodemodeSource"
+        ],
+        "scenarios": [
+          "a misplaced options line is rejected with its line number",
+          "invalid options and empty input are rejected with typed errors"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeSource.cpp:parse_codemode_source` scans only the first line; it returns plain code when a later line starts with the prefix. `parse_source_options` returns `support::ErrorCode::Validation` messages but adds a JSON parse detail that v1.3.0 does not include.",
+      "cppEvidence": "Pike has no misplaced-line check: `text\\n// @options: {}` is accepted as source. The invalid-JSON message is `@options must be valid JSON ...: <parser detail>` where v1.3.0 emits the generic `@options must be a JSON object with supported fields ...`. No C++ test covers either case.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Scan for a later first-token `// @options:` line and raise the v1.3.0 line-numbered error; align the invalid-JSON text with the captured generic message. Add both cases to a source test.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-source-timeout-option",
+      "capability": "Script deadline from the options line",
+      "operation": "Use `timeout_ms` as the whole-execution deadline; without it the Application passes `Number.POSITIVE_INFINITY` rather than the library default of 300 s. An expired deadline ends a script that is waiting on a tool as well as one computing, and reports `Execution timed out after <n> ms`.",
+      "consumer": "Application `executeCodemode`; the model-facing tool result tail; the sandbox timeout path.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/source.ts:CodemodeSourceOptions",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode",
+          "packages/codemode/test/sandbox.test.ts:terminates a synchronous infinite loop on timeout"
+        ],
+        "scenarios": [
+          "a script that computes past its deadline is a timeout",
+          "a script failure keeps prior output and reports the script error with its line"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeSandbox.cpp:875` (`limits.timeout`), `CodemodeToolSource.cpp:limits_for` maps a parsed `timeout_ms` or leaves the timeout disabled; `CodemodeSandbox.cpp:860` formats the timeout.",
+      "cppEvidence": "`CodemodeSandboxTest.cpp:133` covers a computing runaway with a 150 ms limit. `CodemodeToolSource.cpp:limits_for` correctly makes an absent option infinite like the Application. No test covers a tool-waiting deadline or the exact `Execution timed out after N ms` text.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Add a deadline-while-tool-waits case with the exact message to the sandbox/routing tests; keep the default-infinite application rule.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-source-output-token-option",
+      "capability": "Application output-token budget",
+      "operation": "Consume `max_output_tokens` (Application default 10,000 estimated tokens, four characters per token) after joining output text: when over budget, keep head and tail, write the full text to a temp output file, and expose the path as `details.fullOutputPath`.",
+      "consumer": "Application result formatting and the TUI/fallback renderer.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:DEFAULT_MAX_OUTPUT_TOKENS,truncateOutput",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`CodemodeSource.cpp:76` parses and stores `max_output_tokens`; `CodemodeToolSource.cpp:to_extension_result` never reads it. There is no output joining, truncation, spill file or `fullOutputPath` in the coding-agent path.",
+      "cppEvidence": "The option is parsed but has no effect. A large script result is returned whole as text; no truncation marker or full-output file is available. This is a structural Application gap, not just a missing test.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "unverified"
+      },
+      "recommendation": "Implement the Application formatter before adding a differential output-budget test; keep the library parser behavior unchanged.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-declaration-identifier",
+      "capability": "Identifier normalization for script tool names",
+      "operation": "Map a registered tool name to its script identifier by replacing invalid identifier characters with `_` and an empty name with `_`, while keeping the raw name available as `tools[\"<raw>\"]`.",
+      "consumer": "Codemode tool descriptors, `tools.*` bindings, discovery results, catalog headings and declaration rendering.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/identifier.ts:toCodemodeIdentifier",
+          "packages/codemode/test/declarations.test.ts:renders signatures with normalized identifiers"
+        ],
+        "scenarios": [
+          "tool identifiers replace invalid characters and preserve MCP names"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeDiscovery.{hpp,cpp}:to_codemode_identifier`; `CodemodeToolSource.cpp:to_descriptors` derives `js_name` from it and the prelude binds both names.",
+      "cppEvidence": "`CodemodeRoutingTest.cpp:210` asserts both `tools.list_issues` and `tools[\"list-issues\"]` reach the same session tool. No unit test covers the empty-name or punctuation cases; the C++ implementation has the same replacement rule.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Add the captured identifier table to a focused unit test; keep the routing test for the two-name binding.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-schema-to-type",
+      "capability": "JSON Schema to TypeScript type rendering",
+      "operation": "Render JSON Schema primitives, literals, unions, nullable unions, objects, arrays/tuples, local `$ref` resolution, recursive refs as `unknown`, remote refs as `unknown`, property descriptions as comments, and integer/string/`deprecated` tags. Drop tags and then return `unknown` as the character budget is exhausted; keep line terminators escaped.",
+      "consumer": "Tool declarations, `ALL_TOOLS` samples, discovery `searchTools`/`describeTool` output, and the model-facing catalog.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/declarations.ts:schemaToType",
+          "packages/codemode/test/declarations.test.ts:schemaToType"
+        ],
+        "scenarios": [
+          "schema primitives, literals, unions and references render as TypeScript types",
+          "object properties are sorted on one line with quoted non-identifier keys",
+          "property descriptions become comment lines",
+          "constraint tags render integer bounds, defaults, patterns and deprecated markers",
+          "optional non-null branches keep their constraint tags",
+          "draft-04 boolean exclusive bounds become exclusive tags",
+          "long tags are dropped, line terminators are escaped, and line breaks stay in comments",
+          "types over the character budget drop tags, then become unknown",
+          "local references resolve and recursive or remote references render unknown"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp:schema_to_type` (line 515) over `to_type`, `object_type`, `array_type`, `resolve_ref`; declaration budget at `kDefaultInputSchemaMaxChars`.",
+      "cppEvidence": "The implementation has the same major rendering branches (references, tuples, comments, tags, budget fallback), but there is no C++ test at all for `schema_to_type`. The captured v1.3.0 fixtures pin the exact rendering, including tag ordering, escaping and the `16,000`-character input-schema budget.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Add a typed unit-test table mirroring the captured declarations artifact before treating this as verified; do not fold it into the end-to-end sandbox test.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-render-tool-signature",
+      "capability": "Tool declaration, signature and output type rendering",
+      "operation": "Render a tool declaration as `name(args: <input>): Promise<<output>>`, defaulting a missing output schema to `Promise<string>`, and render a standalone output type. `renderToolSample` combines the description and the declaration; `renderToolSignature` omits the description.",
+      "consumer": "`toCodemodeDeclaration`, `renderDeclarations`, `ALL_TOOLS` descriptions, discovery samples, and codemode catalog sections.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/declarations.ts:renderDeclarations,renderToolOutputType,renderToolSample,renderToolSignature",
+          "packages/coding-agent/src/extensions/codemode/tool.ts:toCodemodeDeclaration"
+        ],
+        "scenarios": [
+          "tool signatures and samples use the output schema and input budget",
+          "renderDeclarations groups tools, globals and namespaces with doc comments"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp:render_tool_sample` (line 522) hard-codes `Promise<unknown>`; no `render_tool_signature`/`render_tool_output_type`/`render_declarations` exists in `src/coding_agent/extensions/codemode`.",
+      "cppEvidence": "Pike renders every tool call as `Promise<unknown>`, so a script sees no output type even when the tool declares `outputSchema`. `CodemodeTool.cpp:codemode_description` lists bare property names rather than declarations. There is no public declaration renderer for globals, namespaces, doc comments or output schemas.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add the output-schema-aware declaration/signature renderer and a public `render_declarations` seam before implementing the dynamic catalog. Keep `Promise<string>` as the missing-output default.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-declaration-input-budget",
+      "capability": "Input-schema declaration budget",
+      "operation": "Limit the rendered input schema to 16,000 characters (`DEFAULT_INPUT_SCHEMA_MAX_CHARS`): over-budget schemas render as `unknown`, while an explicit alternate budget is honored.",
+      "consumer": "Tool declarations, discovery samples, catalog sections and script signatures.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/declarations.ts:DEFAULT_INPUT_SCHEMA_MAX_CHARS"
+        ],
+        "scenarios": [
+          "tool signatures and samples use the output schema and input budget"
+        ]
+      },
+      "cppSeam": "`CodemodeDiscovery.cpp:kDefaultInputSchemaMaxChars` (16,000) and `schema_to_type(..., max_chars)`; `render_tool_sample` uses it.",
+      "cppEvidence": "The constant and over-budget fallback exist. There is no C++ test for the 16,000-character boundary or for an alternate budget. The output schema is not rendered at all, so half of the captured declaration budget behavior is absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Test the input boundary separately from the output-schema work; both belong in the declaration renderer rather than the sandbox.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-description-catalog",
+      "capability": "Model-facing codemode catalog description",
+      "operation": "Build the description from the intro, the globals block, then one section per listed tool with its declaration and guidelines. Group tools by namespace, omit deferred tools entirely, enforce the inline token budget per group with an explicit `(tools not listed)`/`(some tools not listed)` marker, and keep an empty catalog stable.",
+      "consumer": "The `codemode` model-facing tool description, MCP late-registration refresh, and the loadout/prompt assembly.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,renderToolSection,selectCatalog",
+          "packages/coding-agent/test/tool-search.test.ts:createCodemodeDescription"
+        ],
+        "scenarios": [
+          "the empty codemode catalog still declares globals, discovery and the options grammar",
+          "a listed tool section carries its declaration, output type and guidelines",
+          "namespaces group sections and the inline budget omits tools with an explicit marker",
+          "deferred tools are never listed and do not change the description"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeTool.cpp:codemode_description` (line 43) appends `- tools.<name>({ props })` lines; `McpProductionAdapters.cpp:541` refreshes it with all non-hidden definitions. No namespace, deferred or budget selection exists; prose is the frozen v1.0.4 text.",
+      "cppEvidence": "The catalog is structurally different from v1.3.0: no fenced declaration, no output type, no guidelines, no namespace heading, no deferred filtering and no inline-budget marker. `SettingsManager::codemode_inline_budget` is parsed but never passed to the description. `CodemodeParityTest.cpp:86` asserts the old bullet form, so the existing test locks in the drift.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Replace the bullet renderer with the v1.3.0 catalog and thread mode/inline budget/namespace/deferred metadata into the refresh path. Update the parity test only after the new differential fixture is registered.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-description-loadout",
+      "capability": "Codemode loadout modes and per-tool script descriptions",
+      "operation": "In `on` mode, give each direct callable tool a `Codemode: tools.<id>(args) resolves to <type>` sentence and list only non-direct callable tools in the codemode catalog. In `only` mode, list every callable tool in the catalog and hide direct declarations. Apply `codemode.mode` from settings.",
+      "consumer": "Application loadout assembly, system-prompt catalog and direct tool descriptions.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:prepareCodemodeLoadout,describeScriptCall,isDirect",
+          "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension"
+        ],
+        "scenarios": [
+          "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+          "the only loadout lists every callable tool and hides direct declarations"
+        ]
+      },
+      "cppSeam": "No C++ loadout hook: `ExtensionTool` exposes `default_active` and description but no `prepare_loadout`; `SettingsManager.cpp:1398` only stores `codemode_mode`. `AgentMcpToolSurface` updates the single description.",
+      "cppEvidence": "The mode setting has no consumer. Pike cannot produce per-tool `Codemode:` descriptions, cannot hide direct declarations in `only` mode, and cannot exclude direct tools from the catalog in `on` mode. This is a missing Application seam, not a formatting difference.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add the loadout seam (with exposure/namespace/deferred metadata) before porting the mode tests; keep settings parsing as the input.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-models-provider-execution",
+      "capability": "Codemode `models.*` provider execution",
+      "operation": "When the application enables model access, `models.getAvailableOfType`/`getModelsOfType`/`getModelOfType`/`classify`/`generateImages` select catalog models, account usage, enforce call limits and turn classifier results into prompt text.",
+      "consumer": "Application codemode tool with a model registry; scripts that classify or generate images.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:createModelGlobals"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`CodemodeTool.hpp` states Pike has no `models.*` namespace; there is no provider, classifier or image-generation implementation.",
+      "cppEvidence": "Excluded from A09: provider execution belongs to the retained AI/model-orchestration contract, not to codemode declaration/execution/replay/Remote. The description-gate capture does not prove provider execution.",
+      "status": {
+        "membership": "excluded",
+        "implementation": "not-applicable",
+        "verification": "not-applicable"
+      },
+      "recommendation": "Do not implement `models.*` provider execution in the codemode port. Track it under the retained AI contract if the product needs it; do not cite the gate capture as proof.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-models-description-gate",
+      "capability": "Codemode `models` description gate",
+      "operation": "Emit the `models` globals line and classifier/image wording in the `codemode` description only when the tool is created with model access; omit it when models are disabled or absent.",
+      "consumer": "Model-facing codemode description and system prompt.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:describeGlobals",
+          "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension"
+        ],
+        "scenarios": [
+          "the models declaration line is present only when models are enabled"
+        ]
+      },
+      "cppSeam": "`CodemodeTool.cpp:codemode_description` never emits the models line. Pike has no model globals, so the capability-absent branch is the only reachable behavior.",
+      "cppEvidence": "The absent branch matches the captured gate (`withoutModels: false`), but the enabled branch (`withModels: true`, classifier/image wording) is unsupported. This row covers only that capability-absent behavior; provider execution is the separate excluded row.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the absent branch correct and add a differential assertion when the catalog is ported. Do not use this row as a demand to implement model providers.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-callable-tools",
+      "capability": "Callable tool selection",
+      "operation": "A script may call every registered tool except `codemode` itself; the description and `ALL_TOOLS` consume the same callable set, filtered for the selected exposure and deferred metadata by the loadout.",
+      "consumer": "Codemode tool source, discovery globals, catalog description and nested-call routing.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:getCodemodeCallableTools",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode"
+        ],
+        "scenarios": [
+          "the callable tool set excludes codemode itself"
+        ]
+      },
+      "cppSeam": "`CodemodeToolSource.cpp:callable_tools` filters only `kCodemodeToolName`; `CodemodeDiscovery` is built from that vector.",
+      "cppEvidence": "The basic exclusion is implemented and exercised indirectly by routing tests. Pike has no explicit callable-set test, and the C++ description refresh additionally filters MCP `Hidden` exposure at the production adapter, not in `callable_tools`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Add a focused test for the exclusion and hidden/deferred interaction; keep the production exposure filter outside the library callable predicate.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-tool-binding",
+      "capability": "Script `tools.*` bindings and call routing",
+      "operation": "Expose every callable tool as an async `tools.<jsName>` and `tools[\"<raw name>\"]` function; route each call through the host nested-call seam, record status/duration, preserve structured results when the tool declares an output schema, and reject missing tools or failures with catchable `Error`s.",
+      "consumer": "Codemode prelude, `CodemodeSandbox` bridge, `CodemodeToolCallHandler`, the Application nested-call runner and the TUI.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:toolsJson",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:toScriptValue",
+          "packages/codemode/test/sandbox.test.ts:tools"
+        ],
+        "scenarios": [
+          "tools are async functions under normalized identifiers and record status and duration presence",
+          "unknown tools and thrown tool errors are catchable, with error call status"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox.cpp:handle_bridge` (`call`/`global`), `CodemodeToolSource.cpp:to_descriptors` + handler, `script_value_from` at line 138, prelude `toolsProxy`; `NestedToolCalls` records the call.",
+      "cppEvidence": "`CodemodeSandboxTest.cpp:193` covers a routed call; `CodemodeRoutingTest.cpp:181` covers routing/status; `:242`, `:276`, `:304`, `:321` cover structured, error-structured, text-only and fallback failures. The C++ script call record has `arguments` rather than the Application preview string and uses `unfinished` rather than pi `cancelled` for an interrupted call.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep the routing; align the nested-call record status/arguments with the codemode details shape if the renderer consumes it. Add the captured unknown-tool catch and unawaited-cancel cases.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-globals",
+      "capability": "Script globals and namespace grouping",
+      "operation": "Bind host globals as top-level identifiers; a `spread` global receives the argument array, and dotted names such as `models.classify` are grouped into a frozen namespace object. Constructor validation rejects invalid identifiers, duplicate names and namespace conflicts.",
+      "consumer": "Application execute path, discovery globals, model globals, and any host helper attached to a script.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:globalsJson",
+          "packages/codemode/test/sandbox.test.ts:globals",
+          "packages/codemode/test/deterministic.test.ts:globals"
+        ],
+        "scenarios": [
+          "globals support top-level spread calls and dotted frozen namespaces",
+          "invalid global names, duplicates and namespace conflicts are rejected at construction",
+          "globals count as issued calls and rejection properties reach the script Error"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox.cpp` passes the literal `no_globals = \"[]\"` to the prelude (line 786); `CodemodeSandbox::run` has no globals argument. `CodemodeDiscovery::globals_json` exists but is never called.",
+      "cppEvidence": "The stale prelude can render globals, but the C++ host always gives it an empty list. Scripts cannot see `searchTools`, `describeTool`, `describeNamespace` or any application global; the discovery handler in `CodemodeToolSource.cpp` is therefore unreachable. Constructor-time global validation and numbered global calls are absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add a `CodemodeGlobalDescriptor`/globals argument to `CodemodeSandbox::run`, pass `CodemodeDiscovery::globals_json()` plus application globals, and test the captured spread/dotted/validation cases. Do not try to fix discovery without this seam.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-discovery",
+      "capability": "Tool discovery globals (`searchTools`, `describeTool`, `describeNamespace`)",
+      "operation": "Expose BM25-ranked `searchTools(query, {limit, namespace})`, full sample `describeTool(name)` and namespace listing `describeNamespace(name)` over the callable set, returning JSON values to the script.",
+      "consumer": "Scripts that need unlisted tools (especially MCP tools), the codemode catalog, and the MCP exposure UI copy.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:createDiscoveryGlobals",
+          "packages/coding-agent/src/extensions/tool-search/tool.ts:Bm25Ranker,createToolSearchDocument"
+        ],
+        "scenarios": [
+          "the empty codemode catalog still declares globals, discovery and the options grammar",
+          "the callable tool set excludes codemode itself"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/extensions/codemode/CodemodeDiscovery.{hpp,cpp}` implements BM25/schema samples and `handle`; `describeNamespace` always returns `null` (line 612); `globals_json` is never wired into the sandbox.",
+      "cppEvidence": "The library code is substantial but dead: with `globalsJson=[]` no discovery identifier exists in a script. `describeNamespace` is a stub because Pike has no tool namespaces in this seam. There is no C++ test for discovery. The captured v1.3.0 catalog advertises these globals, so the description promises an unavailable API.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Wire `globals_json` into the sandbox first, then implement namespace metadata instead of returning `null`; add scripts that call all three globals to routing tests.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-store-load",
+      "capability": "`store()`/`load()` snapshot and write reporting",
+      "operation": "Keep a per-run JSON snapshot of stored values; `store(key, value)` validates key/value JSON, per-value and total size limits, and `undefined` deletes; `load(key)` returns parsed JSON or undefined. Only successful executions report `{set,delete}` writes.",
+      "consumer": "Application session store (`codemode-store` entry), scripts that keep small state across calls, and the result details.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:store,load,serializeWrites",
+          "packages/codemode/test/sandbox.test.ts:store and load",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:readCodemodeStore,appendEntry"
+        ],
+        "scenarios": [
+          "store and load use a JSON snapshot and only successful executions report writes",
+          "exit() succeeds with prior output and store writes and stops later output"
+        ]
+      },
+      "cppSeam": "The v1.0.4 prelude in `CodemodePrelude.hpp` implements store/load and size checks, but `CodemodeSandbox.cpp:786` passes `no_store = \"{}\"` and `emit_done` ignores the writes argument (line 321). `CodemodeRunResult` has no `storeWrites`; `kCodemodeStoreEntryType` is unreferenced outside the constant/test.",
+      "cppEvidence": "Scripts start from an empty store every run, and even successful writes are discarded. The Application has no branch-read/append path, so the advertised persistence contract is absent end to end. The existing prelude fixture test only proves the prelude text matches the old fixture.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add store input/output to `CodemodeRunResult` and `CodemodeSandbox::run`, then port the Application branch read/append. Test a snapshot, a failed execution that loses writes, and the exit-with-writes case.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-output-text-image-console",
+      "capability": "Script output channels and ordering",
+      "operation": "Append `text()`/`console.*` as text items and `image()` as image items in production order; mark console items with `console: true`; `text()` JSON-stringifies non-strings and `image()` accepts a data URL, `{image_url}`, or an image block. The extension header/result appends a returned value after prior output.",
+      "consumer": "Application result formatting, TUI/fallback rendering, image sidecars and output spill.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:output,text,image,console",
+          "packages/codemode/src/types.ts:CodemodeOutputItem",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:formatOutput"
+        ],
+        "scenarios": [
+          "a script returns a JSON value after top-level await and collects output in order",
+          "text values are stringified and image accepts data URLs and image blocks",
+          "invalid image arguments throw a catchable TypeError inside the script"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox.cpp:handle_bridge` maps every non-image channel to `Kind::Text` with no console flag; `CodemodeOutputItem` has only Text/Image. The embedded prelude emits console as `text`; v1.3.0 emits `console`. `CodemodeToolSource.cpp:to_extension_result` appends content in order but has no console block.",
+      "cppEvidence": "`CodemodeSandboxTest.cpp:92` checks text order/value and `:107` checks image MIME/data. `CodemodeOutputPresentationTest.cpp` checks fallback rendering and image sidecars. Neither can distinguish console output from `text()` because the C++ item has no console field. The v1.3.0 `console: true` channel is lost.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Add a console discriminant to `CodemodeOutputItem` and update the prelude to emit `console`; then use it in the Application output block. Keep text/image ordering tests, but assert console separately.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-image-format",
+      "capability": "Image helper argument and MIME handling",
+      "operation": "Accept a non-empty data URL/string, `{image_url}`, or an image block; detect the MIME type from the base64 signature (ignore a misleading data-URI type); reject invalid data with v1.3.0 `TypeError` texts; save displayed images to temp files only in the Application layer.",
+      "consumer": "Script image output, image fixtures, TUI sidecars and the model result.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:imageUrl,image",
+          "packages/codemode/test/sandbox.test.ts:image"
+        ],
+        "scenarios": [
+          "text values are stringified and image accepts data URLs and image blocks",
+          "invalid image arguments throw a catchable TypeError inside the script"
+        ]
+      },
+      "cppSeam": "`CodemodePrelude.hpp:imageUrl` and `output(\"image\", ...)`; `CodemodeSandbox.cpp:handle_bridge` reads `mimeType` from the bridge. The prelude is v1.0.4 and says `raw MCP image block`, while v1.3.0 says `image block { type: \"image\", data, mimeType }`.",
+      "cppEvidence": "`CodemodeSandboxTest.cpp:107` verifies PNG signature detection and base64 stripping. The C++ error strings are the pre-v1.3.0 MCP wording, so a differential script that asserts the captured `TypeError.message` fails. No C++ code saves images to temp files or adds the `[Image saved to ...]` label.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Regenerate the prelude from v1.3.0 (or patch the image texts) and add the Application temp-file save/label path. Keep signature detection rather than trusting the data URI.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-exit",
+      "capability": "`exit()` success path",
+      "operation": "`exit()` ends the script successfully, keeps output and store writes produced before it, and prevents later output; the result is `value: undefined`.",
+      "consumer": "Scripts and the Application result formatter.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:exit",
+          "packages/codemode/test/sandbox.test.ts:exit"
+        ],
+        "scenarios": [
+          "exit() succeeds with prior output and store writes and stops later output"
+        ]
+      },
+      "cppSeam": "`CodemodePrelude.hpp:exit` calls `done(true, undefined, writesJson)`; `emit_done` keeps prior output but ignores the writes argument (`CodemodeSandbox.cpp:321`).",
+      "cppEvidence": "The control-flow exit and prior output work. Store writes from the exit payload are dropped, so the captured `exit()` contract is only partially implemented. No C++ test exercises `exit()`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Carry the writes through `emit_done` as part of the store work; add an exit-with-output-and-writes test.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-error-taxonomy",
+      "capability": "Script error names, stacks, kinds and catchability",
+      "operation": "Report a script `Error` with `kind: \"script\"`, name, message and stack in `codemode.js:line:col` form; syntax errors, non-Error throws, BigInt serialization, unknown tools, out-of-memory and tool failures must be catchable inside the script where applicable, while a terminal syntax error settles the run.",
+      "consumer": "Application error formatting, model-facing `Script error:` block and the TUI.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/types.ts:CodemodeError",
+          "packages/codemode/src/runtime/prelude-source.ts:describeError,errorText",
+          "packages/codemode/test/sandbox.test.ts:script execution"
+        ],
+        "scenarios": [
+          "a script failure keeps prior output and reports the script error with its line",
+          "non-Error throws, syntax errors and non-serializable returns are script errors",
+          "a memory-limited VM reports out of memory as a script error",
+          "unknown tools and thrown tool errors are catchable, with error call status"
+        ]
+      },
+      "cppSeam": "`CodemodeError` in `CodemodeSandbox.hpp` stores only `kind` and `message`; `CodemodeSandbox.cpp:emit_done`/`message_from` parse a message object but do not retain `name`/`stack`; `g.exception_text()` supplies a text stack for syntax errors.",
+      "cppEvidence": "Pike preserves the script error text, including a stack, in `message`, but has no typed `name`/`stack` fields. `CodemodeSandboxTest.cpp:122` only checks the message substring for a thrown Error. Captured BigInt, non-Error, syntax, unknown-tool and OOM shapes cannot be represented exactly in the C++ result type.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Extend `CodemodeError` with optional name/stack and parse the prelude payload; test the captured taxonomy through the public result rather than only `message.find`.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-output-limits",
+      "capability": "Prelude output and store limits",
+      "operation": "Public constants `MAX_OUTPUT_CHARS=16,777,216`, `MAX_OUTPUT_ITEMS=100,000`, `MAX_STORE_VALUE_CHARS=262,144`, and `MAX_STORE_TOTAL_CHARS=1,048,576`; exceeding an output limit fails the script with a `RangeError`, and store limits are enforced per value and total.",
+      "consumer": "Script output collection, store snapshots and the stable prelude fingerprint.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:MAX_OUTPUT_CHARS,MAX_OUTPUT_ITEMS,MAX_STORE_VALUE_CHARS,MAX_STORE_TOTAL_CHARS",
+          "packages/codemode/test/sandbox.test.ts:limits and lifetime"
+        ],
+        "scenarios": [
+          "the guest prelude is the frozen sandbox prelude with output and store limits"
+        ]
+      },
+      "cppSeam": "`CodemodePrelude.hpp:302-318` enforces the same numeric output limits; store checks at the prelude store function. C++ exposes the constants only inside the prelude, not as public C++ constants.",
+      "cppEvidence": "The embedded v1.0.4 prelude has the same output/store numeric limits as v1.3.0. `CodemodePrelude.hpp` is a generated literal; the sandbox test only compares it to the old committed fixture, not to the v1.3.0 prelude. There are no C++ limit tests.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Pin the prelude to v1.3.0 and add limit tests that cross the boundary; do not expose duplicated C++ constants unless a caller needs them.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-unawaited-calls",
+      "capability": "Unawaited tool calls at script completion",
+      "operation": "When the script returns/throws/exits while a tool call is still pending, abort that call and report it as `cancelled`; do not let it keep running after the script result.",
+      "consumer": "Scripts that fire-and-forget, the Application nested-call record and the TUI status row.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/test/sandbox.test.ts:aborts unawaited calls when the script returns",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode"
+        ],
+        "scenarios": [
+          "an unawaited tool call is aborted when the script returns and its record is cancelled"
+        ]
+      },
+      "cppSeam": "`CodemodePrelude.hpp` wraps tool promises and tracks pending calls; `CodemodeSandbox.cpp` stops dispatching when the run is finished; `NestedToolCalls` marks an unfinished call `unfinished`, not `cancelled`.",
+      "cppEvidence": "The sandbox's prelude can abort and `CodemodeSandboxTest.cpp` has a related script case, but the C++ public result has no call records; the Application nested-call status for an interrupted call is `unfinished`. The captured `status: \"cancelled\"` and duration presence are not represented in the C++ result type.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Map an unfinished nested call to `cancelled` at the codemode result boundary and test the Application details; keep the prelude abort behavior.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-clock-timezone",
+      "capability": "Host clock and timezone in non-deterministic execution",
+      "operation": "A normal `execute()` reads the real wall clock and host timezone; only `start()`/deterministic mode freezes the clock to UTC and the virtual `startedAt`.",
+      "consumer": "Scripts that use `Date.now()`, `new Date()` or `performance.now()`, and deterministic replay.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/vm.ts:startVm",
+          "packages/codemode/test/deterministic.test.ts:execute() is not deterministic"
+        ],
+        "scenarios": [
+          "execute() is not deterministic while start() is",
+          "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox.cpp:host_get_timezone_offset` always returns 0; the prelude uses QuickJS `Date` for wall time. There is no virtual clock/seed mode.",
+      "cppEvidence": "A normal run in Pike is always UTC, regardless of the host timezone, and there is no distinction between normal and deterministic time. `Date.now()` is real, but the timezone is pinned. No C++ test covers timezone behavior.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Return the real host timezone offset in non-deterministic mode, or explicitly document UTC as a Pike policy and exclude it from parity; deterministic mode must override it with the virtual clock.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-memory-limit",
+      "capability": "VM memory limit",
+      "operation": "Accept `memoryLimitBytes`; allocations beyond it fail inside the script as `InternalError: out of memory`, and the Application uses a 256 MiB limit so a runaway script cannot take down the process.",
+      "consumer": "Application `executeCodemode`, direct sandbox callers and the Remote cap.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/types.ts:CodemodeSandboxBaseOptions.memoryLimitBytes",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:CODEMODE_MEMORY_LIMIT_BYTES"
+        ],
+        "scenarios": [
+          "a memory-limited VM reports out of memory as a script error"
+        ]
+      },
+      "cppSeam": "`CodemodeLimits` has only `timeout`; WasmEdge `WasmEdge_ConfigureContext` is created without a memory limit; no public option exists.",
+      "cppEvidence": "Pike cannot limit the guest heap. The captured v1.3.0 OOM path (and the Remote cap) is absent. The existing prelude output limit is not a substitute: a script can allocate without emitting output.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add `memoryLimitBytes` to `CodemodeLimits` and configure the WasmEdge memory limit before instantiation; use 256 MiB in the Application and verify the captured OOM shape.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-script-abort-reason",
+      "capability": "Caller cancellation reason and partial output",
+      "operation": "A caller abort during a tool wait rejects the tool, ends the script as `kind: \"aborted\"`, preserves output produced before the abort, and keeps the caller-provided abort reason. A pre-aborted execution reports that reason without starting the VM.",
+      "consumer": "Application signal handling, direct sandbox callers and the TUI status.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:Execution,CodemodeSandboxBase.start",
+          "packages/codemode/test/sandbox.test.ts:aborts via signal and cancels in-flight calls",
+          "packages/codemode/test/deterministic.test.ts:ends with an error the script cannot catch when the caller aborts"
+        ],
+        "scenarios": [
+          "a caller abort ends a waiting script, aborts its tool and keeps partial output",
+          "a pre-aborted execution never starts the guest and reports the caller reason",
+          "abort in a deterministic run is an uncatchable aborted error and finished becomes true"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox.cpp:648` reports `\"The script was cancelled before it ran.\"`; `:863` reports `\"The script was cancelled.\"` after a stop request. The stop token carries no reason, so the caller reason cannot cross.",
+      "cppEvidence": "`CodemodeSandboxTest.cpp:143` only checks the pre-cancelled `Aborted` kind and empty output. Pike drops the caller reason and uses different messages from v1.3.0 (`cancelled`/`early`). Partial output on a mid-run abort is not tested through the public result.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Pass an abort reason alongside the stop token (or a cancellation payload) and preserve partial output; add the captured mid-wait and pre-aborted cases.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-worker-admission",
+      "capability": "Codemode worker admission and capacity",
+      "operation": "Reserve capacity before each worker starts, allow at most two active workers in the Application, deny admission with an explicit error before starting a worker, load wasm before reserving, and release a reservation exactly once on construction failure or actual worker exit.",
+      "consumer": "Application `executeCodemode`; host concurrency policy; every `CodemodeSandbox.execute()`/`start()`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:MAX_CONCURRENT_CODEMODE_WORKERS,acquireWorker",
+          "packages/codemode/test/worker-lifetime.test.ts:does not start a worker when admission is denied"
+        ],
+        "scenarios": [
+          "admission denial rejects before a worker starts and keeps the start hook uncalled",
+          "a wasm loading failure does not reserve admission",
+          "a worker construction failure returns its reserved admission exactly once"
+        ]
+      },
+      "cppSeam": "No admission API or counter exists in `CodemodeSandbox`; `run` creates a `std::thread` unconditionally (`CodemodeSandbox.cpp:928`).",
+      "cppEvidence": "Pike has no worker cap, no acquire/release hook, and no pre-start denial. A burst of codemode calls creates an unbounded number of WasmEdge worker threads. The captured admission order (wasm load before reserve; denial before worker creation) cannot be represented.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add an `acquireWorker`-shaped admission callback (or an application-owned semaphore) around thread creation, with release on construction failure/exit. Do not use the timeout as a capacity mechanism.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-worker-lifetime",
+      "capability": "Result versus worker exit settlement",
+      "operation": "A run result/completion settles when the script and channel stop, which may be before the worker actually exits. `onWorkerStarted(exited)` must expose the actual exit promise; `close()` must settle an in-flight result before the worker exit releases admission; a throwing start hook must fail the execution and request termination.",
+      "consumer": "Application concurrency accounting, `CodemodeSandbox.close()`, and tests that distinguish result settlement from process/thread exit.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:finish,close",
+          "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
+          "packages/codemode/test/worker-lifetime.test.ts:settles %s without waiting for worker exit",
+          "packages/codemode/test/worker-lifetime.test.ts:reports the actual exit of execute() and start() workers"
+        ],
+        "scenarios": [
+          "close settles an in-flight run before the worker exit releases admission",
+          "a throwing lifetime hook requests termination and still releases the worker",
+          "execute and start each start one worker and release it only after actual exit",
+          "a real Node child reports the result before its worker exits and exits promptly for abort, timeout and close"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox.cpp:928` creates a thread and `:967-968` joins it before returning the result; `CodemodeRunResult` has no exit promise and there is no `close()` or `onWorkerStarted`.",
+      "cppEvidence": "Pike only exposes a result after `worker.join()`, so it cannot settle a result while a cancelled worker is still unwinding. There is no lifetime hook, no admission release at exit, and no close-before-exit path. This is a deliberate structural gap, not a missing test.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Separate result settlement from thread exit in the host API and add `onWorkerStarted`/`close`; the worker-lifetime scenario family must be rerun against that seam.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-worker-repeated-cancellation",
+      "capability": "Repeated cancellation and worker exit accounting",
+      "operation": "Repeated aborts create multiple workers whose results settle before their exits; each exit releases one admission; a close after repeated cancellation must not double-release and must leave no acquired reservation.",
+      "consumer": "Application concurrency accounting and `CodemodeSandbox.close()`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/test/worker-lifetime.test.ts:settles %s without waiting for worker exit"
+        ],
+        "scenarios": [
+          "repeated abort results settle while cancelled workers remain unreleased; exits release every admission"
+        ]
+      },
+      "cppSeam": "No admission or exit accounting in the C++ host; `run` joins each thread synchronously.",
+      "cppEvidence": "The captured `releasedAtResult`/`acquiredAtResult`/`exits` distinction has no C++ counterpart. Pike cannot observe a released-count lag because it does not return until the thread is joined.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement the lifetime seam first; then add the repeated-cancel test with an independent released-at-result probe.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-worker-construction-failure",
+      "capability": "Worker construction and wasm-load failure handling",
+      "operation": "A wasm module load failure surfaces as a sandbox error without reserving admission; a worker construction failure (for example an invalid worker URL) returns the reserved admission exactly once and still exposes an exit promise.",
+      "consumer": "Application worker creation and sandbox error reporting.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
+          "packages/codemode/test/worker-lifetime.test.ts:releases admission when worker construction fails",
+          "packages/codemode/test/worker-lifetime.test.ts:does not acquire admission when wasm loading fails"
+        ],
+        "scenarios": [
+          "a wasm loading failure does not reserve admission",
+          "a worker construction failure returns its reserved admission exactly once"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox::create` loads/validates the guest module and returns `Expected`; `run` constructs `std::thread` without a typed construction-failure path; no admission.",
+      "cppEvidence": "The C++ `create` path covers a missing/invalid guest (`CodemodeSandboxTest.cpp:257`), which is analogous to the wasm-load failure but has no reservation. A thread construction failure has no explicit error/release contract. The captured worker-construction case cannot be expressed.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the eager wasm validation; add a typed worker-start failure path and release semantics with the admission seam.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-worker-close",
+      "capability": "Sandbox close semantics",
+      "operation": "`close()` stops the active worker/VM, settles the in-flight execution as `kind: \"aborted\"` with `Sandbox closed`, rejects later executions with the same closed error, and releases admission only after the worker actually exits.",
+      "consumer": "Application `finally { await sandbox.close() }`, session teardown and reuse tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.close",
+          "packages/codemode/test/sandbox.test.ts:rejects execute after close",
+          "packages/codemode/test/worker-lifetime.test.ts:settles %s without waiting for worker exit"
+        ],
+        "scenarios": [
+          "the public tool table can be registered, listed and unregistered; close rejects later runs",
+          "close settles an in-flight run before the worker exit releases admission"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox` has no `close()`; the guest is held for the source lifetime in `GuestHolder` and each run joins its thread.",
+      "cppEvidence": "Pike has no explicit close state: a caller cannot abort/reject an in-flight run through a sandbox close, and a subsequent `run` always creates a new thread. The captured `Sandbox closed` contract is absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add `close()` with a terminal error and idempotent teardown to the host API, then use it in the Application `finally`; do not rely on object destruction for cancellation.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-execute-outcome",
+      "capability": "Execute result shape",
+      "operation": "Return one terminal outcome with `ok` plus `value`, `output`, `calls`, `storeWrites` and optional `during`, or `ok:false` with a typed error plus partial output/calls. A pre-aborted signal ends before the VM starts; a timeout/crash/transport failure uses the matching kind.",
+      "consumer": "Application `executeCodemode`, direct callers and every TUI result consumer.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/types.ts:CodemodeResult",
+          "packages/codemode/src/runtime/execution.ts:execute",
+          "packages/codemode/test/sandbox.test.ts:returns the script's return value after a JSON round trip"
+        ],
+        "scenarios": [
+          "a script returns a JSON value after top-level await and collects output in order",
+          "a script failure keeps prior output and reports the script error with its line",
+          "the public tool table can be registered, listed and unregistered; close rejects later runs"
+        ]
+      },
+      "cppSeam": "`CodemodeRunResult` in `CodemodeSandbox.hpp` has `output`, optional `value_json`, optional `error`; no `ok`, `calls`, `storeWrites` or `during`. `CodemodeSandbox.cpp:854-866` maps terminal states.",
+      "cppEvidence": "The C++ result carries the core output/value/error, but not the ordered call records, store writes, `during`, or a first-class success flag. The existing tests read `result.error`/`value_json`/`output`; they do not assert the full v1.3.0 shape.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Extend the public result struct with call/store/during fields as those seams land; keep `value_json` as storage but expose the captured JSON value semantics.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-sandbox-create-errors",
+      "capability": "Guest module load failure",
+      "operation": "A missing or invalid `quickjs.wasm` is an explicit sandbox error at construction/creation, not a deferred failure on the first script; a session that never calls codemode must not touch the guest.",
+      "consumer": "Application lazy loader, direct sandbox callers and packaged builds.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/host.ts:CodemodeSandbox",
+          "packages/coding-agent/src/extensions/codemode/execute.lazy.ts"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`CodemodeSandbox::create` parses/validates the module and returns `Expected`; `GuestHolder::ensure` loads on first execute. `CodemodeSandboxTest.cpp:257` covers a missing module. `CodemodeParityTest.cpp:153` checks the source tool table but does not cover lazy loading.",
+      "cppEvidence": "Implemented and tested at the seam. The Application still creates a fresh sandbox per tool call (`executeCodemode`) rather than reusing the source holder, so the captured source-level lazy reuse is not the same object lifetime. There is no direct test that `load_tools()` avoids opening the guest.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep the eager module validation; align the Application/source ownership so the lazy-load contract is tested at the consumer boundary, not only in the sandbox unit.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-start",
+      "capability": "Deterministic `start()` and result delivery",
+      "operation": "Expose `start(code, {startedAt, seed, tools, globals, timeoutMs, memoryLimitBytes, onStarted, onCall, onIdle, signal})`; start a deterministic VM without executing tool work on the host, and return a run handle whose `deliver(seq, now, id, result)` advances the VM in result order.",
+      "consumer": "Replay consumers, durable sessions, deterministic tests and the public codemode library surface.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start,CodemodeRun.deliver",
+          "packages/codemode/test/deterministic.test.ts:makes the same calls and output for the same start, seed, and results"
+        ],
+        "scenarios": [
+          "the same script, start time, seed and answers make the same calls and output",
+          "results are applied in seq order even when delivered in reverse order",
+          "a run-supplied jsName overrides the derived script name"
+        ]
+      },
+      "cppSeam": "No `start`/`deliver`/`CodemodeRun` in `src/coding_agent/extensions/codemode`; `CodemodeSandbox::run` resolves tool calls internally and returns only a terminal `AsyncResult`.",
+      "cppEvidence": "The entire deterministic host-delivery API is absent. A caller cannot observe call/ idle events, choose a start time or seed, or answer calls later. This is the largest library-surface gap in A09.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add the deterministic execution state machine as a separate library seam; do not try to emulate it by blocking `run`. Port the captured scenario family before application use.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-clock-seed",
+      "capability": "Deterministic virtual clock and seeded randomness",
+      "operation": "In a deterministic run, `Date.now()` starts at `startedAt` and advances only with delivered `now`; `performance.now()` advances relative to start; `Math.random()` is seed-deterministic; UTC is fixed; `WeakRef`/`FinalizationRegistry` are unavailable.",
+      "consumer": "Replay, tests and durable execution.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/vm.ts:startVm",
+          "packages/codemode/test/deterministic.test.ts:runs in UTC whatever the host's timezone, and without WeakRef or FinalizationRegistry"
+        ],
+        "scenarios": [
+          "deterministic runs use a virtual UTC clock and seeded randomness without WeakRef",
+          "a changed seed is a replay mismatch and changes randomness without changing the start time"
+        ]
+      },
+      "cppSeam": "`CodemodeSandbox.cpp:host_get_timezone_offset` always 0; no virtual clock/seed/intrinsics controls exist. The prelude only sees the guest Date/Math.",
+      "cppEvidence": "Pike can pin UTC but cannot freeze or advance time, seed randomness, or remove `WeakRef`. The captured deterministic clock/seed values and replay-mismatch behavior are absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement the deterministic VM controls as part of the start seam; the UTC host offset is not sufficient and must not be mistaken for replay support.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-seq",
+      "capability": "Ordered result delivery and idle events",
+      "operation": "Results carry a positive `seq` used once, are applied in seq order even if delivered out of order, and emit `onIdle(seq, issued)` after each applied result. A wrong call id, reused seq or non-finite clock is rejected without settling the run; a non-serializable answer leaves the call waiting.",
+      "consumer": "Replay transport, durable result queues and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:Execution.deliver",
+          "packages/codemode/test/deterministic.test.ts:applies results in seq order, whatever order they are delivered in"
+        ],
+        "scenarios": [
+          "results are applied in seq order even when delivered in reverse order",
+          "deliver rejects a wrong call, a reused result number and a non-finite clock without settling the run",
+          "a nonserializable answer leaves the call waiting and a later valid answer settles it"
+        ]
+      },
+      "cppSeam": "No `deliver`, `seq`, `onIdle`, `during` or pending-call registry in C++; `run` answers calls itself.",
+      "cppEvidence": "The complete ordered-delivery contract is absent. Pike cannot buffer an out-of-order result, reject a bad seq, or report idle progress.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Build this on the start seam with explicit `PendingCall`/`appliedSeq` state; test the captured rejection messages and out-of-order case.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-during",
+      "capability": "`during` completion metadata",
+      "operation": "On a script-initiated completion, report `during: {seq, issued}`: the result the VM was processing when it finished (0 for the first run) and the total calls issued. A run that never processed a result reports `{0,0}`; execute does not expose `during`.",
+      "consumer": "Replay/debug consumers and the deterministic result contract.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/types.ts:CodemodeDuring",
+          "packages/codemode/test/deterministic.test.ts:reports the result the VM was processing when the script ended"
+        ],
+        "scenarios": [
+          "during reports the result the VM was processing when the script ended",
+          "execute() is not deterministic while start() is"
+        ]
+      },
+      "cppSeam": "`CodemodeRunResult` has no `during`; no seq tracking in the host.",
+      "cppEvidence": "The field does not exist in C++. Captured `{0,0}`, `{2,2}`, `{3,3}` and `executeHasDuring:false` cannot be produced.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Track applied seq and issued calls in the deterministic run; expose `during` only for start runs.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-fingerprint",
+      "capability": "VM fingerprint and replay mismatch detection",
+      "operation": "Emit an exact fingerprint before the first call (`quickjs-wasi <version>, quickjs <version>, prelude <hash>, deterministic 1, stack <n>, heap <n|none>, budget <none|n>`), and let a replay refuse a different fingerprint. A different heap must change it; idles report issued calls.",
+      "consumer": "Replay admission, durable execution and deterministic tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/vm.ts:startVm,PRELUDE_HASH",
+          "packages/codemode/src/runtime/execution.ts:onStarted",
+          "packages/codemode/test/deterministic.test.ts:reports the fingerprint before any call and the calls issued after each result"
+        ],
+        "scenarios": [
+          "the VM fingerprint arrives before calls, idles report issued calls, and a different heap changes the fingerprint"
+        ]
+      },
+      "cppSeam": "No fingerprint or `onStarted` callback in C++; `CodemodeSandbox::create` validates the wasm but exposes no version/stack/heap metadata.",
+      "cppEvidence": "C++ cannot identify the VM, so a replay cannot reject a different engine/options. The captured fingerprint string and callback ordering are absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Expose a host-computed fingerprint from the start seam (version/prelude/stack/heap/budget), compare it in replay, and test the different-heap branch.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-validation",
+      "capability": "Deterministic start validation and replay seed mismatch",
+      "operation": "Reject negative/non-finite `startedAt`, non-uint32 seeds and duplicate script/tool names at `start`; a changed seed must produce different randomness while keeping the start time; a caller abort yields an uncatchable aborted error and `finished` becomes true.",
+      "consumer": "Replay callers and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start"
+        ],
+        "scenarios": [
+          "start rejects invalid start times, seeds and duplicate script names",
+          "a changed seed is a replay mismatch and changes randomness without changing the start time",
+          "abort in a deterministic run is an uncatchable aborted error and finished becomes true"
+        ]
+      },
+      "cppSeam": "No start API, seed or startedAt in C++; `run` has no `finished`.",
+      "cppEvidence": "The validation and abort semantics cannot be exercised. The captured exact messages are library contract, not merely tests.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement validation in the start seam and reuse the captured messages verbatim; keep `execute` seedless.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-properties",
+      "capability": "Deterministic rejection properties",
+      "operation": "When a deterministic result is `ok:false`, merge its serialized properties onto the script `Error` (excluding `name`, `message`, `stack`); globals count as issued calls and numbered with tools.",
+      "consumer": "Replay callers that preserve structured tool failures and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/prelude-source.ts:settle",
+          "packages/codemode/src/runtime/protocol.ts:HostToWorkerMessage.properties",
+          "packages/codemode/test/deterministic.test.ts:rejects with an Error carrying the answer's properties"
+        ],
+        "scenarios": [
+          "globals count as issued calls and rejection properties reach the script Error"
+        ]
+      },
+      "cppSeam": "C++ prelude `settle(id, ok, payload)` has no `propertiesJson`; `CodemodeToolSource.cpp:handler` returns only error message text; `CodemodeSandbox.cpp:848` passes three arguments.",
+      "cppEvidence": "Both the transport field and the prelude merge are absent, so a structured tool failure cannot expose properties to a script. The captured deterministic case fails.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Carry serialized error properties through the host result/transport and merge them in the prelude; keep the excluded-key rule.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-deterministic-vs-execute",
+      "capability": "Deterministic versus normal execution boundary",
+      "operation": "`execute()` is non-deterministic (real clock/randomness); only `start()` is reproducible. The public API must keep those modes distinct so a host cannot accidentally replay a normal run.",
+      "consumer": "Callers choosing replay versus live execution.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:execute,start",
+          "packages/codemode/test/deterministic.test.ts:execute() is not deterministic"
+        ],
+        "scenarios": [
+          "execute() is not deterministic while start() is"
+        ]
+      },
+      "cppSeam": "Only `CodemodeSandbox::run` exists; there is no mode flag or start API.",
+      "cppEvidence": "Pike has one execution mode. There is no deterministic entry point to keep separate, so this row is missing rather than a behavioral mismatch.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Do not add deterministic behavior to `run`; add a separate start API.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-inline-interrupt-budget",
+      "capability": "Inline VM interrupt budget",
+      "operation": "`InlineCodemodeSandbox` runs the VM on the calling thread; a script that computes or awaits without yielding consumes an interrupt budget (default 100,000 polls) and ends as a timeout with `Execution exceeded its interrupt budget of <n>`. The budget is shared across tool waits, so it is not a wall-clock deadline.",
+      "consumer": "Cloudflare/portable callers, tests, and any host without worker threads.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox,DEFAULT_INTERRUPT_BUDGET",
+          "packages/codemode/test/portable.test.ts:fails a script that computes past its interrupt budget as a timeout"
+        ],
+        "scenarios": [
+          "an inline script that computes without awaiting is stopped by its interrupt budget, not the deadline",
+          "the interrupt budget counts across awaits on tools"
+        ]
+      },
+      "cppSeam": "No Inline class or interrupt-budget option in C++; the only VM is the WasmEdge worker path with a real-time deadline.",
+      "cppEvidence": "Pike cannot interleave inline execution or cap compute by poll count. A synchronous runaway on the calling thread is not possible because every run gets its own thread; the captured budget semantics are absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add an inline launcher only with a real interrupt-budget implementation (not a timeout alias). Keep it out of the Application default path unless a portable target requires it.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-inline-deadline-abort",
+      "capability": "Inline deadline and cancellation while a tool waits",
+      "operation": "An inline deadline while a tool waits reports `Execution timed out after <n> ms` (not the interrupt-budget message); a caller abort aborts the tool and keeps partial output; a pre-aborted execution creates no VM and reports the caller reason.",
+      "consumer": "Portable hosts and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/inline.ts:inlineLauncher"
+        ],
+        "scenarios": [
+          "caller abort during an inline tool wait aborts the tool and keeps partial output",
+          "an inline deadline while a tool waits reports the deadline, not the interrupt budget",
+          "an inline execution with an already-aborted signal never creates a VM"
+        ]
+      },
+      "cppSeam": "No Inline class; the worker sandbox has a deadline/stop path with different abort messages and no pre-VM creation guarantee.",
+      "cppEvidence": "The deadline-vs-budget distinction cannot be represented. Pike’s worker path does abort a tool wait and keep prior output, but it starts a thread and reports its own cancellation text.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement deadline and abort semantics together in the inline seam; test the exact message selection and no-VM pre-abort case.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-inline-success",
+      "capability": "Inline successful execution",
+      "operation": "A successful inline execution returns its value, output and empty calls/store writes, and `close()` is available like other sandboxes.",
+      "consumer": "Portable hosts and direct callers.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.execute",
+          "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox",
+          "packages/codemode/test/portable.test.ts:InlineCodemodeSandbox"
+        ],
+        "scenarios": [
+          "a successful inline execution returns its value and text output"
+        ]
+      },
+      "cppSeam": "No Inline class; the worker sandbox covers the success shape but not the inline host.",
+      "cppEvidence": "The success result is the same core shape as the worker sandbox; only the execution destination is missing. It should be covered by the generic result row once the inline class exists.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Reuse the core result mapping when adding Inline; add one success scenario to prove the destination, not a duplicate result-shape test.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-inline-close",
+      "capability": "Inline close and execution boundary",
+      "operation": "Closing an inline sandbox prevents later executions and reports the closed error; execution uses the injected wasm module and no Node worker thread.",
+      "consumer": "Portable/Cloudflare hosts and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.close",
+          "packages/codemode/src/runtime/inline.ts:InlineCodemodeSandbox",
+          "packages/codemode/src/portable.ts"
+        ],
+        "scenarios": [
+          "the public tool table can be registered, listed and unregistered; close rejects later runs"
+        ]
+      },
+      "cppSeam": "No Inline class or close state; the worker sandbox has no close either.",
+      "cppEvidence": "Both close semantics and the no-Node portable destination are absent. See the sandbox close row for the shared close contract.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Share one close-state implementation between worker, inline and remote sandboxes; do not duplicate state machines.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-remote-exchange",
+      "capability": "Generic Remote exchange and caller-side tools",
+      "operation": "`RemoteCodemodeSandbox` sends a JSON-safe `{code, tools, globals, store, ...}` request to a `CodemodeRemote.execute(request, exchange)`; the remote runs `serveCodemodeRemote`, sends output/call/started/idle/done messages, and the caller answers calls by running its own tools. One execution is one exchange.",
+      "consumer": "Durable Objects, remote isolates, worker boundaries and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox,serveCodemodeRemote",
+          "packages/codemode/src/runtime/protocol.ts",
+          "packages/codemode/test/portable.test.ts:RemoteCodemodeSandbox"
+        ],
+        "scenarios": [
+          "a generic remote runs the script and calls the caller's tools across the exchange",
+          "remote output is buffered instead of one exchange per output item"
+        ]
+      },
+      "cppSeam": "No Remote class, protocol message types, exchange callback or serve function in C++.",
+      "cppEvidence": "The entire Remote contract is absent. There is no way to run a script in another isolate or to route its tool calls back to the caller. This is a structural missing library target, not an application formatting gap.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Port the request/message/reply protocol and `serveCodemodeRemote` as a library interface; keep transport serialization JSON-safe and test the captured exchange trace before adding a Durable Object wrapper.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-remote-output-batching",
+      "capability": "Remote output batching",
+      "operation": "Buffer remote output messages and send them in bounded batches rather than one exchange per output item; all items must arrive in order, and the exchange count must stay below the captured bound (5,000 console lines over six exchanges).",
+      "consumer": "Remote transport efficiency and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox",
+          "packages/codemode/test/portable.test.ts:batches output instead of making one exchange per line"
+        ],
+        "scenarios": [
+          "remote output is buffered instead of one exchange per output item"
+        ]
+      },
+      "cppSeam": "No Remote exchange exists, so no batching policy exists.",
+      "cppEvidence": "A naive future implementation could send one message per line; the captured trace gives the required batching contract. Do not build the transport without it.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Port batching with the exchange implementation and assert the exchange-size sequence, not only the final output.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-remote-caps",
+      "capability": "Remote interrupt-budget and memory caps",
+      "operation": "The remote enforces its own `maxInterruptBudget` and `maxMemoryLimitBytes` over the caller request: a caller may ask for less but never more; exceeding the interrupt budget reports the timeout message, and exceeding memory reports `InternalError: out of memory`.",
+      "consumer": "Durable Object/remote host policy and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/remote.ts:serveCodemodeRemote",
+          "packages/codemode/test/portable.test.ts:caps the interrupt budget and memory at the remote's limits"
+        ],
+        "scenarios": [
+          "the remote caps the requested interrupt budget and memory limit"
+        ]
+      },
+      "cppSeam": "No Remote or memory limit; the worker timeout exists but no cap negotiation.",
+      "cppEvidence": "The cap negotiation itself depends on missing Inline/Remote and memory-limit seams. Pike cannot report either captured remote cap failure.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement caps in `serveCodemodeRemote` after the memory and interrupt-budget primitives exist; do not implement a remote-only cap that the local sandbox cannot honor.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-remote-abort-stop",
+      "capability": "Remote abort and `stop` reply",
+      "operation": "A caller abort while a tool hangs answers the remote exchange with a `stop` reply and settles locally without waiting for remote compute; the nested call is `cancelled`; later messages are ignored.",
+      "consumer": "Durable/remote cancellation and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox.abort",
+          "packages/codemode/src/runtime/remote.ts:CodemodeRemoteReply",
+          "packages/codemode/test/portable.test.ts:tells the remote to stop when the caller aborts"
+        ],
+        "scenarios": [
+          "caller abort answers the remote's exchange with stop and settles without waiting for remote compute"
+        ]
+      },
+      "cppSeam": "No Remote protocol or stop reply; worker cancellation stops a local thread and joins it.",
+      "cppEvidence": "The captured non-blocking `stop` behavior is the opposite of Pike’s local join-before-result model. Remote abort cannot be implemented until result/worker settlement is separated.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Build abort on the exchange/stop protocol and result-vs-exit separation; test that local settlement does not await remote compute.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-remote-failures",
+      "capability": "Remote transport failure taxonomy",
+      "operation": "A rejected remote call reports `Remote sandbox failed: <reason>`; a remote that returns before the script settles reports `Remote sandbox returned before the script settled`; an unreachable remote reports `Failed to reach the remote sandbox: <reason>`. All are `kind: \"sandbox\"`.",
+      "consumer": "Remote callers, durable sessions and the TUI.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox",
+          "packages/codemode/test/portable.test.ts:reports a failing or vanishing remote as a sandbox error"
+        ],
+        "scenarios": [
+          "a failing, silent or unreachable remote is a sandbox error with the transport reason"
+        ]
+      },
+      "cppSeam": "No Remote class or transport error mapping.",
+      "cppEvidence": "The exact three failure branches and messages are absent. Local sandbox errors have a similar kind but no transport reason contract.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Port the three branches with the captured messages; keep transport exceptions out of the VM/script error kind.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-remote-deterministic",
+      "capability": "Deterministic replay over a reordering transport",
+      "operation": "A deterministic `start()` over a Remote transport must still apply replies in seq order when the transport delivers them out of order, and the remote must expose started/idle/done messages.",
+      "consumer": "Durable replay and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/remote.ts:RemoteCodemodeSandbox.start",
+          "packages/codemode/test/deterministic.test.ts:applies results in seq order when the transport reorders replies sent in order"
+        ],
+        "scenarios": [
+          "a deterministic start over a transport that reorders replies still applies results in seq order"
+        ]
+      },
+      "cppSeam": "No Remote and no start/deliver; the transport protocol lacks started/idle messages.",
+      "cppEvidence": "This is the intersection of two missing seams. The captured trace `[started, call, call, idle, idle, done]` is the target once both land.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement start/deliver before Remote deterministic support; then assert the exact message trace and reordered reply handling.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-remote-protocol",
+      "capability": "Remote protocol data types",
+      "operation": "Define JSON-safe `CodemodeRemoteRequest`, `CodemodeRemoteMessage` (call/output/done/crash/started/idle), `CodemodeRemoteReply` (result/stop) and `CodemodeRemoteExchange`; the host must not send class instances or transport-specific values.",
+      "consumer": "Remote transports, Cloudflare RPC, durable object boundaries and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/runtime/protocol.ts",
+          "packages/codemode/src/runtime/remote.ts:CodemodeRemoteExchange"
+        ],
+        "scenarios": [
+          "a generic remote runs the script and calls the caller's tools across the exchange"
+        ]
+      },
+      "cppSeam": "No protocol types or JSON serialization seam in C++.",
+      "cppEvidence": "The C++ worker protocol is an in-process `SandboxLink` with C++ structs and a condition variable. It cannot cross a process/isolate boundary and has no versioned wire shape.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Port the plain-data protocol separately from the worker implementation; do not reuse `SandboxLink` across a transport boundary.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-portable-entry",
+      "capability": "Portable no-Node library entry",
+      "operation": "`@earendil-works/pi-codemode/portable` exports the source, declarations, prelude constants, Inline and Remote sandboxes and protocol types without importing `node:*`, so it runs in Cloudflare Workers, Durable Objects and browsers.",
+      "consumer": "Cloudflare/browser hosts and the library distribution.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/portable.ts",
+          "packages/codemode/package.json:exports"
+        ],
+        "scenarios": [
+          "the public options prefix and grammar constants are fixed"
+        ]
+      },
+      "cppSeam": "Pike’s codemode code lives inside `src/coding_agent/extensions/codemode` and depends on WasmEdge, Boost.Asio, `std::thread` and session types; there is no separate `cch_codemode` library or portable build target.",
+      "cppEvidence": "There is no package boundary, no portable target and no Node-free subset. This is an architecture gap that prevents reuse by a remote/durable host without the whole coding-agent runtime.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Extract the source/declaration/prelude and execution interfaces into a `cch_codemode` library target before adding Inline/Remote. Keep the Application bridge in coding_agent.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-cloudflare-durable-object",
+      "capability": "Cloudflare Durable Object remote wrapper",
+      "operation": "`CodemodeSandboxDurableObject` extends `DurableObject`, loads the Wrangler-compiled wasm module, caps interrupt budget (default 100,000) and memory (32 MiB), and calls `serveCodemodeRemote` for every RPC execution. It keeps no state between executions.",
+      "consumer": "Cloudflare Workers/Durable Objects deployment and codemode remote integration.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/codemode/src/cloudflare.ts:CodemodeSandboxDurableObject,createInlineCodemodeSandbox",
+          "packages/coding-agent/src/extensions/codemode/execute.ts"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "No Cloudflare/Durable Object target in Pike; the runtime is a native CLI with WasmEdge.",
+      "cppEvidence": "Excluded by ADR 0075: Cloudflare-specific deployment is not part of the Linux native CLI contract. Generic Remote execution remains supported and is captured separately.",
+      "status": {
+        "membership": "excluded",
+        "implementation": "not-applicable",
+        "verification": "not-applicable"
+      },
+      "recommendation": "Do not implement the Cloudflare wrapper. Keep it as excluded provenance; implement only the generic Linux Remote seam captured by this audit.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-extension-registration",
+      "capability": "Application extension registration",
+      "operation": "Register one model-facing `codemode` tool: name/label `codemode`, exposure `model-only`, `defaultActive: false`, the raw-JavaScript input description and options instruction, the exact grammar variant, prompt snippet and batch-call guideline. Registration must not load the guest.",
+      "consumer": "Session tool assembly, activation/selection and system prompt.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension",
+          "packages/coding-agent/test/suite/agent-session-codemode.test.ts:createCodemodeExtension"
+        ],
+        "scenarios": [
+          "the extension registers an inactive model-only codemode tool with the source grammar",
+          "the callable tool set excludes codemode itself"
+        ]
+      },
+      "cppSeam": "`CodemodeToolSource.cpp:167` builds `CodemodeTool` with `default_active=false`, prompt snippet/guidelines, exclusive concurrency and lazy `GuestHolder`; `SessionFactory.cpp:1752` adds the source.",
+      "cppEvidence": "`CodemodeParityTest.cpp:120` compares name/label/exposure/store type/inline budget/options prefix/description/parameters/grammar/snippet against the pi-v1.0.4 bundle; `:153` checks one contributed tool. The registration shape is implemented; the comparison bundle is stale v1.0.4 and `CodemodeOutputPresentationTest.cpp` shows the lazy load only indirectly.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep registration; refresh the parity bundle to v1.3.0 before using it as proof of description/snippet parity. Add a direct assertion that load_tools never opens the guest.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-settings",
+      "capability": "Codemode settings resolution",
+      "operation": "Resolve merged `codemode.mode` (`on` default) and `codemode.inlineBudget` with per-field project/global merge, and feed both to the loadout/catalog.",
+      "consumer": "Application settings and codemode loadout.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/core/settings-schema.ts:CodemodeSettingsSchema",
+          "packages/coding-agent/src/extensions/codemode/index.ts:readMode,readInlineBudget"
+        ],
+        "scenarios": [
+          "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+          "namespaces group sections and the inline budget omits tools with an explicit marker"
+        ]
+      },
+      "cppSeam": "`SettingsManager.cpp:1398-1408` resolves both values; `:868-877` merges the nested object. No consumer passes them to codemode.",
+      "cppEvidence": "`SettingsManagerTest.cpp:888` verifies default/global/project/unknown values. The values are parsed correctly but unused, so settings tests give a false sense of integration coverage.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Feed both settings into the loadout/catalog and add an integration assertion that a project `codemode.mode=only` changes the description.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-mcp-refresh",
+      "capability": "Late tool registration and description refresh",
+      "operation": "When an MCP server registers tools after session assembly, refresh the codemode description from the live callable set; tools hidden by exposure must not appear, and the codemode tool itself must not be nested.",
+      "consumer": "Application MCP surface, codemode catalog and MCP exposure management.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription",
+          "packages/coding-agent/src/extensions/mcp/index.ts:registerTools"
+        ],
+        "scenarios": [
+          "the empty codemode catalog still declares globals, discovery and the options grammar",
+          "namespaces group sections and the inline budget omits tools with an explicit marker"
+        ]
+      },
+      "cppSeam": "`McpProductionAdapters.cpp:541-550` rebuilds the old bullet description from every non-hidden definition and updates the agent tool description.",
+      "cppEvidence": "The refresh hook exists but the description renderer is stale and has no namespace/budget/deferred metadata. It calls `codemode_description` with all definitions, so a large MCP catalog is not budget-limited. No test covers a late registration changing the codemode description.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the live refresh trigger; swap in the v1.3.0 catalog and thread namespace/exposure metadata from `AgentMcpToolSurface`. Test a late tool registration and a hidden tool.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-result",
+      "capability": "Application result formatting and details",
+      "operation": "Format the tool result as `Script completed|failed`, wall time, `Output:`, the formatted output (adjacent text joined, console block, images with temp-path labels), a returned value, the error stack plus call summary on failure, and `details.calls`/`fullOutputPath` for the renderer.",
+      "consumer": "Model-facing result, TUI renderer, session transcript and output spill.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:executeCodemode,formatOutput,formatError,truncateOutput,saveImages",
+          "packages/coding-agent/src/extensions/codemode/renderer.ts:codemodeRenderers"
+        ],
+        "scenarios": [
+          "a script returns a JSON value after top-level await and collects output in order",
+          "exit() succeeds with prior output and store writes and stops later output",
+          "a script failure keeps prior output and reports the script error with its line"
+        ]
+      },
+      "cppSeam": "`CodemodeToolSource.cpp:to_extension_result` emits header, content items, value/error text; no details, call summary, output joining/truncation, image temp files or console block. `CodemodeOutputPresentationTest.cpp` verifies only the fallback renderer and image sidecar.",
+      "cppEvidence": "The C++ presentation is the old fallback shape: no nested-call rows, no elapsed timer, no `fullOutputPath`, no `[Image saved to ...]` labels. `ToolResultMessage.nested_calls` exists but the codemode result does not put calls in `details`, and the renderer has no codemode-specific rows. This is a consumer gap even when the sandbox output is correct.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Port the Application formatter and renderer details together; keep the fallback for unregistered names but add the codemode details shape. Test the captured header/error/call-summary and image label.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-store-entry",
+      "capability": "Codemode session store entry",
+      "operation": "Read the branch’s `codemode-store` entries into the next script’s store snapshot; after a successful script, append one entry with `{set,delete}` only when there are writes. The entry is durable/session state, not part of the library sandbox.",
+      "consumer": "Application session manager, branch replay/fork and scripts using `store()`/`load()`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:readCodemodeStore,CODEMODE_STORE_ENTRY_TYPE",
+          "packages/coding-agent/src/utils/output-files.ts:writeOutputFile"
+        ],
+        "scenarios": [
+          "store and load use a JSON snapshot and only successful executions report writes",
+          "exit() succeeds with prior output and store writes and stops later output"
+        ]
+      },
+      "cppSeam": "`kCodemodeStoreEntryType` exists only as a constant in `CodemodeTool.hpp:24`; no read/append path and no store snapshot in `CodemodeSandbox`.",
+      "cppEvidence": "The session entry is entirely missing. Even if the prelude store were wired, a later codemode call would start empty and writes would be dropped. Branch/fork merge behavior is also absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement after the library store snapshot/write result; test cross-call persistence, a failed execution that appends nothing, and branch replay.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-nested-calls",
+      "capability": "Application nested call details and cancellation",
+      "operation": "Record each script tool call as a `CodemodeNestedCall` with id/name/args preview/status/duration/error; publish updates while the script runs; mark still-running calls `cancelled` when the script ends; show them in the TUI and include a call summary in the failure text.",
+      "consumer": "Application execute wrapper, TUI renderer and session transcript.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:CodemodeNestedCall,executeCodemode",
+          "packages/coding-agent/src/extensions/codemode/renderer.ts:formatCall"
+        ],
+        "scenarios": [
+          "an unawaited tool call is aborted when the script returns and its record is cancelled",
+          "unknown tools and thrown tool errors are catchable, with error call status"
+        ]
+      },
+      "cppSeam": "`Agent::NestedToolCalls` records id/name/status/duration/arguments for every nested call and `nested_calls_to_json` serializes it; `CodemodeToolSource.cpp` does not map it into `CodemodeToolDetails`; no renderer uses it.",
+      "cppEvidence": "`CodemodeRoutingTest.cpp:181` checks the record after a full run, but the shape is `arguments`/`unfinished` rather than the Application preview/`cancelled`, and no UI or failure summary consumes it. Live `publish()`-style progress is absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Map the generic nested-call record into codemode details and use it in the renderer/failure summary; align status terms and truncate the args preview. Keep the generic record as the source of truth.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-image-output",
+      "capability": "Application image saving and model presentation",
+      "operation": "After a successful script, add a `[Image saved to <path> (<type>, <size>)]` text item before each image, de-duplicate repeated images, and surface images as inline sidecars; a save failure becomes a label rather than losing the result.",
+      "consumer": "Model result, TUI sidecars, output files and image-heavy scripts.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:saveImages,IMAGE_EXTENSIONS",
+          "packages/coding-agent/src/extensions/codemode/renderer.ts:renderResult"
+        ],
+        "scenarios": [
+          "text values are stringified and image accepts data URLs and image blocks"
+        ]
+      },
+      "cppSeam": "`CodemodeToolSource.cpp:to_extension_result` emits `ai::image_content` directly; no output file or label. `CodemodeOutputPresentationTest.cpp` checks the image sidecar bytes and MIME but not a saved path.",
+      "cppEvidence": "The model receives image blocks but no file path and no save-failure handling. This matches the old fallback behavior, not the v1.3.0 Application contract.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Add the Application save/label step after the output formatter; keep the sandbox’s image bytes unchanged. Test a duplicate image and a write failure.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-tool-guidelines",
+      "capability": "Tool prompt guidelines in declarations",
+      "operation": "Append each callable tool’s trimmed prompt guidelines as `- ...` bullets to its declaration description; empty/whitespace guidelines are ignored; the system prompt only contains guidelines for declared tools.",
+      "consumer": "Codemode catalog, `ALL_TOOLS` samples, discovery descriptions and direct-tool script descriptions.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:toCodemodeDeclaration",
+          "packages/coding-agent/src/extensions/codemode/tool.ts:renderToolSection"
+        ],
+        "scenarios": [
+          "a tool declaration defaults its output schema to string and appends prompt guidelines",
+          "a listed tool section carries its declaration, output type and guidelines"
+        ]
+      },
+      "cppSeam": "`CodemodeToolSource.cpp:to_descriptors` passes `render_tool_sample(tool)` with no guidelines; `CodemodeDiscovery` has no guidelines map. `CodemodeTool.cpp:codemode_description` uses `tool.description` only.",
+      "cppEvidence": "Guidelines are absent from every codemode description/sample. The C++ Tool definition may carry guidelines elsewhere, but the codemode declaration does not append them, so the captured `- Search before reading.` section cannot appear.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Thread the guideline map into the declaration renderer used by the tool source/discovery/catalog; test trimmed bullet insertion and an empty guideline.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-deferred",
+      "capability": "Deferred tools in the codemode catalog",
+      "operation": "Tools with `deferred` exposure remain callable but are never listed; changing only deferred tools must leave the description byte-identical so late registration stays stable.",
+      "consumer": "Codemode catalog/loadout and MCP late-registration behavior.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,selectCatalog",
+          "packages/coding-agent/src/core/extensions/types.ts:ToolExposure"
+        ],
+        "scenarios": [
+          "deferred tools are never listed and do not change the description"
+        ]
+      },
+      "cppSeam": "No deferred concept in `CodemodeToolSource.cpp`/`CodemodeDiscovery`; the description refresh includes every non-hidden definition.",
+      "cppEvidence": "Pike cannot defer a callable tool. The captured stability guarantee (the description does not change when only deferred tools are registered) is absent, so a late MCP registration will always grow the catalog.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add deferred metadata to the codemode loadout and filter it before rendering; test the byte-identical description with and without a deferred tool.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-inline-budget",
+      "capability": "Application inlineBudget setting consumption",
+      "operation": "Pass `SettingsManager.codemode.inlineBudget` to the catalog; when unset use `DEFAULT_CODEMODE_INLINE_BUDGET=3000`, not a hard-coded unlimited list.",
+      "consumer": "Codemode catalog, system prompt size and MCP late registration.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:DEFAULT_CODEMODE_INLINE_BUDGET,CodemodeDescriptionOptions.inlineBudget",
+          "packages/coding-agent/src/extensions/codemode/index.ts:readInlineBudget"
+        ],
+        "scenarios": [
+          "namespaces group sections and the inline budget omits tools with an explicit marker"
+        ]
+      },
+      "cppSeam": "`SettingsManager.cpp:1404` and `CodemodeTool.hpp:kCodemodeDefaultInlineBudget` exist; `CodemodeTool.cpp:codemode_description` has no budget parameter.",
+      "cppEvidence": "Both the setting and the default constant are dead in the renderer. The C++ catalog is unbounded, so a large MCP/tool set can produce a huge description. `CodemodeParityTest.cpp:131` only checks the constant.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Consume the setting in the catalog renderer and test the default and a tiny budget; do not leave the constant as the only artifact.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-namespace",
+      "capability": "Tool namespaces in the catalog and discovery",
+      "operation": "Group catalog sections by namespace (tools without a namespace first, then namespaces by name), include the namespace description, expose namespace listings through `describeNamespace`, and keep `searchTools` namespace filtering.",
+      "consumer": "Codemode catalog, MCP server grouping and scripts discovering MCP tools.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:ToolNamespace,createCodemodeDescription",
+          "packages/coding-agent/src/extensions/codemode/execute.ts:createDiscoveryGlobals"
+        ],
+        "scenarios": [
+          "namespaces group sections and the inline budget omits tools with an explicit marker"
+        ]
+      },
+      "cppSeam": "`McpProductionAdapters` stores a `namespace_name`, but `CodemodeTool.cpp` and `CodemodeDiscovery::describeNamespace` do not consume it; `describeNamespace` always returns null.",
+      "cppEvidence": "Pike has the raw MCP server name in the production adapter but no library namespace type or catalog grouping. The captured `## docs` heading and namespace discovery are absent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Thread namespace metadata from the MCP surface into the library catalog/discovery; implement `describeNamespace` rather than returning null. Test a namespaced and an unnamespaced tool together.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-direct-exposure",
+      "capability": "Direct versus codemode exposure",
+      "operation": "The loadout distinguishes `direct` tools (model sees the tool, script can still call it) from `codemode`/non-direct tools (listed in the codemode catalog); hidden tools are neither. The choice changes the catalog and per-tool descriptions, not script callability.",
+      "consumer": "MCP exposure management, system prompt budget and scripts.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/tool.ts:isDirect,prepareCodemodeLoadout",
+          "packages/coding-agent/src/core/extensions/types.ts:ToolExposure"
+        ],
+        "scenarios": [
+          "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+          "the only loadout lists every callable tool and hides direct declarations",
+          "the callable tool set excludes codemode itself"
+        ]
+      },
+      "cppSeam": "`McpProductionAdapters.cpp:541` filters only `Hidden`; `CodemodeToolSource.cpp` gets all registry tools. No direct/on/only distinction exists in the description path.",
+      "cppEvidence": "Pike exposes direct tools to the model and lists the same tools in the codemode catalog; there is no `on`/`only` split. The setting row and the loadout row describe the same missing consumer from different angles.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement exposure metadata in the loadout/catalog before changing MCP exposure behavior; keep hidden tools out of both paths.",
+      "blockers": []
+    },
+    {
+      "id": "codemode-application-error-summary",
+      "capability": "Application failure text and call summary",
+      "operation": "On failure, format the stack for script errors, prefix timeout/abort/sandbox messages, then append `Tool calls made before the failure (they are not undone): name (status), ...` or `No tool calls were made.`",
+      "consumer": "Model-facing tool result and TUI error rows.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/codemode/execute.ts:formatError,formatCallSummary",
+          "packages/coding-agent/test/suite/agent-session-codemode.test.ts:reports script failures as results that keep partial output and the calls that ran"
+        ],
+        "scenarios": [
+          "a script failure keeps prior output and reports the script error with its line",
+          "unknown tools and thrown tool errors are catchable, with error call status"
+        ]
+      },
+      "cppSeam": "`CodemodeToolSource.cpp:to_extension_result` emits `Script error:\\n` plus the sandbox message only; no call summary or kind-specific prefix.",
+      "cppEvidence": "The failure text is substantially shorter than v1.3.0: no timeout/abort/sandbox prefixes and no record of calls that already ran. A model cannot see which tool effects happened before a failure.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Port `formatError`/`formatCallSummary` with the Application nested-call records; test script, timeout, abort, sandbox and no-call variants.",
+      "blockers": []
+    }
+  ]
+}

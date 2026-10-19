@@ -1,0 +1,393 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:39:02.332Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/source.ts:parseCodemodeSource,parseOptions,CodemodeSourceError,CODEMODE_OPTIONS_PREFIX,CODEMODE_SOURCE_GRAMMAR",
+    "packages/codemode/test/source.test.ts:parseCodemodeSource"
+  ],
+  "scenarios": [
+    {
+      "name": "source keeps plain JavaScript and a leading ordinary comment unchanged",
+      "inputs": {
+        "inputs": [
+          "text('hi')",
+          "// just a comment\nreturn 1"
+        ]
+      },
+      "expected": [
+        {
+          "code": "text('hi')",
+          "options": {}
+        },
+        {
+          "code": "// just a comment\nreturn 1",
+          "options": {}
+        }
+      ],
+      "observed": [
+        {
+          "code": "text('hi')",
+          "options": {}
+        },
+        {
+          "code": "// just a comment\nreturn 1",
+          "options": {}
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/source.test.ts",
+        "case": "returns plain code unchanged"
+      }
+    },
+    {
+      "name": "first-line options are parsed and replaced by an empty line to preserve line numbers",
+      "inputs": {
+        "input": "// @options: {\"timeout_ms\": 10}\nconst a = 1;\ntext(a)"
+      },
+      "expected": {
+        "code": "\nconst a = 1;\ntext(a)",
+        "options": {
+          "timeoutMs": 10
+        }
+      },
+      "observed": {
+        "code": "\nconst a = 1;\ntext(a)",
+        "options": {
+          "timeoutMs": 10
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/source.test.ts",
+        "case": "parses the options line and keeps line numbers"
+      }
+    },
+    {
+      "name": "options accept leading whitespace, CRLF, an empty object and a zero token budget",
+      "inputs": {
+        "inputs": [
+          "  // @options:{\"max_output_tokens\":0,\"timeout_ms\":1500}\r\ntext(1)",
+          "// @options: {}\ntext(1)"
+        ]
+      },
+      "expected": [
+        {
+          "code": "\ntext(1)",
+          "options": {
+            "maxOutputTokens": 0,
+            "timeoutMs": 1500
+          }
+        },
+        {
+          "code": "\ntext(1)",
+          "options": {}
+        }
+      ],
+      "observed": [
+        {
+          "code": "\ntext(1)",
+          "options": {
+            "maxOutputTokens": 0,
+            "timeoutMs": 1500
+          }
+        },
+        {
+          "code": "\ntext(1)",
+          "options": {}
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/source.test.ts",
+        "case": "parses the options line and keeps line numbers"
+      }
+    },
+    {
+      "name": "only the first line is an options line",
+      "inputs": {
+        "inputs": [
+          "// @optionsx {}\ntext(1)",
+          "text(\"// @options: {}\")"
+        ]
+      },
+      "expected": [
+        {
+          "code": "// @optionsx {}\ntext(1)",
+          "options": {}
+        },
+        {
+          "code": "text(\"// @options: {}\")",
+          "options": {}
+        }
+      ],
+      "observed": [
+        {
+          "code": "// @optionsx {}\ntext(1)",
+          "options": {}
+        },
+        {
+          "code": "text(\"// @options: {}\")",
+          "options": {}
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/source.test.ts",
+        "case": "only treats the first line as an options line"
+      }
+    },
+    {
+      "name": "a misplaced options line is rejected with its line number",
+      "inputs": {
+        "inputs": [
+          "// count things\n// @options: {\"timeout_ms\": 1000}\nwhile (true) {}",
+          "\n  // @options: {\"timeout_ms\": 1000}\nwhile (true) {}",
+          "text(1)\r\n// @options: {\"timeout_ms\": 1}",
+          "// @options: {\"timeout_ms\": 1}\ntext(1)\n// @options: {\"timeout_ms\": 2}"
+        ]
+      },
+      "expected": [
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 2"
+        },
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 2"
+        },
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 2"
+        },
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 3"
+        }
+      ],
+      "observed": [
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 2"
+        },
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 2"
+        },
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 2"
+        },
+        {
+          "name": "CodemodeSourceError",
+          "message": "The // @options: line must be the first line of the input; found one on line 3"
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/source.test.ts",
+        "case": "rejects an options line that is not the first line"
+      }
+    },
+    {
+      "name": "invalid options and empty input are rejected with typed errors",
+      "inputs": {
+        "inputs": [
+          "",
+          "  \n",
+          "// @options:\ntext(1)",
+          "// @options: [1]\ntext(1)",
+          "// @options: {\"yield\": 1}\ntext(1)",
+          "// @options: {\"max_output_tokens\": 1.5}\ntext(1)",
+          "// @options: {\"timeout_ms\": 0}\ntext(1)",
+          "// @options: {\"timeout_ms\": 2147483648}\ntext(1)",
+          "// @options: {\"timeout_ms\": 1}",
+          "// @options: {\"timeout_ms\": 1}\n  \n"
+        ]
+      },
+      "expected": [
+        {
+          "input": "",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+          }
+        },
+        {
+          "input": "  \n",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+          }
+        },
+        {
+          "input": "// @options:\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+          }
+        },
+        {
+          "input": "// @options: [1]\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+          }
+        },
+        {
+          "input": "// @options: {\"yield\": 1}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options only supports `max_output_tokens` and `timeout_ms`; got `yield`"
+          }
+        },
+        {
+          "input": "// @options: {\"max_output_tokens\": 1.5}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options field `max_output_tokens` must be a non-negative safe integer"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 0}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 2147483648}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 1}",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "The @options line must be followed by JavaScript source on subsequent lines"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 1}\n  \n",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "The @options line must be followed by JavaScript source on subsequent lines"
+          }
+        }
+      ],
+      "observed": [
+        {
+          "input": "",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+          }
+        },
+        {
+          "input": "  \n",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "Expected JavaScript source text (non-empty). Provide JS only, optionally with a first line `// @options: {\"max_output_tokens\": 1000}`."
+          }
+        },
+        {
+          "input": "// @options:\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+          }
+        },
+        {
+          "input": "// @options: [1]\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options must be a JSON object with supported fields `max_output_tokens` and `timeout_ms`"
+          }
+        },
+        {
+          "input": "// @options: {\"yield\": 1}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options only supports `max_output_tokens` and `timeout_ms`; got `yield`"
+          }
+        },
+        {
+          "input": "// @options: {\"max_output_tokens\": 1.5}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options field `max_output_tokens` must be a non-negative safe integer"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 0}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 2147483648}\ntext(1)",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "@options field `timeout_ms` must be a positive integer up to 2147483647"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 1}",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "The @options line must be followed by JavaScript source on subsequent lines"
+          }
+        },
+        {
+          "input": "// @options: {\"timeout_ms\": 1}\n  \n",
+          "error": {
+            "name": "CodemodeSourceError",
+            "message": "The @options line must be followed by JavaScript source on subsequent lines"
+          }
+        }
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/source.test.ts",
+        "case": "rejects empty input and invalid options"
+      }
+    },
+    {
+      "name": "the public options prefix and grammar constants are fixed",
+      "inputs": {
+        "exports": [
+          "CODEMODE_OPTIONS_PREFIX",
+          "CODEMODE_SOURCE_GRAMMAR"
+        ]
+      },
+      "expected": {
+        "prefix": "// @options:",
+        "grammar": "\nstart: options_source | plain_source\noptions_source: OPTIONS_LINE NEWLINE SOURCE\nplain_source: SOURCE\n\nOPTIONS_LINE: /[ \\t]*\\/\\/ @options:[^\\r\\n]*/\nNEWLINE: /\\r?\\n/\nSOURCE: /[\\s\\S]+/\n"
+      },
+      "observed": {
+        "prefix": "// @options:",
+        "grammar": "\nstart: options_source | plain_source\noptions_source: OPTIONS_LINE NEWLINE SOURCE\nplain_source: SOURCE\n\nOPTIONS_LINE: /[ \\t]*\\/\\/ @options:[^\\r\\n]*/\nNEWLINE: /\\r?\\n/\nSOURCE: /[\\s\\S]+/\n"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/src/source.ts",
+        "case": "CODEMODE_SOURCE_GRAMMAR"
+      }
+    }
+  ]
+}
