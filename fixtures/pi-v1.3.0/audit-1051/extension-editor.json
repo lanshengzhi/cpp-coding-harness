@@ -1,0 +1,730 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T18:24:06.853Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/modes/interactive/interactive-mode.ts:setCustomEditorComponent",
+    "packages/coding-agent/src/core/extensions/types.ts:EditorFactory,ExtensionUIContext.setEditorComponent",
+    "packages/coding-agent/src/modes/interactive/components/custom-editor.ts:CustomEditor",
+    "packages/coding-agent/test/suite/harness.ts:createHarness"
+  ],
+  "scenarios": [
+    {
+      "name": "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
+      "inputs": {
+        "terminal": {
+          "width": 100,
+          "rows": 24
+        },
+        "initialText": "before-install",
+        "typedText": "typed-after-install",
+        "thinkingShortcut": "shift+tab",
+        "bashModeInput": "!",
+        "restoreShortcut": "alt+e",
+        "reinstallShortcut": "alt+i"
+      },
+      "expected": {
+        "factoryCalls": 2,
+        "installTextTransferred": "before-install",
+        "installedFocused": true,
+        "thinkingBorderChanged": true,
+        "bashBorderChanged": true,
+        "submitInvokedOnSubmit": true,
+        "submitClearedEditor": true,
+        "restoreCarriedText": true,
+        "reinstallCarriedText": true,
+        "editorBorderRowsPerFrame": 2
+      },
+      "normalizations": [
+        "the private capture root is replaced with <deterministic-workspace>",
+        "SGR border samples are retained verbatim because the role identity is the observation"
+      ]
+    },
+    {
+      "name": "extension editor applies each optional appearance and autocomplete operation once per install",
+      "inputs": {
+        "installs": 2,
+        "optionalOperations": [
+          "borderColor",
+          "setPaddingX",
+          "setAutocompleteMaxVisible",
+          "setAutocompleteProvider"
+        ]
+      },
+      "expected": {
+        "borderColorAssignmentsInFirstInstall": 6,
+        "setPaddingXCallsPerInstall": 1,
+        "setAutocompleteMaxVisibleCallsPerInstall": 1,
+        "actionHandlerCount": 16,
+        "onSubmitAndOnChangeAssigned": true
+      },
+      "normalizations": [
+        "none"
+      ]
+    }
+  ],
+  "observation": {
+    "facts": [
+      {
+        "stage": "session_start"
+      },
+      {
+        "stage": "default_text_set",
+        "text": "before-install"
+      },
+      {
+        "stage": "factory",
+        "inputs": {
+          "tui": {
+            "type": "object",
+            "constructor": "",
+            "keys": [],
+            "methods": [
+              "requestRender",
+              "setFocus",
+              "stop"
+            ]
+          },
+          "theme": {
+            "type": "object",
+            "keys": [
+              "borderColor",
+              "selectList"
+            ],
+            "borderColorType": "function",
+            "selectListType": "object"
+          },
+          "keybindings": {
+            "type": "object",
+            "constructor": "KeybindingsManager",
+            "keys": [
+              "configPath",
+              "conflicts",
+              "definitions",
+              "keysById",
+              "userBindings"
+            ],
+            "methods": [
+              "matches",
+              "getEffectiveConfig"
+            ]
+          }
+        }
+      },
+      {
+        "stage": "installed",
+        "text": "before-install",
+        "focused": true,
+        "actionHandlerNames": [
+          "app.clear",
+          "app.suspend",
+          "app.thinking.cycle",
+          "app.model.cycleForward",
+          "app.model.cycleBackward",
+          "app.model.select",
+          "app.tools.expand",
+          "app.thinking.toggle",
+          "app.editor.external",
+          "app.message.copy",
+          "app.message.followUp",
+          "app.message.dequeue",
+          "app.session.new",
+          "app.session.tree",
+          "app.session.fork",
+          "app.session.resume"
+        ]
+      },
+      {
+        "stage": "startup",
+        "viewport": [
+          "",
+          " ▀▀█  v1.3.0                                                                                        ",
+          " █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more               ",
+          " Press ctrl+o to show full startup help and loaded resources.                                       ",
+          "                                                                                                    ",
+          " Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.              ",
+          "",
+          "[Extensions]                                                                                        ",
+          "  <inline:audit-1051-editor>                                                                        ",
+          "",
+          "",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "before-install                                                                                      ",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "/tmp/audit-1051-editor-sBO6xI/workspace",
+          "0.0%/128k (auto)                                                               faux-1 • thinking off",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "editorBorderRows": 2
+      },
+      {
+        "stage": "typed",
+        "text": "before-installtyped-after-install",
+        "border": "\u001b[38;2;108;118;123mx\u001b[39m"
+      },
+      {
+        "stage": "thinking",
+        "borderBefore": "\u001b[38;2;108;118;123mx\u001b[39m",
+        "borderAfter": "\u001b[38;2;104;128;141mx\u001b[39m",
+        "footerLine": "0.0%/128k (auto)                                                                    faux-1 • minimal"
+      },
+      {
+        "stage": "bash",
+        "text": "!",
+        "border": "\u001b[38;2;94;178;134mx\u001b[39m"
+      },
+      {
+        "stage": "bash_off",
+        "text": "",
+        "border": "\u001b[38;2;104;128;141mx\u001b[39m"
+      },
+      {
+        "stage": "typed_before_restore",
+        "text": "after-install"
+      },
+      {
+        "stage": "restore.request",
+        "text": "after-install",
+        "customFocused": true
+      },
+      {
+        "stage": "restore.done",
+        "text": "after-install",
+        "customFocused": false
+      },
+      {
+        "stage": "restored",
+        "viewport": [
+          "",
+          " ▀▀█  v1.3.0                                                                                        ",
+          " █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more               ",
+          " Press ctrl+o to show full startup help and loaded resources.                                       ",
+          "                                                                                                    ",
+          " Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.              ",
+          "",
+          "[Extensions]                                                                                        ",
+          "  <inline:audit-1051-editor>                                                                        ",
+          "",
+          "",
+          " Thinking level: minimal                                                                            ",
+          "",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "after-install                                                                                       ",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "/tmp/audit-1051-editor-sBO6xI/workspace",
+          "0.0%/128k (auto)                                                                    faux-1 • minimal",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "editorBorderRows": 2
+      },
+      {
+        "stage": "state",
+        "text": "after-installdefault-typed"
+      },
+      {
+        "stage": "default_state",
+        "viewport": [
+          "",
+          " ▀▀█  v1.3.0                                                                                        ",
+          " █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more               ",
+          " Press ctrl+o to show full startup help and loaded resources.                                       ",
+          "                                                                                                    ",
+          " Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.              ",
+          "",
+          "[Extensions]                                                                                        ",
+          "  <inline:audit-1051-editor>                                                                        ",
+          "",
+          "",
+          " Thinking level: minimal                                                                            ",
+          "",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "after-installdefault-typed                                                                          ",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "/tmp/audit-1051-editor-sBO6xI/workspace",
+          "0.0%/128k (auto)                                                                    faux-1 • minimal",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ]
+      },
+      {
+        "stage": "reinstall.request",
+        "text": "after-installdefault-typed"
+      },
+      {
+        "stage": "factory",
+        "inputs": {
+          "tui": {
+            "type": "object",
+            "constructor": "",
+            "keys": [],
+            "methods": [
+              "requestRender",
+              "setFocus",
+              "stop"
+            ]
+          },
+          "theme": {
+            "type": "object",
+            "keys": [
+              "borderColor",
+              "selectList"
+            ],
+            "borderColorType": "function",
+            "selectListType": "object"
+          },
+          "keybindings": {
+            "type": "object",
+            "constructor": "KeybindingsManager",
+            "keys": [
+              "configPath",
+              "conflicts",
+              "definitions",
+              "keysById",
+              "userBindings"
+            ],
+            "methods": [
+              "matches",
+              "getEffectiveConfig"
+            ]
+          }
+        }
+      },
+      {
+        "stage": "reinstall.done",
+        "text": "after-installdefault-typed",
+        "customFocused": true
+      },
+      {
+        "stage": "reinstalled",
+        "viewport": [
+          "",
+          " ▀▀█  v1.3.0                                                                                        ",
+          " █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more               ",
+          " Press ctrl+o to show full startup help and loaded resources.                                       ",
+          "                                                                                                    ",
+          " Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.              ",
+          "",
+          "[Extensions]                                                                                        ",
+          "  <inline:audit-1051-editor>                                                                        ",
+          "",
+          "",
+          " Thinking level: minimal                                                                            ",
+          "",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "after-installdefault-typed                                                                          ",
+          "────────────────────────────────────────────────────────────────────────────────────────────────────",
+          "/tmp/audit-1051-editor-sBO6xI/workspace",
+          "0.0%/128k (auto)                                                                    faux-1 • minimal",
+          "",
+          "",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "editorBorderRows": 2
+      },
+      {
+        "stage": "submitted",
+        "textAfterSubmit": "",
+        "onSubmitInvocations": 1,
+        "onSubmitAssigned": true
+      },
+      {
+        "stage": "restore.request",
+        "text": "",
+        "customFocused": true
+      },
+      {
+        "stage": "restore.done",
+        "text": "",
+        "customFocused": false
+      },
+      {
+        "stage": "restored_again",
+        "focused": false
+      }
+    ],
+    "installs": [
+      [
+        {
+          "event": "constructed",
+          "text": "",
+          "focused": false
+        },
+        {
+          "event": "onSubmit",
+          "assigned": true
+        },
+        {
+          "event": "onChange",
+          "assigned": true
+        },
+        {
+          "event": "setText",
+          "text": "before-install"
+        },
+        {
+          "event": "inner.onChange",
+          "text": "before-install"
+        },
+        {
+          "event": "setPaddingX",
+          "padding": 0
+        },
+        {
+          "event": "setAutocompleteMaxVisible",
+          "maxVisible": 5
+        },
+        {
+          "event": "onEscape",
+          "assigned": true
+        },
+        {
+          "event": "onCtrlD",
+          "assigned": true
+        },
+        {
+          "event": "onPasteImage",
+          "assigned": true
+        },
+        {
+          "event": "onExtensionShortcut",
+          "assigned": true
+        },
+        {
+          "event": "focus",
+          "value": true
+        },
+        {
+          "event": "setAutocompleteProvider",
+          "present": true
+        },
+        {
+          "event": "borderColor",
+          "sample": "\u001b[38;2;108;118;123mx\u001b[39m"
+        },
+        {
+          "event": "borderColor",
+          "sample": "\u001b[38;2;108;118;123mx\u001b[39m"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "74797065642d61667465722d696e7374616c6c"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "74797065642d61667465722d696e7374616c6c"
+        },
+        {
+          "event": "inner.onChange",
+          "text": "before-installtyped-after-install"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "1b5b5a"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "1b5b5a"
+        },
+        {
+          "event": "borderColor",
+          "sample": "\u001b[38;2;104;128;141mx\u001b[39m"
+        },
+        {
+          "event": "borderColor",
+          "sample": "\u001b[38;2;104;128;141mx\u001b[39m"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "03"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "03"
+        },
+        {
+          "event": "setText",
+          "text": ""
+        },
+        {
+          "event": "inner.onChange",
+          "text": ""
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "21"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "21"
+        },
+        {
+          "event": "inner.onChange",
+          "text": "!"
+        },
+        {
+          "event": "borderColor",
+          "sample": "\u001b[38;2;94;178;134mx\u001b[39m"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "7f"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "7f"
+        },
+        {
+          "event": "inner.onChange",
+          "text": ""
+        },
+        {
+          "event": "borderColor",
+          "sample": "\u001b[38;2;104;128;141mx\u001b[39m"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "61667465722d696e7374616c6c"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "61667465722d696e7374616c6c"
+        },
+        {
+          "event": "inner.onChange",
+          "text": "after-install"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "1b65"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "1b65"
+        },
+        {
+          "event": "focus",
+          "value": false
+        }
+      ],
+      [
+        {
+          "event": "constructed",
+          "text": "",
+          "focused": false
+        },
+        {
+          "event": "onSubmit",
+          "assigned": true
+        },
+        {
+          "event": "onChange",
+          "assigned": true
+        },
+        {
+          "event": "setText",
+          "text": "after-installdefault-typed"
+        },
+        {
+          "event": "inner.onChange",
+          "text": "after-installdefault-typed"
+        },
+        {
+          "event": "setPaddingX",
+          "padding": 0
+        },
+        {
+          "event": "setAutocompleteMaxVisible",
+          "maxVisible": 5
+        },
+        {
+          "event": "setAutocompleteProvider",
+          "present": true
+        },
+        {
+          "event": "onEscape",
+          "assigned": true
+        },
+        {
+          "event": "onCtrlD",
+          "assigned": true
+        },
+        {
+          "event": "onPasteImage",
+          "assigned": true
+        },
+        {
+          "event": "onExtensionShortcut",
+          "assigned": true
+        },
+        {
+          "event": "focus",
+          "value": true
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "7375626d69747465642d6472616674"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "7375626d69747465642d6472616674"
+        },
+        {
+          "event": "inner.onChange",
+          "text": "after-installdefault-typedsubmitted-draft"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "0d"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "0d"
+        },
+        {
+          "event": "inner.onChange",
+          "text": ""
+        },
+        {
+          "event": "inner.onSubmit",
+          "text": "after-installdefault-typedsubmitted-draft"
+        },
+        {
+          "event": "render",
+          "width": 100,
+          "lineCount": 3
+        },
+        {
+          "event": "input",
+          "hex": "1b65"
+        },
+        {
+          "event": "inner.onExtensionShortcut",
+          "data": "1b65"
+        },
+        {
+          "event": "focus",
+          "value": false
+        }
+      ]
+    ],
+    "finalViewport": [
+      "",
+      " ▀▀█  v1.3.0                                                                                        ",
+      " █▀ █ escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more               ",
+      " Press ctrl+o to show full startup help and loaded resources.                                       ",
+      "                                                                                                    ",
+      " Pi can explain its own features and look up its docs. Ask it how to use or extend Pi.              ",
+      "",
+      "[Extensions]                                                                                        ",
+      "  <inline:audit-1051-editor>                                                                        ",
+      "",
+      "",
+      " Thinking level: minimal                                                                            ",
+      "",
+      "                                                                                                    ",
+      " after-installdefault-typedsubmitted-draft                                                          ",
+      "                                                                                                    ",
+      "",
+      " deterministic extension reply                                                                      ",
+      "",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "                                                                                                    ",
+      "────────────────────────────────────────────────────────────────────────────────────────────────────",
+      "/tmp/audit-1051-editor-sBO6xI/workspace",
+      "↑1.4k ↓8 1.1%/128k (auto)                                                           faux-1 • minimal"
+    ],
+    "finalEditorBorderRows": 2,
+    "programStatusCalls": [
+      {
+        "state": "idle",
+        "app": "pi"
+      },
+      {
+        "state": "working",
+        "app": "pi"
+      },
+      {
+        "state": "done",
+        "app": "pi"
+      }
+    ]
+  }
+}

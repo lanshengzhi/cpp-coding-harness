@@ -1,0 +1,1387 @@
+{
+ "schema": "pike/pi-v1.3.0-audit-ledger/1",
+ "ticket": "1051",
+ "title": "Native TUI consumers and historical residuals",
+ "baseline": {
+  "name": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "platform": "linux-x86_64-glibc"
+ },
+ "evidence": {
+  "family": "audit-1051",
+  "manifest": "fixtures/pi-v1.3.0/audit-1051/manifest.json",
+  "manifestSha256": "2fd33f43d8626805314898308a5b4d1e4eef575e61e3c445a8fba4c789a8ba48",
+  "report": "docs/research/pi-v1.3.0/1051-native-tui-consumers-and-residuals.md",
+  "artifacts": [
+   "product-differential.json",
+   "extension-editor.json",
+   "program-status.json"
+  ]
+ },
+ "statusVocabulary": {
+  "membership": [
+   "supported",
+   "excluded",
+   "no-decision"
+  ],
+  "implementation": [
+   "implemented",
+   "partial",
+   "missing",
+   "not-applicable"
+  ],
+  "verification": [
+   "verified",
+   "upstream-captured",
+   "unverified",
+   "not-applicable"
+  ]
+ },
+ "rows": [
+  {
+   "id": "startup-header-help",
+   "capability": "Startup header and command-help presentation",
+   "operation": "The interactive session starts, prints the product header and the startup help/command row, and keeps the visible help readable at the supported widths.",
+   "consumer": "InteractiveSessionRun -> InteractiveEngine -> InteractiveView; the real terminal path constructs the startup surface before the prompt editor is active.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:start,setupEditorSubmitHandler",
+     "packages/coding-agent/src/modes/interactive/components/builtin-header.ts:BuiltInHeader"
+    ],
+    "scenarios": [
+     "native differential boot-100 at 100 columns",
+     "native differential boot-72 at 72 columns",
+     "native differential boot-41 at 41 columns",
+     "native differential boot-120 at 120 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/InteractiveStartup.cpp`, `InteractiveView.cpp`, `LoadedResources.cpp`; `InteractiveSessionRunBuilder` is the consumer boundary.",
+   "cppEvidence": "Native boot captures (`/tmp/1051-cpp-boot*`) pass. At 72 columns pike renders `! bash \u00b7` at the first-row end and wraps `ctrl+o more`; frozen pi keeps `! bash` together and starts `\u00b7 ctrl+o more` on the next row. Pike also omits the static logo row and the Pi docs line.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> InteractiveEngine -> InteractiveView startup",
+   "implementationTicket": "#800/#946; residual #1043",
+   "recommendation": "Do not treat the 72-column boundary or the missing header rows as accepted. Decide the branding/animation exclusion separately; align the command/help text and preserve the full startup help.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ],
+   "notes": "The pi header includes the v1.3.0 version/branding rows; the static logo may fall under the pi branding exclusion, but the help wrap is a behavioral difference."
+  },
+  {
+   "id": "startup-loaded-resources",
+   "capability": "Loaded-resource startup section",
+   "operation": "The startup help lists loaded extensions, skills, prompts, themes and context files for the active session.",
+   "consumer": "InteractiveView startup document and LoadedResources consumer; native extension registration contributes the extension list.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:buildLoadedResourcesMessage",
+     "packages/coding-agent/src/core/resource-loader.ts:DefaultResourceLoader"
+    ],
+    "scenarios": [
+     "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/LoadedResources.cpp`; `InteractiveView` renders it.",
+   "cppEvidence": "`tests/coding_agent/tui/LoadedResourcesTest.cpp` covers the current sections. The C++ startup output has no Extensions section, and `BuiltinSlashCommands.cpp` omits extensions from `/reload`.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> InteractiveView startup document",
+   "implementationTicket": "#1049 extension registration; #1051",
+   "recommendation": "Add the native extension list only after the selected native registration seam exists; do not add third-party package/TS extension claims.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Extensions selects native C++ registration, hooks, tool wrapping, run triggering and prompt/busy-state semantics. #1044 parent correction (2026-10-20) confirms this is included. Direct third-party TS/JS execution is excluded.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/extension-editor.json"
+   ],
+   "notes": "The pi extension startup viewport in the extension artifact shows `[Extensions] <inline:audit-1051-editor>`."
+  },
+  {
+   "id": "startup-project-trust",
+   "capability": "Project trust startup prompt",
+   "operation": "An untrusted workspace asks for a trust decision before project resources and extensions are loaded.",
+   "consumer": "InteractiveSessionRun trust flow -> InteractiveView trust prompt.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:checkProjectTrust",
+     "packages/coding-agent/test/suite/project-trust.test.ts"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/coding_agent/tui/SessionFlowControllerTrust.cpp`, `BootTrustInteractiveTest.cpp`.",
+   "cppEvidence": "`tests/coding_agent/tui/BootTrustInteractiveTest.cpp` covers accept/reject paths. No fresh v1.3.0 dual-runtime cell was captured for this row.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> SessionFlowController trust flow",
+   "implementationTicket": "#946",
+   "recommendation": "Retain; add a differential/PTY cell when trust selection is next changed.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "prompt-editor-submit",
+   "capability": "Prompt editor and submission",
+   "operation": "The real prompt editor accepts text, submits it, clears the draft and starts the supported run path.",
+   "consumer": "InteractiveSessionRun -> InteractiveEngine prompt slot -> Editor/Input.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:setupEditorSubmitHandler",
+     "packages/tui/src/components/editor.ts:Editor"
+    ],
+    "scenarios": [
+     "native differential user-message at 72 columns",
+     "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/InteractiveView.cpp` editor slot, `EditorAutocomplete.cpp`, `InteractiveSessionRunTest.cpp`.",
+   "cppEvidence": "Native user-message capture passes (20 assertions); the pi user-message capture renders the deterministic prompt and reply. `InteractiveSessionRunTest`/`EditorTest` cover submission; no PTY cell was run.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> InteractiveEngine prompt slot",
+   "implementationTicket": "#800/#946",
+   "recommendation": "Use the fresh pi captures as the comparison baseline; keep the existing C++ submission tests.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "prompt-autocomplete",
+   "capability": "Prompt autocomplete menu",
+   "operation": "The editor shows the supported slash/mention autocomplete menu and accepts the selection without leaking a second editor.",
+   "consumer": "EditorAutocomplete -> InteractiveView -> TUI overlay.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/components/editor.ts:EditorAutocomplete",
+     "packages/coding-agent/src/modes/interactive/components/custom-editor.ts:CustomEditor"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/coding_agent/tui/EditorAutocomplete.cpp`, `tests/coding_agent/tui/EditorAutocompleteTest.cpp`.",
+   "cppEvidence": "C++ focused tests cover menu filtering/selection; no fresh v1.3.0 differential cell was captured.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> InteractiveView -> editor autocomplete",
+   "implementationTicket": "#946",
+   "recommendation": "Retain; add a differential cell if the startup/selector work changes the editor option path.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "prompt-input-decoder",
+   "capability": "Prompt input decoding and key handling",
+   "operation": "Keys, paste, shifted/F1-style sequences and fragmented terminal replies reach the prompt editor with the supported key identity.",
+   "consumer": "TUI input decoder -> editor; InteractiveView routes the decoded input.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/keys.ts:parseKey",
+     "packages/tui/src/stdin-buffer.ts:StdinBuffer"
+    ],
+    "scenarios": [
+     "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+    ]
+   },
+   "cppSeam": "`src/tui/InputDecoder.cpp`, `Keys.cpp`, `StdinBuffer.cpp`; `EditorAutocompleteTest` and `InputTest` cover the seam.",
+   "cppEvidence": "C++ focused tests pass. The extension editor capture exercises shift+tab, ctrl+c, `!` and alt shortcuts through the real interactive loop.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_tui",
+   "boundary": "Terminal input -> InteractiveEngine -> editor",
+   "implementationTicket": "#946",
+   "recommendation": "Retain; verify the selected v1.3.0 delayed-reply and shifted-key fixes against the C++ decoder before closing any input residual.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/extension-editor.json"
+   ]
+  },
+  {
+   "id": "prompt-busy-lifecycle",
+   "capability": "Prompt and busy-state lifecycle",
+   "operation": "A run exposes working/busy state, blocks prompt submission or queues it as upstream does, and restores the editor after settlement.",
+   "consumer": "InteractiveSessionRun event loop -> InteractiveView status/editor; extension contexts observe the same busy state.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleEvent,showWorkingStatusIndicator",
+     "packages/coding-agent/src/modes/interactive/program-status-reporter.ts:handleEvent"
+    ],
+    "scenarios": [
+     "program status reports idle, blocked, working, done and error through the terminal contract",
+     "native differential tool-result at 100 columns",
+     "before_agent_start observes busy state and contributes prompt plus custom message"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/StatusIndicator.cpp`, `InteractiveEngine` event loop, `InteractiveView` embedded working status.",
+   "cppEvidence": "The C++ working-status tests pass (`[footer]`, `[cursor]` focused runs). The pi program-status capture shows working/done/error transitions. C++ has no extension `ctx.isIdle()`/busy context; extension busy semantics are tracked in #1049.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> InteractiveEngine event loop -> InteractiveView/status",
+   "implementationTicket": "#1049; #946",
+   "recommendation": "Keep the supported working indicator; add the selected native extension busy/idle context and queued-prompt behavior in the bounded #1049 slices.",
+   "blockers": [],
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/program-status.json"
+   ],
+   "notes": "The program-status artifact records terminal calls, not emulator bytes; a real terminal/PTY remains required for OSC byte acceptance."
+  },
+  {
+   "id": "extension-registration-tool-source",
+   "capability": "Native extension registration and tool source",
+   "operation": "Native extension sources register tools and UI listeners through the extension seam; tool contributions enter the Agent ToolRegistry without TS/JS execution.",
+   "consumer": "InteractiveSessionRun extension registration factory -> ExtensionUiHost; SessionFactory -> ExtensionToolRegistry.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/extensions/loader.ts:loadExtensionFromFactory",
+     "packages/coding-agent/src/core/extensions/runner.ts:registerTool",
+     "packages/coding-agent/src/core/extensions/types.ts:ExtensionAPI"
+    ],
+    "scenarios": [
+     "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
+     "before_agent_start observes busy state and contributes prompt plus custom message"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/extensions/ExtensionToolRegistry.*`, `src/coding_agent/tui/ExtensionUiHost.*`, `InteractiveSessionRunBuilder::with_extension_ui_registration_factory`.",
+   "cppEvidence": "`tests/coding_agent/ExtensionToolSourceTest.cpp:181-319` covers registry collection, duplicate rejection, ToolRegistry conversion and callability. `[extension_ui]` 17 cases/321 assertions pass for listener/editor registration. The CLI boundary has the registration factory but no native extension loader producer; full hooks/run triggering is missing (#1049).",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun extension registration factory -> ExtensionUiHost; SessionFactory tool assembly",
+   "implementationTicket": "#1049 (implemented tool source; hooks/run triggering gap)",
+   "recommendation": "Reuse the #1049 bounded native extension slices; do not add a TS/JS plugin loader or third-party package management.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Extensions selects native C++ registration, hooks, tool wrapping, run triggering and prompt/busy-state semantics. #1044 parent correction (2026-10-20) confirms this is included. Direct third-party TS/JS execution is excluded.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/extension-editor.json",
+    "fixtures/pi-v1.3.0/audit-1049/extension-run.json"
+   ],
+   "notes": "The #1049 correction supersedes the historical ADR 0066 no-decision treatment; this row is supported with a partial implementation, not excluded."
+  },
+  {
+   "id": "extension-editor-lifecycle",
+   "capability": "Extension editor install/restore lifecycle",
+   "operation": "`ctx.ui.setEditorComponent(factory)` installs a custom editor with the default editor text/focus and callbacks, applies the available appearance options once, follows thinking/Bash border roles, restores the default editor with the carried text, and installs exactly one active editor.",
+   "consumer": "InteractiveSessionRun extension UI context -> ExtensionUiHost -> InteractiveView editor slot.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:setCustomEditorComponent,setEditorWorkingStatusIndicator",
+     "packages/coding-agent/src/core/extensions/types.ts:EditorFactory,ExtensionUIContext.setEditorComponent",
+     "packages/coding-agent/test/suite/harness.ts:createHarness"
+    ],
+    "scenarios": [
+     "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
+     "extension editor applies each optional appearance and autocomplete operation once per install"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ExtensionUiHost.cpp` (set_editor_component/make_editor) and `InteractiveView.cpp:set_custom_editor`; `ExtensionUiHostTest.cpp` covers the lifecycle.",
+   "cppEvidence": "The pi capture observes: factory theme keys `borderColor,selectList`, KeybindingsManager, 16 copied action handlers, text `before-install` transferred, focus true, onSubmit/onChange assigned, padding 0, autocomplete max 5, provider installed; thinking border 108,118,123 -> 104,128,141; Bash border 94,178,134; restore carries `after-install` and focus false; reinstall carries `after-installdefault-typed`; the submitted draft invokes the copied `onSubmit` once and clears the editor; each frame has exactly two editor border rows. C++ `[extension_ui]` passes 321 assertions/17 cases, including text/focus/restore and reload paths. No C++ dual-runtime cell captures the border-token/callback values yet (#1033).",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> ExtensionUiHost -> InteractiveView editor slot",
+   "implementationTicket": "#1014/#1033; #1049 extension registration",
+   "recommendation": "Update #1033 with this pi observation; add the Pike-side cell and compare values before closing. Do not claim full dual-runtime verification from the C++ unit tests alone.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Extensions selects native C++ registration, hooks, tool wrapping, run triggering and prompt/busy-state semantics. #1044 parent correction (2026-10-20) confirms this is included. Direct third-party TS/JS execution is excluded.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/extension-editor.json"
+   ],
+   "notes": "The factory receives the live TUI, editor theme and SharedKeybindings. The custom editor render is the only active editor; border rows stay 2 after restore/reinstall."
+  },
+  {
+   "id": "extension-prompt-status-ui",
+   "capability": "Extension prompt, dialog and status UI",
+   "operation": "Extension prompts/dialogs/status use the interactive UI and reflect blocked/busy state without stealing the editor or leaving a stale overlay.",
+   "consumer": "ExtensionUIContext -> InteractiveView/ExtensionUiHost -> TUI overlay/dialog.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/extensions/types.ts:ExtensionUIContext",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:showExtensionInput,showExtensionConfirm"
+    ],
+    "scenarios": [
+     "before_agent_start observes busy state and contributes prompt plus custom message",
+     "program status reports idle, blocked, working, done and error through the terminal contract"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ExtensionUiHost.hpp` exposes listener/editor registration only; dialog/status facades are not wired.",
+   "cppEvidence": "C++ `ExtensionUiHost` has no input/confirm/select/status surface. The pi program-status capture observes a real extension input dialog reporting `blocked {kind:question,message:\"Probe dialog\"}` and returning to idle on Escape. The #1049 extension capture observes prompt/busy context.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "ExtensionUIContext -> InteractiveView/ExtensionUiHost",
+   "implementationTicket": "#1049 (prompt/busy-state extension slice)",
+   "recommendation": "Add the selected native extension prompt/dialog/status facade in the #1049 slice; preserve the `blocked` and idle transitions.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Extensions selects native C++ registration, hooks, tool wrapping, run triggering and prompt/busy-state semantics. #1044 parent correction (2026-10-20) confirms this is included. Direct third-party TS/JS execution is excluded.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/program-status.json",
+    "fixtures/pi-v1.3.0/audit-1049/extension-run.json"
+   ]
+  },
+  {
+   "id": "tool-result-presentation",
+   "capability": "Tool call/result presentation",
+   "operation": "A supported tool call renders its title, arguments, result and final assistant state; the stable post-completion frame matches pi.",
+   "consumer": "InteractiveSessionRun -> ChatContainer -> ToolExecutionComponent/tool_renderers.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/components/tool-execution.ts:ToolExecutionComponent",
+     "packages/coding-agent/src/core/tools/render-utils.ts:formatToolDuration"
+    ],
+    "scenarios": [
+     "native differential tool-result at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ToolExecutionComponent.cpp`, `tool_renderers/*`; `BashRendererTest`, `ReadRendererTest`, `ToolRendererSeamTest`.",
+   "cppEvidence": "The pi tool-result capture renders `read notes.txt` and the final `deterministic tool answer`. The C++ capture passes its 24 assertions and matches the final tool/answer structure; at the mid-stream barrier C++ has already painted the next prose row where pi still shows the Working spinner border (#812/#1043).",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> ChatContainer -> ToolExecutionComponent",
+   "implementationTicket": "#812; #1043 tool-result residual",
+   "recommendation": "Keep the final structure; add the v1.3.0 duration/outputPad propagation and a stable-barrier comparison before closing #812.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "tool-duration",
+   "capability": "Tool execution duration",
+   "operation": "Agent tool execution records a monotonic duration that carries through results, events, persistence/resume and the rendered settled tool block; partial calls have no final duration.",
+   "consumer": "Agent execution -> tool result event -> ToolExecutionComponent render context.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/tools/render-utils.ts:formatToolDuration",
+     "packages/coding-agent/src/core/tools/tool-execution.ts:durationMs",
+     "packages/coding-agent/src/core/agent-session.ts:tool_execution_end"
+    ],
+    "scenarios": [
+     "runToolCall runs the hooks and reports execute-only duration",
+     "tool duration survives the public session record round trip"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ToolExecutionComponent.cpp` stamps `system_clock` at render time; `BashRenderer.cpp:duration_line` renders only settled `Took`; there is no `durationMs` field through results/persistence/resume.",
+   "cppEvidence": "`BashRendererTest` covers exact `Took` shapes from the render clock. The C++ seam does not carry duration through results/events or non-Bash renderers; no fresh v1.3.0 C++ duration cell was captured.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "Agent tool execution -> result/event -> TUI renderer",
+   "implementationTicket": "#1047 (upstream duration capture); new dependency candidate",
+   "recommendation": "Use a monotonic clock at execute start; carry `durationMs` through the result/event/persistence/render path and exclude hooks. Do not copy model-response timing.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1047/tool-execution.json"
+   ]
+  },
+  {
+   "id": "tool-bash-presentation",
+   "capability": "Bash tool presentation",
+   "operation": "Bash output, header, exit status, expanded/collapsed state and settled duration match the supported pi tool renderer.",
+   "consumer": "InteractiveSessionRun -> ToolExecutionComponent -> BashRenderer.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/tools/bash.ts:renderCall,renderResult",
+     "packages/coding-agent/src/core/tools/render-utils.ts:formatToolDuration"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/coding_agent/tui/tool_renderers/BashRenderer.cpp`; `BashRendererTest.cpp` covers `Took` and output shapes.",
+   "cppEvidence": "C++ focused tests pass. No fresh pi bash-output capture was added; outputPad is not applied to tool blocks.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> BashRenderer",
+   "implementationTicket": "#812; outputPad dependency",
+   "recommendation": "Retain; add a bash differential cell and the outputPad propagation when #812/tool presentation is implemented.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "tool-read-line-range",
+   "capability": "Read tool line-range labels",
+   "operation": "Read tool result labels normalize numeric/string/null line ranges as v1.3.0 does.",
+   "consumer": "InteractiveSessionRun -> ToolExecutionComponent -> ReadRenderer.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/tools/read.ts:renderResult",
+     "packages/coding-agent/src/core/tools/render-utils.ts"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/coding_agent/tui/tool_renderers/ReadRenderer.cpp`; no focused v1.3.0 label test was added.",
+   "cppEvidence": "C++ read renderer tests pass for existing shapes; v1.3.0 commit `910149912` normalized line-range labels. No fresh capture covers the distinction.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> ReadRenderer",
+   "implementationTicket": "new dependency candidate (v1.3.0 line-range labels)",
+   "recommendation": "Add a focused read-line-range label test for numeric/string/null inputs before changing the renderer.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "output-pad",
+   "capability": "Dynamic output padding",
+   "operation": "The `outputPad` setting applies to all transcript blocks (user/assistant text, tool blocks, bash, custom/system messages) and re-renders on change.",
+   "consumer": "SettingsManager -> InteractiveView render settings -> ChatContainer components.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:applyRenderSettings",
+     "packages/coding-agent/src/modes/interactive/components/chat-container.ts:setOutputPad"
+    ],
+    "scenarios": [
+     "native differential user-message at 72 columns",
+     "native differential tool-result at 100 columns",
+     "native differential settings-selector at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ChatContainer.cpp:set_output_pad,apply_output_pad_to_components`; only user/assistant/error components are rebuilt.",
+   "cppEvidence": "`SettingsSelectorTest`/`SettingsManagerTest` cover the setting; `ChatContainer` source shows tool/bash/custom blocks do not receive output_pad. No fresh outputPad=0/2 differential capture was added.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "SettingsManager -> InteractiveView -> ChatContainer",
+   "implementationTicket": "new dependency candidate (v1.1.0 #10557)",
+   "recommendation": "Apply outputPad to every transcript block and add a capture/test that distinguishes 0 vs 1 on tool/bash/custom blocks.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "model-selector",
+   "capability": "Model selector",
+   "operation": "`/model` shows the supported model rows, marker/order, search help and stable selection transition.",
+   "consumer": "InteractiveSessionRun -> ModelFlowController -> ModelSelector.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/components/model-selector.ts:ModelSelector",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleModelCommand"
+    ],
+    "scenarios": [
+     "native differential model-selector at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ModelSelector.cpp`, `ModelFlowController.cpp`; `ModelSelectorTest`, `ModelSelectorInteractiveTest`.",
+   "cppEvidence": "The pi v1.3.0 capture shows `\u2192 \u2713 <model> [faux]` and the selector help. The C++ NativeTuiDifferential model-selector run fails its own post-Enter `Model:` assertion (1 failed, 17 passed); no output artifact was written, so marker/layout remains unresolved (#808).",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> ModelFlowController -> ModelSelector",
+   "implementationTicket": "#808",
+   "recommendation": "Reuse #808; add a stable model-selector differential cell and fix the marker/help/post-Enter status without adding deferred provider chrome.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "thinking-selector",
+   "capability": "Thinking-level selector",
+   "operation": "`/thinking` shows the supported levels, marker and help; Enter settles on the selected level.",
+   "consumer": "InteractiveSessionRun -> ThinkingSelector/InteractiveEngine.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/components/thinking-selector.ts:ThinkingSelector",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleThinkingCommand"
+    ],
+    "scenarios": [
+     "native differential thinking-selector at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ThinkingSelector.cpp`; `ThinkingSelectorTest`, `ThinkingSelectorInteractiveTest`.",
+   "cppEvidence": "The pi v1.3.0 capture lists `off,minimal,low,medium,high,xhigh,max`; C++ lists only `off,minimal,low,medium,high` and has a different selection/blank-row layout. The C++ scenario passes its own current assertions (27) because it does not assert the missing levels (#810).",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> ThinkingSelector",
+   "implementationTicket": "#810",
+   "recommendation": "Reuse #810; add xhigh/max rows and align marker/help/viewport, without adding the deferred per-model override.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "settings-selector",
+   "capability": "Settings selector",
+   "operation": "`/settings` exposes the v1.3.0 searchable settings rows, descriptions, values and viewport; supported rows are not omitted.",
+   "consumer": "InteractiveSessionRun -> SettingsFlowController -> SettingsSelector.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/components/settings-selector.ts:SettingsSelector",
+     "packages/coding-agent/src/core/settings-manager.ts:SettingsSchema"
+    ],
+    "scenarios": [
+     "native differential settings-selector at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/SettingsSelector.cpp:make_items`, `SettingsFlowController.cpp`; `SettingsSelectorTest`, `SettingsFlowControllerTest`.",
+   "cppEvidence": "The pi v1.3.0 capture shows 33 rows `(1/33)` with `Auto-compact`, `Auto-resize images`, `Block images`, `Editor padding`, `Autocomplete max items`, `Clear on shrink`, etc.; C++ shows 13 rows `(1/13)`, omits those rows, still uses the v1.0.4 `Show hardware cursor` description, and uses `enter/space`/`escape` casing different from pi. The C++ scenario passes 45 assertions because it checks only the rows it implements.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> SettingsFlowController -> SettingsSelector",
+   "implementationTicket": "#1043 settings residual; #1023 adjudication is not an acceptance",
+   "recommendation": "Do not preserve the 13-row viewport or omitted rows. Reuse/update #1043 (and its #1023 dependency) to add the v1.3.0 rows/descriptions and viewport; keep third-party/package rows out.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "theme-selection-tokens",
+   "capability": "Theme selection and token resolution",
+   "operation": "Theme selection, dark/light/system resolution and every supported token match the v1.3.0 token/schema set.",
+   "consumer": "ThemeController -> LiveTheme -> components.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/theme/theme.ts:createTheme,getResolvedThemeColors",
+     "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts"
+    ],
+    "scenarios": [
+     "native differential boot-100 at 100 columns",
+     "native differential tool-result at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ThemeController.cpp`, `Theme.cpp`, `ThemeTokens.inc`; `ThemeTest`, `ThemeControllerTest`.",
+   "cppEvidence": "The pi captures expose the full dark theme object (`theme` in every differential report); C++ focused theme tests pass. v1.3.0 replaced `theme-json.ts` with `theme-schema.ts`/`theme-tokens.ts`; C++ has the older token subset and no generated system theme.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "ThemeController -> LiveTheme",
+   "implementationTicket": "#1049 theme row; #1032",
+   "recommendation": "Retain the selected palette; port the supported token/schema changes and track the generated system palette in #1032.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "system-theme",
+   "capability": "Generated system theme",
+   "operation": "The `system` theme name resolves to a generated palette from reported terminal colors and live scheme, with the pending/grayscale state.",
+   "consumer": "ThemeController -> system-theme generator -> TUI colors.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/theme/system-theme.ts:generateSystemThemeColors,terminalAppearance",
+     "packages/coding-agent/src/modes/interactive/theme/theme.ts:createSystemTheme,detectTerminalTheme"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/coding_agent/tui/ThemeController.cpp` resolves only the built-in dark/light pair; no system-theme generator.",
+   "cppEvidence": "C++ ThemeController tests cover OSC 11/DSR and auto-sync but not a generated system palette. Upstream `system-theme.ts` is unchanged between v1.0.4 and v1.3.0.",
+   "status": {
+    "membership": "supported",
+    "implementation": "missing",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "ThemeController -> generated system theme",
+   "implementationTicket": "#1032",
+   "recommendation": "Reuse #1032; port the generator as a separate palette-owned change and add per-token fixed-color evidence.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "hardware-cursor",
+   "capability": "Hardware/fake cursor behavior",
+   "operation": "With `showHardwareCursor`, the terminal cursor is the only cursor rendered; fake cursor markers are resolved/removed and the focused cursor is positioned correctly.",
+   "consumer": "SettingsManager -> TUI renderer -> editor component cursor markers.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/tui-alt-screen.ts:resolveFakeCursors",
+     "packages/coding-agent/src/modes/interactive/theme/theme.ts:getThinkingBorderColor"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/tui/RenderPipeline.cpp:show_hardware_cursor_`, `AltScreen.cpp` cursor positioning, `EditorLayout.cpp:insert_fake_cursor`; `HardwareCursorEvidenceTest`, `ProductCursorEvidenceTest`.",
+   "cppEvidence": "C++ `[cursor]` focused tests pass (9 cases/660 assertions). The editor still inserts reverse-video fake-cursor cells; v1.3.0 `1cedd3272` resolves fake cursors and uses only the terminal cursor when hardware cursor is enabled. The settings help still carries the v1.0.4 wording.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_tui",
+   "boundary": "Settings -> TUI renderer -> editor cursor markers",
+   "implementationTicket": "new dependency candidate (v1.3.0 #9311/1cedd3272)",
+   "recommendation": "Add a distinguishing test for fake-cursor suppression in hardware-cursor mode and update the settings description; verify in a real terminal/PTY.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "osc52-opt-in",
+   "capability": "OSC52 clipboard opt-in",
+   "operation": "`PI_CLIPBOARD_OSC52=1` enables the OSC52 copy route; remote/headless detection and the size bound remain as upstream.",
+   "consumer": "clipboard copy -> ClipboardWrite -> OSC52 writer -> terminal.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/utils/clipboard.ts:copyToClipboard,isRemoteSession,MAX_OSC52_ENCODED_LENGTH",
+     "packages/coding-agent/src/modes/interactive/theme/theme.ts"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/coding_agent/tui/ClipboardProcess.cpp:clipboard_environment_from_process`, `ClipboardWrite.cpp:emit_osc52`; no `PI_CLIPBOARD_OSC52` read.",
+   "cppEvidence": "C++ `ClipboardWriteTest`/`ClipboardProcessTest` cover remote/headless routes and the OSC52 size bound. Source inspection finds no `PI_CLIPBOARD_OSC52` override; the C++ route is automatic for remote/headless/WT and cannot be forced on a local desktop session.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "Clipboard copy -> ClipboardWrite -> terminal",
+   "implementationTicket": "new dependency candidate (v1.3.0 OSC52 opt-in)",
+   "recommendation": "Add the opt-in environment branch and a focused test; do not change the retained Magpie/XDG boundaries.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "clipboard-paste",
+   "capability": "Clipboard paste",
+   "operation": "Paste reads the Linux/WSL/Termux clipboard and normalizes bracketed paste as the supported product does.",
+   "consumer": "Terminal paste -> ClipboardPaste -> editor.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/utils/clipboard.ts:readClipboard",
+     "packages/tui/src/components/editor.ts:handlePaste"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "`src/coding_agent/tui/ClipboardPaste.cpp`, `LinuxClipboard.cpp`, `NativeClipboard.cpp`; `ClipboardInteractiveTest`, `PasteNormalizationTest`.",
+   "cppEvidence": "C++ focused clipboard/paste tests pass; no fresh v1.3.0 paste capture was added.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "Terminal paste -> ClipboardPaste -> editor",
+   "implementationTicket": "#946",
+   "recommendation": "Retain; add a Termux/remote paste cell only if the selected OCR/terminal path changes.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "program-status-protocol",
+   "capability": "OSC 7501 program-status protocol",
+   "operation": "The toolkit formats and sends idle/working/blocked/done/error/clear program status over OSC 7501, gates on terminal support and honors `PI_PROGRAM_STATUS`.",
+   "consumer": "Terminal contract -> terminal writer; InteractiveMode reporter is the product caller.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/program-status.ts:formatProgramStatus,isProgramStatusReply,PROGRAM_STATUS_QUERY",
+     "packages/tui/src/terminal.ts:setProgramStatus"
+    ],
+    "scenarios": [
+     "program status reports idle, blocked, working, done and error through the terminal contract"
+    ]
+   },
+   "cppSeam": "No C++ equivalent: `src/tui/include/cch/tui/Terminal.hpp` has no `set_program_status`; `ProcessTerminal`/`VirtualTerminal` emit only OSC 9;4 progress.",
+   "cppEvidence": "The pi capture records the exact calls `idle {app:pi}`, `blocked {kind:question,message:Probe dialog,app:pi}`, `idle`, `working`, `done`, `working`, `error {message:deterministic failure,app:pi}` on our recording terminal. C++ has no protocol or terminal method; this is a missing capability.",
+   "status": {
+    "membership": "supported",
+    "implementation": "missing",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_tui",
+   "boundary": "Terminal -> program-status writer",
+   "implementationTicket": "new dependency candidate (v1.3.0 OSC 7501)",
+   "recommendation": "Implement the protocol in the toolkit, then wire the reporter; verify raw OSC bytes in a real terminal/PTY.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/program-status.json"
+   ]
+  },
+  {
+   "id": "program-status-reporting",
+   "capability": "Program-status reporter",
+   "operation": "InteractiveMode reports working, blocked, done, error and idle from agent/session events and dialog open/close, deduplicating identical statuses.",
+   "consumer": "InteractiveSessionRun events/dialogs -> ProgramStatusReporter -> Terminal.setProgramStatus.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/program-status-reporter.ts:ProgramStatusReporter",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:programStatus"
+    ],
+    "scenarios": [
+     "program status reports idle, blocked, working, done and error through the terminal contract"
+    ]
+   },
+   "cppSeam": "No C++ reporter. `InteractiveEngine` has working/status indicators but no OSC 7501 report path.",
+   "cppEvidence": "The pi capture proves the transitions and error message; C++ has no reporter call or terminal contract. The blocked dialog path is also the extension-prompt/busy UI gap.",
+   "status": {
+    "membership": "supported",
+    "implementation": "missing",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> ProgramStatusReporter -> Terminal",
+   "implementationTicket": "new dependency candidate (v1.3.0 OSC 7501)",
+   "recommendation": "Implement after the toolkit protocol; reuse the event/settlement ordering and preserve the blocked dialog source semantics.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/program-status.json"
+   ]
+  },
+  {
+   "id": "terminal-progress",
+   "capability": "OSC 9;4 terminal progress",
+   "operation": "`terminal.showTerminalProgress` presents/clears the terminal tab progress indicator across runs and mode switches.",
+   "consumer": "SettingsManager -> InteractiveView/InteractiveEngine -> Terminal.set_progress.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/terminal.ts:setProgress",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:setTerminalProgress"
+    ],
+    "scenarios": [
+     "program status reports idle, blocked, working, done and error through the terminal contract"
+    ]
+   },
+   "cppSeam": "`src/tui/include/cch/tui/Terminal.hpp:set_progress`; `ProcessTerminal.cpp:set_progress`; `FooterStatusInteractiveTest`.",
+   "cppEvidence": "C++ focused footer/terminal tests pass; no fresh v1.3.0 OSC 9;4 byte capture was added. The exit sequence clears OSC 9;4.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "Settings -> InteractiveEngine -> Terminal",
+   "implementationTicket": "#946",
+   "recommendation": "Retain; add a byte-level PTY check if progress/chrome work changes the terminal lifecycle.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "mode-switch-renderer",
+   "capability": "Regular/fullscreen mode switch",
+   "operation": "A live mode switch preserves focus, text, cursor identity, transcript and terminal restoration in both directions.",
+   "consumer": "InteractiveSessionRun -> TUI renderer switch -> InteractiveView.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/tui.ts:switchRenderer",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:switchTuiMode"
+    ],
+    "scenarios": [
+     "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/InteractiveEngine.cpp` renderer switch; `TuiModeSwitchTest.cpp`.",
+   "cppEvidence": "C++ `[extension_ui]` and `TuiModeSwitchTest` cover focus/text/cursor preservation; no fresh v1.3.0 PTY switch capture was added.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> TUI renderer switch",
+   "implementationTicket": "#946",
+   "recommendation": "Retain; re-run the PTY switch probe when renderer/selection work changes.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "transcript-state-scrollback",
+   "capability": "Transcript state and retained scrollback",
+   "operation": "The transcript keeps the same retained scrollback rows, structure and scroll position as pi across streaming and resize.",
+   "consumer": "ChatContainer/ChatViewport -> transcript state -> terminal scrollback.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/tui-alt-screen.ts:render",
+     "packages/tui/src/tui-main-screen.ts:render"
+    ],
+    "scenarios": [
+     "native differential scrollback at 72 columns",
+     "native differential boot-100 at 100 columns",
+     "native differential tool-result at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/ChatContainer.cpp`, `ChatViewport.cpp`, `src/tui/AltScreen.cpp`; `ChatViewportTest`, `ScrollViewTest`.",
+   "cppEvidence": "The pi scrollback capture has 12 non-empty retained rows; C++ has 9 in the same scenario (both 7 snapshots). Final visible rows are 10 each. The retained-row difference remains at v1.3.0 (#1043).",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun -> ChatContainer/ChatViewport -> terminal scrollback",
+   "implementationTicket": "#1043 scrollback residual",
+   "recommendation": "Reuse #1043; compare retained rows frame-by-frame and align the scrollback structure before closing.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "transcript-selection-reset",
+   "capability": "Transcript selection reset",
+   "operation": "Replacing/rebuilding the transcript resets text selection and multi-click history so a stale selection cannot survive a rebuild.",
+   "consumer": "InteractiveSessionRun transcript rebuild -> TUI selection state.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/tui-alt-screen.ts:resetTextSelection",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:renderCurrentSessionState"
+    ],
+    "scenarios": [
+     "native differential scrollback at 72 columns"
+    ]
+   },
+   "cppSeam": "`src/tui/AltScreen.cpp:clear_text_selection` exists, but `rebuild_chat`/transcript rebuild does not call a resetTextSelection equivalent; no multi-click history reset.",
+   "cppEvidence": "C++ `AltScreenTest`/`SelectionEvidenceTest` cover clear-on-click paths, not a transcript-rebuild reset. v1.3.0 commit `83c9e2645` adds `resetTextSelection` (selection + lastClick) and calls it before rebuilding the transcript.",
+   "status": {
+    "membership": "supported",
+    "implementation": "missing",
+    "verification": "unverified"
+   },
+   "owner": "cch_tui",
+   "boundary": "InteractiveSessionRun transcript rebuild -> AltScreen selection",
+   "implementationTicket": "new dependency candidate (v1.3.0 #9311)",
+   "recommendation": "Add the toolkit reset and call it from the transcript rebuild consumer; add a two-click selection rebuild case.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "exit-restoration",
+   "capability": "Exit output and terminal restoration",
+   "operation": "Exit writes the supported final transcript/exit output and restores cursor, alternate screen, bracketed paste, mouse and terminal state.",
+   "consumer": "InteractiveSessionRun shutdown -> TUI stop -> terminal restoration.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/terminal.ts:stop",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:shutdown"
+    ],
+    "scenarios": [
+     "native differential boot-100 at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/tui/include/cch/tui/Terminal.hpp` exit sequence; `FullscreenExitOutputTest.cpp`, `TuiModeSwitchTest.cpp`.",
+   "cppEvidence": "C++ `[exit]` focused tests pass (20 cases/2376 assertions). The exit sequence clears OSC 9;4 but has no OSC 7501 clear because program status is absent; raw PTY/emulator evidence was not run in this lane.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "InteractiveSessionRun shutdown -> Terminal stop",
+   "implementationTicket": "new dependency candidate (OSC 7501 clear)",
+   "recommendation": "Add the program-status clear with the protocol; verify the full restoration sequence in a PTY/emulator.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "images-placement-herdr",
+   "capability": "Fullscreen image placement and Herdr",
+   "operation": "Fullscreen images repaint on placement-span changes, preserve emission order, and support Herdr OSC8 hyperlinks/images.",
+   "consumer": "AltScreen image layers -> terminal.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/tui-alt-screen.ts:renderImageLayers",
+     "packages/tui/src/terminal-image.ts:detectHerdr"
+    ],
+    "scenarios": [
+     "native differential tool-result at 100 columns"
+    ]
+   },
+   "cppSeam": "`src/tui/AltScreen.cpp`, `TerminalImage.cpp`; `AltScreenImageEvidenceTest`, `TerminalImageTest`.",
+   "cppEvidence": "C++ image tests pass through the virtual terminal; no real Kitty/WezTerm capture was run. Herdr detection/OSC8 support is absent. The v1.3.0 placement-span repaint trigger is unchanged (#1035).",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_tui",
+   "boundary": "AltScreen image layers -> terminal",
+   "implementationTicket": "#1035",
+   "recommendation": "Reuse #1035; capture the placement-span case and a real WezTerm/Kitty observation; add Herdr only with a supporting terminal detection test.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "wheel-over-overlay",
+   "capability": "Wheel routing under a focused overlay",
+   "operation": "Wheel input scrolls the transcript under a focused overlay while the overlay retains its own routing.",
+   "consumer": "TUI mouse/wheel routing -> overlay/transcript.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/tui/src/tui-alt-screen.ts:routeWheel",
+     "packages/tui/src/tui-alt-screen.ts:shouldDeferViewportInputToOverlay"
+    ],
+    "scenarios": [
+     "native differential scrollback at 72 columns"
+    ]
+   },
+   "cppSeam": "`src/tui/MouseRouting.cpp`/`AltScreen.cpp` has no v1.3.0 overlay wheel deferral behavior.",
+   "cppEvidence": "C++ mouse tests cover overlay routing but not the v1.3.0 wheel-under-overlay fix; no fresh emulator capture.",
+   "status": {
+    "membership": "supported",
+    "implementation": "missing",
+    "verification": "unverified"
+   },
+   "owner": "cch_tui",
+   "boundary": "TUI wheel routing -> overlay/transcript",
+   "implementationTicket": "new dependency candidate (v1.3.0 wheel fix)",
+   "recommendation": "Add a focused overlay-wheel test and verify in a terminal that sends wheel events.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "residual-1043-startup-wrap",
+   "capability": "72-column startup-help wrap family",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: startup-header-help.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "native differential boot-72 at 72 columns"
+    ]
+   },
+   "cppSeam": "See base row `startup-header-help`.",
+   "cppEvidence": "The pi row keeps `! bash` then `\u00b7 ctrl+o more`; C++ keeps `! bash \u00b7` then `ctrl+o more`. The same family is named by #1043 for boot-72/editor-long/editor-cjk/user-message/resize rows.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `startup-header-help`.",
+   "implementationTicket": "#1043",
+   "recommendation": "Reuse #1043: the 72-column wrap remains at v1.3.0 and is not an accepted presentation difference. Keep the scenario and align the shared help wrap.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "residual-1043-scrollback",
+   "capability": "Scrollback retained-row delta",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: transcript-state-scrollback.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "native differential scrollback at 72 columns"
+    ]
+   },
+   "cppSeam": "See base row `transcript-state-scrollback`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `transcript-state-scrollback`.",
+   "implementationTicket": "#1043",
+   "recommendation": "Reuse #1043: retained scrollback still differs (pi 12 vs C++ 9 non-empty rows); align structure rather than accepting the delta.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "residual-1043-tool-result-timing",
+   "capability": "tool-result mid-stream capture moment",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: tool-result-presentation.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "native differential tool-result at 100 columns"
+    ]
+   },
+   "cppSeam": "See base row `tool-result-presentation`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `tool-result-presentation`.",
+   "implementationTicket": "#1043",
+   "recommendation": "Reuse #1043/#812: the mid-stream frame differs (C++ paints the next prose row while pi still shows Working), but the stable post-completion tool/result structure matches. Do not close as a capture-only artifact without a stable-barrier comparison.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "residual-1043-settings-viewport",
+   "capability": "settings-selector viewport and omitted rows",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: settings-selector.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "native differential settings-selector at 100 columns"
+    ]
+   },
+   "cppSeam": "See base row `settings-selector`.",
+   "cppEvidence": "The `Show hardware cursor` description changed from `Show the terminal cursor while still positioning it for IME support` to `Use the terminal cursor instead of Pi's drawn cursor`.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `settings-selector`.",
+   "implementationTicket": "#1043",
+   "recommendation": "Update #1043 and do not preserve the historical #1023 viewport acceptance: pi v1.3.0 has 33 rows and new descriptions; C++ has 13. Add the supported rows/descriptions and viewport.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "residual-1035-image-placement",
+   "capability": "Fullscreen image placement-span repaint",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: images-placement-herdr.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "See base row `images-placement-herdr`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_tui",
+   "boundary": "See base row `images-placement-herdr`.",
+   "implementationTicket": "#1035",
+   "recommendation": "Reuse #1035; upstream placement-span code is unchanged, so the issue remains a C++/emulator evidence gap. Add the placement-span scenario and real Kitty/WezTerm observation.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "residual-1033-extension-editor-capture",
+   "capability": "Extension-editor dual-runtime capture",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: extension-editor-lifecycle.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+    ]
+   },
+   "cppSeam": "See base row `extension-editor-lifecycle`.",
+   "cppEvidence": "The pi side is now captured with factory inputs, 16 copied action handlers, callbacks, text/focus transfers, options, thinking/Bash border tokens, restore/reinstall and exactly two border rows.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `extension-editor-lifecycle`.",
+   "implementationTicket": "#1033",
+   "recommendation": "Update #1033 with the pi observation and add the Pike-side cell; do not close until both cells are green and the callback/focus/text values compare.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/extension-editor.json"
+   ]
+  },
+  {
+   "id": "residual-1032-system-theme",
+   "capability": "Generated system theme",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: system-theme.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "See base row `system-theme`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "missing",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `system-theme`.",
+   "implementationTicket": "#1032",
+   "recommendation": "Reuse #1032; `system-theme.ts` is unchanged v1.0.4->v1.3.0 and C++ still has only the built-in dark/light pair.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "residual-831-dock-growth-footer",
+   "capability": "Dock-growth footer frame loss",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: transcript-state-scrollback.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "See base row `transcript-state-scrollback`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_tui",
+   "boundary": "See base row `transcript-state-scrollback`.",
+   "implementationTicket": "#831",
+   "recommendation": "Reuse #831; the defect is in C++ `RenderPipeline` dock-growth repaint and still needs the VirtualTerminal frame test plus the tmux/PTY A/B observation. No upstream change makes it obsolete.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit."
+  },
+  {
+   "id": "residual-812-tool-result-presentation",
+   "capability": "Successful tool-result presentation",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: tool-result-presentation.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "native differential tool-result at 100 columns"
+    ]
+   },
+   "cppSeam": "See base row `tool-result-presentation`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `tool-result-presentation`.",
+   "implementationTicket": "#812",
+   "recommendation": "Update #812: v1.3.0 final presentation adds duration outputPad semantics; the stable final frame remains the target. Add the mid-stream barrier and duration cases.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "residual-810-thinking-selector",
+   "capability": "Thinking selector layout",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: thinking-selector.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "native differential thinking-selector at 100 columns"
+    ]
+   },
+   "cppSeam": "See base row `thinking-selector`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `thinking-selector`.",
+   "implementationTicket": "#810",
+   "recommendation": "Reuse/update #810: C++ omits `xhigh`/`max` and differs in marker/blank-row layout; the selector source is unchanged upstream, so this is a C++ gap.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "residual-808-model-selector",
+   "capability": "Model selector marker and row layout",
+   "operation": "Historical residual identity retained for reconciliation; upstream behavior was re-read at v1.3.0 and the C++ consumer was re-run where the scenario is executable.",
+   "consumer": "See the base capability row: model-selector.",
+   "upstreamEvidence": {
+    "sources": [
+     "historical issue body and current v1.3.0 source/scenario"
+    ],
+    "scenarios": [
+     "native differential model-selector at 100 columns"
+    ]
+   },
+   "cppSeam": "See base row `model-selector`.",
+   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "upstream-captured"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "See base row `model-selector`.",
+   "implementationTicket": "#808",
+   "recommendation": "Reuse #808: add a stable selector cell; the current C++ native differential run fails its post-Enter `Model:` assertion, so the residual is larger than marker placement alone.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
+   "evidence": [
+    "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
+   ]
+  },
+  {
+   "id": "excluded-third-party-ts-extensions",
+   "capability": "Third-party TS/JS extension execution",
+   "operation": "Direct loading/execution of third-party pi TypeScript/JavaScript plugins and third-party extension package management.",
+   "consumer": "None; excluded by ADR 0075.",
+   "upstreamEvidence": {
+    "sources": [
+     "ADR 0075 Retained product boundaries and explicit exclusions"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "No C++ TS/JS extension loader is present; `ExtensionToolRegistry` is a native C++ seam, not a plugin runtime.",
+   "cppEvidence": "Keep absent. This exclusion does not exclude the native C++ registration/hooks/tool wrapping/run-triggering/prompt-busy rows above.",
+   "status": {
+    "membership": "excluded",
+    "implementation": "not-applicable",
+    "verification": "not-applicable"
+   },
+   "owner": "none",
+   "boundary": "None",
+   "implementationTicket": "ADR 0075",
+   "recommendation": "Do not add a TS/JS plugin loader or third-party package surface.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Extensions selects native C++ registration, hooks, tool wrapping, run triggering and prompt/busy-state semantics. #1044 parent correction (2026-10-20) confirms this is included. Direct third-party TS/JS execution is excluded."
+  },
+  {
+   "id": "excluded-ai-timing-thinking",
+   "capability": "AI model-response timing and cross-model thinking transformation",
+   "operation": "Model-response timing and cross-model thinking transformation remain AI exclusions; tool execution timing is a separate selected capability.",
+   "consumer": "cch_ai boundary.",
+   "upstreamEvidence": {
+    "sources": [
+     "ADR 0075 Retained product boundaries and explicit exclusions"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "No implementation requested; do not use this exclusion to drop tool duration.",
+   "cppEvidence": "Excluded by the retained AI contract.",
+   "status": {
+    "membership": "excluded",
+    "implementation": "not-applicable",
+    "verification": "not-applicable"
+   },
+   "owner": "none",
+   "boundary": "cch_ai",
+   "implementationTicket": "ADR 0075",
+   "recommendation": "Keep excluded; tool duration remains selected in `tool-duration`.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Retained product boundaries \u2014 explicit AI exclusions; tool execution timing is separately selected under Application/Tool timing."
+  },
+  {
+   "id": "excluded-session-share",
+   "capability": "Session share/upload services and sessionShareDestination",
+   "operation": "Session share/upload services and the `sessionShareDestination` setting remain excluded.",
+   "consumer": "None.",
+   "upstreamEvidence": {
+    "sources": [
+     "ADR 0075 Retained product boundaries and explicit exclusions"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "No implementation requested; do not expose a command or setting claim.",
+   "cppEvidence": "Excluded by ADR 0075.",
+   "status": {
+    "membership": "excluded",
+    "implementation": "not-applicable",
+    "verification": "not-applicable"
+   },
+   "owner": "none",
+   "boundary": "None",
+   "implementationTicket": "ADR 0075",
+   "recommendation": "Keep absent from the settings selector and prompt claims.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  }
+ ]
+}

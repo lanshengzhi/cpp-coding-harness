@@ -1,0 +1,645 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1051",
+  "family": "audit-1051",
+  "capturedAt": "2026-10-19T18:24:06.853Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1051/capture-1051.mts",
+    "sha256": "24d23273639ae480c061f31fca9e0adedf05fa015536f326f189c7aec59003de",
+    "command": "PI_CHECKOUT=<private-frozen-checkout> PI_BASELINE=pi-v1.3.0 <private-frozen-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1051/capture-1051.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1051/capture-1051.mts",
+        "sha256": "24d23273639ae480c061f31fca9e0adedf05fa015536f326f189c7aec59003de"
+      },
+      {
+        "path": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+        "sha256": "993545c59088c1c1092ef15352c5198ebc9395f57a24caeaeecd0dc0c3b144a4"
+      },
+      {
+        "path": "fixtures/pi-coding-agent/capture/grok-mermaid-stub.mts",
+        "sha256": "b954a27253513d284dc90903a7ea73df567581cef7cfc28b038b81bedc329904"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "product-differential.json",
+      "family": "audit-1051",
+      "bytes": 167791,
+      "sha256": "6fd229cb391fb6ed1db8fa0a399b0d415f52088fd9fa8c568d8cc9393c222f8d",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode",
+        "packages/coding-agent/test/suite/harness.ts:createHarness",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+      ],
+      "scenarios": [
+        {
+          "name": "native differential boot-72 at 72 columns",
+          "inputs": {
+            "scenario": "boot-72",
+            "width": 72,
+            "terminalRows": 24,
+            "keystrokes": [],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 1,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "boot-72"
+          }
+        },
+        {
+          "name": "native differential boot-100 at 100 columns",
+          "inputs": {
+            "scenario": "boot-100",
+            "width": 100,
+            "terminalRows": 24,
+            "keystrokes": [],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 1,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "boot-100"
+          }
+        },
+        {
+          "name": "native differential boot-120 at 120 columns",
+          "inputs": {
+            "scenario": "boot-120",
+            "width": 120,
+            "terminalRows": 24,
+            "keystrokes": [],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 1,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "boot-120"
+          }
+        },
+        {
+          "name": "native differential boot-41 at 41 columns",
+          "inputs": {
+            "scenario": "boot-41",
+            "width": 41,
+            "terminalRows": 24,
+            "keystrokes": [],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 1,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "boot-41"
+          }
+        },
+        {
+          "name": "native differential model-selector at 100 columns",
+          "inputs": {
+            "scenario": "model-selector",
+            "width": 100,
+            "terminalRows": 24,
+            "keystrokes": [
+              "\f",
+              "\r"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "model-selector"
+          }
+        },
+        {
+          "name": "native differential settings-selector at 100 columns",
+          "inputs": {
+            "scenario": "settings-selector",
+            "width": 100,
+            "terminalRows": 24,
+            "keystrokes": [
+              "/settings",
+              "\r",
+              "Show hardware cursor",
+              "\r",
+              "\u0015",
+              "Terminal progress",
+              "\r",
+              "\u0015",
+              "\u001b"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 10,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": true
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "settings-selector"
+          }
+        },
+        {
+          "name": "native differential thinking-selector at 100 columns",
+          "inputs": {
+            "scenario": "thinking-selector",
+            "width": 100,
+            "terminalRows": 24,
+            "keystrokes": [
+              "/thinking",
+              "\r",
+              "\r"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 4,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "thinking-selector"
+          }
+        },
+        {
+          "name": "native differential editor-long at 72 columns",
+          "inputs": {
+            "scenario": "editor-long",
+            "width": 72,
+            "terminalRows": 24,
+            "keystrokes": [
+              "A long editor line that must wrap without losing the fixture-authored suffix",
+              "\u0015"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "editor-long"
+          }
+        },
+        {
+          "name": "native differential editor-cjk at 72 columns",
+          "inputs": {
+            "scenario": "editor-cjk",
+            "width": 72,
+            "terminalRows": 24,
+            "keystrokes": [
+              "混在文本 mixed 日本語 ✅",
+              "\u0015"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "editor-cjk"
+          }
+        },
+        {
+          "name": "native differential editor-token at 41 columns",
+          "inputs": {
+            "scenario": "editor-token",
+            "width": 41,
+            "terminalRows": 24,
+            "keystrokes": [
+              "UNBREAKABLE_TOKEN_abcdefghijklmnopqrstuvwxyz0123456789",
+              "\u0015"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "editor-token"
+          }
+        },
+        {
+          "name": "native differential user-message at 72 columns",
+          "inputs": {
+            "scenario": "user-message",
+            "width": 72,
+            "terminalRows": 24,
+            "keystrokes": [
+              "deterministic user prompt\r"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 2,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "user-message"
+          }
+        },
+        {
+          "name": "native differential tool-result at 100 columns",
+          "inputs": {
+            "scenario": "tool-result",
+            "width": 100,
+            "terminalRows": 24,
+            "keystrokes": [
+              "run the deterministic tool\r"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "tool-result"
+          }
+        },
+        {
+          "name": "native differential status-footer at 100 columns",
+          "inputs": {
+            "scenario": "status-footer",
+            "width": 100,
+            "terminalRows": 24,
+            "keystrokes": [
+              "deterministic status prompt\r"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 2,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "status-footer"
+          }
+        },
+        {
+          "name": "native differential resize-72-41 at 72 columns",
+          "inputs": {
+            "scenario": "resize-72-41",
+            "width": 72,
+            "terminalRows": 24,
+            "keystrokes": [],
+            "resize": "41x30->72x30",
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "resize-72-41"
+          }
+        },
+        {
+          "name": "native differential resize-100-72 at 100 columns",
+          "inputs": {
+            "scenario": "resize-100-72",
+            "width": 100,
+            "terminalRows": 24,
+            "keystrokes": [],
+            "resize": "72x40->100x40",
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "resize-100-72"
+          }
+        },
+        {
+          "name": "native differential resize-120-100 at 120 columns",
+          "inputs": {
+            "scenario": "resize-120-100",
+            "width": 120,
+            "terminalRows": 24,
+            "keystrokes": [],
+            "resize": "100x50->120x50",
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 3,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "resize-120-100"
+          }
+        },
+        {
+          "name": "native differential scrollback at 72 columns",
+          "inputs": {
+            "scenario": "scrollback",
+            "width": 72,
+            "terminalRows": 24,
+            "keystrokes": [
+              "line one\r",
+              "line two\r",
+              "line three\r",
+              "line four\r",
+              "line five\r",
+              "line six\r"
+            ],
+            "resize": null,
+            "profile": "dark truecolor, deterministic faux model, controlled workspace"
+          },
+          "expected": {
+            "runtime": "pi",
+            "snapshotCount": 7,
+            "themeName": "dark",
+            "colorCapability": "truecolor",
+            "cursorVisibleInFinalSnapshot": false
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "raw ANSI and styled-cell projections are omitted; visible cell text, scrollback text and cursor position are the compared boundary"
+          ],
+          "upstreamTest": {
+            "file": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "scrollback"
+          }
+        }
+      ]
+    },
+    {
+      "path": "extension-editor.json",
+      "family": "audit-1051",
+      "bytes": 24677,
+      "sha256": "4c172ca68b9ab522f2f7db40fe90713e196e05642b27c979e415d6ca9b277c76",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:setCustomEditorComponent",
+        "packages/coding-agent/src/core/extensions/types.ts:EditorFactory,ExtensionUIContext.setEditorComponent",
+        "packages/coding-agent/src/modes/interactive/components/custom-editor.ts:CustomEditor",
+        "packages/coding-agent/test/suite/harness.ts:createHarness"
+      ],
+      "scenarios": [
+        {
+          "name": "extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
+          "inputs": {
+            "terminal": {
+              "width": 100,
+              "rows": 24
+            },
+            "initialText": "before-install",
+            "typedText": "typed-after-install",
+            "thinkingShortcut": "shift+tab",
+            "bashModeInput": "!",
+            "restoreShortcut": "alt+e",
+            "reinstallShortcut": "alt+i"
+          },
+          "expected": {
+            "factoryCalls": 2,
+            "installTextTransferred": "before-install",
+            "installedFocused": true,
+            "thinkingBorderChanged": true,
+            "bashBorderChanged": true,
+            "submitInvokedOnSubmit": true,
+            "submitClearedEditor": true,
+            "restoreCarriedText": true,
+            "reinstallCarriedText": true,
+            "editorBorderRowsPerFrame": 2
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>",
+            "SGR border samples are retained verbatim because the role identity is the observation"
+          ]
+        },
+        {
+          "name": "extension editor applies each optional appearance and autocomplete operation once per install",
+          "inputs": {
+            "installs": 2,
+            "optionalOperations": [
+              "borderColor",
+              "setPaddingX",
+              "setAutocompleteMaxVisible",
+              "setAutocompleteProvider"
+            ]
+          },
+          "expected": {
+            "borderColorAssignmentsInFirstInstall": 6,
+            "setPaddingXCallsPerInstall": 1,
+            "setAutocompleteMaxVisibleCallsPerInstall": 1,
+            "actionHandlerCount": 16,
+            "onSubmitAndOnChangeAssigned": true
+          },
+          "normalizations": [
+            "none"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "program-status.json",
+      "family": "audit-1051",
+      "bytes": 12253,
+      "sha256": "a90897966ec9bd0f6d79394751e702f1cd53c81dd75389af929801743c164226",
+      "sourceEndpoints": [
+        "packages/tui/src/program-status.ts:formatProgramStatus,isProgramStatusReply",
+        "packages/coding-agent/src/modes/interactive/program-status-reporter.ts:ProgramStatusReporter",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:InteractiveMode",
+        "packages/tui/src/terminal.ts:setProgramStatus"
+      ],
+      "scenarios": [
+        {
+          "name": "program status reports idle, blocked, working, done and error through the terminal contract",
+          "inputs": {
+            "terminal": {
+              "width": 100,
+              "rows": 24
+            },
+            "programStatusOverride": "recorded terminal setProgramStatus calls",
+            "dialogTitle": "Probe dialog",
+            "prompts": [
+              "status prompt",
+              "error prompt"
+            ]
+          },
+          "expected": {
+            "statesInOrder": [
+              "idle",
+              "blocked",
+              "idle",
+              "working",
+              "done",
+              "working",
+              "error"
+            ],
+            "app": "pi",
+            "blockedKind": "question",
+            "doneMessageAbsent": true,
+            "errorMessage": "deterministic failure"
+          },
+          "normalizations": [
+            "none"
+          ]
+        }
+      ]
+    }
+  ]
+}
