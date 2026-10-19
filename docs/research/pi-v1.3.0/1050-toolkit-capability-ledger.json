@@ -11,6 +11,134 @@
     "historicalLedger": "docs/research/tui-v1.0.4-capability-ledger.json",
     "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
     "changedSourceFiles": [
+      "packages/coding-agent/src/cli/args.ts",
+      "packages/coding-agent/src/cli/credential-print.ts",
+      "packages/coding-agent/src/cli/experimental/cli.ts",
+      "packages/coding-agent/src/cli/experimental/command-options.ts",
+      "packages/coding-agent/src/cli/experimental/command.ts",
+      "packages/coding-agent/src/cli/experimental/commands/client.ts",
+      "packages/coding-agent/src/cli/experimental/commands/server.ts",
+      "packages/coding-agent/src/client/index.ts",
+      "packages/coding-agent/src/core/agent-session.ts",
+      "packages/coding-agent/src/core/auth-storage.ts",
+      "packages/coding-agent/src/core/bash-executor.ts",
+      "packages/coding-agent/src/core/compaction/utils.ts",
+      "packages/coding-agent/src/core/export-html/template.js",
+      "packages/coding-agent/src/core/export-html/tool-renderer.ts",
+      "packages/coding-agent/src/core/extensions/index.ts",
+      "packages/coding-agent/src/core/extensions/runner.ts",
+      "packages/coding-agent/src/core/extensions/types.ts",
+      "packages/coding-agent/src/core/key-id-schema.ts",
+      "packages/coding-agent/src/core/keybindings-schema.ts",
+      "packages/coding-agent/src/core/keybindings.ts",
+      "packages/coding-agent/src/core/model-config.ts",
+      "packages/coding-agent/src/core/model-resolver.ts",
+      "packages/coding-agent/src/core/model-runtime.ts",
+      "packages/coding-agent/src/core/nested-tool-calls.ts",
+      "packages/coding-agent/src/core/package-manager.ts",
+      "packages/coding-agent/src/core/project-trust.ts",
+      "packages/coding-agent/src/core/prompt-templates.ts",
+      "packages/coding-agent/src/core/remote-catalog-provider.ts",
+      "packages/coding-agent/src/core/resource-loader.ts",
+      "packages/coding-agent/src/core/sdk.ts",
+      "packages/coding-agent/src/core/settings-defaults.ts",
+      "packages/coding-agent/src/core/settings-manager.ts",
+      "packages/coding-agent/src/core/settings-schema.ts",
+      "packages/coding-agent/src/core/slash-commands.ts",
+      "packages/coding-agent/src/core/tools/render-utils.ts",
+      "packages/coding-agent/src/core/tools/renderers/bash.ts",
+      "packages/coding-agent/src/core/tools/renderers/edit.ts",
+      "packages/coding-agent/src/core/tools/renderers/read.ts",
+      "packages/coding-agent/src/experimental/cli.ts",
+      "packages/coding-agent/src/experimental/client-runtime.ts",
+      "packages/coding-agent/src/experimental/client-tui-chat.ts",
+      "packages/coding-agent/src/experimental/client-tui.ts",
+      "packages/coding-agent/src/experimental/client.ts",
+      "packages/coding-agent/src/experimental/commands.ts",
+      "packages/coding-agent/src/experimental/coordinator-entry.ts",
+      "packages/coding-agent/src/experimental/coordinator.ts",
+      "packages/coding-agent/src/experimental/durable/README.md",
+      "packages/coding-agent/src/experimental/durable/harness-setup.ts",
+      "packages/coding-agent/src/experimental/durable/main.ts",
+      "packages/coding-agent/src/experimental/durable/prompt.ts",
+      "packages/coding-agent/src/experimental/durable/runtime.ts",
+      "packages/coding-agent/src/experimental/durable/sessions.ts",
+      "packages/coding-agent/src/experimental/durable/subagent.ts",
+      "packages/coding-agent/src/experimental/durable/tui.ts",
+      "packages/coding-agent/src/experimental/plugin.ts",
+      "packages/coding-agent/src/experimental/plugins/bundled.ts",
+      "packages/coding-agent/src/experimental/plugins/package.ts",
+      "packages/coding-agent/src/experimental/process.ts",
+      "packages/coding-agent/src/experimental/radius-auth.ts",
+      "packages/coding-agent/src/experimental/radius-relay.ts",
+      "packages/coding-agent/src/experimental/server.ts",
+      "packages/coding-agent/src/experimental/services/README.md",
+      "packages/coding-agent/src/experimental/services/agent-controller-provider.ts",
+      "packages/coding-agent/src/experimental/services/agent-controller.ts",
+      "packages/coding-agent/src/experimental/services/connection.ts",
+      "packages/coding-agent/src/experimental/services/models-provider.ts",
+      "packages/coding-agent/src/experimental/services/models.ts",
+      "packages/coding-agent/src/experimental/services/plugins.ts",
+      "packages/coding-agent/src/experimental/services/presentation-ui.ts",
+      "packages/coding-agent/src/experimental/services/server.ts",
+      "packages/coding-agent/src/experimental/services/sessions.ts",
+      "packages/coding-agent/src/experimental/services/slash-commands-provider.ts",
+      "packages/coding-agent/src/experimental/services/slash-commands.ts",
+      "packages/coding-agent/src/experimental/services/transcript-provider.ts",
+      "packages/coding-agent/src/experimental/services/transcript.ts",
+      "packages/coding-agent/src/experimental/services/worker.ts",
+      "packages/coding-agent/src/experimental/session-catalog.ts",
+      "packages/coding-agent/src/experimental/session-worker-manager.ts",
+      "packages/coding-agent/src/experimental/session-worker.ts",
+      "packages/coding-agent/src/experimental/vacation/README.md",
+      "packages/coding-agent/src/experimental/vacation/harness-setup.ts",
+      "packages/coding-agent/src/experimental/vacation/main.ts",
+      "packages/coding-agent/src/experimental/vacation/runtime.ts",
+      "packages/coding-agent/src/experimental/vacation/sessions.ts",
+      "packages/coding-agent/src/experimental/vacation/tui.ts",
+      "packages/coding-agent/src/experimental/vacation/vacation.ts",
+      "packages/coding-agent/src/extensions/codemode/execute.ts",
+      "packages/coding-agent/src/extensions/codemode/index.ts",
+      "packages/coding-agent/src/extensions/codemode/renderer.ts",
+      "packages/coding-agent/src/extensions/codemode/tool.ts",
+      "packages/coding-agent/src/extensions/llama/provider.ts",
+      "packages/coding-agent/src/extensions/mcp/cli.ts",
+      "packages/coding-agent/src/extensions/mcp/index.ts",
+      "packages/coding-agent/src/extensions/mcp/oauth.ts",
+      "packages/coding-agent/src/extensions/mcp/resources.ts",
+      "packages/coding-agent/src/extensions/mcp/runtime.ts",
+      "packages/coding-agent/src/extensions/mcp/tools.ts",
+      "packages/coding-agent/src/extensions/mcp/ui.ts",
+      "packages/coding-agent/src/extensions/tool-search/tool.ts",
+      "packages/coding-agent/src/index.ts",
+      "packages/coding-agent/src/main.ts",
+      "packages/coding-agent/src/modes/interactive/components/bash-execution.ts",
+      "packages/coding-agent/src/modes/interactive/components/branch-summary-message.ts",
+      "packages/coding-agent/src/modes/interactive/components/compaction-summary-message.ts",
+      "packages/coding-agent/src/modes/interactive/components/custom-entry.ts",
+      "packages/coding-agent/src/modes/interactive/components/custom-message.ts",
+      "packages/coding-agent/src/modes/interactive/components/settings-selector.ts",
+      "packages/coding-agent/src/modes/interactive/components/skill-invocation-message.ts",
+      "packages/coding-agent/src/modes/interactive/components/status-indicator.ts",
+      "packages/coding-agent/src/modes/interactive/components/tool-execution.ts",
+      "packages/coding-agent/src/modes/interactive/components/tree-selector.ts",
+      "packages/coding-agent/src/modes/interactive/interactive-mode.ts",
+      "packages/coding-agent/src/modes/interactive/program-status-reporter.ts",
+      "packages/coding-agent/src/modes/interactive/session-share.ts",
+      "packages/coding-agent/src/modes/interactive/theme/dark.json",
+      "packages/coding-agent/src/modes/interactive/theme/light.json",
+      "packages/coding-agent/src/modes/interactive/theme/theme-json.ts",
+      "packages/coding-agent/src/modes/interactive/theme/theme-schema.json",
+      "packages/coding-agent/src/modes/interactive/theme/theme-schema.ts",
+      "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts",
+      "packages/coding-agent/src/modes/interactive/theme/theme.ts",
+      "packages/coding-agent/src/modes/print-mode.ts",
+      "packages/coding-agent/src/package-manager-cli.ts",
+      "packages/coding-agent/src/utils/ansi.ts",
+      "packages/coding-agent/src/utils/clipboard.ts",
+      "packages/coding-agent/src/utils/image-resize-core.ts",
+      "packages/coding-agent/src/utils/image-resize-worker.ts",
+      "packages/coding-agent/src/utils/image-resize.ts",
       "packages/tui/src/components/box.ts",
       "packages/tui/src/components/editor.ts",
       "packages/tui/src/components/input.ts",
@@ -33,7 +161,7 @@
   "stats": {
     "rows": 954,
     "indexExportRows": 176,
-    "nonIndexCapabilityRows": 20,
+    "nonIndexCapabilityRows": 21,
     "memberRows": 757,
     "changeCapabilityRows": 7,
     "linuxUsableRows": 949,
@@ -53,9 +181,9 @@
       "unverified": 900,
       "upstream-captured": 49
     },
-    "sourceChangedSinceV1.0.4": 540,
+    "sourceChangedSinceV1.0.4": 547,
     "v130ObservationRows": 49,
-    "historicalRouteRows": 865
+    "historicalRouteRows": 858
   },
   "rows": [
     {
@@ -49508,19 +49636,12 @@
       "boundary": "tuiMode + --tui-mode regular|fullscreen",
       "implementation_ticket": null,
       "scenario": "E20 tuiMode/default/CLI precedence",
-      "evidence": {
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenario": "E20 tuiMode/default/CLI precedence",
-        "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-        "historicalBaseline": "pi-v1.0.4",
-        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-        "route": "unchanged-frozen-source"
-      },
+      "evidence": null,
       "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
+        "non-index capability not individually re-audited against v1.3.0",
+        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
       ],
-      "notes": "default fullscreen only at #1024 Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
+      "notes": "default fullscreen only at #1024 Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
       "export": "product.tuiMode",
       "member": null,
@@ -49528,14 +49649,22 @@
       "historicalTickets": [],
       "publicOperations": [],
       "typeOnly": false,
-      "sourceChangedSinceV1.0.4": false,
-      "comparisonRoute": "unchanged-frozen-source",
+      "sourceChangedSinceV1.0.4": true,
+      "comparisonRoute": "not-audited",
       "cpp": {
         "interface": "tuiMode + --tui-mode regular|fullscreen",
         "consumer": "CLI parse + settings + interactive mode",
         "tests": []
       },
-      "comparisonCase": "E20 tuiMode/default/CLI precedence"
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E20 tuiMode/default/CLI precedence",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
+      },
+      "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
     {
       "id": "product.--tui-mode",
@@ -49552,19 +49681,12 @@
       "boundary": "--tui-mode regular|fullscreen",
       "implementation_ticket": null,
       "scenario": "E20 CLI overrides settings",
-      "evidence": {
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenario": "E20 CLI overrides settings",
-        "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-        "historicalBaseline": "pi-v1.0.4",
-        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-        "route": "unchanged-frozen-source"
-      },
+      "evidence": null,
       "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
+        "non-index capability not individually re-audited against v1.3.0",
+        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
       ],
-      "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
+      "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
       "export": "product.--tui-mode",
       "member": null,
@@ -49572,14 +49694,22 @@
       "historicalTickets": [],
       "publicOperations": [],
       "typeOnly": false,
-      "sourceChangedSinceV1.0.4": false,
-      "comparisonRoute": "unchanged-frozen-source",
+      "sourceChangedSinceV1.0.4": true,
+      "comparisonRoute": "not-audited",
       "cpp": {
         "interface": "--tui-mode regular|fullscreen",
         "consumer": "AsyncCliRuntime / interactive startup",
         "tests": []
       },
-      "comparisonCase": "E20 CLI overrides settings"
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E20 CLI overrides settings",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
+      },
+      "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
     {
       "id": "product.runInteractiveMode",
@@ -49596,19 +49726,12 @@
       "boundary": "run_interactive_mode assembly",
       "implementation_ticket": null,
       "scenario": "E20/E21 interactive lifecycle",
-      "evidence": {
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenario": "E20/E21 interactive lifecycle",
-        "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-        "historicalBaseline": "pi-v1.0.4",
-        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-        "route": "unchanged-frozen-source"
-      },
+      "evidence": null,
       "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
+        "non-index capability not individually re-audited against v1.3.0",
+        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
       ],
-      "notes": "mode switch/exit/fullscreen assembly tickets Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
+      "notes": "mode switch/exit/fullscreen assembly tickets Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
       "export": "product.runInteractiveMode",
       "member": null,
@@ -49616,14 +49739,22 @@
       "historicalTickets": [],
       "publicOperations": [],
       "typeOnly": false,
-      "sourceChangedSinceV1.0.4": false,
-      "comparisonRoute": "unchanged-frozen-source",
+      "sourceChangedSinceV1.0.4": true,
+      "comparisonRoute": "not-audited",
       "cpp": {
         "interface": "run_interactive_mode assembly",
         "consumer": "run_interactive_mode(Terminal&, InteractiveSessionRun)",
         "tests": []
       },
-      "comparisonCase": "E20/E21 interactive lifecycle"
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E20/E21 interactive lifecycle",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
+      },
+      "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
     {
       "id": "product.fullscreenExitOutput",
@@ -49640,19 +49771,12 @@
       "boundary": "persisted fullscreen exit output control",
       "implementation_ticket": null,
       "scenario": "E20 transcript vs resume-hint exit output",
-      "evidence": {
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenario": "E20 transcript vs resume-hint exit output",
-        "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-        "historicalBaseline": "pi-v1.0.4",
-        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-        "route": "unchanged-frozen-source"
-      },
+      "evidence": null,
       "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
+        "non-index capability not individually re-audited against v1.3.0",
+        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
       ],
-      "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
+      "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
       "export": "product.fullscreenExitOutput",
       "member": null,
@@ -49660,14 +49784,22 @@
       "historicalTickets": [],
       "publicOperations": [],
       "typeOnly": false,
-      "sourceChangedSinceV1.0.4": false,
-      "comparisonRoute": "unchanged-frozen-source",
+      "sourceChangedSinceV1.0.4": true,
+      "comparisonRoute": "not-audited",
       "cpp": {
         "interface": "persisted fullscreen exit output control",
         "consumer": "fullscreen stop/exit policy",
         "tests": []
       },
-      "comparisonCase": "E20 transcript vs resume-hint exit output"
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E20 transcript vs resume-hint exit output",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
+      },
+      "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
     {
       "id": "product.fullscreenCopyOnSelect",
@@ -49684,19 +49816,12 @@
       "boundary": "persisted setting + runtime action",
       "implementation_ticket": null,
       "scenario": "E15 copy-on-select false/true",
-      "evidence": {
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenario": "E15 copy-on-select false/true",
-        "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-        "historicalBaseline": "pi-v1.0.4",
-        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-        "route": "unchanged-frozen-source"
-      },
+      "evidence": null,
       "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
+        "non-index capability not individually re-audited against v1.3.0",
+        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
       ],
-      "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
+      "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
       "export": "product.fullscreenCopyOnSelect",
       "member": null,
@@ -49704,14 +49829,22 @@
       "historicalTickets": [],
       "publicOperations": [],
       "typeOnly": false,
-      "sourceChangedSinceV1.0.4": false,
-      "comparisonRoute": "unchanged-frozen-source",
+      "sourceChangedSinceV1.0.4": true,
+      "comparisonRoute": "not-audited",
       "cpp": {
         "interface": "persisted setting + runtime action",
         "consumer": "fullscreen selection copy",
         "tests": []
       },
-      "comparisonCase": "E15 copy-on-select false/true"
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E15 copy-on-select false/true",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
+      },
+      "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
     {
       "id": "product.fullscreenWheelScrollLines",
@@ -49728,19 +49861,12 @@
       "boundary": "persisted setting",
       "implementation_ticket": null,
       "scenario": "E14 configurable wheel lines",
-      "evidence": {
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenario": "E14 configurable wheel lines",
-        "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-        "historicalBaseline": "pi-v1.0.4",
-        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-        "route": "unchanged-frozen-source"
-      },
+      "evidence": null,
       "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
+        "non-index capability not individually re-audited against v1.3.0",
+        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
       ],
-      "notes": "Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
+      "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
       "export": "product.fullscreenWheelScrollLines",
       "member": null,
@@ -49748,14 +49874,22 @@
       "historicalTickets": [],
       "publicOperations": [],
       "typeOnly": false,
-      "sourceChangedSinceV1.0.4": false,
-      "comparisonRoute": "unchanged-frozen-source",
+      "sourceChangedSinceV1.0.4": true,
+      "comparisonRoute": "not-audited",
       "cpp": {
         "interface": "persisted setting",
         "consumer": "wheel scroll",
         "tests": []
       },
-      "comparisonCase": "E14 configurable wheel lines"
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E14 configurable wheel lines",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
+      },
+      "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
     {
       "id": "product.showHardwareCursor",
@@ -49772,19 +49906,12 @@
       "boundary": "hardware cursor visibility control",
       "implementation_ticket": null,
       "scenario": "E10/E1021 hardware cursor visibility",
-      "evidence": {
-        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
-        "scenario": "E10/E1021 hardware cursor visibility",
-        "result": "historical pi-v1.0.4 evidence family; this non-index capability has no dedicated v1.3.0 observation",
-        "historicalBaseline": "pi-v1.0.4",
-        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
-        "route": "unchanged-frozen-source"
-      },
+      "evidence": null,
       "gaps": [
-        "no v1.3.0 C++ comparison recorded",
-        "no separate v1.3.0 observation; comparison route is the unchanged frozen source plus the historical v1.0.4 bundle"
+        "non-index capability not individually re-audited against v1.3.0",
+        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
       ],
-      "notes": "real emulator evidence in #1021 Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.",
+      "notes": "real emulator evidence in #1021 Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
       "export": "product.showHardwareCursor",
       "member": null,
@@ -49792,14 +49919,22 @@
       "historicalTickets": [],
       "publicOperations": [],
       "typeOnly": false,
-      "sourceChangedSinceV1.0.4": false,
-      "comparisonRoute": "unchanged-frozen-source",
+      "sourceChangedSinceV1.0.4": true,
+      "comparisonRoute": "not-audited",
       "cpp": {
         "interface": "hardware cursor visibility control",
         "consumer": "renderer construction / IME",
         "tests": []
       },
-      "comparisonCase": "E10/E1021 hardware cursor visibility"
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E10/E1021 hardware cursor visibility",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
+      },
+      "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
     {
       "id": "diag.PI_TUI_WRITE_LOG",
@@ -49834,6 +49969,14 @@
         "interface": "equivalent write logging capability",
         "consumer": "toolkit diagnostics",
         "tests": []
+      },
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E22 write-log diagnostic",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
       },
       "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },
@@ -49870,6 +50013,14 @@
         "interface": "optional debug key hook on TUI",
         "consumer": "toolkit diagnostics / host callback",
         "tests": []
+      },
+      "historicalEvidence": {
+        "artifact": "fixtures/pi-tui/bundles/pi-v1.0.4/manifest.json",
+        "scenario": "E22 debug callback",
+        "result": "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+        "historicalBaseline": "pi-v1.0.4",
+        "historicalRevision": "7c10bd4337495ee613f2224843ecdf349b80d1df",
+        "route": "historical-reference-only"
       },
       "comparisonCase": "none (not-audited; no discriminating v1.3.0 capture)"
     },

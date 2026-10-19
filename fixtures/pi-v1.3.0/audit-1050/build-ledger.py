@@ -811,8 +811,10 @@ def main() -> int:
     historical = json.loads(Path(HISTORICAL_LEDGER).read_text())
     changed_files = {
         line
-        for line in run_git(pi, "diff", "--name-only", HISTORICAL_REVISION, REVISION, "--", "packages/tui").splitlines()
-        if line.startswith("packages/tui/src/")
+        for line in run_git(
+            pi, "diff", "--name-only", HISTORICAL_REVISION, REVISION, "--", "packages/tui", "packages/coding-agent"
+        ).splitlines()
+        if line.startswith("packages/tui/src/") or line.startswith("packages/coding-agent/src/")
     }
 
     def file_changed(path: str) -> bool:
@@ -1231,7 +1233,8 @@ def main() -> int:
             rows.append(row)
 
     # Historical Linux-usable non-index capabilities (product entries, internal helpers,
-    # diagnostics). They keep their v1.0.4 identity; only a few point at changed TUI files.
+    # diagnostics). They keep their v1.0.4 identity; every row source is checked against the
+    # complete v1.0.4..v1.3.0 diff, including application sources.
     for historical_extra in historical_non_index:
         classification = historical_extra["classification"]
         membership = "excluded" if classification == "approved-exclusion" else "supported"
@@ -1243,8 +1246,14 @@ def main() -> int:
         if membership == "excluded":
             notes.append("v1.0.4 approved platform exclusion retained.")
         elif source_changed:
-            notes.append("Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.")
+            notes.append(
+                "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited."
+            )
             gaps = ["non-index capability not individually re-audited against v1.3.0"]
+            if historical_extra["path"].startswith("packages/coding-agent/"):
+                gaps.append(
+                    "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+                )
         else:
             notes.append("Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.")
             gaps = [
@@ -1285,14 +1294,22 @@ def main() -> int:
         if membership == "excluded":
             row["evidence"] = None
             row["cpp"]["interface"] = "none (approved exclusion)"
+        elif source_changed:
+            row["evidence"] = None
+            if historical_extra.get("evidence_scenario"):
+                row["historicalEvidence"] = historical_evidence(
+                    historical_extra["evidence_scenario"],
+                    "historical pi-v1.0.4 observation retained as provenance only; the frozen source changed, so it is not comparison evidence for v1.3.0",
+                    route="historical-reference-only",
+                )
         else:
             row["evidence"] = (
                 historical_evidence(
                     historical_extra.get("evidence_scenario", ""),
                     row["evidence"]["result"],
-                    route="not-audited" if source_changed else "unchanged-frozen-source",
+                    route="unchanged-frozen-source",
                 )
-                if historical_extra.get("evidence_scenario") and not source_changed
+                if historical_extra.get("evidence_scenario")
                 else None
             )
         rows.append(row)
@@ -1383,7 +1400,9 @@ def main() -> int:
         if row["id"] in seen_ids:
             raise SystemExit(f"duplicate ledger row id: {row['id']}")
         seen_ids.add(row["id"])
-        row.pop("historicalEvidence", None)
+        historical_reference = row.pop("historicalEvidence", None)
+        if historical_reference is not None:
+            row["historicalEvidence"] = historical_reference
         interface = CPP_INTERFACE_OVERRIDE.get(row["id"])
         if interface is None:
             interface = historical_contract.get(row["id"])
@@ -1407,7 +1426,9 @@ def main() -> int:
             if row.get("member") is None and row.get("export") and row["kind"] in INDEX_EXPORT_KINDS
         ),
         "nonIndexCapabilityRows": sum(
-            1 for row in ordered if row.get("member") is None and row["kind"] not in INDEX_EXPORT_KINDS
+            1
+            for row in ordered
+            if row.get("member") is None and not (row.get("export") and row["kind"] in INDEX_EXPORT_KINDS)
         ),
         "memberRows": sum(1 for row in ordered if row.get("member") is not None),
         "changeCapabilityRows": sum(1 for row in ordered if not row.get("export")),

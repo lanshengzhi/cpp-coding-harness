@@ -18,11 +18,11 @@ New observations carry `baseline: pi-v1.3.0` and `revision: 71023aec…`. Histor
 |---|---:|---|
 | `v1.3.0-observation` | 49 | A v1.3.0 artifact scenario covers the row or its changed member |
 | `member-absent-from-diff` | 455 | Source file changed, but the v1.0.4→v1.3.0 diff never names this member; historical evidence is carried |
-| `unchanged-frozen-source` | 410 | Frozen source file is byte-identical between v1.0.4 and v1.3.0 |
-| `not-audited` | 35 | Symbol appears in changed hunks but has no behavior-specific capture; deliberately **not** labelled unchanged |
+| `unchanged-frozen-source` | 403 | Frozen source file is byte-identical between v1.0.4 and v1.3.0 |
+| `not-audited` | 42 | Source changed or symbol appears in changed hunks, but there is no behavior-specific v1.3.0 capture; deliberately **not** labelled unchanged |
 | `not-applicable` | 5 | Approved exclusion |
 
-The 35 `not-audited` rows are the conservative residue, mostly type/member names that occur incidentally in a changed file (for example `Box.paddingX`, `Terminal.write`, `OverlayOptions.width`, the two diagnostic capability rows). They carry a gap rather than a parity claim; the full list is in the ledger and summarized under [Residual gaps](#residual-gaps).
+The 42 `not-audited` rows are the conservative residue: type/member names that occur incidentally in a changed file (for example `Box.paddingX`, `Terminal.write`, `OverlayOptions.width`, the two diagnostic capability rows) plus 7 application product entries whose `packages/coding-agent` source changed. The 9 changed rows with a `historicalEvidence` field (the 7 product entries and 2 diagnostics) keep the old pi-v1.0.4 pointer as provenance only; it is never comparison evidence or an unchanged claim. The full list is in the ledger and summarized under [Residual gaps](#residual-gaps).
 
 ## Evidence artifacts
 
@@ -45,7 +45,7 @@ Manifest: `fixtures/pi-v1.3.0/audit-1050/manifest.json`, SHA-256 `3f479083b10886
 
 ## Change inventory: v1.0.4 → v1.3.0
 
-The index grew from 173 to 176 exports; none was removed. Fourteen `packages/tui/src` files changed. The table below is the operation/consumer/status summary for every changed capability. The complete per-operation ledger is `docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json`.
+The index grew from 173 to 176 exports; none was removed. Fourteen `packages/tui/src` files changed, and `packages/coding-agent/src/cli/args.ts` plus `packages/coding-agent/src/modes/interactive/interactive-mode.ts` also changed. The 7 application product entries that point at those coding-agent sources are `not-audited` with a separate `historicalEvidence` provenance pointer; their v1.3.0 product behavior belongs to the #1051 application audit and is not carried as unchanged. The table below is the operation/consumer/status summary for every changed TUI capability. The complete per-operation ledger is `docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json`.
 
 | Area | v1.3.0 operations/members | Frozen observation | C++ status | Required caller / C++ consumer |
 |---|---|---|---|---|
@@ -231,7 +231,7 @@ Terminal query/clipboard/image rows are implemented at the reusable layer: cell-
 ## Verification and evidence status
 
 - The evidence checker accepts the manifest: `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1050/manifest.json` exits 0 and prints the registry record above. Until the serial merger applies that record, the bundle remains `upstream-captured`, not `verified`.
-- Row verification: **49 upstream-captured, 900 unverified, 0 verified, 5 not-applicable**. The 900 unverified rows are honest: 865 have a historical comparison route and 35 have a `not-audited` gap. No C++ differential capture was run for this audit, and no real terminal-emulator evidence exists for the C++ side: every native status is source/test inventory, not an emulator observation. That remains a visible verification gap, not an unconditional pass or skip.
+- Row verification: **49 upstream-captured, 900 unverified, 0 verified, 5 not-applicable**. The 900 unverified rows are honest: 858 have a historical comparison route and 42 have a `not-audited` gap. No C++ differential capture was run for this audit, and no real terminal-emulator evidence exists for the C++ side: every native status is source/test inventory, not an emulator observation. That remains a visible verification gap, not an unconditional pass or skip.
 - Functional status: **905 implemented, 30 partial, 14 missing** among supported rows (19 missing including the 5 exclusions), 44 supported rows with a functional gap.
 - Frozen upstream suites were run against the same checkout to corroborate the captured behavior: 20 files, **873 tests passed** (`editor`, `input`, `keys`, `stdin-buffer`, `terminal`, `terminal-image`, `program-status`, `tui-render`, `tui-alt-screen`, `overlay-options`, `native-clipboard-linux`, `markdown`, `latex`, `layout`, `wheel-scroll`, `visible-width`, `truncate-to-width`, `wrap-ansi`, `colors`, `mouse-components`). The checkout remained clean at `71023aec…`.
 - Ledger validator: `python3 fixtures/pi-v1.3.0/audit-1050/validate-ledger.py --pi-checkout /tmp/cch-1050-pi-frozen --ledger docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json` passes (954 rows, 176 index exports, 5 exclusions, 18 additions, 10 artifacts; every v1.3.0 evidence scenario exists).
@@ -241,7 +241,7 @@ Terminal query/clipboard/image rows are implemented at the reusable layer: cell-
 1. **All Linux-usable capabilities/defaults/callers.** 176 index exports + 757 members + 14 historical non-index rows + 7 v1.3.0 change rows are accounted; defaults table above; every row has a consumer (or an explicit `none` with the missing caller named); additions since v1.0.4 are the 3 exports/8 members/7 change rows; representation equivalents and 5 platform/parser exclusions are named.
 2. **Frozen public scenarios.** Fake/hardware cursor markers and standalone components (`cursor-composition.json`, `input-standalone.json`, reused `hardware-cursor.json`); dynamic padding and selection reset (`padding-and-selection-reset.json`); overlay cursor/wheel (`overlay-routing.json`, `cursor-composition.json`); shifted-symbol keys and fragmented color replies (`keys-and-terminal-replies.json`); reused `selection-multiclick.json` for the unchanged selection family.
 3. **Inventory domains.** Program status (format/detection/override) and Herdr are detailed above; rendering/lifecycle/focus/layout, input/Unicode/ANSI/Markdown/math and terminal queries/clipboard/image are covered by the module table and per-row consumers; reusable TUI rows are `cch_tui`, while product-entry rows (`tuiMode`, `--tui-mode`, `runInteractiveMode`, `showHardwareCursor`, fullscreen settings) are `frontend_*`/`cch_coding_agent` responsibilities.
-4. **Provenance.** New observations bind to `pi-v1.3.0`/`71023aec…`; historical rows retain `pi-v1.0.4`/`7c10bd43…`; unchanged rows use the unchanged-source or member-absent-from-diff route; 35 ambiguous rows are explicitly not claimed as unchanged.
+4. **Provenance.** New observations bind to `pi-v1.3.0`/`71023aec…`; historical rows retain `pi-v1.0.4`/`7c10bd43…`; unchanged rows use the unchanged-source or member-absent-from-diff route; 42 rows (35 toolkit rows plus 7 changed application product entries) are explicitly not claimed as unchanged.
 
 ## Residual gaps
 
@@ -256,7 +256,7 @@ The 44 supported rows with a functional gap group as follows (full details in th
 - **Fragmented replies (2 rows + capability):** `StdinBuffer.process`, `flush`, `cch_tui:stdin-buffer:fragmented-terminal-replies` partial.
 - **Herdr (2 rows):** `detectCapabilities` and `detectCapabilitiesFromEnvironment` partial/missing.
 
-The 35 `not-audited` rows are listed in the ledger with `comparisonRoute: not-audited`; they are the rows whose symbol text occurs in a changed hunk but whose behavior was not separately captured. They are deliberately excluded from unchanged-behavior claims. The 900 `unverified` rows have no C++ differential capture; `verified` remains zero by design for this audit.
+The 42 `not-audited` rows are listed in the ledger with `comparisonRoute: not-audited`; they are the rows whose source changed or whose symbol text occurs in a changed hunk without a behavior-specific capture. The 9 rows with a separate `historicalEvidence` field preserve the old pi-v1.0.4 pointer as provenance only, never as v1.3.0 comparison proof. They are deliberately excluded from unchanged-behavior claims. The 900 `unverified` rows have no C++ differential capture; `verified` remains zero by design for this audit.
 
 ## Consumers and tests affected
 
@@ -276,7 +276,7 @@ The 35 `not-audited` rows are listed in the ledger with `comparisonRoute: not-au
 
 - Included: the 10 capture artifacts/58 scenarios, capture harness and child process, the 954-row ledger, the human report, and the ticket-owned validator.
 - Excluded by authority: no production fixes or migrations; no shared registry edit (the record is a handoff request); no issue mutation; no macOS/parser-object capabilities.
-- Unresolved: 44 functional gaps above; 35 not-audited rows; no C++ differential/verified capture; the shared registry record is pending serial merger.
+- Unresolved: 44 functional gaps above; 42 not-audited rows; no C++ differential/verified capture; the shared registry record is pending serial merger.
 
 ## Validation commands
 
@@ -284,7 +284,7 @@ The 35 `not-audited` rows are listed in the ledger with `comparisonRoute: not-au
 - Evidence check: `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1050/manifest.json` — exit 0.
 - Ledger build: `python3 fixtures/pi-v1.3.0/audit-1050/build-ledger.py --pi-checkout /tmp/cch-1050-pi-frozen --output docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json` — 954 rows.
 - Ledger validation: `python3 fixtures/pi-v1.3.0/audit-1050/validate-ledger.py --pi-checkout /tmp/cch-1050-pi-frozen --ledger docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json` — passed.
-- Frozen upstream tests: `node --test --test-reporter=spec test/editor.test.ts … test/mouse-components.test.ts` (18 files) — 873 passed, 0 failed.
+- Frozen upstream tests: `node --test --test-reporter=spec test/editor.test.ts … test/mouse-components.test.ts` (20 files) — 873 passed, 0 failed.
 - Frozen checkout cleanliness: `git -C /tmp/cch-1050-pi-frozen status --short` — empty; `HEAD` at `71023aec…`.
 
 ## Recommended next steps
@@ -292,7 +292,7 @@ The 35 `not-audited` rows are listed in the ledger with `comparisonRoute: not-au
 1. Apply the registry record through the #1046 serial merger so the bundle moves from `upstream-captured` to `verified` (the C++ rows remain unverified until a native comparison exists).
 2. In a #1058 implementation slice, start with the independent TUI gaps: `renderFakeCursor`/marker resolution and hardware-cursor suppression; `Box::set_padding_x`; `AltScreen::reset_text_selection`; shifted-symbol `parse_key`/`matches_key`; fragmented terminal-reply buffering; Herdr detection; then the overlay-wheel routing change.
 3. Implement OSC 7501 as a terminal-layer capability plus a `cch_coding_agent` program-status reporter; the native reporter is a #1051 product row, not a TUI audit deliverable.
-4. Add a C++ differential capture for the 49 upstream-captured rows before claiming `verified`, and use the 35 `not-audited` rows as the review queue for the changed-file triage.
+4. Add a C++ differential capture for the 49 upstream-captured rows before claiming `verified`, and use the 42 `not-audited` rows as the review queue for the changed-file triage; the 7 application product entries are cross-referenced to #1051 rather than treated as unchanged.
 
 ## Pointers
 
