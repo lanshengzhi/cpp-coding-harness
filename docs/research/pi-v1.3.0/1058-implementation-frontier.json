@@ -293,6 +293,36 @@
     },
     {
       "id": "M3",
+      "kind": "expand",
+      "drafts": [
+        "P2",
+        "P3"
+      ],
+      "sharedSymbols": [
+        "cch_chord document/delta/replicated state",
+        "cch_durable Storage, memory backend and Session commit"
+      ],
+      "gate": "The new cch_chord and cch_durable targets expose their real public behavior to focused tests; no legacy consumer is redirected yet.",
+      "note": "Adds the new owners while the existing application paths remain the production path."
+    },
+    {
+      "id": "M4",
+      "kind": "migrate",
+      "drafts": [
+        "P7"
+      ],
+      "sharedSymbols": [
+        "cch::agent::harness::session::TaskStore",
+        "cch::agent::harness::session::SqliteSessionStore/SqliteDatabase",
+        "cch::agent::harness::TaskScheduler"
+      ],
+      "forwardingForm": "Durable-specific machinery moves to cch_durable (or is retired with its membership decision) while cch_agent_core keeps temporary aliases for its own tests.",
+      "removalSlice": "M6",
+      "gate": "TaskStore/SqliteSessionStore move behind the cch_durable boundary; cch_agent_core tests compile through the temporary aliases and introduce no new direct sqlite3 consumer.",
+      "note": "P7 is scheduled only after P3 (M3) and P6 (M1); F7 depends on P7 and therefore cannot be scheduled before M4."
+    },
+    {
+      "id": "M5",
       "kind": "migrate",
       "drafts": [
         "F2",
@@ -301,40 +331,25 @@
       "sharedSymbols": [
         "durable SQLite/JSONL storage contract"
       ],
-      "forwardingForm": "The durable stores are added beside the legacy in-core SqliteSessionStore path, which stays compiled until M4 removes it.",
-      "removalSlice": "M4",
+      "forwardingForm": "The durable stores are added beside the legacy in-core SqliteSessionStore path, which stays compiled until M6 removes it.",
+      "removalSlice": "M6",
       "gate": "SQLite and JSONL storage conformance runs through the durable public caller."
     },
     {
-      "id": "M4",
-      "kind": "expand",
-      "drafts": [
-        "P7",
-        "P8"
-      ],
-      "sharedSymbols": [
-        "cch::agent::harness::session::TaskStore",
-        "cch::agent::harness::session::SqliteSessionStore/SqliteDatabase",
-        "cch::agent::harness::TaskScheduler"
-      ],
-      "forwardingForm": "Durable-specific machinery moves to cch_durable (or is retired with its membership decision) while cch_agent_core keeps temporary aliases for its own tests.",
-      "removalSlice": "M5",
-      "gate": "cch_agent_core no longer links sqlite3; the no-decision legacy SQLite row and the second-store writers are resolved or explicitly retained with a membership decision."
-    },
-    {
-      "id": "M5",
+      "id": "M6",
       "kind": "contract",
       "drafts": [
         "P7",
         "P8"
       ],
       "sharedSymbols": [
-        "TaskStore/SqliteSessionStore/TaskScheduler aliases in cch_agent_core"
+        "TaskStore/SqliteSessionStore/TaskScheduler aliases in cch_agent_core",
+        "the application's second SessionStore writers"
       ],
-      "gate": "cmake/parity/manifest.json reflects the narrowed cch_agent_core; ctest -L architecture and the agent/harness focused selections pass."
+      "gate": "Remove the temporary aliases and the second SessionStore writers; cmake/parity/manifest.json reflects the narrowed cch_agent_core; cch_agent_core no longer links sqlite3; ctest -L architecture and the agent/harness focused selections pass."
     },
     {
-      "id": "M6",
+      "id": "M7",
       "kind": "integrate-verify",
       "drafts": [
         "F1",
@@ -2282,13 +2297,15 @@
   "closeOut": {
     "implemented": [
       "The 11 audit ledgers, 12 registered bundles, 60 artifacts and 373 scenarios exist, verify through the shared verifier and were independently reproduced by their mergers.",
-      "The application runtime and toolkit currently implement the rows the ledgers record as implemented (notably most toolkit exports with historical v1.0.4 routes and the application Session JSONL/compaction behavior).",
+      "The application runtime and toolkit currently implement the 970 rows the ledgers record as implemented, including 15 rows targeted at the new owners whose behavior today lives under existing application owners: cch_durable 3, cch_mcp 5, cch_codemode 7, cch_chord 0.",
+      "128 further rows targeted at the new owners are partial today under those existing owners and are pending ownership migration, not specified-only: cch_durable 87, cch_mcp 11, cch_codemode 12, cch_chord 18.",
       "The current configured Owner graph is the pre-migration graph: cch_ai, cch_agent_core, cch_tui, cch_coding_agent, cch_support; MCP and codemode live inside cch_coding_agent.",
       "The C++ toolkit has real rendering/input behavior and the listed focused test selections pass; the C++ [issue800] model-selector assertion is a known failure (#808)."
     ],
     "specifiedOnly": [
-      "No cch_durable, cch_mcp, cch_codemode or cch_chord owner exists yet; none of their capability rows is implemented or verified.",
+      "No cch_durable, cch_mcp, cch_codemode or cch_chord Owner package or manifest target exists yet; their 15 implemented target rows are existing capability behavior under current application owners and await ownership migration.",
       "No C++ parity comparison exists for any audit row: 0 rows are verified and every upstream-captured row still needs one.",
+      "194 target rows are missing and are the specified work: cch_durable 120, cch_mcp 2, cch_codemode 30, cch_chord 42. The 228 partial rows are partial with recorded remaining work, not blanket specified-only.",
       "Durable bidirectional JSONL/SQLite interchange, power-loss durability and cross-runtime continuation are specified and unproven.",
       "Native extension lifecycle/run triggering, tool duration end-to-end, OSC 7501 program status, codemode Inline/Remote, and the MCP cancellation/transport changes are specified with implementation gaps."
     ],
@@ -2302,7 +2319,7 @@
     "openBlockers": [
       "Umbrella #1044 remains open: implementation and final validation are not done; this consolidation is an audit acceptance gate only.",
       "Membership blockers: two no-decision rows stay visible (legacy SQLite SessionStore alternative, application leaf-marker entry) and require an owner decision before their code is moved or retired.",
-      "Verification blockers: 999 rows carry an honest missing observation (41 declared-comparison, 58 unobserved, 858 historical-only, 42 not-audited) plus 28 related-captured rows that keep their own unverified status.",
+      "Verification blockers: 999 rows carry an honest missing observation (29 declared-comparison, 12 cpp-regression-only, 58 unobserved, 858 historical-only, 42 not-audited) plus 28 related-captured rows that keep their own unverified status.",
       "Terminal blockers: real emulator/PTY evidence is missing for image/footer/cursor/restoration rows; OSC7501 captures are terminal-contract calls, not raw protocol acceptance.",
       "Crash blockers: SIGKILL/reopen is recorded, but power-loss/fsync-failure/multi-process durability is not proven and must not be claimed."
     ],

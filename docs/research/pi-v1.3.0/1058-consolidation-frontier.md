@@ -61,7 +61,7 @@ folded into membership.
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:155, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1432, excluded:26, no-decision:2 |
 | Implementation | implemented:970, partial:228, missing:245, not-applicable:17 |
-| Verification | unverified:1027, upstream-captured:408, not-applicable:25, verified:0 |
+| Verification | unverified:1027, upstream-captured:407, not-applicable:26, verified:0 |
 | Evidence route | captured:407, related-captured:28, declared-comparison:29, cpp-regression-only:12, unobserved:58, historical-v1.0.4:858, not-audited:42, excluded:26 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a
@@ -69,12 +69,16 @@ row with an upstream capture is not promoted because a similar row exists elsewh
 comparison scenario that resolves to a registered artifact for a row that does not itself record
 `upstream-captured` is labelled `related-captured` and keeps a `missingObservation` statement. The
 checker fails the ledger if any row claims `verified`, if an `upstream-captured` row has no
-registered artifact, if an excluded row has no boundary and no excludable route, if an included row
-has no `remainingWork`, or if a supported non-implemented row has no gap, missing observation or
-note.
+registered artifact, if an excluded row has no boundary, a placeholder boundary or an
+`upstream-captured` status without a registered artifact, if an included row has no consumer text,
+if an included row has no `remainingWork`, or if a supported non-implemented row has no gap, missing
+observation or note.
 
 Two rows keep a `no-decision` membership and are visible in `counts.noDecision`:
 `cch_coding_agent:Session:entry:leaf-marker` and `cch_durable:Session:storage:sqlite-alternative`.
+The 18 rows that previously had no consumer string now name either the current application seam or
+an absent current consumer plus the proposed public caller; `consumerOwners` is no longer a
+self-owned default for those rows.
 They need an owner decision before their code is moved or retired; the frontier's P7 and P8 carry
 that decision rather than letting the rows disappear.
 
@@ -117,6 +121,13 @@ replaces the whole recorded pointer with the authoritative spelling, the checker
 double-qualified package path, and the affected rows carry the corrected pointer. This changed only
 the consolidated ledger's source spellings; the lane ledgers and their artifacts are untouched.
 
+Separately from pointer corrections, the plan carries four explicit excluded-row boundary overrides
+(session share/upload, both third-party TS/JS plugin rows, and the source-only settings row) and one
+verification override. The settings row's declared scenario was never registered as an artifact, so
+it is now verification `not-applicable` rather than `upstream-captured`; its boundary records the
+source-only claim and the C++ exclusion without inventing an observation. No source row, artifact
+byte or scenario name changes.
+
 ## 5. Overlap resolutions
 
 Similar names were merged only where the contract identity is the same; adjacent but different
@@ -126,7 +137,7 @@ contracts stay as separate rows with an explicit resolution:
 | --- | --- |
 | `overlap-toolkit-product` | The 1050 toolkit export contract belongs to cch_tui; the seven product-entry rows (`tuiMode`, `--tui-mode`, `runInteractiveMode`, `fullscreenExitOutput`, `fullscreenCopyOnSelect`, `fullscreenWheelScrollLines`, `showHardwareCursor`) are cch_coding_agent product behavior and are not-audited against v1.3.0, routed to the 1051 product differential. |
 | `overlap-session-storage` | The application Session transcript (JSONL session files, cch_coding_agent) and the durable Session (transactional document/entry storage, cch_durable) are different runtimes. The legacy in-core SQLite SessionStore is the third, no-decision row; it is not the durable contract. |
-| `overlap-tasks-harness` | The 1055 task/submission rows driven through the durable session path and the 1056 Harness rows are the same durable contracts seen through two lanes; both stay as separate rows with cross-reference, no duplicate merge and no hidden coverage. |
+| `overlap-tasks-harness` | Both lanes drive the same `Harness.open` entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage. |
 | `overlap-codemode-chord` | The codemode rows name codemode execution and the chord rows name the durable-required Chord subset; the durable Harness consumes both, but neither is the other's contract. |
 | `overlap-extension-lifecycle` | The application extension lifecycle rows (1049/1051) and the durable Harness lifecycle rows (1056) are two owners of one selected native-hook contract; the historical ADR 0066 restriction on extension hooks is superseded by ADR 0075 and is not a retained exclusion. |
 | `overlap-mcp-application` | The reusable MCP protocol/client/transport rows (1052) stay in cch_mcp; the application config, management, resource and session-tool rows belong to cch_coding_agent. |
@@ -156,6 +167,13 @@ resolutions and registered scenario names.
 9. The C++ model-selector assertion fails (17 passed / 1 failed) and has no artifact; no
    model-selector parity may be claimed before it passes.
 10. Registration integrity (owner dependency declarations) is not C++ behavioral verification.
+
+The excluded `settings-runtime-validation` row is a source-only claim: its declared scenario has no
+registered artifact, so it is recorded as verification `not-applicable`, not `upstream-captured`;
+no capture was invented and no C++ behavior was added. Four excluded rows carry explicit ADR 0075
+boundary text: session share/upload and third-party TS/JS plugin execution replace the literal
+`None` boundaries, the 1056 third-party row additionally records the package-management exclusion,
+and the source-only settings row records its no-claim boundary rather than an upstream capture.
 
 The 26 excluded rows are the explicit no-claim boundaries and each carries its recorded boundary
 in the ledger and routes to `excluded`: AI model-response timing, cross-model thinking
@@ -199,14 +217,19 @@ graph in one direction.
 | M0 | integrate-verify | - | - | - |
 | M1 | expand | P1, P4, P5, P6 | forwarding headers for moved sources | M2 |
 | M2 | contract | P4, P5, P6 | - | - |
-| M3 | migrate | F2, F7 | durable stores added beside the legacy in-core SQLite path | M4 |
-| M4 | expand | P7, P8 | temporary aliases in cch_agent_core and second-store removal | M5 |
-| M5 | contract | P7, P8 | - | - |
-| M6 | integrate-verify | all behavior drafts | - | - |
+| M3 | expand | P2, P3 | chord document/delta and durable memory Session added beside the legacy path | - |
+| M4 | migrate | P7 | temporary aliases in cch_agent_core | M6 |
+| M5 | migrate | F2, F7 | durable stores added beside the legacy in-core SQLite path | M6 |
+| M6 | contract | P7, P8 | - | - |
+| M7 | integrate-verify | all behavior drafts | - | - |
 
 Every temporary forwarding form names the slice that removes it (the checker rejects a forwarding
-form without a removal slice), and no historical Pike durable format is imported, migrated or
-dual-read.
+form without a removal slice, a removal that is not later, or a removal step that is not
+`contract`), and no historical Pike durable format is imported, migrated or
+dual-read. Placement is checked transitively against `blockingEdges`: every scheduled draft's
+prerequisites must be scheduled no later, so M4's P7 precedes M5's F7; the check also runs a
+negative probe that rejects the pre-correction F7-before-P7 order and a positive control on the
+committed sequence.
 
 ## 9. Implementation frontier
 
@@ -277,16 +300,22 @@ Open trackers are re-scoped to pi-v1.3.0 and reused, never duplicated:
 
 ## 11. Close-out
 
-- Implemented today: the eleven lane audits, their bundles/artifacts and the current C++
-  application/toolkit behavior the ledgers record as implemented. The configured owner graph is
-  still the pre-migration one (cch_ai, cch_agent_core, cch_tui, cch_coding_agent, cch_support).
-- Specified only: the four new owners, 245 missing plus 228 partial rows, the durable runtime and
-  storage contracts, bidirectional interchange, native extension lifecycle, tool duration
-  end-to-end, codemode Inline/Remote and the MCP cancellation/transport changes. 0 rows verified.
+- Implemented today: the eleven lane audits, their bundles/artifacts and the 970 C++
+  application/toolkit rows the ledgers record as implemented. That total includes 15 rows targeted
+  at the new owners whose behavior currently lives under existing application owners: cch_durable
+  3, cch_mcp 5, cch_codemode 7, cch_chord 0. A further 128 target rows are partial under those
+  existing owners (durable 87, mcp 11, codemode 12, chord 18) and are pending ownership migration,
+  not specified-only.
+- Specified only: the four new Owner packages and manifest targets, the 194 missing target rows
+  (durable 120, mcp 2, codemode 30, chord 42), the durable runtime and storage contracts,
+  bidirectional interchange, native extension lifecycle, tool duration end-to-end, codemode
+  Inline/Remote and the MCP cancellation/transport changes. The 228 partial rows are partial with
+  recorded remaining work, not blanket specified-only. 0 rows are verified.
 - Retained boundaries: Magpie discovery/authentication/inference; XDG Pike state root; all 26
   excluded surfaces; no historical durable data migration, automatic upgrade, dual read or fallback.
 - Open blockers: umbrella #1044; the two no-decision membership rows; the honest missing
-  observations (1027 rows); real emulator/PTY evidence; and the SIGKILL-only crash model.
+  observations (999 declared/unobserved/historical/not-audited plus 28 related-captured rows); real
+  emulator/PTY evidence; and the SIGKILL-only crash model.
 
 ## 12. Validation
 
@@ -302,11 +331,13 @@ owner/consumer adjacency against the target graph (including the forbidden durab
 edges), evidence routes against the registered bundle manifests, scenario coverage with no
 orphaned registered scenario, the groups/overlaps/orphan registrations, the corrections index, the
 frontier's draft graph (acyclic, dependency-ordered, real coverage prefixes, registered capture
-scenarios), the residual reconciliation and the report's relative links. `--pi-root` additionally
+scenarios), migration-step placement against the transitive prerequisite graph (including a
+negative probe reproducing the old F7-before-P7 order and a positive control), the residual
+reconciliation and the report's relative links. `--pi-root` additionally
 verifies that every `packages/...` pointer resolves in the frozen pi checkout at the frozen
 revision.
 
 This tier is the docs/evidence tier of [validation](../../agents/validation.md): no C++ build is
 required or run by these commands, and passing them is not behavioral verification of any row. The
 existing bundle verifier and the focused regression selections remain the evidence-side gates; the
-frontier's M6 names the full build and ctest gate for the implementation work.
+frontier's M7 names the full build and ctest gate for the implementation work.

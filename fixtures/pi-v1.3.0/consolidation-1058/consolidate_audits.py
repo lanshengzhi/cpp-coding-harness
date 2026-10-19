@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import re
 import sys
@@ -298,6 +299,24 @@ def consumer_text(raw: dict) -> str:
     return ""
 
 
+def consumer_text_override(plan: dict, lane: str, raw_id: str, default: str) -> str:
+    return ((plan["consumer"].get("textOverrides") or {}).get(lane) or {}).get(raw_id, default)
+
+
+def boundary_override(plan: dict, lane: str, raw_id: str) -> dict | None:
+    for item in plan.get("boundaryOverrides") or []:
+        if item["ticket"] == lane and item["rowId"] == raw_id:
+            return item
+    return None
+
+
+def verification_override(plan: dict, lane: str, raw_id: str) -> dict | None:
+    for item in plan.get("verificationOverrides") or []:
+        if item["ticket"] == lane and item["rowId"] == raw_id:
+            return item
+    return None
+
+
 def build_bundle_index() -> dict[str, dict[str, list[str]]]:
     index: dict[str, dict[str, list[str]]] = {}
     for manifest_path in sorted((ROOT / "fixtures/pi-v1.3.0").glob("audit-*/manifest.json")):
@@ -528,13 +547,20 @@ def build_ledger(plan: dict) -> dict:
         for entry in entries[1:]:
             if entry["membership"] == "excluded":
                 membership, implementation, verification = entry["membership"], entry["implementation"], entry["verification"]
+        status_override = verification_override(plan, lane, raw["id"])
+        if status_override is not None:
+            require(status_override["verification"] in VERIFICATION, f"{lane}:{raw['id']} override verification {status_override['verification']!r}")
+            verification = status_override["verification"]
         gaps = extract_gaps(lane, raw)
         notes = extract_notes(lane, raw)
+        if status_override is not None and status_override.get("note"):
+            notes = f"{notes} {status_override['note']}".strip()
         implementation_ticket = raw.get("implementation_ticket")
         if implementation_ticket in ("unfiled implementation probe", ""):
             implementation_ticket = None
         capability = raw.get("capability") or raw.get("operation") or display_capability(primary["id"])
         consumer_owners = resolve_consumer_owners(plan, lane, raw, primary["owner"])
+        boundary_item = boundary_override(plan, lane, raw["id"])
         source_rows = [
             {
                 "ticket": entry["lane"],
@@ -555,9 +581,13 @@ def build_ledger(plan: dict) -> dict:
             "implementation": implementation,
             "verification": verification,
             "owner": primary["owner"],
-            "consumer": consumer_text(raw) or None,
+            "consumer": consumer_text_override(plan, lane, raw["id"], consumer_text(raw)) or None,
             "consumerOwners": consumer_owners,
-            "boundary": raw.get("boundary") or (raw.get("cppEvidence") if membership == "excluded" else None),
+            "boundary": (
+                boundary_item["boundary"]
+                if boundary_item is not None
+                else (raw.get("boundary") or (raw.get("cppEvidence") if membership == "excluded" else None))
+            ),
             "implementation_ticket": implementation_ticket,
             "scenario": evidence["declaredScenarios"][0] if evidence["declaredScenarios"] else None,
             "comparisonScenarios": evidence["declaredScenarios"],
@@ -691,10 +721,18 @@ def count_rows(rows: list[dict]) -> dict:
             result[value] = result.get(value, 0) + 1
         return dict(sorted(result.items()))
 
+    by_owner_implementation: dict[str, dict[str, int]] = {}
+    for row in rows:
+        tally_for_owner = by_owner_implementation.setdefault(row["owner"], {})
+        tally_for_owner[row["implementation"]] = tally_for_owner.get(row["implementation"], 0) + 1
+
     return {
         "rows": len(rows),
         "byLane": tally("lane"),
         "byOwner": tally("owner"),
+        "byOwnerImplementation": {
+            owner: dict(sorted(values.items())) for owner, values in sorted(by_owner_implementation.items())
+        },
         "membership": tally("membership"),
         "implementation": tally("implementation"),
         "verification": tally("verification"),
@@ -757,7 +795,15 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
                 )
         if row["membership"] == "excluded":
             require(row["boundary"], f"{row['id']}: excluded row records no boundary")
+            require(
+                row["boundary"].strip() not in ("None", "null"),
+                f"{row['id']}: excluded row records a placeholder boundary",
+            )
             require(row["evidence"]["route"] in ("excluded", "not-applicable"), f"{row['id']}: excluded row has an evidence route")
+            if row["verification"] == "upstream-captured":
+                require(row["evidence"]["artifact"], f"{row['id']}: excluded upstream-captured without registered artifact")
+        else:
+            require(row["consumer"] and row["consumer"].strip(), f"{row['id']}: included row has no consumer text")
         if row["verification"] == "verified":
             raise ConsolidationError(f"{row['id']}: no row may be verified by consolidation; a C++ comparison is required")
         if row["membership"] == "excluded":
@@ -789,6 +835,22 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
         )
         require("Deferred" not in blob and '"deferred"' not in blob, f"{row['id']}: deferred escape hatch")
     notes.append("vocabulary/ownership/remaining-work: checked")
+
+    # 2b. Curated boundary and verification overrides must be applied exactly.
+    rows_by_id = {row["id"]: row for row in rows}
+    for item in plan.get("boundaryOverrides") or []:
+        alias = ledger["sourceAliases"][item["ticket"]].get(item["rowId"])
+        require(alias is not None, f"boundary override names unknown row {item['ticket']}:{item['rowId']}")
+        require(rows_by_id[alias]["boundary"] == item["boundary"], f"{alias}: boundary override not applied")
+    for item in plan.get("verificationOverrides") or []:
+        alias = ledger["sourceAliases"][item["ticket"]].get(item["rowId"])
+        require(alias is not None, f"verification override names unknown row {item['ticket']}:{item['rowId']}")
+        require(rows_by_id[alias]["verification"] == item["verification"], f"{alias}: verification override not applied")
+    for lane, overrides in (plan["consumer"].get("textOverrides") or {}).items():
+        for raw_id, text in overrides.items():
+            alias = ledger["sourceAliases"][lane].get(raw_id)
+            require(alias is not None, f"consumer text override names unknown row {lane}:{raw_id}")
+            require(rows_by_id[alias]["consumer"] == text, f"{alias}: consumer text override not applied")
 
     # 3. Evidence routes point at real registered scenarios or an honest missing observation.
     bundles = build_bundle_index()
@@ -911,6 +973,65 @@ def subprocess_revision(path: Path) -> str:
     return subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
 
 
+def draft_ancestors(frontier: dict) -> dict[str, set[str]]:
+    edges = {draft["id"]: list(draft["blockingEdges"]) for draft in frontier["drafts"]}
+    result: dict[str, set[str]] = {}
+    for start in edges:
+        seen: set[str] = set()
+        stack = list(edges[start])
+        while stack:
+            dependency = stack.pop()
+            if dependency in seen:
+                continue
+            seen.add(dependency)
+            stack.extend(edges.get(dependency, []))
+        result[start] = seen
+    return result
+
+
+def validate_migration_placement(frontier: dict) -> None:
+    sequence = frontier["migrationSequence"]
+    first: dict[str, int] = {}
+    for index, step in enumerate(sequence):
+        for draft_id in step.get("drafts", []):
+            first.setdefault(draft_id, index)
+    draft_ids = {draft["id"] for draft in frontier["drafts"]}
+    require(
+        set(first) == draft_ids,
+        f"migration sequence does not schedule every draft: {sorted(draft_ids - set(first))}",
+    )
+    ancestors = draft_ancestors(frontier)
+    for draft_id, index in sorted(first.items()):
+        for prerequisite in sorted(ancestors[draft_id]):
+            require(
+                prerequisite in first,
+                f"{draft_id} is placed at {sequence[index]['id']} but prerequisite {prerequisite} is not scheduled",
+            )
+            require(
+                first[prerequisite] <= index,
+                f"{draft_id} is placed at {sequence[index]['id']} before prerequisite "
+                f"{prerequisite} at {sequence[first[prerequisite]]['id']}",
+            )
+
+
+def migration_placement_probe(frontier: dict) -> str:
+    """Positive control plus a negative probe reproducing the pre-correction M3/M4 defect."""
+    validate_migration_placement(frontier)
+    invalid = copy.deepcopy(frontier)
+    steps = {step["id"]: step for step in invalid["migrationSequence"]}
+    for step in invalid["migrationSequence"]:
+        step["drafts"] = [draft for draft in step.get("drafts", []) if draft not in {"F2", "F7", "P7", "P8"}]
+    steps["M3"]["drafts"].extend(["F2", "F7"])
+    steps["M4"]["drafts"].extend(["P7", "P8"])
+    try:
+        validate_migration_placement(invalid)
+    except ConsolidationError as error:
+        message = str(error)
+        require("F7" in message and "P7" in message, f"negative migration probe failed for the wrong reason: {message}")
+        return message
+    raise ConsolidationError("negative probe: invalid F7-before-P7 migration placement was accepted")
+
+
 def check_frontier(frontier: dict, ledger: dict) -> list[str]:
     notes: list[str] = []
     require(frontier["schema"] == FRONTIER_SCHEMA, "frontier schema mismatch")
@@ -970,13 +1091,28 @@ def check_frontier(frontier: dict, ledger: dict) -> list[str]:
 
     sequence_ids = [step["id"] for step in frontier["migrationSequence"]]
     require(len(sequence_ids) == len(set(sequence_ids)), "duplicate migration step id")
+    sequence_index = {step_id: index for index, step_id in enumerate(sequence_ids)}
+    steps_by_id = {step["id"]: step for step in frontier["migrationSequence"]}
     for step in frontier["migrationSequence"]:
         require(step["kind"] in ("expand", "migrate", "contract", "integrate-verify"), f"{step['id']}: unknown kind")
         if step.get("forwardingForm"):
             require(step.get("removalSlice"), f"{step['id']}: forwarding form without a removal slice")
+            require(step["kind"] in ("expand", "migrate"), f"{step['id']}: forwarding form in a {step['kind']} step")
+            removal = step["removalSlice"]
+            require(
+                sequence_index[removal] > sequence_index[step["id"]],
+                f"{step['id']}: removal slice {removal} is not after the forwarding form",
+            )
+            require(
+                steps_by_id[removal]["kind"] == "contract",
+                f"{step['id']}: removal slice {removal} is not a contract step",
+            )
         for removal in [step.get("removalSlice")] if step.get("removalSlice") else []:
             require(removal in sequence_ids, f"{step['id']}: removal slice {removal} is not in the sequence")
     notes.append(f"migration sequence: {len(sequence_ids)} steps with removal slices")
+    validate_migration_placement(frontier)
+    probe = migration_placement_probe(frontier)
+    notes.append(f"migration placement: scheduled drafts satisfy transitive prerequisites; negative probe rejected: {probe}")
 
     residual_issues = {item["issue"] for item in frontier["residualReconciliation"]}
     for required in ("#1043", "#1035", "#1033", "#1032", "#831", "#812", "#810", "#808"):

@@ -256,6 +256,51 @@
       "cch_mcp": 19,
       "cch_tui": 925
     },
+    "byOwnerImplementation": {
+      "cch_agent_core": {
+        "implemented": 13,
+        "missing": 6,
+        "partial": 10
+      },
+      "cch_ai": {
+        "missing": 2,
+        "not-applicable": 2
+      },
+      "cch_chord": {
+        "missing": 42,
+        "not-applicable": 5,
+        "partial": 18
+      },
+      "cch_codemode": {
+        "implemented": 7,
+        "missing": 30,
+        "not-applicable": 2,
+        "partial": 12
+      },
+      "cch_coding_agent": {
+        "implemented": 73,
+        "missing": 21,
+        "not-applicable": 5,
+        "partial": 56
+      },
+      "cch_durable": {
+        "implemented": 3,
+        "missing": 120,
+        "not-applicable": 2,
+        "partial": 87
+      },
+      "cch_mcp": {
+        "implemented": 5,
+        "missing": 2,
+        "not-applicable": 1,
+        "partial": 11
+      },
+      "cch_tui": {
+        "implemented": 869,
+        "missing": 22,
+        "partial": 34
+      }
+    },
     "membership": {
       "excluded": 26,
       "no-decision": 2,
@@ -268,9 +313,9 @@
       "partial": 228
     },
     "verification": {
-      "not-applicable": 25,
+      "not-applicable": 26,
       "unverified": 1027,
-      "upstream-captured": 408
+      "upstream-captured": 407
     },
     "evidenceRoute": {
       "captured": 407,
@@ -2295,7 +2340,7 @@
         "1056"
       ],
       "kind": "same-contract-different-lane",
-      "resolution": "Both lanes exercise the same durable scheduler/task/submission contracts through different public entry points. Where 1056 records no scenario and 1055 captured the same semantics for the same owner and consumer, the consolidated row cross-references the 1055 capture without changing the 1056 row's recorded verification; a cross-reference is not evidence inflation.",
+      "resolution": "Both lanes drive the same Harness.open entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage.",
       "rows": [
         "cch_durable:task-versioning",
         "cch_durable:task-outcomes",
@@ -2976,9 +3021,9 @@
       "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession constructs agent::AsyncAgentOptions and Agent (AgentSessionExecution.cpp); proposed public caller: cch_agent_core Agent API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3081,10 +3126,8 @@
       "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: no C++ application caller sets AgentOptions.finishTurn; proposed public caller: cch_agent_core AgentOptions.finishTurn.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "finishTurn action end stops the run before follow-up polling",
@@ -3182,10 +3225,8 @@
       "implementation": "missing",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: no C++ application caller sets AgentOptions.prepareRequest; proposed public caller: cch_agent_core AgentOptions.prepareRequest.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "prepareRequest observes the pending prompt before the provider request",
@@ -3284,9 +3325,9 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent AgentSession event projection and TUI TreeSelector rendering of AssistantMessage.error_message; proposed public caller: cch_agent_core AgentEvent.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3334,10 +3375,8 @@
       "implementation": "missing",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: no C++ application caller invokes Agent::reset; proposed public caller: cch_agent_core Agent API.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "reset restores the prompt baseline and clears both queues",
@@ -3542,9 +3581,9 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession::follow_up (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3596,9 +3635,9 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession clear_steering_queue/clear_follow_up_queue/clear_input_queues (AgentSessionInteraction.cpp); peek_* has no application caller; proposed public caller: cch_agent_core Agent queue API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3647,9 +3686,9 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession::steer (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3698,9 +3737,9 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession::steer (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3749,9 +3788,9 @@
       "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession event projection (AgentSessionInteraction.cpp apply_event) and ProjectionStream; the duration field is absent from the hop; proposed public caller: cch_agent_core nested-tool-call API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3800,9 +3839,9 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession event projection (AgentSessionInteraction.cpp apply_event) and ProjectionStream; proposed public caller: cch_agent_core nested-tool-call API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -3850,10 +3889,8 @@
       "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: no C++ application caller installs AgentOptions.afterToolCall; proposed public caller: cch_agent_core AgentOptions.afterToolCall.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "afterToolCall content replacement drops structuredContent but keeps duration",
@@ -3900,10 +3937,8 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: no C++ application caller installs a before-tool-call argument mutation; proposed public caller: cch_agent_core AgentOptions before-tool-call hook.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
@@ -4056,10 +4091,8 @@
       "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: no C++ application caller sets AgentOptions.toolExecution; proposed public caller: cch_agent_core AgentOptions.toolExecution.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "parallel tool ends follow completion order while result messages keep source order",
@@ -4106,10 +4139,8 @@
       "implementation": "missing",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: no C++ application tool definition sets prepareArguments; proposed public caller: cch_agent_core ToolDefinition.prepareArguments.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
@@ -4156,10 +4187,8 @@
       "implementation": "missing",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
-      "consumerOwners": [
-        "cch_agent_core"
-      ],
+      "consumer": "None currently: runToolCall is internal to ToolCallExecutor/NestedToolCalls and has no application caller; proposed public caller: cch_agent_core ToolCallExecutor API.",
+      "consumerOwners": [],
       "boundary": null,
       "implementation_ticket": null,
       "scenario": "runToolCall runs the hooks and reports execute-only duration",
@@ -4207,9 +4236,9 @@
       "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_agent_core",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession event projection and the TUI tool block; proposed public caller: cch_agent_core ToolCallExecutor API.",
       "consumerOwners": [
-        "cch_agent_core"
+        "cch_coding_agent"
       ],
       "boundary": null,
       "implementation_ticket": null,
@@ -10314,7 +10343,7 @@
       "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
-      "consumer": null,
+      "consumer": "Current consumer: cch_coding_agent::AgentSession::steer/follow_up callers in the TUI prompt path (InteractiveMode.cpp); proposed public caller: AgentSession public API.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
@@ -14100,7 +14129,7 @@
       "owner": "cch_coding_agent",
       "consumer": "None.",
       "consumerOwners": [],
-      "boundary": "None",
+      "boundary": "Application upload/share services and their `sessionShareDestination` setting are excluded (ADR 0075 explicit exclusions); do not expose commands, settings or prompt claims without the corresponding capability.",
       "implementation_ticket": null,
       "scenario": null,
       "comparisonScenarios": [],
@@ -14142,7 +14171,7 @@
       "owner": "cch_coding_agent",
       "consumer": "None; excluded by ADR 0075.",
       "consumerOwners": [],
-      "boundary": "None",
+      "boundary": "Direct execution of third-party pi TS/JS plugins and third-party extension package management are excluded (ADR 0075 explicit exclusions); native C++ extension registration, hooks, tool wrapping and run triggering remain included, and codemode's model-written JavaScript remains included.",
       "implementation_ticket": null,
       "scenario": null,
       "comparisonScenarios": [],
@@ -16914,13 +16943,13 @@
       "frozenSymbols": [],
       "membership": "excluded",
       "implementation": "not-applicable",
-      "verification": "upstream-captured",
+      "verification": "not-applicable",
       "owner": "cch_coding_agent",
       "consumer": "`settings-manager.ts` runtime getters, independent of `settings-schema.ts`.",
       "consumerOwners": [
         "cch_coding_agent"
       ],
-      "boundary": "C++ is not a copy of the upstream runtime bug: it rejects invalid thinking levels (`SettingsManagerTest.cpp:195`) and does not parse `packages`. Do not add validation behavior to match this upstream runtime acceptance.",
+      "boundary": "Source-only claim: the declared scenario 'settings manager consumes values the published schema rejects' has no registered artifact and no observation is claimed. C++ is not a copy of the upstream runtime bug: it rejects invalid thinking levels (`SettingsManagerTest.cpp:195`) and does not parse `packages`; do not add validation behavior to match this upstream runtime acceptance.",
       "implementation_ticket": null,
       "scenario": "settings manager consumes values the published schema rejects",
       "comparisonScenarios": [
@@ -16936,7 +16965,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": null,
-      "notes": "Recommendation: Use `SettingsSchema` as the validation reference where a C++ schema is needed; do not mirror the runtime's unvalidated consumption.",
+      "notes": "Recommendation: Use `SettingsSchema` as the validation reference where a C++ schema is needed; do not mirror the runtime's unvalidated consumption. Verification set to not-applicable in consolidation: the declared scenario was not registered as an artifact; the row is excluded and makes no captured-observation claim.",
       "lane": "1049",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -17554,7 +17583,7 @@
       "owner": "cch_coding_agent",
       "consumer": "None in the selected target.",
       "consumerOwners": [],
-      "boundary": "Direct third-party pi TS/JS plugin execution is excluded; model-written codemode JavaScript remains included.",
+      "boundary": "Direct execution of third-party pi TS/JS plugins is excluded; native C++ extension registration, hooks, tool wrapping and run triggering remain included, and codemode's model-written JavaScript remains included (ADR 0075 Extensions).",
       "implementation_ticket": null,
       "scenario": null,
       "comparisonScenarios": [],

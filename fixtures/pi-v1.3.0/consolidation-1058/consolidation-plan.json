@@ -276,7 +276,24 @@
         "agent-core:ToolResult:duration-field": ["cch_agent_core", "cch_ai", "cch_coding_agent"],
         "coding-agent:AgentSession:tool-telemetry": ["cch_coding_agent"],
         "coding-agent:TUI:tool-duration": ["cch_coding_agent"],
-        "coding-agent:AgentSession:queue-admission": ["cch_coding_agent"]
+        "coding-agent:AgentSession:queue-admission": ["cch_coding_agent"],
+        "agent-core:Agent:default-state": ["cch_coding_agent"],
+        "agent-core:Agent:provider-error": ["cch_coding_agent"],
+        "agent-core:InputQueue:follow-up": ["cch_coding_agent"],
+        "agent-core:InputQueue:peek-clear": ["cch_coding_agent"],
+        "agent-core:InputQueue:steering-all": ["cch_coding_agent"],
+        "agent-core:InputQueue:steering-one-at-a-time": ["cch_coding_agent"],
+        "agent-core:NestedToolCalls:duration": ["cch_coding_agent"],
+        "agent-core:NestedToolCalls:parent-ids": ["cch_coding_agent"],
+        "agent-core:ToolCallExecutor:truncation": ["cch_coding_agent"],
+        "agent-core:Agent:finish-turn-hook": [],
+        "agent-core:Agent:prepare-request-hook": [],
+        "agent-core:Agent:reset": [],
+        "agent-core:ToolCallExecutor:after-tool-call": [],
+        "agent-core:ToolCallExecutor:argument-mutation": [],
+        "agent-core:ToolCallExecutor:parallel-scheduling": [],
+        "agent-core:ToolCallExecutor:prepare-arguments": [],
+        "agent-core:ToolCallExecutor:run-tool-call": []
       },
       "1050": {
         "Editor.render": ["cch_coding_agent", "cch_tui"],
@@ -319,6 +336,28 @@
         "cch_chord:excluded:cluster": [],
         "cch_chord:excluded:cells-schema": [],
         "cch_chord:excluded:node-host": []
+      }
+    },
+    "textOverrides": {
+      "1047": {
+        "agent-core:Agent:default-state": "Current consumer: cch_coding_agent::AgentSession constructs agent::AsyncAgentOptions and Agent (AgentSessionExecution.cpp); proposed public caller: cch_agent_core Agent API.",
+        "agent-core:Agent:provider-error": "Current consumer: cch_coding_agent AgentSession event projection and TUI TreeSelector rendering of AssistantMessage.error_message; proposed public caller: cch_agent_core AgentEvent.",
+        "agent-core:InputQueue:follow-up": "Current consumer: cch_coding_agent::AgentSession::follow_up (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:InputQueue:peek-clear": "Current consumer: cch_coding_agent::AgentSession clear_steering_queue/clear_follow_up_queue/clear_input_queues (AgentSessionInteraction.cpp); peek_* has no application caller; proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:InputQueue:steering-all": "Current consumer: cch_coding_agent::AgentSession::steer (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:InputQueue:steering-one-at-a-time": "Current consumer: cch_coding_agent::AgentSession::steer (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:NestedToolCalls:duration": "Current consumer: cch_coding_agent::AgentSession event projection (AgentSessionInteraction.cpp apply_event) and ProjectionStream; the duration field is absent from the hop; proposed public caller: cch_agent_core nested-tool-call API.",
+        "agent-core:NestedToolCalls:parent-ids": "Current consumer: cch_coding_agent::AgentSession event projection (AgentSessionInteraction.cpp apply_event) and ProjectionStream; proposed public caller: cch_agent_core nested-tool-call API.",
+        "agent-core:ToolCallExecutor:truncation": "Current consumer: cch_coding_agent::AgentSession event projection and the TUI tool block; proposed public caller: cch_agent_core ToolCallExecutor API.",
+        "coding-agent:AgentSession:queue-admission": "Current consumer: cch_coding_agent::AgentSession::steer/follow_up callers in the TUI prompt path (InteractiveMode.cpp); proposed public caller: AgentSession public API.",
+        "agent-core:Agent:finish-turn-hook": "None currently: no C++ application caller sets AgentOptions.finishTurn; proposed public caller: cch_agent_core AgentOptions.finishTurn.",
+        "agent-core:Agent:prepare-request-hook": "None currently: no C++ application caller sets AgentOptions.prepareRequest; proposed public caller: cch_agent_core AgentOptions.prepareRequest.",
+        "agent-core:Agent:reset": "None currently: no C++ application caller invokes Agent::reset; proposed public caller: cch_agent_core Agent API.",
+        "agent-core:ToolCallExecutor:after-tool-call": "None currently: no C++ application caller installs AgentOptions.afterToolCall; proposed public caller: cch_agent_core AgentOptions.afterToolCall.",
+        "agent-core:ToolCallExecutor:argument-mutation": "None currently: no C++ application caller installs a before-tool-call argument mutation; proposed public caller: cch_agent_core AgentOptions before-tool-call hook.",
+        "agent-core:ToolCallExecutor:parallel-scheduling": "None currently: no C++ application caller sets AgentOptions.toolExecution; proposed public caller: cch_agent_core AgentOptions.toolExecution.",
+        "agent-core:ToolCallExecutor:prepare-arguments": "None currently: no C++ application tool definition sets prepareArguments; proposed public caller: cch_agent_core ToolDefinition.prepareArguments.",
+        "agent-core:ToolCallExecutor:run-tool-call": "None currently: runToolCall is internal to ToolCallExecutor/NestedToolCalls and has no application caller; proposed public caller: cch_agent_core ToolCallExecutor API."
       }
     },
     "noneMarkers": ["none", "unconsumable", "no production", "tests only", "no c++ caller"],
@@ -549,7 +588,7 @@
       "id": "overlap-tasks-harness",
       "lanes": ["1055", "1056"],
       "kind": "same-contract-different-lane",
-      "resolution": "Both lanes exercise the same durable scheduler/task/submission contracts through different public entry points. Where 1056 records no scenario and 1055 captured the same semantics for the same owner and consumer, the consolidated row cross-references the 1055 capture without changing the 1056 row's recorded verification; a cross-reference is not evidence inflation.",
+      "resolution": "Both lanes drive the same Harness.open entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage.",
       "rows": [
         "cch_durable:task-versioning",
         "cch_durable:task-outcomes",
@@ -972,6 +1011,46 @@
       "appliesTo": ["cch_coding_agent:Session:wire:redaction"],
       "authority": "/tmp/cch-1044-context/1048-merged.json reviewFindings[4]",
       "rationale": "Cosmetic quotation fix for tests/harness/session/JsonlSessionStoreTest.cpp:131."
+    }
+  ],
+  "boundaryOverrides": [
+    {
+      "ticket": "1051",
+      "rowId": "excluded-session-share",
+      "boundary": "Application upload/share services and their `sessionShareDestination` setting are excluded (ADR 0075 explicit exclusions); do not expose commands, settings or prompt claims without the corresponding capability.",
+      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: Other confirmed exclusions",
+      "rationale": "The recorded row boundary was the literal string 'None'; replace it with the actual retained-product boundary."
+    },
+    {
+      "ticket": "1051",
+      "rowId": "excluded-third-party-ts-extensions",
+      "boundary": "Direct execution of third-party pi TS/JS plugins and third-party extension package management are excluded (ADR 0075 explicit exclusions); native C++ extension registration, hooks, tool wrapping and run triggering remain included, and codemode's model-written JavaScript remains included.",
+      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: Extensions and Other confirmed exclusions",
+      "rationale": "The recorded row boundary was the literal string 'None'; replace it with the actual retained-product boundary."
+    },
+    {
+      "ticket": "1056",
+      "rowId": "thirdparty-plugins-excluded",
+      "boundary": "Direct execution of third-party pi TS/JS plugins is excluded; native C++ extension registration, hooks, tool wrapping and run triggering remain included, and codemode's model-written JavaScript remains included (ADR 0075 Extensions).",
+      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: Extensions",
+      "rationale": "Record the actual ADR boundary instead of the abbreviated row text."
+    },
+    {
+      "ticket": "1049",
+      "rowId": "settings-runtime-validation",
+      "boundary": "Source-only claim: the declared scenario 'settings manager consumes values the published schema rejects' has no registered artifact and no observation is claimed. C++ is not a copy of the upstream runtime bug: it rejects invalid thinking levels (`SettingsManagerTest.cpp:195`) and does not parse `packages`; do not add validation behavior to match this upstream runtime acceptance.",
+      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: explicit AI/application exclusions; 1049 ledger row cppEvidence",
+      "rationale": "Keep the excluded row but make its unregistered source-only status honest; no capture is invented."
+    }
+  ],
+  "verificationOverrides": [
+    {
+      "ticket": "1049",
+      "rowId": "settings-runtime-validation",
+      "verification": "not-applicable",
+      "note": "Verification set to not-applicable in consolidation: the declared scenario was not registered as an artifact; the row is excluded and makes no captured-observation claim.",
+      "authority": "docs/research/pi-v1.3.0/1049-ledger.json row settings-runtime-validation; fixtures/pi-v1.3.0/baselines.json",
+      "rationale": "An excluded row whose only scenario label has no registered artifact must not claim upstream-captured."
     }
   ],
   "retainedLimitations": [
