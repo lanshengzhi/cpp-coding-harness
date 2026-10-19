@@ -363,7 +363,7 @@ function resolveTsxRunner(checkout: string): string {
 	);
 }
 
-function captureTsconfig(checkout: string): string {
+function captureTsconfig(checkout: string, output: string): string {
 	if (existsSync(path.join(checkout, "node_modules/grok-mermaid"))) {
 		return path.join(checkout, "tsconfig.json");
 	}
@@ -372,7 +372,11 @@ function captureTsconfig(checkout: string): string {
 	};
 	const paths = { ...(rootConfig.compilerOptions?.paths ?? {}) };
 	paths["grok-mermaid"] = [path.resolve(scriptDir, "grok-mermaid-stub.mts")];
-	const capturePath = path.join(checkout, "tsconfig.capture.json");
+	// Write the generated config beside the per-scenario capture (a temporary
+	// directory) rather than into the frozen pi checkout, whose cleanliness
+	// gates reject untracked files. The checkout's `paths` values are
+	// checkout-relative, so the base URL stays the checkout as an absolute path.
+	const capturePath = `${output}.tsconfig.json`;
 	writeFileSync(
 		capturePath,
 		`${JSON.stringify({
@@ -385,7 +389,7 @@ function captureTsconfig(checkout: string): string {
 				esModuleInterop: true,
 				skipLibCheck: true,
 				types: ["node"],
-				baseUrl: ".",
+				baseUrl: checkout,
 				paths,
 			},
 		}, null, 2)}\n`,
@@ -449,7 +453,7 @@ async function runPi(scenario: Scenario, output: string): Promise<Record<string,
 	resetScenarioRoot(scenario);
 	const checkout = piCheckout();
 	const tsx = resolveTsxRunner(checkout);
-	const result = execFileSync(tsx, ["--tsconfig", captureTsconfig(checkout), scriptPath, "--runtime", "pi"], {
+	const result = execFileSync(tsx, ["--tsconfig", captureTsconfig(checkout, output), scriptPath, "--runtime", "pi"], {
 		cwd: repositoryRootFromEnvironment(),
 		env: childEnvironment({
 			...scenarioEnvironment(scenario, output),
@@ -1614,6 +1618,14 @@ function validateStableDigests(report: Record<string, unknown>, repositoryRoot: 
 }
 
 async function runParent(): Promise<number> {
+	const scenarioIndex = process.argv.indexOf("--scenario");
+	const scenarioFilter = scenarioIndex >= 0 ? process.argv[scenarioIndex + 1] : undefined;
+	if (scenarioIndex >= 0 && scenarioFilter === undefined) {
+		throw new Error("--scenario requires a differential scenario id");
+	}
+	if (scenarioFilter !== undefined && process.argv.includes("--write")) {
+		throw new Error("--scenario is a debug capture mode and cannot be combined with --write");
+	}
 	const baseline = resolvePiBaseline();
 	const checkout = baseline.checkout;
 	const repositoryRoot = repositoryRootFromEnvironment();
@@ -1642,12 +1654,28 @@ async function runParent(): Promise<number> {
 		scenarios: [] as Record<string, unknown>[],
 	};
 	try {
-		for (const scenario of scenarios) {
+		const activeScenarios = scenarioFilter === undefined
+			? scenarios
+			: scenarios.filter((scenario) => scenario.id === scenarioFilter);
+		if (scenarioFilter !== undefined && activeScenarios.length === 0) {
+			throw new Error(
+				`--scenario '${scenarioFilter}' does not name a differential scenario (known: ${scenarios.map((scenario) => scenario.id).join(", ")})`,
+			);
+		}
+		for (const scenario of activeScenarios) {
 			const pikeOutput = path.join(temporaryDirectory, `${scenario.id}.pike.json`);
 			const piOutput = path.join(temporaryDirectory, `${scenario.id}.pi.json`);
 			const pike = runPike(scenario, pikeOutput);
 			const pi = await runPi(scenario, piOutput);
 			const comparison = compare(pike, pi, scenario, repositoryRoot);
+			// The observed comparison is not the final classification: the
+			// curated triage decides whether a delta is a defect, an accepted
+			// omission, or a match. Print both so a coarse observed label cannot
+			// read as an unreviewed regression.
+			console.log(
+				`${scenario.id}: observed ${comparison.classification} | triage ${triageByScenario[scenario.id].classification}`,
+			);
+			if (scenarioFilter !== undefined) continue;
 			const pikeCapture = normalizeCapture(pike, scenario, repositoryRoot);
 			const piCapture = normalizeCapture(pi, scenario, repositoryRoot);
 			(report.scenarios as Record<string, unknown>[]).push({
@@ -1665,7 +1693,10 @@ async function runParent(): Promise<number> {
 					pi: stableProjection(piCapture, scenario, repositoryRoot),
 				}),
 			});
-			console.log(`${scenario.id}: ${comparison.classification}`);
+		}
+		if (scenarioFilter !== undefined) {
+			console.log(`--scenario ${scenarioFilter}: debug capture only; no report was written or verified`);
+			return 0;
 		}
 	} finally {
 		rmSync(temporaryDirectory, { recursive: true, force: true });

@@ -232,6 +232,9 @@ PI_CHECKOUT=../pi PI_BASELINE_COMMIT=<frozen revision> \
 ```
 
 `CCH_DIFFERENTIAL_REPORT` is unset by default, which keeps `report.json` as the compared path.
+For debugging one scenario without a full 17-scenario cycle, pass `--scenario <id>`: the parent
+captures both runtimes for that scenario, prints the observed and triaged classifications, and
+neither writes nor verifies a report (combining it with `--write` is rejected).
 The v0.99.2 → v1.0.0 and v1.0.0 → v1.0.4 triages each found **no classification change** across
 all 17 scenarios; successive reports are not otherwise comparable difference-by-difference, because
 the pi-side captures moved with the baseline and the Pike-side captures moved with intervening Pike
