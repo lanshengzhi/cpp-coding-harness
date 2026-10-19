@@ -1,0 +1,1578 @@
+{
+  "schema": "pike/pi-v1.3.0-capability-ledger/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "platform": "linux-x86_64-glibc",
+  "ticket": "1057",
+  "owner": "cch_chord",
+  "scope": "durable-required @earendil-works/chord dependency subset",
+  "evidence": {
+    "family": "audit-1057",
+    "manifest": "fixtures/pi-v1.3.0/audit-1057/manifest.json",
+    "manifestSha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d",
+    "report": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.md",
+    "capture": "fixtures/pi-v1.3.0/audit-1057/capture-1057.mts",
+    "artifacts": {
+      "document-transaction.json": {
+        "bytes": 12968,
+        "sha256": "bb500471ac1cdd5d5a9396c62765451dc0a9283d2d8df2b1d1baaec96bd1a1c7",
+        "scenarios": 8,
+        "sourceEndpoints": 7
+      },
+      "context-cancellation.json": {
+        "bytes": 6053,
+        "sha256": "9b4fa6273547f7b301773571f8bd58066f0574a8c563bdc371be0821c018d817",
+        "scenarios": 6,
+        "sourceEndpoints": 6
+      },
+      "delta-revisions.json": {
+        "bytes": 15549,
+        "sha256": "5b5241721f64f50380b2fe7a5c22c528a4d38d7ebfc9035f2c9de3429c335518",
+        "scenarios": 9,
+        "sourceEndpoints": 4
+      },
+      "replicated-state.json": {
+        "bytes": 5152,
+        "sha256": "31d83e25d6245809ad78f2f7dfd37ca87c5321d3eca17deda0e4fe38c3238d53",
+        "scenarios": 5,
+        "sourceEndpoints": 6
+      },
+      "json-output-support.json": {
+        "bytes": 5308,
+        "sha256": "754e7ad07a9279754638f6dca161eebd4de46e2197797e57a989b95eb28fc525",
+        "scenarios": 5,
+        "sourceEndpoints": 6
+      }
+    }
+  },
+  "counts": {
+    "rows": 58,
+    "membership": {
+      "excluded": 5,
+      "supported": 53
+    },
+    "implementation": {
+      "missing": 35,
+      "partial": 18
+    },
+    "verification": {
+      "not-applicable": 5,
+      "unverified": 8,
+      "upstream-captured": 45
+    }
+  },
+  "rows": [
+    {
+      "id": "cch_chord:context:root-background",
+      "capability": "Empty and background root Context values",
+      "operation": "Provide distinct immutable root contexts with no abort signal and no typed values.",
+      "source": [
+        "packages/chord/src/context/index.ts:BACKGROUND_CONTEXT,TODO_CONTEXT",
+        "packages/chord/test/context.test.ts:provides distinct empty root contexts"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.commit,SessionImpl.close,SessionImpl.watchDoc; packages/durable/src/harness/harness.ts:Harness",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "No captured scenario isolates root identity or string forms; the child-cancellation scenario only observes a derived root's absent signal."
+      ],
+      "notes": "",
+      "cppSeam": "No context value carrier; cancellation is a `std::stop_token`/Asio signal bridge.",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Add an immutable `Context` value with keyed values, an optional stop token/signal and root constants; do not widen it into a service locator."
+    },
+    {
+      "id": "cch_chord:context:value-layering",
+      "capability": "Typed value layering and lookup",
+      "operation": "Layer a typed value over a parent and read it through the child without mutating the parent.",
+      "source": [
+        "packages/chord/src/context/index.ts:createContextKey,withContextValue,Context.value",
+        "packages/chord/test/context.test.ts:layers typed values without modifying parents"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.#runCommit,SessionImpl.#publish; packages/durable/test/session-watches.test.ts:preserves commit Context values without inheriting producer cancellation",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+        "result": "Root and child both read value 'root'; the inherited child reads its own 'child' value while retaining the parent key."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "No keyed Context; current code passes explicit structs and `std::stop_token` separately.",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Make committed context values rely on an immutable keyed layer; a watched delivery must read the commit's values, not the producer's cancellation."
+    },
+    {
+      "id": "cch_chord:context:parent-cancellation",
+      "capability": "Parent-to-child cancellation propagation",
+      "operation": "A cancelled parent aborts a child context created before the cancellation; an already-cancelled child keeps its own reason.",
+      "source": [
+        "packages/chord/src/context/index.ts:withAbortSignal,withCancel",
+        "packages/chord/test/context.test.ts:inherits parent cancellation and isolates child cancellation"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/harness.ts:bind; packages/durable/src/harness/scheduler.ts:waitForTask; packages/durable/test/harness-cancellation-barrier.test.ts",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+        "result": "Child reason remains 'child-only'; sibling remains un-aborted; an inheritor context sees parent reason 'parent-reason'."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/CancellationBridge.hpp:CancellationSignalBridge,interruptible_sleep",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Compose cancellation with `std::stop_token`/`std::stop_source`; preserve the first cancellation reason at the context boundary."
+    },
+    {
+      "id": "cch_chord:context:independent-cancel",
+      "capability": "Independent cancellation of a child context",
+      "operation": "Cancel one child without cancelling its parent or sibling.",
+      "source": [
+        "packages/chord/src/context/index.ts:withCancel",
+        "packages/chord/test/context.test.ts:inherits parent cancellation and isolates child cancellation"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/test/session-watches.test.ts:keeps the acquisition revision until start and delivers exact committed frames; packages/durable/test/harness-tasks.test.ts:caller cancellation",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+        "result": "Cancelling child sets only the child's signal; root and sibling remain un-aborted."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/CancellationBridge.hpp:CancellationSignalBridge,interruptible_sleep",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Expose a child scope with its own stop_source derived from the parent; do not mutate the parent context."
+    },
+    {
+      "id": "cch_chord:context:with-abort-signal",
+      "capability": "Combining an external abort signal with its parent",
+      "operation": "Adopt an existing parent cancellation reason and combine a supplied signal without detaching values.",
+      "source": [
+        "packages/chord/src/context/index.ts:withAbortSignal",
+        "packages/chord/test/context.test.ts:inherits parent cancellation and isolates child cancellation"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/harness.ts:bind; packages/durable/src/harness/scheduler.ts:1291; packages/durable/src/testing/env-conformance.ts:withAbortSignal",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "a child cancellation is isolated while parent cancellation reaches an already-created child context",
+        "result": "Inheritor aborts with the parent's 'parent-reason' while keeping its own 'child' value."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/CancellationBridge.hpp:CancellationSignalBridge,interruptible_sleep",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Accept an external stop token/signal plus the parent stop token; combine reasons without overwriting an earlier reason."
+    },
+    {
+      "id": "cch_chord:context:without-abort-signal",
+      "capability": "Detached cleanup context",
+      "operation": "Remove caller cancellation from a context while retaining typed values, for mandatory cleanup paths.",
+      "source": [
+        "packages/chord/src/context/index.ts:withoutAbortSignal",
+        "packages/chord/test/context.test.ts:masks caller cancellation for mandatory cleanup"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.close,SessionImpl.#runCommit; packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts:235; packages/durable/src/harness/task-graph.ts:201",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "withoutAbortSignal removes cancellation while preserving typed values",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "withoutAbortSignal removes cancellation while preserving typed values",
+        "result": "Masked context exposes no signal but retains value 'cleanup'."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/CancellationBridge.hpp:CancellationSignalBridge,interruptible_sleep",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Provide a cleanup overlay that suppresses cancellation propagation only for the operation it wraps; keep values intact."
+    },
+    {
+      "id": "cch_chord:context:await-with-context",
+      "capability": "Cancellation-aware wait",
+      "operation": "Wait for a promise until it settles or the context is cancelled; cancellation rejects only the waiter.",
+      "source": [
+        "packages/chord/src/context/index.ts:awaitWithContext",
+        "packages/chord/test/context.test.ts:stops waiting when the invocation is cancelled"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/tool.ts:335; packages/durable/src/harness/scheduler.ts:363,1622; packages/durable/src/session/session.ts:516",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a context wait rejects with the caller abort reason while the underlying work still completes",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "a context wait rejects with the caller abort reason while the underlying work still completes",
+        "result": "Wait rejects with AbortError 'The operation was aborted'; the underlying gate still resolves 'work finished'."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/CancellationBridge.hpp:CancellationSignalBridge,interruptible_sleep",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Add a waiter that races an awaitable with stop-token cancellation, returns `ErrorCode::Cancelled`, and never cancels the producer's shared future."
+    },
+    {
+      "id": "cch_chord:context:watch-cancellation",
+      "capability": "Cancellation of an observation wait",
+      "operation": "Cancelling the context passed to watch acquisition or delivery stops that watcher without aborting a completed callback or a later commit.",
+      "source": [
+        "packages/chord/src/context/index.ts:withCancel,awaitWithContext",
+        "packages/chord/test/replicated-state-delivery.test.ts:unsubscribe drops queued callbacks without joining or aborting the running callback"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.watchDoc; packages/durable/src/session/observation.ts:CommittedWatch.observeCancellation",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "cancelling a watch ends delivery without aborting a completed callback or later commits",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "cancelling a watch ends delivery without aborting a completed callback or later commits",
+        "result": "The already-delivered frame keeps a null abort signal and commit context 'commit-context'; watch closes {reason:'cancelled'}; value stays 2 while a later snapshot is 3."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "No watch/observer cancellation seam; ADR 0052 subscriptions use a mailbox and explicit unsubscribe.",
+      "cppEvidence": "tests/coding_agent/ProjectionStreamTest.cpp:Projection attach delivers a Base then ordered patches to concurrent subscribers; Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core",
+      "recommendation": "Separate observer lifetime from producer lifetime: cancellation stops future delivery and leaves committed state untouched."
+    },
+    {
+      "id": "cch_chord:context:close-cancellation",
+      "capability": "Cancelled close still performs cleanup",
+      "operation": "Reject the close caller when its context is cancelled, while storage cleanup continues to completion.",
+      "source": [
+        "packages/chord/src/context/index.ts:withoutAbortSignal,awaitWithContext",
+        "packages/chord/test/context.test.ts:masks caller cancellation for mandatory cleanup"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.close; packages/durable/src/harness/harness.ts:465",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "cancelling the close caller rejects close while storage cleanup still completes",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "cancelling the close caller rejects close while storage cleanup still completes",
+        "result": "Close rejects with AbortError, but storage close started and completed and `session.closed` is {reason:'closed'}."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "`AgentSession` close currently owns its own lifecycle; no generic detached close context.",
+      "cppEvidence": "tests/agent/ToolCallExecutorTest.cpp:sequential cancellation during a hook does not start later calls; bounded parallel cancellation leaves queued tool capabilities unstarted",
+      "recommendation": "Run mandatory cleanup under a cleanup context; report caller cancellation separately from cleanup completion."
+    },
+    {
+      "id": "cch_chord:context:acquire-cancellation",
+      "capability": "Cancelled watch acquisition",
+      "operation": "Cancelling a context while watch acquisition waits on storage rejects the acquisition and leaves no observer or write.",
+      "source": [
+        "packages/chord/src/context/index.ts:awaitWithContext",
+        "packages/chord/test/context.test.ts:stops waiting when the invocation is cancelled"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.watchDoc; packages/durable/src/session/observation.ts:CommittedWatch",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
+        "result": "Acquisition rejects with AbortError; the snapshot remains {value:1}."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "No watch acquisition path; storage reads are synchronous/async but not cancellation-aware at this seam.",
+      "cppEvidence": "tests/coding_agent/ProjectionStreamTest.cpp:Projection attach delivers a Base then ordered patches to concurrent subscribers; Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core",
+      "recommendation": "Make acquisition a cancellable waiter; on cancellation release the staged observer before returning."
+    },
+    {
+      "id": "cch_chord:document:commit-publication",
+      "capability": "Ordered committed document publications",
+      "operation": "Each successful document commit publishes one exact immutable value and operation batch in commit sequence order.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#runCommit,SessionImpl.#publish; packages/durable/src/session/transaction.ts:Transaction.settleSuccess",
+        "packages/durable/test/session-documents.test.ts:adopts by pointer swap and shares operation payloads with the published revision"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.commit; packages/durable/src/session/observation.ts:CommittedWatch",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "exact committed frames replay from the acquisition revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "exact committed frames replay from the acquisition revision",
+        "result": "Publications seq 2 and 3 carry exact ops; watch frames replay from the acquisition value to the final snapshot."
+      },
+      "gaps": [
+        "No C++ durable Session/document package exists."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Introduce a `cch_durable` document transaction boundary with immutable committed revisions and ordered publication events."
+    },
+    {
+      "id": "cch_chord:document:callback-rollback",
+      "capability": "Callback rollback",
+      "operation": "A throwing transaction callback publishes no value, leaves the committed revision unchanged, and performs no storage commit.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#runCommit; packages/durable/src/session/transaction.ts:Transaction.#abortChanges",
+        "packages/durable/test/session-documents.test.ts:aborts every change when the callback fails; packages/durable/test/session-checkpoints-migrations.test.ts:rolls migration and edits back with the callback, then coalesces later edits into one base"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.commit; packages/durable/src/session/transaction.ts:Transaction.#abortChanges",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a callback rollback publishes nothing and keeps the committed revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "a callback rollback publishes nothing and keeps the committed revision",
+        "result": "Error 'rollback refused'; no publication or frame; watch and snapshot stay {value:1}; storage commits remain 1; a later success publishes seq 2."
+      },
+      "gaps": [
+        "No C++ document transaction or draft overlay exists."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Keep a draft overlay detached from the committed revision until storage success; aborting it must revoke all draft handles."
+    },
+    {
+      "id": "cch_chord:document:base-creation",
+      "capability": "Creation and migration base publication",
+      "operation": "Creating or migrating a document publishes a base (root replacement) rather than a delta.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#publish; packages/durable/src/session/transaction.ts:Transaction.#assemble,planDocument",
+        "packages/durable/test/session-documents.test.ts:creates an initial base on first access and adopts it after Storage success; packages/durable/test/session-checkpoints-migrations.test.ts:Session document migrations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.commit; packages/durable/src/session/observation.ts:CommittedWatch",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+        "result": "Watching version 1 while committing version 2 yields a frame whose first op is 'r' with the version-2 value; the older snapshot read errors 'has newer version 2 than 1'."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Represent creation/migration with a root replacement and a definition version; a watcher must not replay a delta across incompatible shapes."
+    },
+    {
+      "id": "cch_chord:document:revision-mismatch",
+      "capability": "Revision/definition mismatch diagnostics",
+      "operation": "An older-definition read after a newer-definition commit fails with a precise newer-version error; the watcher gets a full replacement.",
+      "source": [
+        "packages/durable/src/documents.ts:materializeDocument; packages/durable/src/session/session.ts:SessionImpl.snapshot",
+        "packages/durable/test/session-documents.test.ts:rejects tokens whose semantics or version disagree with the stored incarnation; packages/durable/test/session-checkpoints-migrations.test.ts:Session document migrations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.snapshot,SessionImpl.watchDoc",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+        "result": "Older snapshot rejects 'Document 2 (1057.versioned) has newer version 2 than 1'; watcher frame is [['r', {value:2,extra:true}]]."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Carry the definition version with each stored revision; reject or migrate on mismatch and publish a base to observers."
+    },
+    {
+      "id": "cch_chord:document:structural-no-op",
+      "capability": "Structural no-op publication",
+      "operation": "A commit whose final value equals the prior value but whose draft changed structure still publishes a nonempty replayable batch and advances the revision.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#runCommit; packages/durable/src/session/transaction.ts:planDocument",
+        "packages/durable/test/session-watches.test.ts:delivers replayable structural no-op commits instead of suppressing them; packages/chord/test/delta.test.ts:normalizes a deep no-op to exact previous identity"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/chord/src/delta/tracker.ts:Tracker.prepare",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a structurally rewritten but value-identical commit still publishes a nonempty exact batch",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "a structurally rewritten but value-identical commit still publishes a nonempty exact batch",
+        "result": "`items.shift(); items.unshift('a')` emits two splice ops, publication seq 2, and an unchanged {items:['a']} value."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Preserve structural writes even when the final JSON value is equal; do not use deep equality as a publication suppressor."
+    },
+    {
+      "id": "cch_chord:document:state-delivery",
+      "capability": "Typed document state hydration and updates",
+      "operation": "A document state hydrates from the source snapshot and then delivers exact committed updates with the commit context.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/chord/src/state.ts:replicatedState,AttachedReplicatedState",
+        "packages/chord/test/state.test.ts:publishes snapshots then exact ops; derivations follow"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/session/observation.ts:CommittedStateSource",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "document state hydrates from the source snapshot and then delivers the committed update with caller values",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "document state hydrates from the source snapshot and then delivers the committed update with caller values",
+        "result": "Deliveries are hydrate/sequence 0/{value:0}, update/sequence 1/{value:3}; the update context reads 'commit', abort signal null."
+      },
+      "gaps": [
+        "No C++ replicated document state or source attachment."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Build state from a committed revision source, hydrating at the acquisition cursor before applying later committed frames."
+    },
+    {
+      "id": "cch_chord:document:immutable-snapshots",
+      "capability": "Immutable historical snapshots",
+      "operation": "A snapshot read after a later commit remains the earlier immutable value; a new commit returns a distinct revision.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.snapshot; packages/chord/src/delta/tracker.ts:Prepared.value",
+        "packages/durable/test/session-documents.test.ts:returns shared immutable snapshots and keeps prior revisions stable; packages/durable/test/session-watches.test.ts:keeps earlier immutable revisions stable"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.snapshot,SessionImpl.snapshotAsOf",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "committed snapshots keep earlier revisions immutable while a later commit advances the document",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "committed snapshots keep earlier revisions immutable while a later commit advances the document",
+        "result": "First snapshot stays {value:1,nested:{count:0}} after second commit {value:2,nested:{count:1}}; references differ."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Expose immutable revision values; never mutate a value already returned to a caller or observer."
+    },
+    {
+      "id": "cch_chord:document:retirement",
+      "capability": "Document retirement",
+      "operation": "Retiring a document publishes the canonical root-null batch and closes its watcher; later snapshots are absent.",
+      "source": [
+        "packages/durable/src/session/observation.ts:RETIREMENT_OPERATIONS; packages/durable/src/session/session.ts:SessionImpl.watchDoc",
+        "packages/durable/test/session-watches.test.ts:delivers retirement and does not follow recreation; packages/durable/test/session-documents.test.ts:retires documents and creates a new incarnation at the same address"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.watchDoc; packages/durable/src/session/observation.ts:CommittedWatch",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "retiring a document publishes the canonical root-null batch and closes its watcher",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "retiring a document publishes the canonical root-null batch and closes its watcher",
+        "result": "Frame value null, ops [['r', null]], watch end {reason:'retired'}, snapshot undefined."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Use one canonical retirement batch and terminate the watcher; do not deliver an empty delta for an absent incarnation."
+    },
+    {
+      "id": "cch_chord:document:storage-failure",
+      "capability": "Fatal storage failure",
+      "operation": "A storage failure publishes no partial commit and ends the Session; later snapshots fail with a Session-failed error.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#runCommit; packages/durable/src/session/transaction.ts:#abortChanges",
+        "packages/durable/test/session-documents.test.ts:fails the Session after a Storage failure and publishes nothing"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.commit,SessionImpl.snapshot",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a storage failure publishes nothing and ends the Session without a partial commit",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/document-transaction.json",
+        "scenario": "a storage failure publishes nothing and ends the Session without a partial commit",
+        "result": "Commit rejects 'disk vanished'; no publication/frame; storage commits stay 1; session end reason failed; snapshot error SessionFailed 'Session failed after a storage error; close and reopen it'."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Treat storage errors as terminal for the Session, never publish the prepared revision, and expose a typed failed state."
+    },
+    {
+      "id": "cch_chord:document:watch-buffer",
+      "capability": "Watcher pre-start buffering and serialization",
+      "operation": "A watcher acquired before start buffers committed frames and delivers them serially in order after start.",
+      "source": [
+        "packages/durable/src/session/observation.ts:CommittedWatch; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.watchDoc; packages/durable/src/session/observation.ts:CommittedWatch.start",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a watch acquired before start buffers frames and serializes callbacks",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "a watch acquired before start buffers frames and serializes callbacks",
+        "result": "Two commits before start arrive as values [1,2]; an in-flight callback is not overlapped; max concurrent callbacks 1."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Queue exact frames before start and run one listener at a time; never call a listener synchronously from acquisition."
+    },
+    {
+      "id": "cch_chord:document:watch-overflow",
+      "capability": "Watcher pending-frame overflow",
+      "operation": "More than the pending-frame bound collapses buffered frames into one root replacement carrying the latest value.",
+      "source": [
+        "packages/durable/src/session/observation.ts:CommittedWatch; packages/chord/src/state.ts:StateSubscriber.push",
+        "packages/durable/test/session-watches.test.ts:collapses 101 pending commits to one root replacement"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/observation.ts:CommittedWatch",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a watch whose pending frames overflow delivers one root replacement with the latest value",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "a watch whose pending frames overflow delivers one root replacement with the latest value",
+        "result": "101 commits before start produce one frame, first op 'r', value 101."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Bound pending observation memory with a declared capacity and reset to a single root replacement on overflow."
+    },
+    {
+      "id": "cch_chord:document:watch-acquisition-cancellation",
+      "capability": "Cancellable watcher acquisition",
+      "operation": "Cancelling while watch acquisition waits on storage rejects the wait and creates no observer or write.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.watchDoc; packages/chord/src/context/index.ts:awaitWithContext"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.watchDoc",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json",
+        "scenario": "cancelling a watch acquisition rejects the wait and leaves no write or partial observer",
+        "result": "Acquisition rejects AbortError; snapshot remains {value:1}."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Make acquisition an atomic reserve-or-cancel operation; release staged observer state on cancellation."
+    },
+    {
+      "id": "cch_chord:document:draft-lifecycle",
+      "capability": "Typed document draft lifecycle",
+      "operation": "A document draft accepts typed writes across awaits, commits only through a prepared change, and revokes escaped handles after settlement.",
+      "source": [
+        "packages/chord/src/delta/draft.ts:Draft; packages/chord/src/delta/tracker.ts:Change,Prepared; packages/durable/src/session/transaction.ts:Transaction.doc",
+        "packages/chord/test/delta.test.ts:keeps a draft alive across await and adopts only a prepared change; packages/chord/test/state-draft.test.ts:copies only changed branches"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/transaction.ts:Transaction.doc,Transaction.settleSuccess,Transaction.adopt",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+        "result": "Escaped draft write throws TypeError 'Cannot use a settled overlay'; tracker value stays {value:1} at revision 0."
+      },
+      "gaps": [
+        "The C++ side has no draft/overlay; `JsonValue` is a value type only."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Implement a typed overlay whose handles become unusable after prepare/abort; keep the committed revision immutable until adoption."
+    },
+    {
+      "id": "cch_chord:document:checkpoint-bases",
+      "capability": "Checkpoint base selection",
+      "operation": "A checkpoint predicate selects a base for a nonempty structural batch and later reads replay the retained delta tail.",
+      "source": [
+        "packages/durable/src/session/transaction.ts:planDocument,Transaction.#assemble; packages/durable/src/documents.ts:checkpointWhen",
+        "packages/durable/test/session-checkpoints-migrations.test.ts:selects bases only for nonempty ordinary batches and passes the exact prepared revision and ops; persists repeated false decisions as deltas and replays the complete tail"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.commit",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "No captured checkpoint/base scenario in this ticket; checkpoint cost is deliberately not decided here."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Defer checkpoint base economics to a measured implementation probe; first make revision/delta replay correct."
+    },
+    {
+      "id": "cch_chord:document:retention",
+      "capability": "Document retention and eviction",
+      "operation": "Session retention sweeps unreferenced document incarnations after the configured interval.",
+      "source": [
+        "packages/durable/src/session/session.ts:SessionImpl.#sweepDocuments,documentRetention",
+        "packages/durable/test/session-document-retention.test.ts:evicts an unattached document once its retention passed, and loads it again with the same value"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.#sweepDocuments",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "No captured retention/eviction scenario."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Leave retention policy to the durable implementation probe; it is lifecycle, not a Chord replay primitive."
+    },
+    {
+      "id": "cch_chord:delta:tracker-revision",
+      "capability": "Monotonic tracked revisions",
+      "operation": "A tracker exposes its current revision and adopts a prepared change by pointer swap, incrementing the revision.",
+      "source": [
+        "packages/chord/src/delta/tracker.ts:Tracker.revision,Tracker.adopt; packages/chord/test/delta.test.ts:keeps a draft alive across await and adopts only a prepared change"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/transaction.ts:Transaction.#acquire,Transaction.adopt; packages/durable/src/storage/memory.ts:applyImmutableBatches",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+        "result": "Adopting the first preparation moves revision 0 to 1 and value to {value:2,items:['a']}."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "No tracker/revision runtime; `JsonValue` copies but has no prepared revision identity.",
+      "cppEvidence": "tests/support/JsonValueIoTest.cpp:JsonValue round-trips nested structures byte-identically",
+      "recommendation": "Introduce an immutable revision value plus a prepared-batch handle; avoid mutable in-place document application."
+    },
+    {
+      "id": "cch_chord:delta:stale-preparation",
+      "capability": "Stale preparation rejection",
+      "operation": "A prepared change based on an older revision is rejected on adoption without changing the current value or revision.",
+      "source": [
+        "packages/chord/src/delta/tracker.ts:Tracker.adopt; packages/chord/test/delta.test.ts:rejects foreign, stale, and repeated preparations while allowing competing changes"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/transaction.ts:Transaction.adopt; packages/durable/src/session/session.ts:SessionImpl.#runCommit",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+        "result": "Second prepared change at base revision 0 rejects 'Prepared change is stale'; value stays {value:2,...} and revision 1."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Validate the prepared base revision and ownership token before applying; never fall back to a full snapshot to hide a stale batch."
+    },
+    {
+      "id": "cch_chord:delta:draft-abort",
+      "capability": "Draft abort and handle revocation",
+      "operation": "Aborting a changed draft revokes the prepared result and every escaped overlay handle, leaving the committed revision unchanged.",
+      "source": [
+        "packages/chord/src/delta/tracker.ts:Change.abort; packages/chord/test/delta.test.ts:aborts and revokes without changing the committed value"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/transaction.ts:Transaction.#abortChanges",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+        "result": "Escaped handle write throws TypeError 'Cannot use a settled overlay'; adopting the aborted preparation also fails; value stays {value:1}."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Tie overlay and prepared-handle validity to a settlement generation; revoke deterministically on abort."
+    },
+    {
+      "id": "cch_chord:delta:op-vocabulary",
+      "capability": "Delta operation vocabulary",
+      "operation": "Tracked edits emit root replace, set, append, array splice, delete, truncate and permutation operations.",
+      "source": [
+        "packages/chord/src/delta/index.ts:Op,assertValidOp; packages/chord/test/delta.test.ts:emits append and rolling-window operations; supports root replacement, root splice, and permutations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/transaction.ts:Transaction.adopt; packages/durable/src/storage/sqlite/storage.ts:apply",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary",
+        "result": "Exact tuples observed for set, append, splice, permutation, delete, truncate and replace."
+      },
+      "gaps": [],
+      "notes": "Durable storage compatibility requires the C++ applier to accept these tuples; exact spelling is not canonical and may differ for an equivalent producer.",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Implement the seven operations and a validator that rejects unknown verbs, malformed tuples, unsafe paths and splice indices before traversal."
+    },
+    {
+      "id": "cch_chord:delta:immutable-application",
+      "capability": "Copy-on-write immutable application",
+      "operation": "Apply an operation batch without mutating the base, copying only touched containers and sharing untouched subtrees.",
+      "source": [
+        "packages/chord/src/delta/index.ts:applyImmutable; packages/chord/test/delta-apply-immutable.test.ts:copies each touched container once while preserving input and payload ownership"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/task-graph.ts:200; packages/durable/src/harness/view.ts:237; packages/durable/src/storage/memory.ts:applyImmutableBatches",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "immutable application reproduces each revision without mutating the base and shares untouched subtrees",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "immutable application reproduces each revision without mutating the base and shares untouched subtrees",
+        "result": "Base unchanged; root and touched containers new; `retained` and nested `retained` subtrees shared across revisions."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Implement value-identity-preserving copy-on-write; never mutate a committed value or its shared subtrees."
+    },
+    {
+      "id": "cch_chord:delta:batch-application",
+      "capability": "Ordered batch application",
+      "operation": "Apply ordered batches in sequence and return only the final immutable revision while preserving the input base.",
+      "source": [
+        "packages/chord/src/delta/index.ts:applyImmutableBatches; packages/chord/test/delta-apply-immutable.test.ts:shares one private copy-on-write scope across batch partitions"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/storage/memory.ts:applyImmutableBatches; packages/durable/src/storage/sqlite/storage.ts:apply",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "batched immutable application applies ordered batches and returns only the final revision",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "batched immutable application applies ordered batches and returns only the final revision",
+        "result": "Two batches yield {items:['b'],value:2}; the input {items:['a'],value:0} is unchanged; root creation works from undefined."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Replay each stored delta batch in revision order; do not require a full snapshot between batches."
+    },
+    {
+      "id": "cch_chord:delta:mutable-application",
+      "capability": "Materializing mutable application",
+      "operation": "A mutable applier mutates a detached target in place except for a root replacement, which returns a new value.",
+      "source": [
+        "packages/chord/src/delta/index.ts:apply,isBase,isReplace; packages/chord/test/delta.test.ts:applies mutable and immutable operations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/storage/sqlite/storage.ts:654 (revision materialization)",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+        "result": "Ordinary batch returns the same target and mutates it to {items:['a','b'],value:1}; root replacement returns a distinct {replacement:true}."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Use mutable application only on values owned by the materializer, never on a committed/shared revision."
+    },
+    {
+      "id": "cch_chord:delta:path-validation",
+      "capability": "Unsafe path rejection",
+      "operation": "Reject prototype-reaching path segments before mutation.",
+      "source": [
+        "packages/chord/src/delta/index.ts:assertSafePath,UnsafePathError; packages/chord/test/delta.test.ts:rejects unsafe and malformed paths"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/storage/memory.ts; packages/durable/src/storage/sqlite/storage.ts",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+        "result": "Path ['__proto__','polluted'] throws UnsafePathError 'unsafe path segment: __proto__'."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Represent paths as validated segment vectors; reject `__proto__`, `constructor` and `prototype` before any target access."
+    },
+    {
+      "id": "cch_chord:delta:op-validation",
+      "capability": "Operation shape and index validation",
+      "operation": "Validate operation tuples, paths and splice payloads before traversing the target.",
+      "source": [
+        "packages/chord/src/delta/index.ts:assertValidOp; packages/chord/test/delta.test.ts:rejects unknown verbs, malformed tuples, paths, and splice payloads; rejects gaps, huge indices, and string-spelled indices"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/storage/memory.ts; packages/durable/src/storage/sqlite/storage.ts",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+        "result": "Unknown verb 'x' throws TypeError; string splice index throws the recorded typed error."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Validate the entire batch before applying any operation; make failure leave the target untouched."
+    },
+    {
+      "id": "cch_chord:delta:overlap",
+      "capability": "Bounded overlap search",
+      "operation": "Find the longest suffix of written text that is a prefix of the next snapshot, bounded by a scan/probe/candidate budget.",
+      "source": [
+        "packages/chord/src/delta/index.ts:overlap; packages/chord/test/delta.test.ts:finds bounded overlaps"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/tool.ts:457",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "overlap returns the bounded common run used to merge tool output",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "overlap returns the bounded common run used to merge tool output",
+        "result": "overlap('abcdefgh','defghxyz',65536)=5; scan 0 and empty input return 0."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Retain a bounded overlap helper for tool progress diffing; do not use it to infer document revision identity."
+    },
+    {
+      "id": "cch_chord:delta:root-replacement",
+      "capability": "Root replacement and base detection",
+      "operation": "A root replacement operation carries a complete value; a batch beginning with it is a base and is not applied as a delta.",
+      "source": [
+        "packages/chord/src/delta/index.ts:isBase,isReplace; packages/chord/test/delta.test.ts:supports root replacement, root splice, and permutations"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/observation.ts:RETIREMENT_OPERATIONS; packages/durable/src/storage/sqlite/storage.ts",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "mutable application mutates in place except for a root replacement, which returns a new value; a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "scenario": "mutable application mutates in place except for a root replacement, which returns a new value; a watcher acquired at an older definition receives a root replacement on a newer-definition commit",
+        "result": "isBase([['r',...]]) true; isReplace true; root replacement returns a distinct value; watcher version mismatch yields ['r', value]."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Classify a root replacement as a base, reset any path/revision decoding state, and never apply it as an incremental delta."
+    },
+    {
+      "id": "cch_chord:delta:prepare-replace",
+      "capability": "Prepared full replacement",
+      "operation": "Prepare a replacement of the whole document value without traversing or aliasing the replacement input.",
+      "source": [
+        "packages/chord/src/delta/tracker.ts:Tracker.prepareReplace; packages/chord/test/delta.test.ts:emits an owned root replacement without traversing large replacement input"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/transaction.ts:planDocument",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "The ticket captured root replacements through commits/watchers, not `prepareReplace` directly."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta."
+    },
+    {
+      "id": "cch_chord:state:attached-hydration",
+      "capability": "Attached replicated state hydration",
+      "operation": "Attach to an immutable source, hydrate at its snapshot cursor, then deliver exact updates in cursor order.",
+      "source": [
+        "packages/chord/src/state.ts:replicatedState,AttachedReplicatedState,ReplicatedStateSource",
+        "packages/chord/test/replicated-state.test.ts:hydrates at sequence zero when attaching after existing commits; publishes exact source values without applying or re-diffing"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/session/observation.ts:CommittedStateSource",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+        "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
+      },
+      "gaps": [
+        "ProjectionStream does not expose a replicated-state source/attachment API, cursor, or onError."
+      ],
+      "notes": "",
+      "cppSeam": "src/coding_agent/include/cch/coding_agent/ProjectionStream.hpp:ProjectionStreamBase,ProjectionStreamPatchMsg,apply_projection_patches",
+      "cppEvidence": "tests/coding_agent/ProjectionStreamTest.cpp:Projection attach delivers a Base then ordered patches to concurrent subscribers; Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core",
+      "recommendation": "Use an explicit source attachment with a snapshot cursor; the current projection stream is a base+patch analogue but has no source cursor or hydration contract."
+    },
+    {
+      "id": "cch_chord:state:cursor-gap",
+      "capability": "Replicated source cursor-gap detection",
+      "operation": "A non-consecutive source cursor is reported through onError, disposes the attachment, and leaves the last good value.",
+      "source": [
+        "packages/chord/src/state.ts:AttachedReplicatedState.#receive; packages/chord/test/replicated-state.test.ts:reports cursor gaps, disposes the broken attachment, and ignores later frames"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/observation.ts:CommittedStateSource; packages/durable/src/session/session.ts:SessionImpl.documentState",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a cursor gap is reported once and leaves the last good replicated value",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "a cursor gap is reported once and leaves the last good replicated value",
+        "result": "Gap 2 after snapshot 0 reports 'cursor has a gap: expected 1, received 2'; delivered sequences [0]; last value {value:1}; dispose once."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Reject a gap rather than silently applying later frames; surface it through a typed error callback."
+    },
+    {
+      "id": "cch_chord:state:listener-error",
+      "capability": "Observation listener failure isolation",
+      "operation": "A failing state listener is reported through onError and does not stop another subscription or later deliveries.",
+      "source": [
+        "packages/chord/src/state.ts:StateSubscriber; packages/chord/test/replicated-state-delivery.test.ts:isolates a synchronous hydration failure without removing the subscription"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/task-graph.ts:replicatedState(observer,{onError})",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a failing state listener is reported through onError without stopping another subscription",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "a failing state listener is reported through onError without stopping another subscription",
+        "result": "Two errors 'listener failed' (hydrate and update); the other subscriber receives hydrate 0 and update 1."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Catch per-subscriber failures, report them without rethrowing into the source, and keep independent delivery queues."
+    },
+    {
+      "id": "cch_chord:state:delivery-order",
+      "capability": "Per-subscriber delivery serialization",
+      "operation": "Each subscription serializes callbacks and preserves frame order; a running callback is not overlapped by a later frame.",
+      "source": [
+        "packages/chord/src/state.ts:StateSubscriber.drain; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "a watch acquired before start buffers frames and serializes callbacks",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "a watch acquired before start buffers frames and serializes callbacks",
+        "result": "The two-frame watch delivery has one active callback at a time and values [1,2]."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Give every observer an independent serialized queue; never invoke an async listener reentrantly."
+    },
+    {
+      "id": "cch_chord:state:pending-bound",
+      "capability": "Bounded pending observation",
+      "operation": "At most 100 deliveries wait behind a running callback; overflow keeps only the newest pending value/context/delivery.",
+      "source": [
+        "packages/chord/src/state.ts:StateSubscriber.push; packages/chord/test/replicated-state-delivery.test.ts:excludes a running update from overflow and retains exact value/context/delivery"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/session/session.ts:SessionImpl.documentState",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "The watch overflow scenario covers the durable watcher's 100-frame reset; state-subscriber overflow with an in-flight callback is not separately captured."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Declare one bounded pending-observation capacity and make overflow collapse to the newest state without corrupting the running callback."
+    },
+    {
+      "id": "cch_chord:state:dispose",
+      "capability": "Idempotent state disposal",
+      "operation": "Dispose releases the source attachment idempotently while the last published value remains readable.",
+      "source": [
+        "packages/chord/src/state.ts:AttachedReplicatedState.dispose; packages/chord/test/replicated-state.test.ts:keeps attachments independent and disposes each idempotently"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/view.ts",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
+        "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+        "result": "disposeCalls is 1 after hydration and an explicit dispose."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Make observer disposal idempotent and release source resources exactly once; do not clear the last good value."
+    },
+    {
+      "id": "cch_chord:json:copy-json",
+      "capability": "Strict detached JSON copying",
+      "operation": "Copy strict JSON without retaining aliases, rejecting functions, undefined, cycles, non-finite numbers, class instances, holes and sparse arrays.",
+      "source": [
+        "packages/chord/src/json.ts:copyJson; packages/chord/test/json.test.ts:copies strict JSON without retaining aliases; rejects cycles and non-strict container properties"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/usage.ts:37; packages/durable/src/harness/inbox.ts; packages/durable/src/documents.ts:materializeDocument",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "copyJson returns a detached strict-JSON value and omits undefined object properties",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+        "scenario": "copyJson returns a detached strict-JSON value and omits undefined object properties",
+        "result": "Nested copy is detached; default undefined rejects with 'Value contains a non-JSON undefined; expected strict JSON'; with omit, undefined properties disappear."
+      },
+      "gaps": [
+        "C++ `JsonValue` cannot represent undefined; object key order is sorted by `std::map`, unlike JS insertion order."
+      ],
+      "notes": "",
+      "cppSeam": "src/support/include/cch/support/JsonValue.hpp; src/support/Json.cpp:read_json,write_json",
+      "cppEvidence": "tests/support/JsonValueIoTest.cpp:JsonValue parser applies strict JSON grammar and Glaze tolerances; JsonValue serializes numbers byte-identically to the Glaze path",
+      "recommendation": "Use value copying for detachment, but add a strict validator and an explicit omit-undefined policy; C++ `JsonValue` has no undefined."
+    },
+    {
+      "id": "cch_chord:json:strict-validation",
+      "capability": "Strict JSON validation",
+      "operation": "Reject non-JSON values before persistence; distinguish functions, non-finite numbers, class instances and sparse arrays.",
+      "source": [
+        "packages/chord/src/json.ts:copyJson,isJsonValue; packages/chord/test/json.test.ts:rejects cycles and non-strict container properties"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/documents.ts:materializeDocument; packages/durable/src/session/transaction.ts:prepared.value",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+        "scenario": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
+        "result": "Distinct TypeError messages for function, undefined, non-finite, class instance and sparse array."
+      },
+      "gaps": [
+        "The current C++ parser is Glaze-compatible and tolerates trailing content; it is not a strict JSON-value validator."
+      ],
+      "notes": "",
+      "cppSeam": "src/support/include/cch/support/JsonValue.hpp; src/support/Json.cpp:read_json,write_json",
+      "cppEvidence": "tests/support/JsonValueIoTest.cpp:JsonValue parser applies strict JSON grammar and Glaze tolerances; JsonValue serializes numbers byte-identically to the Glaze path",
+      "recommendation": "Add a strict validation pass at durable boundaries; do not rely on the JSON text parser alone."
+    },
+    {
+      "id": "cch_chord:json:json-value",
+      "capability": "JSON value type",
+      "operation": "A strict JSON value model (null, finite number, string, boolean, dense array, plain object with string keys).",
+      "source": [
+        "packages/chord/src/json.ts:JsonValue; packages/chord/test/json.test.ts:checks strict JSON without normalizing it"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/session/transaction.ts:Draft<JsonObject>; packages/durable/src/harness/live.ts:JsonValue",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "No captured scenario directly exercises a C++-comparable JsonValue model; the copyJson scenarios cover the JS value constraints."
+      ],
+      "notes": "",
+      "cppSeam": "src/support/include/cch/support/JsonValue.hpp; src/support/Json.cpp:read_json,write_json",
+      "cppEvidence": "tests/support/JsonValueIoTest.cpp:JsonValue parser applies strict JSON grammar and Glaze tolerances; JsonValue serializes numbers byte-identically to the Glaze path",
+      "recommendation": "Reuse `support::JsonValue` as the data carrier but keep strictness, finite-number and object-shape policy in the durable/chord layer."
+    },
+    {
+      "id": "cch_chord:json:json-representation",
+      "capability": "Compile-time JSON representation mapping",
+      "operation": "Map typed runtime values to their strict JSON representation for document/draft persistence.",
+      "source": [
+        "packages/chord/src/json.ts:JsonRepresentation; packages/durable/src/harness/usage.ts:JsonRepresentation; packages/durable/src/harness/live.ts:JsonRepresentation"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/usage.ts:9,11; packages/durable/src/harness/live.ts:58,89",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "No runtime scenario exists; this is a typing obligation for implementation, not a standalone observable."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Express representation mapping in C++ types/concepts where needed; it is compile-time only and does not justify a runtime engine."
+    },
+    {
+      "id": "cch_chord:output:utf8-byte-length",
+      "capability": "UTF-8 byte length",
+      "operation": "Count the UTF-8 bytes of a string exactly, including multibyte code points.",
+      "source": [
+        "packages/chord/src/output.ts:utf8ByteLength; packages/durable/src/truncate.ts:utf8ByteLength; packages/durable/src/harness/tool.ts:460"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/tool.ts:460; packages/durable/src/truncate.ts",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+        "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+        "result": "utf8ByteLength('abc')=3, '\u00e9'=2, '\ud83d\ude00'=4, 'a\u00e9\ud83d\ude00'=7."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/include/cch/support/BoundedText.hpp:bounded_utf8,utf8_tail_start,bounded_utf8_tail",
+      "cppEvidence": "tests/support/BoundedTextTest.cpp:bounded_utf8 never splits a multibyte sequence; bounded_utf8_tail starts on a UTF-8 character boundary",
+      "recommendation": "Provide a byte-length helper over UTF-8; current bounded text truncation is not a general byte counter."
+    },
+    {
+      "id": "cch_chord:output:character-end",
+      "capability": "UTF-8 character boundary",
+      "operation": "Return the end byte offset of the character containing an index, clamped to a valid boundary.",
+      "source": [
+        "packages/chord/src/output.ts:characterEnd; packages/durable/src/tools/read.ts:280; packages/durable/test/tools-read-differential.test.ts"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/tools/read.ts:280",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+        "scenario": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+        "result": "For the bytes of 'a\u00e9\ud83d\ude00', boundaries are [0,1,1,3,3,3,3,7] including the terminal index."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/include/cch/support/BoundedText.hpp:bounded_utf8,utf8_tail_start,bounded_utf8_tail",
+      "cppEvidence": "tests/support/BoundedTextTest.cpp:bounded_utf8 never splits a multibyte sequence; bounded_utf8_tail starts on a UTF-8 character boundary",
+      "recommendation": "Expose a character-boundary helper for line slicing; preserve the exact clamp/index semantics observed here."
+    },
+    {
+      "id": "cch_chord:output:bound-output",
+      "capability": "Head/tail output bounding",
+      "operation": "Bound output by bytes and lines, retaining the configured head or tail and reporting exact dropped byte/line counts.",
+      "source": [
+        "packages/chord/src/output.ts:boundOutput; packages/chord/test/output.test.ts:keeps output within the limits unchanged; cuts a single line longer than the byte limit on a character boundary"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/tool.ts:875",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+        "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
+        "result": "For 'abcdefghij' with maxBytes 4/maxLines 1, head is abcd/bytes 4/dropped 6/0 lines; tail is ghij/bytes 4/dropped 6/0 lines."
+      },
+      "gaps": [
+        "C++ truncation reports structured truncation facts over pi `String.split` lines; it does not expose Chord's exact `{text,bytes,droppedBytes,droppedLines}` result."
+      ],
+      "notes": "",
+      "cppSeam": "src/support/include/cch/support/OutputLimiter.hpp:truncate_output_head,truncate_output_tail",
+      "cppEvidence": "tests/support/OutputLimiterTest.cpp:limit_output_tail preserves unredacted text when no limit is hit; tail output limiter starts on a UTF-8 character boundary",
+      "recommendation": "Reuse bounded UTF-8 truncation but add exact dropped-byte/line accounting and a byte `retain` direction compatible with Chord tool output."
+    },
+    {
+      "id": "cch_chord:output:output-buffer",
+      "capability": "Incremental bounded output buffer",
+      "operation": "Accumulate chunks into a bounded head/tail buffer with exact retained text and dropped totals.",
+      "source": [
+        "packages/chord/src/output.ts:OutputBuffer; packages/chord/test/output.test.ts:keeps exact totals across chunks and decodes UTF-8 split across byte chunks; packages/chord/test/output-skip.test.ts:OutputBuffer skipped output"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/tool.ts:262,282",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+        "scenario": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
+        "result": "Pushes 'abc','def','gh' all accepted; final snapshot {text:'efgh',droppedBytes:4,droppedLines:0}."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "src/support/include/cch/support/OutputLimiter.hpp:truncate_output_head,truncate_output_tail",
+      "cppEvidence": "tests/support/OutputLimiterTest.cpp:limit_output_tail preserves unredacted text when no limit is hit; tail output limiter starts on a UTF-8 character boundary",
+      "recommendation": "Add an incremental buffer only on top of the bounded truncation primitive; keep retained text and raw-stream dropped counts separate."
+    },
+    {
+      "id": "cch_chord:output:progress-rate",
+      "capability": "Progress byte-rate constant",
+      "operation": "Expose the frozen 100 KiB/s progress byte rate.",
+      "source": [
+        "packages/chord/src/output.ts:PROGRESS_BYTES_PER_SECOND; packages/durable/src/harness/tool.ts:315"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/tool.ts:315",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": "the progress byte rate is the frozen 100 KiB/s constant",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1057/json-output-support.json",
+        "scenario": "the progress byte rate is the frozen 100 KiB/s constant",
+        "result": "PROGRESS_BYTES_PER_SECOND = 102400."
+      },
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Use the exact constant when implementing durable tool progress."
+    },
+    {
+      "id": "cch_chord:output:progress",
+      "capability": "Throttled progress publication",
+      "operation": "Coalesce progress marks and emit at most the configured byte rate, with a stoppable waiter.",
+      "source": [
+        "packages/chord/src/output.ts:Progress; packages/chord/test/output.test.ts:Progress"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_chord",
+      "consumer": "packages/durable/src/harness/tool.ts:441-460",
+      "boundary": null,
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [
+        "No timing-stable scenario captured; progress pacing is deliberately left unverified rather than normalized away."
+      ],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "Implement only after the document/cancellation substrate works; measure against the frozen pacing, not an inferred timer."
+    },
+    {
+      "id": "cch_chord:excluded:plugin-host",
+      "capability": "Chord plugin/host runtime",
+      "operation": "Plugin loading, host contexts and Node-specific plugin execution are not durable dependencies.",
+      "source": [
+        "packages/chord/src/host.ts:HostImpl,Facet,defineFacet; packages/chord/src/loader.ts:nodeLoader"
+      ],
+      "membership": "excluded",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "owner": "cch_chord",
+      "consumer": "none: not imported by packages/durable/src or its tests",
+      "boundary": "Unrelated plugin/host/RPC surface; ADR 0075 says it does not become a target solely because durable imports Chord.",
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "No C++ action."
+    },
+    {
+      "id": "cch_chord:excluded:rpc-links",
+      "capability": "Chord links/RPC transport",
+      "operation": "Link RPC, facets and remote request transport are not used by durable.",
+      "source": [
+        "packages/chord/src/link.ts:Link,MemoryLink,memoryLinkPair; packages/chord/src/connection.ts; packages/chord/src/remote.ts; packages/chord/src/websocket.ts"
+      ],
+      "membership": "excluded",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "owner": "cch_chord",
+      "consumer": "none: no durable import",
+      "boundary": "Unrelated RPC surface.",
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "No C++ action."
+    },
+    {
+      "id": "cch_chord:excluded:cluster",
+      "capability": "Chord cluster placement/readiness",
+      "operation": "Cluster placement, readiness and generation placement are deployment concerns excluded by ADR 0075.",
+      "source": [
+        "packages/chord/src/cluster.ts:runClusterReload,reconcileChild,ChildReloads"
+      ],
+      "membership": "excluded",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "owner": "cch_chord",
+      "consumer": "none: no durable import",
+      "boundary": "Cloudflare/deployment-specific host responsibilities; generic durable storage/transaction semantics are not excluded.",
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "No C++ action."
+    },
+    {
+      "id": "cch_chord:excluded:cells-schema",
+      "capability": "Chord cells/schema tooling",
+      "operation": "Cell schema and migration tooling outside document delta semantics is not used by durable.",
+      "source": [
+        "packages/chord/src/cell.ts:Source,Cell; packages/chord/src/schema.ts:assertValid,normalize"
+      ],
+      "membership": "excluded",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "owner": "cch_chord",
+      "consumer": "none: no durable import",
+      "boundary": "Unrelated schema/tooling surface; durable's own SQLite schema remains in scope.",
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "No C++ action."
+    },
+    {
+      "id": "cch_chord:excluded:node-host",
+      "capability": "Chord Node host adapter",
+      "operation": "Node production host wiring and loader integration are not imported by durable.",
+      "source": [
+        "packages/chord/src/node.ts:nodeLoader; packages/chord/src/loader.ts:nodeLoader"
+      ],
+      "membership": "excluded",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "owner": "cch_chord",
+      "consumer": "none: no durable import",
+      "boundary": "Node host adaptation; native C++ Linux durable host responsibilities remain in cch_durable scope.",
+      "implementation_ticket": "unfiled implementation probe",
+      "scenario": null,
+      "evidence": null,
+      "gaps": [],
+      "notes": "",
+      "cppSeam": "",
+      "cppEvidence": "",
+      "recommendation": "No C++ action."
+    }
+  ]
+}

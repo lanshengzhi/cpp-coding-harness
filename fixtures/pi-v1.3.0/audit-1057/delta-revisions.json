@@ -1,0 +1,707 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1057",
+  "family": "audit-1057",
+  "capturedAt": "2026-10-19T21:24:37.258Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/delta/index.ts:track,apply,applyImmutable,applyImmutableBatches,assertValidOp,isBase,isReplace,overlap",
+    "packages/chord/src/delta/tracker.ts:Tracker,Change,Prepared",
+    "packages/chord/test/delta.test.ts:Delta tracking and application",
+    "packages/chord/test/delta-apply-immutable.test.ts:Immutable delta application"
+  ],
+  "scenarios": [
+    {
+      "name": "prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+      "source": "packages/chord/test/delta.test.ts:rejects foreign, stale, and repeated preparations while allowing competing changes; packages/chord/src/delta/tracker.ts:Tracker.adopt",
+      "inputs": {
+        "initial": {
+          "value": 1,
+          "items": [
+            "a"
+          ]
+        },
+        "firstValue": 2,
+        "secondValue": 3
+      },
+      "expected": {
+        "before": {
+          "value": 1,
+          "items": [
+            "a"
+          ]
+        },
+        "firstOps": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ]
+        ],
+        "revisionAfterFirst": 1,
+        "afterFirst": {
+          "value": 2,
+          "items": [
+            "a"
+          ]
+        },
+        "staleError": {
+          "name": "Error",
+          "message": "Prepared change is stale"
+        },
+        "valueAfterStale": {
+          "value": 2,
+          "items": [
+            "a"
+          ]
+        },
+        "revisionAfterStale": 1
+      },
+      "normalizations": [
+        "`firstOps` are exact for this run; the C++ comparison may use the recorded value and revision fields plus the exact stale error."
+      ]
+    },
+    {
+      "name": "aborting a changed draft revokes escaped handles and leaves the committed revision unchanged",
+      "source": "packages/chord/test/delta.test.ts:invalidates a prepared result when its change is aborted; packages/chord/src/delta/tracker.ts:Change.abort",
+      "inputs": {
+        "initial": {
+          "value": 1
+        },
+        "draftedValue": 9,
+        "escapedWrite": 10
+      },
+      "expected": {
+        "escapedError": {
+          "name": "TypeError",
+          "message": "Cannot use a settled overlay"
+        },
+        "adoptError": {
+          "name": "Error",
+          "message": "Prepared change has been aborted"
+        },
+        "value": {
+          "value": 1
+        },
+        "revision": 0
+      }
+    },
+    {
+      "name": "a structural no-op emits a nonempty batch while an untouched change emits none and still adopts",
+      "source": "packages/chord/test/delta.test.ts:normalizes a deep no-op to exact previous identity; packages/chord/src/delta/tracker.ts:Tracker.prepare",
+      "inputs": {
+        "structural": {
+          "initial": {
+            "items": [
+              "a"
+            ]
+          },
+          "mutation": "items.shift(); items.unshift(\"a\")"
+        },
+        "empty": {
+          "initial": {
+            "value": 1
+          }
+        }
+      },
+      "expected": {
+        "structural": {
+          "before": {
+            "items": [
+              "a"
+            ]
+          },
+          "ops": [
+            [
+              "p",
+              [
+                "items"
+              ],
+              0,
+              1,
+              []
+            ],
+            [
+              "p",
+              [
+                "items"
+              ],
+              0,
+              0,
+              [
+                "a"
+              ]
+            ]
+          ],
+          "after": {
+            "items": [
+              "a"
+            ]
+          },
+          "revision": 1
+        },
+        "empty": {
+          "ops": [],
+          "value": {
+            "value": 1
+          },
+          "revision": 1
+        }
+      },
+      "normalizations": [
+        "`ops` are exact emitted tuples for this run; a C++ producer may emit an equivalent batch, but it must be nonempty for the structural no-op and empty for the untouched change."
+      ]
+    },
+    {
+      "name": "immutable application reproduces each revision without mutating the base and shares untouched subtrees",
+      "source": "packages/chord/test/delta-apply-immutable.test.ts:copies each touched container once while preserving input and payload ownership; packages/chord/src/delta/index.ts:applyImmutable",
+      "inputs": {
+        "base": {
+          "value": 1,
+          "nested": {
+            "count": 0,
+            "retained": {
+              "deep": true
+            }
+          },
+          "retained": {
+            "list": [
+              1,
+              2
+            ]
+          },
+          "items": [
+            "a"
+          ]
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ],
+          [
+            "s",
+            [
+              "nested",
+              "count"
+            ],
+            1
+          ],
+          [
+            "p",
+            [
+              "items"
+            ],
+            1,
+            0,
+            [
+              "b"
+            ]
+          ]
+        ]
+      },
+      "expected": {
+        "baseAfter": {
+          "value": 1,
+          "nested": {
+            "count": 0,
+            "retained": {
+              "deep": true
+            }
+          },
+          "retained": {
+            "list": [
+              1,
+              2
+            ]
+          },
+          "items": [
+            "a"
+          ]
+        },
+        "next": {
+          "value": 2,
+          "nested": {
+            "count": 1,
+            "retained": {
+              "deep": true
+            }
+          },
+          "retained": {
+            "list": [
+              1,
+              2
+            ]
+          },
+          "items": [
+            "a",
+            "b"
+          ]
+        },
+        "nextAgain": {
+          "value": 3,
+          "nested": {
+            "count": 1,
+            "retained": {
+              "deep": true
+            }
+          },
+          "retained": {
+            "list": [
+              1,
+              2
+            ]
+          },
+          "items": [
+            "a",
+            "b"
+          ]
+        },
+        "touchedRootIsNew": true,
+        "retainedRootShared": true,
+        "retainedNestedShared": true,
+        "nextAgainRetainedShared": true
+      }
+    },
+    {
+      "name": "batched immutable application applies ordered batches and returns only the final revision",
+      "source": "packages/chord/test/delta-apply-immutable.test.ts:shares one private copy-on-write scope across batch partitions; packages/chord/src/delta/index.ts:applyImmutableBatches",
+      "inputs": {
+        "base": {
+          "items": [
+            "a"
+          ],
+          "value": 0
+        },
+        "batches": [
+          [
+            [
+              "s",
+              [
+                "value"
+              ],
+              1
+            ],
+            [
+              "p",
+              [
+                "items"
+              ],
+              1,
+              0,
+              [
+                "b"
+              ]
+            ]
+          ],
+          [
+            [
+              "s",
+              [
+                "value"
+              ],
+              2
+            ],
+            [
+              "p",
+              [
+                "items"
+              ],
+              0,
+              1,
+              []
+            ]
+          ]
+        ],
+        "createdBase": null
+      },
+      "expected": {
+        "baseAfter": {
+          "items": [
+            "a"
+          ],
+          "value": 0
+        },
+        "final": {
+          "items": [
+            "b"
+          ],
+          "value": 2
+        },
+        "emptyTarget": {
+          "created": true
+        }
+      }
+    },
+    {
+      "name": "mutable application mutates in place except for a root replacement, which returns a new value",
+      "source": "packages/chord/test/delta.test.ts:applies mutable and immutable operations; packages/chord/src/delta/index.ts:apply,isBase,isReplace",
+      "inputs": {
+        "target": {
+          "items": [
+            "a",
+            "b"
+          ],
+          "value": 1
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            1
+          ],
+          [
+            "p",
+            [
+              "items"
+            ],
+            1,
+            0,
+            [
+              "b"
+            ]
+          ]
+        ],
+        "replacement": [
+          [
+            "r",
+            {
+              "replacement": true
+            }
+          ]
+        ]
+      },
+      "expected": {
+        "sameTarget": true,
+        "targetAfter": {
+          "items": [
+            "a",
+            "b"
+          ],
+          "value": 1
+        },
+        "replacementIsNew": true,
+        "replacement": {
+          "replacement": true
+        },
+        "isBaseRoot": true,
+        "isReplaceRoot": true
+      }
+    },
+    {
+      "name": "unsafe prototype segments and malformed operation tuples are rejected before mutation",
+      "source": "packages/chord/test/delta.test.ts:rejects unsafe and malformed paths; packages/chord/test/delta.test.ts:rejects unknown verbs, malformed tuples, paths, and splice payloads; packages/chord/src/delta/index.ts:assertSafePath,assertValidOp",
+      "inputs": {
+        "unsafe": [
+          [
+            "s",
+            [
+              "__proto__",
+              "polluted"
+            ],
+            true
+          ]
+        ],
+        "unknownVerb": [
+          "x",
+          [
+            "value"
+          ]
+        ],
+        "stringSpliceIndex": [
+          [
+            "p",
+            [],
+            "0",
+            0,
+            [
+              "x"
+            ]
+          ]
+        ]
+      },
+      "expected": {
+        "unsafeError": {
+          "name": "UnsafePathError",
+          "message": "unsafe path segment: __proto__"
+        },
+        "malformedError": {
+          "name": "TypeError",
+          "message": "unknown op verb: x"
+        },
+        "spliceError": {
+          "name": "TypeError",
+          "message": "p index"
+        }
+      }
+    },
+    {
+      "name": "the tracker emits the set, append, splice, permutation, delete, truncate, and replace vocabulary",
+      "source": "packages/chord/test/delta.test.ts:emits append and rolling-window operations; packages/chord/test/delta.test.ts:supports root replacement, root splice, and permutations; packages/chord/src/delta/index.ts:Op",
+      "inputs": {
+        "cases": {
+          "set": {
+            "o": {
+              "a": 1
+            }
+          },
+          "append": {
+            "s": "abc"
+          },
+          "splice": {
+            "a": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "permutation": {
+            "a": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "delete": {
+            "o": {
+              "a": 1,
+              "b": 2
+            }
+          },
+          "truncate": {
+            "s": "abcdef"
+          },
+          "replace": {
+            "o": {
+              "a": 1
+            }
+          },
+          "overlap": {
+            "a": 1
+          }
+        }
+      },
+      "expected": {
+        "set": {
+          "ops": [
+            [
+              "s",
+              [
+                "o",
+                "a"
+              ],
+              2
+            ]
+          ],
+          "before": {
+            "o": {
+              "a": 1
+            }
+          },
+          "value": {
+            "o": {
+              "a": 2
+            }
+          }
+        },
+        "append": {
+          "ops": [
+            [
+              "a",
+              [
+                "s"
+              ],
+              "d"
+            ]
+          ],
+          "before": {
+            "s": "abc"
+          },
+          "value": {
+            "s": "abcd"
+          }
+        },
+        "splice": {
+          "ops": [
+            [
+              "p",
+              [
+                "a"
+              ],
+              1,
+              1,
+              []
+            ],
+            [
+              "p",
+              [
+                "a"
+              ],
+              1,
+              0,
+              [
+                "X",
+                "Y"
+              ]
+            ]
+          ],
+          "before": {
+            "a": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "value": {
+            "a": [
+              "a",
+              "X",
+              "Y",
+              "c"
+            ]
+          }
+        },
+        "permutation": {
+          "ops": [
+            [
+              "m",
+              [
+                "a"
+              ],
+              [
+                2,
+                1,
+                0
+              ]
+            ]
+          ],
+          "before": {
+            "a": [
+              "a",
+              "b",
+              "c"
+            ]
+          },
+          "value": {
+            "a": [
+              "c",
+              "b",
+              "a"
+            ]
+          }
+        },
+        "delete": {
+          "ops": [
+            [
+              "d",
+              [
+                "o",
+                "b"
+              ]
+            ]
+          ],
+          "before": {
+            "o": {
+              "a": 1,
+              "b": 2
+            }
+          },
+          "value": {
+            "o": {
+              "a": 1
+            }
+          }
+        },
+        "truncate": {
+          "ops": [
+            [
+              "t",
+              [
+                "s"
+              ],
+              3
+            ]
+          ],
+          "before": {
+            "s": "abcdef"
+          },
+          "value": {
+            "s": "def"
+          }
+        },
+        "replace": {
+          "ops": [
+            [
+              "s",
+              [
+                "o"
+              ],
+              {
+                "b": 2
+              }
+            ]
+          ],
+          "before": {
+            "o": {
+              "a": 1
+            }
+          },
+          "value": {
+            "o": {
+              "b": 2
+            }
+          }
+        }
+      },
+      "normalizations": [
+        "`ops` are exact for this run. A C++ producer may choose another equivalent tuple spelling; the requirement is that the durable storage applier accepts it and the recorded `value` results."
+      ]
+    },
+    {
+      "name": "overlap returns the bounded common run used to merge tool output",
+      "source": "packages/chord/test/delta.test.ts:finds bounded overlaps; packages/chord/src/delta/index.ts:overlap",
+      "inputs": {
+        "cases": [
+          [
+            "abcdefgh",
+            "defghxyz",
+            65536
+          ],
+          [
+            "abcdef",
+            "defghi",
+            0
+          ],
+          [
+            "",
+            "defghxyz",
+            1
+          ]
+        ]
+      },
+      "expected": {
+        "results": [
+          5,
+          0,
+          0
+        ]
+      }
+    }
+  ]
+}

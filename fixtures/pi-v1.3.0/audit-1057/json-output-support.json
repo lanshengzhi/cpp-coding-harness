@@ -1,0 +1,187 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1057",
+  "family": "audit-1057",
+  "capturedAt": "2026-10-19T21:24:37.258Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/json.ts:copyJson",
+    "packages/chord/src/output.ts:utf8ByteLength,characterEnd,boundOutput,OutputBuffer,PROGRESS_BYTES_PER_SECOND",
+    "packages/chord/test/json.test.ts:copyJson",
+    "packages/chord/test/output.test.ts:OutputBuffer",
+    "packages/chord/test/output-skip.test.ts:OutputBuffer skipped output",
+    "packages/durable/src/harness/tool.ts:Progress,OutputBuffer"
+  ],
+  "scenarios": [
+    {
+      "name": "copyJson returns a detached strict-JSON value and omits undefined object properties",
+      "source": "packages/chord/test/json.test.ts:copyJson returns detached strict JSON and omits undefined properties; packages/chord/src/json.ts:copyJson",
+      "inputs": {
+        "value": {
+          "keep": {
+            "nested": [
+              1,
+              2
+            ]
+          },
+          "omit": "undefined"
+        }
+      },
+      "expected": {
+        "defaultError": {
+          "name": "TypeError",
+          "message": "Value contains a non-JSON undefined; expected strict JSON"
+        },
+        "copied": {
+          "keep": {
+            "nested": [
+              1,
+              2,
+              3
+            ]
+          }
+        },
+        "copiedIsDetached": true,
+        "copiedHasOmit": false,
+        "sourceAfterNestedPush": {
+          "keep": {
+            "nested": [
+              1,
+              2
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "copyJson rejects functions, undefined array entries, non-finite numbers, class instances, and sparse arrays",
+      "source": "packages/chord/test/json.test.ts:copyJson rejects non-strict JSON placements; packages/chord/src/json.ts:copyJson",
+      "inputs": {
+        "cases": [
+          "function",
+          "undefinedArray",
+          "nonFinite",
+          "classInstance",
+          "sparse"
+        ]
+      },
+      "expected": {
+        "failures": {
+          "function": {
+            "name": "TypeError",
+            "message": "Value contains a non-JSON function; expected strict JSON"
+          },
+          "undefinedArray": {
+            "name": "TypeError",
+            "message": "Value contains a non-JSON undefined; expected strict JSON"
+          },
+          "nonFinite": {
+            "name": "TypeError",
+            "message": "Value contains a non-finite number and is not strict JSON"
+          },
+          "classInstance": {
+            "name": "TypeError",
+            "message": "Value must contain strict JSON plain objects or arrays"
+          },
+          "sparse": {
+            "name": "TypeError",
+            "message": "Value must contain strict JSON dense plain arrays"
+          }
+        }
+      }
+    },
+    {
+      "name": "UTF-8 byte length and character-end boundaries match the frozen output helpers",
+      "source": "packages/chord/src/output.ts:utf8ByteLength,characterEnd; packages/durable/test/tools-output.test.ts:durable output helpers",
+      "inputs": {
+        "text": "aé😀",
+        "byteLengths": [
+          97,
+          195,
+          169,
+          240,
+          159,
+          152,
+          128
+        ]
+      },
+      "expected": {
+        "lengths": {
+          "ascii": 3,
+          "twoByte": 2,
+          "fourByte": 4,
+          "mixed": 7
+        },
+        "boundaries": [
+          0,
+          1,
+          1,
+          3,
+          3,
+          3,
+          3,
+          7
+        ]
+      }
+    },
+    {
+      "name": "boundOutput and OutputBuffer retain the configured head or tail and report exact dropped counts",
+      "source": "packages/chord/test/output.test.ts:keeps output within the limits unchanged; cuts a single line longer than the byte limit on a character boundary; packages/chord/test/output-skip.test.ts:OutputBuffer skipped output; packages/chord/src/output.ts:boundOutput,OutputBuffer",
+      "inputs": {
+        "text": "abcdefghij",
+        "limits": {
+          "maxBytes": 4,
+          "maxLines": 1
+        },
+        "pushes": [
+          "abc",
+          "def",
+          "gh"
+        ]
+      },
+      "expected": {
+        "head": {
+          "text": "abcd",
+          "bytes": 4,
+          "droppedBytes": 6,
+          "droppedLines": 0
+        },
+        "tail": {
+          "text": "ghij",
+          "bytes": 4,
+          "droppedBytes": 6,
+          "droppedLines": 0
+        },
+        "accepted": [
+          true,
+          true,
+          true
+        ],
+        "snapshot": {
+          "text": "efgh",
+          "droppedBytes": 4,
+          "droppedLines": 0
+        }
+      }
+    },
+    {
+      "name": "the progress byte rate is the frozen 100 KiB/s constant",
+      "source": "packages/chord/src/output.ts:PROGRESS_BYTES_PER_SECOND; packages/durable/src/harness/tool.ts:Progress",
+      "inputs": {
+        "constant": "PROGRESS_BYTES_PER_SECOND"
+      },
+      "expected": {
+        "bytesPerSecond": 102400
+      }
+    }
+  ]
+}
