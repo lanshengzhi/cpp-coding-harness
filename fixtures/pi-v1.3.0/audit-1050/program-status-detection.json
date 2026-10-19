@@ -1,0 +1,151 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T17:21:56.094Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1",
+    "TERM": "xterm-256color",
+    "pinnedVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "COLORTERM",
+      "KITTY_WINDOW_ID",
+      "GHOSTTY_RESOURCES_DIR",
+      "WEZTERM_PANE",
+      "ITERM_SESSION_ID",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_HYPERLINKS",
+      "PI_IMAGE_PROTOCOL",
+      "PI_TRUE_COLOR",
+      "PI_PROGRAM_STATUS",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR"
+    ]
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/terminal.ts:ProcessTerminal.start,ProcessTerminal.stop,ProcessTerminal.setProgramStatus",
+    "packages/tui/src/program-status.ts:formatProgramStatus,isProgramStatusReply,PROGRAM_STATUS_QUERY",
+    "packages/tui/test/terminal.test.ts:program status (OSC 7501)"
+  ],
+  "scenarios": [
+    {
+      "name": "default-reply-before-device-attributes",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "processTerminal": "public start()/setProgramStatus()/stop()",
+        "piProgramStatusOverride": null,
+        "replyOrder": "reply-before-DA",
+        "states": [
+          "working:app=pi",
+          "blocked:kind=permission:msg=Allow?"
+        ]
+      },
+      "expected": {
+        "queryWrite": "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c",
+        "programStatusWrites": [
+          "\u001b]7501;state=working:app=pi\u001b\\",
+          "\u001b]7501;state=blocked:kind=permission:msg=QWxsb3c/\u001b\\"
+        ],
+        "stopWrites": [
+          "\u001b]7501;state=clear\u001b\\",
+          "\u001b[?2004l",
+          "\u001b[<u",
+          "\u001b[>4;0m"
+        ],
+        "inputs": []
+      }
+    },
+    {
+      "name": "default-device-attributes-before-reply",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "processTerminal": "public start()/setProgramStatus()/stop()",
+        "piProgramStatusOverride": null,
+        "replyOrder": "DA-before-reply",
+        "states": [
+          "working:app=pi",
+          "blocked:kind=permission:msg=Allow?"
+        ]
+      },
+      "expected": {
+        "queryWrite": "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c",
+        "programStatusWrites": [],
+        "stopWrites": [
+          "\u001b[?2004l",
+          "\u001b[<u",
+          "\u001b[>4;0m"
+        ],
+        "inputs": []
+      }
+    },
+    {
+      "name": "override-enabled",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "processTerminal": "public start()/setProgramStatus()/stop()",
+        "piProgramStatusOverride": "1",
+        "replyOrder": "reply-before-DA",
+        "states": [
+          "working:app=pi",
+          "blocked:kind=permission:msg=Allow?"
+        ]
+      },
+      "expected": {
+        "queryWrite": "\u001b[>7u\u001b[?u\u001b[c",
+        "programStatusWrites": [
+          "\u001b]7501;state=working:app=pi\u001b\\",
+          "\u001b]7501;state=blocked:kind=permission:msg=QWxsb3c/\u001b\\"
+        ],
+        "stopWrites": [
+          "\u001b]7501;state=clear\u001b\\",
+          "\u001b[?2004l",
+          "\u001b[<u",
+          "\u001b[>4;0m"
+        ],
+        "inputs": []
+      }
+    },
+    {
+      "name": "override-disabled",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "processTerminal": "public start()/setProgramStatus()/stop()",
+        "piProgramStatusOverride": "0",
+        "replyOrder": "reply-before-DA",
+        "states": [
+          "working:app=pi",
+          "blocked:kind=permission:msg=Allow?"
+        ]
+      },
+      "expected": {
+        "queryWrite": "\u001b[>7u\u001b[?u\u001b[c",
+        "programStatusWrites": [],
+        "stopWrites": [
+          "\u001b[?2004l",
+          "\u001b[<u",
+          "\u001b[>4;0m"
+        ],
+        "inputs": []
+      }
+    }
+  ]
+}

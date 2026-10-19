@@ -1,0 +1,1681 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T17:21:56.094Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1",
+    "TERM": "xterm-256color",
+    "pinnedVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "COLORTERM",
+      "KITTY_WINDOW_ID",
+      "GHOSTTY_RESOURCES_DIR",
+      "WEZTERM_PANE",
+      "ITERM_SESSION_ID",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_HYPERLINKS",
+      "PI_IMAGE_PROTOCOL",
+      "PI_TRUE_COLOR",
+      "PI_PROGRAM_STATUS",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR"
+    ]
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,handleRightClickPaste,handleViewportInput",
+    "packages/tui/src/utils.ts:getOsc8LinkAtColumn",
+    "packages/tui/src/components/text.ts:Text.render,setText",
+    "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
+  ],
+  "scenarios": [
+    {
+      "name": "osc8-click-and-drag-routing",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "url": "https://example.com/link",
+        "text": "alpha plain",
+        "click": {
+          "x": 2,
+          "y": 1
+        },
+        "doubleClick": {
+          "x": 2,
+          "y": 1,
+          "advanceMs": 150
+        },
+        "drag": [
+          {
+            "x": 2,
+            "y": 1
+          },
+          {
+            "x": 5,
+            "y": 1
+          }
+        ]
+      },
+      "expected": {
+        "afterClick": [
+          "https://example.com/link"
+        ],
+        "afterWordClick": [
+          "https://example.com/link"
+        ],
+        "afterDrag": [
+          "https://example.com/link"
+        ]
+      }
+    },
+    {
+      "name": "linux-secondary-button-paste",
+      "dimensions": {
+        "columns": 20,
+        "rows": 3
+      },
+      "inputs": {
+        "platform": "linux",
+        "press": {
+          "button": 2,
+          "x": 3,
+          "y": 1
+        },
+        "releaseButton": 2,
+        "motionButton": 34
+      },
+      "expected": {
+        "afterPress": 0,
+        "afterMotion": 0
+      }
+    },
+    {
+      "name": "styled-cjk-wrapped-selection",
+      "dimensions": {
+        "columns": 6,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "\u001b[31mred界abc\u001b[0m",
+        "drag": [
+          {
+            "x": 2,
+            "y": 1
+          },
+          {
+            "x": 2,
+            "y": 2
+          }
+        ],
+        "copyOnSelect": false
+      },
+      "expected": {
+        "before": [
+          "red界",
+          "abc",
+          "",
+          ""
+        ],
+        "hasSelection": true,
+        "highlighted": true,
+        "styledCells": [
+          [
+            {
+              "text": "r",
+              "width": 1,
+              "inverse": false,
+              "foreground": 1
+            },
+            {
+              "text": "e",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "d",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "界",
+              "width": 2,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "",
+              "width": 0,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            }
+          ],
+          [
+            {
+              "text": "a",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "b",
+              "width": 1,
+              "inverse": true,
+              "foreground": 1
+            },
+            {
+              "text": "c",
+              "width": 1,
+              "inverse": false,
+              "foreground": 1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": false,
+              "foreground": -1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": false,
+              "foreground": -1
+            },
+            {
+              "text": " ",
+              "width": 1,
+              "inverse": false,
+              "foreground": -1
+            }
+          ]
+        ],
+        "copyResult": true,
+        "copied": [
+          "ed界\nab"
+        ],
+        "copyOnSelect": false
+      }
+    },
+    {
+      "name": "selection-content-focus-and-clear-lifecycle",
+      "dimensions": {
+        "columns": 20,
+        "rows": 4
+      },
+      "inputs": {
+        "initialText": "alpha\nbeta\ngamma\ndelta",
+        "drag": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 4,
+            "y": 2
+          }
+        ],
+        "updatedText": "omega\nsigma\ngamma\ndelta",
+        "focus": [
+          "out",
+          "in"
+        ],
+        "contentClick": {
+          "x": 1,
+          "y": 3
+        },
+        "copyOnSelect": false
+      },
+      "expected": {
+        "emptyCopyResult": false,
+        "selected": true,
+        "firstCopyResult": true,
+        "afterContentChange": true,
+        "updatedCopyResult": true,
+        "afterFocusChange": true,
+        "afterContentClick": false,
+        "copied": [
+          "alpha\nbeta",
+          "omega\nsigm"
+        ]
+      }
+    },
+    {
+      "name": "selection-copy-specific-failure",
+      "dimensions": {
+        "columns": 80,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "alpha beta",
+        "drag": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 5,
+            "y": 1
+          }
+        ],
+        "copyOnSelect": false
+      },
+      "expected": {
+        "copyResult": false,
+        "copied": [
+          "alpha"
+        ],
+        "copyError": "Clipboard unavailable: install wl-clipboard",
+        "failureVisible": true
+      }
+    },
+    {
+      "name": "copy-on-select-default-and-empty-range",
+      "dimensions": {
+        "columns": 20,
+        "rows": 2
+      },
+      "inputs": {
+        "text": "alpha beta",
+        "emptyClick": {
+          "x": 1,
+          "y": 1
+        },
+        "drag": [
+          {
+            "x": 1,
+            "y": 1
+          },
+          {
+            "x": 5,
+            "y": 1
+          }
+        ]
+      },
+      "expected": {
+        "defaultCopyOnSelect": true,
+        "afterEmptyClick": [],
+        "copied": [
+          "alpha"
+        ],
+        "hasSelection": true
+      }
+    },
+    {
+      "name": "multiclick-word-line-cycle",
+      "dimensions": {
+        "columns": 30,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "alpha beta gamma",
+        "steps": [
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 0,
+            "target": "beta"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "beta"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "beta",
+              "alpha beta gamma"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "beta",
+              "alpha beta gamma"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "beta",
+              "alpha beta gamma",
+              "beta"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiclick-word-joiners-and-classes",
+      "dimensions": {
+        "columns": 44,
+        "rows": 6
+      },
+      "inputs": {
+        "text": "src/main-component util\na.b ee_ff 3.14 カタカナ\n中x foo,bar",
+        "steps": [
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "main (joiners merge left and right)"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 1
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "main (second)"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 20,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "util (plain word)"
+          },
+          {
+            "action": "release",
+            "x": 20,
+            "y": 1
+          },
+          {
+            "action": "press",
+            "x": 20,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "util (second)"
+          },
+          {
+            "action": "release",
+            "x": 20,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 1,
+            "y": 2,
+            "advanceMs": 400,
+            "target": "a.b (MidNumLet joins letters)"
+          },
+          {
+            "action": "release",
+            "x": 1,
+            "y": 2
+          },
+          {
+            "action": "press",
+            "x": 1,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "a.b (second)"
+          },
+          {
+            "action": "release",
+            "x": 1,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 2,
+            "advanceMs": 400,
+            "target": "ee_ff (ExtendNumLet joins letters)"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 2
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "ee_ff (second)"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 11,
+            "y": 2,
+            "advanceMs": 400,
+            "target": "3.14 (MidNumLet joins digits)"
+          },
+          {
+            "action": "release",
+            "x": 11,
+            "y": 2
+          },
+          {
+            "action": "press",
+            "x": 11,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "3.14 (second)"
+          },
+          {
+            "action": "release",
+            "x": 11,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 16,
+            "y": 2,
+            "advanceMs": 400,
+            "target": "カタカナ (Katakana run)"
+          },
+          {
+            "action": "release",
+            "x": 16,
+            "y": 2
+          },
+          {
+            "action": "press",
+            "x": 16,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "カタカナ (second)"
+          },
+          {
+            "action": "release",
+            "x": 16,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 1,
+            "y": 3,
+            "advanceMs": 400,
+            "target": "中 (single dictionary-script character)"
+          },
+          {
+            "action": "release",
+            "x": 1,
+            "y": 3
+          },
+          {
+            "action": "press",
+            "x": 1,
+            "y": 3,
+            "advanceMs": 150,
+            "target": "中 (second)"
+          },
+          {
+            "action": "release",
+            "x": 1,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 3,
+            "advanceMs": 400,
+            "target": "x (letter after a wide character)"
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 3
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 3,
+            "advanceMs": 150,
+            "target": "x (second)"
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 8,
+            "y": 3,
+            "advanceMs": 400,
+            "target": ", (punctuation selects itself)"
+          },
+          {
+            "action": "release",
+            "x": 8,
+            "y": 3
+          },
+          {
+            "action": "press",
+            "x": 8,
+            "y": 3,
+            "advanceMs": 150,
+            "target": ", (second)"
+          },
+          {
+            "action": "release",
+            "x": 8,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util",
+              "a.b"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util",
+              "a.b",
+              "ee_ff"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util",
+              "a.b",
+              "ee_ff",
+              "3.14"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util",
+              "a.b",
+              "ee_ff",
+              "3.14",
+              "カタカナ"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util",
+              "a.b",
+              "ee_ff",
+              "3.14",
+              "カタカナ",
+              "中"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util",
+              "a.b",
+              "ee_ff",
+              "3.14",
+              "カタカナ",
+              "中",
+              "x"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "src/main-component",
+              "util",
+              "a.b",
+              "ee_ff",
+              "3.14",
+              "カタカナ",
+              "中",
+              "x",
+              ","
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiclick-word-drag-expansion",
+      "dimensions": {
+        "columns": 40,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "one two three four",
+        "steps": [
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "two"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 1
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "two (second)"
+          },
+          {
+            "action": "motion",
+            "x": 15,
+            "y": 1,
+            "target": "four"
+          },
+          {
+            "action": "release",
+            "x": 15,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 15,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "four"
+          },
+          {
+            "action": "release",
+            "x": 15,
+            "y": 1
+          },
+          {
+            "action": "press",
+            "x": 15,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "four (second)"
+          },
+          {
+            "action": "motion",
+            "x": 1,
+            "y": 1,
+            "target": "one"
+          },
+          {
+            "action": "release",
+            "x": 1,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 600,
+            "target": "two"
+          },
+          {
+            "action": "motion",
+            "x": 9,
+            "y": 1,
+            "target": "three"
+          },
+          {
+            "action": "release",
+            "x": 9,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": true,
+            "copied": [
+              "two three four"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "two three four",
+              "one two three four"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "two three four",
+              "one two three four",
+              "two t"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiclick-line-wrapped-rows",
+      "dimensions": {
+        "columns": 10,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "abcdefghij klmnop",
+        "steps": [
+          {
+            "action": "press",
+            "x": 3,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "first wrapped row"
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 1
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 1,
+            "advanceMs": 150
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 1
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 1,
+            "advanceMs": 150
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 2,
+            "advanceMs": 400,
+            "target": "second wrapped row"
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 2
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 2,
+            "advanceMs": 150
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "row one again"
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "row two"
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 3,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "row two (second)"
+          },
+          {
+            "action": "release",
+            "x": 3,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": true,
+            "copied": [
+              "abcdefghij",
+              "abcdefghij"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "abcdefghij",
+              "abcdefghij",
+              "klmnop"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "abcdefghij",
+              "abcdefghij",
+              "klmnop"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "abcdefghij",
+              "abcdefghij",
+              "klmnop"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "abcdefghij",
+              "abcdefghij",
+              "klmnop",
+              "klmnop"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiclick-expiry-and-word-identity",
+      "dimensions": {
+        "columns": 30,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "alpha beta",
+        "steps": [
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "beta"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 650,
+            "target": "beta after 650ms"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta again"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 1,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "alpha, a different word"
+          },
+          {
+            "action": "release",
+            "x": 1,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 1,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "alpha (second)"
+          },
+          {
+            "action": "release",
+            "x": 1,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "beta"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "beta"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "beta",
+              "alpha"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiclick-focus-out-cancels",
+      "dimensions": {
+        "columns": 30,
+        "rows": 4
+      },
+      "inputs": {
+        "text": "alpha beta",
+        "steps": [
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "beta"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "focusOut"
+          },
+          {
+            "action": "focusIn"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta after focus return"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta (second)"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "beta (held)"
+          },
+          {
+            "action": "focusOut"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta after held press"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 7,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "beta (second after held)"
+          },
+          {
+            "action": "release",
+            "x": 7,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "beta"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "beta"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "beta"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "beta",
+              "beta"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "multiclick-scrollbar-cancels",
+      "dimensions": {
+        "columns": 30,
+        "rows": 3
+      },
+      "inputs": {
+        "layoutText": "one two\nthree four\nfive six\nseven eight\nnine ten\neleven",
+        "layoutScroll": {
+          "follow": "none",
+          "primary": true,
+          "scrollbar": "always",
+          "scrollbarHideDelayMs": 0
+        },
+        "steps": [
+          {
+            "action": "press",
+            "x": 30,
+            "y": 3,
+            "advanceMs": 400,
+            "target": "track bottom"
+          },
+          {
+            "action": "release",
+            "x": 30,
+            "y": 3
+          },
+          {
+            "action": "observeViewport"
+          },
+          {
+            "action": "press",
+            "x": 30,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "track top"
+          },
+          {
+            "action": "release",
+            "x": 30,
+            "y": 1
+          },
+          {
+            "action": "observeViewport"
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 400,
+            "target": "two"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 30,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "thumb grab"
+          },
+          {
+            "action": "release",
+            "x": 30,
+            "y": 1
+          },
+          {
+            "action": "observeViewport"
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "two after scrollbar"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 5,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "two (second)"
+          },
+          {
+            "action": "release",
+            "x": 5,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "two"
+            ]
+          }
+        ],
+        "viewports": [
+          [
+            "seven eight                  │",
+            "nine ten                     █",
+            "eleven                       █"
+          ],
+          [
+            "one two                      █",
+            "three four                   █",
+            "five six                     │"
+          ],
+          [
+            "one two                      █",
+            "three four                   █",
+            "five six                     │"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "multiclick-dictionary-script-runs",
+      "dimensions": {
+        "columns": 40,
+        "rows": 5
+      },
+      "inputs": {
+        "text": "日本語\nこんにちは\nสวัสดีครับ",
+        "steps": [
+          {
+            "action": "press",
+            "x": 2,
+            "y": 1,
+            "advanceMs": 600,
+            "target": "han run first"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 1,
+            "advanceMs": 150,
+            "target": "han run second"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 1
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 2,
+            "advanceMs": 600,
+            "target": "hiragana run first"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 2,
+            "advanceMs": 150,
+            "target": "hiragana run second"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 2
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 3,
+            "advanceMs": 600,
+            "target": "thai first word first"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 2,
+            "y": 3,
+            "advanceMs": 150,
+            "target": "thai first word second"
+          },
+          {
+            "action": "release",
+            "x": 2,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 6,
+            "y": 3,
+            "advanceMs": 600,
+            "target": "thai second word first"
+          },
+          {
+            "action": "release",
+            "x": 6,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          },
+          {
+            "action": "press",
+            "x": 6,
+            "y": 3,
+            "advanceMs": 150,
+            "target": "thai second word second"
+          },
+          {
+            "action": "release",
+            "x": 6,
+            "y": 3
+          },
+          {
+            "action": "observe"
+          }
+        ]
+      },
+      "expected": {
+        "observations": [
+          {
+            "hasSelection": false,
+            "copied": []
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "日本語"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語",
+              "こんにちは"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "日本語",
+              "こんにちは"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語",
+              "こんにちは",
+              "สวัสดี"
+            ]
+          },
+          {
+            "hasSelection": false,
+            "copied": [
+              "日本語",
+              "こんにちは",
+              "สวัสดี"
+            ]
+          },
+          {
+            "hasSelection": true,
+            "copied": [
+              "日本語",
+              "こんにちは",
+              "สวัสดี",
+              "ครับ"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
