@@ -475,7 +475,7 @@
       "operation": "A document state hydrates from the source snapshot and then delivers exact committed updates with the commit context.",
       "source": [
         "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/chord/src/state.ts:replicatedState,AttachedReplicatedState",
-        "packages/chord/test/state.test.ts:publishes snapshots then exact ops; derivations follow"
+        "packages/durable/test/session-watches.test.ts:preserves commit Context values without inheriting producer cancellation; packages/chord/test/replicated-state.test.ts:hydrates at sequence zero when attaching after existing commits"
       ],
       "membership": "supported",
       "implementation": "missing",
@@ -584,7 +584,7 @@
       "capability": "Watcher pre-start buffering and serialization",
       "operation": "A watcher acquired before start buffers committed frames and delivers them serially in order after start.",
       "source": [
-        "packages/durable/src/session/observation.ts:CommittedWatch; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
+        "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/test/session-watches.test.ts:serializes callbacks and buffers exact frames committed while one is in flight; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
       ],
       "membership": "supported",
       "implementation": "missing",
@@ -898,7 +898,7 @@
       "capability": "Materializing mutable application",
       "operation": "A mutable applier mutates a detached target in place except for a root replacement, which returns a new value.",
       "source": [
-        "packages/chord/src/delta/index.ts:apply,isBase,isReplace; packages/chord/test/delta.test.ts:applies mutable and immutable operations"
+        "packages/chord/src/delta/index.ts:apply; packages/chord/test/delta.test.ts:applies mutable and immutable operations"
       ],
       "membership": "supported",
       "implementation": "missing",
@@ -1002,7 +1002,7 @@
       "capability": "Root replacement and base detection",
       "operation": "A root replacement operation carries a complete value; a batch beginning with it is a base and is not applied as a delta.",
       "source": [
-        "packages/chord/src/delta/index.ts:isBase,isReplace; packages/chord/test/delta.test.ts:supports root replacement, root splice, and permutations"
+        "packages/chord/src/delta/index.ts:apply; packages/chord/test/delta.test.ts:supports root replacement, root splice, and permutations"
       ],
       "membership": "supported",
       "implementation": "missing",
