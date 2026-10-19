@@ -1,0 +1,449 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T16:01:16.679Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/session-manager.ts:SessionManager.appendUsage,appendContextEdit,appendCustomEntry,appendSessionInfo,appendLabelChange,branch,branchWithSummary,createBranchedSession,getTree,getBranch,buildSessionProjection",
+    "packages/coding-agent/test/session-context-edit.test.ts:omits a target only from model projection,replaces only content and lets the latest edit win",
+    "packages/coding-agent/test/session-manager/tree-traversal.test.ts:inserts branch summary with the source and destination and advances leaf",
+    "packages/coding-agent/test/agent-session-branching.test.ts:should fork from middle of conversation"
+  ],
+  "scenarios": [
+    {
+      "name": "usage and context_edit entries persist without rewriting the stored message",
+      "inputs": {
+        "target": "user message",
+        "replacement": {
+          "content": [
+            {
+              "type": "text",
+              "text": "edited user"
+            }
+          ]
+        }
+      },
+      "expected": {
+        "wireEntryTypes": [
+          "session",
+          "model_change",
+          "thinking_level_change",
+          "message",
+          "message",
+          "usage",
+          "custom",
+          "label",
+          "session_info",
+          "context_edit",
+          "message",
+          "message",
+          "branch_summary"
+        ],
+        "liveEntryTypes": [
+          "model_change",
+          "thinking_level_change",
+          "message",
+          "message",
+          "usage",
+          "custom",
+          "label",
+          "session_info",
+          "context_edit",
+          "message",
+          "message",
+          "branch_summary"
+        ],
+        "usage": {
+          "type": "usage",
+          "kind": "cache_warm",
+          "provider": "faux",
+          "model": "faux-1",
+          "note": "note",
+          "totalTokens": 1
+        },
+        "contextEdit": {
+          "type": "context_edit",
+          "targetType": "message",
+          "replacement": {
+            "content": [
+              {
+                "type": "text",
+                "text": "edited user"
+              }
+            ]
+          }
+        },
+        "projection": {
+          "beforeRoles": [
+            "user",
+            "assistant"
+          ],
+          "beforeUserText": "original user",
+          "afterRoles": [
+            "user",
+            "assistant"
+          ],
+          "afterUserText": "edited user",
+          "storedUserText": "original user"
+        }
+      },
+      "normalizations": [
+        "entry ids and ISO timestamps are host-generated"
+      ]
+    },
+    {
+      "name": "branchWithSummary records the abandoned leaf and joins the active model context",
+      "inputs": {
+        "branchAt": "first assistant",
+        "summary": "branch summary text"
+      },
+      "expected": {
+        "topology": [
+          {
+            "type": "model_change",
+            "children": [
+              {
+                "type": "thinking_level_change",
+                "children": [
+                  {
+                    "type": "message",
+                    "label": "first",
+                    "children": [
+                      {
+                        "type": "message",
+                        "children": [
+                          {
+                            "type": "usage",
+                            "children": [
+                              {
+                                "type": "custom",
+                                "children": [
+                                  {
+                                    "type": "label",
+                                    "children": [
+                                      {
+                                        "type": "session_info",
+                                        "children": [
+                                          {
+                                            "type": "context_edit",
+                                            "children": []
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              }
+                            ]
+                          },
+                          {
+                            "type": "branch_summary",
+                            "children": []
+                          }
+                        ]
+                      },
+                      {
+                        "type": "message",
+                        "children": [
+                          {
+                            "type": "message",
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "activeBranchTypes": [
+          "model_change",
+          "thinking_level_change",
+          "message",
+          "message",
+          "branch_summary"
+        ],
+        "activeProjection": [
+          {
+            "role": "user",
+            "contentTypes": [
+              "text"
+            ],
+            "text": "original user",
+            "hasThinking": false
+          },
+          {
+            "role": "assistant",
+            "contentTypes": [
+              "text"
+            ],
+            "text": "original answer",
+            "hasThinking": false
+          },
+          {
+            "role": "branchSummary",
+            "summary": "branch summary text"
+          }
+        ],
+        "branchSummary": {
+          "type": "branch_summary",
+          "summary": "branch summary text",
+          "fromIdType": "message",
+          "fromHook": false,
+          "usagePresent": true
+        }
+      },
+      "normalizations": [
+        "entry ids, labels and ISO timestamps are host-generated"
+      ]
+    },
+    {
+      "name": "createBranchedSession writes the active path with a parentSession header",
+      "inputs": {
+        "leaf": "first assistant"
+      },
+      "expected": {
+        "forkedEntryTypes": [
+          "model_change",
+          "thinking_level_change",
+          "message",
+          "message",
+          "label"
+        ],
+        "forkedLeafType": "label",
+        "forkedProjectionRoles": [
+          "user",
+          "assistant"
+        ],
+        "forkedHeaderParentSessionPresent": true,
+        "originalFileStillHasAllEntries": true
+      },
+      "normalizations": [
+        "entry ids, file paths and ISO timestamps are host-generated"
+      ]
+    },
+    {
+      "name": "in-memory sessions keep the live entry model without a file",
+      "inputs": {
+        "mode": "in-memory"
+      },
+      "expected": {
+        "isPersisted": false,
+        "sessionFile": null,
+        "entryTypes": [
+          "message"
+        ],
+        "projectionRoles": [
+          "user"
+        ]
+      },
+      "normalizations": [
+        "entry ids and ISO timestamps are host-generated"
+      ]
+    }
+  ],
+  "observations": {
+    "entries": {
+      "wireEntryTypes": [
+        "session",
+        "model_change",
+        "thinking_level_change",
+        "message",
+        "message",
+        "usage",
+        "custom",
+        "label",
+        "session_info",
+        "context_edit",
+        "message",
+        "message",
+        "branch_summary"
+      ],
+      "liveEntryTypes": [
+        "model_change",
+        "thinking_level_change",
+        "message",
+        "message",
+        "usage",
+        "custom",
+        "label",
+        "session_info",
+        "context_edit",
+        "message",
+        "message",
+        "branch_summary"
+      ],
+      "usage": {
+        "type": "usage",
+        "kind": "cache_warm",
+        "provider": "faux",
+        "model": "faux-1",
+        "note": "note",
+        "totalTokens": 1
+      },
+      "contextEdit": {
+        "type": "context_edit",
+        "targetType": "message",
+        "replacement": {
+          "content": [
+            {
+              "type": "text",
+              "text": "edited user"
+            }
+          ]
+        }
+      },
+      "branchSummary": {
+        "type": "branch_summary",
+        "summary": "branch summary text",
+        "fromIdType": "message",
+        "fromHook": false,
+        "usagePresent": true
+      }
+    },
+    "contextEditProjection": {
+      "beforeRoles": [
+        "user",
+        "assistant"
+      ],
+      "beforeUserText": "original user",
+      "afterRoles": [
+        "user",
+        "assistant"
+      ],
+      "afterUserText": "edited user",
+      "storedUserText": "original user"
+    },
+    "tree": {
+      "topology": [
+        {
+          "type": "model_change",
+          "children": [
+            {
+              "type": "thinking_level_change",
+              "children": [
+                {
+                  "type": "message",
+                  "label": "first",
+                  "children": [
+                    {
+                      "type": "message",
+                      "children": [
+                        {
+                          "type": "usage",
+                          "children": [
+                            {
+                              "type": "custom",
+                              "children": [
+                                {
+                                  "type": "label",
+                                  "children": [
+                                    {
+                                      "type": "session_info",
+                                      "children": [
+                                        {
+                                          "type": "context_edit",
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "type": "branch_summary",
+                          "children": []
+                        }
+                      ]
+                    },
+                    {
+                      "type": "message",
+                      "children": [
+                        {
+                          "type": "message",
+                          "children": []
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      "activeBranchTypes": [
+        "model_change",
+        "thinking_level_change",
+        "message",
+        "message",
+        "branch_summary"
+      ],
+      "activeProjection": [
+        {
+          "role": "user",
+          "contentTypes": [
+            "text"
+          ],
+          "text": "original user",
+          "hasThinking": false
+        },
+        {
+          "role": "assistant",
+          "contentTypes": [
+            "text"
+          ],
+          "text": "original answer",
+          "hasThinking": false
+        },
+        {
+          "role": "branchSummary",
+          "summary": "branch summary text"
+        }
+      ],
+      "branchSummaryLeaf": true,
+      "branchSummaryFromIdEqualsBranchLeaf": true
+    },
+    "fork": {
+      "forkedEntryTypes": [
+        "model_change",
+        "thinking_level_change",
+        "message",
+        "message",
+        "label"
+      ],
+      "forkedLeafType": "label",
+      "forkedProjectionRoles": [
+        "user",
+        "assistant"
+      ],
+      "forkedHeaderParentSession": "<capture-root>/sessions/2026-10-19T16-01-18-427Z_01a154e5-565b-72e6-be43-1130bb56394b.jsonl",
+      "originalFileStillHasAllEntries": true,
+      "originalFile": "{\"type\":\"session\",\"version\":3,\"id\":\"01a154e5-565b-72e6-be43-1130bb56394b\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"cwd\":\"<capture-root>/workspace\"}\n{\"type\":\"model_change\",\"id\":\"3f3010f8\",\"parentId\":null,\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"provider\":\"faux\",\"modelId\":\"faux-1\"}\n{\"type\":\"thinking_level_change\",\"id\":\"26d94d6b\",\"parentId\":\"3f3010f8\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"thinkingLevel\":\"medium\"}\n{\"type\":\"message\",\"id\":\"0ef61427\",\"parentId\":\"26d94d6b\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"original user\"}],\"timestamp\":1}}\n{\"type\":\"message\",\"id\":\"e8794834\",\"parentId\":\"0ef61427\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"original answer\"}],\"api\":\"faux:x\",\"provider\":\"faux\",\"model\":\"faux-1\",\"usage\":{\"input\":1,\"output\":1,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":2,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"total\":0}},\"stopReason\":\"stop\",\"timestamp\":2}}\n{\"type\":\"usage\",\"id\":\"5dab422b\",\"parentId\":\"e8794834\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"kind\":\"cache_warm\",\"provider\":\"faux\",\"model\":\"faux-1\",\"usage\":{\"input\":1,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":1,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"total\":0}},\"note\":\"note\"}\n{\"type\":\"custom\",\"customType\":\"audit\",\"data\":{\"key\":\"value\"},\"id\":\"34d77356\",\"parentId\":\"5dab422b\",\"timestamp\":\"2026-10-19T16:01:18.428Z\"}\n{\"type\":\"label\",\"id\":\"b27e7056\",\"parentId\":\"34d77356\",\"timestamp\":\"2026-10-19T16:01:18.428Z\",\"targetId\":\"0ef61427\",\"label\":\"first\"}\n{\"type\":\"session_info\",\"id\":\"e6e156eb\",\"parentId\":\"b27e7056\",\"timestamp\":\"2026-10-19T16:01:18.428Z\",\"name\":\"tree session\"}\n{\"type\":\"context_edit\",\"id\":\"36fcfd58\",\"parentId\":\"e6e156eb\",\"timestamp\":\"2026-10-19T16:01:18.428Z\",\"targetId\":\"0ef61427\",\"replacement\":{\"content\":[{\"type\":\"text\",\"text\":\"edited user\"}]}}\n{\"type\":\"message\",\"id\":\"aa65310d\",\"parentId\":\"0ef61427\",\"timestamp\":\"2026-10-19T16:01:18.428Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"branch question\"}],\"timestamp\":3}}\n{\"type\":\"message\",\"id\":\"5d20d5b6\",\"parentId\":\"aa65310d\",\"timestamp\":\"2026-10-19T16:01:18.428Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"branch answer\"}],\"api\":\"faux:x\",\"provider\":\"faux\",\"model\":\"faux-1\",\"usage\":{\"input\":1,\"output\":1,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":2,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"total\":0}},\"stopReason\":\"stop\",\"timestamp\":4}}\n{\"type\":\"branch_summary\",\"id\":\"b68f12ce\",\"parentId\":\"e8794834\",\"timestamp\":\"2026-10-19T16:01:18.428Z\",\"fromId\":\"5d20d5b6\",\"summary\":\"branch summary text\",\"details\":{\"why\":\"test\"},\"usage\":{\"input\":2,\"output\":1,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":3,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"total\":0}},\"fromHook\":false}\n",
+      "forkedFile": "{\"type\":\"session\",\"version\":3,\"id\":\"01a154e5-565d-72e6-be43-11325046343c\",\"timestamp\":\"2026-10-19T16:01:18.429Z\",\"cwd\":\"<capture-root>/workspace\",\"parentSession\":\"<capture-root>/sessions/2026-10-19T16-01-18-427Z_01a154e5-565b-72e6-be43-1130bb56394b.jsonl\"}\n{\"type\":\"model_change\",\"id\":\"3f3010f8\",\"parentId\":null,\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"provider\":\"faux\",\"modelId\":\"faux-1\"}\n{\"type\":\"thinking_level_change\",\"id\":\"26d94d6b\",\"parentId\":\"3f3010f8\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"thinkingLevel\":\"medium\"}\n{\"type\":\"message\",\"id\":\"0ef61427\",\"parentId\":\"26d94d6b\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"original user\"}],\"timestamp\":1}}\n{\"type\":\"message\",\"id\":\"e8794834\",\"parentId\":\"0ef61427\",\"timestamp\":\"2026-10-19T16:01:18.427Z\",\"message\":{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"original answer\"}],\"api\":\"faux:x\",\"provider\":\"faux\",\"model\":\"faux-1\",\"usage\":{\"input\":1,\"output\":1,\"cacheRead\":0,\"cacheWrite\":0,\"totalTokens\":2,\"cost\":{\"input\":0,\"output\":0,\"cacheRead\":0,\"cacheWrite\":0,\"total\":0}},\"stopReason\":\"stop\",\"timestamp\":2}}\n{\"type\":\"label\",\"id\":\"b8ccb9f8\",\"parentId\":\"e8794834\",\"timestamp\":\"2026-10-19T16:01:18.428Z\",\"targetId\":\"0ef61427\",\"label\":\"first\"}\n"
+    },
+    "inMemory": {
+      "isPersisted": false,
+      "sessionFile": null,
+      "entryTypes": [
+        "message"
+      ],
+      "projectionRoles": [
+        "user"
+      ]
+    }
+  }
+}
