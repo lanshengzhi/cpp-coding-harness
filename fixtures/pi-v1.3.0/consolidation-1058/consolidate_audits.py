@@ -310,13 +310,6 @@ def boundary_override(plan: dict, lane: str, raw_id: str) -> dict | None:
     return None
 
 
-def verification_override(plan: dict, lane: str, raw_id: str) -> dict | None:
-    for item in plan.get("verificationOverrides") or []:
-        if item["ticket"] == lane and item["rowId"] == raw_id:
-            return item
-    return None
-
-
 def build_bundle_index() -> dict[str, dict[str, list[str]]]:
     index: dict[str, dict[str, list[str]]] = {}
     for manifest_path in sorted((ROOT / "fixtures/pi-v1.3.0").glob("audit-*/manifest.json")):
@@ -356,7 +349,16 @@ def resolve_evidence(
     captured_scenarios: list[str] = []
     scenario_match = None
     if membership == "excluded":
-        route = "excluded"
+        if verification == "upstream-captured":
+            route, artifact, captured_scenarios, scenario_match = match_artifact(
+                declared_artifacts, declared_scenarios, bundles, scenario_index
+            )
+            if route != "captured":
+                raise ConsolidationError(
+                    f"{lane}:{raw['id']}: excluded upstream-captured row does not resolve a registered scenario"
+                )
+        else:
+            route = "excluded"
     elif lane == "1050":
         comparison = raw.get("comparisonRoute")
         if comparison == "not-applicable":
@@ -547,14 +549,8 @@ def build_ledger(plan: dict) -> dict:
         for entry in entries[1:]:
             if entry["membership"] == "excluded":
                 membership, implementation, verification = entry["membership"], entry["implementation"], entry["verification"]
-        status_override = verification_override(plan, lane, raw["id"])
-        if status_override is not None:
-            require(status_override["verification"] in VERIFICATION, f"{lane}:{raw['id']} override verification {status_override['verification']!r}")
-            verification = status_override["verification"]
         gaps = extract_gaps(lane, raw)
         notes = extract_notes(lane, raw)
-        if status_override is not None and status_override.get("note"):
-            notes = f"{notes} {status_override['note']}".strip()
         implementation_ticket = raw.get("implementation_ticket")
         if implementation_ticket in ("unfiled implementation probe", ""):
             implementation_ticket = None
@@ -796,12 +792,13 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
         if row["membership"] == "excluded":
             require(row["boundary"], f"{row['id']}: excluded row records no boundary")
             require(
-                row["boundary"].strip() not in ("None", "null"),
+                row["boundary"].strip().casefold() not in ("none", "null"),
                 f"{row['id']}: excluded row records a placeholder boundary",
             )
-            require(row["evidence"]["route"] in ("excluded", "not-applicable"), f"{row['id']}: excluded row has an evidence route")
-            if row["verification"] == "upstream-captured":
-                require(row["evidence"]["artifact"], f"{row['id']}: excluded upstream-captured without registered artifact")
+            require(
+                row["evidence"]["route"] in ("excluded", "not-applicable", "captured"),
+                f"{row['id']}: excluded row has an evidence route",
+            )
         else:
             require(row["consumer"] and row["consumer"].strip(), f"{row['id']}: included row has no consumer text")
         if row["verification"] == "verified":
@@ -810,10 +807,17 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
             require(not row["remainingWork"], f"{row['id']}: excluded row records remaining work")
         else:
             require(row["remainingWork"], f"{row['id']}: no remaining work recorded")
-        if row["verification"] == "upstream-captured" and row["membership"] != "excluded":
+        if row["verification"] == "upstream-captured":
             require(
-                row["evidence"]["route"] in ("captured", "artifact-only"),
-                f"{row['id']}: upstream-captured without a registered artifact ({row['evidence']['route']})",
+                row["evidence"]["route"] == "captured"
+                and row["evidence"]["artifact"]
+                and row["evidence"]["capturedScenarios"],
+                f"{row['id']}: upstream-captured without a registered artifact/scenario",
+            )
+        if row["membership"] == "excluded" and row["evidence"]["route"] == "captured":
+            require(
+                row["verification"] == "upstream-captured",
+                f"{row['id']}: excluded row with a captured route must keep upstream-captured verification",
             )
         if row["membership"] == "supported" and row["implementation"] != "implemented":
             require(
@@ -836,16 +840,12 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
         require("Deferred" not in blob and '"deferred"' not in blob, f"{row['id']}: deferred escape hatch")
     notes.append("vocabulary/ownership/remaining-work: checked")
 
-    # 2b. Curated boundary and verification overrides must be applied exactly.
+    # 2b. Curated boundary and consumer overrides must be applied exactly.
     rows_by_id = {row["id"]: row for row in rows}
     for item in plan.get("boundaryOverrides") or []:
         alias = ledger["sourceAliases"][item["ticket"]].get(item["rowId"])
         require(alias is not None, f"boundary override names unknown row {item['ticket']}:{item['rowId']}")
         require(rows_by_id[alias]["boundary"] == item["boundary"], f"{alias}: boundary override not applied")
-    for item in plan.get("verificationOverrides") or []:
-        alias = ledger["sourceAliases"][item["ticket"]].get(item["rowId"])
-        require(alias is not None, f"verification override names unknown row {item['ticket']}:{item['rowId']}")
-        require(rows_by_id[alias]["verification"] == item["verification"], f"{alias}: verification override not applied")
     for lane, overrides in (plan["consumer"].get("textOverrides") or {}).items():
         for raw_id, text in overrides.items():
             alias = ledger["sourceAliases"][lane].get(raw_id)

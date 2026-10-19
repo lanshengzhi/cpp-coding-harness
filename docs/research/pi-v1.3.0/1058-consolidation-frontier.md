@@ -61,8 +61,8 @@ folded into membership.
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:155, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1432, excluded:26, no-decision:2 |
 | Implementation | implemented:970, partial:228, missing:245, not-applicable:17 |
-| Verification | unverified:1027, upstream-captured:407, not-applicable:26, verified:0 |
-| Evidence route | captured:407, related-captured:28, declared-comparison:29, cpp-regression-only:12, unobserved:58, historical-v1.0.4:858, not-audited:42, excluded:26 |
+| Verification | unverified:1027, upstream-captured:408, not-applicable:25, verified:0 |
+| Evidence route | captured:408, related-captured:28, declared-comparison:29, cpp-regression-only:12, unobserved:58, historical-v1.0.4:858, not-audited:42, excluded:25 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a
 row with an upstream capture is not promoted because a similar row exists elsewhere: a declared
@@ -98,7 +98,9 @@ audit-1057 (audit-1046 is the bootstrap evidence-infrastructure bundle):
 
 Route semantics enforced by the checker:
 
-- `captured` requires a direct scenario name present in the declared registered artifact;
+- `captured` requires a direct scenario name in a registered artifact (a declared artifact or a
+  unique registered scenario match); an excluded-membership row may use it only when its source
+  status is `upstream-captured` and its boundary states the no-C++-obligation;
 - `artifact-only` (unused at this revision) is an artifact route without a scenario name;
 - `related-captured` is a cross-reference only and keeps its own recorded status;
 - `declared-comparison`, `cpp-regression-only`, `unobserved`, `historical-v1.0.4` and `not-audited`
@@ -121,12 +123,13 @@ replaces the whole recorded pointer with the authoritative spelling, the checker
 double-qualified package path, and the affected rows carry the corrected pointer. This changed only
 the consolidated ledger's source spellings; the lane ledgers and their artifacts are untouched.
 
-Separately from pointer corrections, the plan carries four explicit excluded-row boundary overrides
-(session share/upload, both third-party TS/JS plugin rows, and the source-only settings row) and one
-verification override. The settings row's declared scenario was never registered as an artifact, so
-it is now verification `not-applicable` rather than `upstream-captured`; its boundary records the
-source-only claim and the C++ exclusion without inventing an observation. No source row, artifact
-byte or scenario name changes.
+Separately from pointer corrections, the plan carries six explicit excluded-row boundary overrides
+(session share/upload, both third-party TS/JS plugin rows, the settings runtime-observation row, and
+the two 1050 platform exclusions). The settings row retains its source `upstream-captured`
+verification and is linked to `fixtures/pi-v1.3.0/audit-1049/configuration-schema.json` scenario
+`settings manager consumes values the published schema rejects`; membership stays excluded because
+C++ must not reproduce the runtime validation bug. No source row, artifact byte or scenario name
+changes.
 
 ## 5. Overlap resolutions
 
@@ -168,15 +171,21 @@ resolutions and registered scenario names.
    model-selector parity may be claimed before it passes.
 10. Registration integrity (owner dependency declarations) is not C++ behavioral verification.
 
-The excluded `settings-runtime-validation` row is a source-only claim: its declared scenario has no
-registered artifact, so it is recorded as verification `not-applicable`, not `upstream-captured`;
-no capture was invented and no C++ behavior was added. Four excluded rows carry explicit ADR 0075
-boundary text: session share/upload and third-party TS/JS plugin execution replace the literal
-`None` boundaries, the 1056 third-party row additionally records the package-management exclusion,
-and the source-only settings row records its no-claim boundary rather than an upstream capture.
+The excluded `settings-runtime-validation` row keeps its source `upstream-captured` verification:
+the registered `fixtures/pi-v1.3.0/audit-1049/configuration-schema.json` scenario `settings manager
+consumes values the published schema rejects` is an actual upstream observation (bogus
+`defaultThinkingLevel`, non-array `packages`, `schemaCheck: false`). Membership remains excluded
+because C++ must not reproduce the runtime validation bug; its boundary states both the captured
+provenance and the no-C++-obligation. Six excluded rows carry explicit boundary text: session
+share/upload and third-party TS/JS plugin execution replace the literal `None` boundaries, the 1056
+third-party row additionally records the package-management exclusion, the settings row records
+its captured observation and exclusion, and the two 1050 platform rows replace lowercase `none`
+with their recorded platform-exclusion reasons.
 
 The 26 excluded rows are the explicit no-claim boundaries and each carries its recorded boundary
-in the ledger and routes to `excluded`: AI model-response timing, cross-model thinking
+in the ledger; 25 route to `excluded`, while the settings row routes its registered captured
+observation to `captured` without changing its excluded membership: AI model-response timing,
+cross-model thinking
 transformation, final/partial tool-argument parsing, extra AI retry matching, classifier/
 image-generation provider execution; the whole upstream Chord product beyond the durable-required
 subset (plugin host, links/RPC, cluster, cells/schema, Node host); the Cloudflare storage backend,

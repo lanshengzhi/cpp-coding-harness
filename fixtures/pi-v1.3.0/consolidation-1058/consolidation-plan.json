@@ -485,7 +485,7 @@
     {
       "id": "group-durable-tasks-harness",
       "title": "Durable task semantics seen through tasks (1055) and Harness workflows (1056)",
-      "rationale": "1055 drives the scheduler/task store through the public durable session path; 1056 drives the same contracts through Harness.open. Same owner (cch_durable), same frozen contracts, different capture lanes; the rows stay separate and cross-reference instead of duplicating or hiding evidence.",
+      "rationale": "Both lanes drive the same Harness.open entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery; 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); the rows stay separate and cross-reference instead of duplicating or hiding evidence.",
       "members": [
         "cch_durable:task-definition-registry",
         "cch_durable:task-observed-outcomes",
@@ -1038,19 +1038,23 @@
     {
       "ticket": "1049",
       "rowId": "settings-runtime-validation",
-      "boundary": "Source-only claim: the declared scenario 'settings manager consumes values the published schema rejects' has no registered artifact and no observation is claimed. C++ is not a copy of the upstream runtime bug: it rejects invalid thinking levels (`SettingsManagerTest.cpp:195`) and does not parse `packages`; do not add validation behavior to match this upstream runtime acceptance.",
-      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: explicit AI/application exclusions; 1049 ledger row cppEvidence",
-      "rationale": "Keep the excluded row but make its unregistered source-only status honest; no capture is invented."
-    }
-  ],
-  "verificationOverrides": [
+      "boundary": "Excluded from C++ reproduction: the upstream observation is registered at `fixtures/pi-v1.3.0/audit-1049/configuration-schema.json` as 'settings manager consumes values the published schema rejects' (defaultThinkingLevel bogus, packages not-array, schemaCheck false). C++ is not a copy of that runtime bug: it rejects invalid thinking levels (`SettingsManagerTest.cpp:195`) and does not parse `packages`; no C++ obligation.",
+      "authority": "fixtures/pi-v1.3.0/audit-1049/configuration-schema.json and manifest; docs/research/pi-v1.3.0/1049-ledger.json row settings-runtime-validation",
+      "rationale": "Restore the registered upstream observation; membership remains excluded because C++ must not reproduce the runtime validation bug."
+    },
     {
-      "ticket": "1049",
-      "rowId": "settings-runtime-validation",
-      "verification": "not-applicable",
-      "note": "Verification set to not-applicable in consolidation: the declared scenario was not registered as an artifact; the row is excluded and makes no captured-observation claim.",
-      "authority": "docs/research/pi-v1.3.0/1049-ledger.json row settings-runtime-validation; fixtures/pi-v1.3.0/baselines.json",
-      "rationale": "An excluded row whose only scenario label has no registered artifact must not claim upstream-captured."
+      "ticket": "1050",
+      "rowId": "internal.native-modifiers",
+      "boundary": "Platform-exclusive native modifier synthesis excluded; the v1.0.4 approved platform exclusion is retained.",
+      "authority": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json row internal.native-modifiers notes; docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: native macOS/Windows helpers excluded",
+      "rationale": "Replace the lowercase placeholder 'none' with the reason already recorded in the row notes."
+    },
+    {
+      "ticket": "1050",
+      "rowId": "isAppleTerminalSession",
+      "boundary": "Native macOS helper excluded; Linux clipboard handled by #992/#993; the v1.0.4 approved platform exclusion is retained.",
+      "authority": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json row isAppleTerminalSession notes; docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: native macOS/Windows helpers excluded",
+      "rationale": "Replace the lowercase placeholder 'none' with the reason already recorded in the row notes."
     }
   ],
   "retainedLimitations": [
