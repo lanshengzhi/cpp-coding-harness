@@ -230,7 +230,7 @@ Terminal query/clipboard/image rows are implemented at the reusable layer: cell-
 
 ## Verification and evidence status
 
-- The evidence checker accepts the manifest: `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1050/manifest.json` exits 0 and prints the registry record above. Until the serial merger applies that record, the bundle remains `upstream-captured`, not `verified`.
+- The evidence checker accepts the manifest: `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1050/manifest.json` exits 0 and prints the registry record above. The serial merger applied this record and `verify` now covers the family; the capability rows themselves remain `upstream-captured`/`unverified` until a C++ comparison exists.
 - Row verification: **49 upstream-captured, 900 unverified, 0 verified, 5 not-applicable**. The 900 unverified rows are honest: 858 have a historical comparison route and 42 have a `not-audited` gap. No C++ differential capture was run for this audit, and no real terminal-emulator evidence exists for the C++ side: every native status is source/test inventory, not an emulator observation. That remains a visible verification gap, not an unconditional pass or skip.
 - Functional status: **905 implemented, 30 partial, 14 missing** among supported rows (19 missing including the 5 exclusions), 44 supported rows with a functional gap.
 - Frozen upstream suites were run against the same checkout to corroborate the captured behavior: 20 files, **873 tests passed** (`editor`, `input`, `keys`, `stdin-buffer`, `terminal`, `terminal-image`, `program-status`, `tui-render`, `tui-alt-screen`, `overlay-options`, `native-clipboard-linux`, `markdown`, `latex`, `layout`, `wheel-scroll`, `visible-width`, `truncate-to-width`, `wrap-ansi`, `colors`, `mouse-components`). The checkout remained clean at `71023aec…`.
@@ -276,7 +276,7 @@ The 42 `not-audited` rows are listed in the ledger with `comparisonRoute: not-au
 
 - Included: the 10 capture artifacts/58 scenarios, capture harness and child process, the 954-row ledger, the human report, and the ticket-owned validator.
 - Excluded by authority: no production fixes or migrations; no shared registry edit (the record is a handoff request); no issue mutation; no macOS/parser-object capabilities.
-- Unresolved: 44 functional gaps above; 42 not-audited rows; no C++ differential/verified capture; the shared registry record is pending serial merger.
+- Unresolved: 44 functional gaps above; 42 not-audited rows; no C++ differential/verified capture; the shared registry record is registered and covered by `verify`.
 
 ## Validation commands
 
@@ -289,7 +289,7 @@ The 42 `not-audited` rows are listed in the ledger with `comparisonRoute: not-au
 
 ## Recommended next steps
 
-1. Apply the registry record through the #1046 serial merger so the bundle moves from `upstream-captured` to `verified` (the C++ rows remain unverified until a native comparison exists).
+1. The registry record is applied by the serial merger; keep the family covered by `verify` (the C++ rows remain unverified until a native comparison exists).
 2. In a #1058 implementation slice, start with the independent TUI gaps: `renderFakeCursor`/marker resolution and hardware-cursor suppression; `Box::set_padding_x`; `AltScreen::reset_text_selection`; shifted-symbol `parse_key`/`matches_key`; fragmented terminal-reply buffering; Herdr detection; then the overlay-wheel routing change.
 3. Implement OSC 7501 as a terminal-layer capability plus a `cch_coding_agent` program-status reporter; the native reporter is a #1051 product row, not a TUI audit deliverable.
 4. Add a C++ differential capture for the 49 upstream-captured rows before claiming `verified`, and use the 42 `not-audited` rows as the review queue for the changed-file triage; the 7 application product entries are cross-referenced to #1051 rather than treated as unchanged.
