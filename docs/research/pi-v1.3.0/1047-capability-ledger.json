@@ -93,6 +93,94 @@
     ],
     "scenarioCount": 30
   },
+  "existingCxxTests": [
+    {
+      "path": "tests/agent/AgentBehaviorTest.cpp",
+      "covers": [
+        "lifecycle ordering",
+        "continuation and queue drain",
+        "prepareNextTurn",
+        "cancellation",
+        "parallel scheduling",
+        "length truncation"
+      ],
+      "cases": [
+        "async agent loop emits deterministic lifecycle events for text",
+        "Agent continuation from an assistant tail prioritizes steering before follow-up",
+        "prepareNextTurn runs once per continuing turn before the next turn_start",
+        "cancellation reaches a suspended tool and completes one ordinary aborted lifecycle",
+        "bounded parallel execution emits end events in completion order",
+        "length-truncated tool calls emit errors without crossing the executor seam",
+        "default tool execution runs a parallel-safe batch concurrently"
+      ]
+    },
+    {
+      "path": "tests/agent/ToolCallExecutorTest.cpp",
+      "covers": [
+        "registry lookup",
+        "preparation/validation",
+        "blocked/unknown outcomes",
+        "afterToolCall",
+        "parallel source order",
+        "cancellation permits"
+      ],
+      "cases": [
+        "ToolCallExecutor default policy is bounded parallel with no explicit cap",
+        "ToolCallExecutor maps lookup and argument failures to results",
+        "afterToolCall runs for an error execution result (sequential path)",
+        "bounded parallel execution preserves source-order results",
+        "default policy executes parallel-safe calls concurrently"
+      ]
+    },
+    {
+      "path": "tests/agent/AgentCoreEvidenceTest.cpp",
+      "covers": [
+        "lifecycle golden",
+        "aborted terminal golden",
+        "tool-result shape golden",
+        "tool scheduling golden"
+      ],
+      "cases": [
+        "loop lifecycle ordering golden covers the pi turn lifecycle end to end",
+        "loop lifecycle ordering golden covers the aborted terminal",
+        "tool-result shape golden groups is_error exactly as pi's toolResult message",
+        "tool scheduling golden covers parallel default, sequential override, truncated fail-all, and terminate hint"
+      ]
+    },
+    {
+      "path": "tests/agent/AgentToolSurfaceTest.cpp",
+      "covers": [
+        "active declaration subset",
+        "register/remove/active-tool mutation"
+      ],
+      "cases": [
+        "Agent declares only the active tool subset to the model",
+        "Agent registers a live tool and declares it only once activated",
+        "Agent removes a tool from the live registry and the declared set",
+        "Agent set_active_tools ignores names that are not registered"
+      ]
+    },
+    {
+      "path": "tests/agent/NestedToolCallsTest.cpp",
+      "covers": [
+        "nested record caps, argument omission and error truncation"
+      ],
+      "cases": [
+        "the nested-call record drops calls beyond pi's 256-call limit",
+        "arguments over pi's per-call cap are omitted but counted",
+        "a nested failure records the error text truncated to pi's 500 chars"
+      ]
+    },
+    {
+      "path": "tests/coding_agent/tui/tool_renderers/BashRendererTest.cpp",
+      "covers": [
+        "visible Took line currently derived from the execution clock"
+      ],
+      "cases": [
+        "a settled bash result renders pi's Took line from the execution clock"
+      ]
+    }
+  ],
   "rows": [
     {
       "id": "agent-core:Agent:default-state",
@@ -558,7 +646,15 @@
         "packages/agent/test/agent-loop.test.ts:should use prepareNextTurn snapshot before continuing"
       ],
       "verification": "upstream-captured",
-      "notes": "Frozen hook runs once after a tool turn and its appended user message is emitted before the next provider request. C++ PrepareNextTurnHook returns model/context/thinking only (AgentLoopTurnUpdate has no messages), so it cannot append the captured message."
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionExecution.cpp",
+        "symbols": [
+          "AgentSession::Impl::compact_before_next_assistant_response",
+          "AgentSession::Impl::Impl (prepare_next_turn installation)"
+        ],
+        "chainTo": "Agent::prepare_next_turn"
+      },
+      "notes": "Frozen hook runs once after a tool turn and its appended user message is emitted before the next provider request. C++ PrepareNextTurnHook returns model/context/thinking only (AgentLoopTurnUpdate has no messages), so it cannot append the captured message. Application compaction installs this hook in AgentSessionExecution.cpp to compact before the next assistant response and therefore constrains any signature/update change."
     },
     {
       "id": "agent-core:InputQueue:admission",
@@ -1479,7 +1575,7 @@
     {
       "id": "G10-diagnostic-text",
       "severity": "medium",
-      "statement": "Several user-visible diagnostics differ from frozen text: unknown tool, default block reason, busy prompt; abort/truncation message paths need comparison.",
+      "statement": "Several user-visible diagnostics differ from frozen text: unknown-tool text, default block reason and busy-prompt text. The truncation text is source-equivalent but has no dedicated C++ test.",
       "required": "Align exact executable/result text where it is part of the public outcome; do not substitute generic diagnostics.",
       "evidence": [
         "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
@@ -1497,6 +1593,16 @@
       ]
     },
     {
+      "id": "G12-package-boundary",
+      "severity": "info",
+      "statement": "Concrete filesystem/shell tools still live under cch_agent_core instead of the cch_coding_agent harness layer required by ADR 0075.",
+      "required": "#1052 decides the package target; #1047 records the ownership gap and does not move code.",
+      "evidence": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md",
+        "src/agent/ToolRegistry.cpp"
+      ]
+    },
+    {
       "id": "G13-active-tool-execution",
       "severity": "high",
       "statement": "C++ active_tools narrows only the model-visible definition snapshot; the executor resolves calls against the full registry, and no toolsAdded/toolsRemoved system message is emitted.",
@@ -1505,16 +1611,6 @@
         "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:replacing state.tools narrows the executable set and declares the system tool delta",
         "src/agent/ToolCallExecutor.cpp:resolve_tool_call",
         "src/coding_agent/runtime/McpSessionManager.cpp:refresh_tools"
-      ]
-    },
-    {
-      "id": "G12-package-boundary",
-      "severity": "info",
-      "statement": "Concrete filesystem/shell tools still live under cch_agent_core instead of the cch_coding_agent harness layer required by ADR 0075.",
-      "required": "#1052 decides the package target; #1047 records the ownership gap and does not move code.",
-      "evidence": [
-        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md",
-        "src/agent/ToolRegistry.cpp"
       ]
     }
   ],
@@ -1553,6 +1649,13 @@
       "consumer": "Agent::snapshot declaration and McpSessionManager refresh",
       "then": "ToolCallExecutor model-issued lookup",
       "status": "declaration narrowed but execution still resolves full registry"
+    },
+    {
+      "producer": "Agent::prepare_next_turn",
+      "handoff": "PrepareNextTurnContext / AgentLoopTurnUpdate",
+      "consumer": "AgentSession::Impl::compact_before_next_assistant_response (src/coding_agent/AgentSessionCompaction.cpp)",
+      "then": "application compaction before the next assistant response",
+      "status": "consumer constrains hook replacement/context semantics; update has no messages field"
     }
   ]
 }

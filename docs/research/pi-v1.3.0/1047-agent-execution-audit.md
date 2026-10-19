@@ -309,6 +309,36 @@ chains are:
 and projection seams. `ChatContainer` consumes `ToolExecutionEndEvent` at
 `src/coding_agent/tui/ChatContainer.cpp`; `EntrySerializer` is the session DTO consumer.
 
+**Compaction dependency:** `AgentSession::Impl` installs `options.prepare_next_turn` in
+`src/coding_agent/AgentSessionExecution.cpp`; the hook calls
+`AgentSession::Impl::compact_before_next_assistant_response` in
+`src/coding_agent/AgentSessionCompaction.cpp` so a long tool loop can compact before the next
+assistant response. Any change to `PrepareNextTurnContext`/`AgentLoopTurnUpdate` must preserve
+this application-owned caller; the frozen hook's message append capability is additional to the
+context/model replacement this consumer uses today.
+
+### Useful existing tests and seam conflicts
+
+- `tests/agent/AgentBehaviorTest.cpp`: lifecycle ordering, continuation/queue drain,
+  `prepareNextTurn`, cancellation, parallel scheduling and length truncation. Its
+  `agent queue bounds are documented configuration fields` test currently **asserts the caps**
+  (256 / 16 MiB) and must change with the admission fix.
+- `tests/agent/ToolCallExecutorTest.cpp`: registry lookup, preparation/validation, blocked and
+  unknown outcomes, `afterToolCall`, cancellation permits and source-order results. Its
+  `default policy executes parallel-safe calls concurrently` test only uses tools explicitly
+  marked `ParallelSafe`; add a mixed/default-concurrency case.
+- `tests/agent/AgentCoreEvidenceTest.cpp`: existing lifecycle, aborted-terminal, tool-result-shape
+  and tool-scheduling goldens are the right places to extend with the captured duration presence /
+  absence sequence.
+- `tests/agent/AgentToolSurfaceTest.cpp`: active declaration subset, register/remove/active-tool
+  mutation. Extend with the captured “removed tool call never executes” assertion.
+- `tests/agent/NestedToolCallsTest.cpp`: nested record caps/errors. Add the captured end-event
+  execute duration and record-pipeline duration distinction.
+- `tests/coding_agent/tui/tool_renderers/BashRendererTest.cpp`: the
+  `a settled bash result renders pi's Took line from the execution clock` case currently asserts
+  the wall-clock `started_at_ms` / `ended_at_ms` path. It is the seam that must be changed or
+  explicitly proven non-contract.
+
 ## 6. Gaps and implementation-slice recommendations
 
 The ledger has the full gap list with evidence. The blockers for the implementation lane are:
@@ -344,10 +374,12 @@ The ledger has the full gap list with evidence. The blockers for the implementat
 
 The non-AI timing requirement is carried by `tool-execution`/`tool-result` messages and the
 session DTO, not by the assistant message. `ToolResultMessage.usage` is an AI-owned field and is
-not part of this audit's timing claim. Assistant `message_update`/thinking timing, provider retry,
-transport selection, `thinkingBudgets`, `onPayload`/`onResponse`/`onProviderStreamEvent` and the
-`streamProxy` protocol are excluded (rows in the ledger's `excluded` list). An AI-owned message
-shape cannot remove the non-AI `durationMs` requirement.
+not part of this audit's timing claim. Tool argument preparation (`prepareArguments`/validation)
+is included; AI-owned model-response parsing/serialization and provider adapter input parsing are
+excluded. Assistant `message_update`/thinking timing, provider retry, transport selection,
+`thinkingBudgets`, `onPayload`/`onResponse`/`onProviderStreamEvent` and the `streamProxy` protocol
+are excluded (rows in the ledger's `excluded` list). An AI-owned message shape cannot remove the
+non-AI `durationMs` requirement.
 
 ## 7. Validation performed
 
