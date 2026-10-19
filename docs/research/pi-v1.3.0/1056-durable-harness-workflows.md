@@ -143,9 +143,9 @@ Coverage families:
 | Compaction | `manual-compaction`, `threshold-compaction`, `background-compaction`, `compaction-decline`, `overflow-compaction-retry`, `compaction-no-cut` | four compaction scenarios; background/overflow remain gaps |
 | Registries/extensions/hooks | `registry-transition`, `registry-task-definitions`, `extension-sections`, `generation-onYield`, `tool-hooks`, `native-run-triggering`, `task-hooks`, `task-versioning` | live transition, task graph, onYield, tool hooks |
 | Views/events/task graph/inspection | `inspect-task-states`, `inspect-submissions`, `task-graph`, `conversation-view-delta`, `event-stream`, `context-at-entry` | all six observation scenarios |
-| Environment/tools/images | `node-filesystem`, `node-exec`, `builtin-tools`, `builtin-tool-limits`, `node-env-watch`, `image-processor`, `image-orientation-conversion`, `read-image`, `image-capability-absent` | all six environment scenarios |
+| Environment/tools/images | `node-filesystem`, `node-exec`, `builtin-tools`, `builtin-tool-limits`, `node-env-watch`, `image-processor`, `image-orientation-conversion`, `read-image`, `image-capability-absent`, `tool-execution-timing`, `tool-task-cancellation` | all six environment scenarios |
 | Codemode/tool search | `codemode-script`, `codemode-store`, `codemode-failure`, `codemode-replay`, `codemode-remote`, `codemode-models`, `codemode-limits`, `codemode-output`, `toolsearch-load`, `toolsearch-no-match`, `toolsearch-persistence` | four code mode/tool-search scenarios |
-| Durable dependencies/storage | `chord-documents`, `chord-delta`, `sqlite-storage`, `jsonl-storage`, `task-recovery`, `task-outcomes`, `tool-execution-timing`, `tool-task-cancellation` | SQLite/JSONL reopen, task graph |
+| Durable dependencies/storage | `chord-documents`, `chord-delta`, `sqlite-storage`, `jsonl-storage`, `task-recovery`, `task-outcomes` | SQLite/JSONL reopen, task graph |
 | Explicit boundaries | `cloudflare-excluded`, `ssh-daemon-excluded`, `ai-image-provider-excluded`, `thirdparty-plugins-excluded` | Not applicable |
 
 ## C++ mapping and ownership conclusions
@@ -203,8 +203,8 @@ Deferred and not exclusions:
 - `toolsearch-persistence` — loaded tools across forks/reset and durable `modelTools` persistence.
 - `task-versioning`, `task-outcomes`, `task-hooks` — typed migration/versioning, structured terminal
   outcomes/completing holds, and typed task hooks.
-- `tool-task-cancellation`, `tool-execution-timing` — durable ToolTask cancellation and top-level
-  monotonic duration.
+- `tool-task-cancellation` — durable ToolTask cancellation; top-level duration is only
+  upstream-captured by the public workflow, not C++-verified.
 - `builtin-tool-limits` — durable truncation/spill/diagnostic result contract.
 - `node-env-watch` — ExecutionEnv file watching.
 - `image-orientation-conversion` — durable EXIF orientation and format conversion.
