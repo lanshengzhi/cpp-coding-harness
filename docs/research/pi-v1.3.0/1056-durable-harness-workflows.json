@@ -1664,7 +1664,7 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/tasks.ts:defineTask.migrate",
+          "packages/durable/src/types.ts:TaskDefinition.migrate",
           "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases"
         ],
         "scenarios": []
@@ -1716,8 +1716,9 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/harness/types.ts:TaskHooks",
-          "packages/durable/src/harness/scheduler.ts:#runBeforeHooks,#runAfterHooks"
+          "packages/durable/src/types.ts:TaskDefinition.hooks",
+          "packages/durable/src/harness/define.ts:hook",
+          "packages/durable/src/harness/scheduler.ts:hook dispatch"
         ],
         "scenarios": []
       },
