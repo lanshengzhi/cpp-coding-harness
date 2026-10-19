@@ -172,17 +172,15 @@
         ]
       },
       "cppSeam": "`src/agent/harness/WorkspacePathResolution.cpp:resolve_to_cwd` (Unicode spaces, leading `@`, `~`/`$HOME`, absolute/relative lexical resolution). Explicit `--skill`/`--prompt-template`/`--theme` paths call `absolutePath`, which uses this operation.",
-      "cppEvidence": "The C++ operation implements Unicode-space normalization, `@` stripping and `~` expansion and is used by explicit resource paths. It deliberately does not convert `file:` URLs (`resolve_to_cwd` comment and ADR 0057); upstream `resolvePath` converts them. Upstream `resolveCliPaths` calls `resolvePath` without `stripAtPrefix`, so upstream keeps a literal leading `@` for these resource flags, while C++ strips it by ADR 0057.",
+      "cppEvidence": "The C++ operation implements Unicode-space normalization, `@` stripping and `~` expansion and is used by explicit resource paths. It does not convert `file:` URLs (`resolve_to_cwd` comment), while upstream `resolvePath` converts them. Upstream `resolveCliPaths` calls `resolvePath` without `stripAtPrefix`, so upstream keeps a literal leading `@` for `--extensions/--skills/--prompt-templates/--themes`; C++ reuses the tool-path resolver, which strips it. Both are selected resource/context path behavior under ADR 0075; the historical ADR 0057 `file:` narrowing does not override that selection.",
       "status": {
         "membership": "supported",
         "implementation": "partial",
         "verification": "upstream-captured"
       },
-      "recommendation": "Record the file-URL exclusion as ADR 0057 authority and do not add a URL path seam in this ticket. Decide separately whether the resource-flag `@` divergence needs an owner ruling; the current `@` behavior is the supported filesystem contract, not an accidental parser gap.",
-      "blockers": [
-        "file: URL conversion is explicitly excluded by ADR 0057.",
-        "The resource-flag `@` outcome differs between upstream `resolveCliPaths` and the C++ `resolveToCwd` seam; no accepted comparison yet."
-      ]
+      "recommendation": "Implement the selected path behavior in a bounded slice: convert `file:` URLs and preserve the upstream leading-`@` outcome for CLI resource flags, without changing the tool-path `@` convention. Keep ADR 0057's no-follow symlink and filesystem-authority rules. The shared `resolve_to_cwd` seam may need a resource-flag-specific normalization rather than a global behavior change.",
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application: resource/context paths; #1044 Implementation Decisions."
     },
     {
       "id": "resource-explicit-sources",
@@ -205,7 +203,7 @@
         "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Keep the existing flag spelling; do not add `--extensions` as part of this audit.",
+      "recommendation": "Keep the existing flag spelling; the third-party `--extensions`/`--no-extensions` loader remains excluded. Native extension behavior is selected separately through the same extension seam, not through a third-party plugin path.",
       "blockers": []
     },
     {
@@ -224,14 +222,15 @@
         ]
       },
       "cppSeam": "`src/coding_agent/include/cch/coding_agent/Settings.hpp:UserSettings` and `src/coding_agent/SettingsManager.cpp:parse_settings` manual field parsing; there is no generated C++ `SettingsSchema` counterpart.",
-      "cppEvidence": "The C++ subset has typed fields for the model/thinking/session/shell/theme/compaction/retry/presentation values and rejects an invalid `defaultThinkingLevel` (`tests/coding_agent/SettingsManagerTest.cpp:195`). It does not describe the upstream resource-source fields or publish a schema.",
+      "cppEvidence": "The C++ subset has typed fields for the model/thinking/session/shell/theme/compaction/retry/presentation values and rejects an invalid `defaultThinkingLevel` (`tests/coding_agent/SettingsManagerTest.cpp:195`). It does not publish a schema and has no typed fields or consumers for the selected local resource path lists (`skills`, `prompts`, `themes`). The third-party `packages`/`extensions` markers remain excluded.",
       "status": {
         "membership": "supported",
         "implementation": "partial",
         "verification": "upstream-captured"
       },
-      "recommendation": "If a machine-readable C++ settings contract is needed, generate it from the supported C++ fields; do not adopt the upstream schema wholesale because `packages`/`extensions` markers are explicitly deleted.",
-      "blockers": []
+      "recommendation": "Define a C++ settings contract for the fields the application actually supports, including the selected local resource path fields (`skills`, `prompts`, `themes`). Do not adopt the third-party `packages`/`extensions` markers by wholesale copying the upstream schema.",
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application: settings schemas for the actually supported fields and resource/context paths; #1044 Implementation Decisions."
     },
     {
       "id": "settings-runtime",
@@ -249,17 +248,15 @@
         ]
       },
       "cppSeam": "`SettingsManager::create`/`reload` (`src/coding_agent/SettingsManager.cpp:382,1067`) and the two-scope merge; `UserSettings` fields.",
-      "cppEvidence": "C++ consumes the model/thinking/session/shell/theme/compaction/retry subset and reloads both scopes; `tests/coding_agent/SettingsManagerTest.cpp:437` covers reload. C++ does not consume upstream `packages`, `extensions`, `prompts`, `themes` or a `skills` path list. Unknown fields are preserved on surgical writes but ignored by the typed view (`:84`).",
+      "cppEvidence": "C++ consumes the model/thinking/session/shell/theme/compaction/retry subset and reloads both scopes; `tests/coding_agent/SettingsManagerTest.cpp:437` covers reload. C++ does not consume the selected local `skills`, `prompts` or `themes` path lists. It also does not consume `packages`/`extensions`, which are explicitly excluded third-party package/TS-plugin surfaces. Unknown fields are preserved on surgical writes but ignored by the typed view (`:84`).",
       "status": {
         "membership": "supported",
         "implementation": "partial",
         "verification": "upstream-captured"
       },
-      "recommendation": "Split this row before any implementation: model/thinking/compaction/retry/theme-name reload is implemented; resource-source fields are either deleted (`packages`/`extensions`) or unruled (`prompts`/`themes`/`skills` path lists). Keep only the currently supported provider/model selection; this audit does not restore retired provider or model settings.",
-      "blockers": [
-        "`packages` and `extensions` resource markers are explicitly deleted by ADR 0036 G4.",
-        "`prompts`, `themes` and `skills` settings path lists have no owner ruling for the C++ application."
-      ]
+      "recommendation": "Keep `packages`/`extensions` excluded as third-party package/plugin surfaces. Implement the selected local `skills`/`prompts`/`themes` settings-path consumption in a bounded resource-path slice; keep the existing model/thinking/compaction/retry/theme-name reload behavior. Keep only the currently supported provider/model selection; this audit does not restore retired provider or model settings.",
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application: settings and resource/context paths; #1044 Implementation Decisions."
     },
     {
       "id": "settings-runtime-validation",
@@ -307,8 +304,9 @@
         "implementation": "partial",
         "verification": "upstream-captured"
       },
-      "recommendation": "Decide whether unknown-action diagnostics should remain a deliberate C++ hardening divergence or align with the upstream schema's unknown-key acceptance. The known-action, migration, BOM, conflict and reload behaviors already match.",
-      "blockers": []
+      "recommendation": "Align unknown-action handling with the upstream keybindings schema/manager: retain an unknown id in the user binding map, do not install an unknown action in the effective registry, and add a test for schema acceptance versus runtime absence. Keep the existing known-action, migration, BOM, conflict and reload behavior.",
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application: keybindings schemas for the actually supported fields; #1044 Implementation Decisions."
     },
     {
       "id": "keybindings-reload",
@@ -358,7 +356,8 @@
         "verification": "upstream-captured"
       },
       "recommendation": "Re-pin the theme tests to the v1.3.0 schema: reject unknown color tokens, reject a missing required token, reject a slash name. Keep runtime loading's own error handling separate from the published-schema contract; do not copy the upstream runtime's missing-token acceptance.",
-      "blockers": []
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application: theme schemas for the actually supported fields; #1044 Implementation Decisions."
     },
     {
       "id": "theme-token-set",
@@ -381,7 +380,8 @@
         "verification": "upstream-captured"
       },
       "recommendation": "Add the three v1.3.0 optional tokens with their documented fallbacks (`muted`, `selectedBg`, `text`) and retain the existing required-token validation. This is a schema-shape delta, not a new theme UI feature.",
-      "blockers": []
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application/TUI: theme schemas and complete token shape; #1044 Implementation Decisions."
     },
     {
       "id": "extension-native-tool-source",
@@ -397,20 +397,21 @@
         "scenarios": []
       },
       "cppSeam": "`src/coding_agent/extensions/ExtensionTool.hpp`, `ExtensionToolRegistry.hpp/.cpp`, `src/coding_agent/runtime/SessionFactory.cpp:1774-1783`, and `src/coding_agent/runtime/McpProductionAdapters.cpp:494-508`.",
-      "cppEvidence": "`tests/coding_agent/ExtensionToolSourceTest.cpp:181-319` covers registry collection, duplicate rejection, Agent ToolRegistry conversion, assembly visibility and callability. This is the approved minimal foundation from ADR 0066; direct third-party TS/JS execution is not part of it.",
+      "cppEvidence": "`tests/coding_agent/ExtensionToolSourceTest.cpp:181-319` covers registry collection, duplicate rejection, Agent ToolRegistry conversion, assembly visibility and callability. This is the implemented tool-source subset of the native extension behavior selected by ADR 0075 (\u00a7Selected capability additions, Extensions) and #1044. ADR 0066's #865 ruling bounds this tool-source slice only; it cannot narrow the later selected extension target. Direct third-party TS/JS execution remains excluded.",
       "status": {
         "membership": "supported",
         "implementation": "implemented",
         "verification": "unverified"
       },
-      "recommendation": "Map future extension-triggered work to this seam only when the owner approves lifecycle hooks; do not add a TS plugin loader.",
-      "blockers": []
+      "recommendation": "Extend this native seam with the selected hooks, run-triggering and prompt/busy-state behavior tracked in `extension-lifecycle-hooks`; do not add a TS/JS plugin loader.",
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Extensions; #1044 Implementation Decisions. The #865 ADR 0066 ruling is only the historical tool-source foundation."
     },
     {
       "id": "extension-lifecycle-hooks",
       "capability": "Extension-triggered runs and `before_agent_start` contributions",
       "operation": "A `before_agent_start` handler observes a busy context (`ctx.isIdle() === false`), can replace the system prompt and inject a custom message; an extension `sendMessage(..., {triggerTurn:true})` from an idle session starts another run; the contributed message and tool result are retained across a tool turn.",
-      "consumer": "Upstream extension runner and `AgentSession._prepareRun`; the native C++ equivalent is only the Extension Tool Source foundation.",
+      "consumer": "Upstream extension runner and `AgentSession._prepareRun`; the native C++ target is the selected registration/hooks/tool-wrapping/run-triggering and prompt/busy-state extension behavior.",
       "upstreamEvidence": {
         "sources": [
           "packages/coding-agent/src/core/extensions/loader.ts:loadExtensionFromFactory",
@@ -424,16 +425,15 @@
         ]
       },
       "cppSeam": "No general extension lifecycle hook. `src/coding_agent/AgentSessionExecution.cpp:401` only builds the MCP server system-prompt section; `ExtensionToolRegistry` is a tool-contribution seam, not a `before_agent_start`/`sendMessage` seam.",
-      "cppEvidence": "C++ has no `before_agent_start`, custom-message trigger, or extension-driven run API. The native extension tool seam is wired at Session Assembly; no third-party extension runtime is present.",
+      "cppEvidence": "C++ has no `before_agent_start`, custom-message trigger, or extension-driven run API. The native extension tool seam is wired at Session Assembly, but no native extension lifecycle/runtime is present. ADR 0075 (\u00a7Selected capability additions, Extensions) explicitly selects native registration/hooks/tool wrapping/run triggering and prompt/busy-state semantics; #1044 includes the same native extension behavior. ADR 0066's minimal #865 tool-source ruling cannot veto this later membership decision. Direct third-party TS/JS execution remains excluded.",
       "status": {
-        "membership": "no-decision",
+        "membership": "supported",
         "implementation": "missing",
         "verification": "upstream-captured"
       },
-      "recommendation": "Treat the lifecycle hook as unresolved application membership, not an implementation defect in the approved tool seam. Any future slice must define a native lifecycle contract; direct TS/JS execution stays excluded.",
-      "blockers": [
-        "ADR 0066 approves only the minimal Extension Tool Source foundation; lifecycle hooks and extension-triggered custom messages have no owner ruling."
-      ]
+      "recommendation": "Implement bounded native slices: (1) extension registration/event dispatch and `before_agent_start` with busy/idle context; (2) system-prompt and custom-message contributions plus `sendMessage({triggerTurn:true})` run triggering; (3) tool wrapping and contribution retention across a tool turn with settled ordering. Reuse the existing Extension Tool Source registry; do not add a TS/JS plugin loader.",
+      "blockers": [],
+      "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Extensions: native hooks, registry, tool wrapping, run triggering and prompt/busy-state semantics. #1044 Implementation Decisions \u2014 Included native C++ extension behavior must support registration/hooks/tool wrapping/run triggering and correct prompt/busy-state lifecycle. Direct third-party TS/JS plugin execution is excluded."
     },
     {
       "id": "print-mode-text",
@@ -517,13 +517,13 @@
         ]
       },
       "cppSeam": "`src/coding_agent/prompt/SystemPromptBuilder.cpp:107-127` lists only pike docs (`usage`, `keybindings`, `agent-lifecycle`, `runtime-capacities`, `architecture`); `src/coding_agent/prompt/BuiltinSlashCommands.cpp:29-32` explicitly drops `extensions` from `/reload`; `docs/usage.md` lists the supported agent files.",
-      "cppEvidence": "No C++ system-prompt text or built-in command claims package/extension loading or a `before_agent_start` hook. `/reload` claims keybindings, skills, prompts, themes and context files, all of which have C++ reload paths. The only affected claim found is the C++ theme test wording `like pi` for unknown color tokens, which is false at v1.3.0 and belongs to the theme row.",
+      "cppEvidence": "No C++ system-prompt text or built-in command claims package/extension loading or a `before_agent_start` hook. `/reload` currently lists keybindings, skills, prompts, themes and context files and omits extensions; that is an implementation gap for the selected native extension behavior, not a false positive claim. The only affected stale claim found is the C++ theme test wording `like pi` for unknown color tokens, which is false at v1.3.0 and belongs to the theme row.",
       "status": {
         "membership": "supported",
         "implementation": "implemented",
         "verification": "unverified"
       },
-      "recommendation": "Keep the docs/commands free of package/extension claims. Re-pin the theme test wording rather than adding a package surface.",
+      "recommendation": "Keep third-party package/TS-plugin claims absent. When the selected native extension behavior lands, update `/reload` and documentation only for the extension behavior actually implemented. Re-pin the theme test wording rather than adding a package surface.",
       "blockers": []
     }
   ]
