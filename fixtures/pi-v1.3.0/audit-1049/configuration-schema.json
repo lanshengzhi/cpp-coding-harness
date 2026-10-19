@@ -1,0 +1,349 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T16:39:27.925Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/settings-schema.ts:SettingsSchema",
+    "packages/coding-agent/src/core/settings-manager.ts:SettingsManager",
+    "packages/coding-agent/src/core/keybindings.ts:KeybindingsManager",
+    "packages/coding-agent/src/core/keybindings-schema.ts:KeybindingsSchema",
+    "packages/coding-agent/src/modes/interactive/theme/theme-schema.ts:validateThemeJson",
+    "packages/coding-agent/src/modes/interactive/theme/theme.ts:loadThemeFromPath",
+    "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts:THEME_TOKENS"
+  ],
+  "scenarios": [
+    {
+      "name": "settings schema accepts the supported shape and unknown top-level keys",
+      "inputs": {
+        "supportedKeys": [
+          "defaultProvider",
+          "defaultModel",
+          "defaultThinkingLevel",
+          "enabledModels",
+          "packages",
+          "extensions",
+          "skills",
+          "prompts",
+          "themes",
+          "compaction",
+          "retry"
+        ],
+        "unknownTopLevel": true
+      },
+      "expected": {
+        "supportedCheck": true,
+        "unknownTopLevelCheck": true
+      },
+      "normalizations": []
+    },
+    {
+      "name": "settings schema rejects invalid thinking level and negative compaction reserve",
+      "inputs": {
+        "invalidThinking": {
+          "defaultThinkingLevel": "bogus"
+        },
+        "negativeReserve": {
+          "compaction": {
+            "reserveTokens": -1
+          }
+        }
+      },
+      "expected": {
+        "invalidThinkingCheck": false,
+        "negativeReserveCheck": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "settings manager reads package and local resource paths and reloads changed values",
+      "inputs": {
+        "initialSettings": {
+          "defaultProvider": "magpie",
+          "defaultModel": "group/model",
+          "defaultThinkingLevel": "high",
+          "enabledModels": [
+            "group/a",
+            "group/b"
+          ],
+          "packages": [
+            "npm:@scope/a",
+            "git:github.com/example/repo"
+          ],
+          "extensions": [
+            "./ext"
+          ],
+          "skills": [
+            "./skills"
+          ],
+          "prompts": [
+            "./prompts"
+          ],
+          "themes": [
+            "./themes"
+          ],
+          "compaction": {
+            "enabled": true,
+            "reserveTokens": 1234
+          },
+          "retry": {
+            "enabled": false,
+            "maxRetries": 0
+          }
+        },
+        "updatedSettings": {
+          "defaultProvider": "magpie",
+          "defaultModel": "group/model2",
+          "defaultThinkingLevel": "high",
+          "enabledModels": [
+            "group/a",
+            "group/b"
+          ],
+          "packages": [
+            "npm:@scope/b"
+          ],
+          "extensions": [
+            "./ext"
+          ],
+          "skills": [
+            "./skills"
+          ],
+          "prompts": [
+            "./prompts"
+          ],
+          "themes": [
+            "./themes"
+          ],
+          "compaction": {
+            "enabled": true,
+            "reserveTokens": 1234
+          },
+          "retry": {
+            "enabled": false,
+            "maxRetries": 0
+          }
+        },
+        "settingsPath": "controlled temporary agent settings.json"
+      },
+      "expected": {
+        "initial": {
+          "defaultProvider": "magpie",
+          "defaultModel": "group/model",
+          "defaultThinkingLevel": "high",
+          "enabledModels": [
+            "group/a",
+            "group/b"
+          ],
+          "packages": [
+            "npm:@scope/a",
+            "git:github.com/example/repo"
+          ],
+          "extensionPaths": [
+            "./ext"
+          ],
+          "skillPaths": [
+            "./skills"
+          ],
+          "promptPaths": [
+            "./prompts"
+          ],
+          "themePaths": [
+            "./themes"
+          ],
+          "compactionReserveTokens": 1234,
+          "retryMaxRetries": 0
+        },
+        "afterReload": {
+          "defaultModel": "group/model2",
+          "packages": [
+            "npm:@scope/b"
+          ]
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "settings manager consumes values the published schema rejects",
+      "inputs": {
+        "storedSettings": {
+          "defaultThinkingLevel": "bogus",
+          "packages": "not-array"
+        },
+        "schema": "SettingsSchema"
+      },
+      "expected": {
+        "defaultThinkingLevel": "bogus",
+        "packages": [
+          "n",
+          "o",
+          "t",
+          "-",
+          "a",
+          "r",
+          "r",
+          "a",
+          "y"
+        ],
+        "schemaCheck": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "keybindings manager migrates legacy names, keeps unknown actions, drops invalid values and reloads",
+      "inputs": {
+        "initialConfig": {
+          "app.interrupt": "ctrl+q",
+          "app.clear": "ctrl+q",
+          "app.unknown": "ctrl+u",
+          "cursorUp": "ctrl+u",
+          "app.model.select": "not-a-key"
+        },
+        "bom": true,
+        "reloadConfig": {
+          "app.interrupt": "escape"
+        }
+      },
+      "expected": {
+        "initial": {
+          "catalogSize": 90,
+          "appInterrupt": "ctrl+q",
+          "appClear": "ctrl+q",
+          "cursorUp": "ctrl+u",
+          "appUnknownPresent": false,
+          "userBindings": {
+            "tui.editor.cursorUp": "ctrl+u",
+            "app.interrupt": "ctrl+q",
+            "app.clear": "ctrl+q",
+            "app.unknown": "ctrl+u"
+          },
+          "conflicts": [
+            {
+              "key": "ctrl+q",
+              "keybindings": [
+                "app.interrupt",
+                "app.clear"
+              ]
+            }
+          ]
+        },
+        "afterReload": {
+          "catalogSize": 90,
+          "appInterrupt": "escape",
+          "appClear": "ctrl+c",
+          "cursorUp": "up",
+          "appUnknownPresent": false,
+          "userBindings": {
+            "app.interrupt": "escape"
+          },
+          "conflicts": []
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "keybindings schema accepts unknown action ids with valid keys and rejects malformed values",
+      "inputs": {
+        "validKnownAction": {
+          "app.interrupt": "ctrl+q"
+        },
+        "unknownAction": {
+          "future.action": "ctrl+u"
+        },
+        "malformedValue": {
+          "app.model.select": "not-a-key"
+        }
+      },
+      "expected": {
+        "validKnownActionCheck": true,
+        "unknownActionCheck": true,
+        "malformedValueCheck": false
+      },
+      "normalizations": []
+    },
+    {
+      "name": "theme schema accepts the 56-token built-in shape",
+      "inputs": {
+        "theme": "dark.json with audit name",
+        "tokenSource": "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts"
+      },
+      "expected": {
+        "schemaAccepted": true,
+        "tokenCount": 56,
+        "requiredTokenCount": 51,
+        "optionalTokens": [
+          "scrollbarTrack",
+          "scrollbarThumb",
+          "searchMatchBg",
+          "searchMatchText",
+          "thinkingMax"
+        ],
+        "runtimeAccepted": true,
+        "runtimeName": "audit-1049-dark",
+        "runtimeColorCount": 56
+      },
+      "normalizations": []
+    },
+    {
+      "name": "theme schema rejects an unknown color token while runtime loading throws",
+      "inputs": {
+        "colors": "valid dark theme plus bogusToken",
+        "schema": "validateThemeJson",
+        "runtime": "loadThemeFromPath"
+      },
+      "expected": {
+        "label": "audit-unknown",
+        "schemaAccepted": false,
+        "schemaErrorMentionsLabel": true,
+        "schemaErrorMentionsToken": true,
+        "runtimeAccepted": false,
+        "runtimeErrorName": "TypeError",
+        "runtimeErrorMessageIncludesSlot": true,
+        "runtimeName": null,
+        "runtimeColorCount": 0
+      },
+      "normalizations": []
+    },
+    {
+      "name": "theme runtime accepts a missing required token and a slash name that the schema rejects",
+      "inputs": {
+        "missingColor": "text",
+        "slashName": "audit/name",
+        "schema": "validateThemeJson",
+        "runtime": "loadThemeFromPath"
+      },
+      "expected": {
+        "missing": {
+          "label": "audit-missing",
+          "schemaAccepted": false,
+          "schemaErrorMentionsLabel": true,
+          "schemaErrorMentionsToken": true,
+          "runtimeAccepted": true,
+          "runtimeErrorName": null,
+          "runtimeErrorMessageIncludesSlot": false,
+          "runtimeName": "audit-1049-dark",
+          "runtimeColorCount": 55
+        },
+        "slashName": {
+          "label": "audit/name",
+          "schemaAccepted": false,
+          "schemaErrorMentionsLabel": true,
+          "schemaErrorMentionsToken": false,
+          "runtimeAccepted": true,
+          "runtimeErrorName": null,
+          "runtimeErrorMessageIncludesSlot": false,
+          "runtimeName": "audit/name",
+          "runtimeColorCount": 56
+        }
+      },
+      "normalizations": []
+    }
+  ]
+}

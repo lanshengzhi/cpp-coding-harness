@@ -1,0 +1,113 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T16:39:27.925Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/core/prompt-templates.ts:parseCommandArgs,substituteArgs,expandPromptTemplate",
+    "packages/coding-agent/src/core/agent-session.ts:prompt",
+    "packages/coding-agent/test/prompt-templates.test.ts:expandPromptTemplate"
+  ],
+  "scenarios": [
+    {
+      "name": "quoted-empty arguments are retained by the prompt argument parser",
+      "inputs": {
+        "arguments": [
+          "\"\"",
+          "''",
+          "alpha \"beta gamma\" \"\" 'delta epsilon'"
+        ],
+        "quotedTemplateCommand": "/review \"\" src/index.ts"
+      },
+      "expected": {
+        "doubleQuoted": [
+          ""
+        ],
+        "singleQuoted": [
+          ""
+        ],
+        "mixed": [
+          "alpha",
+          "beta gamma",
+          "",
+          "delta epsilon"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/prompt-templates.test.ts",
+        "case": "should use positional default for empty quoted argument without shifting later args"
+      }
+    },
+    {
+      "name": "quoted-empty argument does not shift positional defaults in template expansion",
+      "inputs": {
+        "template": "Review $2. Focus: ${1:-correctness}.",
+        "commands": [
+          "/review \"\" src/index.ts",
+          "/review '' src/index.ts"
+        ]
+      },
+      "expected": {
+        "doubleQuoted": "Review src/index.ts. Focus: correctness.",
+        "singleQuoted": "Review src/index.ts. Focus: correctness.",
+        "templateFound": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/prompt-templates.test.ts",
+        "case": "should use positional default for empty quoted argument without shifting later args"
+      }
+    },
+    {
+      "name": "positional, collection and default substitution forms",
+      "inputs": {
+        "arguments": [
+          "",
+          "src/index.ts"
+        ],
+        "template": "$1|$2|$@|$ARGUMENTS|${1:-x}|${2:-y}|${@:2}|${@:2:1}|${@:-z}|${ARGUMENTS:-z}"
+      },
+      "expected": {
+        "substituted": "|src/index.ts| src/index.ts| src/index.ts|x|src/index.ts|src/index.ts|src/index.ts| src/index.ts| src/index.ts"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/prompt-templates.test.ts",
+        "case": "parseCommandArgs + substituteArgs integration"
+      }
+    },
+    {
+      "name": "session prompt expands the quoted-empty template before the model call",
+      "inputs": {
+        "command": "/review \"\" src/index.ts",
+        "template": "Review $2. Focus: ${1:-correctness}.",
+        "workspace": "controlled temporary workspace"
+      },
+      "expected": {
+        "promptNames": [
+          "review"
+        ],
+        "promptDiagnostics": [],
+        "userText": "Review src/index.ts. Focus: correctness.",
+        "requestUserText": "Review src/index.ts. Focus: correctness.",
+        "requestSystemContainsTemplateCommand": false,
+        "assistantText": "prompt scenario response",
+        "isIdleAfter": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/suite/agent-session-prompt.test.ts",
+        "case": "expands prompt templates before sending the prompt"
+      }
+    }
+  ]
+}

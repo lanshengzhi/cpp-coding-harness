@@ -1,0 +1,937 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1049",
+  "family": "audit-1049",
+  "capturedAt": "2026-10-19T16:39:27.925Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1049/capture-1049.mts",
+    "sha256": "9adaedbb868c8129bdb330f9a6e6e3178be2ee2d49f523ea8340f9b12fd1a813",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1049/capture-1049.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1049/capture-1049.mts",
+        "sha256": "9adaedbb868c8129bdb330f9a6e6e3178be2ee2d49f523ea8340f9b12fd1a813"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1049/capture-helpers.mts",
+        "sha256": "e40558a844652aee3eb32588f172ab3f8fd9a03378fa083c0efab414acc20052"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1049/print-mode-child.mts",
+        "sha256": "aa5f4bfa9d1fac780f8f563467bad594fb1c010f80c2089c7c7d607e0b70d1bb"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "prompt-expansion.json",
+      "family": "audit-1049",
+      "bytes": 3682,
+      "sha256": "d2fa573a4085fa34992b0d5c78b819e3e44c02b10999fbb638b45f4872473038",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/prompt-templates.ts:parseCommandArgs,substituteArgs,expandPromptTemplate",
+        "packages/coding-agent/src/core/agent-session.ts:prompt",
+        "packages/coding-agent/test/prompt-templates.test.ts:expandPromptTemplate"
+      ],
+      "scenarios": [
+        {
+          "name": "quoted-empty arguments are retained by the prompt argument parser",
+          "inputs": {
+            "arguments": [
+              "\"\"",
+              "''",
+              "alpha \"beta gamma\" \"\" 'delta epsilon'"
+            ],
+            "quotedTemplateCommand": "/review \"\" src/index.ts"
+          },
+          "expected": {
+            "doubleQuoted": [
+              ""
+            ],
+            "singleQuoted": [
+              ""
+            ],
+            "mixed": [
+              "alpha",
+              "beta gamma",
+              "",
+              "delta epsilon"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/prompt-templates.test.ts",
+            "case": "should use positional default for empty quoted argument without shifting later args"
+          }
+        },
+        {
+          "name": "quoted-empty argument does not shift positional defaults in template expansion",
+          "inputs": {
+            "template": "Review $2. Focus: ${1:-correctness}.",
+            "commands": [
+              "/review \"\" src/index.ts",
+              "/review '' src/index.ts"
+            ]
+          },
+          "expected": {
+            "doubleQuoted": "Review src/index.ts. Focus: correctness.",
+            "singleQuoted": "Review src/index.ts. Focus: correctness.",
+            "templateFound": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/prompt-templates.test.ts",
+            "case": "should use positional default for empty quoted argument without shifting later args"
+          }
+        },
+        {
+          "name": "positional, collection and default substitution forms",
+          "inputs": {
+            "arguments": [
+              "",
+              "src/index.ts"
+            ],
+            "template": "$1|$2|$@|$ARGUMENTS|${1:-x}|${2:-y}|${@:2}|${@:2:1}|${@:-z}|${ARGUMENTS:-z}"
+          },
+          "expected": {
+            "substituted": "|src/index.ts| src/index.ts| src/index.ts|x|src/index.ts|src/index.ts|src/index.ts| src/index.ts| src/index.ts"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/prompt-templates.test.ts",
+            "case": "parseCommandArgs + substituteArgs integration"
+          }
+        },
+        {
+          "name": "session prompt expands the quoted-empty template before the model call",
+          "inputs": {
+            "command": "/review \"\" src/index.ts",
+            "template": "Review $2. Focus: ${1:-correctness}.",
+            "workspace": "controlled temporary workspace"
+          },
+          "expected": {
+            "promptNames": [
+              "review"
+            ],
+            "promptDiagnostics": [],
+            "userText": "Review src/index.ts. Focus: correctness.",
+            "requestUserText": "Review src/index.ts. Focus: correctness.",
+            "requestSystemContainsTemplateCommand": false,
+            "assistantText": "prompt scenario response",
+            "isIdleAfter": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/suite/agent-session-prompt.test.ts",
+            "case": "expands prompt templates before sending the prompt"
+          }
+        }
+      ]
+    },
+    {
+      "path": "resource-selection.json",
+      "family": "audit-1049",
+      "bytes": 5712,
+      "sha256": "75da96144f6eae5d88ef23261835e5869d8082fa955dd42a72ff02e7fca9d1ab",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/resource-loader.ts:loadProjectContextFiles,DefaultResourceLoader",
+        "packages/coding-agent/src/utils/paths.ts:resolvePath,isLocalPath",
+        "packages/coding-agent/src/main.ts:resolveCliPaths"
+      ],
+      "scenarios": [
+        {
+          "name": "AGENTS.override.md wins over AGENTS.md and ancestor context is root-to-leaf",
+          "inputs": {
+            "precedenceFiles": [
+              "AGENTS.override.md",
+              "AGENTS.md",
+              "CLAUDE.md"
+            ],
+            "nestedFiles": [
+              "tree/AGENTS.md",
+              "tree/nested/AGENTS.md"
+            ],
+            "workspace": "controlled temporary workspace"
+          },
+          "expected": {
+            "precedence": {
+              "paths": [
+                "<workspace>/precedence/AGENTS.override.md"
+              ],
+              "contents": [
+                "override marker\n"
+              ]
+            },
+            "ancestors": {
+              "paths": [
+                "<workspace>/tree/AGENTS.md",
+                "<workspace>/tree/nested/AGENTS.md"
+              ],
+              "contents": [
+                "root marker\n",
+                "nested marker\n"
+              ]
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/resource-loader.test.ts",
+            "case": "should prefer AGENTS.override.md within each directory while preserving ancestor layering"
+          }
+        },
+        {
+          "name": "nested linked worktree shadows the main repo context file",
+          "inputs": {
+            "repository": "worktree/main",
+            "linkedWorktree": "worktree/main/nested",
+            "files": [
+              "worktree/main/AGENTS.md",
+              "worktree/main/nested/AGENTS.md"
+            ],
+            "workspace": "controlled temporary workspace"
+          },
+          "expected": {
+            "paths": [
+              "<workspace>/worktree/main/nested/AGENTS.md"
+            ],
+            "contents": [
+              "nested worktree marker\n"
+            ],
+            "mainContextFileExists": true,
+            "mainContextLoadedSeparately": false
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/resource-loader.test.ts",
+            "case": "should skip the main repo's duplicate when the worktree root has its own context"
+          }
+        },
+        {
+          "name": "worktree context file symlink is loaded once and not duplicated from the main repo",
+          "inputs": {
+            "repository": "worktree/main",
+            "linkedWorktree": "worktree/main/linked",
+            "symlinkTarget": "../AGENTS.md",
+            "workspace": "controlled temporary workspace"
+          },
+          "expected": {
+            "paths": [
+              "<workspace>/worktree/main/linked/AGENTS.md"
+            ],
+            "contents": [
+              "main marker\n"
+            ],
+            "mainContextLoadedSeparately": false
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/resource-loader.test.ts",
+            "case": "should load the worktree's context once when it symlinks to the main repo's file"
+          }
+        },
+        {
+          "name": "local path modifiers expand tilde and strip a leading @",
+          "inputs": {
+            "cwd": "controlled temporary workspace",
+            "home": "controlled temporary home",
+            "input": "~/templates",
+            "variants": [
+              "expandTilde:false",
+              "trim",
+              "normalizeUnicodeSpaces",
+              "default @",
+              "stripAtPrefix",
+              "file: URL"
+            ]
+          },
+          "expected": {
+            "tilde": "<home>/templates",
+            "tildeDisabled": "<workspace>/~/templates",
+            "relative": "<workspace>/templates",
+            "trimmed": "<temp-root>/templates",
+            "unicodeTrimmed": "<workspace>/templates",
+            "atDefault": "<workspace>/@templates",
+            "atPrefixed": "<workspace>/templates",
+            "fileUrl": "<workspace>/home/templates",
+            "isLocal": {
+              "git": false,
+              "npm": false,
+              "fileUrl": true
+            },
+            "packageSources": {
+              "git": {
+                "isLocal": false,
+                "resolved": null
+              },
+              "npm": {
+                "isLocal": false,
+                "resolved": null
+              }
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "package source prefixes bypass local path resolution",
+          "inputs": {
+            "values": [
+              "git:github.com/example/repo",
+              "npm:@scope/pkg"
+            ],
+            "localPathPolicy": "isLocalPath"
+          },
+          "expected": {
+            "git": {
+              "isLocal": false,
+              "resolved": null
+            },
+            "npm": {
+              "isLocal": false,
+              "resolved": null
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "explicit resource paths load prompts, skills and themes",
+          "inputs": {
+            "promptPath": "resources/prompts",
+            "skillPath": "resources/skills",
+            "themePath": "resources/themes",
+            "discoveryFlags": [
+              "noSkills",
+              "noPromptTemplates",
+              "noThemes",
+              "noExtensions"
+            ]
+          },
+          "expected": {
+            "prompts": [
+              "review"
+            ],
+            "promptDiagnostics": 0,
+            "skills": [
+              "audit-skill"
+            ],
+            "skillDiagnostics": 0,
+            "themes": [
+              "audit-1049-dark"
+            ],
+            "themeDiagnostics": 0
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "extension-run.json",
+      "family": "audit-1049",
+      "bytes": 5753,
+      "sha256": "4c7b9e527f354178555c9a030c0b75972e4491b7f92998cf13e0ddb05c137b62",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/extensions/loader.ts:loadExtensionFromFactory",
+        "packages/coding-agent/src/core/extensions/runner.ts:emitBeforeAgentStart",
+        "packages/coding-agent/src/core/agent-session.ts:_prepareRun",
+        "packages/coding-agent/src/core/extensions/types.ts:BeforeAgentStartEvent"
+      ],
+      "scenarios": [
+        {
+          "name": "before_agent_start observes busy state and contributes prompt plus custom message",
+          "inputs": {
+            "extension": "inline before_agent_start handler",
+            "firstPrompt": "start",
+            "handlerReturn": [
+              "systemPrompt replacement",
+              "custom message"
+            ],
+            "workspace": "controlled temporary workspace"
+          },
+          "expected": {
+            "invocations": [
+              {
+                "phase": "user-prompt",
+                "isIdle": false,
+                "messageType": "user",
+                "prompt": "start",
+                "customText": null
+              },
+              {
+                "phase": "extension-triggered",
+                "isIdle": false,
+                "messageType": "custom",
+                "prompt": null,
+                "customText": "extension-triggered"
+              }
+            ],
+            "firstRunRequest": {
+              "roles": [
+                "system",
+                "user",
+                "user"
+              ],
+              "hasSystemContribution": true,
+              "contributionCount": 1,
+              "hasToolResult": false,
+              "toolResultText": null
+            },
+            "idleAfterFirstRun": true,
+            "firstRunMessages": [
+              {
+                "role": "system",
+                "customType": null,
+                "text": ""
+              },
+              {
+                "role": "user",
+                "customType": null,
+                "text": "start"
+              },
+              {
+                "role": "custom",
+                "customType": "audit-1049-contribution",
+                "text": "audit-1049 custom contribution"
+              },
+              {
+                "role": "assistant",
+                "customType": null,
+                "text": ""
+              },
+              {
+                "role": "toolResult",
+                "customType": null,
+                "text": "tool content\n"
+              },
+              {
+                "role": "assistant",
+                "customType": null,
+                "text": "first run complete"
+              }
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/suite/agent-session-model-extension.test.ts",
+            "case": "allows before_agent_start handlers to inject custom messages and modify the system prompt"
+          }
+        },
+        {
+          "name": "extension-triggered run starts from an idle session and retains contributions across a tool turn",
+          "inputs": {
+            "trigger": "pi.sendMessage({ triggerTurn: true })",
+            "triggerCustomType": "audit-1049-trigger",
+            "priorToolTurn": "read note.txt",
+            "workspace": "controlled temporary workspace"
+          },
+          "expected": {
+            "triggerInvocation": {
+              "phase": "extension-triggered",
+              "isIdle": false,
+              "messageType": "custom",
+              "prompt": null,
+              "customText": "extension-triggered"
+            },
+            "priorRunRequest": {
+              "roles": [
+                "system",
+                "user",
+                "user",
+                "assistant",
+                "toolResult"
+              ],
+              "hasSystemContribution": true,
+              "contributionCount": 1,
+              "hasToolResult": true,
+              "toolResultText": "tool content\n"
+            },
+            "triggeredRunRequest": {
+              "roles": [
+                "system",
+                "user",
+                "user",
+                "assistant",
+                "toolResult",
+                "assistant",
+                "user",
+                "user"
+              ],
+              "hasSystemContribution": true,
+              "contributionCount": 2,
+              "hasToolResult": true,
+              "toolResultText": "tool content\n"
+            },
+            "finalMessages": [
+              {
+                "role": "system",
+                "customType": null,
+                "text": ""
+              },
+              {
+                "role": "user",
+                "customType": null,
+                "text": "start"
+              },
+              {
+                "role": "custom",
+                "customType": "audit-1049-contribution",
+                "text": "audit-1049 custom contribution"
+              },
+              {
+                "role": "assistant",
+                "customType": null,
+                "text": ""
+              },
+              {
+                "role": "toolResult",
+                "customType": null,
+                "text": "tool content\n"
+              },
+              {
+                "role": "assistant",
+                "customType": null,
+                "text": "first run complete"
+              },
+              {
+                "role": "custom",
+                "customType": "audit-1049-trigger",
+                "text": "extension-triggered"
+              },
+              {
+                "role": "custom",
+                "customType": "audit-1049-contribution",
+                "text": "audit-1049 custom contribution"
+              },
+              {
+                "role": "assistant",
+                "customType": null,
+                "text": "extension-triggered run complete"
+              }
+            ],
+            "isIdleAfterTriggeredRun": true
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/suite/agent-session-prompt.test.ts",
+            "case": "sendUserMessage while idle triggers a turn"
+          }
+        }
+      ]
+    },
+    {
+      "path": "configuration-schema.json",
+      "family": "audit-1049",
+      "bytes": 9579,
+      "sha256": "a7191ccc7c8c9f5f45d90a951b6d6c661c3e1531a53d6feed9aa395a987adeb8",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/settings-schema.ts:SettingsSchema",
+        "packages/coding-agent/src/core/settings-manager.ts:SettingsManager",
+        "packages/coding-agent/src/core/keybindings.ts:KeybindingsManager",
+        "packages/coding-agent/src/core/keybindings-schema.ts:KeybindingsSchema",
+        "packages/coding-agent/src/modes/interactive/theme/theme-schema.ts:validateThemeJson",
+        "packages/coding-agent/src/modes/interactive/theme/theme.ts:loadThemeFromPath",
+        "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts:THEME_TOKENS"
+      ],
+      "scenarios": [
+        {
+          "name": "settings schema accepts the supported shape and unknown top-level keys",
+          "inputs": {
+            "supportedKeys": [
+              "defaultProvider",
+              "defaultModel",
+              "defaultThinkingLevel",
+              "enabledModels",
+              "packages",
+              "extensions",
+              "skills",
+              "prompts",
+              "themes",
+              "compaction",
+              "retry"
+            ],
+            "unknownTopLevel": true
+          },
+          "expected": {
+            "supportedCheck": true,
+            "unknownTopLevelCheck": true
+          },
+          "normalizations": []
+        },
+        {
+          "name": "settings schema rejects invalid thinking level and negative compaction reserve",
+          "inputs": {
+            "invalidThinking": {
+              "defaultThinkingLevel": "bogus"
+            },
+            "negativeReserve": {
+              "compaction": {
+                "reserveTokens": -1
+              }
+            }
+          },
+          "expected": {
+            "invalidThinkingCheck": false,
+            "negativeReserveCheck": false
+          },
+          "normalizations": []
+        },
+        {
+          "name": "settings manager reads package and local resource paths and reloads changed values",
+          "inputs": {
+            "initialSettings": {
+              "defaultProvider": "magpie",
+              "defaultModel": "group/model",
+              "defaultThinkingLevel": "high",
+              "enabledModels": [
+                "group/a",
+                "group/b"
+              ],
+              "packages": [
+                "npm:@scope/a",
+                "git:github.com/example/repo"
+              ],
+              "extensions": [
+                "./ext"
+              ],
+              "skills": [
+                "./skills"
+              ],
+              "prompts": [
+                "./prompts"
+              ],
+              "themes": [
+                "./themes"
+              ],
+              "compaction": {
+                "enabled": true,
+                "reserveTokens": 1234
+              },
+              "retry": {
+                "enabled": false,
+                "maxRetries": 0
+              }
+            },
+            "updatedSettings": {
+              "defaultProvider": "magpie",
+              "defaultModel": "group/model2",
+              "defaultThinkingLevel": "high",
+              "enabledModels": [
+                "group/a",
+                "group/b"
+              ],
+              "packages": [
+                "npm:@scope/b"
+              ],
+              "extensions": [
+                "./ext"
+              ],
+              "skills": [
+                "./skills"
+              ],
+              "prompts": [
+                "./prompts"
+              ],
+              "themes": [
+                "./themes"
+              ],
+              "compaction": {
+                "enabled": true,
+                "reserveTokens": 1234
+              },
+              "retry": {
+                "enabled": false,
+                "maxRetries": 0
+              }
+            },
+            "settingsPath": "controlled temporary agent settings.json"
+          },
+          "expected": {
+            "initial": {
+              "defaultProvider": "magpie",
+              "defaultModel": "group/model",
+              "defaultThinkingLevel": "high",
+              "enabledModels": [
+                "group/a",
+                "group/b"
+              ],
+              "packages": [
+                "npm:@scope/a",
+                "git:github.com/example/repo"
+              ],
+              "extensionPaths": [
+                "./ext"
+              ],
+              "skillPaths": [
+                "./skills"
+              ],
+              "promptPaths": [
+                "./prompts"
+              ],
+              "themePaths": [
+                "./themes"
+              ],
+              "compactionReserveTokens": 1234,
+              "retryMaxRetries": 0
+            },
+            "afterReload": {
+              "defaultModel": "group/model2",
+              "packages": [
+                "npm:@scope/b"
+              ]
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "settings manager consumes values the published schema rejects",
+          "inputs": {
+            "storedSettings": {
+              "defaultThinkingLevel": "bogus",
+              "packages": "not-array"
+            },
+            "schema": "SettingsSchema"
+          },
+          "expected": {
+            "defaultThinkingLevel": "bogus",
+            "packages": [
+              "n",
+              "o",
+              "t",
+              "-",
+              "a",
+              "r",
+              "r",
+              "a",
+              "y"
+            ],
+            "schemaCheck": false
+          },
+          "normalizations": []
+        },
+        {
+          "name": "keybindings manager migrates legacy names, keeps unknown actions, drops invalid values and reloads",
+          "inputs": {
+            "initialConfig": {
+              "app.interrupt": "ctrl+q",
+              "app.clear": "ctrl+q",
+              "app.unknown": "ctrl+u",
+              "cursorUp": "ctrl+u",
+              "app.model.select": "not-a-key"
+            },
+            "bom": true,
+            "reloadConfig": {
+              "app.interrupt": "escape"
+            }
+          },
+          "expected": {
+            "initial": {
+              "catalogSize": 90,
+              "appInterrupt": "ctrl+q",
+              "appClear": "ctrl+q",
+              "cursorUp": "ctrl+u",
+              "appUnknownPresent": false,
+              "userBindings": {
+                "tui.editor.cursorUp": "ctrl+u",
+                "app.interrupt": "ctrl+q",
+                "app.clear": "ctrl+q",
+                "app.unknown": "ctrl+u"
+              },
+              "conflicts": [
+                {
+                  "key": "ctrl+q",
+                  "keybindings": [
+                    "app.interrupt",
+                    "app.clear"
+                  ]
+                }
+              ]
+            },
+            "afterReload": {
+              "catalogSize": 90,
+              "appInterrupt": "escape",
+              "appClear": "ctrl+c",
+              "cursorUp": "up",
+              "appUnknownPresent": false,
+              "userBindings": {
+                "app.interrupt": "escape"
+              },
+              "conflicts": []
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "keybindings schema accepts unknown action ids with valid keys and rejects malformed values",
+          "inputs": {
+            "validKnownAction": {
+              "app.interrupt": "ctrl+q"
+            },
+            "unknownAction": {
+              "future.action": "ctrl+u"
+            },
+            "malformedValue": {
+              "app.model.select": "not-a-key"
+            }
+          },
+          "expected": {
+            "validKnownActionCheck": true,
+            "unknownActionCheck": true,
+            "malformedValueCheck": false
+          },
+          "normalizations": []
+        },
+        {
+          "name": "theme schema accepts the 56-token built-in shape",
+          "inputs": {
+            "theme": "dark.json with audit name",
+            "tokenSource": "packages/coding-agent/src/modes/interactive/theme/theme-tokens.ts"
+          },
+          "expected": {
+            "schemaAccepted": true,
+            "tokenCount": 56,
+            "requiredTokenCount": 51,
+            "optionalTokens": [
+              "scrollbarTrack",
+              "scrollbarThumb",
+              "searchMatchBg",
+              "searchMatchText",
+              "thinkingMax"
+            ],
+            "runtimeAccepted": true,
+            "runtimeName": "audit-1049-dark",
+            "runtimeColorCount": 56
+          },
+          "normalizations": []
+        },
+        {
+          "name": "theme schema rejects an unknown color token while runtime loading throws",
+          "inputs": {
+            "colors": "valid dark theme plus bogusToken",
+            "schema": "validateThemeJson",
+            "runtime": "loadThemeFromPath"
+          },
+          "expected": {
+            "label": "audit-unknown",
+            "schemaAccepted": false,
+            "schemaErrorMentionsLabel": true,
+            "schemaErrorMentionsToken": true,
+            "runtimeAccepted": false,
+            "runtimeErrorName": "TypeError",
+            "runtimeErrorMessageIncludesSlot": true,
+            "runtimeName": null,
+            "runtimeColorCount": 0
+          },
+          "normalizations": []
+        },
+        {
+          "name": "theme runtime accepts a missing required token and a slash name that the schema rejects",
+          "inputs": {
+            "missingColor": "text",
+            "slashName": "audit/name",
+            "schema": "validateThemeJson",
+            "runtime": "loadThemeFromPath"
+          },
+          "expected": {
+            "missing": {
+              "label": "audit-missing",
+              "schemaAccepted": false,
+              "schemaErrorMentionsLabel": true,
+              "schemaErrorMentionsToken": true,
+              "runtimeAccepted": true,
+              "runtimeErrorName": null,
+              "runtimeErrorMessageIncludesSlot": false,
+              "runtimeName": "audit-1049-dark",
+              "runtimeColorCount": 55
+            },
+            "slashName": {
+              "label": "audit/name",
+              "schemaAccepted": false,
+              "schemaErrorMentionsLabel": true,
+              "schemaErrorMentionsToken": false,
+              "runtimeAccepted": true,
+              "runtimeErrorName": null,
+              "runtimeErrorMessageIncludesSlot": false,
+              "runtimeName": "audit/name",
+              "runtimeColorCount": 56
+            }
+          },
+          "normalizations": []
+        }
+      ]
+    },
+    {
+      "path": "print-mode.json",
+      "family": "audit-1049",
+      "bytes": 2093,
+      "sha256": "0cc590201da5f12ea8c8d1347bba6221e76694455316759a9b3018dd52e4c043",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/print-mode.ts:runPrintMode",
+        "packages/coding-agent/src/modes/interactive/components/assistant-message.ts:Response was truncated"
+      ],
+      "scenarios": [
+        {
+          "name": "length-truncated text response prints partial stdout, warning stderr and exits 1",
+          "inputs": {
+            "mode": "text",
+            "scriptedResponse": "partial answer",
+            "scriptedStopReason": "length",
+            "modelMaxTokens": 4
+          },
+          "expected": {
+            "processExitCode": 1,
+            "stdout": "partial answer\n",
+            "stderr": "Response was truncated: the model reached its output token limit.\n",
+            "finalAssistant": {
+              "stopReason": "length",
+              "text": "partial answer",
+              "outputTokens": 4
+            },
+            "sessionRoles": [
+              "system",
+              "user",
+              "assistant"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/print-mode.test.ts",
+            "case": "warns on stderr and returns non-zero when the response was truncated"
+          }
+        },
+        {
+          "name": "complete text response prints final text and exits 0",
+          "inputs": {
+            "mode": "text",
+            "scriptedResponse": "complete answer",
+            "scriptedStopReason": "stop",
+            "modelMaxTokens": 4
+          },
+          "expected": {
+            "processExitCode": 0,
+            "stdout": "complete answer\n",
+            "stderr": "",
+            "finalAssistant": {
+              "stopReason": "stop",
+              "text": "complete answer",
+              "outputTokens": 4
+            },
+            "sessionRoles": [
+              "system",
+              "user",
+              "assistant"
+            ]
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}
