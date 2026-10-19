@@ -918,8 +918,8 @@
         ],
         "scenarios": []
       },
-      "cppSeam": "`CodemodeSandbox::create` parses/validates the module and returns `Expected`; `GuestHolder::ensure` loads on first execute. `CodemodeSandboxTest.cpp:257` covers a missing module; `CodemodeParityTest.cpp` covers lazy load.",
-      "cppEvidence": "Implemented and tested at the seam. The Application still creates a fresh sandbox per tool call (`executeCodemode`) rather than reusing the source holder, so the captured source-level lazy reuse is not the same object lifetime.",
+      "cppSeam": "`CodemodeSandbox::create` parses/validates the module and returns `Expected`; `GuestHolder::ensure` loads on first execute. `CodemodeSandboxTest.cpp:257` covers a missing module. `CodemodeParityTest.cpp:153` checks the source tool table but does not cover lazy loading.",
+      "cppEvidence": "Implemented and tested at the seam. The Application still creates a fresh sandbox per tool call (`executeCodemode`) rather than reusing the source holder, so the captured source-level lazy reuse is not the same object lifetime. There is no direct test that `load_tools()` avoids opening the guest.",
       "status": {
         "membership": "supported",
         "implementation": "implemented",
