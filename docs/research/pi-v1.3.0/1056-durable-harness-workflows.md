@@ -184,6 +184,10 @@ Target mapping and edge rules:
 6. New durable JSONL/SQLite must be the pi-durable main/sidecar/document/task format. The current
    `JsonlSessionStore` is the coding-agent transcript format and the current `SqliteSessionStore` is
    the application session/task schema; neither is bidirectional durable-format evidence.
+7. No independent durable example exists in the current tree; there is no `cch_durable` target and
+   the repository's executable tests/examples are application Agent/Session seams. The first durable
+   slice needs a public example that opens a Harness and runs a submission, not another application
+   Session test.
 
 ## Unverified selected capabilities (honest gaps)
 
