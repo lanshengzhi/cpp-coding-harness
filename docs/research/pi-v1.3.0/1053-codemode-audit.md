@@ -10,7 +10,7 @@ close any capability gap.
 - **Capture host:** Linux x86-64, glibc 2.44, Node v26.12.0, tsx 4.22.1
 - **Private frozen checkout:** `/tmp/cch-1053-pi-frozen`; tracked tree clean and `HEAD` verified as
   the full baseline SHA before the capture wrote anything
-- **Integration base:** `978b52c4e` (`integration/1044-pi-v1.3.0`, including the landed
+- **Integration base:** `e4ff4763a` (`integration/1044-pi-v1.3.0`, including the landed
   #1045–#1055 audit bundles; the ticket work was originally cut from `e8cf93dd1`)
 - **Ticket branch:** `ticket/1053-audit`
 - **Machine ledger:** [1053-codemode-audit-ledger.json](1053-codemode-audit-ledger.json) — 68
