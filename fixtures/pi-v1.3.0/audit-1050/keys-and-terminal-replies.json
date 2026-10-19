@@ -1,0 +1,168 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T17:21:56.094Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1",
+    "TERM": "xterm-256color",
+    "pinnedVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "COLORTERM",
+      "KITTY_WINDOW_ID",
+      "GHOSTTY_RESOURCES_DIR",
+      "WEZTERM_PANE",
+      "ITERM_SESSION_ID",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_HYPERLINKS",
+      "PI_IMAGE_PROTOCOL",
+      "PI_TRUE_COLOR",
+      "PI_PROGRAM_STATUS",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR"
+    ]
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/keys.ts:parseKey,matchesKey,parseKeyId,matchesKittySequence,matchesPrintableModifyOtherKeys",
+    "packages/tui/src/stdin-buffer.ts:StdinBuffer.process,flush,extractCompleteSequences",
+    "packages/tui/src/tui.ts:TUI.queryTerminalColors",
+    "packages/tui/test/keys.test.ts:shifted symbols",
+    "packages/tui/test/stdin-buffer.test.ts:Terminal Reply Strings",
+    "packages/tui/test/terminal-colors.test.ts:delayed Ghostty color fragments"
+  ],
+  "scenarios": [
+    {
+      "name": "shifted-symbol-keys-match-produced-character",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "sequences": {
+          "kitty_shift_plus": "\u001b[61:43;2u",
+          "kitty_ctrl_shift_plus": "\u001b[61:43;6u",
+          "modify_other_keys_ctrl_plus": "\u001b[27;6;43~",
+          "legacy_ctrl_slash": "\u001b[27;5;47~"
+        },
+        "plainPlus": "+"
+      },
+      "expected": {
+        "observations": {
+          "kitty_shift_plus": {
+            "parseKey": "+",
+            "matchesPlus": true,
+            "matchesShiftEquals": true,
+            "matchesCtrlPlus": false,
+            "matchesCtrlSlash": false
+          },
+          "kitty_ctrl_shift_plus": {
+            "parseKey": "ctrl++",
+            "matchesPlus": false,
+            "matchesShiftEquals": false,
+            "matchesCtrlPlus": true,
+            "matchesCtrlSlash": false
+          },
+          "modify_other_keys_ctrl_plus": {
+            "parseKey": "ctrl++",
+            "matchesPlus": false,
+            "matchesShiftEquals": false,
+            "matchesCtrlPlus": true,
+            "matchesCtrlSlash": false
+          },
+          "legacy_ctrl_slash": {
+            "parseKey": "ctrl+/",
+            "matchesPlus": false,
+            "matchesShiftEquals": false,
+            "matchesCtrlPlus": false,
+            "matchesCtrlSlash": true
+          }
+        },
+        "plainPlus": "+",
+        "plainPlusMatches": true
+      }
+    },
+    {
+      "name": "fragmented-color-reply-never-leaks-or-opens-editor",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "reply": "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007",
+        "split": [
+          15,
+          22
+        ],
+        "timeoutMs": 20,
+        "tailWaitMs": 80
+      },
+      "expected": {
+        "afterHeaderTimeout": [],
+        "bufferedAfterHeaderTimeout": "\u001b]4;1;rgb:eaea/6c",
+        "afterTail": [
+          "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007"
+        ],
+        "afterTailCtlGMatch": false,
+        "afterRealCtrlG": [
+          "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007",
+          "\u0007"
+        ],
+        "realCtrlGDelivered": true
+      }
+    },
+    {
+      "name": "ambiguous-alt-bracket-input-recovers-within-sequence-timeout",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "prefix": "\u001b]",
+        "batchedTail": "x\r",
+        "timeoutMs": 20
+      },
+      "expected": {
+        "recovered": [
+          "\u001b]",
+          "a",
+          "x",
+          "\r"
+        ]
+      }
+    },
+    {
+      "name": "fragmented-color-query-keeps-prompt-clean",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "query": "queryTerminalColors({timeoutMs:1000})",
+        "fragments": [
+          "\u001b]4;1;rgb:eaea/6c",
+          "6c/6d6d\u0007",
+          "\u001b[?62;4;52c"
+        ],
+        "fragmentDelayMs": 100
+      },
+      "expected": {
+        "colors": {
+          "foreground": null,
+          "background": null,
+          "palette": null
+        },
+        "inputsAfterQuery": [],
+        "inputsAfterRealCtrlG": [
+          "\u0007"
+        ]
+      }
+    }
+  ]
+}

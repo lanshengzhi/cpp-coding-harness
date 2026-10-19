@@ -1,0 +1,3564 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1050",
+  "family": "audit-1050",
+  "capturedAt": "2026-10-19T17:21:56.094Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1",
+    "TERM": "xterm-256color",
+    "pinnedVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "COLORTERM",
+      "KITTY_WINDOW_ID",
+      "GHOSTTY_RESOURCES_DIR",
+      "WEZTERM_PANE",
+      "ITERM_SESSION_ID",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_HYPERLINKS",
+      "PI_IMAGE_PROTOCOL",
+      "PI_TRUE_COLOR",
+      "PI_PROGRAM_STATUS",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR"
+    ]
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1050/capture-1050.mts",
+    "sha256": "668c66b6b3118a1c8c509efdafa0bf5d3492f36072fd5608fb340b2dc9b7cc35",
+    "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1050/capture-1050.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1050/capture-1050.mts",
+        "sha256": "668c66b6b3118a1c8c509efdafa0bf5d3492f36072fd5608fb340b2dc9b7cc35"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1050/scenarios-1050.mts",
+        "sha256": "05643e12ce1d3606bf12dc385867dc5a36dfbb022a4d896f67c81e94a121104a"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1050/program-status-child.mts",
+        "sha256": "296b8a9803f72ac3ab33d56db09b2f674dd6f711a1dde0cd89466ddc722c5a5b"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/hardware-cursor-scenarios.mts",
+        "sha256": "b019bd68653bc0855460d6a6138ee04dad6c2b826bf0850c175d7900fcfd18aa"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/input-scenarios.mts",
+        "sha256": "63a4e0bf0069b590b66dba70790af89cfc1b2de36746e1c5a7cc85496f7c3bcb"
+      },
+      {
+        "path": "fixtures/pi-tui/capture/selection-scenarios.mts",
+        "sha256": "48b3eed9a19bc4a305f21d1f8d7b77874a834fe8870fb9d0d50afd3f69cbcf95"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "hardware-cursor.json",
+      "family": "audit-1050",
+      "bytes": 27527,
+      "sha256": "081e4e8ebd20b5f8665091a6c36a565852dd17076e3506d774c1e044b3508871",
+      "sourceEndpoints": [
+        "packages/tui/src/tui.ts:getShowHardwareCursor,setShowHardwareCursor,extractCursorPosition,hideTerminalCursor",
+        "packages/tui/src/tui-main-screen.ts:positionHardwareCursor,render",
+        "packages/tui/src/tui-alt-screen.ts:constructor,render"
+      ],
+      "scenarios": [
+        {
+          "name": "main-screen-default-hidden",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "default",
+            "cursorCol": 4,
+            "cursorRow": 0
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 4,
+                  "row": 0
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "test text",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+                  },
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[5G"
+                  },
+                  {
+                    "op": "hideCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+                  "\u001b[5G"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "main-screen-enabled-visible",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "enabled",
+            "cursorCol": 4,
+            "cursorRow": 0
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 4,
+                  "row": 0
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "test text",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+                  },
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[5G"
+                  },
+                  {
+                    "op": "showCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+                  "\u001b[5G"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "main-screen-disabled-explicit",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "disabled",
+            "cursorCol": 4,
+            "cursorRow": 0
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 4,
+                  "row": 0
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "test text",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+                  },
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[5G"
+                  },
+                  {
+                    "op": "hideCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+                  "\u001b[5G"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "main-screen-toggle",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "transitions": [
+              "default-false",
+              "toggle-true",
+              "toggle-false"
+            ]
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "default-false",
+                "cursor": {
+                  "col": 4,
+                  "row": 0
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "test text",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+                  },
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[5G"
+                  },
+                  {
+                    "op": "hideCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026htest text\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+                  "\u001b[5G"
+                ]
+              },
+              {
+                "action": "toggle-true",
+                "cursor": {
+                  "col": 4,
+                  "row": 0
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "test text",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[5G"
+                  },
+                  {
+                    "op": "showCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[5G"
+                ]
+              },
+              {
+                "action": "toggle-false",
+                "cursor": {
+                  "col": 4,
+                  "row": 0
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "test text",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "hideCursor"
+                  },
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[5G"
+                  },
+                  {
+                    "op": "hideCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[5G"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "main-screen-invalid-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "enabled",
+            "cursor": null
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 14,
+                  "row": 0
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": true,
+                "screen": [
+                  "no cursor line",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026hno cursor line\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+                  },
+                  {
+                    "op": "hideCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026hno cursor line\u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "main-screen-nested",
+          "dimensions": {
+            "columns": 30,
+            "rows": 10
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "layout": "Container(Text(1 row), Box(padX=2, padY=1, Input(col=3, row=0)))"
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "preference-false",
+                "cursor": {
+                  "col": 5,
+                  "row": 2
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "header line                   ",
+                  "                              ",
+                  "  nested input                ",
+                  "                              ",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026hheader line                   \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\r\n  nested input                \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+                  },
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[1A\u001b[6G"
+                  },
+                  {
+                    "op": "hideCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026hheader line                   \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\r\n  nested input                \u001b[0m\u001b]8;;\u0007\r\n                              \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+                  "\u001b[1A\u001b[6G"
+                ]
+              },
+              {
+                "action": "preference-true",
+                "cursor": {
+                  "col": 5,
+                  "row": 2
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "header line                   ",
+                  "                              ",
+                  "  nested input                ",
+                  "                              ",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[6G"
+                  },
+                  {
+                    "op": "showCursor"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[6G"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-default-hidden",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "preference": "default",
+            "cursorCol": 6,
+            "cursorRow": 1
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 6,
+                  "row": 1
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "line 0",
+                  "line 1",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-enabled-visible",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "preference": "enabled",
+            "cursorCol": 6,
+            "cursorRow": 1
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 6,
+                  "row": 1
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "line 0",
+                  "line 1",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25h\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25h\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-disabled-explicit",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "preference": "disabled",
+            "cursorCol": 6,
+            "cursorRow": 1
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 6,
+                  "row": 1
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "line 0",
+                  "line 1",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-toggle",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "transitions": [
+              "default-false",
+              "toggle-true",
+              "toggle-false"
+            ]
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "default-false",
+                "cursor": {
+                  "col": 6,
+                  "row": 1
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "line 0",
+                  "line 1",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "toggle-true",
+                "cursor": {
+                  "col": 6,
+                  "row": 1
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "line 0",
+                  "line 1",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2;7H\u001b[?25h\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2;7H\u001b[?25h\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "toggle-false",
+                "cursor": {
+                  "col": 6,
+                  "row": 1
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "line 0",
+                  "line 1",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "hideCursor"
+                  },
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2;7H\u001b[?25l\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-invalid-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "preference": "enabled",
+            "cursor": null
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "initial",
+                "cursor": {
+                  "col": 0,
+                  "row": 4
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": true,
+                "screen": [
+                  "no cursor line",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kno cursor line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kno cursor line\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-nested",
+          "dimensions": {
+            "columns": 30,
+            "rows": 10
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "layout": "Container(Text(1 row), Box(padX=3, padY=1, Input(col=4, row=0)))"
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "preference-false",
+                "cursor": {
+                  "col": 7,
+                  "row": 2
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": false,
+                "screen": [
+                  "first row                     ",
+                  "                              ",
+                  "   alt nested                 ",
+                  "                              ",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst row                     \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K   alt nested                 \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;8H\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kfirst row                     \u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2K   alt nested                 \u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2K                              \u001b[0m\u001b]8;;\u0007\u001b[5;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[6;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[7;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[8;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[9;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[10;1H\u001b[2K\u001b[0m\u001b]8;;\u0007\u001b[3;8H\u001b[?25l\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "preference-true",
+                "cursor": {
+                  "col": 7,
+                  "row": 2
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "first row                     ",
+                  "                              ",
+                  "   alt nested                 ",
+                  "                              ",
+                  "",
+                  "",
+                  "",
+                  "",
+                  "",
+                  ""
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[3;8H\u001b[?25h\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[3;8H\u001b[?25h\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "alt-screen-clipped",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "preference": "enabled",
+            "contentRows": 8,
+            "cursorCol": 5,
+            "cursorRow": 2,
+            "transitions": [
+              "following-end",
+              "scroll-to-top",
+              "scroll-by-1",
+              "scroll-to-bottom"
+            ]
+          },
+          "expected": {
+            "steps": [
+              {
+                "action": "following-end",
+                "cursor": {
+                  "col": 6,
+                  "row": 3
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": true,
+                "screen": [
+                  "line 4",
+                  "line 5",
+                  "line 6",
+                  "line 7"
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[2J\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "scroll-to-top",
+                "cursor": {
+                  "col": 5,
+                  "row": 2
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "line 0",
+                  "line 1",
+                  "line 2",
+                  "line 3"
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[3;6H\u001b[?25h\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[1;1H\u001b[2Kline 0\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[3;6H\u001b[?25h\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "scroll-by-1",
+                "cursor": {
+                  "col": 5,
+                  "row": 1
+                },
+                "cursorVisible": true,
+                "showHardwareCursor": true,
+                "screen": [
+                  "line 1",
+                  "line 2",
+                  "line 3",
+                  "line 4"
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[1;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25h\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[1;1H\u001b[2Kline 1\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 2\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 3\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;6H\u001b[?25h\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "scroll-to-bottom",
+                "cursor": {
+                  "col": 6,
+                  "row": 3
+                },
+                "cursorVisible": false,
+                "showHardwareCursor": true,
+                "screen": [
+                  "line 4",
+                  "line 5",
+                  "line 6",
+                  "line 7"
+                ],
+                "terminalEvents": [
+                  {
+                    "op": "write",
+                    "bytes": "\u001b[?2026h\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+                  }
+                ],
+                "rawWrites": [
+                  "\u001b[?2026h\u001b[1;1H\u001b[2Kline 4\u001b[0m\u001b]8;;\u0007\u001b[2;1H\u001b[2Kline 5\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[2Kline 6\u001b[0m\u001b]8;;\u0007\u001b[4;1H\u001b[2Kline 7\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "input-standalone.json",
+      "family": "audit-1050",
+      "bytes": 3164,
+      "sha256": "688cb804e9ab4b8ef406a8a500bc1000bd90fb388e6f264605192d87b6815d78",
+      "sourceEndpoints": [
+        "packages/tui/src/components/input.ts:render,handleInput,handlePaste,getValue,onSubmit",
+        "packages/tui/src/keybindings.ts:KeybindingsManager",
+        "packages/tui/src/keys.ts:setKittyProtocolActive"
+      ],
+      "scenarios": [
+        {
+          "name": "input-placeholder-reversal-and-custom-styling",
+          "dimensions": {
+            "columns": 20,
+            "rows": 3
+          },
+          "inputs": {
+            "defaultPlaceholder": "Search...",
+            "styledPlaceholder": "Filter items",
+            "styledPrompt": "Find: "
+          },
+          "expected": {
+            "defaultEmpty": {
+              "line": "> \u001b_pi:fc\u0007S\u001b_pi:/fc\u0007earch...     ",
+              "visibleWidth": 16,
+              "cursorColumn": 2
+            },
+            "styledEmpty": {
+              "line": "Find: \u001b_pi:fc\u0007\u001b[2mF\u001b[22m\u001b_pi:/fc\u0007\u001b[2milter items\u001b[22m  ",
+              "visibleWidth": 20,
+              "cursorColumn": 6
+            },
+            "populated": {
+              "line": "> abc\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007          ",
+              "visibleWidth": 16,
+              "cursorColumn": 5
+            }
+          }
+        },
+        {
+          "name": "input-raw-lf-submission-and-rebound-submit",
+          "dimensions": {
+            "columns": 20,
+            "rows": 2
+          },
+          "inputs": {
+            "reboundSubmitKey": "ctrl+x",
+            "pastedText": "first\r\nsecond\nthird\tval"
+          },
+          "expected": {
+            "reboundCrSubmitted": [],
+            "reboundLfSubmitted": [
+              "hello"
+            ],
+            "kittyLfSubmitted": [
+              "kitty"
+            ],
+            "pastedValue": "firstsecondthird    val",
+            "pastedSubmitted": []
+          }
+        },
+        {
+          "name": "input-narrow-unicode-scroll-and-cursor",
+          "dimensions": {
+            "columns": 12,
+            "rows": 1
+          },
+          "inputs": {
+            "text": "éclair 世界 foo",
+            "width": 12
+          },
+          "expected": {
+            "stepHome": {
+              "line": "> \u001b_pi:fc\u0007é\u001b_pi:/fc\u0007clair 世 ",
+              "visibleWidth": 12,
+              "cursorColumn": 2
+            },
+            "stepRight6": {
+              "line": "> clair\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007世界",
+              "visibleWidth": 12,
+              "cursorColumn": 7
+            },
+            "stepEnd": {
+              "line": ">  世界 foo\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007",
+              "visibleWidth": 12,
+              "cursorColumn": 11
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "selection-multiclick.json",
+      "family": "audit-1050",
+      "bytes": 36184,
+      "sha256": "ee33e3f9776bdd136099cc54a6636644be17a83720d23db73ddd515aac04a481",
+      "sourceEndpoints": [
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleSelectionMouseEvent,handleRightClickPaste,handleViewportInput",
+        "packages/tui/src/utils.ts:getOsc8LinkAtColumn",
+        "packages/tui/src/components/text.ts:Text.render,setText",
+        "packages/tui/src/components/scroll-view.ts:ScrollView.scrollTo",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal.sendInput,getViewport,waitForRender"
+      ],
+      "scenarios": [
+        {
+          "name": "osc8-click-and-drag-routing",
+          "dimensions": {
+            "columns": 20,
+            "rows": 3
+          },
+          "inputs": {
+            "url": "https://example.com/link",
+            "text": "alpha plain",
+            "click": {
+              "x": 2,
+              "y": 1
+            },
+            "doubleClick": {
+              "x": 2,
+              "y": 1,
+              "advanceMs": 150
+            },
+            "drag": [
+              {
+                "x": 2,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 1
+              }
+            ]
+          },
+          "expected": {
+            "afterClick": [
+              "https://example.com/link"
+            ],
+            "afterWordClick": [
+              "https://example.com/link"
+            ],
+            "afterDrag": [
+              "https://example.com/link"
+            ]
+          }
+        },
+        {
+          "name": "linux-secondary-button-paste",
+          "dimensions": {
+            "columns": 20,
+            "rows": 3
+          },
+          "inputs": {
+            "platform": "linux",
+            "press": {
+              "button": 2,
+              "x": 3,
+              "y": 1
+            },
+            "releaseButton": 2,
+            "motionButton": 34
+          },
+          "expected": {
+            "afterPress": 0,
+            "afterMotion": 0
+          }
+        },
+        {
+          "name": "styled-cjk-wrapped-selection",
+          "dimensions": {
+            "columns": 6,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "\u001b[31mred界abc\u001b[0m",
+            "drag": [
+              {
+                "x": 2,
+                "y": 1
+              },
+              {
+                "x": 2,
+                "y": 2
+              }
+            ],
+            "copyOnSelect": false
+          },
+          "expected": {
+            "before": [
+              "red界",
+              "abc",
+              "",
+              ""
+            ],
+            "hasSelection": true,
+            "highlighted": true,
+            "styledCells": [
+              [
+                {
+                  "text": "r",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": 1
+                },
+                {
+                  "text": "e",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "d",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "界",
+                  "width": 2,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "",
+                  "width": 0,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                }
+              ],
+              [
+                {
+                  "text": "a",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "b",
+                  "width": 1,
+                  "inverse": true,
+                  "foreground": 1
+                },
+                {
+                  "text": "c",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": 1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": -1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": -1
+                },
+                {
+                  "text": " ",
+                  "width": 1,
+                  "inverse": false,
+                  "foreground": -1
+                }
+              ]
+            ],
+            "copyResult": true,
+            "copied": [
+              "ed界\nab"
+            ],
+            "copyOnSelect": false
+          }
+        },
+        {
+          "name": "selection-content-focus-and-clear-lifecycle",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "initialText": "alpha\nbeta\ngamma\ndelta",
+            "drag": [
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 4,
+                "y": 2
+              }
+            ],
+            "updatedText": "omega\nsigma\ngamma\ndelta",
+            "focus": [
+              "out",
+              "in"
+            ],
+            "contentClick": {
+              "x": 1,
+              "y": 3
+            },
+            "copyOnSelect": false
+          },
+          "expected": {
+            "emptyCopyResult": false,
+            "selected": true,
+            "firstCopyResult": true,
+            "afterContentChange": true,
+            "updatedCopyResult": true,
+            "afterFocusChange": true,
+            "afterContentClick": false,
+            "copied": [
+              "alpha\nbeta",
+              "omega\nsigm"
+            ]
+          }
+        },
+        {
+          "name": "selection-copy-specific-failure",
+          "dimensions": {
+            "columns": 80,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "drag": [
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 1
+              }
+            ],
+            "copyOnSelect": false
+          },
+          "expected": {
+            "copyResult": false,
+            "copied": [
+              "alpha"
+            ],
+            "copyError": "Clipboard unavailable: install wl-clipboard",
+            "failureVisible": true
+          }
+        },
+        {
+          "name": "copy-on-select-default-and-empty-range",
+          "dimensions": {
+            "columns": 20,
+            "rows": 2
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "emptyClick": {
+              "x": 1,
+              "y": 1
+            },
+            "drag": [
+              {
+                "x": 1,
+                "y": 1
+              },
+              {
+                "x": 5,
+                "y": 1
+              }
+            ]
+          },
+          "expected": {
+            "defaultCopyOnSelect": true,
+            "afterEmptyClick": [],
+            "copied": [
+              "alpha"
+            ],
+            "hasSelection": true
+          }
+        },
+        {
+          "name": "multiclick-word-line-cycle",
+          "dimensions": {
+            "columns": 30,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta gamma",
+            "steps": [
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 0,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "alpha beta gamma"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta",
+                  "alpha beta gamma"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "alpha beta gamma",
+                  "beta"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-word-joiners-and-classes",
+          "dimensions": {
+            "columns": 44,
+            "rows": 6
+          },
+          "inputs": {
+            "text": "src/main-component util\na.b ee_ff 3.14 カタカナ\n中x foo,bar",
+            "steps": [
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "main (joiners merge left and right)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "main (second)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 20,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "util (plain word)"
+              },
+              {
+                "action": "release",
+                "x": 20,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 20,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "util (second)"
+              },
+              {
+                "action": "release",
+                "x": 20,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "a.b (MidNumLet joins letters)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "a.b (second)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "ee_ff (ExtendNumLet joins letters)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "ee_ff (second)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 11,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "3.14 (MidNumLet joins digits)"
+              },
+              {
+                "action": "release",
+                "x": 11,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 11,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "3.14 (second)"
+              },
+              {
+                "action": "release",
+                "x": 11,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 16,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "カタカナ (Katakana run)"
+              },
+              {
+                "action": "release",
+                "x": 16,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 16,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "カタカナ (second)"
+              },
+              {
+                "action": "release",
+                "x": 16,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 3,
+                "advanceMs": 400,
+                "target": "中 (single dictionary-script character)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 3
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "中 (second)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 3,
+                "advanceMs": 400,
+                "target": "x (letter after a wide character)"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 3
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "x (second)"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 8,
+                "y": 3,
+                "advanceMs": 400,
+                "target": ", (punctuation selects itself)"
+              },
+              {
+                "action": "release",
+                "x": 8,
+                "y": 3
+              },
+              {
+                "action": "press",
+                "x": 8,
+                "y": 3,
+                "advanceMs": 150,
+                "target": ", (second)"
+              },
+              {
+                "action": "release",
+                "x": 8,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ",
+                  "中"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ",
+                  "中",
+                  "x"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "src/main-component",
+                  "util",
+                  "a.b",
+                  "ee_ff",
+                  "3.14",
+                  "カタカナ",
+                  "中",
+                  "x",
+                  ","
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-word-drag-expansion",
+          "dimensions": {
+            "columns": 40,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "one two three four",
+            "steps": [
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "two"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "two (second)"
+              },
+              {
+                "action": "motion",
+                "x": 15,
+                "y": 1,
+                "target": "four"
+              },
+              {
+                "action": "release",
+                "x": 15,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 15,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "four"
+              },
+              {
+                "action": "release",
+                "x": 15,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 15,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "four (second)"
+              },
+              {
+                "action": "motion",
+                "x": 1,
+                "y": 1,
+                "target": "one"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 600,
+                "target": "two"
+              },
+              {
+                "action": "motion",
+                "x": 9,
+                "y": 1,
+                "target": "three"
+              },
+              {
+                "action": "release",
+                "x": 9,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two three four"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two three four",
+                  "one two three four"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two three four",
+                  "one two three four",
+                  "two t"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-line-wrapped-rows",
+          "dimensions": {
+            "columns": 10,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "abcdefghij klmnop",
+            "steps": [
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "first wrapped row"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 150
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 150
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 400,
+                "target": "second wrapped row"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 150
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "row one again"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "row two"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 3,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "row two (second)"
+              },
+              {
+                "action": "release",
+                "x": 3,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": true,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "abcdefghij",
+                  "abcdefghij",
+                  "klmnop",
+                  "klmnop"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-expiry-and-word-identity",
+          "dimensions": {
+            "columns": 30,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "steps": [
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 650,
+                "target": "beta after 650ms"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta again"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "alpha, a different word"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 1,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "alpha (second)"
+              },
+              {
+                "action": "release",
+                "x": 1,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "alpha"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-focus-out-cancels",
+          "dimensions": {
+            "columns": 30,
+            "rows": 4
+          },
+          "inputs": {
+            "text": "alpha beta",
+            "steps": [
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "beta"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "focusOut"
+              },
+              {
+                "action": "focusIn"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta after focus return"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta (second)"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "beta (held)"
+              },
+              {
+                "action": "focusOut"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta after held press"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 7,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "beta (second after held)"
+              },
+              {
+                "action": "release",
+                "x": 7,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "beta"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "beta",
+                  "beta"
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "multiclick-scrollbar-cancels",
+          "dimensions": {
+            "columns": 30,
+            "rows": 3
+          },
+          "inputs": {
+            "layoutText": "one two\nthree four\nfive six\nseven eight\nnine ten\neleven",
+            "layoutScroll": {
+              "follow": "none",
+              "primary": true,
+              "scrollbar": "always",
+              "scrollbarHideDelayMs": 0
+            },
+            "steps": [
+              {
+                "action": "press",
+                "x": 30,
+                "y": 3,
+                "advanceMs": 400,
+                "target": "track bottom"
+              },
+              {
+                "action": "release",
+                "x": 30,
+                "y": 3
+              },
+              {
+                "action": "observeViewport"
+              },
+              {
+                "action": "press",
+                "x": 30,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "track top"
+              },
+              {
+                "action": "release",
+                "x": 30,
+                "y": 1
+              },
+              {
+                "action": "observeViewport"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 400,
+                "target": "two"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 30,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "thumb grab"
+              },
+              {
+                "action": "release",
+                "x": 30,
+                "y": 1
+              },
+              {
+                "action": "observeViewport"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "two after scrollbar"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 5,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "two (second)"
+              },
+              {
+                "action": "release",
+                "x": 5,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "two"
+                ]
+              }
+            ],
+            "viewports": [
+              [
+                "seven eight                  │",
+                "nine ten                     █",
+                "eleven                       █"
+              ],
+              [
+                "one two                      █",
+                "three four                   █",
+                "five six                     │"
+              ],
+              [
+                "one two                      █",
+                "three four                   █",
+                "five six                     │"
+              ]
+            ]
+          }
+        },
+        {
+          "name": "multiclick-dictionary-script-runs",
+          "dimensions": {
+            "columns": 40,
+            "rows": 5
+          },
+          "inputs": {
+            "text": "日本語\nこんにちは\nสวัสดีครับ",
+            "steps": [
+              {
+                "action": "press",
+                "x": 2,
+                "y": 1,
+                "advanceMs": 600,
+                "target": "han run first"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 1,
+                "advanceMs": 150,
+                "target": "han run second"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 1
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 2,
+                "advanceMs": 600,
+                "target": "hiragana run first"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 2,
+                "advanceMs": 150,
+                "target": "hiragana run second"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 2
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 3,
+                "advanceMs": 600,
+                "target": "thai first word first"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 2,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "thai first word second"
+              },
+              {
+                "action": "release",
+                "x": 2,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 6,
+                "y": 3,
+                "advanceMs": 600,
+                "target": "thai second word first"
+              },
+              {
+                "action": "release",
+                "x": 6,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              },
+              {
+                "action": "press",
+                "x": 6,
+                "y": 3,
+                "advanceMs": 150,
+                "target": "thai second word second"
+              },
+              {
+                "action": "release",
+                "x": 6,
+                "y": 3
+              },
+              {
+                "action": "observe"
+              }
+            ]
+          },
+          "expected": {
+            "observations": [
+              {
+                "hasSelection": false,
+                "copied": []
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "日本語"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語",
+                  "こんにちは"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "日本語",
+                  "こんにちは"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語",
+                  "こんにちは",
+                  "สวัสดี"
+                ]
+              },
+              {
+                "hasSelection": false,
+                "copied": [
+                  "日本語",
+                  "こんにちは",
+                  "สวัสดี"
+                ]
+              },
+              {
+                "hasSelection": true,
+                "copied": [
+                  "日本語",
+                  "こんにちは",
+                  "สวัสดี",
+                  "ครับ"
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "cursor-composition.json",
+      "family": "audit-1050",
+      "bytes": 7291,
+      "sha256": "6f86fc16da6bfeb72ffb736f3ff4314295d65c76b37c563dc662ecb3c9564590",
+      "sourceEndpoints": [
+        "packages/tui/src/components/input.ts:render",
+        "packages/tui/src/components/editor.ts:render",
+        "packages/tui/src/tui.ts:CURSOR_MARKER,renderFakeCursor,TuiBase.resolveFakeCursors",
+        "packages/tui/src/tui-main-screen.ts:render",
+        "packages/tui/src/utils.ts:stripTerminalSequences,sliceByColumn,visibleWidth",
+        "packages/tui/src/terminal.ts:showCursor,hideCursor,moveBy",
+        "packages/tui/test/tui-render.test.ts:TUI fake cursor"
+      ],
+      "scenarios": [
+        {
+          "name": "standalone-input-fake-cursor-is-strippable",
+          "dimensions": {
+            "columns": 10,
+            "rows": 1
+          },
+          "inputs": {
+            "component": "Input",
+            "value": "abc",
+            "focused": true,
+            "width": 10
+          },
+          "expected": {
+            "rawLine": "> \u001b_pi:c\u0007\u001b_pi:fc\u0007a\u001b_pi:/fc\u0007bc     ",
+            "strippedLine": "> abc     ",
+            "visibleWidth": 10,
+            "fakeCursorMarkerCount": 1
+          }
+        },
+        {
+          "name": "standalone-editor-fake-cursor-is-strippable",
+          "dimensions": {
+            "columns": 10,
+            "rows": 3
+          },
+          "inputs": {
+            "component": "Editor",
+            "text": "hi",
+            "width": 10,
+            "tuiStarted": false
+          },
+          "expected": {
+            "rawLines": [
+              "\u001b[2m──────────\u001b[22m",
+              "hi\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007       ",
+              "\u001b[2m──────────\u001b[22m"
+            ],
+            "strippedLines": [
+              "──────────",
+              "hi        ",
+              "──────────"
+            ],
+            "visibleWidths": [
+              10,
+              10,
+              10
+            ],
+            "fakeCursorMarkerCount": 1
+          }
+        },
+        {
+          "name": "main-screen-focused-fake-cursor-drawn",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "default-false",
+            "component": "Input",
+            "value": "abc"
+          },
+          "expected": {
+            "writes": [
+              "\u001b[?2026h> \u001b[7ma\u001b[27mbc               \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[3G"
+            ],
+            "cursorEvents": [
+              "hide",
+              "hide"
+            ],
+            "screen": [
+              "> abc               ",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "fakeCursorVisible": true,
+            "hardwareCursorPositioned": true
+          }
+        },
+        {
+          "name": "main-screen-focused-hardware-cursor-omits-fake-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "enabled",
+            "component": "Input",
+            "value": "abc"
+          },
+          "expected": {
+            "writes": [
+              "\u001b[?2026h> abc               \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[3G"
+            ],
+            "cursorEvents": [
+              "hide",
+              "show"
+            ],
+            "screen": [
+              "> abc               ",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "fakeCursorVisible": false,
+            "hardwareCursorPositioned": true
+          }
+        },
+        {
+          "name": "main-screen-unfocused-fake-cursor-stays-visible",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "enabled",
+            "component": "Input",
+            "focused": false
+          },
+          "expected": {
+            "writes": [
+              "\u001b[?2026h> \u001b[7ma\u001b[27mbc               \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+            ],
+            "cursorEvents": [
+              "hide",
+              "hide"
+            ],
+            "screen": [
+              "> abc               ",
+              "",
+              "",
+              "",
+              ""
+            ],
+            "fakeCursorVisible": true,
+            "hardwareCursorPositioned": false
+          }
+        },
+        {
+          "name": "truncated-line-drops-unterminated-fake-cursor",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "preference": "enabled",
+            "line": "ab<CURSOR_MARKER><fake:c>def",
+            "slice": [
+              0,
+              3
+            ]
+          },
+          "expected": {
+            "writes": [
+              "\u001b[?2026habc\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[3G"
+            ],
+            "cursorEvents": [
+              "hide",
+              "show"
+            ],
+            "fakeCursorVisible": false,
+            "hardwareCursorPositioned": true
+          }
+        },
+        {
+          "name": "overlay-left-of-cursor-keeps-cursor-fake",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "showHardwareCursor": false,
+            "base": "abc<CURSOR_MARKER><fake:d>ef",
+            "overlay": "XXX",
+            "overlayBounds": {
+              "row": 0,
+              "col": 0,
+              "width": 3
+            }
+          },
+          "expected": {
+            "writes": [
+              "\u001b[?2026h\u001b[0m\u001b]8;;\u0007XXX\u001b[0m\u001b]8;;\u0007\u001b[7md\u001b[27mef              \u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[4A\u001b[4G"
+            ],
+            "cursorEvents": [
+              "hide",
+              "hide",
+              "hide"
+            ],
+            "overlayText": true,
+            "fakeCursorVisible": true,
+            "hardwareCursorPositioned": true
+          }
+        },
+        {
+          "name": "overlay-left-of-cursor-keeps-cursor-hardware",
+          "dimensions": {
+            "columns": 20,
+            "rows": 5
+          },
+          "inputs": {
+            "root": "MainScreen",
+            "showHardwareCursor": true,
+            "base": "abc<CURSOR_MARKER><fake:d>ef",
+            "overlay": "XXX",
+            "overlayBounds": {
+              "row": 0,
+              "col": 0,
+              "width": 3
+            }
+          },
+          "expected": {
+            "writes": [
+              "\u001b[?2026h\u001b[0m\u001b]8;;\u0007XXX\u001b[0m\u001b]8;;\u0007def              \u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+              "\u001b[4A\u001b[4G"
+            ],
+            "cursorEvents": [
+              "hide",
+              "hide",
+              "show"
+            ],
+            "overlayText": true,
+            "fakeCursorVisible": false,
+            "hardwareCursorPositioned": true
+          }
+        }
+      ]
+    },
+    {
+      "path": "padding-and-selection-reset.json",
+      "family": "audit-1050",
+      "bytes": 3929,
+      "sha256": "134c1297e51205d722e00f7923a1f5598a9d39533ae2aa510dff6d674eba5223",
+      "sourceEndpoints": [
+        "packages/tui/src/components/box.ts:Box.setPaddingX,render",
+        "packages/tui/src/components/text.ts:Text.setPaddingX,render",
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.resetTextSelection,clearTextSelection",
+        "packages/tui/test/tui-alt-screen.test.ts:resetTextSelection"
+      ],
+      "scenarios": [
+        {
+          "name": "box-set-padding-x-rerenders-dynamic-width",
+          "dimensions": {
+            "columns": 10,
+            "rows": 1
+          },
+          "inputs": {
+            "component": "Box",
+            "child": "Text(hey)",
+            "transitions": [
+              2,
+              3,
+              0
+            ],
+            "width": 10
+          },
+          "expected": {
+            "atTwo": [
+              "  hey     "
+            ],
+            "atThree": [
+              "   hey    "
+            ],
+            "atZero": [
+              "hey       "
+            ]
+          }
+        },
+        {
+          "name": "text-set-padding-x-rerenders-dynamic-width",
+          "dimensions": {
+            "columns": 10,
+            "rows": 2
+          },
+          "inputs": {
+            "component": "Text",
+            "text": "hello",
+            "transitions": [
+              1,
+              3,
+              0
+            ],
+            "width": 10
+          },
+          "expected": {
+            "atOne": [
+              " hello    "
+            ],
+            "atThree": [
+              "   hell   ",
+              "   o      "
+            ],
+            "atZero": [
+              "hello     "
+            ]
+          }
+        },
+        {
+          "name": "selection-reset-drops-selection-and-multiclick-history",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "copyOnSelect": false,
+            "text": "alpha beta gamma",
+            "steps": [
+              "click(7,1)",
+              "click(7,1)",
+              "resetTextSelection",
+              "drag(7,1 -> 9,1)"
+            ]
+          },
+          "expected": {
+            "afterDoubleClick": [
+              "alpha \u001b[7mbeta\u001b[27m gamma    \u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007"
+            ],
+            "afterReset": [
+              "alpha beta gamma    \u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007"
+            ],
+            "dragAfterReset": [
+              "alpha \u001b[7mbet\u001b[27ma gamma    \u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007"
+            ]
+          }
+        },
+        {
+          "name": "third-consecutive-click-selects-line-control",
+          "dimensions": {
+            "columns": 20,
+            "rows": 4
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "copyOnSelect": false,
+            "text": "alpha beta gamma",
+            "steps": [
+              "click(7,1)",
+              "click(7,1)",
+              "press(7,1)",
+              "drag(9,1)"
+            ]
+          },
+          "expected": {
+            "thirdClickDrag": [
+              "\u001b[7malpha beta gamma    \u001b[27m\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007",
+              "\u001b[0m\u001b]8;;\u0007"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "overlay-routing.json",
+      "family": "audit-1050",
+      "bytes": 2257,
+      "sha256": "2ad62595a658fe0180345427965b2a36dce372de008377a7773da524dc1326d7",
+      "sourceEndpoints": [
+        "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleWheelReport,routeWheel,shouldDeferViewportInputToOverlay,handleViewportInput",
+        "packages/tui/test/tui-alt-screen.test.ts:scrolls the transcript on wheel input a focused overlay does not handle",
+        "packages/tui/test/tui-alt-screen.test.ts:gives viewport keys to a focused overlay"
+      ],
+      "scenarios": [
+        {
+          "name": "overlay-unhandled-wheel-scrolls-transcript",
+          "dimensions": {
+            "columns": 20,
+            "rows": 6
+          },
+          "inputs": {
+            "root": "AltScreen",
+            "contentRows": 12,
+            "overlay": "focused InputOverlay",
+            "events": [
+              "showOverlay(top-left,10)",
+              "wheel-up(3,1)",
+              "pageDown"
+            ]
+          },
+          "expected": {
+            "overlayFocused": true,
+            "viewportTop": {
+              "before": 6,
+              "afterOverlay": 6,
+              "afterWheel": 5,
+              "afterPageDown": 5
+            },
+            "overlayInputs": [
+              "\u001b[6~"
+            ],
+            "screenAfterWheel": [
+              "\u001b[0m\u001b]8;;\u0007overlay   \u001b[0m\u001b]8;;\u0007          \u001b[0m\u001b]8;;\u0007",
+              "line 7              \u001b[0m\u001b]8;;\u0007",
+              "line 8              \u001b[0m\u001b]8;;\u0007",
+              "line 9              \u001b[0m\u001b]8;;\u0007",
+              "line 10             \u001b[0m\u001b]8;;\u0007",
+              "line 11             \u001b[0m\u001b]8;;\u0007"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "keys-and-terminal-replies.json",
+      "family": "audit-1050",
+      "bytes": 4537,
+      "sha256": "f13fa48a1874202288b644c3309b08d9620634e6ac70fe1799a890140df3fbad",
+      "sourceEndpoints": [
+        "packages/tui/src/keys.ts:parseKey,matchesKey,parseKeyId,matchesKittySequence,matchesPrintableModifyOtherKeys",
+        "packages/tui/src/stdin-buffer.ts:StdinBuffer.process,flush,extractCompleteSequences",
+        "packages/tui/src/tui.ts:TUI.queryTerminalColors",
+        "packages/tui/test/keys.test.ts:shifted symbols",
+        "packages/tui/test/stdin-buffer.test.ts:Terminal Reply Strings",
+        "packages/tui/test/terminal-colors.test.ts:delayed Ghostty color fragments"
+      ],
+      "scenarios": [
+        {
+          "name": "shifted-symbol-keys-match-produced-character",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "sequences": {
+              "kitty_shift_plus": "\u001b[61:43;2u",
+              "kitty_ctrl_shift_plus": "\u001b[61:43;6u",
+              "modify_other_keys_ctrl_plus": "\u001b[27;6;43~",
+              "legacy_ctrl_slash": "\u001b[27;5;47~"
+            },
+            "plainPlus": "+"
+          },
+          "expected": {
+            "observations": {
+              "kitty_shift_plus": {
+                "parseKey": "+",
+                "matchesPlus": true,
+                "matchesShiftEquals": true,
+                "matchesCtrlPlus": false,
+                "matchesCtrlSlash": false
+              },
+              "kitty_ctrl_shift_plus": {
+                "parseKey": "ctrl++",
+                "matchesPlus": false,
+                "matchesShiftEquals": false,
+                "matchesCtrlPlus": true,
+                "matchesCtrlSlash": false
+              },
+              "modify_other_keys_ctrl_plus": {
+                "parseKey": "ctrl++",
+                "matchesPlus": false,
+                "matchesShiftEquals": false,
+                "matchesCtrlPlus": true,
+                "matchesCtrlSlash": false
+              },
+              "legacy_ctrl_slash": {
+                "parseKey": "ctrl+/",
+                "matchesPlus": false,
+                "matchesShiftEquals": false,
+                "matchesCtrlPlus": false,
+                "matchesCtrlSlash": true
+              }
+            },
+            "plainPlus": "+",
+            "plainPlusMatches": true
+          }
+        },
+        {
+          "name": "fragmented-color-reply-never-leaks-or-opens-editor",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "reply": "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007",
+            "split": [
+              15,
+              22
+            ],
+            "timeoutMs": 20,
+            "tailWaitMs": 80
+          },
+          "expected": {
+            "afterHeaderTimeout": [],
+            "bufferedAfterHeaderTimeout": "\u001b]4;1;rgb:eaea/6c",
+            "afterTail": [
+              "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007"
+            ],
+            "afterTailCtlGMatch": false,
+            "afterRealCtrlG": [
+              "\u001b]4;1;rgb:eaea/6c6c/6d6d\u0007",
+              "\u0007"
+            ],
+            "realCtrlGDelivered": true
+          }
+        },
+        {
+          "name": "ambiguous-alt-bracket-input-recovers-within-sequence-timeout",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "prefix": "\u001b]",
+            "batchedTail": "x\r",
+            "timeoutMs": 20
+          },
+          "expected": {
+            "recovered": [
+              "\u001b]",
+              "a",
+              "x",
+              "\r"
+            ]
+          }
+        },
+        {
+          "name": "fragmented-color-query-keeps-prompt-clean",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "query": "queryTerminalColors({timeoutMs:1000})",
+            "fragments": [
+              "\u001b]4;1;rgb:eaea/6c",
+              "6c/6d6d\u0007",
+              "\u001b[?62;4;52c"
+            ],
+            "fragmentDelayMs": 100
+          },
+          "expected": {
+            "colors": {
+              "foreground": null,
+              "background": null,
+              "palette": null
+            },
+            "inputsAfterQuery": [],
+            "inputsAfterRealCtrlG": [
+              "\u0007"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "program-status-format.json",
+      "family": "audit-1050",
+      "bytes": 2667,
+      "sha256": "e41cd21e549ef606e09304b7ade4e420490f91af49b96eb0bbd629c47ea434b8",
+      "sourceEndpoints": [
+        "packages/tui/src/program-status.ts:formatProgramStatus,isProgramStatusReply,PROGRAM_STATUS_QUERY",
+        "packages/tui/test/program-status.test.ts:formatProgramStatus,isProgramStatusReply"
+      ],
+      "scenarios": [
+        {
+          "name": "format-program-status-encodes-fields-and-limits",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "states": [
+              "blocked/permission",
+              "clear",
+              "working/invalid-app/empty-message",
+              "error/control-characters",
+              "working/2000-é"
+            ]
+          },
+          "expected": {
+            "blocked": "\u001b]7501;state=blocked:app=pi:kind=permission:msg=QWxsb3cgYmFzaD8=\u001b\\",
+            "clear": "\u001b]7501;state=clear\u001b\\",
+            "omitted": "\u001b]7501;state=working\u001b\\",
+            "controlCharacters": "\u001b]7501;state=error:msg=Zmlyc3Qgc2Vjb25kIFszMW0gdGhpcmQ=\u001b\\",
+            "controlCharactersMessage": "first second [31m third",
+            "longMessageBytes": 2766,
+            "longMessageDecodedLength": 1024,
+            "invalidAppRowOmitted": true,
+            "kindOmittedOutsideBlocked": true
+          }
+        },
+        {
+          "name": "program-status-reply-recognition",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "replies": {
+              "query_echo_st": "\u001b]7501;?\u001b\\",
+              "query_echo_bel": "\u001b]7501;?\u0007",
+              "query_echo_future_pairs": "\u001b]7501;?version=2\u001b\\",
+              "status_report": "\u001b]7501;state=idle\u001b\\",
+              "color_report": "\u001b]11;rgb:0000/0000/0000\u0007"
+            }
+          },
+          "expected": {
+            "recognized": {
+              "query_echo_st": true,
+              "query_echo_bel": true,
+              "query_echo_future_pairs": true,
+              "status_report": false,
+              "color_report": false
+            }
+          }
+        }
+      ]
+    },
+    {
+      "path": "program-status-detection.json",
+      "family": "audit-1050",
+      "bytes": 4159,
+      "sha256": "ceff81b893ef4626cd676cf397353b16fa820454484c4cb92110f08ef6892dc5",
+      "sourceEndpoints": [
+        "packages/tui/src/terminal.ts:ProcessTerminal.start,ProcessTerminal.stop,ProcessTerminal.setProgramStatus",
+        "packages/tui/src/program-status.ts:formatProgramStatus,isProgramStatusReply,PROGRAM_STATUS_QUERY",
+        "packages/tui/test/terminal.test.ts:program status (OSC 7501)"
+      ],
+      "scenarios": [
+        {
+          "name": "default-reply-before-device-attributes",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "processTerminal": "public start()/setProgramStatus()/stop()",
+            "piProgramStatusOverride": null,
+            "replyOrder": "reply-before-DA",
+            "states": [
+              "working:app=pi",
+              "blocked:kind=permission:msg=Allow?"
+            ]
+          },
+          "expected": {
+            "queryWrite": "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c",
+            "programStatusWrites": [
+              "\u001b]7501;state=working:app=pi\u001b\\",
+              "\u001b]7501;state=blocked:kind=permission:msg=QWxsb3c/\u001b\\"
+            ],
+            "stopWrites": [
+              "\u001b]7501;state=clear\u001b\\",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[>4;0m"
+            ],
+            "inputs": []
+          }
+        },
+        {
+          "name": "default-device-attributes-before-reply",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "processTerminal": "public start()/setProgramStatus()/stop()",
+            "piProgramStatusOverride": null,
+            "replyOrder": "DA-before-reply",
+            "states": [
+              "working:app=pi",
+              "blocked:kind=permission:msg=Allow?"
+            ]
+          },
+          "expected": {
+            "queryWrite": "\u001b[>7u\u001b[?u\u001b]7501;?\u001b\\\u001b[c",
+            "programStatusWrites": [],
+            "stopWrites": [
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[>4;0m"
+            ],
+            "inputs": []
+          }
+        },
+        {
+          "name": "override-enabled",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "processTerminal": "public start()/setProgramStatus()/stop()",
+            "piProgramStatusOverride": "1",
+            "replyOrder": "reply-before-DA",
+            "states": [
+              "working:app=pi",
+              "blocked:kind=permission:msg=Allow?"
+            ]
+          },
+          "expected": {
+            "queryWrite": "\u001b[>7u\u001b[?u\u001b[c",
+            "programStatusWrites": [
+              "\u001b]7501;state=working:app=pi\u001b\\",
+              "\u001b]7501;state=blocked:kind=permission:msg=QWxsb3c/\u001b\\"
+            ],
+            "stopWrites": [
+              "\u001b]7501;state=clear\u001b\\",
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[>4;0m"
+            ],
+            "inputs": []
+          }
+        },
+        {
+          "name": "override-disabled",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "processTerminal": "public start()/setProgramStatus()/stop()",
+            "piProgramStatusOverride": "0",
+            "replyOrder": "reply-before-DA",
+            "states": [
+              "working:app=pi",
+              "blocked:kind=permission:msg=Allow?"
+            ]
+          },
+          "expected": {
+            "queryWrite": "\u001b[>7u\u001b[?u\u001b[c",
+            "programStatusWrites": [],
+            "stopWrites": [
+              "\u001b[?2004l",
+              "\u001b[<u",
+              "\u001b[>4;0m"
+            ],
+            "inputs": []
+          }
+        }
+      ]
+    },
+    {
+      "path": "terminal-capabilities.json",
+      "family": "audit-1050",
+      "bytes": 3211,
+      "sha256": "222da5678d6201fd5ea893425b432f58c3434f93479703e809ac7764814239b0",
+      "sourceEndpoints": [
+        "packages/tui/src/terminal-image.ts:detectCapabilities,detectCapabilitiesFromEnvironment",
+        "packages/tui/test/terminal-image.test.ts:enables hyperlinks and Kitty images for Herdr"
+      ],
+      "scenarios": [
+        {
+          "name": "herdr-detected-before-outer-terminal",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "env": {
+              "TERM_PROGRAM": "herdr",
+              "TERM": "xterm-256color",
+              "COLORTERM": "truecolor"
+            }
+          },
+          "expected": {
+            "capabilities": {
+              "images": "kitty",
+              "trueColor": true,
+              "hyperlinks": true
+            }
+          }
+        },
+        {
+          "name": "herdr-with-leaked-kitty-variable",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "env": {
+              "TERM_PROGRAM": "herdr",
+              "TERM": "xterm-256color",
+              "COLORTERM": "truecolor",
+              "KITTY_WINDOW_ID": "1"
+            }
+          },
+          "expected": {
+            "capabilities": {
+              "images": "kitty",
+              "trueColor": true,
+              "hyperlinks": true
+            }
+          }
+        },
+        {
+          "name": "herdr-hyperlink-override-disabled",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "env": {
+              "TERM_PROGRAM": "herdr",
+              "TERM": "xterm-256color",
+              "PI_HYPERLINKS": "0"
+            }
+          },
+          "expected": {
+            "capabilities": {
+              "images": "kitty",
+              "trueColor": false,
+              "hyperlinks": false
+            }
+          }
+        },
+        {
+          "name": "kitty-control",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "env": {
+              "TERM_PROGRAM": "kitty",
+              "KITTY_WINDOW_ID": "1",
+              "TERM": "xterm-256color"
+            }
+          },
+          "expected": {
+            "capabilities": {
+              "images": "kitty",
+              "trueColor": true,
+              "hyperlinks": true
+            }
+          }
+        },
+        {
+          "name": "unknown-terminal-control",
+          "dimensions": {
+            "columns": 80,
+            "rows": 24
+          },
+          "inputs": {
+            "env": {
+              "TERM": "xterm-256color",
+              "COLORTERM": "truecolor"
+            }
+          },
+          "expected": {
+            "capabilities": {
+              "images": null,
+              "trueColor": true,
+              "hyperlinks": false
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T17:21:56.094Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1",
+    "TERM": "xterm-256color",
+    "pinnedVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "COLORTERM",
+      "KITTY_WINDOW_ID",
+      "GHOSTTY_RESOURCES_DIR",
+      "WEZTERM_PANE",
+      "ITERM_SESSION_ID",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_HYPERLINKS",
+      "PI_IMAGE_PROTOCOL",
+      "PI_TRUE_COLOR",
+      "PI_PROGRAM_STATUS",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR"
+    ]
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/terminal-image.ts:detectCapabilities,detectCapabilitiesFromEnvironment",
+    "packages/tui/test/terminal-image.test.ts:enables hyperlinks and Kitty images for Herdr"
+  ],
+  "scenarios": [
+    {
+      "name": "herdr-detected-before-outer-terminal",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "env": {
+          "TERM_PROGRAM": "herdr",
+          "TERM": "xterm-256color",
+          "COLORTERM": "truecolor"
+        }
+      },
+      "expected": {
+        "capabilities": {
+          "images": "kitty",
+          "trueColor": true,
+          "hyperlinks": true
+        }
+      }
+    },
+    {
+      "name": "herdr-with-leaked-kitty-variable",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "env": {
+          "TERM_PROGRAM": "herdr",
+          "TERM": "xterm-256color",
+          "COLORTERM": "truecolor",
+          "KITTY_WINDOW_ID": "1"
+        }
+      },
+      "expected": {
+        "capabilities": {
+          "images": "kitty",
+          "trueColor": true,
+          "hyperlinks": true
+        }
+      }
+    },
+    {
+      "name": "herdr-hyperlink-override-disabled",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "env": {
+          "TERM_PROGRAM": "herdr",
+          "TERM": "xterm-256color",
+          "PI_HYPERLINKS": "0"
+        }
+      },
+      "expected": {
+        "capabilities": {
+          "images": "kitty",
+          "trueColor": false,
+          "hyperlinks": false
+        }
+      }
+    },
+    {
+      "name": "kitty-control",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "env": {
+          "TERM_PROGRAM": "kitty",
+          "KITTY_WINDOW_ID": "1",
+          "TERM": "xterm-256color"
+        }
+      },
+      "expected": {
+        "capabilities": {
+          "images": "kitty",
+          "trueColor": true,
+          "hyperlinks": true
+        }
+      }
+    },
+    {
+      "name": "unknown-terminal-control",
+      "dimensions": {
+        "columns": 80,
+        "rows": 24
+      },
+      "inputs": {
+        "env": {
+          "TERM": "xterm-256color",
+          "COLORTERM": "truecolor"
+        }
+      },
+      "expected": {
+        "capabilities": {
+          "images": null,
+          "trueColor": true,
+          "hyperlinks": false
+        }
+      }
+    }
+  ]
+}
