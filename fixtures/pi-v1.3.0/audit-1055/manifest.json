@@ -1,0 +1,1125 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1055",
+  "family": "audit-1055",
+  "capturedAt": "2026-10-19T20:13:49.692Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1055/capture-1055.mts",
+    "sha256": "e43c95a7c7fabfb6d9ff534e52b0a5f3911bebce04d7b40c359f8dc457dbbed2",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1055/capture-1055.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1055/capture-1055.mts",
+        "sha256": "e43c95a7c7fabfb6d9ff534e52b0a5f3911bebce04d7b40c359f8dc457dbbed2"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1055/scenarios.mts",
+        "sha256": "d3e351fb4356894a737e8d3bcd84a1da56c3ecc3f09d83fc6461a19d8e1f4e56"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1055/audit-tasks.mts",
+        "sha256": "dc0f29b3344faff6f60b84ade203eac61ee9d530ead3c6d3a26cfe5a9fc905dd"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1055/pi.mts",
+        "sha256": "b2300f944f3d4d8530211792e0b14d6b0fb5c1f8930e5d5a1783c0c37ad88a36"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1055/crash-worker.mts",
+        "sha256": "78f87ede3f60bc0304b992380012ad0b0303e8f62b5d6e97cdbc4e3827c7a3c5"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "task-lifecycle.json",
+      "family": "audit-1055",
+      "bytes": 5365,
+      "sha256": "f758d5cda5bf83485f9d7d4bf25bad596b0f9c1c9877997434262ff285fa8cec",
+      "sourceEndpoints": [
+        "packages/durable/src/tasks.ts:defineTask",
+        "packages/durable/src/harness/scheduler.ts:TaskScheduler",
+        "packages/durable/src/session/transaction.ts:Transaction.createTask",
+        "packages/durable/test/harness-tasks.test.ts:task phases",
+        "packages/durable/test/harness-ownership.test.ts:structured concurrency"
+      ],
+      "scenarios": [
+        {
+          "name": "a multi-phase task replaces checkpoint state and reports a typed terminal result",
+          "inputs": {
+            "task": "audit.counter",
+            "input": {
+              "to": 3
+            },
+            "clockMs": 1000
+          },
+          "expected": {
+            "phasesSeen": [
+              0,
+              1,
+              2
+            ],
+            "invocations": 1,
+            "result": 3,
+            "record": {
+              "kind": "audit.counter",
+              "version": 1,
+              "status": "terminal"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "task lifecycle times come from the Harness clock and survive a durable wait",
+          "inputs": {
+            "task": "audit.clock",
+            "waitingOn": "audit.hold-child",
+            "clockMs": [
+              1000,
+              3000,
+              4000
+            ]
+          },
+          "expected": {
+            "startedAt": 1000,
+            "endedAt": 4000,
+            "terminal": "terminal",
+            "waitingStatus": "waiting"
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a task memo survives checkpoint replacement and is absent from the terminal record",
+          "inputs": {
+            "task": "audit.memo",
+            "memo": {
+              "requested": 7
+            }
+          },
+          "expected": {
+            "runningMemos": {
+              "requested": 7
+            },
+            "runningCheckpoint": {
+              "phase": "apply"
+            },
+            "terminalStatus": "terminal",
+            "terminalHasMemos": false
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a completing owner holds its terminal outcome until ordinary owned work drains",
+          "inputs": {
+            "task": "audit.hold-parent",
+            "child": "audit.hold-child"
+          },
+          "expected": {
+            "before": [
+              {
+                "kind": "audit.hold-parent",
+                "recordStatus": "completing",
+                "inspection": "completing"
+              },
+              {
+                "kind": "audit.hold-child",
+                "recordStatus": "running",
+                "inspection": "running"
+              }
+            ],
+            "parentOutcome": {
+              "status": "completed",
+              "result": "parent"
+            },
+            "childOutcome": {
+              "status": "completed",
+              "result": "child"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "task hooks run in extension order and an ordinary throw is reported while the task continues",
+          "inputs": {
+            "task": "audit.hooked",
+            "hooks": [
+              "hook-throw",
+              "hook-observer"
+            ]
+          },
+          "expected": {
+            "log": [
+              "hook-1",
+              "hook-2",
+              "task"
+            ],
+            "reports": [
+              "hook boom"
+            ],
+            "outcome": {
+              "status": "completed",
+              "result": "done"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "task-versioning.json",
+      "family": "audit-1055",
+      "bytes": 7316,
+      "sha256": "905e9577dd4935499f4b5b914e6023429c8cedc631092ef9da0b0b5f54081191",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/scheduler.ts:#reserve,#decide,#blockedReason",
+        "packages/durable/src/session/transaction.ts:Transaction.createTask",
+        "packages/durable/src/session/session.ts:HarnessImpl.fail",
+        "packages/durable/test/harness-tasks-recovery.test.ts:versioned",
+        "packages/durable/test/harness-tasks.test.ts:migration"
+      ],
+      "scenarios": [
+        {
+          "name": "reservation migrates a stored definition before running the newer version",
+          "inputs": {
+            "storedVersion": 1,
+            "installedVersion": 2,
+            "migrate": "input.n += fromVersion; checkpoint.n += 10"
+          },
+          "expected": {
+            "before": [
+              {
+                "kind": "ready",
+                "migrates": false
+              }
+            ],
+            "afterInstall": [
+              {
+                "kind": "ready",
+                "migrates": true
+              }
+            ],
+            "log": [
+              "run-v2"
+            ],
+            "version": 2,
+            "input": {
+              "n": 2
+            },
+            "outcome": {
+              "status": "completed",
+              "result": "v2:11"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a task whose stored version is newer than the installed definition stays pending and blocked",
+          "inputs": {
+            "storedVersion": 2,
+            "installedVersion": 1
+          },
+          "expected": {
+            "inspection": "blocked",
+            "reason": "task_too_old",
+            "recordStatus": "pending",
+            "checkpoint": {
+              "phase": "run",
+              "n": 1
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a task with no installed definition stays pending and runs when its definition returns",
+          "inputs": {
+            "installedDefinition": "removed then restored",
+            "version": 1
+          },
+          "expected": {
+            "inspection": "blocked",
+            "reason": "missing_task",
+            "recordStatus": "pending",
+            "outcome": {
+              "status": "completed",
+              "result": "v1:1"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a failed migration is reported and leaves the task pending until a usable definition is installed",
+          "inputs": {
+            "storedVersion": 1,
+            "brokenVersion": 2,
+            "repairedVersion": 2
+          },
+          "expected": {
+            "blocked": "blocked",
+            "reason": "migration_failed",
+            "reports": [
+              "cannot migrate"
+            ],
+            "recoveredOutcome": {
+              "status": "completed",
+              "result": "v2:1"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a running task hands over to a newer definition at a phase boundary",
+          "inputs": {
+            "runningVersion": 1,
+            "replacementVersion": 2,
+            "boundary": "after p1 checkpoint commit"
+          },
+          "expected": {
+            "log": [
+              "v1-p1",
+              "v1-p1-release",
+              "v2-migrate-from-1",
+              "v2-p2"
+            ],
+            "version": 2,
+            "outcome": {
+              "status": "completed",
+              "result": "v2"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "inadmissible child ownership is rejected before the commit writes",
+          "inputs": {
+            "cases": [
+              "terminal owner",
+              "missing owner",
+              "background child",
+              "other conversation"
+            ]
+          },
+          "expected": {
+            "child_of_terminal": "Task owner 7 is terminal",
+            "child_of_missing": "Task owner 999999 does not exist",
+            "background_child": "A child task cannot be background",
+            "child_other_conversation": "A child task lives in its owner's conversation 1"
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a storage failure at the terminal commit fails the Session and the task reruns after reopen",
+          "inputs": {
+            "failurePoint": "terminal task commit",
+            "storage": "node:sqlite"
+          },
+          "expected": {
+            "failure": {
+              "name": "SessionFailed",
+              "message": "Session failed after a storage error; close and reopen it"
+            },
+            "reopenedStatus": "pending",
+            "reopenedCheckpoint": {
+              "phase": "run"
+            },
+            "finalOutcome": {
+              "status": "completed",
+              "result": "ok"
+            },
+            "reports": [
+              "injected storage failure"
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "ownership-abort.json",
+      "family": "audit-1055",
+      "bytes": 6480,
+      "sha256": "39052eaa758f72f39074325f4dc4413d7dadb7e9e4dc14d008b3f4165c6be438",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/scheduler.ts:#runAbort,#abortTask",
+        "packages/durable/src/harness/inbox.ts:withdrawQueuedInputs",
+        "packages/durable/test/harness-ownership.test.ts:failFast",
+        "packages/durable/test/harness-tasks.test.ts:abort"
+      ],
+      "scenarios": [
+        {
+          "name": "a failFast join aborts live siblings and the parent reads ordered terminal outcomes",
+          "inputs": {
+            "join": "failFast",
+            "children": [
+              "failed",
+              "running",
+              "running"
+            ]
+          },
+          "expected": {
+            "log": [
+              "parent-spawn",
+              "child-run-a",
+              "child-run-b",
+              "parent-waiting",
+              "child-run-c",
+              "child-abort-b",
+              "child-abort-c",
+              "parent-decide"
+            ],
+            "parent": {
+              "status": "completed",
+              "result": [
+                "failed",
+                "aborted",
+                "aborted"
+              ]
+            },
+            "children": [
+              {
+                "input": "a",
+                "outcome": "failed",
+                "abortRequested": false
+              },
+              {
+                "input": "b",
+                "outcome": "aborted",
+                "abortRequested": true
+              },
+              {
+                "input": "c",
+                "outcome": "aborted",
+                "abortRequested": true
+              }
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "an allSettled join lets surviving siblings finish and still reads ordered outcomes",
+          "inputs": {
+            "join": "allSettled",
+            "children": [
+              "failed",
+              "completing"
+            ]
+          },
+          "expected": {
+            "log": [
+              "parent-spawn",
+              "child-run-b",
+              "parent-waiting",
+              "child-run-c",
+              "parent-decide"
+            ],
+            "parent": {
+              "status": "completed",
+              "result": [
+                "failed",
+                "completed"
+              ]
+            },
+            "children": [
+              {
+                "input": "b",
+                "outcome": "failed",
+                "abortRequested": false
+              },
+              {
+                "input": "c",
+                "outcome": "completed",
+                "abortRequested": false
+              }
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "aborting a parent runs descendants' abort handlers before the parent and preserves order",
+          "inputs": {
+            "abort": "abortTask(parent)",
+            "child": "running"
+          },
+          "expected": {
+            "marked": "marked",
+            "log": [
+              "parent-run",
+              "child-run",
+              "child-abort",
+              "parent-abort:aborted"
+            ],
+            "parent": {
+              "status": "aborted",
+              "reason": "parent"
+            },
+            "children": [
+              {
+                "outcome": "aborted",
+                "abortRequested": true
+              }
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "abortTask marks a running task and runs its abort handler after the run invocation joins",
+          "inputs": {
+            "task": "audit.abort-order",
+            "abortAt": "while the run phase awaits its signal"
+          },
+          "expected": {
+            "marked": "marked",
+            "duringMark": {
+              "status": "running",
+              "abortRequested": true
+            },
+            "log": [
+              "run-start",
+              "hook-1",
+              "hook-2",
+              "run-signalled",
+              "commit-rejected:This operation was aborted",
+              "run-end",
+              "abort-handler"
+            ],
+            "outcome": {
+              "status": "aborted",
+              "reason": "requested"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "cancelling a wait cancels only the waiter; the persistent task keeps running and completes",
+          "inputs": {
+            "task": "audit.slow",
+            "cancellation": "waitForTask AbortSignal"
+          },
+          "expected": {
+            "waitError": {
+              "name": "Error",
+              "message": "stop waiting"
+            },
+            "afterCancel": {
+              "status": "running",
+              "abortRequested": false
+            },
+            "outcome": {
+              "status": "completed",
+              "result": "done"
+            },
+            "log": [
+              "run"
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "submissions-inbox.json",
+      "family": "audit-1055",
+      "bytes": 11766,
+      "sha256": "58686c32e5d2df71a1ed6b4a3526eb371115b30019aecc33f2d7dd239da04acb",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/submissions.ts:Submissions,admitSubmission",
+        "packages/durable/src/harness/inbox.ts:InboxDoc,prepareBoundary,applyBoundary",
+        "packages/durable/src/harness/harness.ts:Harness.submit,abortSubmission",
+        "packages/durable/test/harness-inbox.test.ts:inbox",
+        "packages/durable/test/harness-submissions.test.ts:submissions"
+      ],
+      "scenarios": [
+        {
+          "name": "an idle input is placed and answered by a run",
+          "inputs": {
+            "submission": "input",
+            "busy": false
+          },
+          "expected": {
+            "status": "done",
+            "type": "input",
+            "entryKind": "pi.user",
+            "transcript": [
+              "pi.user:hi",
+              "pi.assistant:hello"
+            ],
+            "messages": [
+              "user",
+              "assistant"
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "an idle passive write is appended and settled done without starting a run",
+          "inputs": {
+            "submission": "write",
+            "entry": "audit.note",
+            "busy": false
+          },
+          "expected": {
+            "status": "done",
+            "entryKind": "audit.note",
+            "entryData": {
+              "text": "passive"
+            },
+            "messages": 0
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a busy input queues as a follow-up and is placed at the final boundary",
+          "inputs": {
+            "submission": "input",
+            "busy": true,
+            "whenBusy": "followUp"
+          },
+          "expected": {
+            "before": {
+              "first": "placed",
+              "followUp": "queued",
+              "inbox": [
+                {
+                  "mode": "followUp",
+                  "isFollowUp": true
+                }
+              ]
+            },
+            "followUpStatus": "done",
+            "transcript": [
+              "pi.user:a",
+              "pi.assistant:first",
+              "pi.user:f1",
+              "pi.assistant:second"
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a busy steer input queues in steer mode and a conversation abort withdraws it",
+          "inputs": {
+            "submission": "input",
+            "busy": true,
+            "whenBusy": "steer"
+          },
+          "expected": {
+            "before": {
+              "first": "placed",
+              "steer": "queued",
+              "inbox": [
+                {
+                  "mode": "steer",
+                  "isSteer": true
+                }
+              ]
+            },
+            "after": {
+              "status": "unanswered",
+              "reason": "aborted"
+            },
+            "live": {}
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a display-only write is appended and settled while the conversation is busy",
+          "inputs": {
+            "submission": "write",
+            "entry": "display-only",
+            "busy": true
+          },
+          "expected": {
+            "status": "done",
+            "inboxLength": 0
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a duplicate request ID returns the existing submission without a storage write",
+          "inputs": {
+            "requestId": "req-9",
+            "duplicateType": "input vs write"
+          },
+          "expected": {
+            "sameId": true,
+            "duplicateBatches": 0,
+            "originalStatus": "placed",
+            "wrongType": {
+              "name": "Error",
+              "message": "Request req-9 already identifies a submission of type input"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a busy input with whenBusy reject throws ConversationBusy and writes no submission",
+          "inputs": {
+            "whenBusy": "reject",
+            "busy": true
+          },
+          "expected": {
+            "error": {
+              "name": "ConversationBusy",
+              "message": "Conversation 1 is busy",
+              "isConversationBusy": true
+            },
+            "submissionsBefore": 1,
+            "submissionsAfter": 1,
+            "inboxLength": 0
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "admission commits the queued submission and its inbox change in one storage batch",
+          "inputs": {
+            "storage": "recording MemoryStorage",
+            "submission": "busy input"
+          },
+          "expected": {
+            "batchTypes": [
+              "submission",
+              "document.change"
+            ],
+            "submissionStatus": "queued",
+            "submissionType": "input",
+            "documentKind": "delta",
+            "documentVersion": 1,
+            "inboxPath": "items"
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "queue modes decide whether all follow-ups or one are placed at the final boundary",
+          "inputs": {
+            "followUpMode": [
+              "all",
+              "one-at-a-time"
+            ],
+            "followUps": 2
+          },
+          "expected": {
+            "all": {
+              "twoAfterFirst": "done",
+              "transcript": [
+                "pi.user:a",
+                "pi.assistant:first",
+                "pi.user:f1",
+                "pi.user:f2",
+                "pi.assistant:a"
+              ]
+            },
+            "oneAtATime": {
+              "twoAfterFirst": "placed",
+              "transcript": [
+                "pi.user:a",
+                "pi.assistant:first",
+                "pi.user:f1",
+                "pi.assistant:a",
+                "pi.user:f2",
+                "pi.assistant:b"
+              ]
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "abort reports queued, placed and settled outcomes and removes the queued item",
+          "inputs": {
+            "submissions": [
+              "placed input",
+              "queued input"
+            ]
+          },
+          "expected": {
+            "results": {
+              "placed": "already_placed",
+              "wrongConversation": "not_found",
+              "queued": "aborted",
+              "again": "settled",
+              "unknown": "not_found"
+            },
+            "queuedRecord": {
+              "status": "unanswered",
+              "reason": "aborted"
+            },
+            "inboxLength": 0
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "conversation abort withdraws queued inputs, keeps queued writes and settles the placed input unanswered",
+          "inputs": {
+            "submissions": [
+              "placed input",
+              "queued input",
+              "queued write"
+            ]
+          },
+          "expected": {
+            "before": [
+              "placed",
+              "queued",
+              "queued"
+            ],
+            "after": [
+              {
+                "status": "unanswered",
+                "reason": "aborted"
+              },
+              {
+                "status": "unanswered",
+                "reason": "aborted"
+              },
+              {
+                "status": "queued",
+                "reason": null
+              }
+            ],
+            "inbox": [
+              {
+                "mode": "write",
+                "isWrite": true
+              }
+            ],
+            "live": {}
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "cancelling a submission wait leaves the submission placed until it settles",
+          "inputs": {
+            "cancellation": "Submission.wait AbortSignal"
+          },
+          "expected": {
+            "error": {
+              "name": "Error",
+              "message": "stop waiting"
+            },
+            "afterCancel": "placed",
+            "settled": "done"
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "crash-recovery.json",
+      "family": "audit-1055",
+      "bytes": 6779,
+      "sha256": "1a17f92618a9f9264b4a7fb0d15cdaaa3f2946e9154dfc89815443c93a3ce4ab",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/scheduler.ts:Harness.open,#reconcile,#runAbort",
+        "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+        "packages/durable/src/harness/submissions.ts:Submissions.wait",
+        "packages/durable/test/harness-tasks-recovery.test.ts:crash recovery",
+        "packages/durable/test/harness-submissions.test.ts:reacquires a submission after reopen"
+      ],
+      "scenarios": [
+        {
+          "name": "a killed process leaves an admitted input and its generation task recoverable without a duplicate submission",
+          "inputs": {
+            "worker": "generation",
+            "kill": "SIGKILL after request dispatch",
+            "storage": "node:sqlite",
+            "requestId": "crash-1"
+          },
+          "expected": {
+            "killSignal": "SIGKILL",
+            "schedulingAfterOpen": "paused",
+            "taskAfterOpen": [
+              {
+                "kind": "pi.generation",
+                "recordStatus": "pending",
+                "inspection": "ready",
+                "checkpointPhase": "request",
+                "abortRequested": false
+              }
+            ],
+            "submissionAfterOpen": {
+              "status": "placed",
+              "requestId": "crash-1"
+            },
+            "settled": {
+              "status": "done",
+              "hasAnswer": true
+            },
+            "duplicateSameId": true,
+            "transcriptAfterSettle": [
+              "pi.user:crash input",
+              "pi.assistant:after reopen"
+            ],
+            "settledAfterThird": "done",
+            "answerCountAfterThird": 1
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
+          "inputs": {
+            "worker": "effect",
+            "kill": "SIGKILL after effect, before outcome commit",
+            "storage": "node:sqlite"
+          },
+          "expected": {
+            "killSignal": "SIGKILL",
+            "ready": {
+              "key": "transfer-7",
+              "receipt": 70
+            },
+            "afterOpen": {
+              "status": "pending",
+              "checkpoint": {
+                "phase": "apply",
+                "key": "transfer-7"
+              },
+              "memos": {
+                "requested": 7
+              },
+              "startedAtPresent": true
+            },
+            "effectAfterCrash": {
+              "calls": 1,
+              "applied": 1
+            },
+            "outcome": {
+              "status": "completed",
+              "result": {
+                "receipt": 70
+              }
+            },
+            "effectAfterResume": {
+              "calls": 2,
+              "applied": 1
+            },
+            "terminalAfterThird": "terminal",
+            "effectAfterThird": {
+              "calls": 2,
+              "applied": 1
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "an abort mark survives a killed process and only the abort handler runs after reopen",
+          "inputs": {
+            "worker": "abort",
+            "kill": "SIGKILL inside the abort handler before its terminal commit"
+          },
+          "expected": {
+            "killSignal": "SIGKILL",
+            "workerLog": [
+              "run",
+              "abort"
+            ],
+            "afterOpen": {
+              "status": "pending",
+              "abortRequested": true,
+              "checkpoint": {
+                "phase": "run"
+              }
+            },
+            "reopenedLog": [
+              "abort"
+            ],
+            "outcome": {
+              "status": "aborted",
+              "reason": "recovered"
+            }
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a killed process after a terminal commit does not rerun the task or duplicate the submission",
+          "inputs": {
+            "worker": "terminal",
+            "kill": "SIGKILL after terminal task and write settlement"
+          },
+          "expected": {
+            "killSignal": "SIGKILL",
+            "workerLog": [
+              "run"
+            ],
+            "taskStatus": "terminal",
+            "outcome": {
+              "status": "completed",
+              "result": "once"
+            },
+            "submissionStatus": "done",
+            "rerunLog": [],
+            "duplicateSameId": true
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        },
+        {
+          "name": "a task abandoned on restart is aborted with reason restart after reopen",
+          "inputs": {
+            "option": "abandonOnRestart",
+            "reopen": "clean close then open"
+          },
+          "expected": {
+            "afterOpen": {
+              "status": "pending",
+              "checkpoint": {
+                "phase": "run"
+              }
+            },
+            "abortReason": "restart",
+            "outcome": {
+              "status": "aborted",
+              "reason": "restart"
+            },
+            "log": [
+              "abort:restart"
+            ]
+          },
+          "normalizations": [
+            "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+            "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+            "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+          ]
+        }
+      ]
+    }
+  ]
+}

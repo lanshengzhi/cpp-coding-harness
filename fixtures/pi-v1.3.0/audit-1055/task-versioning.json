@@ -1,0 +1,206 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1055",
+  "family": "audit-1055",
+  "capturedAt": "2026-10-19T20:13:49.692Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/scheduler.ts:#reserve,#decide,#blockedReason",
+    "packages/durable/src/session/transaction.ts:Transaction.createTask",
+    "packages/durable/src/session/session.ts:HarnessImpl.fail",
+    "packages/durable/test/harness-tasks-recovery.test.ts:versioned",
+    "packages/durable/test/harness-tasks.test.ts:migration"
+  ],
+  "scenarios": [
+    {
+      "name": "reservation migrates a stored definition before running the newer version",
+      "inputs": {
+        "storedVersion": 1,
+        "installedVersion": 2,
+        "migrate": "input.n += fromVersion; checkpoint.n += 10"
+      },
+      "expected": {
+        "before": [
+          {
+            "kind": "ready",
+            "migrates": false
+          }
+        ],
+        "afterInstall": [
+          {
+            "kind": "ready",
+            "migrates": true
+          }
+        ],
+        "log": [
+          "run-v2"
+        ],
+        "version": 2,
+        "input": {
+          "n": 2
+        },
+        "outcome": {
+          "status": "completed",
+          "result": "v2:11"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a task whose stored version is newer than the installed definition stays pending and blocked",
+      "inputs": {
+        "storedVersion": 2,
+        "installedVersion": 1
+      },
+      "expected": {
+        "inspection": "blocked",
+        "reason": "task_too_old",
+        "recordStatus": "pending",
+        "checkpoint": {
+          "phase": "run",
+          "n": 1
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a task with no installed definition stays pending and runs when its definition returns",
+      "inputs": {
+        "installedDefinition": "removed then restored",
+        "version": 1
+      },
+      "expected": {
+        "inspection": "blocked",
+        "reason": "missing_task",
+        "recordStatus": "pending",
+        "outcome": {
+          "status": "completed",
+          "result": "v1:1"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a failed migration is reported and leaves the task pending until a usable definition is installed",
+      "inputs": {
+        "storedVersion": 1,
+        "brokenVersion": 2,
+        "repairedVersion": 2
+      },
+      "expected": {
+        "blocked": "blocked",
+        "reason": "migration_failed",
+        "reports": [
+          "cannot migrate"
+        ],
+        "recoveredOutcome": {
+          "status": "completed",
+          "result": "v2:1"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a running task hands over to a newer definition at a phase boundary",
+      "inputs": {
+        "runningVersion": 1,
+        "replacementVersion": 2,
+        "boundary": "after p1 checkpoint commit"
+      },
+      "expected": {
+        "log": [
+          "v1-p1",
+          "v1-p1-release",
+          "v2-migrate-from-1",
+          "v2-p2"
+        ],
+        "version": 2,
+        "outcome": {
+          "status": "completed",
+          "result": "v2"
+        }
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "inadmissible child ownership is rejected before the commit writes",
+      "inputs": {
+        "cases": [
+          "terminal owner",
+          "missing owner",
+          "background child",
+          "other conversation"
+        ]
+      },
+      "expected": {
+        "child_of_terminal": "Task owner 7 is terminal",
+        "child_of_missing": "Task owner 999999 does not exist",
+        "background_child": "A child task cannot be background",
+        "child_other_conversation": "A child task lives in its owner's conversation 1"
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    },
+    {
+      "name": "a storage failure at the terminal commit fails the Session and the task reruns after reopen",
+      "inputs": {
+        "failurePoint": "terminal task commit",
+        "storage": "node:sqlite"
+      },
+      "expected": {
+        "failure": {
+          "name": "SessionFailed",
+          "message": "Session failed after a storage error; close and reopen it"
+        },
+        "reopenedStatus": "pending",
+        "reopenedCheckpoint": {
+          "phase": "run"
+        },
+        "finalOutcome": {
+          "status": "completed",
+          "result": "ok"
+        },
+        "reports": [
+          "injected storage failure"
+        ]
+      },
+      "normalizations": [
+        "temporary SQLite paths, temporary effect files and the killed worker's process id are omitted",
+        "wall-clock capture timestamps are omitted; durable lifecycle times use the Harness clock recorded in the scenario",
+        "generated task, conversation and submission IDs are compared only where the identity relation is the observation"
+      ]
+    }
+  ]
+}

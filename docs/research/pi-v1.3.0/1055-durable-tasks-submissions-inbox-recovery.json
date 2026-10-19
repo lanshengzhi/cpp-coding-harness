@@ -1,0 +1,1092 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-ledger/1",
+  "ticket": "1055",
+  "title": "Durable tasks, submissions, inbox admission and crash recovery",
+  "baseline": {
+    "name": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+    "platform": "linux-x86_64-glibc"
+  },
+  "evidence": {
+    "family": "audit-1055",
+    "manifest": "fixtures/pi-v1.3.0/audit-1055/manifest.json",
+    "manifestSha256": "070a22ff5e021475ff8cbe3c5417bbb391bb9200e8768abd1cd94b526a415c62",
+    "report": "docs/research/pi-v1.3.0/1055-durable-tasks-submissions-inbox-recovery.md",
+    "capture": "fixtures/pi-v1.3.0/audit-1055/capture-1055.mts",
+    "artifacts": {
+      "task-lifecycle.json": {
+        "scenarios": 5,
+        "sha256": "f758d5cda5bf83485f9d7d4bf25bad596b0f9c1c9877997434262ff285fa8cec"
+      },
+      "task-versioning.json": {
+        "scenarios": 7,
+        "sha256": "905e9577dd4935499f4b5b914e6023429c8cedc631092ef9da0b0b5f54081191"
+      },
+      "ownership-abort.json": {
+        "scenarios": 5,
+        "sha256": "39052eaa758f72f39074325f4dc4413d7dadb7e9e4dc14d008b3f4165c6be438"
+      },
+      "submissions-inbox.json": {
+        "scenarios": 12,
+        "sha256": "58686c32e5d2df71a1ed6b4a3526eb371115b30019aecc33f2d7dd239da04acb"
+      },
+      "crash-recovery.json": {
+        "scenarios": 5,
+        "sha256": "1a17f92618a9f9264b4a7fb0d15cdaaa3f2946e9154dfc89815443c93a3ce4ab"
+      }
+    }
+  },
+  "statusVocabulary": {
+    "membership": [
+      "supported",
+      "excluded",
+      "no-decision"
+    ],
+    "implementation": [
+      "implemented",
+      "partial",
+      "missing",
+      "not-applicable"
+    ],
+    "verification": [
+      "verified",
+      "upstream-captured",
+      "unverified",
+      "not-applicable"
+    ]
+  },
+  "rows": [
+    {
+      "id": "task-definition-registry",
+      "capability": "Typed task definitions and registry resolution",
+      "operation": "Define a task by name and version with an `initial` checkpoint, an exhaustive phase map, an `abort` handler, an optional `migrate(input, checkpoint, fromVersion)` callback and typed hooks. Install definitions through extensions; resolution uses the current registry snapshot at reservation and at every phase boundary.",
+      "consumer": "Harness and TaskScheduler; extension authors. A task record stores only `kind` and `version`, never executable code.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/tasks.ts:defineTask",
+          "packages/durable/src/harness/define.ts:defineExtension,hook",
+          "packages/durable/src/harness/registry.ts:createRegistry,BUILTIN_TASKS",
+          "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases"
+        ],
+        "scenarios": [
+          "a multi-phase task replaces checkpoint state and reports a typed terminal result",
+          "reservation migrates a stored definition before running the newer version",
+          "task hooks run in extension order and an ordinary throw is reported while the task continues"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/TaskScheduler.hpp:TaskScheduler::register_handler`, `src/agent/harness/session/TaskStore.hpp:DurableTask.kind,definition_version`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:52` replaces a future handler and keeps the running invocation on its old handler; `TaskSchedulerTest.cpp:120` rejects an unknown kind and a version regression. There is no typed `initial`/`phases`/`abort`/`migrate` surface: a handler is one `std::function<Expected<std::string>(std::stop_token)>`, and a return string is the entire checkpoint.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Introduce a C++ task-definition value (name, version, initial checkpoint, phase table, abort handler, migrate callback, hook names) and make the scheduler resolve that value by kind/version at reservation. Keep the current handler adapter as an implementation detail; do not expose SQLite or handler-return strings through the public seam.",
+      "blockers": []
+    },
+    {
+      "id": "task-observed-outcomes",
+      "capability": "Observed terminal outcomes: completed, failed and aborted",
+      "operation": "An implementation commits a terminal outcome. `completed` carries `result`; `failed` carries an error snapshot; `aborted` carries an optional reason and result. The terminal receipt is queryable by `getTask` and resolves `waitForTask`.",
+      "consumer": "Harness callers, join waiters and task authors reading `runtime.outcomes()`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskOutcome,TaskState,TaskRecord",
+          "packages/durable/src/harness/scheduler.ts:#decide,#terminate",
+          "packages/durable/test/harness-tasks.test.ts:terminal outcomes"
+        ],
+        "scenarios": [
+          "a multi-phase task replaces checkpoint state and reports a typed terminal result",
+          "a failFast join aborts live siblings and the parent reads ordered terminal outcomes",
+          "aborting a parent runs descendants' abort handlers before the parent and preserves order",
+          "abortTask marks a running task and runs its abort handler after the run invocation joins"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:kSchemaSql` and `transition`; `src/agent/harness/session/TaskStore.hpp:DurableTask.state`",
+      "cppEvidence": "`TaskStoreTest.cpp:8` asserts flat `state` strings and checkpoint persistence. `TaskStore` has no outcome column or structured result: `completed|failed|aborted` are CHECK-constrained state strings, and `failed` is not distinguished from a completed receipt in inspection. `TaskSchedulerTest.cpp:16` checks only `completed` and the returned checkpoint.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Persist the terminal outcome beside the state (status, result JSON, error snapshot, reason) and return it from `load_task`/wait. Migrate the current six-value state column into the upstream five-state + outcome model rather than overloading `failed`.",
+      "blockers": []
+    },
+    {
+      "id": "task-scheduler-outcomes",
+      "capability": "Scheduler-written outcomes: orphaned and faulted",
+      "operation": "A task with no usable definition that is abort-marked settles `orphaned` with the blocked reason. An uncaught throw, malformed provider data or no durable progress settles `faulted`; a fault with live ordinary owned work is held at `completing`. Neither outcome runs task code.",
+      "consumer": "Harness reconciliation, session cleanup and operators inspecting failed durable work.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskOutcome",
+          "packages/durable/src/harness/scheduler.ts:#terminate,#failSession,#finalize",
+          "packages/durable/docs/spec.md:\u00a75.4"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "No Pike seam. `TaskScheduler` maps an `Expected` failure to the `failed` state in `transition(\"running\",\"completing\")/transition(\"completing\",\"failed\")`; it never writes `orphaned` or `faulted`, and it does not distinguish a handler bug from a deliberate failed outcome.",
+      "cppEvidence": "`TaskStoreTest.cpp:77` covers parent-failure propagation to children as `failed`; `TaskSchedulerTest.cpp:412` covers abort. No test writes `orphaned` or `faulted`, and no C++ type represents either.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "unverified"
+      },
+      "recommendation": "Add the two scheduler-written outcomes and their cleanup semantics only after the record model carries an outcome. Cover missing definition + abort, a thrown handler, and a thrown handler while owned work is live; the last must hold then finalize.",
+      "blockers": []
+    },
+    {
+      "id": "task-reservation-checkpoint",
+      "capability": "Reservation and durable checkpoint commits",
+      "operation": "The scheduler serially reserves an eligible task by committing `pending -> running` before running the handler. A handler commits a replacement checkpoint (or the next phase) after rereading the task; a run invocation may not commit after an abort mark appears. A storage failure during reservation runs no handler.",
+      "consumer": "TaskScheduler, TaskRuntime.commit and every phase handler.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskState",
+          "packages/durable/src/harness/scheduler.ts:#reserve,#step",
+          "packages/durable/src/harness/harness.ts:Harness.openTasks,resume",
+          "packages/durable/test/harness-tasks.test.ts:checkpoint"
+        ],
+        "scenarios": [
+          "a multi-phase task replaces checkpoint state and reports a typed terminal result",
+          "task lifecycle times come from the Harness clock and survive a durable wait",
+          "a storage failure at the terminal commit fails the Session and the task reruns after reopen"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/TaskScheduler.cpp:TaskScheduler::run`; `src/agent/harness/session/TaskStore.cpp:transition`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:16` asserts `running` is committed before the handler runs and `resume()` gates dispatch; `TaskSchedulerTest.cpp:166` asserts a rejected reservation does not run the handler and leaves `pending`. The handler returns one checkpoint string at the end, so C++ has no per-phase commit or abort-mark rejection at a checkpoint.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep reservation-before-handler and the rollback test. Add a C++ phase-runtime commit that rereads the record and rejects after an abort mark, plus a discriminator that the reservation commit (not the handler) is the observable write.",
+      "blockers": []
+    },
+    {
+      "id": "task-terminal-receipt-atomicity",
+      "capability": "Atomic terminal task receipt",
+      "operation": "A terminal transition writes the terminal record, appends result entries, retires task-scoped documents and settles submissions in one atomic commit. A `completing` hold splits a task-written outcome: its other writes land at hold; the record, task-document retirement and waiters finalize later.",
+      "consumer": "Harness storage transaction, task waiters, transcript consumers and document retirement.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskState",
+          "packages/durable/src/harness/scheduler.ts:#terminate,#finalize",
+          "packages/durable/src/session/transaction.ts:Transaction.setTask",
+          "packages/durable/docs/spec.md:\u00a75.3"
+        ],
+        "scenarios": [
+          "a multi-phase task replaces checkpoint state and reports a typed terminal result",
+          "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
+          "a killed process after a terminal commit does not rerun the task or duplicate the submission"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:transition`; `src/agent/harness/TaskScheduler.cpp:run`",
+      "cppEvidence": "`transition` updates `tasks.state/checkpoint` and, in the same SQLite transaction, marks the task's submissions `done` for a terminal state. It has no task-scoped document table, no result/log entry append, and no terminal outcome payload. `TaskSchedulerTest.cpp:195` recovers transcript export and checks the submission becomes `done`, but that is the side effect of the export handler, not an atomic task result receipt.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Introduce a transaction-level terminal commit that carries outcome and result entries, retires task-scoped documents, and settles submissions. Test an injected failure after the record write to prove the whole receipt rolls back.",
+      "blockers": []
+    },
+    {
+      "id": "task-lifecycle-times",
+      "capability": "startedAt and endedAt lifecycle stamps",
+      "operation": "The Session stamps `startedAt` at the first change to `running` and `endedAt` at the change to `terminal` using the Harness clock. Both survive waits, a `completing` hold and reopen. A never-run task has only `endedAt`; old records may have neither.",
+      "consumer": "Harness inspection, task waiters and UI timing.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskRecordBase",
+          "packages/durable/src/harness/scheduler.ts:#reserve,#terminate",
+          "packages/durable/test/harness-tasks.test.ts:lifecycle times"
+        ],
+        "scenarios": [
+          "task lifecycle times come from the Harness clock and survive a durable wait",
+          "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.hpp:DurableTask.created_at,updated_at`",
+      "cppEvidence": "`TaskStoreTest.cpp:8` only asserts created/updated persistence. There is no `started_at` or `ended_at`, and `transition` writes `updated_at` on every state change, so a wait or reopen cannot recover the first-run or terminal span.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add `started_at`/`ended_at` with null-before-first-run semantics and preserve them across recovery. Test the same clock sequence used in the frozen capture (1000/3000/4000).",
+      "blockers": []
+    },
+    {
+      "id": "task-memos",
+      "capability": "First-writer-wins task memos",
+      "operation": "`runtime.memo(name)` reads a durable JSON value; `runtime.memo(name, candidate)` stores the candidate unless one exists and returns the durable winner in the same commit. Memos survive checkpoint replacement, are absent from the terminal representation, and concurrent candidates converge on one value.",
+      "consumer": "Phase handlers that need idempotent progress or effect identifiers.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskRuntime.memo",
+          "packages/durable/src/harness/scheduler.ts:#step",
+          "packages/durable/test/harness-tasks.test.ts:memos"
+        ],
+        "scenarios": [
+          "a task memo survives checkpoint replacement and is absent from the terminal record",
+          "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once"
+        ]
+      },
+      "cppSeam": "No Pike seam. `DurableTask` has `checkpoint` only; no memo table or first-writer-wins API exists.",
+      "cppEvidence": "`TaskStoreTest.cpp` has no memo case; `TaskSchedulerTest.cpp` handlers return checkpoint strings only. The transfer crash capture shows the frozen memo `requested: 7` survives the crash and disappears at terminal, which C++ cannot represent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add a JSON memo map to live records with compare-on-insert semantics inside the same transaction as the candidate read. Test two concurrent candidates, checkpoint replacement, crash survival and terminal removal.",
+      "blockers": []
+    },
+    {
+      "id": "task-lifecycle-hooks",
+      "capability": "Per-task phase hooks and scheduler lifecycle hooks",
+      "operation": "A task definition can declare hook names; extensions install handlers for a task type in extension order. `runtime.hooks.each(name, invoke)` runs matching handlers in that order, isolates an ordinary throw through `onReport`, and propagates cancellation after an invocation is signalled. The scheduler also runs registered before/after task hooks around terminalization.",
+      "consumer": "Extension authors, task diagnostics and the scheduler.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/define.ts:hook",
+          "packages/durable/src/harness/scheduler.ts:#runPhases",
+          "packages/durable/src/types.ts:HookRunner",
+          "packages/durable/test/harness-tasks.test.ts:hooks"
+        ],
+        "scenarios": [
+          "task hooks run in extension order and an ordinary throw is reported while the task continues",
+          "abortTask marks a running task and runs its abort handler after the run invocation joins"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/TaskScheduler.hpp:register_before_hook,register_after_hook,set_diagnostics_sink`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:306` proves registration-order before/after hooks, error isolation through the diagnostics sink, and after-hooks observing `completed`; `TaskSchedulerTest.cpp:362` proves a before-hook abort reaches the handler stop token. These are scheduler-wide hooks, not per-task phase hooks: there is no `runtime.hooks.each`, no extension-ordered handler registry, and no hook name in a task definition.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the existing before/after scheduler hooks. Add per-task named hooks with extension-order resolution only when the task-definition model exists; make cancellation the terminal check and report ordinary throws once.",
+      "blockers": []
+    },
+    {
+      "id": "task-effect-sandwich",
+      "capability": "Intent/effect/outcome recovery boundary",
+      "operation": "The documented sandwich is: commit intent (a checkpoint), perform the external effect, commit the outcome or next phase. Reopening in an intent phase may replay the effect; the handler must be idempotent, poll an external handle, or record interruption. The durable layer does not deduplicate arbitrary external effects.",
+      "consumer": "Task authors of side-effecting work such as transcript export, payments or generation.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/docs/spec.md:\u00a75.2",
+          "packages/durable/src/types.ts:TaskRuntime.commit",
+          "packages/durable/test/harness-tasks-recovery.test.ts:TransferService"
+        ],
+        "scenarios": [
+          "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
+          "a killed process after a terminal commit does not rerun the task or duplicate the submission"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/TaskScheduler.cpp:run`; `src/agent/harness/TranscriptExport.cpp:transcript_export_handler`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:195` recovers a running transcript export and proves the file effect is idempotent by replay; the handler is the one task kind wired to the scheduler. There is no generic intent/effect/outcome API or effect receipt. The frozen capture measured the boundary directly: the killed worker's effect ran once; after reopen the handler called the effect a second time, and the application-side keyed store applied it only once (`calls: 2, applied: 1`).",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Document and test at-least-once replay rather than claiming exactly-once. Add a replay-safe effect convention (stable key in checkpoint/memo) and crash tests that distinguish effect invocation count from applied count. Do not add scheduler deduplication without an idempotency contract.",
+      "blockers": []
+    },
+    {
+      "id": "task-completing-hold",
+      "capability": "Completing hold for structured concurrency",
+      "operation": "A task that commits a terminal outcome while its ordinary owned work is live is stored as `{status:\"completing\", outcome}`. It runs no more code and finalizes only when no ordinary owned work is live. A held non-completed outcome is cancellation intent for the work below; a held completed outcome waits normally. Waiters, idle waits and inspection see `completing` as live.",
+      "consumer": "Structured-concurrency joins, owner finalization and task inspection.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskState",
+          "packages/durable/src/harness/scheduler.ts:#finalize,#hasOwnedLive",
+          "packages/durable/docs/spec.md:\u00a75.5 rule 1-5"
+        ],
+        "scenarios": [
+          "a completing owner holds its terminal outcome until ordinary owned work drains",
+          "a failFast join aborts live siblings and the parent reads ordered terminal outcomes"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:transition`; `src/agent/harness/TaskScheduler.cpp:run`",
+      "cppEvidence": "`transition` permits `running -> completing -> completed|failed|aborted` and the scheduler performs both writes back-to-back in the same work item. `TaskStoreTest.cpp:77` uses `completing` only as an intermediate write; there is no live-owned-work query, no hold across commits, and no test that a terminal outcome waits for a child.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Make `completing` a durable hold: persist the outcome, stop the handler, and finalize from a reconciliation pass that checks ordinary owned work with the same transaction semantics. Test parent-completes-first and child-completes-first orderings, including work created by the finishing commit.",
+      "blockers": []
+    },
+    {
+      "id": "waiting-failfast-join",
+      "capability": "Waiting joins with failFast",
+      "operation": "A phase commits `{status:\"waiting\", checkpoint, on, policy:\"failFast\"}`. The task has no invocation; it resumes when every task in `on` is terminal. The first non-completed outcome in `on` gives every other live member an abort mark in the next reconcile commit; the waiter itself stays unmarked and reads ordered outcomes after all settle.",
+      "consumer": "Task authors coordinating children and the scheduler reconciliation pass.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskState,JoinPolicy",
+          "packages/durable/src/harness/scheduler.ts:#track,#reconcile,#anyFailed",
+          "packages/durable/test/harness-ownership.test.ts:failFast"
+        ],
+        "scenarios": [
+          "a failFast join aborts live siblings and the parent reads ordered terminal outcomes"
+        ]
+      },
+      "cppSeam": "No Pike seam. `DurableTask.state` has no `waiting`; `TaskOptions`/`TaskStore` have no join list or policy; scheduler handlers cannot commit a waiting state.",
+      "cppEvidence": "`TaskStoreTest.cpp:77` implements the opposite direction: when a parent transitions to `failed`, every non-terminal descendant is set `failed`. There is no `on` list, no failFast sibling abort, and no ordered `outcomes()` read. `TaskSchedulerTest.cpp:256` covers direct parent abort cascade, not a waiting join.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add `waiting` records with `on` and `policy`, scheduler tracking of waiters, reconcile-time failFast marking, and a terminal-outcome read in `on` order. The first C++ test should fail one child, keep two live, and assert the two are aborted while the parent completes with `[failed, aborted, aborted]`.",
+      "blockers": []
+    },
+    {
+      "id": "waiting-allsettled-join",
+      "capability": "Waiting joins with allSettled",
+      "operation": "With `policy:\"allSettled\"`, a failure in `on` does not abort the other members. The waiter resumes only after all are terminal and reads their outcomes in the declared order. A task may wait on non-owned tasks only with `allSettled`; the wait graph may not contain a missing task, a self-edge or a cycle.",
+      "consumer": "Task authors joining independent work without fail-fast cancellation.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:JoinPolicy",
+          "packages/durable/src/harness/scheduler.ts:#track,#reconcile",
+          "packages/durable/test/harness-ownership.test.ts:allSettled"
+        ],
+        "scenarios": [
+          "an allSettled join lets surviving siblings finish and still reads ordered outcomes"
+        ]
+      },
+      "cppSeam": "No Pike seam. There is no waiting state, join policy or wait-for graph validation.",
+      "cppEvidence": "No C++ test models a surviving sibling after another fails; `TaskStoreTest.cpp:77` terminalizes descendants on a parent failure, which is incompatible with both join policies.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Fold this into the waiting-join slice, not a second scheduler. Test `[failed, completed]` with no abortRequested on the surviving child, plus cycle/missing-task rejection.",
+      "blockers": []
+    },
+    {
+      "id": "task-ownership-graph",
+      "capability": "Task ownership, child restrictions and cascade edges",
+      "operation": "Every task names ownership: its conversation (`{kind:\"conversation\"}`) or a task (`{kind:\"task\",taskId}`). A child lives in its owner's conversation, cannot be background, and requires a live, non-aborted owner. Owner edges are immutable. A parent abort cascades through descendants; a failing failFast join marks the other members.",
+      "consumer": "Task creation, conversation creation, scheduler cascades and inspection.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskOwnership,TaskOptions",
+          "packages/durable/src/session/transaction.ts:Transaction.createTask",
+          "packages/durable/test/harness-ownership.test.ts:ownership"
+        ],
+        "scenarios": [
+          "inadmissible child ownership is rejected before the commit writes",
+          "a failFast join aborts live siblings and the parent reads ordered terminal outcomes",
+          "aborting a parent runs descendants' abort handlers before the parent and preserves order"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.hpp:DurableTask.parent_task_id`; `TaskStore.cpp:task_descendants,request_abort,transition`",
+      "cppEvidence": "`TaskStoreTest.cpp:77` and `TaskSchedulerTest.cpp:256` prove recursive abort and a cycle-free descendant query. `create_task` accepts any `parent_task_id` without checking existence, terminal state, conversation, or background; there is no conversation ownership column. `TaskStoreTest.cpp:102` only checks recovery ordering and a schema migration.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add validated ownership at the transaction seam: owner exists, is live, shares the conversation, and is not background. Keep parent/child traversal, but derive failFast joins from waiting policies rather than parent-failure propagation.",
+      "blockers": []
+    },
+    {
+      "id": "background-ownership-boundary",
+      "capability": "Background tasks as cancellation and idle boundaries",
+      "operation": "A conversation-owned task may be `background`; a child may not. Background tasks are excluded from ordinary idle waits, conversation aborts and cascades unless aborted directly or with `Conversation.abort({background:true})`. Ordinary work below a background owner is excluded from the owner's scope.",
+      "consumer": "Conversation abort, idle waits and structured-concurrency scopes.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskOptions.background,ConversationAbortOptions",
+          "packages/durable/src/harness/scheduler.ts:#loadScopes,#walkDown",
+          "packages/durable/test/harness-ownership.test.ts:background"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "No Pike seam. `DurableTask` has no background or conversation-ownership field; `request_abort` marks every descendant.",
+      "cppEvidence": "No C++ test has a background task or distinguishes a background boundary; `TaskStoreTest.cpp:77` aborts every descendant.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "unverified"
+      },
+      "recommendation": "Introduce background on conversation-owned tasks only and use it in scope walks. Test that a background child survives a conversation abort, while a direct abort or `{background:true}` reaches it.",
+      "blockers": []
+    },
+    {
+      "id": "abort-task-protocol",
+      "capability": "Durable abort mark, run join and abort invocation",
+      "operation": "`abortTask(id)` returns `terminal` for an already terminal task, otherwise commits a durable abort mark (or upgrades a restart mark) and returns `marked`. It signals and joins the active run invocation; the run may not commit after the mark. A fresh abort invocation then runs `abort`, which must commit a terminal outcome. A `completing` task is only marked.",
+      "consumer": "Harness callers, conversation abort and task authors implementing compensation.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#abort,#runAbort",
+          "packages/durable/src/types.ts:TaskDefinition.abort",
+          "packages/durable/test/harness-tasks.test.ts:abort"
+        ],
+        "scenarios": [
+          "abortTask marks a running task and runs its abort handler after the run invocation joins",
+          "aborting a parent runs descendants' abort handlers before the parent and preserves order"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:request_abort,finish_aborted`; `src/agent/harness/TaskScheduler.cpp:request_abort`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:412` proves a durable mark, stop token and `unanswered` submission; `TaskStoreTest.cpp:8` proves abort marks survive reopen. There is no abort handler invocation: `request_abort` immediately sets `pending|running -> aborted`, and the scheduler only converts the interrupted run through `finish_aborted`. The return value is `ExpectedVoid`, not `marked|terminal`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Separate the mark from terminalization. Keep the current run cancellation path for handlers that have no compensation, but add an abort invocation and a `marked|terminal` result. Test that a run commit after the mark is rejected and that the abort handler runs only after the run joins.",
+      "blockers": []
+    },
+    {
+      "id": "abort-cascade-bottom-up",
+      "capability": "Bottom-up abort cascade through owned work",
+      "operation": "An abort mark cascades idempotently to every foreground task below the live owner. The owner's abort handler starts only after its ordinary owned work is terminal, so it can read final child outcomes. Background boundaries stop the cascade; the reason `restart` propagates only from an abandoned owner; terminal owners never cascade. Queued inputs in reached conversations become `unanswered/aborted` and leave the inbox; queued writes stay.",
+      "consumer": "Structured concurrency, conversation abort and cleanup handlers.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#reconcile,#runAbort,#walkDown",
+          "packages/durable/src/harness/inbox.ts:withdrawQueuedInputs",
+          "packages/durable/docs/spec.md:\u00a75.4-5.5"
+        ],
+        "scenarios": [
+          "aborting a parent runs descendants' abort handlers before the parent and preserves order",
+          "a failFast join aborts live siblings and the parent reads ordered terminal outcomes",
+          "conversation abort withdraws queued inputs, keeps queued writes and settles the placed input unanswered"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:request_abort`; `src/agent/harness/TaskScheduler.cpp:request_abort`",
+      "cppEvidence": "`TaskStoreTest.cpp:77` and `TaskSchedulerTest.cpp:256` prove recursive marks and stop-token propagation. The mark immediately writes `aborted` for pending/running descendants, so there is no bottom-up abort handler order to observe; `TaskStoreTest.cpp:77` also marks children `failed` on a parent failure, not on a join. No conversation/inbox withdrawal is coupled to the cascade.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Reuse the existing recursive descendant query as the ownership walk, but derive marks in a reconcile commit and run abort handlers bottom-up. Add the captured order assertion (`child-abort` before `parent-abort:aborted`) and keep queue withdrawal in the same admission/inbox slice.",
+      "blockers": []
+    },
+    {
+      "id": "wait-cancellation-is-not-abort",
+      "capability": "Cancelling a wait versus aborting persistent work",
+      "operation": "Passing an aborted `AbortSignal` context to `Harness.waitForTask` or `Submission.wait` rejects only that waiter. The task remains `running` with `abortRequested:false` and later completes; the submission remains `placed` and later settles. A task abort marks the persistent record and runs its abort handler.",
+      "consumer": "Harness callers, tool tasks and UI waiters.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:TaskScheduler.waitForTask",
+          "packages/durable/src/harness/submissions.ts:Submissions.wait",
+          "packages/durable/test/harness-ownership.test.ts:cancels only the caller's wait"
+        ],
+        "scenarios": [
+          "cancelling a wait cancels only the waiter; the persistent task keeps running and completes",
+          "cancelling a submission wait leaves the submission placed until it settles"
+        ]
+      },
+      "cppSeam": "No Pike seam. `TaskScheduler` has no waiter handle; `TaskStore` has no submission wait and no context/cancellation type.",
+      "cppEvidence": "`TaskSchedulerTest.cpp` polls store state and joins only on `close()`; there is no `waitForTask` and no test separating waiter cancellation from task abort. `TaskStoreTest.cpp` has no submission wait handle.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add waiter handles with a cancellation token that unregisters only the wait; keep task/submission records untouched. Test both captured cases and assert the record state after the cancellation, not just the rejected promise.",
+      "blockers": []
+    },
+    {
+      "id": "abandon-on-restart",
+      "capability": "Abandon-on-restart marks and migration wait",
+      "operation": "A task created with `abandonOnRestart` is marked `abortReason:\"restart\"` by the first reservation pass in a later Harness. The mark cascades to ordinary owned work with the same reason. A restart-marked task with no definition waits instead of becoming orphaned; an explicit abort replaces the reason and may orphan it. Opening without scheduling marks nothing.",
+      "consumer": "Tool tasks, replay-unsafe creators and restart cleanup.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskOptions.abandonOnRestart",
+          "packages/durable/src/harness/scheduler.ts:#abandoned,#reserve",
+          "packages/durable/test/harness-tasks-recovery.test.ts:abandonOnRestart"
+        ],
+        "scenarios": [
+          "a task abandoned on restart is aborted with reason restart after reopen"
+        ]
+      },
+      "cppSeam": "No Pike seam. `DurableTask` has `abort_requested` only; there is no `abandonOnRestart`, `abort_reason`, or reason-aware abort handler.",
+      "cppEvidence": "`TaskStoreTest.cpp` has no abandon/restart case. `TaskSchedulerTest.cpp:135` recovers every running task to `pending`; there is no selective abandonment or `restart` outcome.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add the flag and reason to the live record, mark on first resume rather than open, and pass the reason to the abort handler. Test open-only versus resume and a restart mark that waits for a missing definition.",
+      "blockers": []
+    },
+    {
+      "id": "version-migration-before-reservation",
+      "capability": "Definition migration before reservation",
+      "operation": "At reservation, a stored version older than the installed definition runs `migrate(input, checkpoint, fromVersion)`; success commits the migrated record and `running` atomically. Failure leaves the task pending, reports once and is retried only after the registry resolves a different definition. A stored version newer than the installed definition is blocked `task_too_old`.",
+      "consumer": "Registry authors and long-lived tasks surviving definition upgrades.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskDefinition.migrate",
+          "packages/durable/src/harness/scheduler.ts:#reserve,#blockedReason",
+          "packages/durable/test/harness-tasks.test.ts:migration"
+        ],
+        "scenarios": [
+          "reservation migrates a stored definition before running the newer version",
+          "a task whose stored version is newer than the installed definition stays pending and blocked",
+          "a failed migration is reported and leaves the task pending until a usable definition is installed"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:migrate_task`; `src/agent/harness/TaskScheduler.cpp:migrate_task`",
+      "cppEvidence": "`TaskStoreTest.cpp:126` migrates a pending version and rejects a running one; `TaskSchedulerTest.cpp:120` rejects version regression. Migration only changes `definition_version`: there is no input/checkpoint callback, no atomic migrated-record reservation, and the caller must invoke `migrate_task`; there is no blocked state or retry-on-registry-change.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Move migration into the reservation commit and carry `(input, checkpoint)` through a migration callback. Add blocked reasons and retry on a changed definition. Test a migration failure then a repaired definition, and a stored version newer than installed.",
+      "blockers": []
+    },
+    {
+      "id": "definition-replacement",
+      "capability": "Definition replacement without mid-flight takeover",
+      "operation": "Registering the same task kind with a higher version replaces the definition for future reservations. An already running invocation keeps its original handler. At a phase boundary, if the newly resolved definition can reserve the task, the invocation commits back to `pending` with its checkpoint, memos and abort mark and ends; the next reservation migrates and starts fresh. If the new definition cannot take it, the old invocation continues and reports once.",
+      "consumer": "Registry updates during a live task.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases",
+          "packages/durable/src/harness/registry.ts:createRegistry",
+          "packages/durable/test/harness-tasks-recovery.test.ts:handover"
+        ],
+        "scenarios": [
+          "a running task hands over to a newer definition at a phase boundary"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/TaskScheduler.cpp:register_handler,migrate_task,run`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:52` proves a running task finishes under its old handler while a pending task migrates and runs the new one; `TaskSchedulerTest.cpp:120` rejects a version regression. There is no phase boundary handover: a C++ handler is one invocation and cannot commit `pending` mid-run to hand over.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep replacement for future enqueues. The phase-boundary handover belongs with the phase-runtime slice; test a handler that finishes its current phase, commits `pending`, and then runs under v2 with migrated input/checkpoint.",
+      "blockers": []
+    },
+    {
+      "id": "blocked-definition-orphaned",
+      "capability": "Blocked definitions and orphan settlement",
+      "operation": "A live task whose definition is missing, too old or failed migration stays `pending` and blocked; it is never terminalized just because code is absent. It still blocks ordinary idle and is reconsidered on registry change. Aborting a blocked task settles it `orphaned` with the blocked reason instead of `aborted`, because no task code runs.",
+      "consumer": "Registry evolution, operators aborting unavailable work and idle waits.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#blockedReason,#terminate",
+          "packages/durable/src/types.ts:TaskOutcome",
+          "packages/durable/test/harness-tasks.test.ts:blocked"
+        ],
+        "scenarios": [
+          "a task whose stored version is newer than the installed definition stays pending and blocked",
+          "a task with no installed definition stays pending and runs when its definition returns",
+          "a failed migration is reported and leaves the task pending until a usable definition is installed"
+        ]
+      },
+      "cppSeam": "No Pike seam. `TaskScheduler::enqueue` rejects an unknown kind/version and leaves the task pending, but `TaskStore` has no blocked reason, inspection or orphan path; `request_abort` simply marks it `aborted`.",
+      "cppEvidence": "`TaskSchedulerTest.cpp:120` rejects unknown kinds at enqueue; `TaskStoreTest.cpp` has no missing-definition or orphan case. The current abort path would report `aborted` where upstream reports `orphaned` with `missing_task`/`task_too_old`/`migration_failed`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add derived blocked state (not persisted) and an orphan terminal path for abort of blocked tasks. Test missing/too-old/migration-failed, registry restoration, and abort-before-definition.",
+      "blockers": []
+    },
+    {
+      "id": "recovery-open",
+      "capability": "Open recovery and explicit resume",
+      "operation": "Opening a Harness loads every live task (`pending`, `running`, `waiting`, `completing`), changes surviving `running` back to `pending`, keeps checkpoints and lifecycle stamps, and dispatches nothing until `resume()` or a submission/wait asks for progress. Live `failFast` waiters are re-armed. An inspection-only open runs no task.",
+      "consumer": "Harness.open, crash recovery and all task kinds.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#open,resume",
+          "packages/durable/src/harness/harness.ts:Harness.openTasks",
+          "packages/durable/test/harness-tasks-recovery.test.ts:reopen"
+        ],
+        "scenarios": [
+          "a killed process leaves an admitted input and its generation task recoverable without a duplicate submission",
+          "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
+          "a task abandoned on restart is aborted with reason restart after reopen"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:recover_tasks`; `src/agent/harness/TaskScheduler.cpp:resume`",
+      "cppEvidence": "`TaskStoreTest.cpp:8` and `TaskSchedulerTest.cpp:135` prove `running -> pending`, parent-first recovery and no dispatch before `resume()`. The recovery query handles only flat states; it does not re-arm waiters or re-evaluate `completing`, because those states do not exist.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the recovery/resume gate. Extend it when waiting/completing records land: re-arm failFast waiters and finalize any `completing` task whose owned work drained during the crash window.",
+      "blockers": []
+    },
+    {
+      "id": "request-id-deduplication",
+      "capability": "Submission request-ID deduplication",
+      "operation": "A submission draft may carry `requestId`, scoped to its conversation. Submitting the same request ID with the same type returns the existing submission without a storage write. Reusing it with a different type throws. The identity survives reopen; a killed process can re-submit the same ID after recovery without duplicating the submission.",
+      "consumer": "Hosts retrying admission after a crash or transport error.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/submissions.ts:admitSubmission",
+          "packages/durable/src/session/transaction.ts:Transaction.submissionByRequest",
+          "packages/durable/test/harness-submissions.test.ts:request ID"
+        ],
+        "scenarios": [
+          "a duplicate request ID returns the existing submission without a storage write",
+          "a killed process leaves an admitted input and its generation task recoverable without a duplicate submission",
+          "a killed process after a terminal commit does not rerun the task or duplicate the submission"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:submit,load_submission`",
+      "cppEvidence": "`TaskStoreTest.cpp:46` proves deduplication across reopen. But the request ID is the submissions table primary key globally, not scoped per conversation; `submit` always creates a new task, there is no submission type check, and there is no high-level handle or status. The transcript-export test is the only consumer.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the atomic request-ID lookup/insert, but scope it by conversation and type and separate the submission from task creation. Add a same-ID/different-type rejection and a retry-after-crash test at the host API.",
+      "blockers": []
+    },
+    {
+      "id": "idle-input-admission",
+      "capability": "Idle input admission and run start",
+      "operation": "An idle conversation with no queued items admits an input by appending its entry (`pi.user` or an application entry kind) and creating a `placed` submission with the entry ID, then starts a run. An input entry kind must be non-empty and must not start with `pi.`. A successful run settles the input `done` with an answer entry.",
+      "consumer": "Host submit, generation tasks and transcript consumers.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/submissions.ts:admitSubmission",
+          "packages/durable/src/harness/inbox.ts:appendInput",
+          "packages/durable/src/harness/generation.ts:startRun"
+        ],
+        "scenarios": [
+          "an idle input is placed and answered by a run"
+        ]
+      },
+      "cppSeam": "No Pike high-level seam. `TaskStore::submit` accepts a task, request ID, kind and payload; `SqliteSessionStore` appends entries but has no admission path that creates a submission and starts a run.",
+      "cppEvidence": "`TaskStoreTest.cpp:46` covers the task/submission record, not input transcript placement. `SqliteSessionStoreTest.cpp:57` covers entry batches only. No C++ API accepts user content, creates a `pi.user` entry and starts a run atomically.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Build one admission transaction that appends the input entry, creates the placed submission and starts the run. Test entry kind validation, transcript order, and the returned answer/settled status.",
+      "blockers": []
+    },
+    {
+      "id": "passive-write-admission",
+      "capability": "Passive write admission and display-only writes",
+      "operation": "An idle `write` appends its entry and settles `done` without starting a run. A display-only write (only `kind`/`data`, no model/head/edits) is appended and settled even while busy, unless a queued reset must land first. A write whose head targets before the active range settles `unanswered/stale`.",
+      "consumer": "Hosts appending application entries, resets and UI annotations.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/submissions.ts:admitSubmission,isDisplayOnly",
+          "packages/durable/src/harness/inbox.ts:isStale",
+          "packages/durable/test/harness-submissions.test.ts:writes"
+        ],
+        "scenarios": [
+          "an idle passive write is appended and settled done without starting a run",
+          "a display-only write is appended and settled while the conversation is busy"
+        ]
+      },
+      "cppSeam": "No Pike high-level seam. `SqliteSessionStore::append_entry` can append a `write` entry but has no submission record, busy check or display-only/stale classification.",
+      "cppEvidence": "`SqliteSessionStoreTest.cpp:57` only covers entry batching. There is no test for display-only busy admission or stale head writes.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add write admission beside input admission: append + settle for display-only, queue for model-affecting writes, and settle stale heads. The stale/reset ordering test should run after the inbox queue exists.",
+      "blockers": []
+    },
+    {
+      "id": "busy-admission-modes",
+      "capability": "Busy admission: steer, followUp and reject",
+      "operation": "A busy conversation queues a non-display input in `pi.inbox` as `steer` or `followUp` (default followUp), or rejects it with `ConversationBusy` when `whenBusy:\"reject\"`. An idle conversation with queued items queues behind them and runs a final boundary. The queued item remains a `queued` submission until a boundary places it.",
+      "consumer": "Host input during an active run and UI steering.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/submissions.ts:admitSubmission",
+          "packages/durable/src/harness/inbox.ts:InboxItem",
+          "packages/durable/test/harness-inbox.test.ts:busy"
+        ],
+        "scenarios": [
+          "a busy input queues as a follow-up and is placed at the final boundary",
+          "a busy steer input queues in steer mode and a conversation abort withdraws it",
+          "a busy input with whenBusy reject throws ConversationBusy and writes no submission"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/SqliteSessionStore.hpp:InboxKind,InboxPayload`; `SqliteSessionStore.cpp:enqueue_inbox,claim_pending_inbox`",
+      "cppEvidence": "The low-level table supports `steer|follow_up|write` and claim-once. No busy/live-run check, no `ConversationBusy`, no submission record linking the inbox item, no default follow-up mode, and no admission API. `SqliteSessionStoreTest.cpp:96/129` only tests the table.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the table as storage, add the admission policy above it: live-run check, mode selection, reject, and one atomic submission+inbox write. Test all three modes and that reject writes nothing.",
+      "blockers": []
+    },
+    {
+      "id": "queue-mode-selection",
+      "capability": "Queue-mode selection at a boundary",
+      "operation": "`steeringMode` and `followUpMode` each choose whether a boundary places all matching queued items or only the first. The frozen capture discriminates `all` from `one-at-a-time` for follow-ups at the final boundary.",
+      "consumer": "Generation phase boundaries and the inbox queue.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/inbox.ts:applyBoundary,prepareBoundary",
+          "packages/durable/src/types.ts:QueueMode",
+          "packages/durable/test/harness-inbox.test.ts:boundaries"
+        ],
+        "scenarios": [
+          "queue modes decide whether all follow-ups or one are placed at the final boundary"
+        ]
+      },
+      "cppSeam": "No Pike seam. `claim_pending_inbox` claims every pending item at once; it has no postTools/final distinction, no mode selection, no reset handling and no submission placement.",
+      "cppEvidence": "`SqliteSessionStoreTest.cpp:96` proves claim-once only. No C++ test distinguishes steer placement at post-tools from follow-up placement at final, or `all` from `one-at-a-time`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Implement queue-mode selection with the inbox boundary transaction. Test both modes and both steer/followUp selections; the frozen capture covers follow-ups at final, not steer at post-tools.",
+      "blockers": []
+    },
+    {
+      "id": "steering-boundary-placement",
+      "capability": "postTools steer placement versus final followUp placement",
+      "operation": "At a `postTools` boundary, queued writes and steering-mode-selected steers are placed; follow-ups are placed only at a `final` boundary. A queued reset forces a final boundary. Items are placed in inbox order; writes are placed before user items.",
+      "consumer": "Generation phase boundaries and the inbox queue.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/inbox.ts:applyBoundary,prepareBoundary",
+          "packages/durable/src/types.ts:QueueMode",
+          "packages/durable/test/harness-inbox.test.ts:boundaries"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "No Pike seam. `SqliteSessionStore::claim_pending_inbox` claims every pending item at once and has no postTools/final distinction.",
+      "cppEvidence": "`SqliteSessionStoreTest.cpp:96` proves claim-once only. No C++ test distinguishes steer placement at post-tools from follow-up placement at final; `TaskStoreTest.cpp` has no inbox placement at all.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "unverified"
+      },
+      "recommendation": "Add a generation-with-tools capture that queues a steer during the tool round, then implement placement in the boundary transaction. This audit does not claim the steer post-tools message was observed; only steer admission and withdrawal were.",
+      "blockers": []
+    },
+    {
+      "id": "atomic-admission-inbox",
+      "capability": "Atomic admission of submission and inbox change",
+      "operation": "Admission commits the submission record and the `pi.inbox` document change in one storage batch/transaction. A crash between them cannot expose a message without its queue item, or a queue item without its submission.",
+      "consumer": "Session commit, inbox document and crash recovery.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/submissions.ts:admitSubmission",
+          "packages/durable/src/session/session.ts:HarnessImpl.#runCommit",
+          "packages/durable/test/harness-inbox.test.ts:atomic admission"
+        ],
+        "scenarios": [
+          "admission commits the queued submission and its inbox change in one storage batch"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/SqliteSessionStore.cpp:commit_batch_with_inbox`; `src/agent/harness/session/TaskStore.cpp:submit`",
+      "cppEvidence": "`SqliteSessionStoreTest.cpp:96` proves entry+inbox atomicity and rollback with an injected failure; `TaskStoreTest.cpp:46` proves task+submission atomicity. They are two separate seams and tables: no single transaction writes a submission and its inbox delta, so the captured upstream admission batch (`[submission, document.change]`) has no C++ equivalent.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Unify the two writes in one transaction at the admission seam. Keep `commit_batch_with_inbox` as the low-level primitive, but make its inbox payload reference a real submission and test a failure between the two writes.",
+      "blockers": []
+    },
+    {
+      "id": "submission-abort",
+      "capability": "Submission abort outcomes and inbox removal",
+      "operation": "`abortSubmission` (and `Submission.abort`) withdraws a queued submission and removes its inbox item, returning `aborted`; a placed input returns `already_placed`; a settled submission returns `settled`; an unknown or wrong-conversation ID returns `not_found`. The withdrawn input settles `unanswered/aborted`.",
+      "consumer": "Host cancellation and queue cleanup.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/submissions.ts:Submissions.abort",
+          "packages/durable/src/harness/harness.ts:Harness.abortSubmission",
+          "packages/durable/test/harness-submissions.test.ts:abort"
+        ],
+        "scenarios": [
+          "abort reports queued, placed and settled outcomes and removes the queued item"
+        ]
+      },
+      "cppSeam": "No Pike seam. `TaskStore` has no submission abort; `SqliteSessionStore` has no inbox item removal or settled submission record.",
+      "cppEvidence": "No C++ test covers submission abort outcomes or inbox removal. `TaskStoreTest` only settles submissions through task transitions.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add submission abort to the admission/inbox slice. Test all four return values, wrong-conversation scoping, the settled record, and inbox removal in the same commit.",
+      "blockers": []
+    },
+    {
+      "id": "conversation-abort-effects",
+      "capability": "Conversation abort: submit input, cancel scope, wait idle",
+      "operation": "`Conversation.abort()` withdraws every queued input of the conversation as `unanswered/aborted` and removes it from the inbox, keeps queued writes, settles a placed input unanswered, aborts the ordinary task scope, and waits until the conversation is ordinarily idle. `{background:true}` reaches background tasks too. The abort is idempotent.",
+      "consumer": "Interactive interrupt, task conversation ownership and queue cleanup.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/inbox.ts:withdrawQueuedInputs",
+          "packages/durable/src/harness/scheduler.ts:abortConversation,#walkDown",
+          "packages/durable/test/harness-ownership.test.ts:conversation abort"
+        ],
+        "scenarios": [
+          "conversation abort withdraws queued inputs, keeps queued writes and settles the placed input unanswered",
+          "a busy steer input queues in steer mode and a conversation abort withdraws it",
+          "aborting a parent runs descendants' abort handlers before the parent and preserves order"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/TaskStore.cpp:request_abort`; `SqliteSessionStore.cpp:claim_pending_inbox`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:256` aborts task descendants, and `TaskStore` marks submissions `unanswered` for aborted tasks. There is no conversation-scoped inbox withdrawal, no queued-write retention semantics, no placed-input settlement and no idle wait. The low-level inbox claim does not settle submissions.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Build conversation abort on top of waiting joins and the inbox: withdraw queued inputs, leave writes, settle placed input, then wait for ordinary idle. Test the captured statuses/inbox and the background option separately.",
+      "blockers": []
+    },
+    {
+      "id": "submission-wait-handle",
+      "capability": "Submission status and wait handles",
+      "operation": "`Harness.submission(id)` returns a handle with `status`, `wait` and `abort`. `wait` resolves with the settled record (`done` or `unanswered`); cancelling the wait context rejects only that waiter and leaves the submission placed. A closed Harness rejects pending waits with a session-closed error.",
+      "consumer": "Host retries, UI and shutdown.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/submissions.ts:SubmissionHandle,Submissions.wait",
+          "packages/durable/src/harness/types.ts:Submission",
+          "packages/durable/test/harness-submissions.test.ts:wait"
+        ],
+        "scenarios": [
+          "cancelling a submission wait leaves the submission placed until it settles",
+          "an idle input is placed and answered by a run"
+        ]
+      },
+      "cppSeam": "No Pike seam. `TaskStore` exposes `load_submission` by request ID only; there is no handle, status, wait or cancellation.",
+      "cppEvidence": "No C++ test waits on a submission or cancels a wait. `TaskStoreTest.cpp:46` only reloads a submission record.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add a handle over the submission record and a waiter set. Test done/unanswered settlement, cancellation of the waiter, and close rejecting pending waits without changing the record.",
+      "blockers": []
+    },
+    {
+      "id": "recovery-after-admission",
+      "capability": "Crash after admission: generation task and submission recovery",
+      "operation": "A process killed after a generation request was dispatched leaves the submission `placed` and the generation task `pending` at its request checkpoint. Reopen reconciles `running -> pending`, dispatches nothing until resume, then settles the run `done`; resubmitting the same request ID returns the same submission. A third open adds no answer.",
+      "consumer": "Harness.open, generation task and submit retry.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#open",
+          "packages/durable/src/harness/generation.ts:GenerationTask",
+          "packages/durable/test/harness-submissions.test.ts:reacquires a submission after reopen"
+        ],
+        "scenarios": [
+          "a killed process leaves an admitted input and its generation task recoverable without a duplicate submission"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:recover_tasks,submit`; `src/agent/harness/TaskScheduler.cpp:resume`",
+      "cppEvidence": "`TaskStoreTest.cpp:46` proves submission dedup across reopen; `TaskSchedulerTest.cpp:135` proves recovered work waits for `resume`. There is no generation task, transcript answer or high-level submit retry; the only wired task is transcript export.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Wire the recovered task record to the actual generation/submission transaction. Keep the resume gate and add a killed-process test that reopens, re-submits the same request ID, and asserts one answer.",
+      "blockers": []
+    },
+    {
+      "id": "recovery-after-effect",
+      "capability": "Crash after effect, before outcome commit",
+      "operation": "A process killed after an intent-phase effect but before the outcome commit reopens at the intent checkpoint with memos and `startedAt` intact. The handler runs again; the external effect is invoked twice but an application idempotency key applies it once. The terminal result is the same, and a later open does not run the handler again.",
+      "consumer": "Side-effecting task authors and crash recovery.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#open",
+          "packages/durable/docs/spec.md:\u00a75.2",
+          "packages/durable/test/harness-tasks-recovery.test.ts:TransferService"
+        ],
+        "scenarios": [
+          "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
+          "a killed process after a terminal commit does not rerun the task or duplicate the submission"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/TaskScheduler.cpp:run`; `src/agent/harness/TranscriptExport.cpp:transcript_export_handler`",
+      "cppEvidence": "`TaskSchedulerTest.cpp:195` proves the transcript-export handler replays idempotently. The frozen capture measured `calls: 2, applied: 1` across the crash. C++ has the same replay model but no generic effect key/memo, so a new side-effecting kind would need its own idempotency.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Do not promise exactly-once. Add a replay-safe handler convention with a stable effect key in the checkpoint/memo, and a crash test that asserts both invocation count and applied count. Keep the transcript-export idempotency regression.",
+      "blockers": []
+    },
+    {
+      "id": "recovery-after-terminal",
+      "capability": "Crash after terminal commit",
+      "operation": "A task killed after its terminal commit does not rerun on reopen; its submission stays `done`, its result is unchanged, and a duplicate request ID with the same type returns the same submission without a new answer.",
+      "consumer": "Crash recovery and submit idempotency.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#open",
+          "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+          "packages/durable/test/harness-tasks-recovery.test.ts:terminal"
+        ],
+        "scenarios": [
+          "a killed process after a terminal commit does not rerun the task or duplicate the submission"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:recover_tasks,transition,submit`",
+      "cppEvidence": "`recover_tasks` selects only `running`, so terminal C++ tasks are not rerun; `transition` settles the task submission `done`; `TaskStoreTest.cpp:46` proves duplicate request IDs. There is no result entry or terminal outcome to preserve, but the no-rerun and submission identity properties hold.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add terminal result/entry preservation to the terminal receipt slice; keep the no-rerun test and extend it to a reopened scheduler with the same kind/version.",
+      "blockers": []
+    },
+    {
+      "id": "recovery-abort-mark",
+      "capability": "Abort mark survives a killed process",
+      "operation": "A process killed inside an abort handler leaves a durable abort mark. Reopen loads the task as pending with `abortRequested:true`; scheduling runs only the abort handler, which commits the terminal outcome (`aborted/recovered`). The run phase does not execute again.",
+      "consumer": "Crash recovery and abort protocol.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/scheduler.ts:#open,#runAbort",
+          "packages/durable/test/harness-tasks-recovery.test.ts:abort mark"
+        ],
+        "scenarios": [
+          "an abort mark survives a killed process and only the abort handler runs after reopen"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:request_abort,recover_tasks`; `src/agent/harness/TaskScheduler.cpp:run`",
+      "cppEvidence": "`TaskStoreTest.cpp:8` proves abort marks survive reopen; `TaskSchedulerTest.cpp:412` proves a marked task terminalizes on close. There is no abort handler: `recover_tasks` removes abort-marked tasks from recovery and leaves them `aborted`, so a kill before terminalization cannot be completed after reopen.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Recover marked tasks into an abort-only invocation instead of dropping them. Test the captured sequence: kill inside abort cleanup, reopen, run only the abort handler, and preserve the mark.",
+      "blockers": []
+    },
+    {
+      "id": "storage-failure-session",
+      "capability": "Storage failure during a task commit",
+      "operation": "A storage failure fails the Session with `SessionFailed`; the task commit does not land and waiters reject. Reopening the same storage shows the task pending at its prior checkpoint, and scheduling reruns it to completion. The failure is reported once.",
+      "consumer": "Session failure guard, SQLite storage and recovery.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/session/session.ts:HarnessImpl.fail",
+          "packages/durable/src/harness/scheduler.ts:#failSession",
+          "packages/durable/test/harness-storage-failure.test.ts:task commit"
+        ],
+        "scenarios": [
+          "a storage failure at the terminal commit fails the Session and the task reruns after reopen"
+        ]
+      },
+      "cppSeam": "`src/agent/harness/session/TaskStore.cpp:transition`; `src/agent/harness/TaskScheduler.cpp:run`",
+      "cppEvidence": "`TaskStoreTest.cpp:146` proves a rejected transition rolls back state and checkpoint; `TaskSchedulerTest.cpp:166` proves a rejected reservation does not run the handler. There is no Session failure state, no failing-storage wrapper and no reopen-after-failure test; scheduler errors are ignored or returned locally.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add a sticky Session failure state for storage errors in task commits and reject waiters. Test an injected terminal-commit failure, reject the wait, reopen, and rerun to completion.",
+      "blockers": []
+    },
+    {
+      "id": "inspection-state",
+      "capability": "Harness inspection of live tasks and submissions",
+      "operation": "`inspect()` returns scheduling paused/running/closing, every live task with its derived scheduling state (running, ready+migrates, waiting, completing, blocked+reason) and record, and queued/placed submissions in ID order.",
+      "consumer": "Replay-unsafe tool tasks and restart cleanup.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/types.ts:TaskOptions.abandonOnRestart",
+          "packages/durable/src/harness/scheduler.ts:#abandoned,#reserve",
+          "packages/durable/test/harness-tasks-recovery.test.ts:abandonOnRestart"
+        ],
+        "scenarios": [
+          "a task whose stored version is newer than the installed definition stays pending and blocked",
+          "a completing owner holds its terminal outcome until ordinary owned work drains"
+        ]
+      },
+      "cppSeam": "No Pike seam. `DurableTask` has only `abort_requested`; `recover_tasks` requeues every running task with no abandonment path.",
+      "cppEvidence": "No C++ test sets an abandon flag or reads an abort reason. `TaskSchedulerTest.cpp:135` recovers work normally, which is the opposite of abandonment.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add a derived inspection read model after waiting/completing states land: live records plus registry resolution, never a scheduler proxy. Test paused/running/closing and every derived state.",
+      "blockers": []
+    },
+    {
+      "id": "idle-waits",
+      "capability": "Ordinary idle and named-task waits",
+      "operation": "`waitForIdle()` waits until the ordinary ownership scope has no live non-background task. `waitForTask(id)` waits for that named task regardless of background. A cancelled wait rejects only the waiter and does not mark the task (cross-reference `wait-cancellation-is-not-abort`).",
+      "consumer": "Host UI, shutdown and tests.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/harness.ts:waitForIdle,waitForTask",
+          "packages/durable/src/harness/scheduler.ts:#settleIdle,waitForTask",
+          "packages/durable/test/harness-ownership.test.ts:idle"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "No Pike equivalent. `TaskScheduler::close` waits for terminalization of active work, but there is no ordinary-scope idle predicate or named-task waiter.",
+      "cppEvidence": "`TaskSchedulerTest.cpp` polls `TaskStore::load_task` and joins on `close()`; no idle or named wait test exists.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "unverified"
+      },
+      "recommendation": "Add idle and named waits over the ownership graph after background/waiting states land. Test ordinary vs background scope, and cancellation of the waiter separately from task abort.",
+      "blockers": []
+    },
+    {
+      "id": "inspection-and-idle",
+      "capability": "Harness inspection and idle waits",
+      "operation": "`inspect()` returns scheduling paused/running/closing, every live task with its derived scheduling state and record, and queued/placed submissions. `waitForIdle()` waits for the ordinary scope (not background work); `waitForTask()` waits for a named task regardless of background.",
+      "consumer": "Host UI, tests and shutdown.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/durable/src/harness/harness.ts:inspect,waitForIdle,waitForTask",
+          "packages/durable/src/harness/types.ts:HarnessInspection,TaskInspection",
+          "packages/durable/test/harness-ownership.test.ts:idle"
+        ],
+        "scenarios": [
+          "a task whose stored version is newer than the installed definition stays pending and blocked",
+          "a completing owner holds its terminal outcome until ordinary owned work drains"
+        ]
+      },
+      "cppSeam": "No Pike equivalent. `TaskScheduler` has `resume`/`close` and the store can list records only by direct SQL; there is no inspection, derived blocked/ready/waiting state, idle waiter or named-task wait.",
+      "cppEvidence": "`TaskSchedulerTest.cpp` observes state by polling `TaskStore::load_task`; no inspection or idle test exists.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add an inspection read model and idle wait after waiting/completing states land. Keep it derived from records, never a scheduler proxy. Test paused/running/closing, blocked reasons and ordinary-vs-background idle.",
+      "blockers": []
+    }
+  ]
+}
