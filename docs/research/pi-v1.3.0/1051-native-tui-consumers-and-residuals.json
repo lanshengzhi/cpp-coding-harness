@@ -547,21 +547,22 @@
     ]
    },
    "cppSeam": "`src/coding_agent/tui/ThinkingSelector.cpp`; `ThinkingSelectorTest`, `ThinkingSelectorInteractiveTest`.",
-   "cppEvidence": "The pi v1.3.0 capture lists `off,minimal,low,medium,high,xhigh,max`; C++ lists only `off,minimal,low,medium,high` and has a different selection/blank-row layout. The C++ scenario passes its own current assertions (27) because it does not assert the missing levels (#810).",
+   "cppEvidence": "The captures are not an availability comparison. The C++ fixture uses `tests::make_full_thinking_model(\"faux-1\")`, whose explicit `thinkingLevelMap` maps all seven levels, so `ai::get_supported_thinking_levels` returns `off,minimal,low,medium,high,xhigh,max`. The frozen pi fixture's `faux-1` is `reasoning:true` with no `thinkingLevelMap`; pi `getSupportedThinkingLevels` therefore returns `off,minimal,low,medium,high`. The five common rows, title/help text, `\u2192 \u2713 off` marker and descriptions are directly comparable; pi has a blank row between the `>` prompt and first item and C++ does not. The C++ scenario passes its own 27 assertions but does not compare maps or availability.",
    "status": {
     "membership": "supported",
     "implementation": "partial",
-    "verification": "upstream-captured"
+    "verification": "unverified"
    },
    "owner": "cch_coding_agent",
    "boundary": "InteractiveSessionRun -> ThinkingSelector",
    "implementationTicket": "#810",
-   "recommendation": "Reuse #810; add xhigh/max rows and align marker/help/viewport, without adding the deferred per-model override.",
+   "recommendation": "Reuse/update #810 for the matched layout/fixture comparison: add a matched-`thinkingLevelMap` scenario and resolve the evidenced blank-row layout difference. Do not add `xhigh`/`max` from this capture; availability parity is unverified until both harnesses use the same map.",
    "blockers": [],
    "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
    "evidence": [
     "fixtures/pi-v1.3.0/audit-1051/product-differential.json"
-   ]
+   ],
+   "notes": "Configuration mismatch: C++ fixture maps seven levels; pi fixture omits the map and therefore has five. This is not evidence that C++ omits levels or that pi omits them for a mapped model."
   },
   {
    "id": "settings-selector",
@@ -1262,16 +1263,16 @@
     ]
    },
    "cppSeam": "See base row `thinking-selector`.",
-   "cppEvidence": "Reconcile through the current issue; no code change in this audit.",
+   "cppEvidence": "C++ full-map fixture lists `off,minimal,low,medium,high,xhigh,max`; pi no-map fixture lists `off,minimal,low,medium,high`. The count difference is fixture configuration. Common five rows/marker/help are directly comparable, a blank-row layout delta remains, and availability parity is unverified. No missing-level inference is made.",
    "status": {
     "membership": "supported",
     "implementation": "partial",
-    "verification": "upstream-captured"
+    "verification": "unverified"
    },
    "owner": "cch_coding_agent",
    "boundary": "See base row `thinking-selector`.",
    "implementationTicket": "#810",
-   "recommendation": "Reuse/update #810: C++ omits `xhigh`/`max` and differs in marker/blank-row layout; the selector source is unchanged upstream, so this is a C++ gap.",
+   "recommendation": "Reuse/update #810 for the matched layout/fixture comparison; add a matched-map scenario before claiming availability parity. Do not add thinking levels from this capture.",
    "blockers": [],
    "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
    "evidence": [

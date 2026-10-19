@@ -141,7 +141,7 @@ The machine ledger is authoritative for every operation, owner, consumer, scenar
 | Read line-range labels | `ReadRenderer` | partial / unverified | v1.3.0 normalization not tested |
 | outputPad | `ChatContainer` | partial / unverified | only user/assistant/error, not tool/bash/custom |
 | Model selector | `ModelSelector`, `ModelFlowController` | partial / captured | marker/layout; C++ post-Enter `Model:` assertion fails |
-| Thinking selector | `ThinkingSelector` | partial / captured | C++ omits `xhigh`/`max`; layout differs |
+| Thinking selector | `ThinkingSelector` | partial / unverified | fixture map mismatch; common layout comparable, blank-row delta; availability unverified |
 | Settings selector | `SettingsSelector`, `SettingsFlowController` | partial / captured | 13 vs 33 rows; stale hardware-cursor help; viewport |
 | Theme tokens | `ThemeController`, `Theme` | partial / captured | v1.3.0 token/schema changes (#1049) |
 | System theme | `ThemeController` | missing / unverified | no generator (#1032) |
@@ -168,7 +168,15 @@ The C++ capture seam was run for the scenarios that can settle a row. Normalized
   padding` and `Terminal progress` but omits the v1.3.0 rows; its hardware-cursor description is the old
   `Show the terminal cursor while still positioning it for IME support`, while pi says `Use the terminal cursor instead
   of Pi's drawn cursor`.
-- `thinking-selector`: C++ lists `off/minimal/low/medium/high`; pi lists those plus `xhigh` and `max`.
+- `thinking-selector`: the two captures are not an availability comparison. The C++ fixture uses
+  `tests::make_full_thinking_model("faux-1")`, whose explicit `thinkingLevelMap` maps all seven levels, so
+  `ai::get_supported_thinking_levels` returns `off/minimal/low/medium/high/xhigh/max`. The frozen pi fixture's
+  `faux-1` is `reasoning: true` with no `thinkingLevelMap`; pi's `getSupportedThinkingLevels` therefore returns
+  `off/minimal/low/medium/high`. The five common rows, title/help text, `→ ✓ off` marker and descriptions are
+  directly comparable; a blank-row layout difference remains (pi has a blank row between the `>` prompt and first
+  item, C++ does not). Availability parity is **unverified** until a matched-map scenario runs. The raw outputs are
+  `/tmp/1051-cpp-thinking/out.json` (pike, seven levels) and `/tmp/1051-diff-thinking-selector/out.json` (pi, five
+  levels); the committed pi artifact is unchanged.
 - `scrollback`: after six scripted turns both have 10 non-empty visible rows, but pi retains 12 non-empty scrollback rows
   and C++ retains 9.
 - `tool-result`: at the mid-stream barrier C++ already shows `deterministic tool answer`; pi still shows
@@ -192,7 +200,7 @@ scenario/capability names, not new tickets.
 | #1032 | Generated `system` theme (`generateSystemThemeColors`, `terminalAppearance`) | **No** (`system-theme.ts` unchanged) | C++ still resolves only built-in dark/light | **Reuse #1032.** |
 | #831 | Dock-growth footer frames (autocomplete/multi-line editor) | **No** reference change; this is a C++ `RenderPipeline` defect | No PTY A/B in this lane; focused C++ tests do not cover the reported frame sequence | **Reuse #831.** Add the VirtualTerminal frame test and the tmux/PTY observation. |
 | #812 | Successful `tool-result` presentation | **Yes:** v1.3.0 adds tool duration and applies outputPad to transcript blocks; the final tool/result structure is still the reference | Final read/result structure matches; the mid-stream C++ frame paints the next prose row where pi still shows Working | **Update #812** with the duration/outputPad consequences and a stable-barrier case. |
-| #810 | `thinking-selector` layout | **No** selector source change; v1.3.0 baseline has `xhigh`/`max` | C++ lists only off/minimal/low/medium/high; marker/blank-row layout differs | **Update/reuse #810.** Add the missing levels and align the selector. |
+| #810 | `thinking-selector` layout | **No** selector source change; v1.3.0 supports model-gated `xhigh`/`max` | C++ full-map fixture lists seven; pi no-map fixture lists five. Common five rows and `→ ✓ off` marker are directly comparable; a blank-row layout delta remains. Level availability is configuration-mismatched. | **Update/reuse #810.** Add a matched-map fixture for the layout/fixture comparison; do not add thinking levels from this capture. Record availability parity as unverified until both harnesses use the same map. |
 | #808 | `model-selector` marker/row layout | **No** selector source change | pi shows `→ ✓ <model>`; C++ native differential fails its own post-Enter `Model:` assertion | **Reuse #808** and broaden it to the failing stable transition. |
 
 ## Reassessment of historical accepted differences and omissions
@@ -282,6 +290,8 @@ Missing C++ implementation is not treated as a completed comparison:
   thinking-selector (27), user-message (20), tool-result (24), scrollback (30) — **pass**, except model-selector
   (17 passed, 1 failed: missing `Model:` after Enter).
 - C++ `[extension_ui]`: **17 cases / 321 assertions pass**.
+- #810 correction: exact captures re-read; C++ seven levels with an explicit full map, pi five with no map;
+  availability parity remains unverified. No recapture or rebuild was needed.
 - C++ `[cursor]`: **9 cases / 660 assertions pass**; `[exit]`: **20 cases / 2376 assertions pass**; `[footer]`:
   **16 cases / 152 assertions pass**.
 - The C++ target was built at `-j1` from the pinned vcpkg root; no full suite was run for this audit-only change.
@@ -303,7 +313,8 @@ Missing C++ implementation is not treated as a completed comparison:
 9. Port the generated system theme (#1032).
 10. Add the placement-span image repaint and Herdr support only with real-emulator evidence (#1035).
 11. Add wheel-under-overlay routing and a focused test.
-12. Align model and thinking selectors, including the missing thinking levels and the failing model post-Enter
-    transition.
+12. Align model and thinking selectors using a matched thinking-level-map fixture; resolve the evidenced
+    blank-row/layout difference, preserve the failing model post-Enter transition, and do not infer missing thinking
+    levels from the unmatched captures.
 
 These are dependency candidates for consolidation; this audit does not create or retarget their issues.
