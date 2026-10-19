@@ -1,0 +1,1112 @@
+{
+  "schema": "pike/pi-v1.3.0-consolidation-plan/1",
+  "ticket": "1058",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "sources": [
+    {
+      "ticket": "1047",
+      "ledger": "docs/research/pi-v1.3.0/1047-capability-ledger.json",
+      "report": "docs/research/pi-v1.3.0/1047-agent-execution-audit.md",
+      "family": "audit-1047",
+      "schema": "cch/pi-v1.3.0-audit-ledger/1"
+    },
+    {
+      "ticket": "1048",
+      "ledger": "docs/research/pi-v1.3.0/1048-session-persistence.json",
+      "report": "docs/research/pi-v1.3.0/1048-session-persistence.md",
+      "family": "audit-1048",
+      "schema": "pike/pi-v1.3.0-capability-ledger/1"
+    },
+    {
+      "ticket": "1049",
+      "ledger": "docs/research/pi-v1.3.0/1049-ledger.json",
+      "report": "docs/research/pi-v1.3.0/1049-resources-configuration-extensions-print-mode.md",
+      "family": "audit-1049",
+      "schema": "pike/pi-v1.3.0-audit-ledger/1"
+    },
+    {
+      "ticket": "1050",
+      "ledger": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json",
+      "report": "docs/research/pi-v1.3.0/1050-toolkit-capability-inventory.md",
+      "family": "audit-1050",
+      "schema": "pike/pi-v1.3.0-capability-ledger/1"
+    },
+    {
+      "ticket": "1051",
+      "ledger": "docs/research/pi-v1.3.0/1051-native-tui-consumers-and-residuals.json",
+      "report": "docs/research/pi-v1.3.0/1051-native-tui-consumers-and-residuals.md",
+      "family": "audit-1051",
+      "schema": "pike/pi-v1.3.0-audit-ledger/1"
+    },
+    {
+      "ticket": "1052",
+      "ledger": "docs/research/pi-v1.3.0/1052-mcp-audit-ledger.json",
+      "report": "docs/research/pi-v1.3.0/1052-mcp-protocol-oauth-application.md",
+      "family": "audit-1052",
+      "schema": "pike/pi-v1.3.0-audit-ledger/1"
+    },
+    {
+      "ticket": "1053",
+      "ledger": "docs/research/pi-v1.3.0/1053-codemode-audit-ledger.json",
+      "report": "docs/research/pi-v1.3.0/1053-codemode-audit.md",
+      "family": "audit-1053",
+      "schema": "pike/pi-v1.3.0-audit-ledger/1"
+    },
+    {
+      "ticket": "1054",
+      "ledger": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.json",
+      "report": "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.md",
+      "family": "audit-1054",
+      "schema": "pike/pi-v1.3.0-capability-ledger/1"
+    },
+    {
+      "ticket": "1055",
+      "ledger": "docs/research/pi-v1.3.0/1055-durable-tasks-submissions-inbox-recovery.json",
+      "report": "docs/research/pi-v1.3.0/1055-durable-tasks-submissions-inbox-recovery.md",
+      "family": "audit-1055",
+      "schema": "pike/pi-v1.3.0-audit-ledger/1"
+    },
+    {
+      "ticket": "1056",
+      "ledger": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.json",
+      "report": "docs/research/pi-v1.3.0/1056-durable-harness-workflows.md",
+      "family": "audit-1056",
+      "schema": "pike/pi-v1.3.0-audit-ledger/1"
+    },
+    {
+      "ticket": "1057",
+      "ledger": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json",
+      "report": "docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.md",
+      "family": "audit-1057",
+      "schema": "pike/pi-v1.3.0-capability-ledger/1"
+    }
+  ],
+  "schemaMappings": [
+    {
+      "ticket": "1047",
+      "sourceSchema": "cch/pi-v1.3.0-audit-ledger/1",
+      "mapping": {
+        "id": "id (package-prefixed: agent-core -> cch_agent_core, coding-agent -> cch_coding_agent)",
+        "capability": "no capability field; derived from the id member path; the frozen symbols stay in frozenSymbols verbatim",
+        "source": "piTests (packages/<...>:<case>) and piSymbols kept separately because the lane recorded symbol names without a file path",
+        "membership/implementation/verification": "top-level fields",
+        "consumer": "consumer.path/symbols/chainTo object",
+        "boundary/implementation_ticket/gaps": "absent; the lane's top-level G1-G13 gap register is preserved in sourceGapRegisters and attached to rows by evidence match"
+      }
+    },
+    {
+      "ticket": "1048",
+      "sourceSchema": "pike/pi-v1.3.0-capability-ledger/1",
+      "mapping": {
+        "note": "already the protocol row shape; evidence.artifact=null rows are C++ regression checks or static traces, not frozen captures"
+      }
+    },
+    {
+      "ticket": "1049",
+      "sourceSchema": "pike/pi-v1.3.0-audit-ledger/1",
+      "mapping": {
+        "id": "id; owner supplied from the application owner",
+        "capability": "capability",
+        "operation": "operation (kept as operation)",
+        "source": "upstreamEvidence.sources",
+        "scenario": "upstreamEvidence.scenarios",
+        "membership/implementation/verification": "status.*",
+        "gaps": "blockers",
+        "remaining work": "recommendation"
+      }
+    },
+    {
+      "ticket": "1050",
+      "sourceSchema": "pike/pi-v1.3.0-capability-ledger/1",
+      "mapping": {
+        "evidence": "evidence.artifact/scenario, or null; historical v1.0.4 routes stay historical and never count as v1.3.0 captures",
+        "scenario": "scenario; comparisonRoute decides captured / not-audited / historical / not-applicable"
+      }
+    },
+    {
+      "ticket": "1051",
+      "sourceSchema": "pike/pi-v1.3.0-audit-ledger/1",
+      "mapping": {
+        "source": "upstreamEvidence.sources",
+        "scenario": "upstreamEvidence.scenarios (future C++ comparison case names, not artifact scenario names)",
+        "evidence": "evidence is an artifact path list; the captured scenario pairing is artifact-level",
+        "membership/implementation/verification": "status.*",
+        "gaps": "blockers",
+        "remaining work": "recommendation"
+      }
+    },
+    {
+      "ticket": "1052",
+      "sourceSchema": "pike/pi-v1.3.0-audit-ledger/1",
+      "mapping": {
+        "source": "upstreamEvidence.sources",
+        "scenario": "upstreamEvidence.scenarios (names match the recorded artifact scenarios)",
+        "membership/implementation/verification": "status.*",
+        "gaps": "blockers",
+        "remaining work": "recommendation"
+      }
+    },
+    {
+      "ticket": "1053",
+      "sourceSchema": "pike/pi-v1.3.0-audit-ledger/1",
+      "mapping": {
+        "source": "upstreamEvidence.sources",
+        "scenario": "upstreamEvidence.scenarios",
+        "membership/implementation/verification": "status.*",
+        "gaps": "blockers",
+        "remaining work": "recommendation"
+      }
+    },
+    {
+      "ticket": "1054",
+      "sourceSchema": "pike/pi-v1.3.0-capability-ledger/1",
+      "mapping": {
+        "note": "already the protocol row shape"
+      }
+    },
+    {
+      "ticket": "1055",
+      "sourceSchema": "pike/pi-v1.3.0-audit-ledger/1",
+      "mapping": {
+        "source": "upstreamEvidence.sources",
+        "scenario": "upstreamEvidence.scenarios",
+        "membership/implementation/verification": "status.*",
+        "gaps": "blockers",
+        "remaining work": "recommendation"
+      }
+    },
+    {
+      "ticket": "1056",
+      "sourceSchema": "pike/pi-v1.3.0-audit-ledger/1",
+      "mapping": {
+        "upstreamEvidence.sources": "source (the divergent field that needs explicit mapping)",
+        "upstreamEvidence.scenarios": "scenario and evidence resolution; a row with no scenario is an explicit evidence gap, not an exclusion",
+        "blockers": "gaps (the divergent field that needs explicit mapping; blockers are remaining work)",
+        "recommendation": "notes",
+        "membership/implementation/verification": "top-level fields; the lane also carries them per row"
+      }
+    },
+    {
+      "ticket": "1057",
+      "sourceSchema": "pike/pi-v1.3.0-capability-ledger/1",
+      "mapping": {
+        "note": "already the protocol row shape; excluded rows now record implementation_ticket null"
+      }
+    }
+  ],
+  "owner": {
+    "defaults": {
+      "1047": "id-prefix",
+      "1048": "row-owner",
+      "1049": "cch_coding_agent",
+      "1050": "row-owner",
+      "1051": "row-owner-or-cch_coding_agent",
+      "1052": "cch_mcp",
+      "1053": "cch_codemode",
+      "1054": "row-owner",
+      "1055": "cch_durable",
+      "1056": "row-owner",
+      "1057": "row-owner"
+    },
+    "overrides": {
+      "1047": {
+        "coding-agent:AgentSession:tool-telemetry": "cch_coding_agent",
+        "coding-agent:TUI:tool-duration": "cch_coding_agent",
+        "coding-agent:AgentSession:queue-admission": "cch_coding_agent"
+      },
+      "1051": {
+        "excluded-third-party-ts-extensions": "cch_coding_agent",
+        "excluded-ai-timing-thinking": "cch_ai",
+        "excluded-session-share": "cch_coding_agent"
+      },
+      "1052": {
+        "mcp-client-lifecycle": "cch_mcp",
+        "mcp-tool-result-conversion": "cch_coding_agent",
+        "mcp-resource-tools": "cch_coding_agent",
+        "mcp-oauth-persistence": "cch_coding_agent",
+        "mcp-config": "cch_coding_agent",
+        "mcp-exposure": "cch_coding_agent",
+        "mcp-application-startup": "cch_coding_agent",
+        "mcp-application-resource-init": "cch_coding_agent",
+        "mcp-management-ui": "cch_coding_agent",
+        "mcp-session-tool-binding": "cch_coding_agent",
+        "mcp-reconnect-tools-changed": "cch_coding_agent",
+        "mcp-external-signin-pickup": "cch_coding_agent",
+        "mcp-deferred-tool-search": "cch_coding_agent"
+      },
+      "1053": {
+        "codemode-description-catalog": "cch_coding_agent",
+        "codemode-description-loadout": "cch_coding_agent",
+        "codemode-models-description-gate": "cch_coding_agent",
+        "codemode-callable-tools": "cch_coding_agent",
+        "codemode-tool-binding": "cch_coding_agent",
+        "codemode-extension-registration": "cch_coding_agent",
+        "codemode-settings": "cch_coding_agent",
+        "codemode-mcp-refresh": "cch_coding_agent",
+        "codemode-application-result": "cch_coding_agent",
+        "codemode-store-entry": "cch_coding_agent",
+        "codemode-application-nested-calls": "cch_coding_agent",
+        "codemode-application-image-output": "cch_coding_agent",
+        "codemode-application-tool-guidelines": "cch_coding_agent",
+        "codemode-application-deferred": "cch_coding_agent",
+        "codemode-application-inline-budget": "cch_coding_agent",
+        "codemode-application-namespace": "cch_coding_agent",
+        "codemode-application-direct-exposure": "cch_coding_agent",
+        "codemode-application-error-summary": "cch_coding_agent"
+      }
+    }
+  },
+  "consumer": {
+    "defaults": {
+      "1047": "scan-then-row-owner",
+      "1048": "scan-then-row-owner",
+      "1049": "cch_coding_agent",
+      "1050": "scan-then-row-owner",
+      "1051": "scan-then-row-owner",
+      "1052": "scan-then-row-owner",
+      "1053": "scan-then-row-owner",
+      "1054": "cch_durable",
+      "1055": "cch_durable",
+      "1056": "scan-then-row-owner",
+      "1057": "cch_durable"
+    },
+    "overrides": {
+      "1047": {
+        "agent-core:ToolResult:duration-field": ["cch_agent_core", "cch_ai", "cch_coding_agent"],
+        "coding-agent:AgentSession:tool-telemetry": ["cch_coding_agent"],
+        "coding-agent:TUI:tool-duration": ["cch_coding_agent"],
+        "coding-agent:AgentSession:queue-admission": ["cch_coding_agent"],
+        "agent-core:Agent:default-state": ["cch_coding_agent"],
+        "agent-core:Agent:provider-error": ["cch_coding_agent"],
+        "agent-core:InputQueue:follow-up": ["cch_coding_agent"],
+        "agent-core:InputQueue:peek-clear": ["cch_coding_agent"],
+        "agent-core:InputQueue:steering-all": ["cch_coding_agent"],
+        "agent-core:InputQueue:steering-one-at-a-time": ["cch_coding_agent"],
+        "agent-core:NestedToolCalls:duration": ["cch_coding_agent"],
+        "agent-core:NestedToolCalls:parent-ids": ["cch_coding_agent"],
+        "agent-core:ToolCallExecutor:truncation": ["cch_coding_agent"],
+        "agent-core:Agent:finish-turn-hook": [],
+        "agent-core:Agent:prepare-request-hook": [],
+        "agent-core:Agent:reset": [],
+        "agent-core:ToolCallExecutor:after-tool-call": [],
+        "agent-core:ToolCallExecutor:argument-mutation": [],
+        "agent-core:ToolCallExecutor:parallel-scheduling": [],
+        "agent-core:ToolCallExecutor:prepare-arguments": [],
+        "agent-core:ToolCallExecutor:run-tool-call": []
+      },
+      "1050": {
+        "Editor.render": ["cch_coding_agent", "cch_tui"],
+        "Input.render": ["cch_coding_agent", "cch_tui"],
+        "ProcessTerminal.start": ["cch_coding_agent", "cch_tui"],
+        "ProcessTerminal.stop": ["cch_coding_agent", "cch_tui"],
+        "TUI.getShowHardwareCursor": ["cch_coding_agent", "cch_tui"],
+        "TUI.setShowHardwareCursor": ["cch_coding_agent", "cch_tui"],
+        "TUI.showOverlay": ["cch_coding_agent", "cch_tui"],
+        "TuiAltScreen.render": ["cch_coding_agent", "cch_tui"],
+        "TuiAltScreen.handleViewportInput": ["cch_coding_agent", "cch_tui"],
+        "TuiAltScreen.clearTextSelection": ["cch_coding_agent", "cch_tui"],
+        "TuiAltScreen.applySelection": ["cch_coding_agent", "cch_tui"],
+        "cch_tui:keys:shifted-symbol-matching": ["cch_coding_agent", "cch_tui"]
+      },
+      "1051": {
+        "excluded-ai-timing-thinking": ["cch_ai"]
+      },
+      "1054": {
+        "cch_durable:Session:create": ["cch_durable"],
+        "cch_durable:Session:commit": ["cch_durable"],
+        "cch_durable:Tx:createTask": ["cch_durable"],
+        "cch_durable:Tx:read:task": ["cch_durable"],
+        "cch_durable:Storage:task": ["cch_durable"],
+        "cch_durable:Storage:submissionByRequest": ["cch_durable"],
+        "cch_durable:Chord:context": ["cch_durable"],
+        "cch_durable:Chord:draft": ["cch_durable"],
+        "cch_durable:Chord:delta": ["cch_durable"],
+        "cch_durable:Chord:state": ["cch_durable"],
+        "cch_durable:Chord:json": ["cch_durable"]
+      },
+      "1056": {
+        "chord-documents": ["cch_durable"],
+        "chord-delta": ["cch_durable"],
+        "tool-task-cancellation": ["cch_durable"]
+      },
+      "1057": {
+        "cch_chord:excluded:plugin-host": [],
+        "cch_chord:excluded:rpc-links": [],
+        "cch_chord:excluded:cluster": [],
+        "cch_chord:excluded:cells-schema": [],
+        "cch_chord:excluded:node-host": []
+      }
+    },
+    "textOverrides": {
+      "1047": {
+        "agent-core:Agent:default-state": "Current consumer: cch_coding_agent::AgentSession constructs agent::AsyncAgentOptions and Agent (AgentSessionExecution.cpp); proposed public caller: cch_agent_core Agent API.",
+        "agent-core:Agent:provider-error": "Current consumer: cch_coding_agent AgentSession event projection and TUI TreeSelector rendering of AssistantMessage.error_message; proposed public caller: cch_agent_core AgentEvent.",
+        "agent-core:InputQueue:follow-up": "Current consumer: cch_coding_agent::AgentSession::follow_up (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:InputQueue:peek-clear": "Current consumer: cch_coding_agent::AgentSession clear_steering_queue/clear_follow_up_queue/clear_input_queues (AgentSessionInteraction.cpp); peek_* has no application caller; proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:InputQueue:steering-all": "Current consumer: cch_coding_agent::AgentSession::steer (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:InputQueue:steering-one-at-a-time": "Current consumer: cch_coding_agent::AgentSession::steer (AgentSessionInteraction.cpp) and the TUI prompt path (InteractiveMode.cpp); proposed public caller: cch_agent_core Agent queue API.",
+        "agent-core:NestedToolCalls:duration": "Current consumer: cch_coding_agent::AgentSession event projection (AgentSessionInteraction.cpp apply_event) and ProjectionStream; the duration field is absent from the hop; proposed public caller: cch_agent_core nested-tool-call API.",
+        "agent-core:NestedToolCalls:parent-ids": "Current consumer: cch_coding_agent::AgentSession event projection (AgentSessionInteraction.cpp apply_event) and ProjectionStream; proposed public caller: cch_agent_core nested-tool-call API.",
+        "agent-core:ToolCallExecutor:truncation": "Current consumer: cch_coding_agent::AgentSession event projection and the TUI tool block; proposed public caller: cch_agent_core ToolCallExecutor API.",
+        "coding-agent:AgentSession:queue-admission": "Current consumer: cch_coding_agent::AgentSession::steer/follow_up callers in the TUI prompt path (InteractiveMode.cpp); proposed public caller: AgentSession public API.",
+        "agent-core:Agent:finish-turn-hook": "None currently: no C++ application caller sets AgentOptions.finishTurn; proposed public caller: cch_agent_core AgentOptions.finishTurn.",
+        "agent-core:Agent:prepare-request-hook": "None currently: no C++ application caller sets AgentOptions.prepareRequest; proposed public caller: cch_agent_core AgentOptions.prepareRequest.",
+        "agent-core:Agent:reset": "None currently: no C++ application caller invokes Agent::reset; proposed public caller: cch_agent_core Agent API.",
+        "agent-core:ToolCallExecutor:after-tool-call": "None currently: no C++ application caller installs AgentOptions.afterToolCall; proposed public caller: cch_agent_core AgentOptions.afterToolCall.",
+        "agent-core:ToolCallExecutor:argument-mutation": "None currently: no C++ application caller installs a before-tool-call argument mutation; proposed public caller: cch_agent_core AgentOptions before-tool-call hook.",
+        "agent-core:ToolCallExecutor:parallel-scheduling": "None currently: no C++ application caller sets AgentOptions.toolExecution; proposed public caller: cch_agent_core AgentOptions.toolExecution.",
+        "agent-core:ToolCallExecutor:prepare-arguments": "None currently: no C++ application tool definition sets prepareArguments; proposed public caller: cch_agent_core ToolDefinition.prepareArguments.",
+        "agent-core:ToolCallExecutor:run-tool-call": "None currently: runToolCall is internal to ToolCallExecutor/NestedToolCalls and has no application caller; proposed public caller: cch_agent_core ToolCallExecutor API."
+      }
+    },
+    "noneMarkers": ["none", "unconsumable", "no production", "tests only", "no c++ caller"],
+    "productKeywords": [
+      "native tui",
+      "frontend_tui",
+      "product",
+      "interactive",
+      "settings",
+      "theme",
+      "clipboard",
+      "assistant/tool messages",
+      "transcript",
+      "selector",
+      "dialog",
+      "footer",
+      "editor host",
+      "image component",
+      "renderer",
+      "startup",
+      "help",
+      "loading indicator",
+      "boxes/loaders/markdown chrome",
+      "composition",
+      "keybinding",
+      "slash/file/skill",
+      "decoder",
+      "dispatch",
+      "fullscreen",
+      "regular",
+      "status"
+    ]
+  },
+  "scenarioLinks": [
+    {
+      "ticket": "1047",
+      "scenario": "tool duration survives the public session record round trip",
+      "rows": ["agent-core:ToolResult:duration-field"],
+      "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
+    },
+    {
+      "ticket": "1047",
+      "scenario": "the default thinking level remains off for a reasoning-capable model",
+      "rows": ["agent-core:Agent:default-state"],
+      "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
+    },
+    {
+      "ticket": "1047",
+      "scenario": "abort while streaming produces one aborted assistant terminal and is idempotent",
+      "rows": ["agent-core:Agent:abort"],
+      "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
+    },
+    {
+      "ticket": "1047",
+      "scenario": "abort and waitForIdle are no-ops while the Agent is idle",
+      "rows": ["agent-core:Agent:wait-for-idle"],
+      "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
+    }
+  ],
+  "orphanScenarios": [
+    {
+      "family": "audit-1050",
+      "artifact": "input-standalone.json",
+      "scenario": "input-placeholder-reversal-and-custom-styling",
+      "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": ["cch_tui:Input.placeholderStyle"],
+      "disposition": "input behavior slices must consume this observation when they touch placeholder styling"
+    },
+    {
+      "family": "audit-1050",
+      "artifact": "input-standalone.json",
+      "scenario": "input-raw-lf-submission-and-rebound-submit",
+      "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact.",
+      "rows": ["cch_tui:Input.onSubmit"],
+      "disposition": "input behavior slices must consume this observation when they touch submission handling"
+    },
+    {
+      "family": "audit-1050",
+      "artifact": "input-standalone.json",
+      "scenario": "input-narrow-unicode-scroll-and-cursor",
+      "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact.",
+      "rows": ["cch_tui:Input.render"],
+      "disposition": "input behavior slices must consume this observation when they touch narrow/Unicode cursor scrolling"
+    }
+  ],
+  "groups": [
+    {
+      "id": "group-tool-execution-duration",
+      "title": "Tool execution duration across agent core, application Session, TUI and durable Harness",
+      "rationale": "One frozen contract (monotonic execute-only durationMs) with four distinct owners/consumers; the rows stay separate because each consumer is migrated by a different owner slice, but they share one comparison family.",
+      "members": [
+        "cch_agent_core:ToolCallExecutor:duration",
+        "cch_agent_core:NestedToolCalls:duration",
+        "cch_agent_core:ToolResult:duration-field",
+        "cch_coding_agent:AgentSession:tool-telemetry",
+        "cch_coding_agent:TUI:tool-duration",
+        "cch_coding_agent:tool-duration",
+        "cch_durable:tool-execution-timing"
+      ]
+    },
+    {
+      "id": "group-native-extension-lifecycle",
+      "title": "Native extension registration, hooks, wrapping and run triggering",
+      "rationale": "The same selected native extension contract appears as an application Session seam (1049/1051) and as a durable Harness seam (1056). Owners and consumers differ, so rows stay separate; the group records one membership authority and one removal of the historical ADR 0066 clause.",
+      "members": [
+        "cch_coding_agent:extension-native-tool-source",
+        "cch_coding_agent:extension-lifecycle-hooks",
+        "cch_coding_agent:extension-registration-tool-source",
+        "cch_coding_agent:extension-editor-lifecycle",
+        "cch_coding_agent:extension-prompt-status-ui",
+        "cch_coding_agent:prompt-busy-lifecycle",
+        "cch_durable:native-run-triggering",
+        "cch_durable:generation-onYield"
+      ]
+    },
+    {
+      "id": "group-tool-selection-loadout",
+      "title": "Tool selection modifiers and resumed loadout",
+      "rationale": "Application Session resume rows and product CLI/session behavior; one contract, application owner only.",
+      "members": [
+        "cch_coding_agent:Session:resume:tool-loadout",
+        "cch_coding_agent:Session:resume:relative-tool-modifiers"
+      ]
+    },
+    {
+      "id": "group-durable-tasks-harness",
+      "title": "Durable task semantics seen through tasks (1055) and Harness workflows (1056)",
+      "rationale": "Both lanes drive the same Harness.open entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery; 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); the rows stay separate and cross-reference instead of duplicating or hiding evidence.",
+      "members": [
+        "cch_durable:task-definition-registry",
+        "cch_durable:task-observed-outcomes",
+        "cch_durable:task-lifecycle-hooks",
+        "cch_durable:request-id-deduplication",
+        "cch_durable:busy-admission-modes",
+        "cch_durable:recovery-open",
+        "cch_durable:registry-task-definitions",
+        "cch_durable:task-versioning",
+        "cch_durable:task-outcomes",
+        "cch_durable:task-hooks",
+        "cch_durable:submission-queues",
+        "cch_durable:task-recovery"
+      ]
+    },
+    {
+      "id": "group-durable-chord-subset",
+      "title": "Durable-required Chord contracts (1054 overview rows, 1057 detail rows, 1056 durable usage rows)",
+      "rationale": "1054 records five coarse Chord rows the durable session depends on; 1057 records the same contracts per operation; 1056 records durable's own usage. One owner (cch_chord), one consumer (cch_durable); 1054 rows are the coarse view of 1057 detail and are kept with an explicit overlap resolution rather than deleted.",
+      "members": [
+        "cch_chord:Chord:context",
+        "cch_chord:Chord:draft",
+        "cch_chord:Chord:delta",
+        "cch_chord:Chord:state",
+        "cch_chord:Chord:json",
+        "cch_chord:chord-documents",
+        "cch_chord:chord-delta"
+      ]
+    },
+    {
+      "id": "group-codemode-core-and-integration",
+      "title": "Codemode core contracts (1053) and durable/application integration (1053/1056)",
+      "rationale": "The reusable VM/declaration/Remote contract belongs to cch_codemode; the application catalog, store, loadout and durable script integrations are consumers. Rows stay separate per owner; the group records the true contract identity behind the similar names.",
+      "members": [
+        "cch_codemode:codemode-worker-lifetime",
+        "cch_codemode:codemode-remote-exchange",
+        "cch_codemode:codemode-deterministic-start",
+        "cch_durable:codemode-script",
+        "cch_durable:codemode-store",
+        "cch_durable:codemode-replay",
+        "cch_codemode:codemode-remote",
+        "cch_durable:codemode-models",
+        "cch_durable:codemode-limits",
+        "cch_durable:codemode-output"
+      ]
+    },
+    {
+      "id": "group-tui-toolkit-product",
+      "title": "TUI toolkit exports (1050) and Native TUI product consumers (1051)",
+      "rationale": "The toolkit contract belongs to cch_tui; the product TUI behavior belongs to cch_coding_agent (frontend_tui). The toolkit rows for a component and the product rows that consume it are adjacent but not the same contract; the group keeps the toolkit/product split explicit and routes the seven 1050 product-entry rows to the 1051 product evidence.",
+      "members": [
+        "cch_coding_agent:product.tuiMode",
+        "cch_coding_agent:product.--tui-mode",
+        "cch_coding_agent:product.runInteractiveMode",
+        "cch_coding_agent:product.fullscreenExitOutput",
+        "cch_coding_agent:product.fullscreenCopyOnSelect",
+        "cch_coding_agent:product.fullscreenWheelScrollLines",
+        "cch_coding_agent:product.showHardwareCursor"
+      ]
+    },
+    {
+      "id": "group-application-session-storage",
+      "title": "Application Session transcript (1048) versus durable Session/storage (1054)",
+      "rationale": "Two distinct runtimes with different storage formats and consumers. ADR 0075 keeps the ordinary application Session separate from durable; no row merges and no consumer may cross the boundary.",
+      "members": [
+        "cch_coding_agent:Session:storage:transcript-vs-durable",
+        "cch_durable:Session:storage:sqlite-alternative",
+        "cch_durable:Session:create"
+      ]
+    }
+  ],
+  "overlaps": [
+    {
+      "id": "overlap-toolkit-product",
+      "lanes": ["1050", "1051"],
+      "kind": "adjacent-contracts-distinct-owner",
+      "resolution": "The toolkit export contract is cch_tui; the Native TUI product behavior is cch_coding_agent's frontend_tui implementation target. The seven 1050 product-entry rows are not-audited for v1.3.0 and route to the 1051 product evidence for the same source files; they stay explicit audit/verification blockers and are not counted as verified by the 1051 captures.",
+      "rows": [
+        "cch_coding_agent:product.tuiMode",
+        "cch_coding_agent:product.--tui-mode",
+        "cch_coding_agent:product.runInteractiveMode",
+        "cch_coding_agent:product.fullscreenExitOutput",
+        "cch_coding_agent:product.fullscreenCopyOnSelect",
+        "cch_coding_agent:product.fullscreenWheelScrollLines",
+        "cch_coding_agent:product.showHardwareCursor"
+      ]
+    },
+    {
+      "id": "overlap-session-storage",
+      "lanes": ["1048", "1054", "1057"],
+      "kind": "distinct-runtime-distinct-storage",
+      "resolution": "Application Session transcript (JSONL session files, coding-agent owner) and durable Session (transactional document/entry/storage contract, durable owner) are different runtimes. The legacy SQLite SessionStore row stays no-decision and is the coupling to split; it is not durable's storage and not the application's final transcript format.",
+      "rows": [
+        "cch_coding_agent:Session:storage:transcript-vs-durable",
+        "cch_durable:Session:storage:sqlite-alternative",
+        "cch_durable:Session:create"
+      ]
+    },
+    {
+      "id": "overlap-tasks-harness",
+      "lanes": ["1055", "1056"],
+      "kind": "same-contract-different-lane",
+      "resolution": "Both lanes drive the same Harness.open entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage.",
+      "rows": [
+        "cch_durable:task-versioning",
+        "cch_durable:task-outcomes",
+        "cch_durable:task-hooks",
+        "cch_durable:submission-queues",
+        "cch_durable:task-recovery",
+        "cch_durable:harness-run-control"
+      ]
+    },
+    {
+      "id": "overlap-codemode-chord",
+      "lanes": ["1053", "1054", "1057"],
+      "kind": "similar-names-different-contract",
+      "resolution": "Chord Context/documents/delta are document-tracking semantics owned by cch_chord and consumed only by cch_durable. Codemode context/globals/store are script-VM semantics owned by cch_codemode (with application and durable integrations). Similar names do not merge: the true contract identity is the owner plus the frozen source family.",
+      "rows": [
+        "cch_chord:Chord:context",
+        "cch_codemode:codemode-script-globals",
+        "cch_durable:codemode-store",
+        "cch_chord:chord-documents"
+      ]
+    },
+    {
+      "id": "overlap-extension-lifecycle",
+      "lanes": ["1049", "1051", "1056"],
+      "kind": "same-membership-different-consumer",
+      "resolution": "Native extension registration/hooks/run triggering is one selected membership with an application Session consumer (1049/1051) and a durable Harness consumer (1056). The historical ADR 0066 #865 tool-source clause does not reopen this; direct third-party TS/JS execution stays excluded.",
+      "rows": [
+        "cch_coding_agent:extension-lifecycle-hooks",
+        "cch_coding_agent:prompt-busy-lifecycle",
+        "cch_durable:native-run-triggering"
+      ]
+    },
+    {
+      "id": "overlap-mcp-application",
+      "lanes": ["1052", "1053"],
+      "kind": "generic-owner-application-integration",
+      "resolution": "Generic MCP client/transports/OAuth stay in cch_mcp; application config, persistence, exposure, management UI, session-tool binding and codemode's MCP refresh stay in cch_coding_agent. The codemode-mcp-refresh row is an application integration, not an MCP protocol contract.",
+      "rows": [
+        "cch_mcp:mcp-client-lifecycle",
+        "cch_coding_agent:mcp-config",
+        "cch_coding_agent:codemode-mcp-refresh"
+      ]
+    }
+  ],
+  "corrections": [
+    {
+      "id": "C1051-1",
+      "ticket": "1051",
+      "kind": "replace",
+      "recorded": "packages/coding-agent/src/modes/interactive/components/chat-container.ts:setOutputPad",
+      "actual": "packages/coding-agent/src/modes/interactive/components/tool-execution.ts:setOutputPad",
+      "appliesTo": [
+        "cch_coding_agent:output-pad"
+      ],
+      "authority": "frozen pi checkout 71023aec1546d6d677a65669c5665c0927ce0dd0 path resolution",
+      "rationale": "chat-container.ts does not exist at the frozen revision; setOutputPad is defined in components/tool-execution.ts. Capability and scenario names unchanged."
+    },
+    {
+      "id": "C1051-2",
+      "ticket": "1051",
+      "kind": "replace",
+      "recorded": "packages/coding-agent/src/modes/interactive/components/builtin-header.ts:BuiltInHeader",
+      "actual": "packages/coding-agent/src/modes/interactive/interactive-mode.ts:BuiltInHeader",
+      "appliesTo": [
+        "cch_coding_agent:startup-header-help"
+      ],
+      "authority": "frozen pi checkout 71023aec1546d6d677a65669c5665c0927ce0dd0 path resolution",
+      "rationale": "builtin-header.ts does not exist at the frozen revision; the BuiltInHeader class is defined in interactive-mode.ts. Capability and scenario names unchanged."
+    },
+    {
+      "id": "C1051-3",
+      "ticket": "1051",
+      "kind": "replace",
+      "recorded": "packages/coding-agent/test/suite/project-trust.test.ts",
+      "actual": "packages/coding-agent/test/trust-manager.test.ts",
+      "appliesTo": [
+        "cch_coding_agent:startup-project-trust"
+      ],
+      "authority": "frozen pi checkout 71023aec1546d6d677a65669c5665c0927ce0dd0 path resolution",
+      "rationale": "The suite/project-trust.test.ts path does not exist at the frozen revision; ProjectTrustStore and trust-requiring project resources are covered by test/trust-manager.test.ts. No scenario is claimed and the row stays unverified."
+    },
+    {
+      "id": "C1051-4",
+      "ticket": "1051",
+      "kind": "replace",
+      "recorded": "packages/coding-agent/src/core/tools/tool-execution.ts:durationMs",
+      "actual": "packages/coding-agent/src/modes/interactive/components/tool-execution.ts:durationMs",
+      "appliesTo": [
+        "cch_coding_agent:tool-duration"
+      ],
+      "authority": "frozen pi checkout 71023aec1546d6d677a65669c5665c0927ce0dd0 path resolution",
+      "rationale": "src/core/tools/tool-execution.ts does not exist at the frozen revision; the ToolExecution component with durationMs lives under modes/interactive/components. Capability and scenario names unchanged."
+    },
+    {
+      "id": "C1052-1",
+      "ticket": "1052",
+      "kind": "replace",
+      "recorded": "extensions/mcp/cli.ts:registerMcpCommands",
+      "actual": "packages/coding-agent/src/extensions/mcp/cli.ts:runMcpCommand",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
+      "rationale": "The command entry point is runMcpCommand (cli.ts:185); registerMcpCommands does not exist."
+    },
+    {
+      "id": "C1052-2",
+      "ticket": "1052",
+      "kind": "replace",
+      "recorded": "extensions/mcp/index.ts:MCP_EXPOSURE_ALIASES",
+      "actual": "packages/coding-agent/src/core/mcp-servers.ts:MCP_EXPOSURE_ALIASES",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
+      "rationale": "The alias constant lives in core/mcp-servers.ts:57."
+    },
+    {
+      "id": "C1052-3",
+      "ticket": "1052",
+      "kind": "replace",
+      "recorded": "transports/stdio.ts:stderrTail",
+      "actual": "packages/mcp/src/transports/stdio.ts:get stderr",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
+      "rationale": "The stderr tail is exposed by the get stderr accessor (stdio.ts:86)."
+    },
+    {
+      "id": "C1052-4",
+      "ticket": "1052",
+      "kind": "replace",
+      "recorded": "mcp/README.md:supported operations",
+      "actual": "packages/mcp/README.md:Supported protocol surface",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
+      "rationale": "The heading is 'Supported protocol surface' (README.md:116)."
+    },
+    {
+      "id": "C1052-5",
+      "ticket": "1052",
+      "kind": "replace",
+      "recorded": "mcp-extension.test.ts:McpExtension",
+      "actual": "packages/coding-agent/test/mcp-extension.test.ts:MCP connections",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
+      "rationale": "Test-file shorthand: the suite is 'MCP connections' with named cases such as 'closes a connection that is still initializing before close returns'."
+    },
+    {
+      "id": "C1052-6",
+      "ticket": "1052",
+      "kind": "replace",
+      "recorded": "client.test.ts:cancellation",
+      "actual": "packages/mcp/test/client.test.ts:cancels aborted and timed-out requests",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
+      "rationale": "Cancellation shorthand: the exact case is 'cancels aborted and timed-out requests' (client.test.ts:210)."
+    },
+    {
+      "id": "C1052-7",
+      "ticket": "1052",
+      "kind": "replace",
+      "recorded": "oauth/flow.ts:validateIssuer",
+      "actual": "packages/mcp/src/oauth/flow.ts:OAuthIssuerMismatchError",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
+      "rationale": "Issuer validation is inline (flow.ts:388) and throws OAuthIssuerMismatchError; there is no validateIssuer symbol."
+    },
+    {
+      "id": "C1053-1",
+      "ticket": "1053",
+      "kind": "replace",
+      "recorded": "packages/codemode/src/types.ts:CodemodeRemoteRequest,CodemodeRemoteMessage,CodemodeRemoteReply",
+      "actual": "packages/codemode/src/runtime/remote.ts:CodemodeRemoteRequest,CodemodeRemoteMessage,CodemodeRemoteReply",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1053-merged.json residual_risks[4]",
+      "rationale": "Remote types are defined in runtime/remote.ts; the pinned artifact envelope keeps the recorded endpoint and is not rehashed."
+    },
+    {
+      "id": "C1053-2",
+      "ticket": "1053",
+      "kind": "symbol-suffix",
+      "recorded": "packages/codemode/src/runtime/worker-process-exit.ts",
+      "actual": "workerProcessExit",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1053-merged.json residual_risks[5]",
+      "rationale": "File-level shorthand normalized to the exported symbol."
+    },
+    {
+      "id": "C1053-3",
+      "ticket": "1053",
+      "kind": "replace",
+      "recorded": "src/tools/output-files.ts",
+      "actual": "packages/coding-agent/src/utils/output-files.ts:writeOutputFile",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1053-merged.json independent_verification.scope_checks",
+      "rationale": "The output-file helper is src/utils/output-files.ts:writeOutputFile; the old src/tools path is absent."
+    },
+    {
+      "id": "C1054-1",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/test/session-tables.test.ts:typed entry read",
+      "actual": "packages/durable/test/session-tables.test.ts:Session transaction tables",
+      "appliesTo": ["cch_durable:Tx:read:entry"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[0]",
+      "rationale": "Suite title is 'Session transaction tables'."
+    },
+    {
+      "id": "C1054-2",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/test/session-tables.test.ts:scan limits and cursors",
+      "actual": "packages/durable/test/session-tables.test.ts:passes caller-selected limits and cursors through table scans",
+      "appliesTo": ["cch_durable:Tx:read:scanEntries"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[1]",
+      "rationale": "Exact case title."
+    },
+    {
+      "id": "C1054-3",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/src/storage/sqlite/schema.ts:submissionsByRequest index",
+      "actual": "packages/durable/src/storage/sqlite/schema.ts:INDEX_NAMES.submissionsByRequest",
+      "appliesTo": ["cch_durable:Tx:read:submissionByRequest"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[2]",
+      "rationale": "The index is declared through INDEX_NAMES.submissionsByRequest / SQL index submissions_by_request."
+    },
+    {
+      "id": "C1054-4",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/src/session/forks.ts:copyConversationDocuments",
+      "actual": "packages/durable/src/session/forks.ts:prepareForkDocumentCopies",
+      "appliesTo": ["cch_durable:Tx:forkConversation", "cch_durable:Document:fork-copy"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[3],[6]",
+      "rationale": "Actual symbol is prepareForkDocumentCopies."
+    },
+    {
+      "id": "C1054-5",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/test/session-tables.test.ts:typed append",
+      "actual": "packages/durable/test/session-tables.test.ts:Session transaction tables",
+      "appliesTo": ["cch_durable:Entry:append-typed"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[4]",
+      "rationale": "Suite title is 'Session transaction tables'."
+    },
+    {
+      "id": "C1054-6",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/test/session-checkpoints-migrations.test.ts:Session document checkpoints and migrations",
+      "actual": "packages/durable/test/session-checkpoints-migrations.test.ts:Session document checkpoints / Session document migrations",
+      "appliesTo": ["cch_durable:Document:version-migrate"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[5]",
+      "rationale": "Two suite titles in the same file."
+    },
+    {
+      "id": "C1054-7",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/src/testing/storage-conformance.ts:registerStorageConformance",
+      "actual": "packages/durable/src/testing/runner.ts:registerStorageConformance",
+      "appliesTo": ["cch_durable:Storage:commit"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[7]",
+      "rationale": "registerStorageConformance is declared in testing/runner.ts and re-exported from testing/index.ts."
+    },
+    {
+      "id": "C1054-8",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/test/jsonl-storage.test.ts:declares corruption",
+      "actual": "packages/durable/test/jsonl-storage.test.ts:fails open when confirmed sidecar data is missing",
+      "appliesTo": ["cch_durable:Storage:jsonl:corruption"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[8]",
+      "rationale": "Exact case title in suite 'Pico JsonlStorage publication and recovery'."
+    },
+    {
+      "id": "C1054-9",
+      "ticket": "1054",
+      "kind": "record-only",
+      "recorded": "packages/durable/test/jsonl-storage.test.ts:poisons after failure",
+      "actual": "packages/durable/test/jsonl-storage.test.ts:poisons after failure",
+      "appliesTo": ["cch_durable:Storage:jsonl:poison"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[9]",
+      "rationale": "Parameterised 'poisons after ${mode} failure' cases; the abbreviated label resolves."
+    },
+    {
+      "id": "C1054-10",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/src/storage/sqlite/schema.ts:CURRENT_SQLITE_SCHEMA_VERSION",
+      "actual": "packages/durable/src/storage/sqlite/migrations.ts:CURRENT_SQLITE_SCHEMA_VERSION",
+      "appliesTo": ["cch_durable:Storage:sqlite:schema-version"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[10]",
+      "rationale": "The constant is declared in migrations.ts."
+    },
+    {
+      "id": "C1054-11",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/test/sqlite-migrations.test.ts:Durable SQLite migrations",
+      "actual": "packages/durable/test/sqlite-migrations.test.ts:durable SQLite migrations",
+      "appliesTo": ["cch_durable:Storage:sqlite:schema-version"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[11]",
+      "rationale": "Case title is lowercase."
+    },
+    {
+      "id": "C1054-12",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/src/storage/sqlite/cloudflare.ts:SqliteCloudflareStorage",
+      "actual": "packages/durable/src/storage/sqlite/cloudflare.ts:openDurableObjectSqliteStorage,DurableObjectSqliteStorage",
+      "appliesTo": ["cch_durable:Storage:sqlite:cloudflare"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[12]",
+      "rationale": "Actual exports in the excluded adapter."
+    },
+    {
+      "id": "C1054-13",
+      "ticket": "1054",
+      "kind": "replace",
+      "recorded": "packages/durable/test/sqlite-storage.test.ts:SqliteStorage conformance across reopen",
+      "actual": "packages/durable/test/sqlite-storage.test.ts:SqliteStorage across reopen",
+      "appliesTo": ["cch_durable:Interchange:sqlite-pi-create"],
+      "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[13]",
+      "rationale": "Exact case title."
+    },
+    {
+      "id": "C1055-1",
+      "ticket": "1055",
+      "kind": "replace",
+      "recorded": "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases",
+      "actual": "packages/durable/src/harness/scheduler.ts:#reserve,#step",
+      "appliesTo": ["task-definition-registry"],
+      "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[0]",
+      "rationale": "#runPhases does not exist; phase dispatch is inline in #step (scheduler.ts:1325-1332)."
+    },
+    {
+      "id": "C1055-2",
+      "ticket": "1055",
+      "kind": "replace",
+      "recorded": "packages/durable/src/harness/scheduler.ts:#blockedReason,#terminate",
+      "actual": "packages/durable/src/harness/scheduler.ts:#resolve,#terminate",
+      "appliesTo": ["blocked-definition-orphaned"],
+      "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[1]",
+      "rationale": "#blockedReason does not exist; blocked resolution is #resolve/#fit (scheduler.ts:1210-1278)."
+    },
+    {
+      "id": "C1055-3",
+      "ticket": "1055",
+      "kind": "replace",
+      "recorded": "src/agent/harness/TaskStore.cpp:request_abort",
+      "actual": "src/agent/harness/session/TaskStore.cpp:request_abort",
+      "appliesTo": ["conversation-abort-effects"],
+      "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[2]",
+      "rationale": "Actual C++ path is src/agent/harness/session/TaskStore.cpp."
+    },
+    {
+      "id": "C1055-4",
+      "ticket": "1055",
+      "kind": "replace",
+      "recorded": "TaskStore.cpp:task_descendants",
+      "actual": "src/agent/harness/session/TaskStore.cpp:task_descendants",
+      "appliesTo": ["task-ownership-graph"],
+      "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[3]",
+      "rationale": "Shorthand after the full TaskStore.hpp path in the same row; normalize to the full session path."
+    },
+    {
+      "id": "C1056-1",
+      "ticket": "1056",
+      "kind": "replace",
+      "recorded": "src/agent/harness/TaskStore.",
+      "actual": "src/agent/harness/session/TaskStore.",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[0]",
+      "rationale": "Actual C++ path (report already corrected in a76cc708c); the ledger never carried the stale path."
+    },
+    {
+      "id": "C1056-2",
+      "ticket": "1056",
+      "kind": "replace",
+      "recorded": "submissions.ts",
+      "actual": "packages/durable/src/harness/submissions.ts:Submissions",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[11]",
+      "rationale": "File-only source spelling normalized to the exported symbol."
+    },
+    {
+      "id": "C1056-3",
+      "ticket": "1056",
+      "kind": "replace",
+      "recorded": "inbox.ts",
+      "actual": "packages/durable/src/harness/inbox.ts:InboxDoc",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[11]",
+      "rationale": "File-only source spelling normalized to the exported symbol."
+    },
+    {
+      "id": "C1056-4",
+      "ticket": "1056",
+      "kind": "replace",
+      "recorded": "tool-search.ts",
+      "actual": "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool,createToolSearchExtension",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[11]",
+      "rationale": "File-only source spelling normalized to the exported symbols."
+    },
+    {
+      "id": "C1047-1",
+      "ticket": "1047",
+      "kind": "record-only",
+      "recorded": "packages/agent/src/types.ts:AgentEvent,AgentOptions,QueueMode",
+      "actual": "packages/agent/src/agent.ts:AgentOptions",
+      "appliesTo": "*",
+      "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[4]",
+      "rationale": "Artifact endpoint lists AgentOptions, which is declared in agent.ts:114; the pinned artifact bytes are preserved and the consolidated ref notes the split."
+    },
+    {
+      "id": "C1048-1",
+      "ticket": "1048",
+      "kind": "record-only",
+      "recorded": "Glaze JSONL session redacts sensitive message fields at persistence",
+      "actual": "Glaze JSONL session redacts sensitive message fields at persistence boundary",
+      "appliesTo": ["cch_coding_agent:Session:wire:redaction"],
+      "authority": "/tmp/cch-1044-context/1048-merged.json reviewFindings[4]",
+      "rationale": "Cosmetic quotation fix for tests/harness/session/JsonlSessionStoreTest.cpp:131."
+    }
+  ],
+  "boundaryOverrides": [
+    {
+      "ticket": "1051",
+      "rowId": "excluded-session-share",
+      "boundary": "Application upload/share services and their `sessionShareDestination` setting are excluded (ADR 0075 explicit exclusions); do not expose commands, settings or prompt claims without the corresponding capability.",
+      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: Other confirmed exclusions",
+      "rationale": "The recorded row boundary was the literal string 'None'; replace it with the actual retained-product boundary."
+    },
+    {
+      "ticket": "1051",
+      "rowId": "excluded-third-party-ts-extensions",
+      "boundary": "Direct execution of third-party pi TS/JS plugins and third-party extension package management are excluded (ADR 0075 explicit exclusions); native C++ extension registration, hooks, tool wrapping and run triggering remain included, and codemode's model-written JavaScript remains included.",
+      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: Extensions and Other confirmed exclusions",
+      "rationale": "The recorded row boundary was the literal string 'None'; replace it with the actual retained-product boundary."
+    },
+    {
+      "ticket": "1056",
+      "rowId": "thirdparty-plugins-excluded",
+      "boundary": "Direct execution of third-party pi TS/JS plugins is excluded; native C++ extension registration, hooks, tool wrapping and run triggering remain included, and codemode's model-written JavaScript remains included (ADR 0075 Extensions).",
+      "authority": "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: Extensions",
+      "rationale": "Record the actual ADR boundary instead of the abbreviated row text."
+    },
+    {
+      "ticket": "1049",
+      "rowId": "settings-runtime-validation",
+      "boundary": "Excluded from C++ reproduction: the upstream observation is registered at `fixtures/pi-v1.3.0/audit-1049/configuration-schema.json` as 'settings manager consumes values the published schema rejects' (defaultThinkingLevel bogus, packages not-array, schemaCheck false). C++ is not a copy of that runtime bug: it rejects invalid thinking levels (`SettingsManagerTest.cpp:195`) and does not parse `packages`; no C++ obligation.",
+      "authority": "fixtures/pi-v1.3.0/audit-1049/configuration-schema.json and manifest; docs/research/pi-v1.3.0/1049-ledger.json row settings-runtime-validation",
+      "rationale": "Restore the registered upstream observation; membership remains excluded because C++ must not reproduce the runtime validation bug."
+    },
+    {
+      "ticket": "1050",
+      "rowId": "internal.native-modifiers",
+      "boundary": "Platform-exclusive native modifier synthesis excluded; the v1.0.4 approved platform exclusion is retained.",
+      "authority": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json row internal.native-modifiers notes; docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: native macOS/Windows helpers excluded",
+      "rationale": "Replace the lowercase placeholder 'none' with the reason already recorded in the row notes."
+    },
+    {
+      "ticket": "1050",
+      "rowId": "isAppleTerminalSession",
+      "boundary": "Native macOS helper excluded; Linux clipboard handled by #992/#993; the v1.0.4 approved platform exclusion is retained.",
+      "authority": "docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json row isAppleTerminalSession notes; docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md: native macOS/Windows helpers excluded",
+      "rationale": "Replace the lowercase placeholder 'none' with the reason already recorded in the row notes."
+    }
+  ],
+  "retainedLimitations": [
+    {
+      "id": "limit-extension-stub",
+      "statement": "#1052 application observations use the public createMcpExtension factory with a minimal public ExtensionAPI/ExtensionContext host stub, not a full AgentSession or real management UI; later Session/Interactive comparisons are required.",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[0]"
+    },
+    {
+      "id": "limit-codemode-stub",
+      "statement": "#1053 application-catalog observations use public createCodemodeExtension/createCodemodeDescription/toCodemodeDeclaration with a minimal ExtensionAPI host stub, not a full AgentSession or real TUI.",
+      "authority": "/tmp/cch-1044-context/1053-merged.json residual_risks[2]"
+    },
+    {
+      "id": "limit-no-cpp-parity",
+      "statement": "No audit lane ran a C++ comparison; zero rows are verified and every upstream-captured row still requires an independent C++ comparison.",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[2]"
+    },
+    {
+      "id": "limit-1047-symbols",
+      "statement": "#1047 records frozen symbol names without file paths; the consolidated frozenSymbols stay verbatim and the C++ targets were corrected from the merger review.",
+      "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[1]"
+    },
+    {
+      "id": "limit-1051-thinking-fixture",
+      "statement": "Thinking-selector availability remains unverified until both harnesses run the same thinkingLevelMap; do not add xhigh/max because C++ already gates seven levels and the frozen fixture lists five.",
+      "authority": "protocol.md '#1051 correction gate' and /tmp/cch-1044-context/1051-thinking-fix.json"
+    },
+    {
+      "id": "limit-1055-crash",
+      "statement": "Crash evidence is real SIGKILL and SQLite reopen with a live OS page cache; power loss, fsync failure and multi-process concurrency are not proven.",
+      "authority": "/tmp/cch-1044-context/1055-merged.json residualGaps[2]"
+    },
+    {
+      "id": "limit-1054-interchange",
+      "statement": "Pi-only JSONL/SQLite reopen is captured; both C++ interchange directions and alternating writers remain unverified.",
+      "authority": "/tmp/cch-1044-context/1054-merged.json residual_risks[0]"
+    },
+    {
+      "id": "limit-1051-emulator",
+      "statement": "Real emulator/PTY evidence is missing for image/footer/cursor/restoration and program-status captures record terminal-contract calls, not raw protocol acceptance.",
+      "authority": "protocol.md '#1051 parent acceptance note'"
+    },
+    {
+      "id": "limit-808-model-selector",
+      "statement": "The C++ [issue800] model-selector case fails its own post-Enter assertion (17 passed / 1 failed, no artifact); preserve as a #808 verification defect, not green evidence.",
+      "authority": "protocol.md '#1051 parent acceptance note'"
+    },
+    {
+      "id": "limit-registration-integrity",
+      "statement": "Serial registry registration proves bundle integrity only; it never makes a row C++-verified.",
+      "authority": "/tmp/cch-1044-context/1057-merged.json provenanceNormalizationsFor1058[0]"
+    }
+  ]
+}

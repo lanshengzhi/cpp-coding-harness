@@ -1,0 +1,2328 @@
+{
+  "schema": "pike/pi-v1.3.0-implementation-frontier/1",
+  "ticket": "1058",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "authority": "ADR 0075; spec #1044; consolidated ledger docs/research/pi-v1.3.0/1058-consolidated-capability-ledger.json",
+  "ownerGraph": {
+    "nodes": [
+      {
+        "owner": "cch_support",
+        "role": "support",
+        "currentRoot": "src/support",
+        "targetResponsibility": "Pi-neutral C++ values and mechanics; no pi alignment target",
+        "newlyIntroduced": false,
+        "evidence": [
+          "cmake/parity/manifest.json cch_support role=support"
+        ]
+      },
+      {
+        "owner": "cch_ai",
+        "role": "owner",
+        "currentRoot": "src/ai",
+        "targetResponsibility": "Retained Magpie discovery, catalog, authentication and inference contract; passive fields (for example tool durationMs) may be added",
+        "newlyIntroduced": false,
+        "evidence": [
+          "ADR 0075 retained product boundaries",
+          "ADR 0073",
+          "cmake/parity/manifest.json cch_ai"
+        ]
+      },
+      {
+        "owner": "cch_agent_core",
+        "role": "owner",
+        "currentRoot": "src/agent",
+        "targetResponsibility": "Agent, loop, tool execution, nested calls and tool registry only; application session/history, compaction, concrete environments and built-in tools leave this owner",
+        "newlyIntroduced": false,
+        "evidence": [
+          "ADR 0075 target package boundaries",
+          "packages/agent/package.json deps: pi-ai, typebox (no durable, no chord)"
+        ]
+      },
+      {
+        "owner": "cch_tui",
+        "role": "owner",
+        "currentRoot": "src/tui",
+        "targetResponsibility": "Complete reusable Linux TUI toolkit target at v1.3.0",
+        "newlyIntroduced": false,
+        "evidence": [
+          "ADR 0075",
+          "packages/tui/package.json deps: get-east-asian-width, marked"
+        ]
+      },
+      {
+        "owner": "cch_coding_agent",
+        "role": "owner",
+        "currentRoot": "src/coding_agent",
+        "targetResponsibility": "Application Agent Session, Models Runtime policy, concrete application tools, CLI, Native TUI and application integrations (MCP config/management/session tools, codemode presentation)",
+        "newlyIntroduced": false,
+        "evidence": [
+          "ADR 0075",
+          "packages/coding-agent/package.json deps: pi-agent-core, pi-ai, pi-codemode, pi-mcp, pi-tui (no pi-durable)"
+        ]
+      },
+      {
+        "owner": "cch_durable",
+        "role": "owner",
+        "currentRoot": "src/durable",
+        "targetResponsibility": "Independent complete Linux durable runtime: Harness, conversations/entries, submissions, documents, transactions, versioned tasks, scheduling/recovery, hooks/registry, views, tools, environments, images, codemode and tool-search integrations, memory/JSONL/SQLite storage and bidirectional pi interchange",
+        "newlyIntroduced": true,
+        "evidence": [
+          "ADR 0075 complete durable target",
+          "packages/durable/package.json deps: chord, pi-ai, pi-codemode, photon, diff, typebox (no pi-agent-core)"
+        ]
+      },
+      {
+        "owner": "cch_mcp",
+        "role": "owner",
+        "currentRoot": "src/mcp",
+        "targetResponsibility": "Reusable MCP protocol, client, transports and generic OAuth; application config, persistence, management UI and session-tool binding stay in cch_coding_agent",
+        "newlyIntroduced": true,
+        "evidence": [
+          "ADR 0075",
+          "packages/mcp/package.json deps: cross-spawn only"
+        ]
+      },
+      {
+        "owner": "cch_codemode",
+        "role": "owner",
+        "currentRoot": "src/codemode",
+        "targetResponsibility": "Reusable source/declarations/prelude, VM execution, Inline, deterministic replay and generic Remote contracts; application catalog/store/settings stay in cch_coding_agent, durable's integration stays in cch_durable",
+        "newlyIntroduced": true,
+        "evidence": [
+          "ADR 0075",
+          "packages/codemode/package.json deps: quickjs-wasi only"
+        ]
+      },
+      {
+        "owner": "cch_chord",
+        "role": "owner",
+        "currentRoot": "src/chord",
+        "targetResponsibility": "Durable-required Context, document/delta tracking, state observation, strict JSON and bounded output semantics; not the whole upstream Chord product",
+        "newlyIntroduced": true,
+        "evidence": [
+          "ADR 0075",
+          "packages/chord/package.json deps: typebox only",
+          "packages/durable imports @earendil-works/chord"
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "from": "cch_agent_core",
+        "to": "cch_ai",
+        "kind": "owner",
+        "evidence": "current cmake/parity/manifest.json legal_owner_dependencies; packages/agent depends on pi-ai"
+      },
+      {
+        "from": "cch_agent_core",
+        "to": "cch_support",
+        "kind": "owner",
+        "evidence": "current C++ support usage (AsyncResult/JsonValue) in src/agent"
+      },
+      {
+        "from": "cch_coding_agent",
+        "to": "cch_agent_core",
+        "kind": "owner",
+        "evidence": "current manifest; packages/coding-agent depends on pi-agent-core"
+      },
+      {
+        "from": "cch_coding_agent",
+        "to": "cch_ai",
+        "kind": "owner",
+        "evidence": "current manifest; retained Magpie models runtime"
+      },
+      {
+        "from": "cch_coding_agent",
+        "to": "cch_tui",
+        "kind": "implementation",
+        "evidence": "manifest implementation_owner_dependencies; frontend_tui/frontend_cli only"
+      },
+      {
+        "from": "cch_coding_agent",
+        "to": "cch_mcp",
+        "kind": "owner",
+        "evidence": "packages/coding-agent depends on pi-mcp"
+      },
+      {
+        "from": "cch_coding_agent",
+        "to": "cch_codemode",
+        "kind": "owner",
+        "evidence": "packages/coding-agent depends on pi-codemode"
+      },
+      {
+        "from": "cch_coding_agent",
+        "to": "cch_support",
+        "kind": "owner",
+        "evidence": "current C++ support usage"
+      },
+      {
+        "from": "cch_durable",
+        "to": "cch_ai",
+        "kind": "owner",
+        "evidence": "packages/durable depends on pi-ai; retained Magpie-backed generation"
+      },
+      {
+        "from": "cch_durable",
+        "to": "cch_chord",
+        "kind": "owner",
+        "evidence": "packages/durable depends on chord; durable imports root/context/delta/output"
+      },
+      {
+        "from": "cch_durable",
+        "to": "cch_codemode",
+        "kind": "owner",
+        "evidence": "packages/durable depends on pi-codemode"
+      },
+      {
+        "from": "cch_durable",
+        "to": "cch_support",
+        "kind": "owner",
+        "evidence": "C++ values/mechanics only"
+      },
+      {
+        "from": "cch_mcp",
+        "to": "cch_support",
+        "kind": "owner",
+        "evidence": "C++ values/mechanics only"
+      },
+      {
+        "from": "cch_codemode",
+        "to": "cch_support",
+        "kind": "owner",
+        "evidence": "C++ values/mechanics only; WasmEdge remains an external family"
+      },
+      {
+        "from": "cch_chord",
+        "to": "cch_support",
+        "kind": "owner",
+        "evidence": "C++ values/mechanics only"
+      },
+      {
+        "from": "cch_tui",
+        "to": "cch_support",
+        "kind": "owner",
+        "evidence": "C++ values/mechanics only"
+      }
+    ],
+    "excludedEdges": [
+      {
+        "from": "cch_durable",
+        "to": "cch_agent_core",
+        "reason": "upstream pi-durable does not depend on pi-agent-core; the historical placement of durable machinery under src/agent is not a contract"
+      },
+      {
+        "from": "cch_durable",
+        "to": "cch_coding_agent",
+        "reason": "durable and coding-agent are distinct runtimes; durable calls codemode and chord directly"
+      },
+      {
+        "from": "cch_coding_agent",
+        "to": "cch_durable",
+        "reason": "the ordinary application Session is not switched onto durable storage"
+      },
+      {
+        "from": "cch_durable",
+        "to": "cch_tui",
+        "reason": "durable is headless; durable consumers provide their own presentation"
+      },
+      {
+        "from": "cch_mcp",
+        "to": "cch_coding_agent",
+        "reason": "the reusable MCP owner must not depend on the application"
+      },
+      {
+        "from": "cch_codemode",
+        "to": "cch_coding_agent",
+        "reason": "the reusable codemode owner must not depend on the application"
+      },
+      {
+        "from": "cch_chord",
+        "to": "cch_durable",
+        "reason": "Chord does not depend on its durable consumer"
+      },
+      {
+        "from": "cch_ai",
+        "to": "cch_agent_core",
+        "reason": "the retained AI owner depends on nothing"
+      }
+    ],
+    "emptyShellRule": "Every newly introduced owner's first slice delivers real public behavior through its own caller (see drafts P1-P5); no owner is created as an empty shell and no new per-owner event loop is introduced.",
+    "nodeCount": 9,
+    "edgeCount": 16
+  },
+  "migrationSequence": [
+    {
+      "id": "M0",
+      "kind": "integrate-verify",
+      "drafts": [],
+      "gate": "Record the current green baseline before any move: cmake --build --preset vcpkg --target cch_tests_coding_agent; ctest --preset vcpkg -L architecture; focused session/agent selections.",
+      "note": "No behavior change; establishes the comparison point for the forwarded moves."
+    },
+    {
+      "id": "M1",
+      "kind": "expand",
+      "drafts": [
+        "P1",
+        "P4",
+        "P5",
+        "P6"
+      ],
+      "sharedSymbols": [
+        "cch::agent::harness::session::SessionStore (and SessionEntry/SessionTree/SessionResume/JsonlSessionStore)",
+        "src/coding_agent/extensions/codemode CodemodeSource/CodemodeDiscovery/CodemodeSandbox",
+        "src/coding_agent/mcp McpProtocol/McpStdioClient/McpHttpClient/McpOAuth*"
+      ],
+      "forwardingForm": "New owner targets own the moved sources; the old include paths keep thin forwarding headers (include the new owner header) so existing consumers compile unchanged.",
+      "removalSlice": "M2",
+      "gate": "Architecture gate passes with the new owner edges; focused tests for the moved sources run through the forwarding headers."
+    },
+    {
+      "id": "M2",
+      "kind": "contract",
+      "drafts": [
+        "P4",
+        "P5",
+        "P6"
+      ],
+      "sharedSymbols": [
+        "the forwarding headers from M1"
+      ],
+      "gate": "Delete every forwarding header and the old source copies; ctest -L architecture plus the owning focused selections; no consumer may include the old path.",
+      "note": "The contract slice is complete only when the old paths are gone; a forwarding header without a removal slice is not allowed."
+    },
+    {
+      "id": "M3",
+      "kind": "expand",
+      "drafts": [
+        "P2",
+        "P3"
+      ],
+      "sharedSymbols": [
+        "cch_chord document/delta/replicated state",
+        "cch_durable Storage, memory backend and Session commit"
+      ],
+      "gate": "The new cch_chord and cch_durable targets expose their real public behavior to focused tests; no legacy consumer is redirected yet.",
+      "note": "Adds the new owners while the existing application paths remain the production path."
+    },
+    {
+      "id": "M4",
+      "kind": "migrate",
+      "drafts": [
+        "P7"
+      ],
+      "sharedSymbols": [
+        "cch::agent::harness::session::TaskStore",
+        "cch::agent::harness::session::SqliteSessionStore/SqliteDatabase",
+        "cch::agent::harness::TaskScheduler"
+      ],
+      "forwardingForm": "Durable-specific machinery moves to cch_durable (or is retired with its membership decision) while cch_agent_core keeps temporary aliases for its own tests.",
+      "removalSlice": "M6",
+      "gate": "TaskStore/SqliteSessionStore move behind the cch_durable boundary; cch_agent_core tests compile through the temporary aliases and introduce no new direct sqlite3 consumer.",
+      "note": "P7 is scheduled only after P3 (M3) and P6 (M1); F7 depends on P7 and therefore cannot be scheduled before M4."
+    },
+    {
+      "id": "M5",
+      "kind": "migrate",
+      "drafts": [
+        "F2",
+        "F7"
+      ],
+      "sharedSymbols": [
+        "durable SQLite/JSONL storage contract"
+      ],
+      "forwardingForm": "The durable stores are added beside the legacy in-core SqliteSessionStore path, which stays compiled until M6 removes it.",
+      "removalSlice": "M6",
+      "gate": "SQLite and JSONL storage conformance runs through the durable public caller."
+    },
+    {
+      "id": "M6",
+      "kind": "contract",
+      "drafts": [
+        "P7",
+        "P8"
+      ],
+      "sharedSymbols": [
+        "TaskStore/SqliteSessionStore/TaskScheduler aliases in cch_agent_core",
+        "the application's second SessionStore writers"
+      ],
+      "gate": "Remove the temporary aliases and the second SessionStore writers; cmake/parity/manifest.json reflects the narrowed cch_agent_core; cch_agent_core no longer links sqlite3; ctest -L architecture and the agent/harness focused selections pass."
+    },
+    {
+      "id": "M7",
+      "kind": "integrate-verify",
+      "drafts": [
+        "F1",
+        "F2",
+        "F3",
+        "F4",
+        "F5",
+        "F6",
+        "F7",
+        "F8",
+        "F9",
+        "F10",
+        "F11",
+        "F12",
+        "F13",
+        "F14",
+        "F15",
+        "F16",
+        "F17",
+        "F18",
+        "F19",
+        "F20",
+        "F21",
+        "F22",
+        "F23",
+        "F24"
+      ],
+      "gate": "Full Validation (cmake --build --preset vcpkg; ctest --preset vcpkg) plus the comparison gates named per draft and the dated emulator evidence for terminal rows; every included row's implementation and verification status updated."
+    }
+  ],
+  "drafts": [
+    {
+      "id": "P1",
+      "title": "Create the cch_chord value surface durable needs",
+      "kind": "prefactor",
+      "owner": "cch_chord",
+      "frontier": true,
+      "context": "One owner, one context: immutable Context values with keyed lookup and cancellation, strict JSON copy/validation, and bounded output helpers.",
+      "demo": "A public `cch::chord::Context` value program: create a root, layer typed values, derive a child, cancel the child independently, combine an external stop signal, and bound output with the byte/character helpers.",
+      "scope": [
+        "Context value layering and root constants",
+        "stop-token composition and await/watch cancellation",
+        "strict JSON value copy/validation",
+        "UTF-8 byte length, character-end and bounded output buffer"
+      ],
+      "acceptance": [
+        {
+          "property": "A child context's cancellation is isolated while parent cancellation reaches an already-created child.",
+          "case": "Root and child read their own values; cancelling the child leaves the sibling un-aborted and an inheritor sees the parent reason.",
+          "failureCase": "A stand-in that shares one stop_source across all contexts passes a single-context test while propagating a child cancellation to its parent; the captured child/sibling observation fails it."
+        },
+        {
+          "property": "WithoutAbortSignal detaches cancellation while preserving typed values.",
+          "case": "A detached cleanup context observes no abort after its parent is cancelled and still reads the parent's typed values.",
+          "failureCase": "A stand-in that only checks the parent token at creation time still aborts later; the captured detached-value scenario separates it."
+        },
+        {
+          "property": "Bounded output keeps the configured head or tail and reports UTF-8 boundaries exactly.",
+          "case": "Multi-byte output truncated at a character boundary; a longer buffer retains the configured end with a declared marker.",
+          "failureCase": "A byte-slicing stand-in passes ASCII tests but splits a multi-byte character; the captured character-boundary case separates it."
+        }
+      ],
+      "blockingEdges": [],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json: a child cancellation is isolated while parent cancellation reaches an already-created child context",
+          "fixtures/pi-v1.3.0/audit-1057/context-cancellation.json: withoutAbortSignal removes cancellation while preserving typed values",
+          "fixtures/pi-v1.3.0/audit-1057/json-output-support.json: UTF-8 byte length and character-end boundaries match the frozen output helpers"
+        ],
+        "comparison": "Run the same scenarios against the new public caller and compare values, cancellation outcomes and output bytes with the frozen artifacts.",
+        "missing": "No C++ comparison exists today; the C++ rows are missing/partial per the consolidated ledger."
+      },
+      "coverage": [
+        "cch_chord:context",
+        "cch_chord:json",
+        "cch_chord:output"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "Not the whole upstream Chord product: plugin host, links/RPC, cluster, cells/schema and Node host stay excluded"
+      ]
+    },
+    {
+      "id": "P2",
+      "title": "Add cch_chord document, delta and replicated-state tracking",
+      "kind": "prefactor",
+      "owner": "cch_chord",
+      "frontier": false,
+      "context": "One owner, one context: typed draft preparation, immutable delta application, revision tracking, document publication ordering and replicated state delivery.",
+      "demo": "A public program commits two document revisions through a draft/tracker path, watches the committed frames, replays them from an older revision, and hydrates a replicated state that converges with a fresh snapshot.",
+      "scope": [
+        "draft lifecycle and escaped-handle revocation",
+        "immutable/mutable/batch delta application with path and op validation",
+        "tracker revision and stale/replace detection",
+        "ordered publication, watches, cursor gaps and listener isolation"
+      ],
+      "acceptance": [
+        {
+          "property": "A prepared revision is immutable and application is copy-on-write; a stale preparation is rejected.",
+          "case": "Preparing twice on one base makes the second preparation stale; a commit applies exactly the recorded operations and a revision mismatch is reported.",
+          "failureCase": "A stand-in that applies operations in place passes a single revision while mutating the base; the captured replay/no-mutation case separates it."
+        },
+        {
+          "property": "Watcher delivery is ordered per subscriber and a cursor gap is reported once without dropping the last good value.",
+          "case": "Frames delivered out of order still produce the frozen order; a gap reports once and keeps the previous value.",
+          "failureCase": "A queue-only stand-in loses the gap signal; the captured cursor-gap scenario separates it."
+        },
+        {
+          "property": "A failing listener does not stop other subscribers.",
+          "case": "One listener throws, the remaining listener still receives every frame and the error is reported through onError.",
+          "failureCase": "A stand-in that aborts the fan-out on the first throw fails the captured isolation case."
+        }
+      ],
+      "blockingEdges": [
+        "P1"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json: prepared revisions are immutable and a same-base preparation becomes stale after adoption",
+          "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json: batched immutable application applies ordered batches and returns only the final revision",
+          "fixtures/pi-v1.3.0/audit-1057/replicated-state.json: a cursor gap is reported once and leaves the last good replicated value"
+        ],
+        "comparison": "Compare operation tuples, frame order, replay results and final values against the frozen durable Chord capture.",
+        "missing": "Eight 1057 rows remain unverified (root identity, checkpoint bases, retention, prepareReplace, pending bound, JSON value/representation, progress); the implementation slices must add those observations."
+      },
+      "coverage": [
+        "cch_chord:document",
+        "cch_chord:delta",
+        "cch_chord:state"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "Document frames may be emitted as an equivalent C++ batch, but order, replay, final value and nonempty operation checks are compared"
+      ]
+    },
+    {
+      "id": "P3",
+      "title": "Create cch_durable with Storage, memory backend and Session commit",
+      "kind": "prefactor",
+      "owner": "cch_durable",
+      "frontier": true,
+      "context": "One owner, one context: the durable Storage contract, an in-memory backend, the Session transaction line, ID/sequence allocation and commit publication.",
+      "demo": "A public `cch::durable::Session` over memory storage: open, create a conversation, append a typed entry and a document in one commit, observe the committed revision through a subscription, snapshot it, and close.",
+      "scope": [
+        "Storage open/commit/mintId/close contract",
+        "memory backend with prepared-commit invisibility",
+        "Session commit callback rollback and storage-failure failure",
+        "commit publication and close notification"
+      ],
+      "acceptance": [
+        {
+          "property": "Prepared drafts become observable only after Storage settles the commit.",
+          "case": "A prepared commit is inspected before apply: it is invisible; after apply the committed revision is visible with one sequence.",
+          "failureCase": "A stand-in that publishes during prepare passes a post-commit assertion while leaking uncommitted state; the captured pre-settle read separates it."
+        },
+        {
+          "property": "A failed Storage commit fails the Session and publishes nothing.",
+          "case": "A storage boundary that fails the next commit leaves the Session failed/closed, the commit outcome unknown, and no publication.",
+          "failureCase": "A stand-in that retries blindly or swallows the error passes a happy-path reopen while duplicating the write; the captured storage-failure scenario separates it."
+        },
+        {
+          "property": "A failed transaction callback leaves the Session usable and writes nothing.",
+          "case": "A callback throws after writes: the callback/assembly rollback leaves a usable Session and no committed state.",
+          "failureCase": "A stand-in that treats every failure as fatal, or that commits partial writes, fails one of the two captured distinction cases."
+        }
+      ],
+      "blockingEdges": [
+        "P1"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1054/session-transactions.json: a prepared draft is not observable before Storage settles its commit",
+          "fixtures/pi-v1.3.0/audit-1054/session-transactions.json: a failed transaction callback publishes nothing and leaves the Session usable",
+          "fixtures/pi-v1.3.0/audit-1054/session-transactions.json: a failed Storage commit fails the Session and publishes nothing",
+          "fixtures/pi-v1.3.0/audit-1054/backend-contract.json: the same public operation yields the same records on memory, JSONL and SQLite"
+        ],
+        "comparison": "Compare committed snapshots, sequences, publication and failure outcomes with the frozen durable session capture.",
+        "missing": "No cch_durable target or C++ durable implementation exists; every 1054 row is upstream-captured or unverified."
+      },
+      "coverage": [
+        "cch_durable:Session",
+        "cch_durable:Storage:memory",
+        "cch_durable:Identity",
+        "cch_durable:Query"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "The ordinary application Session is not replaced"
+      ]
+    },
+    {
+      "id": "P4",
+      "title": "Extract cch_codemode from coding-agent",
+      "kind": "prefactor",
+      "owner": "cch_codemode",
+      "frontier": true,
+      "context": "One owner, one context: move codemode source/declarations/prelude and the WasmEdge sandbox into cch_codemode with existing behavior and forwarding headers.",
+      "demo": "A standalone `cch::codemode` caller parses a codemode source, renders the declaration, executes a script against an injected callable tool, and reports result/error without constructing a coding-agent Session.",
+      "scope": [
+        "CodemodeSource parse and options",
+        "declaration/signature rendering and identifier normalization",
+        "CodemodeSandbox execute with nested tools and output channels",
+        "portable library entry"
+      ],
+      "acceptance": [
+        {
+          "property": "First-line options are parsed and replaced without changing the body; only the first line is an options line.",
+          "case": "A body with a leading ordinary comment, CRLF and leading whitespace parses with the frozen option replacement.",
+          "failureCase": "A greedy parser that strips later comment lines passes the simple case; the captured only-first-line case separates it."
+        },
+        {
+          "property": "A script executes a nested tool and preserves output ordering and error taxonomy.",
+          "case": "A script with a real nested call keeps its store across turns and reports a failed call with its prior nested history.",
+          "failureCase": "A stand-in that runs the script without the tool bridge passes a syntax-only test; the captured nested-call case separates it."
+        },
+        {
+          "property": "The extraction keeps existing application behavior green through the forwarding headers.",
+          "case": "Application codemode tests and the codemode parity selection pass unchanged before the contract slice.",
+          "failureCase": "A move that only renames directories leaves one consumer broken; the owning shard selection fails."
+        }
+      ],
+      "blockingEdges": [],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1053/source-options.json: only the first line is an options line",
+          "fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.json: code mode runs a script that calls a real nested tool and keeps its store across turns"
+        ],
+        "comparison": "The moved behavior is compared through the existing application selection; the new owner caller is added for standalone use.",
+        "missing": "The current sandbox always passes empty globals/store and the prelude is generated from pi v1.0.4; the behavior slices F10-F12 regenerate it."
+      },
+      "coverage": [
+        "cch_codemode:codemode-source",
+        "cch_codemode:codemode-declaration",
+        "cch_codemode:codemode-script",
+        "cch_codemode:codemode-execute",
+        "cch_codemode:codemode-portable"
+      ],
+      "relatedIssues": [
+        "#882"
+      ],
+      "boundaries": [
+        "Cloudflare deployment remains excluded; generic Remote stays in scope"
+      ]
+    },
+    {
+      "id": "P5",
+      "title": "Extract cch_mcp from coding-agent",
+      "kind": "prefactor",
+      "owner": "cch_mcp",
+      "frontier": true,
+      "context": "One owner, one context: move the generic MCP client/protocol/transports and generic OAuth into cch_mcp with forwarding headers; application config/UI stay put.",
+      "demo": "A standalone `cch::mcp` caller connects a stdio and an HTTP client to a local fixture server, lists tools, calls one, and closes without a coding-agent Session.",
+      "scope": [
+        "JSON-RPC client lifecycle and cancellation",
+        "stdio and streamable-HTTP transports",
+        "generic OAuth discovery/flow/provider/callback",
+        "request authentication"
+      ],
+      "acceptance": [
+        {
+          "property": "The generic client is usable without the application.",
+          "case": "A standalone caller drives initialize/tools-list/tools-call/close against a local fixture.",
+          "failureCase": "A move that leaves application includes in the generic target fails the standalone caller or the architecture gate."
+        },
+        {
+          "property": "Existing application MCP behavior stays green through the forwarding headers.",
+          "case": "McpHttpSessionTest/McpStdioSessionTest and the application MCP selections pass unchanged before the contract slice.",
+          "failureCase": "A partial move breaks one transport; the owning focused selection fails."
+        }
+      ],
+      "blockingEdges": [],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1052/structured-content.json: client preserves an array structuredContent when content is absent",
+          "fixtures/pi-v1.3.0/audit-1052/transports.json: streamable HTTP transport connects over plain http"
+        ],
+        "comparison": "Moved behavior is compared through existing application selections; the new owner caller is added for standalone use.",
+        "missing": "Generic transport/protocol rows are upstream-captured only; no C++ parity ran."
+      },
+      "coverage": [
+        "cch_mcp:mcp-client",
+        "cch_mcp:mcp-http",
+        "cch_mcp:mcp-oauth",
+        "cch_mcp:mcp-tools",
+        "cch_mcp:mcp-resources"
+      ],
+      "relatedIssues": [
+        "#882"
+      ],
+      "boundaries": [
+        "Application config persistence, management UI and session-tool binding stay in cch_coding_agent"
+      ]
+    },
+    {
+      "id": "P6",
+      "title": "Move application session, history and compaction into cch_coding_agent",
+      "kind": "prefactor",
+      "owner": "cch_coding_agent",
+      "frontier": true,
+      "context": "One owner, one context: move the application session/history/compaction/JSONL store/leaf/tree/resume out of cch_agent_core with forwarding headers, then contract the old paths.",
+      "demo": "The `pike --resume` flow and the Session assembly public entry keep working end to end while the owning sources and public headers live under cch_coding_agent; cch_agent_core no longer contains session-store sources.",
+      "scope": [
+        "SessionStore/SessionEntry/SessionTree/SessionResume/JsonlSessionStore",
+        "compaction and context projection",
+        "session journal/serialization/redaction",
+        "leaf marker (membership stays visible)"
+      ],
+      "acceptance": [
+        {
+          "property": "The move preserves existing behavior and consumers.",
+          "case": "Resume, fork, compaction and TUI session selections pass before and after the move.",
+          "failureCase": "A move that changes include surfaces without updating the interface root fails the architecture gate; a move that breaks one consumer fails its focused selection."
+        },
+        {
+          "property": "A temporary forwarding header is removed in the contract slice.",
+          "case": "After M2/M4 the old paths are absent and no source includes them.",
+          "failureCase": "Leaving forwarding headers behind passes the build while the ownership split is incomplete; the checker refuses a forwarding form without a removal slice."
+        }
+      ],
+      "blockingEdges": [],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json: resume applies relative tool modifiers to the recorded loadout",
+          "fixtures/pi-v1.3.0/audit-1048/session-compaction-boundary.json: compaction appends a checkpoint without rewriting the earlier transcript lines"
+        ],
+        "comparison": "Behavior is preserved during the move; the behavior fixes for the same rows land in F15/F16/F21.",
+        "missing": "No C++ parity comparison ran for 1048; the move is a green relocation slice."
+      },
+      "coverage": [
+        "cch_coding_agent:Session"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "The application transcript stays separate from durable storage"
+      ]
+    },
+    {
+      "id": "P7",
+      "title": "Split the legacy SQLite/TaskStore coupling out of cch_agent_core",
+      "kind": "prefactor",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: move or retire the durable-specific SessionStore/TaskStore/TaskScheduler machinery so cch_agent_core no longer links sqlite3.",
+      "demo": "cch_agent_core builds without sqlite3 and without durable-specific sources; the affected tests run against the new owner or are retired with an explicit membership decision.",
+      "scope": [
+        "SqliteSessionStore/SqliteDatabase",
+        "TaskStore/TaskScheduler/TranscriptExport coupling",
+        "manifest and build declarations for the narrowed core"
+      ],
+      "acceptance": [
+        {
+          "property": "cch_agent_core has no sqlite3 edge and no durable-specific source.",
+          "case": "The architecture gate and the link set prove the removed dependency.",
+          "failureCase": "A stand-in that keeps the sources but removes a test passes a file-existence check while the edge remains; the manifest/link-set check separates it."
+        },
+        {
+          "property": "The two no-decision rows receive a tangible decision instead of disappearing.",
+          "case": "The legacy SQLite SessionStore and leaf-marker rows are implemented under an owner or explicitly retained with a boundary and a tracker.",
+          "failureCase": "Deleting the sources silently closes the membership question; the ledger keeps both rows visible."
+        }
+      ],
+      "blockingEdges": [
+        "P3",
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: the SQLite schema records the durable tables, metadata and document revisions",
+          "fixtures/pi-v1.3.0/audit-1054/backend-contract.json: the same public operation yields the same records on memory, JSONL and SQLite"
+        ],
+        "comparison": "The durable SQLite contract is compared through the durable public caller (F7), not through the legacy test-only store.",
+        "missing": "No pi coding-agent equivalent exists for SqliteSessionStore or TaskStore."
+      },
+      "coverage": [
+        "cch_durable:Session:storage:sqlite-alternative",
+        "cch_coding_agent:Session:entry:leaf-marker",
+        "cch_durable:Storage:sqlite"
+      ],
+      "relatedIssues": [
+        "#915",
+        "#920"
+      ],
+      "boundaries": [
+        "The legacy store is not pi v1.3.0 coding-agent storage and is not migrated; existing user data is not deleted"
+      ]
+    },
+    {
+      "id": "P8",
+      "title": "Remove the application's second SessionStore writers",
+      "kind": "prefactor",
+      "owner": "cch_coding_agent",
+      "frontier": false,
+      "context": "One owner, one context: TUI session operations must use the live Agent Session store instead of opening a second store for rename/export.",
+      "demo": "Session-selector rename and `/export` go through the live session path; a live tree observes the write without a second writer.",
+      "scope": [
+        "SessionFlowController rename",
+        "InteractiveEngineHost export",
+        "live-store consumers"
+      ],
+      "acceptance": [
+        {
+          "property": "No production path opens a second store for rename or export.",
+          "case": "A live tree observes the rename/export write; opening a second store is impossible through the public path.",
+          "failureCase": "A test that only asserts the file content passes with a second writer; the live-observer case separates it."
+        },
+        {
+          "property": "The application Session storage boundary stays separate from durable.",
+          "case": "The transcript-vs-durable row remains implemented with no durable import.",
+          "failureCase": "A stand-in that reuses durable storage for export crosses the boundary; the boundary comparison fails."
+        }
+      ],
+      "blockingEdges": [
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json: resume without modifiers restores the recorded order and does not rewrite the transcript"
+        ],
+        "comparison": "Consumer trace plus the existing session/TUI selections; no frozen capture covers the second-writer case today.",
+        "missing": "Static consumer trace only; a live-observer regression test is the acceptance case."
+      },
+      "coverage": [
+        "cch_coding_agent:Session:consumers"
+      ],
+      "relatedIssues": [],
+      "boundaries": []
+    },
+    {
+      "id": "F1",
+      "title": "Run a durable Harness workflow through the public caller",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: Harness open/close, root creation, registry, prompt assembly and a complete admitted run with a real injected tool.",
+      "demo": "A standalone durable example opens a Harness over memory storage, submits a prompt, streams a scripted model response, executes a real injected tool, and reads the settled receipt plus committed entries.",
+      "scope": [
+        "Harness.open/close/root",
+        "registry, prompt and settings assembly",
+        "generation admission and settlement",
+        "event stream and inspect"
+      ],
+      "acceptance": [
+        {
+          "property": "A complete run reaches settlement with the committed entry sequence.",
+          "case": "The captured workflow: user, system, assistant tool call, tool result, final assistant; the injected tool ran exactly once with duration present.",
+          "failureCase": "A Harness implemented as an AgentSession wrapper can pass a prompt test while missing the receipt/entry contract; the public workflow scenario separates it."
+        },
+        {
+          "property": "A registry install after root creation changes the next request.",
+          "case": "A late extension appears in the offered tools and prompt sections of the next request.",
+          "failureCase": "A startup-only registry passes an open-time test; the live registry transition case separates it."
+        },
+        {
+          "property": "Inspection derives task states and the task graph from committed runtime state.",
+          "case": "inspect reports ready/running/waiting/blocked and the parent/child graph with the owned conversation.",
+          "failureCase": "A second scheduler authority that keeps its own display state diverges on reopen; the inspect observation compares committed state."
+        }
+      ],
+      "blockingEdges": [
+        "P2",
+        "P3"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1056/workflow.json: a scripted model drives admission, one real injected tool, committed entries and final settlement",
+          "fixtures/pi-v1.3.0/audit-1056/workflow.json: a registry install after conversation creation changes the next request's tools and prompt sections",
+          "fixtures/pi-v1.3.0/audit-1056/observability.json: inspect derives ready, running, waiting and blocked task states without running task code"
+        ],
+        "comparison": "Run the same public workflow in frozen pi and the durable example; compare settlement, committed entries, offered tools and inspect states.",
+        "missing": "No durable Harness exists in C++ today."
+      },
+      "coverage": [
+        "cch_durable:harness-open-close",
+        "cch_durable:generation-admission",
+        "cch_durable:registry-transition",
+        "cch_durable:inspect",
+        "cch_durable:task-graph",
+        "cch_durable:conversation-view"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "The ordinary pike CLI runtime is not switched to durable"
+      ]
+    },
+    {
+      "id": "F2",
+      "title": "Implement the transactional JSONL durable store",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: the durable JSONL main/sidecar format with ordered fsync, torn-tail recovery, corruption refusal and poison/reopen.",
+      "demo": "A durable example opens a JSONL store directory, commits entries and documents, closes, reopens after removing an unconfirmed tail, and refuses a store whose confirmed sidecar is missing.",
+      "scope": [
+        "main.jsonl commit markers",
+        "doc-N/task-N sidecars",
+        "sidecar-before-marker ordering and fsync",
+        "torn-tail truncation, corruption refusal, poison recovery"
+      ],
+      "acceptance": [
+        {
+          "property": "Every sidecar append is ordered before its main marker.",
+          "case": "A torn final main line truncates to the last confirmed commit on reopen; an unconfirmed sidecar tail is dropped.",
+          "failureCase": "A stand-in that writes the marker first recovers a partial commit after a torn write; the captured recovery scenario separates it."
+        },
+        {
+          "property": "A store whose confirmed sidecar record is missing fails closed instead of dropping data.",
+          "case": "Removing confirmed sidecar data makes open fail with the frozen corruption outcome.",
+          "failureCase": "A permissive reader passes a happy-path reopen while silently losing a document; the corruption case separates it."
+        },
+        {
+          "property": "A commit I/O failure poisons the instance and recovery happens only on reopen.",
+          "case": "After a forced failure the instance refuses further commits; reopening the directory recovers.",
+          "failureCase": "A stand-in that retries in place passes a reopen test while duplicating writes; the poison case separates it."
+        }
+      ],
+      "blockingEdges": [
+        "P3"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json: JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail",
+          "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json: JSONL refuses a main marker whose confirmed sidecar record is missing",
+          "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json: a JSONL checkpoint replaces a current-only sidecar and retirement removes it"
+        ],
+        "comparison": "Compare commit sequences, sidecar files, recovery outcomes and refusal errors with the frozen JSONL capture.",
+        "missing": "Fsync-failure and power-loss behavior are not proven by the frozen capture; the row stays partial until an equivalent observation exists."
+      },
+      "coverage": [
+        "cch_durable:Storage:jsonl"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "No historical Pike durable format import or dual read"
+      ]
+    },
+    {
+      "id": "F3",
+      "title": "Run versioned durable tasks with checkpoints, hooks and outcomes",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: typed task definitions, reservation and checkpoints, version migration/replacement, phase hooks and terminal outcomes.",
+      "demo": "A public durable program installs a counter task, runs it through phases with a checkpoint and a memo, migrates a stored older version, and reads a typed terminal receipt.",
+      "scope": [
+        "defineTask/registry resolution",
+        "reservation, checkpoint commits and memos",
+        "definition versioning, migration and replacement",
+        "phase hooks, hook isolation and terminal outcomes"
+      ],
+      "acceptance": [
+        {
+          "property": "Reservation migrates a stored definition before running the newer version.",
+          "case": "A stored v1 task runs v2 after migration with the recorded phase log and typed result.",
+          "failureCase": "A stand-in that ignores versioning passes a fresh-task test; the captured before-reservation migration case separates it."
+        },
+        {
+          "property": "Too-old, missing and failed-migration definitions stay pending with the frozen diagnostics and recover when a usable definition appears.",
+          "case": "Each blocked state reports its exact code, keeps the task pending, and completes after repair.",
+          "failureCase": "A scheduler that treats every blocked state as failed passes one case while losing recoverability in another; the three captured cases separate it."
+        },
+        {
+          "property": "Phase hooks run in extension order and an ordinary hook throw is reported while the task completes.",
+          "case": "The recorded hook log and outcome; a throwing hook is isolated.",
+          "failureCase": "A stand-in that aborts the task on a hook throw fails the isolation case."
+        },
+        {
+          "property": "A terminal task receipt is atomic with its record.",
+          "case": "The captured terminal receipt/record pair commits together.",
+          "failureCase": "Two separate commits pass a happy-path read while a crash between them loses the receipt; the atomicity case separates it."
+        }
+      ],
+      "blockingEdges": [
+        "P3"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1055/task-versioning.json: reservation migrates a stored definition before running the newer version",
+          "fixtures/pi-v1.3.0/audit-1055/task-lifecycle.json: a multi-phase task replaces checkpoint state and reports a typed terminal result",
+          "fixtures/pi-v1.3.0/audit-1055/task-lifecycle.json: task hooks run in extension order and an ordinary throw is reported while the task continues",
+          "fixtures/pi-v1.3.0/audit-1056/workflow.json: tool hooks rewrite arguments before execution and observe the committed result"
+        ],
+        "comparison": "Compare phase logs, checkpoint state, version outcomes, hook order and terminal receipts with the frozen durable task captures.",
+        "missing": "Scheduler-written orphaned/faulted outcomes were not observed in a scenario (1055 residual gap) and stay unverified."
+      },
+      "coverage": [
+        "cch_durable:task-definition",
+        "cch_durable:task-memo",
+        "cch_durable:task-lifecycle",
+        "cch_durable:task-version",
+        "cch_durable:task-hook",
+        "cch_durable:task-outcome"
+      ],
+      "relatedIssues": [
+        "#925",
+        "#932"
+      ],
+      "boundaries": []
+    },
+    {
+      "id": "F4",
+      "title": "Implement durable submissions, inbox admission and deduplication",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: submission identity and request dedup, inbox placement, queue modes and atomic admission.",
+      "demo": "A public durable program places an idle input, a busy steer and a follow-up at their boundaries, aborts a conversation and observes which queued inputs survive; a duplicate request ID admits nothing.",
+      "scope": [
+        "request-ID deduplication",
+        "idle/passive/busy admission modes",
+        "atomic submission+inbox commit",
+        "conversation abort effects on queued inputs"
+      ],
+      "acceptance": [
+        {
+          "property": "A duplicate request ID is rejected without a second work item.",
+          "case": "The captured duplicateSameId/dedup observation.",
+          "failureCase": "A stand-in that dedups by content passes one case while accepting a same-ID different-payload submission; the wrong-type case separates it."
+        },
+        {
+          "property": "Admission of a submission and its inbox change is atomic.",
+          "case": "The captured [submission, document.change] batch commits as one sequence.",
+          "failureCase": "Two commits pass a happy-path read while a crash leaves an orphan inbox item; the atomic admission case separates it."
+        },
+        {
+          "property": "Busy steer/followUp/reject placement matches the frozen boundary rules.",
+          "case": "Steer queues in steer mode, followUp at the final boundary, reject refuses; conversation abort withdraws queued inputs and keeps queued writes.",
+          "failureCase": "A single queue for both modes passes one placement case; the captured mode/boundary cases separate it."
+        }
+      ],
+      "blockingEdges": [
+        "F3"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: a busy steer input queues in steer mode and a conversation abort withdraws it",
+          "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: a duplicate request ID returns the existing submission without a storage write",
+          "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: a busy input with whenBusy reject throws ConversationBusy and writes no submission",
+          "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: an idle passive write is appended and settled done without starting a run"
+        ],
+        "comparison": "Compare admission outcomes, queue placement, dedup results and abort effects with the frozen captures.",
+        "missing": "postTools steer placement versus final followUp placement is a 1055 residual gap."
+      },
+      "coverage": [
+        "cch_durable:submission",
+        "cch_durable:atomic-admission-inbox",
+        "cch_durable:busy-admission-modes",
+        "cch_durable:passive-write-admission",
+        "cch_durable:idle-input-admission",
+        "cch_durable:steering"
+      ],
+      "relatedIssues": [
+        "#932"
+      ],
+      "boundaries": []
+    },
+    {
+      "id": "F5",
+      "title": "Implement durable ownership, joins, abort and wait cancellation",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: task ownership graph, failFast/allSettled joins, bottom-up abort cascade and the wait/abort distinction.",
+      "demo": "A public durable program runs a parent with two children, aborts it bottom-up, observes hook order and outcomes, and shows that cancelling a wait does not abort the persistent task.",
+      "scope": [
+        "ownership and child restrictions",
+        "failFast/allSettled joins",
+        "abort cascade and abort-handler ordering",
+        "wait cancellation versus persistent abort"
+      ],
+      "acceptance": [
+        {
+          "property": "failFast aborts live siblings while allSettled lets them finish; both read ordered terminal outcomes.",
+          "case": "The two captured join scenarios.",
+          "failureCase": "A join that cancels the parent without settling children passes one case; the ordered-outcome observation separates it."
+        },
+        {
+          "property": "Aborting a parent runs descendants' handlers before the parent and preserves order.",
+          "case": "The captured bottom-up abort log.",
+          "failureCase": "A depth-first abort that fires the parent first fails the recorded order."
+        },
+        {
+          "property": "Cancelling a wait leaves the task running and completing.",
+          "case": "The captured wait-cancel scenario: waiter error, abortRequested false, later completed result.",
+          "failureCase": "A stand-in that conflates wait cancellation with abort passes a cancellation test while killing work; the captured distinction separates it."
+        }
+      ],
+      "blockingEdges": [
+        "F3"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1055/ownership-abort.json: a failFast join aborts live siblings and the parent reads ordered terminal outcomes",
+          "fixtures/pi-v1.3.0/audit-1055/ownership-abort.json: cancelling a wait cancels only the waiter; the persistent task keeps running and completes",
+          "fixtures/pi-v1.3.0/audit-1055/ownership-abort.json: aborting a parent runs descendants' abort handlers before the parent and preserves order"
+        ],
+        "comparison": "Compare ordered outcomes, abort marks, handler order and post-cancel state with the frozen ownership capture.",
+        "missing": "Background-ownership boundaries and ordinary idle/named waits were not captured."
+      },
+      "coverage": [
+        "cch_durable:task-ownership-graph",
+        "cch_durable:conversation-ownership",
+        "cch_durable:waiting-failfast-join",
+        "cch_durable:waiting-allsettled-join",
+        "cch_durable:abort-cascade-bottom-up",
+        "cch_durable:wait-cancellation-is-not-abort"
+      ],
+      "relatedIssues": [
+        "#932"
+      ],
+      "boundaries": []
+    },
+    {
+      "id": "F6",
+      "title": "Prove durable crash recovery with a real killed process",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: recovery after admission, after effect, after terminal commit and after an abort mark, with process-level crash injection.",
+      "demo": "A durable example worker commits an admitted boundary, is SIGKILLed, and a second process reopens the store, continues the generation without duplicating the submission, and applies the recorded effect once.",
+      "scope": [
+        "crash after admission",
+        "intent/effect/outcome checkpoint recovery",
+        "terminal-commit crash",
+        "abort-mark survival"
+      ],
+      "acceptance": [
+        {
+          "property": "An admitted input and its generation task are recoverable without a duplicate submission.",
+          "case": "The captured SIGKILL/reopen scenario with duplicateSameId true and transcript after settle.",
+          "failureCase": "A replay that admits the input again passes a reopen smoke test while duplicating work; the captured duplicate check separates it."
+        },
+        {
+          "property": "An effect is applied once across crash and resume.",
+          "case": "effectAfterCrash calls 1 applied 1; after resume calls 2 applied 1.",
+          "failureCase": "A stand-in that re-invokes the effect passes a single-run test; the applied-once observation separates it."
+        },
+        {
+          "property": "A terminal commit is not rerun and does not create a duplicate submission.",
+          "case": "The captured terminal crash scenario with an empty rerun log.",
+          "failureCase": "A recovery that always resumes passes the admission case while rerunning terminal work; the terminal scenario separates it."
+        }
+      ],
+      "blockingEdges": [
+        "F3",
+        "F4"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1055/crash-recovery.json: a killed process leaves an admitted input and its generation task recoverable without a duplicate submission",
+          "fixtures/pi-v1.3.0/audit-1055/crash-recovery.json: a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once",
+          "fixtures/pi-v1.3.0/audit-1055/crash-recovery.json: a killed process after a terminal commit does not rerun the task or duplicate the submission"
+        ],
+        "comparison": "Run the C++ worker as a real child process, assert the observed SIGKILL signal, reopen the same store and compare the frozen recovery observations.",
+        "missing": "Power loss, fsync failure and multi-process concurrency are not proven by the frozen SIGKILL capture and must not be claimed."
+      },
+      "coverage": [
+        "cch_durable:recovery",
+        "cch_durable:abandon-on-restart",
+        "cch_durable:storage-failure"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "SIGKILL with a live page cache is the recorded crash model; no stronger durability claim"
+      ]
+    },
+    {
+      "id": "F7",
+      "title": "Implement the durable SQLite store",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: the durable SQLite schema, migrations, STRICT tables, transaction atomicity and options.",
+      "demo": "A durable example opens a SQLite store, applies contiguous migrations, commits a batch atomically, rolls back a failing batch, rejects a newer schema version and closes with a checkpoint.",
+      "scope": [
+        "schema and prefixed identifiers",
+        "migrations and version refusal",
+        "STRICT tables and JSON validity",
+        "one immediate transaction per commit",
+        "WAL checkpoint/busy timeout options"
+      ],
+      "acceptance": [
+        {
+          "property": "A failing batch rolls back every write and leaves the sequence unchanged.",
+          "case": "The captured failing-batch observation with the transaction rollback.",
+          "failureCase": "A stand-in that commits per statement passes a happy-path test while a mid-batch failure leaves partial state; the rollback case separates it."
+        },
+        {
+          "property": "A store written by a newer durable schema version is refused.",
+          "case": "The captured newer-schema refusal.",
+          "failureCase": "A permissive opener migrates forward anyway and corrupts the store; the refusal case separates it."
+        },
+        {
+          "property": "The schema identifier prefix isolates an unrelated table set.",
+          "case": "The captured prefixed-schema observation.",
+          "failureCase": "Hardcoded table names pass a single-store test while colliding with another prefix; the isolation case separates it."
+        }
+      ],
+      "blockingEdges": [
+        "P3",
+        "P7"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
+          "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: a failing SQLite batch rolls back every write and leaves the sequence unchanged",
+          "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: SQLite refuses a store written by a newer durable schema version"
+        ],
+        "comparison": "Compare schema identifiers, constraints, rows, recovery observations and errors with the frozen SQLite capture; page layout is not a contract.",
+        "missing": "Non-default busyTimeout/WAL auto-checkpoint thresholds, filtered scans and document version migration were not captured."
+      },
+      "coverage": [
+        "cch_durable:Storage:sqlite"
+      ],
+      "relatedIssues": [
+        "#915",
+        "#920"
+      ],
+      "boundaries": [
+        "Cloudflare SQLite hosting stays excluded"
+      ]
+    },
+    {
+      "id": "F8",
+      "title": "Prove bidirectional JSONL/SQLite interchange with frozen pi",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: pi-created stores continue in C++ and C++-created stores continue in pi, including alternating writers across close/reopen.",
+      "demo": "A cross-runtime harness: frozen pi creates a JSONL store with an unfinished task, documents and checkpoints; the C++ durable caller reopens, continues and closes; pi reopens and continues; the same with reversed creation order and with alternating writers.",
+      "scope": [
+        "pi-create then C++ continue then pi reopen",
+        "C++ create then pi continue then C++ reopen",
+        "alternating writers across close/reopen",
+        "unfinished tasks, submissions, documents and checkpoints preserved"
+      ],
+      "acceptance": [
+        {
+          "property": "A pi-created store continues in C++ without losing state.",
+          "case": "The captured pi-create interchange plus a C++ continuation that preserves identifiers, sequences and checkpoints.",
+          "failureCase": "A reader that imports a snapshot passes a read-only test while writing an incompatible continuation; the pi-reopen step separates it."
+        },
+        {
+          "property": "A C++-created store continues in pi.",
+          "case": "The reverse direction runs through the frozen pi public store API.",
+          "failureCase": "A C++ writer that matches test expectations but not the frozen schema fails pi's open; the reverse step separates it."
+        },
+        {
+          "property": "Alternating writers across close/reopen do not lose or duplicate state.",
+          "case": "pi and C++ alternate commits; identifiers, sequences, submissions and checkpoints stay consistent.",
+          "failureCase": "A single-writer design passes the first direction and fails the alternation; the third case separates it."
+        }
+      ],
+      "blockingEdges": [
+        "F2",
+        "F7"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1054/interchange.json: jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+          "fixtures/pi-v1.3.0/audit-1054/interchange.json: sqlite store created by pi reopens with unfinished task, documents and checkpoints and continues"
+        ],
+        "comparison": "The exact cross-runtime sequence must run both directions with alternating writers; pi-only reopen is not acceptance.",
+        "missing": "Both C++ directions are unverified today; the frozen capture covers pi-only reopen."
+      },
+      "coverage": [
+        "cch_durable:Interchange"
+      ],
+      "relatedIssues": [
+        "#915",
+        "#920"
+      ],
+      "boundaries": [
+        "Concurrent cross-process writers are not promised beyond the upstream storage contract"
+      ]
+    },
+    {
+      "id": "F9",
+      "title": "Implement durable documents, forks, reset/handoff and compaction",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: built-in durable documents, revision history, fork/reset/handoff lifecycle and compaction placement.",
+      "demo": "A durable conversation creates its five built-in documents in one commit, forks as of an entry, resets with handoff text, compacts manually and by threshold, and reopens with the same identity and state.",
+      "scope": [
+        "built-in agent/inbox/live/provider/usage documents",
+        "document revisions, checkpoints and as-of reads",
+        "fork/reset/handoff",
+        "manual/threshold/background/declined/no-cut compaction"
+      ],
+      "acceptance": [
+        {
+          "property": "A fork copies the transcript and agent state as of its entry and stays independent.",
+          "case": "The captured fork scenario; later writes to one branch do not change the other.",
+          "failureCase": "A shallow copy passes an identity test while sharing documents; the independence observation separates it."
+        },
+        {
+          "property": "Threshold compaction runs before the protected request and a beforeCompact decline leaves no marker or summary request.",
+          "case": "The captured placement and decline scenarios.",
+          "failureCase": "A stand-in that always compacts passes a summary test while ignoring the decline; the decline case separates it."
+        },
+        {
+          "property": "Reset carries handoff text as the first context user message.",
+          "case": "The captured reset/handoff scenario.",
+          "failureCase": "A reset that drops the handoff passes a tree test; the context comparison separates it."
+        }
+      ],
+      "blockingEdges": [
+        "F1",
+        "P2"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1056/conversations.json: the root conversation is created lazily in one commit with its five built-in documents",
+          "fixtures/pi-v1.3.0/audit-1056/conversations.json: a fork copies the transcript and agent state as of its entry and stays independent",
+          "fixtures/pi-v1.3.0/audit-1056/compaction.json: a compaction beforeCompact hook can decline the cut and the request goes out uncompacted",
+          "fixtures/pi-v1.3.0/audit-1057/document-transaction.json: a callback rollback publishes nothing and keeps the committed revision"
+        ],
+        "comparison": "Compare committed documents, fork independence, compaction placement and reopen identity with the frozen captures.",
+        "missing": "Background compaction, overflow retry and authorization edges are unverified (1056 gaps)."
+      },
+      "coverage": [
+        "cch_durable:conversation-fork",
+        "cch_durable:Document:fork-copy",
+        "cch_durable:Entry:fork-ancestry",
+        "cch_durable:reset-handoff",
+        "cch_durable:compaction",
+        "cch_durable:harness-documents",
+        "cch_durable:usage-aggregate"
+      ],
+      "relatedIssues": [],
+      "boundaries": []
+    },
+    {
+      "id": "F10",
+      "title": "Align the codemode worker with shutdown-request versus actual-exit semantics",
+      "kind": "behavior",
+      "owner": "cch_codemode",
+      "frontier": false,
+      "context": "One owner, one context: worker admission, result settlement, actual exit accounting, repeated cancellation and construction failure.",
+      "demo": "A standalone codemode caller runs a script that settles its result while a cancelled worker survives, observes capacity still held until the worker actually exits, repeats aborts without unbounded survivors, and sees a construction failure release its reservation exactly once.",
+      "scope": [
+        "admission and release tied to actual exit",
+        "result settlement versus close settlement",
+        "repeated cancellation accounting",
+        "wasm-load/construction failure"
+      ],
+      "acceptance": [
+        {
+          "property": "Result/close settlement happens on shutdown request, while capacity release tracks actual exit.",
+          "case": "The captured worker-lifetime observation: releasedAtResult below acquiredAtResult, exits release all.",
+          "failureCase": "A stand-in that frees capacity at settlement passes a single-abort test while admitting unbounded surviving workers; the repeated-cancellation case separates it."
+        },
+        {
+          "property": "Repeated aborts cannot admit unbounded surviving workers.",
+          "case": "Three aborts settle while all three workers remain unreleased until their exits.",
+          "failureCase": "A fire-and-forget abort leaks workers; the accounting case separates it."
+        },
+        {
+          "property": "Construction failure returns its reserved admission exactly once; wasm-load failure acquires nothing.",
+          "case": "The two captured failure scenarios.",
+          "failureCase": "A single 'fail' path double-releases or leaks; the two distinct observations separate it."
+        }
+      ],
+      "blockingEdges": [
+        "P4"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json: admission denial rejects before a worker starts and keeps the start hook uncalled",
+          "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json: repeated abort results settle while cancelled workers remain unreleased; exits release every admission",
+          "fixtures/pi-v1.3.0/audit-1053/worker-lifetime.json: a worker construction failure returns its reserved admission exactly once"
+        ],
+        "comparison": "Compare settlement order, capacity accounting and failure messages with the frozen worker-lifetime capture.",
+        "missing": "The current C++ sandbox creates and joins a std::thread per call; no result-versus-exit separation exists."
+      },
+      "coverage": [
+        "cch_codemode:codemode-worker"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "Node/Bun internals are not interface requirements"
+      ]
+    },
+    {
+      "id": "F11",
+      "title": "Implement codemode Inline execution and deterministic replay",
+      "kind": "behavior",
+      "owner": "cch_codemode",
+      "frontier": false,
+      "context": "One owner, one context: Inline VM interrupt budgets, deadlines, partial output and deterministic start/seed/seq/fingerprint replay.",
+      "demo": "A standalone caller runs an inline script that exceeds its interrupt budget, aborts during a tool wait and keeps partial output; then replays a deterministic run with the same start time and seed and detects a seed mismatch.",
+      "scope": [
+        "inline interrupt budget and deadline distinction",
+        "pre-aborted signal creates no VM",
+        "deterministic start/clock/seed/seq/idle metadata",
+        "fingerprint and replay mismatch"
+      ],
+      "acceptance": [
+        {
+          "property": "Interrupt budget exhaustion and a deadline report distinct errors; the budget accrues across tool waits.",
+          "case": "The captured inline cases: 'Execution exceeded its interrupt budget' versus 'Execution timed out'.",
+          "failureCase": "A single timeout path passes one case while misreporting the other; the two captured errors separate it."
+        },
+        {
+          "property": "Deterministic replay reproduces calls and output and rejects a mismatched seed or reused result number.",
+          "case": "The captured deterministic cases including reverse delivery applying seq order.",
+          "failureCase": "A stand-in that ignores the seed passes a same-run replay while accepting a changed seed; the mismatch cases separate it."
+        },
+        {
+          "property": "The VM fingerprint and idle metadata are reported before calls.",
+          "case": "The recorded fingerprint string and idle observations.",
+          "failureCase": "A fingerprint derived from the environment changes across runs; the recorded value separates it."
+        }
+      ],
+      "blockingEdges": [
+        "F10"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1053/inline-interrupt.json: an inline script that computes without awaiting is stopped by its interrupt budget, not the deadline",
+          "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json: the same script, start time, seed and answers make the same calls and output",
+          "fixtures/pi-v1.3.0/audit-1053/deterministic-replay.json: the VM fingerprint arrives before calls, idles report issued calls, and a different heap changes the fingerprint"
+        ],
+        "comparison": "Compare error text, partial output, replay call/answer sets and fingerprint with the frozen captures.",
+        "missing": "No C++ Inline/deterministic implementation exists."
+      },
+      "coverage": [
+        "cch_codemode:codemode-inline",
+        "cch_codemode:codemode-deterministic"
+      ],
+      "relatedIssues": [],
+      "boundaries": []
+    },
+    {
+      "id": "F12",
+      "title": "Implement the generic Remote exchange and a Linux host",
+      "kind": "behavior",
+      "owner": "cch_codemode",
+      "frontier": false,
+      "context": "One owner, one context: the generic Remote request/message/reply contract with a working Linux host, output batching, caps, abort-stop and failure taxonomy.",
+      "demo": "A Linux host and caller exchange a remote script that calls caller-side tools across multiple exchanges, batches console output, enforces caps, answers abort with stop, and reports distinct transport failures.",
+      "scope": [
+        "remote protocol data types",
+        "caller tool invocation across exchanges",
+        "output batching and caps",
+        "abort/stop and failure taxonomy",
+        "deterministic replay over a reordering transport"
+      ],
+      "acceptance": [
+        {
+          "property": "Remote exchange runs the script and calls caller tools without a Cloudflare deployment.",
+          "case": "The captured remote-exchange scenario over a local Linux host.",
+          "failureCase": "A stand-in that only serializes messages passes a protocol test while never invoking a caller tool; the exchange scenario separates it."
+        },
+        {
+          "property": "Output is batched and caps are enforced with the frozen messages.",
+          "case": "5000 console lines over six exchanges; interrupt budget and memory caps.",
+          "failureCase": "One exchange per output item passes a small script and fails the batching observation."
+        },
+        {
+          "property": "Abort answers the remote exchange with stop and settles without waiting for worker exit.",
+          "case": "The captured abort/stop scenario.",
+          "failureCase": "A stand-in that waits for exit passes a happy path and fails the settlement observation."
+        }
+      ],
+      "blockingEdges": [
+        "P4",
+        "F10"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json: a generic remote runs the script and calls the caller's tools across the exchange",
+          "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json: remote output is buffered instead of one exchange per output item",
+          "fixtures/pi-v1.3.0/audit-1053/remote-exchange.json: caller abort answers the remote's exchange with stop and settles without waiting for remote compute"
+        ],
+        "comparison": "Compare exchange sequences, batched output, cap errors and abort settlement with the frozen remote capture.",
+        "missing": "The Remote protocol consumers and the C++ host do not exist; the row is excluded only for the Cloudflare wrapper."
+      },
+      "coverage": [
+        "cch_codemode:codemode-remote"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "The standalone pi-env SSH daemon stays excluded; this is the generic Remote contract plus a local Linux host"
+      ]
+    },
+    {
+      "id": "F13",
+      "title": "Fix MCP structured results, cancellation, close and transports",
+      "kind": "behavior",
+      "owner": "cch_mcp",
+      "frontier": false,
+      "context": "One owner, one context: generic MCP client behavior against the frozen protocol and OAuth fixtures.",
+      "demo": "A standalone MCP caller against local fixtures preserves array/primitive/null structured content, never resends a cancelled or timed-out call after refresh, closes without refreshing, rejects a forged issuer, connects over http/https with redirects, and refuses an untrusted certificate.",
+      "scope": [
+        "arbitrary JSON structuredContent",
+        "cancellation through refresh/discovery/registration/sign-in",
+        "close without refresh",
+        "issuer validation",
+        "HTTP/HTTPS/redirect request authentication"
+      ],
+      "acceptance": [
+        {
+          "property": "No cancelled or timed-out call is sent after the refresh completes.",
+          "case": "The captured abort and timeout scenarios: exactly one tools/call (401), toolCallsAfterRefresh 0, refresh still completes.",
+          "failureCase": "A stand-in that resumes the call after refreshing passes a refresh test while executing a cancelled tool; the toolCallsAfterRefresh observation separates it."
+        },
+        {
+          "property": "Close does not refresh and does not wait for an in-flight refresh.",
+          "case": "The captured close-with-stalled-refresh observation (<=250ms, DELETE with the pre-refresh token).",
+          "failureCase": "A close that awaits the refresh passes a functional close test and fails the latency/token observation."
+        },
+        {
+          "property": "Structured content is preserved for arrays, primitives and null; the issuer is verified before token exchange.",
+          "case": "The captured structured-content and forged-issuer scenarios.",
+          "failureCase": "An object-only schema passes one fixture while rejecting an array; the array/null cases separate it."
+        },
+        {
+          "property": "Plain http and trusted https connect; redirects preserve or strip Authorization by origin; untrusted certificates fail.",
+          "case": "The captured transport scenarios.",
+          "failureCase": "A TLS-only client passes an https test and rejects plain http; the captured application-config and plain-http cases separate it."
+        }
+      ],
+      "blockingEdges": [
+        "P5"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1052/structured-content.json: client preserves a null structuredContent",
+          "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json: cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+          "fixtures/pi-v1.3.0/audit-1052/oauth-lifecycle.json: closing while a token refresh is in flight does not wait for the refresh",
+          "fixtures/pi-v1.3.0/audit-1052/transports.json: HTTPS transport rejects an untrusted certificate",
+          "fixtures/pi-v1.3.0/audit-1052/transports.json: cross-origin redirect is followed without Authorization and is rejected"
+        ],
+        "comparison": "Run the same fixtures against the C++ client and compare values, request logs, errors and timing bounds; keep certificate validation.",
+        "missing": "The management-UI row has no scenario; retain platform certificate validation."
+      },
+      "coverage": [
+        "cch_mcp:mcp-tools-call",
+        "cch_mcp:mcp-refresh",
+        "cch_mcp:mcp-close",
+        "cch_mcp:mcp-oauth",
+        "cch_mcp:mcp-request-auth",
+        "cch_mcp:mcp-request-cancellation"
+      ],
+      "relatedIssues": [
+        "#882"
+      ],
+      "boundaries": [
+        "Retain applicable certificate validation; do not alter the Magpie connection contract"
+      ]
+    },
+    {
+      "id": "F14",
+      "title": "Integrate MCP management, on-demand resources and session tools",
+      "kind": "behavior",
+      "owner": "cch_coding_agent",
+      "frontier": false,
+      "context": "One owner, one context: application MCP config/state exposure, management during connection, on-demand resources and session-tool conversion.",
+      "demo": "An application Session starts with a delayed MCP server: `/mcp status` stays usable while connecting, resources load on demand without blocking tools, a resources failure keeps the server connected, and the first prompt resolves within the startup window.",
+      "scope": [
+        "management UI during connection",
+        "on-demand resource listing",
+        "session-tool conversion and declaration refresh",
+        "external sign-in pickup"
+      ],
+      "acceptance": [
+        {
+          "property": "A slow server does not block session creation or unrelated management.",
+          "case": "The captured application-init scenarios: close during pending initialize <=250ms, codemode prompt <=250ms, direct prompt waits 40ms.",
+          "failureCase": "A startup that awaits every server passes a single-server test while blocking on a delayed one; the delayed scenarios separate it."
+        },
+        {
+          "property": "Resource listing happens on demand and a resources failure keeps the server connected for tools.",
+          "case": "The captured hasResources/no resources-list/eager-failure observations.",
+          "failureCase": "An eager snapshot that fails the connection passes a tools-only test; the failure observation separates it."
+        },
+        {
+          "property": "Management actions remain usable while a server connects.",
+          "case": "A full Session/Interactive comparison of /mcp status/list/sign-in during connection (the #1052 extension-stub limitation must be removed).",
+          "failureCase": "The extension-factory stub passes the current capture while the real Session blocks; only the Session-level comparison separates it."
+        }
+      ],
+      "blockingEdges": [
+        "F13",
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1052/application-initialization.json: resources are listed on demand after the connection is ready",
+          "fixtures/pi-v1.3.0/audit-1052/application-initialization.json: a resources/list failure leaves the server connected and usable for tools",
+          "fixtures/pi-v1.3.0/audit-1052/application-initialization.json: closing while initialize is pending returns without waiting"
+        ],
+        "comparison": "The current captures stop at the public extension factory with a minimal host stub; this draft must add the Session/Interactive comparison rather than treating the stub as Session proof.",
+        "missing": "Management UI actions during connection were not captured; this draft owns that observation."
+      },
+      "coverage": [
+        "cch_coding_agent:mcp-config",
+        "cch_coding_agent:mcp-application",
+        "cch_coding_agent:mcp-management",
+        "cch_coding_agent:mcp-exposure",
+        "cch_coding_agent:mcp-session-tool"
+      ],
+      "relatedIssues": [
+        "#882"
+      ],
+      "boundaries": [
+        "MCP prompts/sampling stay excluded"
+      ]
+    },
+    {
+      "id": "F15",
+      "title": "Carry monotonic tool duration end to end",
+      "kind": "behavior",
+      "owner": "cch_agent_core",
+      "frontier": false,
+      "context": "One contract across owners: measure execute-only duration in cch_agent_core, carry it through cch_ai's passive result field, the application session and the TUI renderer.",
+      "demo": "A tool with a long before-hook and a short execute shows durationMs equal to the execute time only; an unexecuted call has no duration; the value survives persistence, resume and the rendered settled tool block.",
+      "scope": [
+        "monotonic execute-only measurement",
+        "durationMs on end event and tool-result message",
+        "session serialization round trip",
+        "resume and renderer consumption"
+      ],
+      "acceptance": [
+        {
+          "property": "Hook time is excluded and an unexecuted call has no duration.",
+          "case": "The captured long-hook/short-execute case (durationMs 10 with ~121ms wall) and the length-truncated case (duration absent, executeCalls 0).",
+          "failureCase": "A wall-clock timer around the whole call passes a fast test while including the hook; the captured hook case separates it."
+        },
+        {
+          "property": "The session record round-trips durationMs, including resume.",
+          "case": "The captured session round trip plus a C++ persist/reopen comparison.",
+          "failureCase": "An in-memory-only field passes the live assertion and disappears after resume; the round-trip case separates it."
+        },
+        {
+          "property": "The visible settled duration comes from the recorded value, not a render clock.",
+          "case": "A resumed tool block renders the persisted duration rather than a fresh timer.",
+          "failureCase": "The current BashRenderer-derived clock passes a live test and shows a different value after resume; the resume render case separates it."
+        }
+      ],
+      "blockingEdges": [
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1047/tool-execution.json: hook and execute activity are distinguishable in duration and wall time",
+          "fixtures/pi-v1.3.0/audit-1047/tool-execution.json: a call from a length-truncated message never executes and has no duration",
+          "fixtures/pi-v1.3.0/audit-1047/tool-execution.json: tool duration survives the public session record round trip"
+        ],
+        "comparison": "Compare presence/absence, hook exclusion and persisted resume values; a C++-only assertion is a regression check, not parity.",
+        "missing": "The AI passive field and the application persistence paths are unimplemented; the mature-model thinking default row stays separate."
+      },
+      "coverage": [
+        "cch_agent_core:ToolCallExecutor:duration",
+        "cch_agent_core:ToolResult:duration-field",
+        "cch_coding_agent:AgentSession:tool-telemetry",
+        "cch_coding_agent:TUI:tool-duration",
+        "cch_coding_agent:tool-duration"
+      ],
+      "relatedIssues": [
+        "#812"
+      ],
+      "boundaries": [
+        "Model-response timing stays excluded"
+      ]
+    },
+    {
+      "id": "F16",
+      "title": "Restore recorded tool loadout and relative tool modifiers",
+      "kind": "behavior",
+      "owner": "cch_coding_agent",
+      "frontier": false,
+      "context": "One owner, one context: application session resume tool policy and CLI/SDK tool selection modifiers.",
+      "demo": "Resume restores the recorded loadout order; `-bash,+edit` yields the frozen ordered set with precedence; mixed names and modifiers are validated; unavailable tools are filtered without rewriting the transcript.",
+      "scope": [
+        "recorded loadout restoration",
+        "relative +/- modifiers and precedence",
+        "CLI/SDK validation",
+        "transcript not rewritten on resume"
+      ],
+      "acceptance": [
+        {
+          "property": "Resume restores the recorded order rather than registry order.",
+          "case": "The captured no-modifier resume: [read,bash,write] in transcript order, file unchanged.",
+          "failureCase": "A registry-order restore passes a set-equality test and fails the order observation."
+        },
+        {
+          "property": "Relative modifiers apply with ordered precedence.",
+          "case": "The captured [-bash,+edit] over [read,bash,write] yields [read,write,edit].",
+          "failureCase": "An allow/deny-only interface passes a removal test while dropping the append position of +edit; the captured order separates it."
+        }
+      ],
+      "blockingEdges": [
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json: resume without modifiers restores the recorded order and does not rewrite the transcript",
+          "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json: resume applies relative tool modifiers to the recorded loadout"
+        ],
+        "comparison": "Compare active tool order, transcript bytes and the public CLI/SDK error behavior with the frozen capture.",
+        "missing": "The current C++ ToolSelection has only allow/deny lists and no modifier parser."
+      },
+      "coverage": [
+        "cch_coding_agent:Session:resume:tool-loadout",
+        "cch_coding_agent:Session:resume:relative-tool-modifiers"
+      ],
+      "relatedIssues": [],
+      "boundaries": []
+    },
+    {
+      "id": "F17",
+      "title": "Implement native extension lifecycle and run triggering in the application Session",
+      "kind": "behavior",
+      "owner": "cch_coding_agent",
+      "frontier": false,
+      "context": "One owner, one context: native registration, before_agent_start, prompt/system-prompt contributions, custom messages and extension-triggered runs.",
+      "demo": "A native extension registers a tool, observes busy state in before_agent_start, contributes a system-prompt section and a custom message, and triggers a second run from an idle session; contributions survive a tool turn.",
+      "scope": [
+        "registration and dispatch",
+        "before_agent_start with busy context",
+        "prompt/custom-message contributions",
+        "sendMessage triggerTurn run start",
+        "tool wrapping and retention"
+      ],
+      "acceptance": [
+        {
+          "property": "before_agent_start observes a non-idle context and can replace the system prompt and inject a message.",
+          "case": "The captured extension-run scenario with isIdle false and contribution counts.",
+          "failureCase": "A tool-registry-only seam passes the tool test while never invoking lifecycle hooks; the captured run separates it."
+        },
+        {
+          "property": "An extension-triggered run from idle starts and retains contributions across a tool turn.",
+          "case": "The captured triggered run with two contributions and hasToolResult.",
+          "failureCase": "A stand-in that queues the message without starting a run passes a message test; the run-start observation separates it."
+        },
+        {
+          "property": "Direct third-party TS/JS plugin execution stays excluded while native hooks work.",
+          "case": "The boundary test checks the excluded row is unchanged.",
+          "failureCase": "Restoring a JS loader to satisfy the hook tests violates the exclusion; the boundary comparison separates it."
+        }
+      ],
+      "blockingEdges": [
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1049/extension-run.json: before_agent_start observes busy state and contributes prompt plus custom message",
+          "fixtures/pi-v1.3.0/audit-1049/extension-run.json: extension-triggered run starts from an idle session and retains contributions across a tool turn"
+        ],
+        "comparison": "Compare hook invocation, busy state, contribution retention and run start at the real application Session; the native seam is not a JS runtime.",
+        "missing": "No general extension lifecycle hook exists in C++; ADR 0066's historical #865 clause does not reopen this."
+      },
+      "coverage": [
+        "cch_coding_agent:extension",
+        "cch_coding_agent:prompt-busy",
+        "cch_coding_agent:extension-registration",
+        "cch_coding_agent:extension-prompt-status"
+      ],
+      "relatedIssues": [
+        "#1033"
+      ],
+      "boundaries": [
+        "Direct third-party pi TS/JS plugin execution stays excluded"
+      ]
+    },
+    {
+      "id": "F18",
+      "title": "Wire durable Harness extension hooks and run triggering",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: durable registry lifecycle, generation onYield continuation and tool hooks.",
+      "demo": "A durable Harness installs an extension that appends a user message through onYield and continues the same admitted run; tool hooks rewrite arguments before execution and observe the committed result.",
+      "scope": [
+        "live registry install/replace/uninstall",
+        "generation onYield continuation",
+        "tool before/after hooks",
+        "task hooks interaction"
+      ],
+      "acceptance": [
+        {
+          "property": "A generation onYield hook appends a user message and continues the same admitted run.",
+          "case": "The captured hookContinuation scenario.",
+          "failureCase": "A stand-in that starts a new run passes a message test and fails the one-settlement observation."
+        },
+        {
+          "property": "Tool hooks rewrite arguments before execution and observe the committed result.",
+          "case": "The captured toolHook scenario.",
+          "failureCase": "Post-execution-only hooks pass an observation test while the rewritten arguments never execute; the rewritten-result case separates it."
+        },
+        {
+          "property": "Registry replace/uninstall is live, not startup-only.",
+          "case": "A replace/uninstall scenario added by this draft (1056 leaves them uncaptured).",
+          "failureCase": "The current install-only observation cannot distinguish a stale list; the new scenario is the acceptance case."
+        }
+      ],
+      "blockingEdges": [
+        "F1",
+        "F17"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1056/workflow.json: a generation onYield hook appends a user message and continues the same admitted run",
+          "fixtures/pi-v1.3.0/audit-1056/workflow.json: tool hooks rewrite arguments before execution and observe the committed result"
+        ],
+        "comparison": "Compare hook invocation, argument rewriting, committed results and settlement count with the frozen capture.",
+        "missing": "Registry replace/uninstall and harness run-control details remain uncaptured and must be added."
+      },
+      "coverage": [
+        "cch_durable:native-run-triggering",
+        "cch_durable:generation-onYield",
+        "cch_durable:tool-hooks",
+        "cch_durable:registry-transition"
+      ],
+      "relatedIssues": [],
+      "boundaries": []
+    },
+    {
+      "id": "F19",
+      "title": "Align the TUI toolkit with v1.3.0 behavior",
+      "kind": "behavior",
+      "owner": "cch_tui",
+      "frontier": false,
+      "context": "One owner, one context: the reusable toolkit deltas the audit localized (cursor markers, padding, keys, terminal replies, program status primitives, images).",
+      "demo": "Toolkit-level comparisons: fake-cursor markers are strippable, padding re-renders dynamic width, shifted-symbol keys match produced characters, fragmented color replies never leak, program-status format/reply recognition matches, and Herdr/image capability detection is correct.",
+      "scope": [
+        "Editor fake-cursor markers and hardware-cursor suppression",
+        "Box/Text dynamic padding",
+        "key shifted-symbol and ctrl++ identity parsing",
+        "fragmented/ambiguous terminal reply handling",
+        "program status format/reply/detection",
+        "terminal capability detection"
+      ],
+      "acceptance": [
+        {
+          "property": "The fake cursor is strippable and hardware-cursor mode omits it.",
+          "case": "The captured cursor-composition scenarios.",
+          "failureCase": "Raw reverse-video mutation passes an on-screen test while the marker contract is absent; the strippable-marker observation separates it."
+        },
+        {
+          "property": "Shifted-symbol keys match the produced character and consume the implicit Shift.",
+          "case": "The captured keys-and-terminal-replies scenarios.",
+          "failureCase": "A modifier-string comparison passes the common case and fails ctrl++ identities; the captured ctrl++ case separates it."
+        },
+        {
+          "property": "A fragmented color reply is consumed without leaking or opening the editor.",
+          "case": "The captured fragmented-reply scenarios.",
+          "failureCase": "A whole-reply parser passes the happy path and leaks garbage on fragmentation."
+        }
+      ],
+      "blockingEdges": [
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1050/cursor-composition.json: standalone-editor-fake-cursor-is-strippable",
+          "fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json: text-set-padding-x-rerenders-dynamic-width",
+          "fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json: shifted-symbol-keys-match-produced-character",
+          "fixtures/pi-v1.3.0/audit-1050/program-status-format.json: format-program-status-encodes-fields-and-limits"
+        ],
+        "comparison": "Component/render differential comparisons using the existing toolkit captures; terminal/image properties need dated emulator evidence.",
+        "missing": "Real emulator/PTY evidence is missing for image placement and some terminal outcomes."
+      },
+      "coverage": [
+        "cch_tui:Editor",
+        "cch_tui:Text",
+        "cch_tui:Box",
+        "cch_tui:Input",
+        "cch_tui:Terminal",
+        "cch_tui:program-status",
+        "cch_tui:tui"
+      ],
+      "relatedIssues": [
+        "#1032",
+        "#749",
+        "#830"
+      ],
+      "boundaries": [
+        "Marked/Token/Tokens and internal helpers stay excluded/unconsumable"
+      ]
+    },
+    {
+      "id": "F20",
+      "title": "Align the Native TUI product behavior with v1.3.0",
+      "kind": "behavior",
+      "owner": "cch_coding_agent",
+      "frontier": false,
+      "context": "One owner, one context: product TUI lifecycle, program status reporting, OSC52 opt-in, output padding, selection reset, Herdr images, wheel-over-overlay and exit restoration.",
+      "demo": "A PTY/emulator session: program status reports idle/blocked/working/done/error, OSC52 is opt-in, output padding renders on tool/bash/custom blocks, selection reset drops history, wheel-under-overlay scrolls the transcript, images place under Herdr, and exit restores the terminal.",
+      "scope": [
+        "program status reporter and OSC 7501 clear on exit",
+        "OSC52 opt-in and clipboard",
+        "outputPad rendering",
+        "transcript selection reset",
+        "fullscreen image/Herdr placement",
+        "wheel routing and mode switch",
+        "startup help/wrap residuals"
+      ],
+      "acceptance": [
+        {
+          "property": "Program status reports the frozen states through the terminal contract and clears on exit.",
+          "case": "The captured program-status scenario plus a real PTY/emulator comparison for the exit clear.",
+          "failureCase": "A reporter that never clears passes a status test and leaves the dashboard stuck; the exit observation separates it."
+        },
+        {
+          "property": "outputPad renders on tool/bash/custom blocks.",
+          "case": "A native differential cell for each block type.",
+          "failureCase": "Rendering only the default block passes one cell; the per-block cases separate it."
+        },
+        {
+          "property": "Selection reset and wheel-over-overlay match the frozen outcomes.",
+          "case": "The captured selection-reset and overlay-routing scenarios.",
+          "failureCase": "A stand-in that clears only the visible selection keeps multi-click history; the captured reset case separates it."
+        }
+      ],
+      "blockingEdges": [
+        "F19"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1051/program-status.json: program status reports idle, blocked, working, done and error through the terminal contract",
+          "fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json: selection-reset-drops-selection-and-multiclick-history",
+          "fixtures/pi-v1.3.0/audit-1050/overlay-routing.json: overlay-unhandled-wheel-scrolls-transcript",
+          "fixtures/pi-v1.3.0/audit-1051/extension-editor.json: extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+        ],
+        "comparison": "Native product differential cells plus dated real-emulator/PTY evidence where the property needs a terminal; terminal-contract calls are not raw protocol acceptance.",
+        "missing": "OSC7501 was observed as terminal-contract calls, not raw protocol bytes; real emulator evidence is missing for image/footer/cursor/restoration."
+      },
+      "coverage": [
+        "cch_coding_agent:program-status",
+        "cch_coding_agent:osc52",
+        "cch_coding_agent:output-pad",
+        "cch_coding_agent:transcript",
+        "cch_coding_agent:exit-restoration",
+        "cch_coding_agent:mode-switch",
+        "cch_coding_agent:startup"
+      ],
+      "relatedIssues": [
+        "#1035",
+        "#831",
+        "#1043"
+      ],
+      "boundaries": [
+        "Session share/upload services and sessionShareDestination stay excluded",
+        "No branding animation"
+      ]
+    },
+    {
+      "id": "F21",
+      "title": "Fix application configuration, prompt and print-mode deltas",
+      "kind": "behavior",
+      "owner": "cch_coding_agent",
+      "frontier": false,
+      "context": "One owner, one context: prompt quoting/substitution, resource/context paths, supported schemas, summary serialization and print-mode exit/warning behavior.",
+      "demo": "A CLI Session run: quoted-empty prompt args are retained, resource/context selection follows the frozen candidate order with local/tilde/@/file: modifiers, settings/keybindings/themes validate against the supported shape, summary serialization omits thinking, and a length-truncated print run warns and exits non-zero.",
+      "scope": [
+        "prompt quoting/substitution",
+        "resource/context candidate order and modifiers",
+        "settings/keybindings/theme schemas and reload diagnostics",
+        "summary serialization",
+        "print-mode truncated/length behavior"
+      ],
+      "acceptance": [
+        {
+          "property": "Quoted-empty arguments are retained and do not shift positions.",
+          "case": "The captured prompt-expansion scenarios.",
+          "failureCase": "A parser that pushes only non-empty tokens shifts later positions; the captured `$10`/`[][j]` case separates it."
+        },
+        {
+          "property": "Resource/context selection follows the frozen order with the supported modifiers.",
+          "case": "The captured override/shadowing/symlink-dedupe and modifier scenarios.",
+          "failureCase": "An existence-only loader passes a simple file test and loads both worktree copies; the captured shadowing case separates it."
+        },
+        {
+          "property": "A length-truncated print run warns and exits with the frozen status.",
+          "case": "The captured print-mode scenario.",
+          "failureCase": "A print path that exits 0 passes a text-comparison test; the captured exit/warning observation separates it."
+        }
+      ],
+      "blockingEdges": [
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1049/prompt-expansion.json: quoted-empty arguments are retained by the prompt argument parser",
+          "fixtures/pi-v1.3.0/audit-1049/resource-selection.json: nested linked worktree shadows the main repo context file",
+          "fixtures/pi-v1.3.0/audit-1049/print-mode.json: length-truncated text response prints partial stdout, warning stderr and exits 1"
+        ],
+        "comparison": "Compare printed text, warnings, exit status, loaded resources and schema diagnostics with the frozen captures.",
+        "missing": "The project-scope settings half is a source claim, not a captured observation; do not widen it."
+      },
+      "coverage": [
+        "cch_coding_agent:prompt-quoted",
+        "cch_coding_agent:prompt-substitution",
+        "cch_coding_agent:context-file",
+        "cch_coding_agent:resource-path",
+        "cch_coding_agent:settings-schema",
+        "cch_coding_agent:keybindings",
+        "cch_coding_agent:theme",
+        "cch_coding_agent:print-mode"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "print-mode JSON event stream stays excluded; retention of Pike's redaction stays"
+      ]
+    },
+    {
+      "id": "F22",
+      "title": "Remove the historical Agent queue capacity divergence",
+      "kind": "behavior",
+      "owner": "cch_agent_core",
+      "frontier": false,
+      "context": "One owner, one context: Agent input queue defaults and admission follow frozen pi instead of Pike's capacity caps.",
+      "demo": "A public Agent admits 300 steering and 300 follow-up messages with void enqueue results; one-at-a-time and all modes behave as frozen; no capacity rejection surface remains.",
+      "scope": [
+        "remove max_queued_messages/max_queued_bytes caps",
+        "void enqueue result",
+        "steering one-at-a-time/all and follow-up modes",
+        "peek/clear and continue ordering"
+      ],
+      "acceptance": [
+        {
+          "property": "Queue admission is unbounded at frozen defaults and enqueue returns void.",
+          "case": "The captured 300+300 admission with enqueueReturnsVoid true.",
+          "failureCase": "A retained 256 cap passes a small-input test and rejects the captured case; the large admission separates it."
+        },
+        {
+          "property": "One-at-a-time and all steering modes and follow-up ordering match the capture.",
+          "case": "The captured mode/order scenarios.",
+          "failureCase": "A single drain policy passes one mode and fails the other."
+        }
+      ],
+      "blockingEdges": [
+        "P6"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1047/queue-admission.json: queue admission is unbounded and both queues default to one-at-a-time",
+          "fixtures/pi-v1.3.0/audit-1047/queue-admission.json: one-at-a-time steering injects the oldest message after the tool turn",
+          "fixtures/pi-v1.3.0/audit-1047/queue-admission.json: all-mode steering injects every queued message in FIFO order in one turn"
+        ],
+        "comparison": "Compare admission results, enqueue return shape and drain ordering; update AgentSession callers and tests.",
+        "missing": "ADR 0022's capacity divergence is a migration obligation, not a retained exemption."
+      },
+      "coverage": [
+        "cch_agent_core:InputQueue",
+        "cch_coding_agent:AgentSession:queue-admission"
+      ],
+      "relatedIssues": [],
+      "boundaries": []
+    },
+    {
+      "id": "F23",
+      "title": "Wire durable environments, images, codemode and tool-search",
+      "kind": "behavior",
+      "owner": "cch_durable",
+      "frontier": false,
+      "context": "One owner, one context: durable's local Node-like environment responsibilities implemented natively, plus its codemode and tool-search integration.",
+      "demo": "A durable caller runs the built-in read/write/edit/bash tools over the local environment, processes and reads an image, runs a codemode script with a real nested tool and deferred tool_search loading, and persists loaded tools across a fork.",
+      "scope": [
+        "filesystem/append/read/list/stat and missing-file handling",
+        "shell split output, direct argv and timeout",
+        "built-in tools over the injected environment",
+        "image processing/resizing and capability-absent outcome",
+        "codemode script/store/failure/replay integration",
+        "tool_search load/no-match/persistence"
+      ],
+      "acceptance": [
+        {
+          "property": "Built-in tools run over a real injected environment and leave the frozen file content.",
+          "case": "The captured environment/builtin-tools scenarios.",
+          "failureCase": "A tool that bypasses the injected environment passes a unit test with a fake filesystem; the real-environment observation separates it."
+        },
+        {
+          "property": "A capability-absent image path returns the frozen unsupported error instead of provider execution.",
+          "case": "The captured image-capability-absent scenario.",
+          "failureCase": "Restoring classifier/image provider execution to satisfy the read-image test violates the AI boundary; the absent-capability case separates it."
+        },
+        {
+          "property": "Deferred tool_search loads a tool and no-match leaves the offered set unchanged; loaded tools persist across a fork.",
+          "case": "The captured toolsearch scenarios plus a persistence case.",
+          "failureCase": "A catalog that always offers every tool passes the load case; the no-match observation and the persistence gap separate it."
+        }
+      ],
+      "blockingEdges": [
+        "F1",
+        "P4"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1056/environment.json: the built-in read, write, edit and bash tools run over a real injected local environment",
+          "fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.json: tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+          "fixtures/pi-v1.3.0/audit-1056/environment.json: the read tool returns a resized image content block with its coordinate-mapping diagnostic"
+        ],
+        "comparison": "Compare real filesystem/shell observations, image bytes and diagnostics, script results and tool-search outcomes.",
+        "missing": "toolsearch-persistence, image-orientation-conversion and some environment limits were not captured."
+      },
+      "coverage": [
+        "cch_durable:node-filesystem",
+        "cch_durable:node-exec",
+        "cch_durable:builtin-tool",
+        "cch_durable:image",
+        "cch_durable:codemode-script",
+        "cch_durable:toolsearch"
+      ],
+      "relatedIssues": [],
+      "boundaries": [
+        "Classifier/image-generation provider execution stays excluded; only retained AI capabilities are exposed"
+      ]
+    },
+    {
+      "id": "F24",
+      "title": "Reconcile and close the residual TUI tracker defects on refreshed evidence",
+      "kind": "behavior",
+      "owner": "cch_coding_agent",
+      "frontier": false,
+      "context": "One owner, one context: the open residual TUI trackers re-scoped to pi-v1.3.0 with refreshed acceptance, not duplicated.",
+      "demo": "Each residual issue's scenario is re-run against v1.3.0: model selector marker/row layout including the failing post-Enter assertion, thinking selector layout with a matched fixture, successful tool-result presentation, dock-growth footer frames, image placement spans (real emulator), extension-editor dual-runtime capture, generated system theme, and the untracked 72-column/scrollback/settings-viewport deltas.",
+      "scope": [
+        "#808 model selector",
+        "#810 thinking selector",
+        "#812 tool-result presentation",
+        "#831 dock-growth footer",
+        "#1035 image placement",
+        "#1033 extension editor",
+        "#1032 system theme",
+        "#1043 residual deltas"
+      ],
+      "acceptance": [
+        {
+          "property": "#808's post-Enter 'Model:' assertion passes in a real PTY run and writes its artifact.",
+          "case": "The failing C++ case re-run after the model-selector layout fix.",
+          "failureCase": "A marker-only fix passes a static render comparison while the post-Enter assertion still fails; the PTY assertion separates it."
+        },
+        {
+          "property": "#810's layout is compared with the same thinkingLevelMap on both harnesses.",
+          "case": "A matched-fixture comparison that does not add xhigh/max to satisfy a mismatched fixture.",
+          "failureCase": "Comparing the five-level frozen fixture with the seven-level C++ map produces a false availability claim; the matched fixture separates it."
+        },
+        {
+          "property": "Remaining terminal properties are accepted only with dated real-emulator evidence.",
+          "case": "Kitty/WezTerm PTY captures for image placement, footer frames, hardware cursor and full restoration.",
+          "failureCase": "Terminal-contract calls alone are not raw protocol acceptance; the emulator capture separates them."
+        }
+      ],
+      "blockingEdges": [
+        "F19",
+        "F20"
+      ],
+      "evidence": {
+        "captures": [
+          "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential model-selector at 100 columns",
+          "fixtures/pi-v1.3.0/audit-1051/program-status.json: program status reports idle, blocked, working, done and error through the terminal contract",
+          "fixtures/pi-v1.3.0/audit-1051/extension-editor.json: extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+        ],
+        "comparison": "Re-run each residual's original scenario with refreshed acceptance; reuse the existing trackers instead of opening duplicates.",
+        "missing": "Real Kitty/WezTerm/PTY evidence is missing for several rows; the C++ model-selector assertion currently fails 17/1."
+      },
+      "coverage": [
+        "cch_coding_agent:residual",
+        "cch_coding_agent:model-selector",
+        "cch_coding_agent:thinking-selector",
+        "cch_coding_agent:tool-result-presentation",
+        "cch_tui:residual-1035-image-placement",
+        "cch_tui:residual-831-dock-growth-footer"
+      ],
+      "relatedIssues": [
+        "#808",
+        "#810",
+        "#812",
+        "#831",
+        "#1035",
+        "#1033",
+        "#1032",
+        "#1043"
+      ],
+      "boundaries": [
+        "Do not add xhigh/max from the mismatched fixture",
+        "Reuse existing issues; no duplicate tracker"
+      ]
+    }
+  ],
+  "residualReconciliation": [
+    {
+      "issue": "#808",
+      "state": "open",
+      "title": "Align Native TUI model selector marker and row layout with the supported baseline",
+      "recommendation": "Re-scope to pi-v1.3.0; fix the marker/row layout and make the failing C++ post-Enter 'Model:' assertion pass in a real PTY run with an artifact.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential model-selector at 100 columns",
+        "protocol.md #1051 note: C++ model-selector FAILS 17 passed/1 failed, no artifact"
+      ],
+      "draft": "F24",
+      "action": "keep-open"
+    },
+    {
+      "issue": "#810",
+      "state": "open",
+      "title": "Align Native TUI thinking selector layout with the supported baseline",
+      "recommendation": "Compare with the same thinkingLevelMap on both harnesses; keep the common layout/marker and blank-row residuals; do not add xhigh/max.",
+      "evidence": [
+        "1051-thinking-fix.json: C++ seven levels versus frozen five-level fixture",
+        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential thinking-selector at 100 columns"
+      ],
+      "draft": "F24",
+      "action": "keep-open"
+    },
+    {
+      "issue": "#812",
+      "state": "open",
+      "title": "Align Native TUI successful tool-result presentation",
+      "recommendation": "Re-check the v1.3.0 tool-result rendering, including duration from the recorded value (F15), and accept on a refreshed differential.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential tool-result at 100 columns"
+      ],
+      "draft": "F24",
+      "action": "keep-open"
+    },
+    {
+      "issue": "#831",
+      "state": "open",
+      "title": "Native TUI dock-growth frames drop footer rows",
+      "recommendation": "Re-run the dock-growth cell against v1.3.0; acceptance needs a real PTY/emulator capture of the growth frames, not a component-only check.",
+      "evidence": [
+        "/tmp/cch-1044-context/protocol.md #1051 note: real footer/image evidence missing"
+      ],
+      "draft": "F24",
+      "action": "keep-open"
+    },
+    {
+      "issue": "#1035",
+      "state": "open",
+      "title": "Repaint fullscreen images on frozen placement-span changes",
+      "recommendation": "Re-target the placement-span repaint to v1.3.0 and require dated Kitty/WezTerm evidence; keep the toolkit image capability rows (F19).",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential cells at 100/120/72 columns"
+      ],
+      "draft": "F24",
+      "action": "keep-open"
+    },
+    {
+      "issue": "#1033",
+      "state": "open",
+      "title": "Capture extension-editor behavior in the dual-runtime pi harness",
+      "recommendation": "Close the capture gap with a real Pike-side dual-runtime extension-editor cell using the same factory/callback/text/focus/border values.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1051/extension-editor.json: extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+      ],
+      "draft": "F24",
+      "action": "keep-open"
+    },
+    {
+      "issue": "#1032",
+      "state": "open",
+      "title": "Port the generated system theme",
+      "recommendation": "Re-target the generated system theme to v1.3.0 theme tokens; the toolkit token/theme rows in F19/F20 carry the comparison.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1051/native-tui-consumers-and-residuals.json: residual-1032-system-theme row"
+      ],
+      "draft": "F24",
+      "action": "keep-open"
+    },
+    {
+      "issue": "#1043",
+      "state": "open",
+      "title": "Residual v1.0.4 product-differential deltas without an open tracker",
+      "recommendation": "Re-run the four residual families (72-column startup wrap, scrollback retained-row delta, tool-result mid-stream capture, settings viewport) against v1.3.0 and either fold them into F20/F24 or close them on refreshed evidence.",
+      "evidence": [
+        "1051 rows residual-1043-startup-wrap, residual-1043-scrollback, residual-1043-tool-result-timing, residual-1043-settings-viewport"
+      ],
+      "draft": "F24",
+      "action": "re-scope"
+    },
+    {
+      "issue": "#946",
+      "state": "closed",
+      "title": "Historical complete Linux TUI target at pi-v1.0.4",
+      "recommendation": "Use as historical scaffolding only; ADR 0075 supersedes its target. Do not reopen or relabel its evidence.",
+      "evidence": [
+        "docs/adr/0067",
+        "docs/research/tui-v1.0.4-capability-ledger.json"
+      ],
+      "draft": null,
+      "action": "historical-reference"
+    },
+    {
+      "issue": "#882",
+      "state": "closed",
+      "title": "Historical MCP + codemode pi-v1.0.4 alignment",
+      "recommendation": "Historical scaffolding for F13/F14/P4/P5; its alignment claim does not transfer to v1.3.0.",
+      "evidence": [
+        "docs/research/pi-v1.3.0/1052-mcp-protocol-oauth-application.md",
+        "docs/research/pi-v1.3.0/1053-codemode-audit.md"
+      ],
+      "draft": null,
+      "action": "historical-reference"
+    },
+    {
+      "issue": "#915",
+      "state": "closed",
+      "title": "Historical pi-durable SQLite SessionStore backend",
+      "recommendation": "Historical evidence for the storage contract and the legacy coupling; the new target is the durable SQLite/JSONL contract with bidirectional interchange (F7/F8).",
+      "evidence": [
+        "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.md"
+      ],
+      "draft": null,
+      "action": "historical-reference"
+    },
+    {
+      "issue": "#920",
+      "state": "closed",
+      "title": "Historical pi-durable Phase 2 integration and atomic commits",
+      "recommendation": "Historical evidence for atomic batch commits; the durable Session transaction line (P3/F1) is the new target and the legacy coupling is split in P7.",
+      "evidence": [
+        "docs/research/pi-v1.3.0/1054-durable-session-documents-storage.md"
+      ],
+      "draft": null,
+      "action": "historical-reference"
+    },
+    {
+      "issue": "#925",
+      "state": "closed",
+      "title": "Historical pi-durable task records and scheduler seam",
+      "recommendation": "Historical seed for the task slices; F3/F4/F5 own the v1.3.0 versioning, deduplication, ownership and recovery contract.",
+      "evidence": [
+        "docs/research/pi-v1.3.0/1055-durable-tasks-submissions-inbox-recovery.md"
+      ],
+      "draft": null,
+      "action": "historical-reference"
+    },
+    {
+      "issue": "#932",
+      "state": "closed",
+      "title": "Historical pi-durable ownership graph and inbox boundaries",
+      "recommendation": "Historical seed for ownership/joins/inbox; keep the legacy TaskStore/TaskScheduler out of the application owner (P7) and implement the frozen contract in F4/F5.",
+      "evidence": [
+        "docs/research/pi-v1.3.0/1055-durable-tasks-submissions-inbox-recovery.md"
+      ],
+      "draft": null,
+      "action": "historical-reference"
+    }
+  ],
+  "closeOut": {
+    "implemented": [
+      "The 11 audit ledgers, 12 registered bundles, 60 artifacts and 373 scenarios exist, verify through the shared verifier and were independently reproduced by their mergers.",
+      "The application runtime and toolkit currently implement the 970 rows the ledgers record as implemented, including 15 rows targeted at the new owners whose behavior today lives under existing application owners: cch_durable 3, cch_mcp 5, cch_codemode 7, cch_chord 0.",
+      "128 further rows targeted at the new owners are partial today under those existing owners and are pending ownership migration, not specified-only: cch_durable 87, cch_mcp 11, cch_codemode 12, cch_chord 18.",
+      "The current configured Owner graph is the pre-migration graph: cch_ai, cch_agent_core, cch_tui, cch_coding_agent, cch_support; MCP and codemode live inside cch_coding_agent.",
+      "The C++ toolkit has real rendering/input behavior and the listed focused test selections pass; the C++ [issue800] model-selector assertion is a known failure (#808)."
+    ],
+    "specifiedOnly": [
+      "No cch_durable, cch_mcp, cch_codemode or cch_chord Owner package or manifest target exists yet; their 15 implemented target rows are existing capability behavior under current application owners and await ownership migration.",
+      "No C++ parity comparison exists for any audit row: 0 rows are verified and every upstream-captured row still needs one.",
+      "194 target rows are missing and are the specified work: cch_durable 120, cch_mcp 2, cch_codemode 30, cch_chord 42. The 228 partial rows are partial with recorded remaining work, not blanket specified-only.",
+      "Durable bidirectional JSONL/SQLite interchange, power-loss durability and cross-runtime continuation are specified and unproven.",
+      "Native extension lifecycle/run triggering, tool duration end-to-end, OSC 7501 program status, codemode Inline/Remote, and the MCP cancellation/transport changes are specified with implementation gaps."
+    ],
+    "retainedBoundaries": [
+      "Magpie-only model discovery/authentication/inference; no overall cch_ai baseline advance (cch_ai rows).",
+      "XDG Pike state root retained (cch_coding_agent:Session:storage:xdg-root).",
+      "Explicit AI exclusions: model-response timing, cross-model thinking transformation, final/partial tool-argument parsing, extra AI retry matching, classifier/image-generation provider execution.",
+      "Excluded surfaces: Agent-core streamProxy protocol, standalone pi-env SSH daemon, Cloudflare deployment adapters, direct third-party TS/JS plugin execution, upload/share services, branding animation, installer/updater/Nix/npm distribution, installed SDK/stable ABI.",
+      "No import/migration/automatic upgrade/dual reads/fallback for historical Pike durable data; existing user data is not deleted."
+    ],
+    "openBlockers": [
+      "Umbrella #1044 remains open: implementation and final validation are not done; this consolidation is an audit acceptance gate only.",
+      "Membership blockers: two no-decision rows stay visible (legacy SQLite SessionStore alternative, application leaf-marker entry) and require an owner decision before their code is moved or retired.",
+      "Verification blockers: 999 rows carry an honest missing observation (29 declared-comparison, 12 cpp-regression-only, 58 unobserved, 858 historical-only, 42 not-audited) plus 28 related-captured rows that keep their own unverified status.",
+      "Terminal blockers: real emulator/PTY evidence is missing for image/footer/cursor/restoration rows; OSC7501 captures are terminal-contract calls, not raw protocol acceptance.",
+      "Crash blockers: SIGKILL/reopen is recorded, but power-loss/fsync-failure/multi-process durability is not proven and must not be claimed."
+    ],
+    "umbrellaStatus": "#1044 stays open until every included row is implemented and verified; #1058 does not close it or publish draft issues."
+  }
+}
