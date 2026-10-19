@@ -1,0 +1,308 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:39:02.332Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/codemode/src/runtime/host.ts:workerLauncher,CodemodeSandbox",
+    "packages/codemode/src/runtime/execution.ts:Execution.finish,CodemodeSandboxBase.close",
+    "packages/codemode/src/types.ts:CodemodeSandboxOptions.acquireWorker,CodemodeSandboxOptions.onWorkerStarted",
+    "packages/codemode/test/worker-lifetime.test.ts:worker lifetime",
+    "packages/codemode/test/fixtures/worker-process-exit.ts:worker process exit"
+  ],
+  "scenarios": [
+    {
+      "name": "admission denial rejects before a worker starts and keeps the start hook uncalled",
+      "inputs": {
+        "acquireWorker": "throws worker capacity exhausted"
+      },
+      "expected": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "worker capacity exhausted",
+        "acquired": 1,
+        "started": 0
+      },
+      "observed": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "worker capacity exhausted",
+        "acquired": 1,
+        "started": 0
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "does not start a worker when admission is denied"
+      }
+    },
+    {
+      "name": "a wasm loading failure does not reserve admission",
+      "inputs": {
+        "wasm": "load rejects"
+      },
+      "expected": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "Failed to load QuickJS: wasm unavailable",
+        "acquired": 0
+      },
+      "observed": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "Failed to load QuickJS: wasm unavailable",
+        "acquired": 0
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "does not acquire admission when wasm loading fails"
+      }
+    },
+    {
+      "name": "a worker construction failure returns its reserved admission exactly once",
+      "inputs": {
+        "workerUrl": "https://invalid.example/worker.js"
+      },
+      "expected": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "Failed to start worker: The URL must be of scheme file",
+        "acquired": 1,
+        "released": 1
+      },
+      "observed": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "Failed to start worker: The URL must be of scheme file",
+        "acquired": 1,
+        "released": 1
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "releases admission when worker construction fails"
+      }
+    },
+    {
+      "name": "repeated abort results settle while cancelled workers remain unreleased; exits release every admission",
+      "inputs": {
+        "cancellations": 3,
+        "tool": "hang"
+      },
+      "expected": {
+        "kinds": [
+          "aborted",
+          "aborted",
+          "aborted"
+        ],
+        "releasedAtResult": [
+          0,
+          1,
+          2
+        ],
+        "acquiredAtResult": [
+          1,
+          2,
+          3
+        ],
+        "acquired": 3,
+        "started": 3,
+        "exitCount": 3,
+        "releasedAfterExit": 3
+      },
+      "observed": {
+        "kinds": [
+          "aborted",
+          "aborted",
+          "aborted"
+        ],
+        "releasedAtResult": [
+          0,
+          1,
+          2
+        ],
+        "acquiredAtResult": [
+          1,
+          2,
+          3
+        ],
+        "acquired": 3,
+        "started": 3,
+        "exitCount": 3,
+        "releasedAfterExit": 3
+      },
+      "normalizations": [
+        "the observation is the immediate release counter after each result and after all exits; wall-clock delay is not compared"
+      ],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "settles %s without waiting for worker exit"
+      }
+    },
+    {
+      "name": "close settles an in-flight run before the worker exit releases admission",
+      "inputs": {
+        "closeWhileToolHangs": true
+      },
+      "expected": {
+        "kind": "aborted",
+        "message": "Sandbox closed",
+        "releasedAtResult": 0,
+        "acquired": 1,
+        "releasedAfterExit": 1,
+        "started": 1,
+        "exitCount": 1
+      },
+      "observed": {
+        "kind": "aborted",
+        "message": "Sandbox closed",
+        "releasedAtResult": 0,
+        "acquired": 1,
+        "releasedAfterExit": 1,
+        "started": 1,
+        "exitCount": 1
+      },
+      "normalizations": [
+        "the observation is the release counter immediately after the result and after all exits"
+      ],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "settles close without waiting for worker exit"
+      }
+    },
+    {
+      "name": "a throwing lifetime hook requests termination and still releases the worker",
+      "inputs": {
+        "onWorkerStarted": "throws lifetime hook failed"
+      },
+      "expected": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "lifetime hook failed",
+        "acquired": 1,
+        "released": 1,
+        "exitDefined": true
+      },
+      "observed": {
+        "ok": false,
+        "errorKind": "sandbox",
+        "errorMessage": "lifetime hook failed",
+        "acquired": 1,
+        "released": 1,
+        "exitDefined": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "requests termination when onWorkerStarted throws"
+      }
+    },
+    {
+      "name": "execute and start each start one worker and release it only after actual exit",
+      "inputs": {
+        "runs": [
+          "execute",
+          "start"
+        ]
+      },
+      "expected": {
+        "executeValue": 1,
+        "startValue": 2,
+        "started": 2,
+        "acquired": 2,
+        "exitCount": 2,
+        "releasedAfterExit": 2,
+        "finished": true
+      },
+      "observed": {
+        "executeValue": 1,
+        "startValue": 2,
+        "started": 2,
+        "acquired": 2,
+        "exitCount": 2,
+        "releasedAfterExit": 2,
+        "finished": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "reports the actual exit of execute() and start() workers"
+      }
+    },
+    {
+      "name": "a real Node child reports the result before its worker exits and exits promptly for abort, timeout and close",
+      "inputs": {
+        "runtime": "node",
+        "modes": [
+          "abort",
+          "timeout",
+          "close"
+        ]
+      },
+      "expected": [
+        {
+          "mode": "abort",
+          "kind": "aborted",
+          "workerExitedAtResult": false,
+          "resultUnderOneSecond": true,
+          "exitGapUnderOneSecond": true
+        },
+        {
+          "mode": "timeout",
+          "kind": "timeout",
+          "workerExitedAtResult": false,
+          "resultUnderOneSecond": true,
+          "exitGapUnderOneSecond": true
+        },
+        {
+          "mode": "close",
+          "kind": "aborted",
+          "workerExitedAtResult": false,
+          "resultUnderOneSecond": true,
+          "exitGapUnderOneSecond": true
+        }
+      ],
+      "observed": [
+        {
+          "mode": "abort",
+          "kind": "aborted",
+          "workerExitedAtResult": false,
+          "resultUnderOneSecond": true,
+          "exitGapUnderOneSecond": true
+        },
+        {
+          "mode": "timeout",
+          "kind": "timeout",
+          "workerExitedAtResult": false,
+          "resultUnderOneSecond": true,
+          "exitGapUnderOneSecond": true
+        },
+        {
+          "mode": "close",
+          "kind": "aborted",
+          "workerExitedAtResult": false,
+          "resultUnderOneSecond": true,
+          "exitGapUnderOneSecond": true
+        }
+      ],
+      "normalizations": [
+        "raw elapsed milliseconds are replaced by the contract's under-one-second relations"
+      ],
+      "upstreamTest": {
+        "path": "packages/codemode/test/worker-lifetime.test.ts",
+        "case": "exits promptly after %s with a real worker"
+      }
+    }
+  ]
+}
