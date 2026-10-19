@@ -33,8 +33,8 @@ Preconditions:
   --text "/help"`, `"$HELPER" send --name boot --key enter`. Expect
   `Available commands:`: `"$HELPER" expect --name boot --text "Available commands:"`.
 - **Read the command list.** `"$HELPER" screen --name boot --path
-  $EVIDENCE_DIR/startup-help.txt`. The list includes `/login /logout
-  /resume /fork /tree /reload /compact /trust`.
+  $EVIDENCE_DIR/startup-help.txt`. The list includes `/resume /fork /tree
+  /reload /compact /trust`.
 - **Proof.** The boot and help snapshots plus the raw `raw.ansi` transcript show
   the banner, the routed command, and its output.
 

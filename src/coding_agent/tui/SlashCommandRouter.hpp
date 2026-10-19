@@ -29,8 +29,6 @@ enum class SlashCommandId {
     Model,
     Models,
     Thinking,
-    Login,
-    Logout,
     Resume,
     Fork,
     Tree,
@@ -44,7 +42,7 @@ enum class SlashCommandId {
 
 /// The command and its already-trimmed argument. Arguments are optional for
 /// commands whose pi-shaped handlers use the empty value as a distinct case,
-/// such as `/model`, `/login`, `/name`, `/thinking`, and `/compact`.
+/// such as `/model`, `/name`, `/thinking`, and `/compact`.
 struct SlashCommandInvocation {
     SlashCommandId command{SlashCommandId::Clear};
     std::string argument;

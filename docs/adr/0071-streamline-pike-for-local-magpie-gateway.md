@@ -16,10 +16,12 @@ root of [ADR 0058](0058-fix-the-product-state-root-under-xdg-in-pi-json-shapes.m
 
 ## Decisions
 
-- **Retire interactive provider login/logout flows and their dialogs.** `AuthFlowController`,
-  `LoginDialog`, `LoginPresentation`, `OAuthSelector`, and their tests are deleted. The Native
-  TUI keeps `/login` and `/logout` as modal slash commands that append concise gateway-only
-  guidance: Pike binds to the loopback gateway and requires no provider login.
+- **Retire interactive provider login/logout flows, their dialogs, and the top-level
+  commands.** `AuthFlowController`, `LoginDialog`, `LoginPresentation`, `OAuthSelector`, and
+  their tests are deleted. The Native TUI carries no `/login` or `/logout` command: Pike binds
+  to the loopback gateway and requires no provider login, so those spellings follow the
+  unknown-slash pass-through and become ordinary Agent Prompts. MCP authentication keeps its own
+  `/mcp login` and `/mcp logout` subcommands.
 - **Omit a `/gateway` command.** The gateway diagnostics command from the source design is not
   required by this product: startup discovery, `/reload`, and `/model` surface gateway state and
   diagnostics. The autocomplete catalog does not advertise it.
@@ -43,7 +45,7 @@ root of [ADR 0058](0058-fix-the-product-state-root-under-xdg-in-pi-json-shapes.m
 ## Consequences
 
 - The setup is zero-configuration: running `magpie serve` makes the configured models available
-  without touching `models.json` or `/login`.
+  without touching `models.json`.
 - Pike sessions are attributed in the gateway by the shared session header and the product user
   agent.
 - Independent cloud-provider login flows and backward-compatibility shims for `auth.json` /

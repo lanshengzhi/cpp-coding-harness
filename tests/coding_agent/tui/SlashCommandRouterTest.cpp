@@ -47,7 +47,6 @@ TEST_CASE("Slash command parsing trims input and resolves aliases", "[coding_age
             {.text = "/scoped-models", .command = Models, .argument = {}},
             {.text = "/models", .command = Models, .argument = {}},
             {.text = "/model\tprovider/model", .command = Model, .argument = "provider/model"},
-            {.text = "/login   provider", .command = Login, .argument = "provider"},
             {.text = "/name  session name  ", .command = Name, .argument = "session name"},
             {.text = "/compact  summarize this  ", .command = Compact, .argument = "summarize this"},
             {.text = "/mcp", .command = Mcp, .argument = {}},
@@ -156,8 +155,6 @@ TEST_CASE("Slash command routing returns structured modal requests with argument
             {.text = "/model fake/model", .command = Model, .argument = "fake/model"},
             {.text = "/models", .command = Models, .argument = {}},
             {.text = "/thinking high", .command = Thinking, .argument = "high"},
-            {.text = "/login fake", .command = Login, .argument = "fake"},
-            {.text = "/logout", .command = Logout, .argument = {}},
             {.text = "/resume", .command = Resume, .argument = {}},
             {.text = "/fork", .command = Fork, .argument = {}},
             {.text = "/tree", .command = Tree, .argument = {}},
@@ -196,6 +193,14 @@ TEST_CASE("Slash command routing passes unrecognized submissions through as prom
 
     auto unknown = router.route("/missing", context);
     CHECK(std::holds_alternative<tui::SlashCommandPassThrough>(unknown));
+
+    // The retired model login/logout commands have no top-level surface: their
+    // spellings are unrecognized slash submissions like any other prompt text.
+    auto login = router.route("/login provider", context);
+    CHECK(std::holds_alternative<tui::SlashCommandPassThrough>(login));
+
+    auto logout = router.route("/logout", context);
+    CHECK(std::holds_alternative<tui::SlashCommandPassThrough>(logout));
 }
 
 TEST_CASE("Slash command routing reports immediate execution failures as user-visible errors",

@@ -28,7 +28,7 @@ struct SlashCommandDefinition {
     bool immediate;
 };
 
-constexpr std::array<SlashCommandDefinition, 21> kCommandDefinitions{{
+constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
         {.command = SlashCommandId::Clear,
                 .canonical_name = "clear",
                 .argument_mode = SlashArgumentMode::None,
@@ -69,14 +69,6 @@ constexpr std::array<SlashCommandDefinition, 21> kCommandDefinitions{{
                 .canonical_name = "thinking",
                 .argument_mode = SlashArgumentMode::Optional,
                 .immediate = false},
-        {.command = SlashCommandId::Login,
-                .canonical_name = "login",
-                .argument_mode = SlashArgumentMode::Optional,
-                .immediate = false},
-        {.command = SlashCommandId::Logout,
-                .canonical_name = "logout",
-                .argument_mode = SlashArgumentMode::None,
-                .immediate = false},
         {.command = SlashCommandId::Resume,
                 .canonical_name = "resume",
                 .argument_mode = SlashArgumentMode::None,
@@ -115,7 +107,7 @@ constexpr std::array<SlashCommandDefinition, 21> kCommandDefinitions{{
                 .immediate = true},
 }};
 
-constexpr std::array<SlashCommandSpelling, 26> kCommandSpellings{{
+constexpr std::array<SlashCommandSpelling, 24> kCommandSpellings{{
         {.spelling = "clear", .command = SlashCommandId::Clear},
         {.spelling = "new", .command = SlashCommandId::Clear},
         {.spelling = "quit", .command = SlashCommandId::Quit},
@@ -131,8 +123,6 @@ constexpr std::array<SlashCommandSpelling, 26> kCommandSpellings{{
         {.spelling = "models", .command = SlashCommandId::Models},
         {.spelling = "scoped-models", .command = SlashCommandId::Models},
         {.spelling = "thinking", .command = SlashCommandId::Thinking},
-        {.spelling = "login", .command = SlashCommandId::Login},
-        {.spelling = "logout", .command = SlashCommandId::Logout},
         {.spelling = "resume", .command = SlashCommandId::Resume},
         {.spelling = "fork", .command = SlashCommandId::Fork},
         {.spelling = "tree", .command = SlashCommandId::Tree},

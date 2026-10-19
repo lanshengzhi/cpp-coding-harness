@@ -3988,6 +3988,10 @@ TEST_CASE("Native TUI routes slash commands without submitting builtins as Agent
     CHECK(screen.find("Available commands:") != std::string::npos);
     CHECK(screen.find("/name") != std::string::npos);
     CHECK(screen.find("/trust") != std::string::npos);
+    // The retired top-level model login/logout commands are absent from the
+    // rendered help; neither spelling is part of the command surface.
+    CHECK(screen.find("/login") == std::string::npos);
+    CHECK(screen.find("/logout") == std::string::npos);
 
     REQUIRE(terminal.inject_input("/commands session\r"));
     drain_ready(io);

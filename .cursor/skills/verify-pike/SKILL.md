@@ -257,7 +257,7 @@ Anchors that are stable on the real binary:
 | Startup | spawn a TUI session | `Press ctrl+o to show full startup help`, footer shows the cwd |
 | Slash router | type `/help` + Enter | `Available commands:` then the command list (`/clear /new /quit …`) |
 | No-gateway error | submit any prompt with no gateway catalog | `Provider unknown has no API implementation for "unknown"` |
-| Command list | `/help` | `/login /logout /resume /fork /tree /reload /compact /trust` |
+| Command list | `/help` | `/resume /fork /tree /reload /compact /trust` |
 | Resume picker | `/resume` + Enter | `Resume Session (Current Folder)` header, scope/sort hints, session rows |
 | Resume scope | `tab` inside the picker | `Resume Session (All)` header; sessions from other workspaces appear |
 | Session persistence | submit a prompt in a non-`--no-session` run | a `.jsonl` appears under `$XDG_CONFIG_HOME/pike/agent/sessions/<workspace-key>/` |

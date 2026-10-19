@@ -367,8 +367,6 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
     case SlashCommandId::Model:
     case SlashCommandId::Models:
     case SlashCommandId::Thinking:
-    case SlashCommandId::Login:
-    case SlashCommandId::Logout:
     case SlashCommandId::Resume:
     case SlashCommandId::Fork:
     case SlashCommandId::Tree:
@@ -422,17 +420,6 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
             return;
         }
         settings_flows_->show_thinking_selector();
-        return;
-    case SlashCommandId::Login:
-    case SlashCommandId::Logout:
-        // Model provider login/logout was retired with the Magpie gateway
-        // migration; both commands now state the gateway-only guidance.
-        if (view_) {
-            view_->append_frontend_message(
-                    "Pike is dedicated to the local Magpie gateway (127.0.0.1:3425) with zero-state loopback "
-                    "authentication; no provider login is required.");
-            invalidate_frame();
-        }
         return;
     case SlashCommandId::Resume:
         session_flows_->open_resume();

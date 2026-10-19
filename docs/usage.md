@@ -121,8 +121,6 @@ Project settings in `.pi/settings.json` load only after Project Trust and overri
 | `/fork` | Fork at a selected user message. |
 | `/tree` | Navigate the session tree. |
 | `/trust` | Change the project trust decision. |
-| `/login [provider]` | Show local Magpie gateway authentication guidance. |
-| `/logout` | Show local Magpie gateway authentication guidance. |
 | `/new` | Start a new session (alias `/clear`). |
 | `/clear` | Start a new session (alias `/new`). |
 | `/compact [instructions]` | Compact context, optionally with instructions. |

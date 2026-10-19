@@ -33,11 +33,10 @@ struct HotkeyHelpRow;
 
 /// pi `/help` chat text: the available built-in commands and keybindings
 /// list rendered as one frontend message.
-inline constexpr std::string_view kHelpCommandText =
-    "Available commands:\n"
-    "/clear /new /quit /exit /q /copy /session /hotkeys /settings\n"
-    "/help /commands /name /model /models /scoped-models /thinking\n"
-    "/login /logout /resume /fork /tree /reload /compact /trust";
+inline constexpr std::string_view kHelpCommandText = "Available commands:\n"
+                                                     "/clear /new /quit /exit /q /copy /session /hotkeys /settings\n"
+                                                     "/help /commands /name /model /models /scoped-models /thinking\n"
+                                                     "/resume /fork /tree /reload /compact /trust";
 
 /// pi `handleHotkeysCommand`: the Keyboard Shortcuts chat block over the
 /// effective registry. Navigation/Editing/Other rows come from registry

@@ -737,8 +737,7 @@ TEST_CASE("ModelSelector renders pi's model row marker column, unpadded provider
         CHECK(cells.color_at("alpha-2 [alpha]", 8) == "38;2;157;165;169");
         // The provider hint starts in the first column: the leading column
         // belongs to the model rows' marker, not to this line.
-        CHECK(cells.row("Only showing models") ==
-                "Only showing models from the local Magpie gateway. Use /login for gateway guidance.");
+        CHECK(cells.row("Only showing models") == "Only showing models from the local Magpie gateway.");
         CHECK(cells.color_at("Only showing models") == "38;2;205;154;34");
         // pi draws the save hint with `theme.fg("dim", ...)`, a different gray
         // from the `muted` `Model Name:` line under the list.

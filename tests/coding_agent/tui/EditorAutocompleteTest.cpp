@@ -103,6 +103,29 @@ TEST_CASE("Native TUI /mcp autocomplete offers actions and eligible server names
     CHECK((*login_servers)[0].description == "connected · 0 tools");
 }
 
+TEST_CASE("Native TUI command palette omits the retired model login and logout commands",
+        "[coding_agent][tui][autocomplete]") {
+    const auto commands = cch::coding_agent::tui::command_autocomplete_commands({}, {}, nullptr, nullptr, false);
+
+    // The palette is the completion list the editor offers. The retired
+    // top-level model login/logout commands must not resolve to a spelling;
+    // `/mcp` stays, and its own login/logout argument completions are separate
+    // (the case above).
+    bool found_mcp = false;
+    for (const auto& item : commands) {
+        if (const auto* command = std::get_if<cch::tui::SlashCommand>(&item); command != nullptr) {
+            CHECK(command->name != "login");
+            CHECK(command->name != "logout");
+            found_mcp = found_mcp || command->name == "mcp";
+            continue;
+        }
+        const auto& value = std::get<cch::tui::AutocompleteItem>(item).value;
+        CHECK(value != "login");
+        CHECK(value != "logout");
+    }
+    CHECK(found_mcp);
+}
+
 TEST_CASE("Executor-composed autocomplete delivery lands provider results on the serialized executor",
         "[coding_agent][tui][autocomplete][issue609][spec]") {
     boost::asio::io_context io;

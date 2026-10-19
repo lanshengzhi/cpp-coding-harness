@@ -11,7 +11,7 @@ TEST_CASE(
         "builtin slash autocomplete carries pi's verbatim entries", "[coding_agent][slash-commands][issue419][spec]") {
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
 
-    // The 20 autocomplete entries of pi's 22-command catalog; `thinking` is
+    // The 18 autocomplete entries of pi's 22-command catalog; `thinking` is
     // pi's own entry (issue #791) and `mcp` is pi's extension-registered entry
     // (issue #884). Router-only spellings (`/clear`, `/help`,
     // `/commands`, `/exit`, `/q`, `/models`) come from the router's spelling
@@ -28,8 +28,6 @@ TEST_CASE(
             "tree",
             "thinking",
             "trust",
-            "login",
-            "logout",
             "new",
             "compact",
             "resume",
@@ -55,11 +53,6 @@ TEST_CASE(
     REQUIRE(model != nullptr);
     CHECK(model->description == "Select model (opens selector UI)");
     CHECK(model->argument_hint == "<provider/model>");
-
-    const auto* login = by_name("login");
-    REQUIRE(login != nullptr);
-    CHECK(login->description == "Show Magpie gateway authentication guidance");
-    CHECK(login->argument_hint.empty());
 
     const auto* hotkeys = by_name("hotkeys");
     REQUIRE(hotkeys != nullptr);

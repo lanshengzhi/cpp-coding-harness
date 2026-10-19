@@ -345,10 +345,7 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
         // pi adds the provider hint unpadded: the leading column belongs to
         // the model rows' own marker, not to this line.
         cch::tui::Text hint(
-                theme_.foreground(ThemeToken::Warning,
-                        "Only showing models from the local Magpie gateway. Use /login for gateway guidance."),
-                0,
-                0);
+                theme_.foreground(ThemeToken::Warning, "Only showing models from the local Magpie gateway."), 0, 0);
         if (auto appended = append(hint); !appended) return std::unexpected(appended.error());
     } else {
         cch::tui::Text scope(scope_text(), 1, 0);
