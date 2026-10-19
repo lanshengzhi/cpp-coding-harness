@@ -1,0 +1,596 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1048",
+  "family": "audit-1048",
+  "capturedAt": "2026-10-19T16:01:16.679Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "checkoutPreparation": {
+    "generatedDataFile": "packages/ai/src/providers/data/azure.json",
+    "reason": "ignored generated model-catalog shard missing from the frozen workspace; the checked-in azure.models.ts imports it",
+    "action": "supplied an empty JSON object in the private checkout; no tracked source file changed"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1048/capture-session-persistence.mts",
+    "sha256": "c81bffe263a64e43b1ddd41a03eee502b0538f7b910e4fab5dd3916e5d32faa0",
+    "command": "PI_CHECKOUT=/tmp/cch-1048-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1048-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1048/capture-session-persistence.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1048/capture-session-persistence.mts",
+        "sha256": "c81bffe263a64e43b1ddd41a03eee502b0538f7b910e4fab5dd3916e5d32faa0"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "session-tool-restore.json",
+      "family": "audit-1048",
+      "bytes": 22247,
+      "sha256": "68e8e5373eab8c1859fd753017d04a6021cc3313ace4ee059d28581da261612f",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/index.ts:createAgentSession,SessionManager,SettingsManager,DefaultResourceLoader,ModelRuntime",
+        "packages/coding-agent/src/core/agent-session.ts:AgentSession.getActiveToolNames,AgentSession.setActiveToolsByName,AgentSession.prompt,_restoreToolsFromTranscript",
+        "packages/coding-agent/src/core/sdk.ts:createAgentSession",
+        "packages/coding-agent/src/core/settings-manager.ts:getToolListError,applyToolModifiers",
+        "packages/coding-agent/test/default-tools-setting.test.ts:restores the loadout the transcript records,applies +name and -name tool options to the recorded loadout",
+        "packages/ai/src/compat.ts:registerFauxProvider",
+        "packages/ai/src/providers/faux.ts:fauxAssistantMessage,fauxThinking"
+      ],
+      "scenarios": [
+        {
+          "name": "activation persists the added tool declaration and advances the live loadout",
+          "inputs": {
+            "defaultTools": [
+              "read",
+              "bash"
+            ],
+            "activation": [
+              "read",
+              "bash",
+              "write"
+            ],
+            "prompts": [
+              "initial tools",
+              "activate write"
+            ]
+          },
+          "expected": {
+            "initialActive": [
+              "read",
+              "bash"
+            ],
+            "afterFirstPromptActive": [
+              "read",
+              "bash"
+            ],
+            "afterActivationActive": [
+              "read",
+              "bash",
+              "write"
+            ],
+            "toolDeclarations": [
+              {
+                "toolsAdded": [
+                  "read",
+                  "bash"
+                ],
+                "toolsRemoved": [],
+                "sectionNames": [
+                  "preamble",
+                  "tools",
+                  "rules",
+                  "docs",
+                  "skills",
+                  "cwd"
+                ]
+              },
+              {
+                "toolsAdded": [
+                  "write"
+                ],
+                "toolsRemoved": [],
+                "sectionNames": [
+                  "tools",
+                  "rules"
+                ]
+              }
+            ],
+            "persistedEntryTypes": [
+              "session",
+              "model_change",
+              "thinking_level_change",
+              "message",
+              "message",
+              "message",
+              "message",
+              "message",
+              "message"
+            ]
+          },
+          "normalizations": [
+            "entry ids, session id, ISO timestamps and the capture workspace path are host-generated; they are omitted from the expected observation"
+          ]
+        },
+        {
+          "name": "resume applies relative tool modifiers to the recorded loadout",
+          "inputs": {
+            "tools": [
+              "-bash",
+              "+edit"
+            ]
+          },
+          "expected": {
+            "active": [
+              "read",
+              "write",
+              "edit"
+            ],
+            "messageRoles": [
+              "system",
+              "user",
+              "assistant",
+              "system",
+              "user",
+              "assistant"
+            ],
+            "model": {
+              "provider": "faux-tools",
+              "id": "faux-1"
+            },
+            "thinkingLevel": "medium"
+          },
+          "normalizations": [
+            "entry ids and the capture workspace path are host-generated"
+          ]
+        },
+        {
+          "name": "resume without modifiers restores the recorded order and does not rewrite the transcript",
+          "inputs": {
+            "mode": "tool options omitted"
+          },
+          "expected": {
+            "active": [
+              "read",
+              "bash",
+              "write"
+            ],
+            "messageRoles": [
+              "system",
+              "user",
+              "assistant",
+              "system",
+              "user",
+              "assistant"
+            ],
+            "resumeRewroteTranscript": false,
+            "sessionFileLineCount": 9
+          },
+          "normalizations": [
+            "entry ids and ISO timestamps are host-generated"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "session-compaction-boundary.json",
+      "family": "audit-1048",
+      "bytes": 65870,
+      "sha256": "504f0b2f99ca5b45cf4c5416c76d179dba25398edeb06ceafe3817b18f00d206",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/agent-session.ts:AgentSession.compact,_runDefaultCompaction",
+        "packages/coding-agent/src/core/session-manager.ts:SessionManager.appendCompaction,buildSessionProjection",
+        "packages/coding-agent/src/core/compaction/index.ts:prepareCompaction,compact",
+        "packages/coding-agent/src/core/compaction/utils.ts:serializeConversation",
+        "packages/coding-agent/test/compaction-serialization.test.ts:should omit thinking",
+        "packages/coding-agent/test/session-manager/build-context.test.ts:includes summary before kept messages",
+        "packages/ai/src/compat.ts:registerFauxProvider",
+        "packages/ai/src/providers/faux.ts:fauxAssistantMessage,fauxThinking"
+      ],
+      "scenarios": [
+        {
+          "name": "summary serialization omits thinking while the stored transcript retains it",
+          "inputs": {
+            "prompts": [
+              "first request",
+              "second request"
+            ],
+            "compactionSettings": {
+              "reserveTokens": 1000,
+              "keepRecentTokens": 1
+            },
+            "customInstructions": "focus on persistence"
+          },
+          "expected": {
+            "thinkingInStoredTranscript": [
+              "SECRET_THINKING_FIRST",
+              "SECRET_THINKING_SECOND"
+            ],
+            "summarizationRequestsContainThinking": false,
+            "summaryContainsThinking": false,
+            "summary": "## Goal\nfrozen history summary\n\n---\n\n**Turn Context (split turn):**\n\n## Original Request\nfrozen turn prefix summary"
+          },
+          "normalizations": [
+            "summary usage and token counts depend on the frozen checkout's rendered system prompt and are observed, not normalized away"
+          ]
+        },
+        {
+          "name": "compaction appends a checkpoint without rewriting the earlier transcript lines",
+          "inputs": {
+            "entriesBeforeCompaction": [
+              "session",
+              "model_change",
+              "thinking_level_change",
+              "message",
+              "message",
+              "message",
+              "message",
+              "message"
+            ]
+          },
+          "expected": {
+            "originalLinesByteIdentical": true,
+            "originalLineCount": 8,
+            "afterLineCount": 9,
+            "appendedEntryTypes": [
+              "compaction"
+            ],
+            "compactionEntry": {
+              "type": "compaction",
+              "summary": "## Goal\nfrozen history summary\n\n---\n\n**Turn Context (split turn):**\n\n## Original Request\nfrozen turn prefix summary",
+              "firstKeptEntryIdPresent": true,
+              "firstKeptEntryIdEqualsEntry": false,
+              "tokensBefore": 2995,
+              "details": {
+                "readFiles": [],
+                "modifiedFiles": []
+              },
+              "fromHook": false,
+              "usagePresent": true,
+              "systemMessage": {
+                "role": "system",
+                "sectionNames": [
+                  "preamble",
+                  "tools",
+                  "rules",
+                  "docs",
+                  "skills",
+                  "cwd"
+                ],
+                "toolsAdded": [
+                  "read",
+                  "bash"
+                ],
+                "hasTimestamp": true
+              },
+              "systemMessageTimestampEqualsEntry": true
+            },
+            "result": {
+              "summary": "## Goal\nfrozen history summary\n\n---\n\n**Turn Context (split turn):**\n\n## Original Request\nfrozen turn prefix summary",
+              "firstKeptEntryType": "message",
+              "firstKeptMessageRole": "assistant",
+              "tokensBefore": 2995,
+              "estimatedTokensAfter": 2978,
+              "usagePresent": true,
+              "details": {
+                "readFiles": [],
+                "modifiedFiles": []
+              }
+            }
+          },
+          "normalizations": [
+            "entry ids, first-kept id, ISO timestamps and the capture workspace path are host-generated",
+            "tokensBefore/estimatedTokensAfter/usage reflect the host-rendered system prompt and assistant usage"
+          ]
+        },
+        {
+          "name": "rebuilt context places the captured system boundary before the summary and retained tail",
+          "inputs": {
+            "mode": "post-compaction projection"
+          },
+          "expected": {
+            "postCompactionProjection": [
+              {
+                "role": "system",
+                "sectionNames": [
+                  "preamble",
+                  "tools",
+                  "rules",
+                  "docs",
+                  "skills",
+                  "cwd"
+                ],
+                "toolsAdded": [
+                  "read",
+                  "bash"
+                ],
+                "hasTimestamp": true
+              },
+              {
+                "role": "compactionSummary",
+                "summary": "## Goal\nfrozen history summary\n\n---\n\n**Turn Context (split turn):**\n\n## Original Request\nfrozen turn prefix summary",
+                "tokensBefore": 2995
+              },
+              {
+                "role": "assistant",
+                "contentTypes": [
+                  "thinking",
+                  "text"
+                ],
+                "text": "SECRET_THINKING_SECONDsecond answer",
+                "hasThinking": true
+              }
+            ],
+            "summarizationRequestRoles": [
+              [
+                "system",
+                "user"
+              ],
+              [
+                "system",
+                "user"
+              ]
+            ]
+          },
+          "normalizations": [
+            "system prompt section contents depend on the local skill/document discovery"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "session-tree-and-fork.json",
+      "family": "audit-1048",
+      "bytes": 17208,
+      "sha256": "d05a61f6b1e6fa8c547a8be8904cf952ffdd484a83665788412f935240cbed10",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/session-manager.ts:SessionManager.appendUsage,appendContextEdit,appendCustomEntry,appendSessionInfo,appendLabelChange,branch,branchWithSummary,createBranchedSession,getTree,getBranch,buildSessionProjection",
+        "packages/coding-agent/test/session-context-edit.test.ts:omits a target only from model projection,replaces only content and lets the latest edit win",
+        "packages/coding-agent/test/session-manager/tree-traversal.test.ts:inserts branch summary with the source and destination and advances leaf",
+        "packages/coding-agent/test/agent-session-branching.test.ts:should fork from middle of conversation"
+      ],
+      "scenarios": [
+        {
+          "name": "usage and context_edit entries persist without rewriting the stored message",
+          "inputs": {
+            "target": "user message",
+            "replacement": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "edited user"
+                }
+              ]
+            }
+          },
+          "expected": {
+            "wireEntryTypes": [
+              "session",
+              "model_change",
+              "thinking_level_change",
+              "message",
+              "message",
+              "usage",
+              "custom",
+              "label",
+              "session_info",
+              "context_edit",
+              "message",
+              "message",
+              "branch_summary"
+            ],
+            "liveEntryTypes": [
+              "model_change",
+              "thinking_level_change",
+              "message",
+              "message",
+              "usage",
+              "custom",
+              "label",
+              "session_info",
+              "context_edit",
+              "message",
+              "message",
+              "branch_summary"
+            ],
+            "usage": {
+              "type": "usage",
+              "kind": "cache_warm",
+              "provider": "faux",
+              "model": "faux-1",
+              "note": "note",
+              "totalTokens": 1
+            },
+            "contextEdit": {
+              "type": "context_edit",
+              "targetType": "message",
+              "replacement": {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "edited user"
+                  }
+                ]
+              }
+            },
+            "projection": {
+              "beforeRoles": [
+                "user",
+                "assistant"
+              ],
+              "beforeUserText": "original user",
+              "afterRoles": [
+                "user",
+                "assistant"
+              ],
+              "afterUserText": "edited user",
+              "storedUserText": "original user"
+            }
+          },
+          "normalizations": [
+            "entry ids and ISO timestamps are host-generated"
+          ]
+        },
+        {
+          "name": "branchWithSummary records the abandoned leaf and joins the active model context",
+          "inputs": {
+            "branchAt": "first assistant",
+            "summary": "branch summary text"
+          },
+          "expected": {
+            "topology": [
+              {
+                "type": "model_change",
+                "children": [
+                  {
+                    "type": "thinking_level_change",
+                    "children": [
+                      {
+                        "type": "message",
+                        "label": "first",
+                        "children": [
+                          {
+                            "type": "message",
+                            "children": [
+                              {
+                                "type": "usage",
+                                "children": [
+                                  {
+                                    "type": "custom",
+                                    "children": [
+                                      {
+                                        "type": "label",
+                                        "children": [
+                                          {
+                                            "type": "session_info",
+                                            "children": [
+                                              {
+                                                "type": "context_edit",
+                                                "children": []
+                                              }
+                                            ]
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                ]
+                              },
+                              {
+                                "type": "branch_summary",
+                                "children": []
+                              }
+                            ]
+                          },
+                          {
+                            "type": "message",
+                            "children": [
+                              {
+                                "type": "message",
+                                "children": []
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              }
+            ],
+            "activeBranchTypes": [
+              "model_change",
+              "thinking_level_change",
+              "message",
+              "message",
+              "branch_summary"
+            ],
+            "activeProjection": [
+              {
+                "role": "user",
+                "contentTypes": [
+                  "text"
+                ],
+                "text": "original user",
+                "hasThinking": false
+              },
+              {
+                "role": "assistant",
+                "contentTypes": [
+                  "text"
+                ],
+                "text": "original answer",
+                "hasThinking": false
+              },
+              {
+                "role": "branchSummary",
+                "summary": "branch summary text"
+              }
+            ],
+            "branchSummary": {
+              "type": "branch_summary",
+              "summary": "branch summary text",
+              "fromIdType": "message",
+              "fromHook": false,
+              "usagePresent": true
+            }
+          },
+          "normalizations": [
+            "entry ids, labels and ISO timestamps are host-generated"
+          ]
+        },
+        {
+          "name": "createBranchedSession writes the active path with a parentSession header",
+          "inputs": {
+            "leaf": "first assistant"
+          },
+          "expected": {
+            "forkedEntryTypes": [
+              "model_change",
+              "thinking_level_change",
+              "message",
+              "message",
+              "label"
+            ],
+            "forkedLeafType": "label",
+            "forkedProjectionRoles": [
+              "user",
+              "assistant"
+            ],
+            "forkedHeaderParentSessionPresent": true,
+            "originalFileStillHasAllEntries": true
+          },
+          "normalizations": [
+            "entry ids, file paths and ISO timestamps are host-generated"
+          ]
+        },
+        {
+          "name": "in-memory sessions keep the live entry model without a file",
+          "inputs": {
+            "mode": "in-memory"
+          },
+          "expected": {
+            "isPersisted": false,
+            "sessionFile": null,
+            "entryTypes": [
+              "message"
+            ],
+            "projectionRoles": [
+              "user"
+            ]
+          },
+          "normalizations": [
+            "entry ids and ISO timestamps are host-generated"
+          ]
+        }
+      ]
+    }
+  ]
+}

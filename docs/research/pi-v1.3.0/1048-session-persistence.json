@@ -1,0 +1,803 @@
+{
+  "schema": "pike/pi-v1.3.0-capability-ledger/1",
+  "ticket": "1048",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "platform": "linux-x86_64-glibc",
+  "counts": {
+    "membership": {
+      "supported": 26,
+      "excluded": 2,
+      "no-decision": 2
+    },
+    "implementation": {
+      "implemented": 13,
+      "partial": 9,
+      "missing": 8
+    },
+    "verification": {
+      "verified": 0,
+      "upstream-captured": 11,
+      "unverified": 17,
+      "not-applicable": 2
+    }
+  },
+  "rows": [
+    {
+      "id": "cch_coding_agent:Session:assembly:createAgentSession",
+      "capability": "Resolve and assemble the application Agent Session from a model, settings, resources, tool policy and SessionManager",
+      "source": [
+        "packages/coding-agent/src/core/sdk.ts:191-306",
+        "packages/coding-agent/src/core/agent-session.ts:526"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "cch_coding_agent SessionFactory",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "session assembly public entry",
+      "evidence": {
+        "artifact": null,
+        "scenario": "session assembly public entry",
+        "result": "C++ SessionFactory/SessionAssemblyContract tests cover assembly; no frozen capture comparison in audit-1048"
+      },
+      "gaps": [
+        "C++ assembly has no relative +name/-name tool selection",
+        "resume assembly parses the JSONL file twice"
+      ],
+      "notes": "C++ path: src/coding_agent/runtime/SessionFactory.cpp:2204 and SessionLifecycle.cpp:163/223/363."
+    },
+    {
+      "id": "cch_coding_agent:Session:publication:deferred-jsonl",
+      "capability": "Publish a new JSONL session whose header and pre-conversation entries are deferred until the first user or assistant message",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:1057-1135",
+        "packages/coding-agent/src/core/session-manager.ts:1172-1197"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionLifecycle, SessionFactory",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a new session writes no file until the first user or assistant message",
+      "evidence": {
+        "artifact": null,
+        "scenario": "a new session writes no file until the first user or assistant message",
+        "result": "C++ JsonlSessionStoreTest and SessionAssemblyContractTest cover deferred publication; no capture comparison"
+      },
+      "gaps": [],
+      "notes": "C++: JsonlSessionStore.cpp:31-73,89-116; SessionAssemblyContractTest.cpp."
+    },
+    {
+      "id": "cch_coding_agent:Session:wire:baseline-alignment",
+      "capability": "Serialize application Session entries at the pi-v1.3.0 coding-agent SessionManager format rather than the retired pi-agent-core 0.83 harness format",
+      "source": [
+        "fixtures/pi-agent-core/README.md:14-39",
+        "83114817:packages/agent/src/harness/types.ts:398-464",
+        "packages/coding-agent/src/core/session-manager.ts:80-192"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionStore, SessionTree, SessionFork, TranscriptExport",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "usage and context_edit entries persist without rewriting the stored message",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tree-and-fork.json",
+        "scenario": "usage and context_edit entries persist without rewriting the stored message",
+        "result": "v1.3.0 coding-agent SessionManager has usage/context_edit/systemMessage and no leaf; C++ keeps the pi-agent-core 0.83 retainedTail/leaf shape"
+      },
+      "gaps": [
+        "C++ and its compat-pi fixtures target pi-agent-core 0.83, not pi-v1.3.0 coding-agent",
+        "fixtures/pi-agent-core/compaction-persistence.jsonl asserts retainedTail as pi's wire",
+        "current tests tagged compat-pi are not v1.3.0 parity evidence"
+      ],
+      "notes": "Decide and re-base the application wire before adding individual fields. Evidence: fixtures/pi-agent-core/README.md:14-39 and git show 83114817:packages/agent/src/harness/session/session.ts."
+    },
+    {
+      "id": "cch_coding_agent:Session:wire:entry-kinds",
+      "capability": "Serialize and read the v3 Session entry kinds with pi field names, optional/null semantics and unknown-line preservation",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:80-192",
+        "packages/coding-agent/src/core/session-manager.ts:1172-1197"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionStore, SessionTree, SessionFork, TranscriptExport",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "usage and context_edit entries persist without rewriting the stored message",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tree-and-fork.json",
+        "scenario": "usage and context_edit entries persist without rewriting the stored message",
+        "result": "pi writes usage and context_edit entries; C++ preserves them only as Unknown raw lines and has no typed projection"
+      },
+      "gaps": [
+        "C++ SessionEntryKind has no Usage or ContextEdit",
+        "C++ parser does not project context edits",
+        "C++ compaction DTO has no systemMessage"
+      ],
+      "notes": "C++: SessionEntry.hpp:26-39, EntrySerializer.cpp:31-144; tests preserve unknown future lines."
+    },
+    {
+      "id": "cch_coding_agent:Session:wire:migrations",
+      "capability": "Migrate v1/v2 pi session entries to current v3 on open, including ids/parentIds and hookMessage conversion",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:287-351",
+        "packages/coding-agent/test/session-manager/migration.test.ts:should add id/parentId to v1 entries"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionStore.open_existing, SessionResume",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "v1 entries gain id/parentId",
+      "evidence": {
+        "artifact": null,
+        "scenario": "packages/coding-agent/test/session-manager/migration.test.ts:should add id/parentId to v1 entries",
+        "result": "upstream test source only; C++ has no migration path"
+      },
+      "gaps": [
+        "C++ ReadHeaderDto tolerates old headers but entry DTOs have no v1/v2 field migration",
+        "legacy active_tools_change is treated as Unknown rather than migrated"
+      ],
+      "notes": "C++: EntrySerializer.cpp:40-51; JsonlSessionStoreTest.cpp case legacy active_tools_change is not read by the native session format."
+    },
+    {
+      "id": "cch_coding_agent:Session:wire:compaction-boundary",
+      "capability": "Persist and reconstruct the prompt/tool boundary on a compaction entry",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:91-104",
+        "packages/coding-agent/src/core/session-manager.ts:1261-1290",
+        "packages/coding-agent/src/core/session-manager.ts:457-465"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "Session compaction, SessionTree::buildSessionContext",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "compaction appends a checkpoint without rewriting the earlier transcript lines",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-compaction-boundary.json",
+        "scenario": "compaction appends a checkpoint without rewriting the earlier transcript lines",
+        "result": "pi stores systemMessage with toolsAdded/project sections on the compaction entry; C++ stores retainedTail instead"
+      },
+      "gaps": [
+        "CompactionDto has no systemMessage field",
+        "retainedTail is a non-pi wire field",
+        "pi-written compaction loses its boundary in C++ projection"
+      ],
+      "notes": "C++: EntrySerializer.cpp:120-132, Compaction.cpp:1007-1018, SessionTree.cpp:403-430."
+    },
+    {
+      "id": "cch_coding_agent:Session:tree:live-store",
+      "capability": "Maintain fileEntries/byId/leafId equivalent live state and answer topology/context queries without re-reading the file",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:994-1122",
+        "packages/coding-agent/src/core/session-manager.ts:1404-1577"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionStore, SessionTree, TUI tree selector",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "live tree queries answer without re-reading the session file",
+      "evidence": {
+        "artifact": null,
+        "scenario": "live tree queries answer without re-reading the session file",
+        "result": "C++ SessionStoreTest covers the live tree; no frozen comparison"
+      },
+      "gaps": [
+        "C++ get_branch returns leaf-to-root while pi getBranch returns root-to-leaf",
+        "C++ leaf markers are a non-pi durable extension"
+      ],
+      "notes": "C++: SessionStore.cpp:12-50; SessionStoreTest.cpp cases live tree queries and fresh-load comparison."
+    },
+    {
+      "id": "cch_coding_agent:Session:resume:context",
+      "capability": "Reopen a session into compaction-aware messages, model and thinking level on the active leaf path",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:1766-1804",
+        "packages/coding-agent/src/core/session-manager.ts:1469-1503",
+        "packages/coding-agent/src/core/sdk.ts:211-263"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionLifecycle prepare_resume_target/publish_resume_session",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "resume without modifiers restores the recorded order and does not rewrite the transcript",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json",
+        "scenario": "resume without modifiers restores the recorded order and does not rewrite the transcript",
+        "result": "pi resumes shared store/context and leaves the file unchanged; C++ SessionLifecycleTest covers context but resumes by parsing twice"
+      },
+      "gaps": [
+        "resume_session and open_existing each parse the file",
+        "C++ context lacks context-edit projection",
+        "C++ compaction boundary reconstruction differs"
+      ],
+      "notes": "C++: SessionResume.cpp:98-120, SessionLifecycle.cpp:301-366; tests resumed session uses compaction tree context and active leaf path."
+    },
+    {
+      "id": "cch_coding_agent:Session:resume:tool-loadout",
+      "capability": "Restore the active tool loadout recorded in the transcript on resume, preserving declaration order and filtering unavailable tools",
+      "source": [
+        "packages/coding-agent/src/core/agent-session.ts:1815-1825",
+        "packages/coding-agent/test/default-tools-setting.test.ts:restores the loadout the transcript records"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "AgentSession build/replay",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "resume without modifiers restores the recorded order and does not rewrite the transcript",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json",
+        "scenario": "resume without modifiers restores the recorded order and does not rewrite the transcript",
+        "result": "pi restores [read,bash,write] in recorded order; C++ replay_active_tool_names returns registry order"
+      },
+      "gaps": [
+        "C++ reorders the restored loadout by registered tool order",
+        "C++ does not preserve the pending/activation state semantics"
+      ],
+      "notes": "C++: AgentSessionExecution.cpp:55-85,227-243; AgentSessionSnapshotTest.cpp resume loadout case."
+    },
+    {
+      "id": "cch_coding_agent:Session:resume:relative-tool-modifiers",
+      "capability": "Apply relative +name/-name tool-selection modifiers to the recorded loadout on resume with ordered precedence",
+      "source": [
+        "packages/coding-agent/src/core/settings-manager.ts:87-120",
+        "packages/coding-agent/src/core/sdk.ts:282-301",
+        "packages/coding-agent/test/default-tools-setting.test.ts:applies +name and -name tool options to the recorded loadout"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "Session creation / resume tool policy",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "resume applies relative tool modifiers to the recorded loadout",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json",
+        "scenario": "resume applies relative tool modifiers to the recorded loadout",
+        "result": "pi tools [-bash,+edit] over [read,bash,write] yields [read,write,edit]; C++ has no modifier parser"
+      },
+      "gaps": [
+        "ToolSelection only has allow/deny lists",
+        "CLI/SDK validation does not reject mixed names and modifiers",
+        "C++ has no modifier precedence test"
+      ],
+      "notes": "Explicit ADR 0075 application addition. C++: ToolSelection.hpp:14-23, AgentSessionCreationRequest.hpp:78-83."
+    },
+    {
+      "id": "cch_coding_agent:Session:fork:branch-file",
+      "capability": "Fork a session at a message position into a new file with re-chained parents, retained labels, parentSession header and unknown-line preservation",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:1632-1748",
+        "packages/coding-agent/test/agent-session-branching.test.ts:should fork from middle of conversation"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionFork, fork UI/CLI",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "createBranchedSession writes the active path with a parentSession header",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tree-and-fork.json",
+        "scenario": "createBranchedSession writes the active path with a parentSession header",
+        "result": "pi writes path + re-created label and parentSession; C++ SessionForkTest covers the same behavior, no value comparison"
+      },
+      "gaps": [
+        "C++ leaf markers are not pi-compatible",
+        "C++ create_from_entries must preserve unknown lines (existing test)"
+      ],
+      "notes": "C++: SessionFork.cpp:228-278,437; SessionForkTest.cpp fork re-chains parents and in-memory seed cases."
+    },
+    {
+      "id": "cch_coding_agent:Session:context:projection",
+      "capability": "Build a provenance-preserving, compaction-aware model projection with per-entry source mapping",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:216-227",
+        "packages/coding-agent/src/core/session-manager.ts:525-585"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "AgentSession requests, TUI rendering, token estimates",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "usage and context_edit entries persist without rewriting the stored message",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tree-and-fork.json",
+        "scenario": "usage and context_edit entries persist without rewriting the stored message",
+        "result": "pi projection carries source entries and edited content; C++ SessionContext carries only messages/model/thinking"
+      },
+      "gaps": [
+        "C++ SessionContext has no ProjectedSessionEntry equivalent",
+        "C++ cannot resolve a projected message back to its source entry",
+        "C++ context edits are not projected"
+      ],
+      "notes": "C++: SessionTree.hpp:40-57; SessionTree.cpp:441."
+    },
+    {
+      "id": "cch_coding_agent:Session:context:context-edit",
+      "capability": "Append-only context_edit entries that null out or replace one earlier entry's model content without rewriting storage",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:168-180",
+        "packages/coding-agent/src/core/session-manager.ts:1360-1398",
+        "packages/coding-agent/test/session-context-edit.test.ts:omits a target only from model projection"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "Recovery omission, extension context edits, compaction projection",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "usage and context_edit entries persist without rewriting the stored message",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tree-and-fork.json",
+        "scenario": "usage and context_edit entries persist without rewriting the stored message",
+        "result": "pi changes only the projection (original user to edited user); C++ has no ContextEdit entry kind or projection"
+      },
+      "gaps": [
+        "no typed ContextEditEntry",
+        "no appendContextEdit equivalent",
+        "overflow recovery omission is not persisted"
+      ],
+      "notes": "C++ leaf/unknown path only; EntrySerializer parses it as Unknown raw line."
+    },
+    {
+      "id": "cch_coding_agent:Session:compaction:manual",
+      "capability": "Manually compact the active branch, append a checkpoint and rebuild the live context",
+      "source": [
+        "packages/coding-agent/src/core/agent-session.ts:2794-2915",
+        "packages/coding-agent/src/core/compaction/compaction.ts:872-1140"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "AgentSession compact, CLI/TUI /compact, extensions",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "compaction appends a checkpoint without rewriting the earlier transcript lines",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-compaction-boundary.json",
+        "scenario": "compaction appends a checkpoint without rewriting the earlier transcript lines",
+        "result": "pi appends one compaction entry; C++ manual compaction does the same but persists retainedTail instead of systemMessage and rejects in-memory sessions"
+      },
+      "gaps": [
+        "compaction boundary field mismatch",
+        "in-memory manual compaction rejected",
+        "C++ detail/structure follows its own CompactionResult"
+      ],
+      "notes": "C++: AgentSessionCompaction.cpp:17-196; AgentSessionCompactionTest.cpp manual compaction cases."
+    },
+    {
+      "id": "cch_coding_agent:Session:compaction:summary-serialization",
+      "capability": "Serialize conversation text for summarization without thinking while retaining thinking in the stored transcript",
+      "source": [
+        "packages/coding-agent/src/core/compaction/utils.ts:120-175",
+        "packages/coding-agent/test/compaction-serialization.test.ts:should omit thinking"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "Compaction and branch summarization",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "summary serialization omits thinking while the stored transcript retains it",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-compaction-boundary.json",
+        "scenario": "summary serialization omits thinking while the stored transcript retains it",
+        "result": "pi retains both thinking blocks in JSONL, sends no thinking in either summary request, and appends a thinking-free summary"
+      },
+      "gaps": [
+        "C++ comparison test not added in this audit"
+      ],
+      "notes": "C++ compaction door serializes pi conversation text; no C++ test asserts thinking omission from a transcript with thinking blocks."
+    },
+    {
+      "id": "cch_coding_agent:Session:compaction:auto-recovery",
+      "capability": "Automatic threshold/overflow compaction with one retry, persistent omission of the failed attempt and stale-usage guards",
+      "source": [
+        "packages/coding-agent/src/core/agent-session.ts:1241-1258",
+        "packages/coding-agent/src/core/agent-session.ts:2977-3270",
+        "packages/coding-agent/test/agent-session-auto-compaction-queue.test.ts"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "AgentSession post-run and between-turn triggers",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "overflow recovery persists the failed attempt omission",
+      "evidence": {
+        "artifact": null,
+        "scenario": "packages/coding-agent/test/suite/agent-session-compaction.test.ts:does not retry overflow recovery more than once",
+        "result": "upstream test source and C++ AgentSessionCompactionTest source; no frozen capture in audit-1048"
+      },
+      "gaps": [
+        "C++ does not append context_edit omission; it only pops live agent state",
+        "reopen resurrects the failed attempt",
+        "in-memory sessions do not auto-compact"
+      ],
+      "notes": "C++: AgentSessionCompaction.cpp:286-380. Retry additions are an AI exclusion; this row covers application recovery ordering."
+    },
+    {
+      "id": "cch_coding_agent:Session:compaction:in-memory",
+      "capability": "Compaction and context reconstruction for an in-memory session",
+      "source": [
+        "packages/coding-agent/test/agent-session-compaction.test.ts:should work with --no-session mode (in-memory only)",
+        "packages/coding-agent/src/core/session-manager.ts:1804-1813"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "No-session SDK/CLI consumers",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "in-memory sessions keep the live entry model without a file",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tree-and-fork.json",
+        "scenario": "in-memory sessions keep the live entry model without a file",
+        "result": "pi in-memory SessionManager appends and projects without a file; C++ rejects manual compaction and skips auto compaction when store->path() is absent"
+      },
+      "gaps": [
+        "manual compaction rejects in-memory sessions",
+        "auto compaction silently returns false for in-memory sessions"
+      ],
+      "notes": "C++: AgentSessionCompaction.cpp:215-221,384-392; AgentSessionCompactionTest.cpp."
+    },
+    {
+      "id": "cch_coding_agent:Session:history:tree-ops",
+      "capability": "Branch, reset leaf, label and branch-summary operations over the live tree",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:1579-1627",
+        "packages/coding-agent/src/core/session-manager.ts:1529-1577"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
+      "owner": "cch_coding_agent",
+      "consumer": "Tree navigation, TUI tree selector, extensions",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "branchWithSummary records the abandoned leaf and joins the active model context",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1048/session-tree-and-fork.json",
+        "scenario": "branchWithSummary records the abandoned leaf and joins the active model context",
+        "result": "pi branch_summary joins the projection with fromId; C++ SessionStore branch/branch_summary tests cover the same shape"
+      },
+      "gaps": [],
+      "notes": "C++: SessionStoreTest.cpp branch summary cases; TreeNavigationTest.cpp set_entry_label/navigate_tree."
+    },
+    {
+      "id": "cch_coding_agent:AgentSession:lifecycle:abort",
+      "capability": "Abort the current Agent operation and wait for idle, including compaction/branch-summary/retry work",
+      "source": [
+        "packages/coding-agent/src/core/agent-session.ts:2464-2475",
+        "packages/coding-agent/test/suite/agent-session-compaction.test.ts:aborts an in-progress manual compaction and waits until the session is idle"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "AgentSession close, UI cancel, tests",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "abort during manual compaction",
+      "evidence": {
+        "artifact": null,
+        "scenario": "packages/coding-agent/test/suite/agent-session-compaction.test.ts:aborts an in-progress manual compaction and waits until the session is idle",
+        "result": "upstream test source and C++ AgentSessionCompactionTest; no frozen timing capture"
+      },
+      "gaps": [
+        "C++ abort only requests the active stop source and does not await idle",
+        "C++ Close provides the quiescence point instead"
+      ],
+      "notes": "C++: AgentSession.cpp:537-540, AgentSessionExecution.cpp:797-801; close tests cover the draining behavior."
+    },
+    {
+      "id": "cch_coding_agent:AgentSession:lifecycle:close",
+      "capability": "Close a session idempotently: stop admission, cancel or await admitted work, drain persistence, release resources",
+      "source": [
+        "packages/coding-agent/src/core/agent-session.ts:1397-1419",
+        "docs/adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "CLI/TUI lifecycle, SDK dispose",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "Session Close waits for an admitted compaction before releasing Session resources",
+      "evidence": {
+        "artifact": null,
+        "scenario": "tests/coding_agent/runtime/SessionCloseTest.cpp:Session Close waits for an admitted compaction before releasing Session resources",
+        "result": "C++ test source only; pi dispose aborts compaction rather than waiting"
+      },
+      "gaps": [
+        "pi dispose and C++ close have different compaction/cancellation semantics"
+      ],
+      "notes": "C++: AgentSessionExecution.cpp:803-906; SessionCloseTest.cpp and SessionCommitmentAsyncTest.cpp."
+    },
+    {
+      "id": "cch_coding_agent:Session:event-commitment",
+      "capability": "Commit completed Session Entry messages off-loop in FIFO admission order with a sticky failure and a run veto",
+      "source": [
+        "docs/adr/0040-own-asynchronous-operations-and-the-serialized-runtime-lifecycle.md",
+        "packages/coding-agent/src/core/agent-session.ts:1974",
+        "packages/coding-agent/src/core/session-manager.ts:1172-1187"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "AgentSession prompt/completion events, Close",
+      "boundary": "C++ architectural addition; pi persists synchronously in _persist",
+      "implementation_ticket": "#1058-draft",
+      "scenario": "an aborted prompt settles the commitment channel with a consistent session file",
+      "evidence": {
+        "artifact": null,
+        "scenario": "tests/coding_agent/runtime/SessionCommitmentAsyncTest.cpp:an aborted prompt settles the commitment channel with a consistent session file",
+        "result": "C++ tests cover FIFO, failure, Busy, in-memory and Close; no frozen pi equivalent"
+      },
+      "gaps": [
+        "C++ queue must not become a second source of truth during an ownership move"
+      ],
+      "notes": "C++: SessionEventCommitment.cpp:26-53, SessionPersistence.cpp:117-200; SessionEventCommitmentTest.cpp."
+    },
+    {
+      "id": "cch_coding_agent:Session:consumers:tui-live-session",
+      "capability": "TUI session operations use the live Agent Session store rather than opening a second store",
+      "source": [
+        "packages/coding-agent/src/core/agent-session.ts:3972-3974",
+        "packages/coding-agent/src/core/session-export.ts:32"
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionFlowController /rename, InteractiveEngineHost /export",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "TUI rename uses the live session name path",
+      "evidence": {
+        "artifact": null,
+        "scenario": "static consumer trace",
+        "result": "C++ opens a second SessionStore for rename/export; no frozen capture"
+      },
+      "gaps": [
+        "SessionFlowController.cpp:563-572 appends session_info through a second store for the session-selector rename",
+        "InteractiveEngineHost.cpp:357-360 exports through a second store",
+        "a live tree does not observe the second writer; /name already uses the live path"
+      ],
+      "notes": "The remaining bypasses are the session-selector rename and /export; /name uses AgentSession::set_session_name."
+    },
+    {
+      "id": "cch_coding_agent:Session:storage:transcript-vs-durable",
+      "capability": "Keep the application Session transcript independent from the Durable runtime, with no old-Pike durable import or automatic migration",
+      "source": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md",
+        "packages/coding-agent/src/core/session-manager.ts:1040-1135"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "Session publication, CLI resume",
+      "boundary": "ordinary coding-agent JSONL stays separate from durable JSONL/SQLite; no old-Pike durable migration",
+      "implementation_ticket": null,
+      "scenario": "application transcript storage boundary",
+      "evidence": {
+        "artifact": null,
+        "scenario": "static boundary review of ADR 0075 and Session publication",
+        "result": "C++ SessionStore JSONL path and SqliteSessionStore legacy alternative are separate; no production durable switch"
+      },
+      "gaps": [
+        "SqliteSessionStore/TaskStore legacy coupling still sits in cch_agent_core"
+      ],
+      "notes": "No user data is deleted, migrated or reinterpreted by this audit."
+    },
+    {
+      "id": "cch_coding_agent:Session:storage:xdg-root",
+      "capability": "Retain the Pike XDG Agent Config Directory and Magpie-only model path while aligning Session behavior with pi",
+      "source": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md",
+        "docs/adr/0058-*.md"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "Session discovery and publication",
+      "boundary": "$XDG_CONFIG_HOME/pike/agent or ~/.config/pike/agent; pi's ~/.pi/agent is not adopted",
+      "implementation_ticket": null,
+      "scenario": "XDG session root",
+      "evidence": {
+        "artifact": null,
+        "scenario": "static boundary review and SessionPathPolicy tests",
+        "result": "AgentConfigDir.cpp resolves the Pike XDG root; SessionPathPolicyTest covers path policy"
+      },
+      "gaps": [],
+      "notes": "C++: src/coding_agent/AgentConfigDir.cpp:25-35."
+    },
+    {
+      "id": "cch_coding_agent:Session:wire:header-fields",
+      "capability": "Write the pi v3 session header shape and tolerantly read older headers",
+      "source": [
+        "packages/coding-agent/src/core/session-manager.ts:43-50",
+        "packages/coding-agent/src/core/session-manager.ts:1040-1068"
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "SessionStore header writer/reader",
+      "boundary": null,
+      "implementation_ticket": "#1058-draft",
+      "scenario": "v3 session header writes and loads correctly",
+      "evidence": {
+        "artifact": null,
+        "scenario": "tests/harness/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
+        "result": "C++ test passes its own header; pi v1.3.0 header has no provider/model fields"
+      },
+      "gaps": [
+        "C++ WriteHeaderDto adds provider/model fields absent from pi v1.3.0",
+        "C++ reads the pi header shape only through optional fields"
+      ],
+      "notes": "C++: EntrySerializer.cpp:29-51."
+    },
+    {
+      "id": "cch_coding_agent:Session:wire:redaction",
+      "capability": "Retain Pike's mandatory secret redaction at the Session persistence seam while documenting the pi wire divergence",
+      "source": [
+        "docs/adr/0026-*.md",
+        "docs/adr/0028-*.md",
+        "packages/coding-agent/src/core/session-manager.ts:1172-1187"
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "EntrySerializer, message mirror",
+      "boundary": "intentional security divergence: C++ redacts secret-like content before persistence; pi does not",
+      "implementation_ticket": null,
+      "scenario": "redaction remains at the persistence seam",
+      "evidence": {
+        "artifact": null,
+        "scenario": "tests/harness/session/JsonlSessionStoreTest.cpp:Glaze JSONL session redacts sensitive message fields at persistence",
+        "result": "C++ test source only; no frozen pi comparison"
+      },
+      "gaps": [
+        "pi-written files are not redacted on load; the divergence needs an explicit interoperability decision"
+      ],
+      "notes": "Do not remove redaction in an ownership move; parity does not authorize weakening the security guardrail."
+    },
+    {
+      "id": "cch_durable:Session:storage:sqlite-alternative",
+      "capability": "Legacy SQLite SessionStore alternative used by tests and mirrored from pi-durable's relational backing",
+      "source": [
+        "src/agent/harness/session/SqliteSessionStore.hpp:17-20",
+        "src/agent/harness/session/SessionStore.cpp:76-116",
+        "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically"
+      ],
+      "membership": "no-decision",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_durable",
+      "consumer": "tests only; no production SessionStore caller",
+      "boundary": "legacy durable coupling; not a pi v1.3.0 coding-agent storage alternative",
+      "implementation_ticket": "#1058-draft",
+      "scenario": "SQLite factory atomic batch",
+      "evidence": {
+        "artifact": null,
+        "scenario": "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically",
+        "result": "C++ test source only; production uses JSONL/in-memory"
+      },
+      "gaps": [
+        "cch_agent_core links sqlite3 and owns SqliteSessionStore/SqliteDatabase/TaskStore",
+        "must be split from the application Session before ownership moves",
+        "SQLite and TaskStore have no pi coding-agent equivalent"
+      ],
+      "notes": "This is the durable-to-coding-agent edge to avoid; durable owns its own storage implementation."
+    },
+    {
+      "id": "cch_coding_agent:Session:entry:leaf-marker",
+      "capability": "Persist an active leaf position as a leaf-marked Session entry",
+      "source": [
+        "src/agent/include/cch/agent/harness/session/SessionEntry.hpp:101-103",
+        "src/agent/harness/session/SessionStore.cpp:331-345",
+        "83114817:packages/agent/src/harness/types.ts:448-464"
+      ],
+      "membership": "no-decision",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "C++ branch/tree navigation, resume topology",
+      "boundary": "non-pi extension; pi has no leaf entry and opens with the last file entry as active leaf",
+      "implementation_ticket": "#1058-draft",
+      "scenario": "a persisted leaf marker moves the live leaf and parents later messages",
+      "evidence": {
+        "artifact": null,
+        "scenario": "tests/harness/session/SessionStoreTest.cpp:a persisted leaf marker moves the live leaf and parents later messages",
+        "result": "C++ test source only; pi behavior is last-entry leaf selection"
+      },
+      "gaps": [
+        "leaf marker comes from pi-agent-core 0.83, not v1.3.0 coding-agent",
+        "pi v1.3.0 reopening a C++ file treats the marker as the active leaf"
+      ],
+      "notes": "C++: SessionLeaf.hpp, SessionTree.cpp; test cases leaf marker missing/targeting missing entry."
+    },
+    {
+      "id": "cch_ai:Thinking:cross-model-transformation",
+      "capability": "Cross-model thinking transformation and replay normalization",
+      "source": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md:explicit AI exclusions"
+      ],
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
+      "owner": "cch_ai",
+      "consumer": "none in this audit",
+      "boundary": "explicit AI exclusion; the application summary capture does not exercise it",
+      "implementation_ticket": null,
+      "scenario": null,
+      "evidence": null,
+      "gaps": [],
+      "notes": "Kept separate from application summary serialization; no AI baseline change is claimed."
+    },
+    {
+      "id": "cch_ai:Retry:additional-matching",
+      "capability": "Additional AI retry matching and provider-specific retry timing",
+      "source": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md:explicit AI exclusions"
+      ],
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
+      "owner": "cch_ai",
+      "consumer": "none in this audit",
+      "boundary": "explicit AI exclusion; compaction capture disables retry to keep summary behavior separate",
+      "implementation_ticket": null,
+      "scenario": null,
+      "evidence": null,
+      "gaps": [],
+      "notes": "Application overflow recovery is a separate row; its one-retry orchestration is not an AI retry claim."
+    }
+  ],
+  "evidence": {
+    "family": "audit-1048",
+    "manifest": "fixtures/pi-v1.3.0/audit-1048/manifest.json",
+    "manifestSha256": "2cbc07e8d2924ff92775245cd2750545da083fb07fbb1f88abf604134669eecd"
+  }
+}
