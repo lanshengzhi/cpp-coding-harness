@@ -1,0 +1,541 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1054",
+  "family": "audit-1054",
+  "capturedAt": "2026-10-19T19:57:03.655Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/session/session.ts:createSession",
+    "packages/durable/src/documents.ts:defineDoc",
+    "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage",
+    "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage",
+    "packages/durable/test/session-documents.test.ts:Session document transactions",
+    "packages/durable/test/jsonl-storage.test.ts:Pico JsonlStorage publication and recovery",
+    "packages/durable/test/sqlite-storage.test.ts:SqliteStorage conformance across reopen"
+  ],
+  "scenarios": [
+    {
+      "name": "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "inputs": {
+        "backend": "JsonlStorage",
+        "creation": [
+          "one conversation and two entries",
+          "a latest document with base, delta and checkpoint base",
+          "a rewindable document with two revisions",
+          "one pending task with an initial checkpoint"
+        ],
+        "continuation": "pi reopens, appends one entry and updates both documents, then reopens again",
+        "laterCppLeg": "not run: the C++ durable owner does not exist; the C++ continuation remains unverified"
+      },
+      "expected": {
+        "backend": "jsonl",
+        "conversationId": 2,
+        "ids": {
+          "first": 3,
+          "task": 6,
+          "second": 7
+        },
+        "fixture": {
+          "files": [
+            {
+              "name": "doc-4.jsonl",
+              "bytes": 167,
+              "sha256": "dc05eab19aef99190fac8232bcb573d7cfb954cb4cc8e5ce3fcdd30e3c187ffd",
+              "text": "{\"format\":1,\"type\":\"record\",\"seq\":4,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":4,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"checkpoint\",\"revision\":3}}}}\n",
+              "lines": [
+                {
+                  "format": 1,
+                  "type": "record",
+                  "seq": 4,
+                  "ordinal": 0,
+                  "payload": {
+                    "type": "document",
+                    "id": 4,
+                    "content": {
+                      "version": 1,
+                      "kind": "base",
+                      "value": {
+                        "text": "checkpoint",
+                        "revision": 3
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "doc-5.jsonl",
+              "bytes": 299,
+              "sha256": "ecc56be0014b83928a2949be273ee278a103a5c027e5ea5e98aaee2175f5fdcb",
+              "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":2,\"payload\":{\"type\":\"document\",\"id\":5,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"r1\"}}}}\n{\"format\":1,\"type\":\"record\",\"seq\":3,\"ordinal\":1,\"payload\":{\"type\":\"document\",\"id\":5,\"content\":{\"version\":1,\"kind\":\"delta\",\"ops\":[[\"s\",[\"text\"],\"r2\"]]}}}\n",
+              "lines": [
+                {
+                  "format": 1,
+                  "type": "record",
+                  "seq": 2,
+                  "ordinal": 2,
+                  "payload": {
+                    "type": "document",
+                    "id": 5,
+                    "content": {
+                      "version": 1,
+                      "kind": "base",
+                      "value": {
+                        "text": "r1"
+                      }
+                    }
+                  }
+                },
+                {
+                  "format": 1,
+                  "type": "record",
+                  "seq": 3,
+                  "ordinal": 1,
+                  "payload": {
+                    "type": "document",
+                    "id": 5,
+                    "content": {
+                      "version": 1,
+                      "kind": "delta",
+                      "ops": [
+                        [
+                          "s",
+                          [
+                            "text"
+                          ],
+                          "r2"
+                        ]
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "main.jsonl",
+              "bytes": 939,
+              "sha256": "482377489a076e5598725b8902ae4a438a4cb295343f75c7f7bc7169d86e29cf",
+              "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"entry\",\"value\":{\"kind\":\"audit1054.note\",\"data\":{\"n\":1},\"id\":3,\"conversationId\":2}},{\"type\":\"task.sidecar\",\"id\":6,\"ordinal\":0},{\"type\":\"document.create\",\"record\":{\"id\":4,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":1},{\"type\":\"document.create\",\"record\":{\"id\":5,\"kind\":\"audit1054.rewind\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"rewindable\",\"fork\":\"asOf\"},\"ordinal\":2}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":3,\"writes\":[{\"type\":\"entry\",\"value\":{\"kind\":\"audit1054.note\",\"data\":{\"n\":2},\"id\":7,\"conversationId\":2}},{\"type\":\"document.change\",\"id\":4,\"ordinal\":0},{\"type\":\"document.change\",\"id\":5,\"ordinal\":1}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":4,\"writes\":[{\"type\":\"document.change\",\"id\":4,\"ordinal\":0}]}\n",
+              "lines": [
+                {
+                  "format": 1,
+                  "type": "commit",
+                  "seq": 1,
+                  "writes": [
+                    {
+                      "type": "conversation",
+                      "value": {
+                        "id": 2
+                      }
+                    }
+                  ]
+                },
+                {
+                  "format": 1,
+                  "type": "commit",
+                  "seq": 2,
+                  "writes": [
+                    {
+                      "type": "entry",
+                      "value": {
+                        "kind": "audit1054.note",
+                        "data": {
+                          "n": 1
+                        },
+                        "id": 3,
+                        "conversationId": 2
+                      }
+                    },
+                    {
+                      "type": "task.sidecar",
+                      "id": 6,
+                      "ordinal": 0
+                    },
+                    {
+                      "type": "document.create",
+                      "record": {
+                        "id": 4,
+                        "kind": "audit1054.latest",
+                        "scope": {
+                          "kind": "conversation",
+                          "conversationId": 2
+                        },
+                        "history": "latest",
+                        "fork": "current"
+                      },
+                      "ordinal": 1
+                    },
+                    {
+                      "type": "document.create",
+                      "record": {
+                        "id": 5,
+                        "kind": "audit1054.rewind",
+                        "scope": {
+                          "kind": "conversation",
+                          "conversationId": 2
+                        },
+                        "history": "rewindable",
+                        "fork": "asOf"
+                      },
+                      "ordinal": 2
+                    }
+                  ]
+                },
+                {
+                  "format": 1,
+                  "type": "commit",
+                  "seq": 3,
+                  "writes": [
+                    {
+                      "type": "entry",
+                      "value": {
+                        "kind": "audit1054.note",
+                        "data": {
+                          "n": 2
+                        },
+                        "id": 7,
+                        "conversationId": 2
+                      }
+                    },
+                    {
+                      "type": "document.change",
+                      "id": 4,
+                      "ordinal": 0
+                    },
+                    {
+                      "type": "document.change",
+                      "id": 5,
+                      "ordinal": 1
+                    }
+                  ]
+                },
+                {
+                  "format": 1,
+                  "type": "commit",
+                  "seq": 4,
+                  "writes": [
+                    {
+                      "type": "document.change",
+                      "id": 4,
+                      "ordinal": 0
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "name": "task-6.jsonl",
+              "bytes": 271,
+              "sha256": "3af71031650dae8a1789d88be4496275bacec5fad59ee59e880f34824f087c9a",
+              "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":6,\"conversationId\":2,\"kind\":\"audit1054.work\",\"version\":1,\"input\":{\"n\":7},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\",\"n\":7}}}}}\n",
+              "lines": [
+                {
+                  "format": 1,
+                  "type": "record",
+                  "seq": 2,
+                  "ordinal": 0,
+                  "payload": {
+                    "type": "task",
+                    "value": {
+                      "id": 6,
+                      "conversationId": 2,
+                      "kind": "audit1054.work",
+                      "version": 1,
+                      "input": {
+                        "n": 7
+                      },
+                      "background": false,
+                      "abortRequested": false,
+                      "state": {
+                        "status": "pending",
+                        "checkpoint": {
+                          "phase": "start",
+                          "n": 7
+                        }
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "phases": [
+          {
+            "phase": "pi reopen and observe",
+            "latest": {
+              "text": "checkpoint",
+              "revision": 3
+            },
+            "rewind": {
+              "text": "r2"
+            },
+            "asOfFirst": {
+              "text": "r1"
+            },
+            "entries": [
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 2
+                },
+                "id": 7,
+                "conversationId": 2
+              },
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 1
+                },
+                "id": 3,
+                "conversationId": 2
+              }
+            ],
+            "task": {
+              "id": 6,
+              "conversationId": 2,
+              "kind": "audit1054.work",
+              "version": 1,
+              "input": {
+                "n": 7
+              },
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "start",
+                  "n": 7
+                }
+              }
+            },
+            "minted": 8
+          },
+          {
+            "phase": "pi reopen and observe the continued store",
+            "latest": {
+              "text": "after-cpp-leg",
+              "revision": 4
+            },
+            "rewind": {
+              "text": "r3"
+            },
+            "asOfFirst": {
+              "text": "r1"
+            },
+            "asOfSecond": {
+              "text": "r2"
+            },
+            "entries": [
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 3
+                },
+                "id": 9,
+                "conversationId": 2
+              },
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 2
+                },
+                "id": 7,
+                "conversationId": 2
+              },
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 1
+                },
+                "id": 3,
+                "conversationId": 2
+              }
+            ],
+            "task": {
+              "id": 6,
+              "conversationId": 2,
+              "kind": "audit1054.work",
+              "version": 1,
+              "input": {
+                "n": 7
+              },
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "start",
+                  "n": 7
+                }
+              }
+            },
+            "minted": 10
+          }
+        ],
+        "continuation": {
+          "third": 9
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "sqlite store created by pi reopens with unfinished task, documents and checkpoints and continues",
+      "inputs": {
+        "backend": "SqliteStorage",
+        "creation": [
+          "one conversation and two entries",
+          "a latest document with base, delta and checkpoint base",
+          "a rewindable document with two revisions",
+          "one pending task with an initial checkpoint"
+        ],
+        "continuation": "pi reopens, appends one entry and updates both documents, then reopens again",
+        "laterCppLeg": "not run: the C++ durable owner does not exist; the C++ continuation remains unverified"
+      },
+      "expected": {
+        "backend": "sqlite",
+        "conversationId": 2,
+        "ids": {
+          "first": 3,
+          "task": 6,
+          "second": 7
+        },
+        "fixture": {
+          "sqlite": {
+            "file": "storage.sqlite",
+            "bytes": 118784,
+            "sha256": "4cdcc3fb5f7accdab53053a047af148f37b9a773eb15e244717ad13063ee0495",
+            "encoding": "gzip+base64",
+            "gzipBase64": "H4sIAAAAAAAAA+2dX2zcxp3HOfuPWv2jlVhmEtUwTdVYLbJ2vHF8bhW4PXW9jXVWZFdWYQe5YE0txxYrLSmRXMs6wz1QDvxWFEWBAId77wF9CnAPaR/60pc+pEAfAhQ54IBDHg6H4B7SFPcQow89zJDc5exyJZ2jnhD1+3nQcub3m/n9ZuY3JGc1I9383oLlU+2u47YMX7sgHZMyGelvNU2SpIwkSSelLi9KkpRLpIm0Nxnp3D+9n2fKyp9Y+mvKn0Z/O/rKyM+HfzN8o/jLoRH5A/nNwp8LPy6cyxdyT3LZ7HvkM3JF+mgfdQ/COSGr1VMkmLJskz4wnWa7RW3fa6xsN7yms0E7OWptqT63XNfmF6/Ub2v9itr1xW6uNsPzGmuWbVY0Z8umbsMyK5plloOZSVm9eIrsFPstGqbpUs/r5J0YbDNSHS4Wi6Lh0GS6+btGy1rfrmhrdLtx31hv04rWdKnhU7Nh+NqV+s1aRXOpb7k8o/z468dl9dQp8kT1jZX1bld0LiYj/5bnvrNQTzrB3LJMbX5xuf5GfUm7sTT/5tzSW9q1+lsVJmJ+acv128va4vVlbfH7Cws8O3SvUyqWabWr9do1baYj1mbOV7RquRzWFbclpcJuL4jCuMaEnNVa8qjnWY5dqmilpmPfp65n+FHaN7y1UmQy7tA+T7k00aOp8m4Hx/Iou+m4A/z8gefYrJGWOROqlcvDxWJZu7m8NF9bXnteVi9NkyAMKK+90rJ4M8LY9A2/7SUyjwsxlarNQjkh0GbC7DB8pedktTZNglKatWSvJUTP72YzWabPclIYz6AfTsjqN6dJcDbNA5dutqnnJ3Kf2814pL633UixYZnlnTPHZHV6mrw7wadFolzickKYGkLde0yOHtODgih2h0dMGO3h4KVHeijjUb7Zpm1qsqDeWDea4ZXp2JR9tm3D9raoS8042J89LhuKrF5QSUD4OLEJxLt8xWiu3XOdtm3yrGPC8KRosbHh2dpMN5MHgj0uq5dVEkyKBowVx/XjkaWhFSXdSo9qwlSPhNtbGCuoJZVYojl2++CJ8XQb/PbSrTi8J1tmeXVUVi+pJFDE6pLDzzPH0qvtnTZR9WkTZmmkoL6skk3RUBgSPDmabqJ7N4gqT9wHHr88LKuqSp5c5JOAK/AfI0LgRwUPIuQHPDT2G/Ub1DYt+x4Lcrdt29HllmH50WXTaW2s0zjlU7dl2cZ6PA16I2XQQ6pfT3haJcJ6UA2CilD42adicLwoq7UpEtziMUBt391urFLD7AslJrKoNyxExC76LDqiMqnBx98qytqtq/WlusZq0OZvdpxvD8nq61MkON3xyqKDPCr2eZSiuz9vgjuyrE5Nkcfhe01UIPoYEuK3U9lBRHDY/MQzv+m0Wpbf8OjmoLv8Mw94piCrtVL8mBaey6zTwlcYNjsFkSx08i6lWEcLYm2mK+y86r6Ul9WbJRK8sZsTyWxBpbAfZ3pHP9WptJticDsnq6US2XF4EAjlhEReCIie+vcIi1TzQggIvXZAL4TBjaysnj5NdtZ400KNhmV63auc0Khu/p4tilT97Q2a7lpSgd94e9+k+c2k80pd0Urdl6PwTSRcRZTEJn03I6tnz5Kdb4dLkbbLPhot6hum4Ru96ay4MOmRho30LPveOvUdO62tnSdIR+myVg3vwjZ90HnvEqcrl6RN5mRDZomslstk5xWhIV5zlbYMMZVJbUQo+3JNYONhJUr1jmEs/9Zl7Xw0CmxJPzIWrc3D5TkAAAAAAAAAAACOGFmSlYrh+v8LSfnisN0BAAAAAAAAAADAQVMgOUkh38iz9X9B+YWkfKb8p/I75dfKvyu/OGzfAAAAAAAAAAAAEDIkZyWVn7sYyWelk/ERi5FcIiEXstIkO5IxlI2VlUxWOpM8vhH+/v9zSfn8sFsEAAAAAAAAAACAA2Msw/4c38mHumXqs68+Gubr/6eS8vSwHQMAAAAAAAAAAMCBU8hJhGQyWP8DAAAAAAAAAABHmGj9z/b/Z5S7kvKvyt3DdgkAAAAAAAAAAPhqc02WJSKRYCKTfaiz/3qrz+pG27T86vmLr52zHZ/qFZ39H0N99qFus335Fb4//1JFTx7Wn+db9q9l48oy+6qsGlV2Ia2yYb7+/4Ok/AH/AQAAAAAAAAAAADgqyDlCSEaWw89slq3/pWOH7RUAAAAAAAAAAAD+koR///+0pJw+bE8AAAAAAAAAAIBDJPj7QlEiZ6eGhh5nM4l99luOu6ZvUNu07HvhH9P/m5T99ZX+Dfq8YEVnepbDtudXdMveaPvRbv1Ljyr6itFcu+c6bVbyrrHu0YpurDiuv0Q329TzaTfb8w2fspLsou3ps7FLekVvrtLm2oZj2bzqjVXDo/osU3R9vRKaehT9/f8/SsofD7ujAQAAAAAAAAAAcHCM5aYIib4lKBTC9f8XEk7/AwAAAAAAAAAAR4/w/H+8/v9UUj49bI8AAAAAAAAAAADwpTmRO0tI7zGEeP3/VFKeHraDAAAAAAAAAAAAOHAKuSFCsP4HAAAAAAAAAACONNH6n/39f/z/PwAAAAAAAAAA4GjDfv+P9T8AAAAAAAAAAHC0wfofAAAAAAAAAAA4+mD9DwAAAAAAAAAAHH3Y+f/M+E8kZX78J4ftCwAAAAAAAACAvyKCi/kRqTo0cYYQaedk4h/WuXTLsk1d15uOfZ+6nuFbjp3JPNQtU5+9WNHXmHS2v0BF95rOBtVnH8YqyQr0ipCcN/XZVx9V9FXL8x13W5/Vw1qMlXWqV/S77J/mzeqGd/0uK+hSw6fmnM/KBK/lun5PJdxYN3zq+QP8fi3F76jAl/S7U0vkc7PtutT2e91mv//PKD+TlI+Unx320AMAAAAAAAAAAH/dVIrVM2Rogkik//sN4WsFXc/kU5WjrwN6lXPh+v/3kvLfyu8Pu5UAAAAAAAAAAAD4v3A8f4YQIiz28/mUzFy0/n9fUj5W3j9srwEAAAAAAAAAABBSKpwh1Z5VfP+egHx+D71oO0Aux87/j8gfSEpt/B/G/mX0t6OvjPx8+DfDN4q/HBqRP5DfLPy58OPCuXwh9ySXzb5HPiNXpI+kJenv+j0rvFDgn/+oyurrp0hQtWyTPjCdZrtFbd9rrGw3+IGGBjvN0Ml+obZUn1uua/OLV+q3tQHa2vXFrkib6QoqmrNlU7dhmRUtTFtm2Tkhq9VTJJga4EAnR93D9r7MWmY5mJmU1YunyE6x36Jhmi71vE7eicE2I9XhYrEoGg5Nppu/a7Ss9e2Ktka3G/eN9TataNH5jobha1fqN2sVzaW+5fKM8uOvH5fVU6fIE9VnR1o6RjoXk5F/y3PfWagnnWBuWaY2v7hcf6O+pN1Ymn9zbukt7Vr9rQoT8WFart9e1havL2uL319Y4Nmhe51SsUyrXa3XrmkzHbE2c76iVcvlsK64LSkVJoJCEMY1JuSs1pJHPc9y7FJFKyXnAkv7hrdWikzGHdrnKZcmejRV3u3gWB5lNx13gJ8/8BybNdIyZ0K1cnm4WCxrN5eX5mvLa8/L6qVpEoQB5bVXWhZvRhibvuG3vUTmcSGmUrVZKCcE2kyYHYav9Jys1qZJUEqzluy1hOj53Wwmy/RZTgrjGfTDCVn95jQJzqZ54NLNNvX8RO5zuxmP1Pe2Gyk2LLO8c+aYrE5Pk3cn+LRIlEtcTghTQ6h7j8nRY3pQEMXu8IgJoz0cvPRID2U8yjfbtE1NFtQb60YzvDIdm7LPtm3Y3hZ1qRkH+7PHZUOR1QsqCQgfJzaBeJevGM21e67Ttk2edUwYnhQtNjY8W5vpZvJAsMdl9bJKgknRgLHiuH48sjS0oqRb6VFNmOqRcHsLYwW1pBJLNMduHzwxnm4jfiZFFXeePKujsnpJJYEiVpccfp45ll5t77SJqk+bMEsjBfVllWyKhsKQ4MnRdBPdu0FUeeI+8PjlYVlVVfLkIp8EXIH/GBECPyp4ECE/4KGx36jfoLZp2fdYkLtt244utwzLjy6bTmtjncYpn7otyzbW42nQGymDHlL9esLTKhHWg2oQVITCzz4Vg+NFWa1NkeAWjwFq++52Y5UaZl8oMZFFvWEhInbRZ9ERlUkNPv5WUdZuXa0v1TVWgzZ/s+N8e0hWX58iwemOVxYd5FGxz6MU3f15E9yRZXVqijwO32uiAtHHkBC/ncoOIoLD5iee+U2n1bL8hkc3B93ln3nAMwVZrZXix7TwXGadFr7CsNkpiGShk3cpxTpaEGszXWHnVfelvKzeLJHgjd2cSGYLKoX9ONM7+qlOpd0Ug9s5WS2VyI7Dg0AoJyTyQkD01L9HWKSaF0JA6LUDeiEMbmRl9fRpsrPGmxZqNCzT617lhEZ18/dsUaTqb2/QdNeSCvzG2/smzW8mnVfqilbqvhyFbyLhKqIkNum7GVk9e5bsfDtcirRd9tFoUd8wDd/oTWfFhUmPNGykZ9n31qnv2Glt7TxBOkqXtWp4F7bpg857lzhduSRtMicbMktktVwmO68IDfGaq7RliKlMaiNC2ZdrAhsPK1Gqdwxj+bcua+eTozCmvCtllTuS8ivljvIj5c7//zcaAAAAAAAAAADAVx89VyBELV7KZ0267htvv617euVt3acPfP2diu6+qr/zjvKxVCRq0cidyxcImSx+L5dbMTz6MNSa1ZurtLm24Vj8r/e59L7FVvL67IVHL2a4fimfEfTdqv5IkqQZMlmcy4mi+1WhivOPhpWnUlb5RFI+VT5XPlE+Oez+AgAAAAAAAAAAwDMg5wgh+WyOf+Zy+TCdyTBRMZcZG/qppBQcSXlPuTr+8fjW2PXR340ujPzH8DeKPyp+beif5cLQYsE57EYAAAD4ihMcf0lW56okqAlHpRrxV9Kd7fX9kpOpJ6f6SyZPbXWl2kwnr3tYjG3s49uHd+ovyGq1St69KByL6hbvz3kp9aBU0iDblpcwmr4feOBG4cFHnLqHm9hX+3yDJfvVQrytfdBOwHhTs09tf88tqJFeVGVyC6LYjx7dTO4mrL1YUG9ViRQe49lct3zaMNq+w9ONlDGr9udNSZI0JOEgIQ4S4iAhDhLiICEOEuIg4V/uIOGw8j9SVvmQKP+m/JfyofLhYb8gAgAAAAAAAAAAYFfG8kQlJM9/GZDNjebJJCH8IEEunw1TeZbiv/ofJUUuyvwvK+K0pQDQAQA="
+          }
+        },
+        "phases": [
+          {
+            "phase": "pi reopen and observe",
+            "latest": {
+              "text": "checkpoint",
+              "revision": 3
+            },
+            "rewind": {
+              "text": "r2"
+            },
+            "asOfFirst": {
+              "text": "r1"
+            },
+            "entries": [
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 2
+                },
+                "id": 7,
+                "conversationId": 2
+              },
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 1
+                },
+                "id": 3,
+                "conversationId": 2
+              }
+            ],
+            "task": {
+              "id": 6,
+              "conversationId": 2,
+              "kind": "audit1054.work",
+              "version": 1,
+              "input": {
+                "n": 7
+              },
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "start",
+                  "n": 7
+                }
+              }
+            },
+            "minted": 8
+          },
+          {
+            "phase": "pi reopen and observe the continued store",
+            "latest": {
+              "text": "after-cpp-leg",
+              "revision": 4
+            },
+            "rewind": {
+              "text": "r3"
+            },
+            "asOfFirst": {
+              "text": "r1"
+            },
+            "asOfSecond": {
+              "text": "r2"
+            },
+            "entries": [
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 3
+                },
+                "id": 9,
+                "conversationId": 2
+              },
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 2
+                },
+                "id": 7,
+                "conversationId": 2
+              },
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 1
+                },
+                "id": 3,
+                "conversationId": 2
+              }
+            ],
+            "task": {
+              "id": 6,
+              "conversationId": 2,
+              "kind": "audit1054.work",
+              "version": 1,
+              "input": {
+                "n": 7
+              },
+              "background": false,
+              "abortRequested": false,
+              "state": {
+                "status": "pending",
+                "checkpoint": {
+                  "phase": "start",
+                  "n": 7
+                }
+              }
+            },
+            "minted": 10
+          }
+        ],
+        "continuation": {
+          "third": 9
+        }
+      },
+      "normalizations": []
+    }
+  ]
+}

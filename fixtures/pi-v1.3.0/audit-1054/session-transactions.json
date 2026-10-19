@@ -1,0 +1,663 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1054",
+  "family": "audit-1054",
+  "capturedAt": "2026-10-19T19:57:03.655Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/session/session.ts:createSession,SessionImpl.commit,SessionImpl.close",
+    "packages/durable/src/session/transaction.ts:Transaction",
+    "packages/durable/src/session/observation.ts:CommittedWatch,CommittedStateSource",
+    "packages/durable/src/documents.ts:defineDoc,defineDocFamily,materializeDocument",
+    "packages/durable/src/entries.ts:defineEntry",
+    "packages/durable/test/session-documents.test.ts:Session document transactions",
+    "packages/durable/test/session-watches.test.ts:Session document watches"
+  ],
+  "scenarios": [
+    {
+      "name": "a commit that changes an entry and documents observes one committed revision",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "documentRetentionMs": 600000,
+        "operations": [
+          "create one ownerless conversation",
+          "append one audit1054.note entry and create four documents in one commit"
+        ]
+      },
+      "expected": {
+        "conversationId": 2,
+        "entry": {
+          "kind": "audit1054.note",
+          "data": {
+            "n": 1
+          },
+          "id": 3,
+          "conversationId": 2
+        },
+        "entryCommitSeq": 2,
+        "typedEntryIsNote": true,
+        "snapshots": {
+          "latest": {
+            "text": "hello",
+            "revision": 1
+          },
+          "counter": {
+            "count": 1
+          },
+          "memberAlpha": {
+            "seed": "seed-first",
+            "hits": 1
+          },
+          "rewind": {
+            "text": "v1"
+          }
+        },
+        "scannedEntries": [
+          {
+            "kind": "audit1054.note",
+            "data": {
+              "n": 1
+            },
+            "id": 3,
+            "conversationId": 2
+          }
+        ],
+        "documentRecord": {
+          "id": 4,
+          "kind": "audit1054.latest",
+          "scope": {
+            "kind": "conversation",
+            "conversationId": 2
+          },
+          "history": "latest",
+          "fork": "current",
+          "createdAt": 2
+        },
+        "publicationCount": 2,
+        "publications": [
+          {
+            "seq": 1,
+            "changes": [
+              {
+                "type": "conversation",
+                "id": 2,
+                "kind": null
+              }
+            ]
+          },
+          {
+            "seq": 2,
+            "changes": [
+              {
+                "type": "entry",
+                "id": 3,
+                "kind": null
+              },
+              {
+                "type": "document",
+                "recordId": 4,
+                "kind": "audit1054.latest",
+                "value": {
+                  "text": "hello",
+                  "revision": 1
+                },
+                "ops": [],
+                "source": null
+              },
+              {
+                "type": "document",
+                "recordId": 5,
+                "kind": "audit1054.counter",
+                "value": {
+                  "count": 1
+                },
+                "ops": [],
+                "source": null
+              },
+              {
+                "type": "document",
+                "recordId": 6,
+                "kind": "audit1054.member",
+                "value": {
+                  "seed": "seed-first",
+                  "hits": 1
+                },
+                "ops": [],
+                "source": null
+              },
+              {
+                "type": "document",
+                "recordId": 7,
+                "kind": "audit1054.rewind",
+                "value": {
+                  "text": "v1"
+                },
+                "ops": [],
+                "source": null
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a prepared draft is not observable before Storage settles its commit",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "heldAt": "public Storage.commit",
+        "operation": "a document draft and an entry append are prepared, then the commit is released"
+      },
+      "expected": {
+        "observationBefore": {
+          "text": "committed",
+          "revision": 1
+        },
+        "observationWhileHeld": {
+          "text": "committed",
+          "revision": 1
+        },
+        "publicationCountWhileHeld": 2,
+        "settledCommit": {
+          "rejected": false
+        },
+        "settledSnapshot": {
+          "text": "pending",
+          "revision": 2
+        },
+        "settledEntryIds": [
+          4
+        ],
+        "publicationCountAfterSettlement": 3,
+        "publicationsAfterSettlement": [
+          {
+            "seq": 1,
+            "changes": [
+              {
+                "type": "conversation",
+                "id": 2,
+                "kind": null
+              }
+            ]
+          },
+          {
+            "seq": 2,
+            "changes": [
+              {
+                "type": "document",
+                "recordId": 3,
+                "kind": "audit1054.latest",
+                "value": {
+                  "text": "committed",
+                  "revision": 1
+                },
+                "ops": [],
+                "source": null
+              }
+            ]
+          },
+          {
+            "seq": 3,
+            "changes": [
+              {
+                "type": "entry",
+                "id": 4,
+                "kind": null
+              },
+              {
+                "type": "document",
+                "recordId": 3,
+                "kind": "audit1054.latest",
+                "value": {
+                  "text": "pending",
+                  "revision": 2
+                },
+                "ops": [
+                  [
+                    "s",
+                    [
+                      "text"
+                    ],
+                    "pending"
+                  ],
+                  [
+                    "s",
+                    [
+                      "revision"
+                    ],
+                    2
+                  ]
+                ],
+                "source": null
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a failed transaction callback publishes nothing and leaves the Session usable",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "failure": "the commit callback appends an entry and mutates a document, then throws"
+      },
+      "expected": {
+        "observationBefore": {
+          "text": "baseline",
+          "revision": 1
+        },
+        "failure": {
+          "rejected": true,
+          "name": "Error",
+          "message": "callback failed"
+        },
+        "observationAfterFailure": {
+          "text": "baseline",
+          "revision": 1
+        },
+        "entriesAfterFailure": [],
+        "publicationCountAfterFailure": 2,
+        "publicationsAfterFailure": [
+          {
+            "seq": 1,
+            "changes": [
+              {
+                "type": "conversation",
+                "id": 2,
+                "kind": null
+              }
+            ]
+          },
+          {
+            "seq": 2,
+            "changes": [
+              {
+                "type": "document",
+                "recordId": 3,
+                "kind": "audit1054.latest",
+                "value": {
+                  "text": "baseline",
+                  "revision": 1
+                },
+                "ops": [],
+                "source": null
+              }
+            ]
+          }
+        ],
+        "recoveredSnapshot": {
+          "text": "after-failure",
+          "revision": 3
+        },
+        "publicationCountAfterRecovery": 3
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a failed Storage commit fails the Session and publishes nothing",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "failureInjection": "one public Storage.commit call throws before reaching MemoryStorage"
+      },
+      "expected": {
+        "observationBefore": {
+          "text": "baseline",
+          "revision": 1
+        },
+        "failure": {
+          "rejected": true,
+          "name": "Error",
+          "message": "disk vanished"
+        },
+        "publicationCountBefore": 2,
+        "publicationCountAfter": 2,
+        "publicationsAfter": [
+          {
+            "seq": 1,
+            "changes": [
+              {
+                "type": "conversation",
+                "id": 2,
+                "kind": null
+              }
+            ]
+          },
+          {
+            "seq": 2,
+            "changes": [
+              {
+                "type": "document",
+                "recordId": 3,
+                "kind": "audit1054.latest",
+                "value": {
+                  "text": "baseline",
+                  "revision": 1
+                },
+                "ops": [],
+                "source": null
+              }
+            ]
+          }
+        ],
+        "snapshotAfter": {
+          "rejected": true,
+          "name": "SessionFailed",
+          "message": "Session failed after a storage error; close and reopen it"
+        },
+        "commitAfter": {
+          "rejected": true,
+          "name": "SessionFailed",
+          "message": "Session failed after a storage error; close and reopen it"
+        },
+        "sessionEnd": {
+          "reason": "failed",
+          "errorMessage": "disk vanished"
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "document watches and states deliver only committed frames",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "watch": "one started watch is stopped; a second watch observes Session close"
+      },
+      "expected": {
+        "frames": [
+          {
+            "value": {
+              "text": "b",
+              "revision": 2
+            },
+            "ops": [
+              [
+                "s",
+                [
+                  "text"
+                ],
+                "b"
+              ],
+              [
+                "s",
+                [
+                  "revision"
+                ],
+                2
+              ]
+            ]
+          }
+        ],
+        "watchValueAfterCommit": {
+          "text": "b",
+          "revision": 2
+        },
+        "stateValueAfterCommit": {
+          "count": 2
+        },
+        "stateDisposed": true,
+        "stopped": {
+          "reason": "stopped"
+        },
+        "closedWatch": {
+          "reason": "session_closed"
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "rewindable history reads an entry revision and retirement keeps it addressable",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "history": "rewindable conversation document",
+        "cutoffs": "the two entry IDs created with each document revision"
+      },
+      "expected": {
+        "firstEntry": 3,
+        "secondEntry": 6,
+        "currentBeforeRetire": {
+          "text": "v2"
+        },
+        "asOfFirst": {
+          "text": "v1"
+        },
+        "asOfSecond": {
+          "text": "v2"
+        },
+        "asOfFirstAfterRetire": {
+          "text": "v1"
+        },
+        "publications": [
+          {
+            "seq": 4,
+            "changes": [
+              {
+                "type": "document",
+                "recordId": 4,
+                "kind": "audit1054.rewind",
+                "value": null,
+                "ops": [],
+                "source": null
+              },
+              {
+                "type": "document",
+                "recordId": 5,
+                "kind": "audit1054.latest",
+                "value": null,
+                "ops": [],
+                "source": null
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "forking a conversation copies as-of and current documents and leaves initial-only members absent",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "forkAt": "the first entry of the parent conversation",
+        "documentForkModes": [
+          "asOf",
+          "current",
+          "initial"
+        ]
+      },
+      "expected": {
+        "childConversationId": 8,
+        "parentRewind": {
+          "text": "v2"
+        },
+        "childRewind": {
+          "text": "v1"
+        },
+        "childLatestCurrent": {
+          "text": "c2",
+          "revision": 0
+        },
+        "childLatestInitialAfterAccess": {
+          "text": "initialized"
+        },
+        "copyChanges": [
+          {
+            "type": "conversation",
+            "id": 8,
+            "kind": null
+          },
+          {
+            "type": "document.copy",
+            "recordId": 9,
+            "kind": "audit1054.rewind",
+            "value": null,
+            "ops": [],
+            "source": {
+              "id": 4,
+              "at": 2
+            }
+          },
+          {
+            "type": "document.copy",
+            "recordId": 10,
+            "kind": "audit1054.latest",
+            "value": null,
+            "ops": [],
+            "source": {
+              "id": 5,
+              "at": "current"
+            }
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "table scans continue by cursor and family members initialize from their first seed",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "entries": 3,
+        "pageSize": 2,
+        "families": [
+          "alpha",
+          "beta"
+        ]
+      },
+      "expected": {
+        "entryIds": [
+          3,
+          4,
+          5
+        ],
+        "firstPage": {
+          "items": [
+            {
+              "kind": "audit1054.head",
+              "id": 5,
+              "conversationId": 2,
+              "head": 5
+            },
+            {
+              "kind": "audit1054.note",
+              "data": {
+                "n": 2
+              },
+              "id": 4,
+              "conversationId": 2
+            }
+          ],
+          "next": {
+            "after": 4,
+            "order": "descending"
+          }
+        },
+        "secondPage": {
+          "items": [
+            {
+              "kind": "audit1054.note",
+              "data": {
+                "n": 1
+              },
+              "id": 3,
+              "conversationId": 2
+            }
+          ]
+        },
+        "ascendingIds": [
+          3,
+          4,
+          5
+        ],
+        "headMarker": {
+          "kind": "audit1054.head",
+          "id": 5,
+          "conversationId": 2,
+          "head": 5
+        },
+        "conversations": {
+          "items": [
+            {
+              "id": 2
+            }
+          ]
+        },
+        "members": {
+          "alpha": {
+            "seed": "first-seed",
+            "hits": 2
+          },
+          "beta": {
+            "seed": "second-seed",
+            "hits": 0
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "closing seals admission and notifies close subscribers once",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "operationAfterClose": "Session.commit"
+      },
+      "expected": {
+        "closeNotifications": [
+          1
+        ],
+        "admissionAfterClose": {
+          "rejected": true,
+          "name": "Error",
+          "message": "Session is closed"
+        },
+        "sessionEnd": {
+          "reason": "closed"
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "document retention controls whether a committed document is reloaded from Storage",
+      "inputs": {
+        "backend": "MemoryStorage",
+        "configurations": [
+          "documentRetentionMs: 0",
+          "default 600000 ms"
+        ],
+        "operations": [
+          "commit count 1",
+          "commit count 2",
+          "snapshot"
+        ]
+      },
+      "expected": {
+        "retentionZero": {
+          "value": {
+            "count": 2
+          },
+          "reads": {
+            "document": 2,
+            "findDocument": 3
+          }
+        },
+        "defaultRetention": {
+          "value": {
+            "count": 2
+          },
+          "reads": {
+            "document": 0,
+            "findDocument": 1
+          }
+        }
+      },
+      "normalizations": []
+    }
+  ]
+}

@@ -1,0 +1,844 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1054",
+  "family": "audit-1054",
+  "capturedAt": "2026-10-19T19:57:03.655Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage.open,JsonlStorage.commit,JsonlStorage.recover",
+    "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage",
+    "packages/durable/src/env/index.ts:FileSystem",
+    "packages/durable/test/jsonl-storage.test.ts:Pico JsonlStorage publication and recovery"
+  ],
+  "scenarios": [
+    {
+      "name": "a JSONL commit appends every sidecar before the main marker",
+      "inputs": {
+        "backend": "JsonlStorage",
+        "commit": "one entry and one conversation document",
+        "observation": "public FileSystem append order"
+      },
+      "expected": {
+        "appendOrder": [
+          "doc-4.jsonl",
+          "main.jsonl"
+        ],
+        "files": [
+          {
+            "name": "doc-4.jsonl",
+            "bytes": 164,
+            "sha256": "5345f443b4c6257a084654776fbf2585a9f5b4eb619e885af0b3a320fc5e64a7",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":4,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"ordered\",\"revision\":1}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 2,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 4,
+                  "content": {
+                    "version": 1,
+                    "kind": "base",
+                    "value": {
+                      "text": "ordered",
+                      "revision": 1
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "main.jsonl",
+            "bytes": 399,
+            "sha256": "5b6b222dac9f27dd5e4352e2717032fd3c76691f194d8a5ca8233a3d06309fab",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"entry\",\"value\":{\"kind\":\"audit1054.note\",\"data\":{\"n\":1},\"id\":3,\"conversationId\":2}},{\"type\":\"document.create\",\"record\":{\"id\":4,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "entry",
+                    "value": {
+                      "kind": "audit1054.note",
+                      "data": {
+                        "n": 1
+                      },
+                      "id": 3,
+                      "conversationId": 2
+                    }
+                  },
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 4,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "mainMarker": {
+          "format": 1,
+          "type": "commit",
+          "seq": 2,
+          "writes": [
+            {
+              "type": "entry",
+              "value": {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 1
+                },
+                "id": 3,
+                "conversationId": 2
+              }
+            },
+            {
+              "type": "document.create",
+              "record": {
+                "id": 4,
+                "kind": "audit1054.latest",
+                "scope": {
+                  "kind": "conversation",
+                  "conversationId": 2
+                },
+                "history": "latest",
+                "fork": "current"
+              },
+              "ordinal": 0
+            }
+          ]
+        },
+        "sidecarRecord": {
+          "format": 1,
+          "type": "record",
+          "seq": 2,
+          "ordinal": 0,
+          "payload": {
+            "type": "document",
+            "id": 4,
+            "content": {
+              "version": 1,
+              "kind": "base",
+              "value": {
+                "text": "ordered",
+                "revision": 1
+              }
+            }
+          }
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "a JSONL checkpoint replaces a current-only sidecar and retirement removes it",
+      "inputs": {
+        "backend": "JsonlStorage",
+        "document": "latest-history conversation document",
+        "updates": [
+          "base one",
+          "delta two",
+          "checkpoint base",
+          "retire"
+        ]
+      },
+      "expected": {
+        "afterFirstBase": [
+          {
+            "name": "doc-3.jsonl",
+            "bytes": 160,
+            "sha256": "eedfe11053730cb56a59ba9d95b910194690ef4e8b3164288f4295070f1d9a2b",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"one\",\"revision\":0}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 2,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 3,
+                  "content": {
+                    "version": 1,
+                    "kind": "base",
+                    "value": {
+                      "text": "one",
+                      "revision": 0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "main.jsonl",
+            "bytes": 307,
+            "sha256": "c7d6cd37bdf2c0a64529b733654562186dac5f0b99f2a0f288b33d462fd1524d",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 3,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "afterDelta": [
+          {
+            "name": "doc-3.jsonl",
+            "bytes": 314,
+            "sha256": "240cd0860387f93086cd021fb3c077d5db6275cbac97cccb44e9e39476a17a78",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"one\",\"revision\":0}}}}\n{\"format\":1,\"type\":\"record\",\"seq\":3,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"delta\",\"ops\":[[\"s\",[\"text\"],\"two\"]]}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 2,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 3,
+                  "content": {
+                    "version": 1,
+                    "kind": "base",
+                    "value": {
+                      "text": "one",
+                      "revision": 0
+                    }
+                  }
+                }
+              },
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 3,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 3,
+                  "content": {
+                    "version": 1,
+                    "kind": "delta",
+                    "ops": [
+                      [
+                        "s",
+                        [
+                          "text"
+                        ],
+                        "two"
+                      ]
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "main.jsonl",
+            "bytes": 401,
+            "sha256": "dead5c93525a7078795aa64e61140e1f147199567c2db6c019f03fd484972ee8",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":3,\"writes\":[{\"type\":\"document.change\",\"id\":3,\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 3,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 3,
+                "writes": [
+                  {
+                    "type": "document.change",
+                    "id": 3,
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "afterCheckpoint": [
+          {
+            "name": "doc-3.jsonl",
+            "bytes": 167,
+            "sha256": "614591b28d1cbcded2608e9404736e54a3c5dd2c21aa5f972ae378d03d0968e4",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":4,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"checkpoint\",\"revision\":0}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 4,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 3,
+                  "content": {
+                    "version": 1,
+                    "kind": "base",
+                    "value": {
+                      "text": "checkpoint",
+                      "revision": 0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "main.jsonl",
+            "bytes": 495,
+            "sha256": "07fb6dc65b26f78ef6dc5ac8486174d285aaf76a7e374cd96963077c734b0027",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":3,\"writes\":[{\"type\":\"document.change\",\"id\":3,\"ordinal\":0}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":4,\"writes\":[{\"type\":\"document.change\",\"id\":3,\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 3,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 3,
+                "writes": [
+                  {
+                    "type": "document.change",
+                    "id": 3,
+                    "ordinal": 0
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 4,
+                "writes": [
+                  {
+                    "type": "document.change",
+                    "id": 3,
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "afterRetire": [
+          {
+            "name": "main.jsonl",
+            "bytes": 577,
+            "sha256": "dcf06cddd7a3f40a64a8bb34ebc1ab0401ba1927aedc383b012ab99cb98312ee",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":3,\"writes\":[{\"type\":\"document.change\",\"id\":3,\"ordinal\":0}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":4,\"writes\":[{\"type\":\"document.change\",\"id\":3,\"ordinal\":0}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":5,\"writes\":[{\"type\":\"document.retire\",\"id\":3}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 3,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 3,
+                "writes": [
+                  {
+                    "type": "document.change",
+                    "id": 3,
+                    "ordinal": 0
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 4,
+                "writes": [
+                  {
+                    "type": "document.change",
+                    "id": 3,
+                    "ordinal": 0
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 5,
+                "writes": [
+                  {
+                    "type": "document.retire",
+                    "id": 3
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    },
+    {
+      "name": "JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail",
+      "inputs": {
+        "backend": "JsonlStorage",
+        "simulatedCrash": "after close, a torn main marker and a complete but unconfirmed sidecar record are appended to the files"
+      },
+      "expected": {
+        "filesBefore": [
+          {
+            "name": "doc-3.jsonl",
+            "bytes": 161,
+            "sha256": "9996025d4cb51787b8cbbf474c47b0a75f0e5dfa4dc75ca8581961cc3eb848e4",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"kept\",\"revision\":0}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 2,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 3,
+                  "content": {
+                    "version": 1,
+                    "kind": "base",
+                    "value": {
+                      "text": "kept",
+                      "revision": 0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "main.jsonl",
+            "bytes": 307,
+            "sha256": "c7d6cd37bdf2c0a64529b733654562186dac5f0b99f2a0f288b33d462fd1524d",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 3,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "filesAfterRecovery": [
+          {
+            "name": "doc-3.jsonl",
+            "bytes": 161,
+            "sha256": "9996025d4cb51787b8cbbf474c47b0a75f0e5dfa4dc75ca8581961cc3eb848e4",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"kept\",\"revision\":0}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 2,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 3,
+                  "content": {
+                    "version": 1,
+                    "kind": "base",
+                    "value": {
+                      "text": "kept",
+                      "revision": 0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "main.jsonl",
+            "bytes": 307,
+            "sha256": "c7d6cd37bdf2c0a64529b733654562186dac5f0b99f2a0f288b33d462fd1524d",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 3,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "recovered": {
+          "text": "kept",
+          "revision": 0
+        }
+      },
+      "normalizations": []
+    },
+    {
+      "name": "JSONL refuses a main marker whose confirmed sidecar record is missing",
+      "inputs": {
+        "backend": "JsonlStorage",
+        "corruption": "delete one document sidecar after a committed close"
+      },
+      "expected": {
+        "missingSidecar": "doc-3.jsonl",
+        "open": {
+          "rejected": true,
+          "name": "JsonlCorruptionError",
+          "message": "Missing confirmed sidecar record doc-3.jsonl at sequence 2"
+        }
+      },
+      "normalizations": [
+        "temp-dir path in the error is not recorded"
+      ]
+    },
+    {
+      "name": "a JSONL main-marker I/O failure poisons the instance while reopen recovers the published prefix",
+      "inputs": {
+        "backend": "JsonlStorage",
+        "failureInjection": "the next public FileSystem append to main.jsonl returns a file error"
+      },
+      "expected": {
+        "failure": {
+          "rejected": true,
+          "name": "JsonlStoragePoisonedError",
+          "message": "JSONL storage is poisoned and must be reopened"
+        },
+        "readAfterFailure": {
+          "rejected": true,
+          "name": "JsonlStoragePoisonedError",
+          "message": "JSONL storage is poisoned and must be reopened"
+        },
+        "sessionEnd": {
+          "reason": "failed",
+          "errorMessage": "JSONL storage is poisoned and must be reopened"
+        },
+        "filesAfterRecovery": [
+          {
+            "name": "main.jsonl",
+            "bytes": 89,
+            "sha256": "1fcbb982a87a1e53eb573319e42d52f47316a24b8d882a9dc313e44cf2756260",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ],
+        "entriesAfterRecovery": []
+      },
+      "normalizations": []
+    },
+    {
+      "name": "JSONL fsync flushes sidecar bytes before the main marker is appended",
+      "inputs": {
+        "backend": "JsonlStorage",
+        "options": {
+          "fsync": true
+        },
+        "commit": "one conversation document"
+      },
+      "expected": {
+        "appendOrder": [
+          "doc-3.jsonl",
+          "main.jsonl"
+        ],
+        "flushOrder": [
+          "doc-3.jsonl"
+        ],
+        "files": [
+          {
+            "name": "doc-3.jsonl",
+            "bytes": 164,
+            "sha256": "ab8a359057c5608da3096eebf2e0dafb200651c5825d31bfe445c37ae28244ff",
+            "text": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"text\":\"fsynced\",\"revision\":0}}}}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "record",
+                "seq": 2,
+                "ordinal": 0,
+                "payload": {
+                  "type": "document",
+                  "id": 3,
+                  "content": {
+                    "version": 1,
+                    "kind": "base",
+                    "value": {
+                      "text": "fsynced",
+                      "revision": 0
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "name": "main.jsonl",
+            "bytes": 307,
+            "sha256": "c7d6cd37bdf2c0a64529b733654562186dac5f0b99f2a0f288b33d462fd1524d",
+            "text": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":2}}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"audit1054.latest\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":2},\"history\":\"latest\",\"fork\":\"current\"},\"ordinal\":0}]}\n",
+            "lines": [
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 1,
+                "writes": [
+                  {
+                    "type": "conversation",
+                    "value": {
+                      "id": 2
+                    }
+                  }
+                ]
+              },
+              {
+                "format": 1,
+                "type": "commit",
+                "seq": 2,
+                "writes": [
+                  {
+                    "type": "document.create",
+                    "record": {
+                      "id": 3,
+                      "kind": "audit1054.latest",
+                      "scope": {
+                        "kind": "conversation",
+                        "conversationId": 2
+                      },
+                      "history": "latest",
+                      "fork": "current"
+                    },
+                    "ordinal": 0
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "normalizations": []
+    }
+  ]
+}

@@ -1,0 +1,192 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1054",
+  "family": "audit-1054",
+  "capturedAt": "2026-10-19T19:57:03.655Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/storage/memory.ts:MemoryStorage",
+    "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage",
+    "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage",
+    "packages/durable/src/types.ts:Storage,Session,Cursor,Page",
+    "packages/durable/src/testing/storage-conformance.ts:registerStorageConformance",
+    "packages/durable/test/jsonl-storage.test.ts:JsonlStorage conformance across reopen",
+    "packages/durable/test/sqlite-storage.test.ts:SqliteStorage conformance across reopen",
+    "packages/durable/test/memory-storage.test.ts:MemoryStorage conformance"
+  ],
+  "scenarios": [
+    {
+      "name": "the same public operation yields the same records on memory, JSONL and SQLite",
+      "inputs": {
+        "backends": [
+          "MemoryStorage",
+          "JsonlStorage",
+          "SqliteStorage"
+        ],
+        "operations": [
+          "create a conversation",
+          "append three entries including a self head marker",
+          "create a latest document and a rewindable document",
+          "create a pending task",
+          "update both documents",
+          "scan two pages of entries by cursor",
+          "read the head marker, task and as-of document",
+          "close and, for file backends, reopen and continue reading"
+        ]
+      },
+      "expected": {
+        "beforeReopen": {
+          "conversationId": 2,
+          "ids": {
+            "first": 3,
+            "second": 4,
+            "headed": 5,
+            "task": 8
+          },
+          "latest": {
+            "text": "second",
+            "revision": 0
+          },
+          "rewind": {
+            "text": "r2"
+          },
+          "asOfFirst": {
+            "text": "r1"
+          },
+          "firstPage": {
+            "items": [
+              {
+                "kind": "audit1054.head",
+                "id": 5,
+                "conversationId": 2,
+                "head": 5
+              },
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 2
+                },
+                "id": 4,
+                "conversationId": 2
+              }
+            ],
+            "next": {
+              "after": 4,
+              "order": "descending"
+            }
+          },
+          "secondPage": {
+            "items": [
+              {
+                "kind": "audit1054.note",
+                "data": {
+                  "n": 1
+                },
+                "id": 3,
+                "conversationId": 2
+              }
+            ]
+          },
+          "headMarker": {
+            "kind": "audit1054.head",
+            "id": 5,
+            "conversationId": 2,
+            "head": 5
+          },
+          "task": {
+            "id": 8,
+            "conversationId": 2,
+            "kind": "audit1054.work",
+            "version": 1,
+            "input": {
+              "n": 5
+            },
+            "background": false,
+            "abortRequested": false,
+            "state": {
+              "status": "pending",
+              "checkpoint": {
+                "phase": "start",
+                "n": 5
+              }
+            }
+          }
+        },
+        "reopenedObservation": {
+          "latest": {
+            "text": "second",
+            "revision": 0
+          },
+          "rewind": {
+            "text": "r2"
+          },
+          "asOfFirst": {
+            "text": "r1"
+          },
+          "entries": [
+            {
+              "kind": "audit1054.head",
+              "id": 5,
+              "conversationId": 2,
+              "head": 5
+            },
+            {
+              "kind": "audit1054.note",
+              "data": {
+                "n": 2
+              },
+              "id": 4,
+              "conversationId": 2
+            },
+            {
+              "kind": "audit1054.note",
+              "data": {
+                "n": 1
+              },
+              "id": 3,
+              "conversationId": 2
+            }
+          ],
+          "task": {
+            "id": 8,
+            "conversationId": 2,
+            "kind": "audit1054.work",
+            "version": 1,
+            "input": {
+              "n": 5
+            },
+            "background": false,
+            "abortRequested": false,
+            "state": {
+              "status": "pending",
+              "checkpoint": {
+                "phase": "start",
+                "n": 5
+              }
+            }
+          },
+          "mintedAfterReopen": 9
+        },
+        "memory": {
+          "reopened": false
+        },
+        "jsonl": {
+          "reopened": true
+        },
+        "sqlite": {
+          "reopened": true
+        }
+      },
+      "normalizations": []
+    }
+  ]
+}
