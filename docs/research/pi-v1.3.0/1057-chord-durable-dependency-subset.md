@@ -11,9 +11,10 @@ capabilities** in seven families: Context/cancellation, document transactions an
 delta tracking/application, revisions, replicated state, strict JSON, and bounded output. The
 remaining five Chord rows are unrelated plugin/host/RPC/cluster/cell surfaces and are bounded out
 under ADR 0075. The audit carries **45 upstream-captured rows**, **8 deliberately unverified gaps**,
-and **5 not-applicable exclusions**. No row is marked `verified` before serial registry
-registration. The evidence bundle contains **33 genuine frozen public-path scenarios** in five
-artifacts; all were captured from a private clean checkout at
+and **5 not-applicable exclusions**. No row is marked `verified`: serial registry registration
+proves only that the committed bundle is intact, and a `verified` row requires a committed C++
+comparison against these scenarios. The evidence bundle contains **33 genuine frozen public-path
+scenarios** in five artifacts; all were captured from a private clean checkout at
 `71023aec1546d6d677a65669c5665c0927ce0dd0` with exact observed values. The durable transaction
 evidence includes rollback, committed-revision/sequence observation, a stale prepared revision, and
 a definition-version mismatch, so a full-snapshot-only substitute cannot satisfy the delta/revision
@@ -138,7 +139,7 @@ uses `RETIREMENT_OPERATIONS = [["r", null]]` for retirement.
 | Typed document state | `session.ts:SessionImpl.documentState`; `state.ts:replicatedState,AttachedReplicatedState`; `session-watches.test.ts:preserves commit Context values without inheriting producer cancellation`; `replicated-state.test.ts:hydrates at sequence zero when attaching after existing commits` | `SessionImpl.documentState`; `CommittedStateSource` | `document-transaction.json` document-state scenario |
 | Immutable historical snapshots | `session.ts:SessionImpl.snapshot`; `transaction.ts:Prepared.value`; `session-documents.test.ts:returns shared immutable snapshots…` | `SessionImpl.snapshot/snapshotAsOf` | `document-transaction.json` snapshots scenario |
 | Retirement | `observation.ts:RETIREMENT_OPERATIONS`; `session-watches.test.ts:delivers retirement and does not follow recreation` | `SessionImpl.watchDoc`; `CommittedWatch` | `document-transaction.json` retirement scenario |
-| Fatal storage failure | `session.ts:#runCommit`; `transaction.ts:#abortChanges`; `session-documents.test.ts:fails the Session after a Storage failure and publishes nothing` | `SessionImpl.commit/snapshot` | `document-transaction.json` storage-failure scenario |
+| Fatal storage failure | `session.ts:#runCommit`; `transaction.ts:Transaction.#abortChanges`; `session-documents.test.ts:fails the Session after a Storage failure and publishes nothing` | `SessionImpl.commit/snapshot` | `document-transaction.json` storage-failure scenario |
 | Pre-start buffering/serialization | `observation.ts:CommittedWatch.start`; `session-watches.test.ts:keeps the acquisition revision until start…; serializes callbacks…` | `SessionImpl.watchDoc`; `CommittedWatch` | `replicated-state.json` watch-buffer scenario |
 | Pending-frame overflow | `observation.ts:CommittedWatch`; `state.ts:StateSubscriber.push`; `session-watches.test.ts:collapses 101 pending commits to one root replacement` | `CommittedWatch` | `replicated-state.json` watch-overflow scenario |
 | Acquisition cancellation | `session.ts:SessionImpl.watchDoc`; `context/index.ts:awaitWithContext` | `SessionImpl.watchDoc` | `context-cancellation.json` acquisition scenario |
@@ -265,14 +266,14 @@ exists in the current tree. The relevant existing mechanics are:
 
 | Required obligation | Existing C++ mechanic | Limit |
 | --- | --- | --- |
-| Parent/child cancellation propagation | `src/support/CancellationBridge.hpp:CancellationSignalBridge` bridges `std::stop_token` to an Asio `cancellation_signal`; tests in `ToolCallExecutorTest.cpp` cover sequential/parallel cancellation | No keyed Context, no cancellation reason layering, no independent child scope API |
-| Waiter-only cancellation | `interruptible_sleep(duration, stop_token, message)` returns `ErrorCode::Cancelled` and leaves the timer/work producer alone; `ToolCallExecutorTest.cpp` covers cancellation boundaries | Only a sleep helper; no generic awaitable wait or `withoutAbortSignal` cleanup overlay |
+| Parent/child cancellation propagation | `src/support/CancellationBridge.hpp:CancellationSignalBridge` bridges `std::stop_token` to an Asio `cancellation_signal`; tests in `tests/agent/ToolCallExecutorTest.cpp` cover sequential/parallel cancellation | No keyed Context, no cancellation reason layering, no independent child scope API |
+| Waiter-only cancellation | `interruptible_sleep(duration, stop_token, message)` returns `ErrorCode::Cancelled` and leaves the timer/work producer alone; `tests/agent/ToolCallExecutorTest.cpp` covers cancellation boundaries | Only a sleep helper; no generic awaitable wait or `withoutAbortSignal` cleanup overlay |
 | Detached cleanup / close | `withoutAbortSignal` has no C++ equivalent; current `AgentSession` owns lifecycle directly | A cancelled close currently has no generic detached cleanup path; must not abort storage work |
-| Durable transaction/document observation | `ProjectionStream.hpp` (ADR 0052) provides Base + ordered value-bearing patches and mailbox resync; `ProjectionStreamTest.cpp` covers attach/convergence/overflow | Projection is an in-process read-model stream, not a document revision source: no document identity, definition version, `Op` batch, revision adoption, stale preparation, or storage durability |
+| Durable transaction/document observation | `src/coding_agent/include/cch/coding_agent/ProjectionStream.hpp` (ADR 0052) provides Base + ordered value-bearing patches and mailbox resync; `tests/coding_agent/ProjectionStreamTest.cpp` covers attach/convergence/overflow | Projection is an in-process read-model stream, not a document revision source: no document identity, definition version, `Op` batch, revision adoption, stale preparation, or storage durability |
 | Delta tracking/application | None. `support::JsonValue` is a value carrier only; no `Draft`, `Tracker`, `Prepared`, `apply`/`applyImmutable`/`applyImmutableBatches` | Projection `apply_projection_patches` is not a substitute: it replaces read-model slices, does not apply durable JSON operations or preserve revision identity |
 | Replicated state | None. `TaskStore`/`TaskScheduler` are task records/scheduling, not replicated document state | No source attachment, snapshot cursor, gap handling, `onError`, or hydration/update delivery |
-| Strict JSON | `support::JsonValue` + `read_json`/`write_json`; `JsonValueIoTest.cpp` pins Glaze-compatible parsing/serialization | Parser is not a strict JSON-value validator (trailing content tolerated), writer maps non-finite to `null`, object keys are sorted and `undefined` is unrepresentable |
-| Bounded output | `BoundedText.hpp` (`bounded_utf8`, `utf8_tail_start`, `bounded_utf8_tail`) and `OutputLimiter.hpp`; `BoundedTextTest.cpp`/`OutputLimiterTest.cpp` cover UTF-8 boundaries and head/tail truncation | No Chord `bytes/droppedBytes/droppedLines` result, no incremental `OutputBuffer`, no `Progress` pacing; these are analogous mechanics, not interchangeable contracts |
+| Strict JSON | `support::JsonValue` + `read_json`/`write_json`; `tests/support/JsonValueIoTest.cpp` pins Glaze-compatible parsing/serialization | Parser is not a strict JSON-value validator (trailing content tolerated), writer maps non-finite to `null`, object keys are sorted and `undefined` is unrepresentable |
+| Bounded output | `src/support/include/cch/support/BoundedText.hpp` (`bounded_utf8`, `utf8_tail_start`, `bounded_utf8_tail`) and `src/support/include/cch/support/OutputLimiter.hpp`; `tests/support/BoundedTextTest.cpp`/`tests/support/OutputLimiterTest.cpp` cover UTF-8 boundaries and head/tail truncation | No Chord `bytes/droppedBytes/droppedLines` result, no incremental `OutputBuffer`, no `Progress` pacing; these are analogous mechanics, not interchangeable contracts |
 | Progress rate | None | Only the frozen constant is captured; pacing behavior remains unverified |
 
 No existing mechanic is accepted as an empty owner or substitute engine. In particular,
@@ -353,8 +354,9 @@ The eight unverified required rows are:
 8. `output:progress` — throttled `Progress` pacing/timing.
 
 These are recorded as `unverified`, never as Deferred or excluded. The audit also has no row marked
-`verified`: `upstream-captured` is the strongest status available before serial registration, and
-the eight gaps remain visible.
+`verified`: `upstream-captured` records a bundle-pinned frozen observation, and a row becomes
+`verified` only when a committed C++ comparison accepts the same scenario; the eight gaps remain
+visible.
 
 ## Preserved constraints
 

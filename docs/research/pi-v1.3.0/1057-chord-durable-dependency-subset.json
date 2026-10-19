@@ -557,7 +557,7 @@
       "capability": "Fatal storage failure",
       "operation": "A storage failure publishes no partial commit and ends the Session; later snapshots fail with a Session-failed error.",
       "source": [
-        "packages/durable/src/session/session.ts:SessionImpl.#runCommit; packages/durable/src/session/transaction.ts:#abortChanges",
+        "packages/durable/src/session/session.ts:SessionImpl.#runCommit; packages/durable/src/session/transaction.ts:Transaction.#abortChanges",
         "packages/durable/test/session-documents.test.ts:fails the Session after a Storage failure and publishes nothing"
       ],
       "membership": "supported",
@@ -742,7 +742,7 @@
       "capability": "Monotonic tracked revisions",
       "operation": "A tracker exposes its current revision and adopts a prepared change by pointer swap, incrementing the revision.",
       "source": [
-        "packages/chord/src/delta/tracker.ts:Tracker.revision,Tracker.adopt; packages/chord/test/delta.test.ts:keeps a draft alive across await and adopts only a prepared change"
+        "packages/chord/src/delta/tracker.ts:track,Tracker.revision,Tracker.adopt; packages/chord/test/delta.test.ts:keeps a draft alive across await and adopts only a prepared change"
       ],
       "membership": "supported",
       "implementation": "missing",
@@ -1477,7 +1477,7 @@
       "owner": "cch_chord",
       "consumer": "none: not imported by packages/durable/src or its tests",
       "boundary": "Unrelated plugin/host/RPC surface; ADR 0075 says it does not become a target solely because durable imports Chord.",
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": null,
       "scenario": null,
       "evidence": null,
       "gaps": [],
@@ -1499,7 +1499,7 @@
       "owner": "cch_chord",
       "consumer": "none: no durable import",
       "boundary": "Unrelated RPC surface.",
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": null,
       "scenario": null,
       "evidence": null,
       "gaps": [],
@@ -1521,7 +1521,7 @@
       "owner": "cch_chord",
       "consumer": "none: no durable import",
       "boundary": "Cloudflare/deployment-specific host responsibilities; generic durable storage/transaction semantics are not excluded.",
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": null,
       "scenario": null,
       "evidence": null,
       "gaps": [],
@@ -1543,7 +1543,7 @@
       "owner": "cch_chord",
       "consumer": "none: no durable import",
       "boundary": "Unrelated schema/tooling surface; durable's own SQLite schema remains in scope.",
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": null,
       "scenario": null,
       "evidence": null,
       "gaps": [],
@@ -1565,7 +1565,7 @@
       "owner": "cch_chord",
       "consumer": "none: no durable import",
       "boundary": "Node host adaptation; native C++ Linux durable host responsibilities remain in cch_durable scope.",
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": null,
       "scenario": null,
       "evidence": null,
       "gaps": [],
