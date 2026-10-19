@@ -1062,8 +1062,7 @@
       "consumer": "Replay callers and tests.",
       "upstreamEvidence": {
         "sources": [
-          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start",
-          "packages/codemode/test/deterministic.test.ts:rejects a call that is not waiting and a result number used twice"
+          "packages/codemode/src/runtime/execution.ts:CodemodeSandboxBase.start"
         ],
         "scenarios": [
           "start rejects invalid start times, seeds and duplicate script names",
