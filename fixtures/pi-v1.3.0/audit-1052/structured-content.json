@@ -1,0 +1,180 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1052",
+  "family": "audit-1052",
+  "capturedAt": "2026-10-19T17:56:18.012Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/client.ts:McpClient.callTool,validateCallToolResult",
+    "packages/mcp/src/protocol/content.ts:CallToolResult,toLlmContent",
+    "packages/coding-agent/src/extensions/mcp/tools.ts:convertMcpResult,createMcpResultSchema",
+    "packages/mcp/test/client.test.ts:accepts structured content that is not an object",
+    "packages/mcp/test/content.test.ts:falls back to the structured content as JSON when there are no blocks",
+    "packages/coding-agent/test/mcp-extension.test.ts:convertMcpResult"
+  ],
+  "scenarios": [
+    {
+      "name": "client preserves an array structuredContent when content is absent",
+      "inputs": {
+        "tool": "array",
+        "content": "absent",
+        "structuredContent": [
+          1,
+          {
+            "x": true
+          },
+          null
+        ]
+      },
+      "expected": {
+        "structuredContent": [
+          1,
+          {
+            "x": true
+          },
+          null
+        ],
+        "content": [],
+        "isError": null
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "client preserves a primitive structuredContent",
+      "inputs": {
+        "tool": "primitive",
+        "content": [],
+        "structuredContent": 7
+      },
+      "expected": {
+        "structuredContent": 7,
+        "content": [],
+        "isError": null
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "client preserves a null structuredContent",
+      "inputs": {
+        "tool": "null",
+        "content": [],
+        "structuredContent": null
+      },
+      "expected": {
+        "structuredContent": null,
+        "content": [],
+        "isError": null
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "client and tool conversion preserve an error result",
+      "inputs": {
+        "tool": "error",
+        "content": [
+          {
+            "type": "text",
+            "text": "tool failed"
+          }
+        ],
+        "isError": true,
+        "meta": {
+          "traceId": "t-1"
+        }
+      },
+      "expected": {
+        "client": {
+          "isError": true,
+          "content": [
+            {
+              "type": "text",
+              "text": "tool failed"
+            }
+          ],
+          "meta": {
+            "traceId": "t-1"
+          }
+        },
+        "converted": {
+          "content": [
+            {
+              "type": "text",
+              "text": "tool failed"
+            }
+          ],
+          "isError": true,
+          "structuredContent": {
+            "content": [
+              {
+                "type": "text",
+                "text": "tool failed"
+              }
+            ],
+            "isError": true
+          }
+        }
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "tool conversion serializes structuredContent into model text",
+      "inputs": {
+        "tool": "array",
+        "content": [],
+        "structuredContent": [
+          {
+            "id": 1
+          },
+          {
+            "id": 2
+          }
+        ]
+      },
+      "expected": {
+        "content": [
+          {
+            "type": "text",
+            "text": "[\n  {\n    \"id\": 1\n  },\n  {\n    \"id\": 2\n  }\n]"
+          }
+        ],
+        "structuredContent": {
+          "content": [],
+          "structuredContent": [
+            {
+              "id": 1
+            },
+            {
+              "id": 2
+            }
+          ]
+        },
+        "isError": null
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    }
+  ]
+}

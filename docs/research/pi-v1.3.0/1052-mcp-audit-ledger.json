@@ -1,0 +1,827 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-ledger/1",
+  "title": "MCP protocol, OAuth and application integration capability ledger",
+  "ticket": "1052",
+  "baseline": {
+    "name": "pi-v1.3.0",
+    "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+    "platform": "linux-x86_64-glibc"
+  },
+  "statusVocabulary": {
+    "membership": [
+      "supported",
+      "excluded",
+      "no-decision"
+    ],
+    "implementation": [
+      "implemented",
+      "partial",
+      "missing",
+      "not-applicable"
+    ],
+    "verification": [
+      "verified",
+      "upstream-captured",
+      "unverified",
+      "not-applicable"
+    ]
+  },
+  "evidence": {
+    "family": "audit-1052",
+    "manifest": "fixtures/pi-v1.3.0/audit-1052/manifest.json",
+    "manifestSha256": "15acbbfe81dbb9a226f6e5f963953b354b5823d892868a2d134fb5418c629eb9",
+    "capture": "fixtures/pi-v1.3.0/audit-1052/capture-1052.mts",
+    "artifacts": {
+      "structured-content.json": {
+        "scenarios": 5,
+        "sha256": "3061724d83492738e9f0d29fd089b5fc8d940be09901339a8183319637b204e5"
+      },
+      "oauth-lifecycle.json": {
+        "scenarios": 7,
+        "sha256": "21d20a43ddb027e1ce322d9632164776c7d6c8b5144ae8f01bee929a0eee2c47"
+      },
+      "transports.json": {
+        "scenarios": 6,
+        "sha256": "2edd0f5d56b27af96c06ccb6e295139ac58c898bc58c62500f69b3d461a66504"
+      },
+      "application-initialization.json": {
+        "scenarios": 7,
+        "sha256": "71d447812fc6fbf5c95ddc423552e8dd1fa1c879924886f6987d531876346cb8"
+      }
+    },
+    "scenarioCount": 25
+  },
+  "rows": [
+    {
+      "id": "mcp-client-lifecycle",
+      "capability": "MCP client connect, initialize and close",
+      "operation": "Create an `McpClient`, run the `initialize` handshake, expose connection state and server capabilities, and close the transport; closing must not wait for unrelated background work. The application layer wraps this as `McpServerConnection` with `connecting`, `connected`, `disconnected`, `needs-auth`, `failed` and `closed` states.",
+      "consumer": "Generic `McpClient` and application `McpServerConnection`/`McpSessionManager`; transport callers do not own JSON-RPC state themselves.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient.connect,McpClient.close,McpClient.connectionState",
+          "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.getClient,McpServerConnection.close",
+          "packages/coding-agent/test/mcp-extension.test.ts:McpExtension"
+        ],
+        "scenarios": [
+          "closing while initialize is pending returns without waiting",
+          "closing while a token refresh is in flight does not wait for the refresh"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpStdioClient.{hpp,cpp}`, `McpHttpClient.{hpp,cpp}`, `src/coding_agent/runtime/McpProductionAdapters.cpp:ProductionMcpConnection::close`; `McpSessionManager::start`.",
+      "cppEvidence": "`McpHttpSessionTest.cpp` and `McpStdioSessionTest.cpp` cover handshakes; `McpSessionIntegrationTest.cpp:237` asserts Pike resolves the connect phase before session creation. Pike has no background connect, retry/backoff or explicit pending-initialize close test; its assembly awaits every enabled server before returning.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Port the v1.3.0 `McpServerConnection` state/retry shape and make close abort a pending initialize and any refresh wait. Add a C++ test that starts a never-answering initialize, closes, and asserts prompt/creation does not block; distinguish close-during-connect from close-after-connected.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-tools-list",
+      "capability": "MCP tools/list pagination and naming",
+      "operation": "Follow `nextCursor` across pages, validate each tool, and assign order-independent `mcp__<server>__<tool>` names with the 64-character hash suffix on collisions.",
+      "consumer": "Application tool surface and codemode/tool_search catalogs; direct callers of `McpClient.listTools`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient.listTools,McpClient.listAll",
+          "packages/mcp/src/protocol/types.ts:Tool",
+          "packages/coding-agent/src/extensions/mcp/index.ts:createMcpToolName",
+          "packages/mcp/test/client.test.ts:listTools"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpExtensionToolSource.cpp:list_mcp_server_tools,assign_mcp_tool_names`; `src/coding_agent/runtime/McpSessionManager.cpp:register_tools`.",
+      "cppEvidence": "`McpToolsListTest.cpp:118` covers pagination and a terminal null/empty cursor; `McpToolNameTest.cpp:38-57` covers sanitization and hash suffixes; `McpHttpSessionTest.cpp:321` covers a named HTTP listing. No v1.3.0 differential scenario is captured here.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep the implementation; add a public differential scenario only when the parity suite can name the same tool/cursor inputs. Do not fold tool naming into a generic JSON-RPC client test.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-tools-call-structured",
+      "capability": "MCP tools/call arbitrary structured content",
+      "operation": "`tools/call` accepts `content` as an array of content blocks and `structuredContent` as any JSON value (array, primitive or null); a missing `content` defaults to `[]`, and `isError` is preserved.",
+      "consumer": "`McpClient.callTool`, the application tool wrapper, and codemode's script result channel.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient.callTool,validateCallToolResult",
+          "packages/mcp/src/protocol/content.ts:CallToolResult,toLlmContent",
+          "packages/coding-agent/src/extensions/mcp/tools.ts:convertMcpResult,createMcpResultSchema",
+          "packages/mcp/test/client.test.ts:accepts structured content that is not an object",
+          "packages/coding-agent/test/mcp-extension.test.ts:convertMcpResult"
+        ],
+        "scenarios": [
+          "client preserves an array structuredContent when content is absent",
+          "client preserves a primitive structuredContent",
+          "client preserves a null structuredContent",
+          "client and tool conversion preserve an error result"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpExtensionToolSource.cpp:convert_mcp_tools_call_result,create_mcp_result_schema`; `src/coding_agent/runtime/McpProductionAdapters.cpp:AgentMcpToolSurface::register_tool`.",
+      "cppEvidence": "`McpToolsListTest.cpp:103` converts an object result with a `content` array. The converter rejects a missing/non-array `content` (`sent a tools/call result without content`), so a structured-only result accepted by v1.3.0 is a hard error in Pike; it does not test array, primitive or null `structuredContent`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Accept an absent `content` as `[]`, validate arbitrary `structuredContent`, and add the captured array/primitive/null/error cases to the MCP result test. Keep `isError` separate from protocol errors.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-tool-result-conversion",
+      "capability": "MCP result conversion to model and script channels",
+      "operation": "Convert text/image/embedded-resource blocks to model content, render resource links and binary resources as pi text, middle-truncate combined text over 20 KiB with the output-file warning, and expose the full `CallToolResult` (minus `_meta`) to codemode separately from renderer details.",
+      "consumer": "Model-facing MCP tools, codemode nested calls, TUI renderers and the output-file spill path.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/tools.ts:convertMcpResult,toModelContent,limitMcpContent",
+          "packages/coding-agent/src/extensions/mcp/tools.ts:createMcpResultSchema",
+          "packages/coding-agent/test/mcp-extension.test.ts:convertMcpResult"
+        ],
+        "scenarios": [
+          "tool conversion serializes structuredContent into model text",
+          "client and tool conversion preserve an error result"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpExtensionToolSource.cpp:convert_mcp_tools_call_result` (20 KiB middle truncation and temp file); `AgentMcpToolSurface` binds the result to `ExtensionToolResult.details`.",
+      "cppEvidence": "`McpToolsListTest.cpp:90` covers 20 KiB truncation and spill. Pike has one `details` JSON value (the whole CallToolResult) and no separate `structuredContent` channel or `{server,tool,fullOutputPath}` renderer details; resource links and binary resources are not rendered. This is a structural gap, not only a missing test.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Separate pi's `details` (`server`, `tool`, optional `fullOutputPath`) from the codemode script result (`structuredContent`) and port resource-link/binary placeholders. Add a conversion test whose inputs include array structuredContent and a resource link.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-resources-list-read",
+      "capability": "MCP resource listing, templates and reads",
+      "operation": "List resources and resource templates with pagination and read one resource by URI; resource operations use the same cancel/progress-capable request path as tools.",
+      "consumer": "Resource tools (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`), management panels and codemode resource calls.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient.listResources,McpClient.listResourcesPage,McpClient.listResourceTemplates,McpClient.readResource",
+          "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.allResources,McpServerConnection.allResourceTemplates,McpServerConnection.readResource",
+          "packages/coding-agent/src/extensions/mcp/resources.ts:createMcpResourceToolDefinitions"
+        ],
+        "scenarios": [
+          "connecting a server lists tools but not resources",
+          "resources are listed on demand after the connection is ready",
+          "a resources/list failure leaves the server connected and usable for tools"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpResourceTools.{hpp,cpp}`; `McpProductionAdapters.cpp:ProductionMcpConnection::resources_page,resource_templates_page,read_resource`; `McpSessionManager::LiveResourceServer`.",
+      "cppEvidence": "`McpResourceToolsTest.cpp:190-296` covers tool descriptions, cross-server pagination and cursors. In production `ProductionMcpConnection::refresh` calls `fetch_mcp_resource_snapshot` during connect and fails the connection if that snapshot fails; the manager also exposes `resource_count`, whereas v1.3.0 only sets `hasResources` and lists on demand.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Remove the connect-time resource snapshot; set `hasResources` from `initialize.capabilities.resources` and use the resource tools' on-demand pages. Keep a resource-list failure local to the resource call, as captured. This is a prerequisite for a reusable `cch_mcp` connection.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-resource-tools",
+      "capability": "Codex-compatible MCP resource tools",
+      "operation": "Expose `list_mcp_resources`, `list_mcp_resource_templates` and `read_mcp_resource` with pi's descriptions, parameters, pagination and per-server failure collection at the widest non-hidden exposure.",
+      "consumer": "Application tool surface, codemode scripts and the `mcp_servers` prompt section.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/resources.ts:createMcpResourceToolDefinitions",
+          "packages/coding-agent/src/extensions/mcp/index.ts:syncResourceTools"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpResourceTools.{hpp,cpp}`; `McpSessionManager::sync_resource_tools` and `McpSessionManager::resource_bearing_servers`.",
+      "cppEvidence": "`McpResourceToolsTest.cpp:190` checks verbatim descriptions/schemas; cross-server pagination and failure collection are covered. `McpSessionIntegrationTest.cpp:346` covers a live resource listing through a session.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep; add the captured resource-list failure case to the session test so the connection remains usable after a failed resource list.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-roots-list",
+      "capability": "Server-to-client roots/list and ping",
+      "operation": "A connected client answers server requests: `ping` returns `{}`, and `roots/list` returns the configured roots (pi passes `roots` into `McpClient` and installs the handler for both transports).",
+      "consumer": "MCP servers that probe roots or liveness; application connection adapters.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient constructor,setRequestHandler",
+          "packages/mcp/src/client.ts:roots",
+          "packages/mcp/test/client.test.ts:roots/list"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpHttpClient.cpp` installs `ping` and a `roots/list` handler that hardcodes `file://<cwd>`; `McpStdioClient` has no server-request handler at all.",
+      "cppEvidence": "No `McpProtocolSurfaceTest` case sends `roots/list` or `ping` through the stdio client. The HTTP handler ignores configured roots and derives the single root from the process cwd.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Carry roots on the connection (not process cwd) and install the same `ping`/`roots/list` handlers for stdio and HTTP. Add a test that sends both server requests on each transport.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-progress",
+      "capability": "MCP progress notifications and deadline re-arming",
+      "operation": "A request that supplies `onProgress` advertises `_meta.progressToken`; matching `notifications/progress` messages re-arm the request deadline and feed the progress callback.",
+      "consumer": "Tool execution updates and long-running MCP calls; the management/status display.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient.requestInternal",
+          "packages/mcp/src/protocol/types.ts:ProgressNotification",
+          "packages/mcp/test/client.test.ts:progress"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpHttpClient.cpp:with_progress_token,progress_token_of,send_request`; `McpStdioClient` progress callback; `McpProductionAdapters.cpp:AgentMcpToolSurface::register_tool` forwards progress to the run update sink.",
+      "cppEvidence": "`McpProgressTest.cpp:84` covers token injection and extraction; `McpHttpClient` has the re-arm/deadline path. Progress through stdio is not covered by the same test, and no v1.3.0 capture is present.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Add matched stdio/HTTP progress scenarios before marking verified; the current row is implementation-complete but unverified against the frozen capture.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-request-cancellation",
+      "capability": "MCP request cancellation and timeout",
+      "operation": "A cancelled or timed-out request sends `notifications/cancelled` with pi's reason (`Aborted`/`Request timed out`) and settles with the cancellation/timeout error; `initialize` is never cancellable.",
+      "consumer": "Agent turn cancellation and tool execution; HTTP/stdio transports.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient.requestInternal,cancelPending",
+          "packages/mcp/src/protocol/jsonrpc.ts:McpAbortError,McpTimeoutError",
+          "packages/mcp/test/client.test.ts:cancellation"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpHttpClient.cpp:send_request,notify_cancelled`; `McpStdioClient.cpp:cancel_request,write_cancellation`; `McpFailureIsolationTest.cpp:239,269,293`.",
+      "cppEvidence": "`McpFailureIsolationTest.cpp:239` covers cancellation notification and connection reuse; `:269` covers a server that keeps streaming; `:293` covers an explicit timeout. The refresh-specific gap is tracked separately.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Retain; add the captured refresh-cancellation scenario as the differential case, because generic cancellation tests do not exercise the OAuth recovery path.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-refresh-cancellation",
+      "capability": "Cancellation during OAuth refresh never dispatches the request",
+      "operation": "When a request gets a 401 and the token refresh is in flight, aborting or timing out the request settles it immediately; once the refresh completes, the request must not be sent with the new token. The refresh itself may complete and persist rotated tokens.",
+      "consumer": "OAuth-eligible HTTP MCP calls; the application tool wrapper and Agent turn cancellation.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.authorizedFetch",
+          "packages/mcp/src/oauth/flow.ts:adaptOAuthProvider",
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:createMcpAuthProvider",
+          "packages/coding-agent/test/mcp-oauth-refresh.test.ts:refresh"
+        ],
+        "scenarios": [
+          "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+          "a tool call that times out during OAuth refresh never sends it after the refresh completes"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpOAuthTokenResolver.cpp:current_headers`; `McpHttpClient.cpp:post` resolves headers before assigning `request.stop_token`; there is no shared in-flight refresh or refresh lock.",
+      "cppEvidence": "`McpOAuthSessionTest.cpp:548` proves rotated tokens are persisted before the request continues, but no test aborts during refresh. Pike blocks the caller in `current_headers` until refresh returns; the transport then observes the aborted stop token and suppresses the POST. Correct final dispatch, but not v1.3.0's immediate cancellation and shared-refresh semantics.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Make the refresh a shared background operation (per server/URL) that the request waits on only while not cancelled; on cancellation settle immediately, keep the refresh alive, and suppress dispatch. Add the captured abort and timeout cases, asserting exactly one 401 tool attempt and zero post-refresh calls.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-close-no-refresh",
+      "capability": "Close does not refresh and reuses the last token",
+      "operation": "Closing an MCP HTTP connection aborts pending transport work, sends a best-effort session DELETE with the last token, never asks the auth provider for a new token, and never waits for a refresh.",
+      "consumer": "Application shutdown, `/mcp` disable/reconnect, and Agent session teardown.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.close",
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:createMcpAuthProvider",
+          "packages/coding-agent/test/mcp-oauth-refresh.test.ts:close"
+        ],
+        "scenarios": [
+          "closing while a token refresh is in flight does not wait for the refresh"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpHttpClient.cpp:close` (DELETE + GET stream abort); `McpProductionAdapters.cpp:ProductionMcpConnection::close`; `McpOAuthTokenResolver` has no `settled()` equivalent.",
+      "cppEvidence": "`McpHttpSessionTest.cpp` covers session DELETE and close; `McpOAuthSessionTest.cpp` covers request-time refresh, but there is no close-during-refresh test. Pike's close is synchronous and does not wait for `McpOAuthTokenResolver` work, but it also has no token-settled contract to ensure a rotated refresh response is persisted before exit.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Add a token-provider `settled()`/in-flight tracking seam so close can skip starting a refresh while still allowing an already-answered refresh to persist. Test that close returns within a bounded time while `/token` is stalled and that DELETE carries the pre-refresh access token.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-oauth-discovery",
+      "capability": "OAuth protected-resource and authorization-server discovery",
+      "operation": "Discover RFC 9728 protected-resource metadata, then RFC 8414/OpenID authorization-server metadata in pi's candidate order, with loopback/http exceptions and issuer validation; discovery requests must be cancellable.",
+      "consumer": "Generic OAuth flow, sign-in and request-time refresh.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/oauth/discovery.ts:discoverOAuthServerInfo,discoverProtectedResourceMetadata,discoverAuthorizationServerMetadata",
+          "packages/mcp/src/oauth/flow.ts:authorizeMcp",
+          "packages/mcp/test/oauth.test.ts:authorizeMcp"
+        ],
+        "scenarios": [
+          "cancellation during protected-resource discovery aborts the flow"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpOAuthDiscovery.{hpp,cpp}`; `McpOAuthFlow.cpp:authorize_mcp`; `OAuthHttpClient` requests use `std::stop_token{}` in discovery and flow.",
+      "cppEvidence": "`McpOAuthDiscoveryTest.cpp:55-182` covers path-suffixed retry, root-path behavior, candidate order and issuer mismatch. Discovery accepts no caller stop token, so a cancelled sign-in cannot abort a stalled discovery request.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Thread the sign-in/session cancellation token through discovery and flow requests. Add the captured stalled protected-resource case and assert the request socket is closed and no token/registration request follows.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-oauth-registration-signin",
+      "capability": "OAuth dynamic registration, PKCE and sign-in callback",
+      "operation": "Register a client (or use a Client ID Metadata Document), build an S256 PKCE authorization URL, run the loopback/paste callback, exchange the code and persist tokens; cancellation while waiting for the browser or pasted URL must stop the flow.",
+      "consumer": "`signInMcpServer`/`/mcp login`, `McpOAuthFlow`, `OAuthCallbackServer`, `McpOAuthSignIn`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/oauth/flow.ts:authorizeMcp,startAuthorization,registerClient,exchangeAuthorizationCode",
+          "packages/mcp/src/oauth/callback.ts:OAuthCallbackServer",
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:signInMcpServer,McpSignInCancelledError",
+          "packages/coding-agent/test/suite/agent-session-mcp-oauth.test.ts:OAuth"
+        ],
+        "scenarios": [
+          "cancellation during dynamic client registration aborts the flow",
+          "cancellation while waiting for the browser callback stops sign-in",
+          "authorization response from another issuer is rejected before token exchange"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpOAuthFlow.{hpp,cpp}`; `McpOAuthSignIn.{hpp,cpp}`; `OAuthCallbackServer.{hpp,cpp}`; `Pkce.{hpp,cpp}`.",
+      "cppEvidence": "`McpOAuthFlowTest.cpp:112` covers discovery/registration/authorization and `:164` the code exchange; `McpOAuthSignInTest.cpp:246-295` covers pasted and browser callbacks and CIMD. Neither flow nor sign-in takes a session stop token; the callback has a 300 s timer but no cancellation classification matching pi's callback expiry.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Thread cancellation through registration and the callback wait, and classify callback expiry as pi does. Add the captured registration-stall and prompt-cancel cases; assert no token request after cancellation.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-oauth-refresh",
+      "capability": "OAuth token refresh, rotation and cross-process locking",
+      "operation": "Refresh tokens when the access token is near expiry or rejected, coalesce concurrent refreshes, rotate refresh tokens, persist before continuing, serialize across processes with a lock, and never loop on `invalid_grant`.",
+      "consumer": "`createMcpAuthProvider` in the application integration; `McpOAuthTokenResolver` for request-time credentials.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:createMcpAuthProvider,McpOAuthCredentialStore",
+          "packages/mcp/src/oauth/flow.ts:adaptOAuthProvider",
+          "packages/coding-agent/test/mcp-oauth-refresh.test.ts:refresh"
+        ],
+        "scenarios": [
+          "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+          "a tool call that times out during OAuth refresh never sends it after the refresh completes"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpOAuthTokenResolver.cpp:current_headers`; `McpOAuthFlow.cpp:refresh`; `McpAuthStore.{hpp,cpp}`.",
+      "cppEvidence": "`McpOAuthFlowTest.cpp:203` covers rotated refresh persistence and `:238` a dead refresh token; `McpOAuthSessionTest.cpp:548` covers request-time rotation. Pike refreshes per request with a five-minute margin, no single-flight/coalescing and no cross-process lock; it does not have v1.3.0's 30-second skew.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Extract refresh into a per-server single-flight with pi's 30-second skew and a file lock; keep the no-loop `invalid_grant` rule. Add concurrent-401 and cross-process lock cases before claiming parity.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-oauth-issuer",
+      "capability": "RFC 9207 issuer verification",
+      "operation": "When the authorization response carries `iss`, or the server advertises `authorization_response_iss_parameter_supported`, reject a mismatched issuer before the token exchange.",
+      "consumer": "OAuth sign-in and refresh flows; callback parsing.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/oauth/flow.ts:authorizeMcp,validateIssuer",
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:signInMcpServer"
+        ],
+        "scenarios": [
+          "authorization response from another issuer is rejected before token exchange"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpOAuthFlow.cpp:authorize_mcp` issuer check; `OAuthCallbackServer.cpp` parses `iss`.",
+      "cppEvidence": "`McpOAuthFlowTest.cpp:9` states a code from another issuer must never reach the token endpoint; `McpOAuthDiscoveryTest.cpp:165` rejects a mismatched authorization-server issuer. The captured upstream exact error and zero-token-request observation is the comparison case.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Retain; add the captured forged-issuer scenario as the C++ differential case. Keep the check before token exchange and preserve the exact server/expected/received fields.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-oauth-persistence",
+      "capability": "OAuth credential persistence in mcp-auth.json",
+      "operation": "Store client registration, tokens, expiry, PKCE state and discovery under `mcp__<server>|<url>` in `mcp-auth.json`, migrate legacy `auth.json` records, and remove credentials on sign-out.",
+      "consumer": "Application `McpOAuthCredentialStore`; `McpAuthStore`; `/mcp logout` and session startup.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:McpOAuthCredentialStore",
+          "packages/coding-agent/src/core/auth-storage.ts:AuthStorageBackend,InMemoryAuthStorageBackend",
+          "packages/coding-agent/test/mcp-extension.test.ts:McpOAuthCredentialStore"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpAuthStore.{hpp,cpp}`; `McpOAuthTokenResolver.cpp`; `McpOAuthFlowSignInDriver` in `McpProductionAdapters.cpp`.",
+      "cppEvidence": "`McpAuthStoreTest.cpp:66-214` covers key shape, legacy takeover, tokens, removal and migration; `McpOAuthSessionTest.cpp:485` covers the `mcp-auth.json` record. The C++ store is file-backed but has no cross-process refresh lock.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep the store; pair it with the refresh lock slice. Add a two-process refresh test before verified status.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-config",
+      "capability": "Application MCP configuration and validation",
+      "operation": "Load `mcp.json` from the agent directory and a trusted project, validate server URLs (v1.3.0 accepts `http` and `https`, rejects other schemes), OAuth settings, exposure/toolExposure and timeout.",
+      "consumer": "`createMcpExtension`, `loadMcpConfig`, `McpSessionManager`, CLI `mcp` commands and the management panel.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/config.ts:loadMcpConfig,validateMcpServerConfig",
+          "packages/coding-agent/src/core/mcp-servers.ts:McpServerConfig,getMcpToolExposure",
+          "packages/coding-agent/test/mcp-extension.test.ts:loadMcpConfig"
+        ],
+        "scenarios": [
+          "application config accepts http and https but rejects another scheme"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpConfigFile.{hpp,cpp}`, `McpHttpServerConfig.{hpp,cpp}`; `McpSessionManager` constructor/merge; `McpExposure.hpp`.",
+      "cppEvidence": "`McpConfigSurfaceTest.cpp:154` matches v1.0.4 exposure cases; `McpHttpServerConfig.cpp:19` rejects every non-`https://` URL. The captured v1.3.0 rule accepts `http://` and `https://` and rejects `ftp://` with `url must be an http or https URL`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Change only the MCP URL validation and transport gate; do not change the Magpie provider TLS contract. Add the captured scheme cases to `McpConfigSurfaceTest`.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-http-transport",
+      "capability": "Streamable HTTP transport: HTTP/HTTPS, redirects and TLS",
+      "operation": "POST JSON-RPC with `accept: application/json, text/event-stream`, accept JSON or SSE, capture `mcp-session-id`, follow standard fetch redirects (same-origin keeps Authorization, cross-origin strips it), accept plain HTTP and HTTPS, and retain platform TLS certificate validation.",
+      "consumer": "Generic `StreamableHttpTransport`; application `McpHttpClient`; OAuth-protected server calls.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport",
+          "packages/mcp/src/transports/streamable-http.ts:McpAuthRequiredError",
+          "packages/mcp/src/transports/streamable-http.ts:McpSessionExpiredError",
+          "packages/mcp/test/streamable-http.test.ts:StreamableHttpTransport"
+        ],
+        "scenarios": [
+          "streamable HTTP transport connects over plain http",
+          "HTTPS transport connects when its certificate is trusted",
+          "HTTPS transport rejects an untrusted certificate",
+          "same-origin redirect is followed and keeps the request auth header",
+          "cross-origin redirect is followed without Authorization and is rejected"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpHttpClient.cpp` over `support::BoostBeastStreamTransport`; `McpHttpServerConfig.cpp` TLS gate; `McpHttpSessionTest.cpp:396,445`.",
+      "cppEvidence": "`McpHttpSessionTest.cpp:396` asserts an `http://` URL is rejected; `:445` asserts a redirect is refused with `never follows a redirect`. Pike has no plain-HTTP or redirect test because the behavior is intentionally absent. TLS trust is delegated to Boost.Asio/OpenSSL and tested only indirectly.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Remove the TLS-only registration gate and the redirect refusal; reuse the existing Boost.Beast/OpenSSL transport for `https` and add a plain-HTTP/StreamTransport variant or a minimal HTTP stream. Preserve certificate verification. Add the captured same/cross-origin redirect and self-signed trust cases.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-http-session-stream",
+      "capability": "MCP streamable HTTP session and server-to-client GET stream",
+      "operation": "Capture and echo `Mcp-Session-Id`, treat 404 with a session id as an expired session and retry once on a fresh session, open the long-lived GET stream after initialization, reconnect with the server's retry hint, and close the stream on shutdown.",
+      "consumer": "Generic HTTP transport; application manager; OAuth-protected calls.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.captureSession,checkResponse,startGetStream",
+          "packages/mcp/test/streamable-http.test.ts:GET stream"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpHttpClient.cpp:start_get_stream,get_stream_headers,capture_session`; `McpHttpGetStreamTest.cpp`; `McpHttpSessionTest.cpp`.",
+      "cppEvidence": "`McpHttpGetStreamTest.cpp:338-387` covers 405 as feature-absent, retry hints and out-of-range hints; `McpHttpSessionTest.cpp` covers session headers and a 404 session expiry. No v1.3.0 capture is present.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep; add a matched capture when the frozen harness can exercise an SSE GET stream, including the retry hint and 405 case.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-request-auth",
+      "capability": "Request-time authentication and 401 handling",
+      "operation": "Attach configured headers or an auth provider's current token to every request; on 401 refresh once and retry with the new credentials; if authorization is required, surface the explicit OAuth re-login/needs-auth outcome instead of a silent unauthenticated retry.",
+      "consumer": "Generic HTTP transport and application `McpRequestAuthSource`/`McpAuthProvider`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.authorizedFetch,headers",
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:createMcpAuthProvider",
+          "packages/coding-agent/test/mcp-oauth-refresh.test.ts:refresh"
+        ],
+        "scenarios": [
+          "streamable HTTP transport connects over plain http",
+          "same-origin redirect is followed and keeps the request auth header",
+          "cross-origin redirect is followed without Authorization and is rejected"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpHttpClient.cpp:request_headers_for_call,resolve_headers`; `McpRequestAuthSource.hpp`; `McpOAuthTokenResolver`.",
+      "cppEvidence": "`McpOAuthSessionTest.cpp:525` covers a stored token resolving without a token request; `McpFailureIsolationTest` and `McpHttpSessionTest` cover auth errors. Pike resolves headers per request but has no refresh single-flight and no test of request dispatch after a cancelled header refresh.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep per-request resolution and the explicit OAuth error, but pair it with the refresh single-flight/cancellation slice. Add the captured same-origin (auth preserved) and cross-origin (auth stripped) cases.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-exposure",
+      "capability": "MCP exposure model and discovery activation",
+      "operation": "Classify servers and tools as `codemode`, `direct`, `deferred` or `hidden`; activate codemode/tool_search from configuration; re-register withdrawn tools as hidden; render the `mcp_servers` section with indirect exposure.",
+      "consumer": "`createMcpExtension`, `McpSessionManager`, codemode/tool_search, the system prompt section and the management panel.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/index.ts:ensureDiscoveryActive,renderServersSection,hasDirectTools",
+          "packages/coding-agent/src/core/mcp-servers.ts:getMcpToolExposure",
+          "packages/coding-agent/src/extensions/mcp/index.ts:MCP_EXPOSURE_ALIASES"
+        ],
+        "scenarios": [
+          "first prompt does not wait for a codemode server still initializing",
+          "first prompt waits startupWaitMs for a direct server and reports still connecting"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpExposure.hpp`; `McpSessionManager::ensure_discovery_active,register_tools,sync_resource_tools`; `McpServersSection.cpp`.",
+      "cppEvidence": "`McpConfigSurfaceTest.cpp:227` covers exact-name-beats-pattern; `McpServersSectionTest.cpp:63-101` covers indirect listings and the deferred clause; `McpSessionIntegrationTest.cpp:214-282` covers codemode activation and the warning. Deferred exposure remains unreachable because Pike has no `tool_search`.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Keep the direct/codemode activation and section rendering. Decide `tool_search` membership or explicitly record deferred as unreachable; do not activate deferred tools without the discovery tool.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-application-startup",
+      "capability": "Application startup wait and background connection",
+      "operation": "At `session_start`, connect enabled servers in the background; the first prompt waits at most `startupWaitMs` (default 10 s) only for servers with direct tools, reports still-connecting servers, and never blocks on codemode/deferred servers.",
+      "consumer": "`createMcpExtension` session lifecycle, `before_agent_start`, the application Session, and the `/mcp` panel.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/index.ts:createMcpExtension,session_start,waitForDirectServers",
+          "packages/coding-agent/src/extensions/mcp/index.ts:DEFAULT_STARTUP_WAIT_MS",
+          "packages/coding-agent/test/suite/agent-session-mcp.test.ts:MCP"
+        ],
+        "scenarios": [
+          "first prompt does not wait for a codemode server still initializing",
+          "first prompt waits startupWaitMs for a direct server and reports still connecting",
+          "direct server tools become available when it connects within startupWaitMs"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/runtime/McpSessionManager.cpp:start`; `SessionFactory` assembly; `McpSessionIntegrationTest.cpp:237`.",
+      "cppEvidence": "Pike's `McpSessionManager::start` awaits every enabled server serially before `session_start` completes; there is no `startupWaitMs`, no background connection and no still-connecting application notification. `McpSessionIntegrationTest.cpp:237` asserts the opposite (connect phase resolved before creation).",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "This is the largest application gap. Start connections asynchronously, keep a per-server ready promise and state, add the bounded first-prompt wait for direct servers and pi's notification, and make `/mcp` usable while connecting. Add a test with a never-answering direct server and one that connects inside the wait.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-application-resource-init",
+      "capability": "Application connection setup without eager resource listing",
+      "operation": "Connecting lists tools only; resources remain lazy and a failed `resources/list` does not fail the connection. `hasResources` comes from the initialize capability, not from a resource snapshot.",
+      "consumer": "`McpServerConnection`, `McpSessionManager`, resource tools and the session status surface.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.connectOnce,allResources",
+          "packages/coding-agent/src/extensions/mcp/index.ts:startConnection",
+          "packages/coding-agent/test/mcp-extension.test.ts:McpExtension"
+        ],
+        "scenarios": [
+          "connecting a server lists tools but not resources",
+          "resources are listed on demand after the connection is ready",
+          "a resources/list failure leaves the server connected and usable for tools"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/runtime/McpProductionAdapters.cpp:ProductionMcpConnection::refresh` (calls `fetch_mcp_resource_snapshot`); `McpSessionManager::start_connection`.",
+      "cppEvidence": "`McpSessionManagerTest.cpp:727` seeds `resource_count_value`, implying the resource snapshot is part of the manager model; `ProductionMcpConnection::refresh` fails the connection when the snapshot fails. This is the v1.0.4 shape, not v1.3.0.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Remove the snapshot and `resource_count`; set `has_resources` from capabilities. Add the captured three cases to `McpSessionManagerTest`/`McpSessionIntegrationTest`.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-management-ui",
+      "capability": "MCP management UI and `/mcp` actions",
+      "operation": "`/mcp` lists servers and exposes sign-in, sign-out, reconnect, tools, exposure, enable/disable and project enable/disable actions; status stays readable while a server connects; actions produce explicable outcomes.",
+      "consumer": "TUI `McpManagerFlow`/`McpManagerPresenter`; CLI `mcp` commands; the live `McpSessionManager`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/ui.ts:showMcpManager",
+          "packages/coding-agent/src/extensions/mcp/index.ts:registerCommand",
+          "packages/coding-agent/src/extensions/mcp/cli.ts:registerMcpCommands"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/tui/McpManagerFlow.{hpp,cpp}`, `McpManagerPresenter.{hpp,cpp}`, `McpManagerView.{hpp,cpp}`; `McpSessionManager::run_action,set_exposure`; tests `McpManagerFlowTest.cpp`, `McpManagerPresenterTest.cpp`, `McpManagerViewTest.cpp`, `McpServerManagementTest.cpp`, `McpConfigWriteTest.cpp`.",
+      "cppEvidence": "`McpManagerFlowTest.cpp:461-504` covers menu open/navigation/reconnect and refresh on manager change; `McpManagerPresenterTest.cpp:232-283` covers state/projection and exposure/tools menus; `McpServerManagementTest.cpp` covers config. There is no frozen v1.3.0 management capture; current tests are v1.0.4-shaped.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep the panel; add differential cases for status while connecting, stale sign-in/reconnect outcomes and the `enable-project`/`disable-project` actions. Multi-candidate sign-in selection remains the known interaction gap.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-session-tool-binding",
+      "capability": "Session tool registration and codemode routing",
+      "operation": "Register each MCP tool on the live session surface with its exposure, schemas, description and call binding; keep a withdrawn tool registered as hidden; forward model calls, arguments and progress; expose the result to codemode's nested-call channel.",
+      "consumer": "`AgentMcpToolSurface`, codemode `tools.*`, direct session tools and tool_search catalogs.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/index.ts:createMcpToolDefinition,registerTool",
+          "packages/coding-agent/src/extensions/mcp/tools.ts:createMcpToolName,createMcpResultSchema",
+          "packages/coding-agent/test/suite/agent-session-mcp.test.ts:MCP"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/runtime/McpProductionAdapters.cpp:AgentMcpToolSurface::register_tool`; `src/coding_agent/mcp/McpExtensionToolSource.{hpp,cpp}`; `McpSessionManager::register_tools`.",
+      "cppEvidence": "`McpSessionIntegrationTest.cpp:214-282` covers codemode registration/activation and a scripted call; `McpToolsListTest.cpp` covers naming/schema. No v1.3.0 differential capture.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep; the conversion gap stays separate. Add a differential case that calls a tool with array structuredContent from codemode and checks the script value/result channel.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-reconnect-tools-changed",
+      "capability": "MCP reconnect and tools/list_changed refresh",
+      "operation": "Reconnect a dead stdio/HTTP connection and refresh tools; `notifications/tools/list_changed` re-lists and re-registers, `notifications/resources/list_changed` refreshes resource state; a 404 session expiry retries once.",
+      "consumer": "`McpServerConnection`, `McpSessionManager`, `/mcp reconnect`, and the live tool surface.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.reconnect,refreshTools,handleClientClose",
+          "packages/coding-agent/src/extensions/mcp/index.ts:reconnectSignedIn",
+          "packages/coding-agent/test/mcp-extension.test.ts:McpExtension"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/runtime/McpProductionAdapters.cpp:ProductionMcpConnection::reconnect,request`; `McpSessionManager::start_connection,register_tools`; `McpLiveNotificationRouter`.",
+      "cppEvidence": "`McpSessionManagerTest.cpp:371-391` covers tools/list failure and healthy registration; `McpSessionManagerTest.cpp:771` dispatches `resources/list_changed`; HTTP session expiry retry is in `ProductionMcpConnection::request`. No stdio/HTTP reconnect differential capture.",
+      "status": {
+        "membership": "supported",
+        "implementation": "implemented",
+        "verification": "unverified"
+      },
+      "recommendation": "Keep; add re-list/reconnect cases with a dropped transport and a changed tool list. The external sign-in pickup is a separate gap.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-oauth-flow-cancellation",
+      "capability": "Cancellation through OAuth discovery, registration and sign-in",
+      "operation": "Cancelling a sign-in or refresh aborts discovery/registration/token requests and the browser/paste wait; the cancelled flow does not continue to authorization or token exchange.",
+      "consumer": "`authorizeMcp`, `signInMcpServer`, `OAuthCallbackServer` and the TUI/CLI sign-in prompt.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/oauth/flow.ts:authorizeMcp,registerClient,exchangeAuthorizationCode",
+          "packages/mcp/src/oauth/discovery.ts:discoverOAuthServerInfo",
+          "packages/coding-agent/src/extensions/mcp/oauth.ts:signInMcpServer"
+        ],
+        "scenarios": [
+          "cancellation during protected-resource discovery aborts the flow",
+          "cancellation during dynamic client registration aborts the flow",
+          "cancellation while waiting for the browser callback stops sign-in"
+        ]
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpOAuthFlow.cpp`, `McpOAuthDiscovery.cpp`, `McpOAuthSignIn.cpp`, `OAuthCallbackServer.cpp`: all HTTP calls use `std::stop_token{}` and no sign-in stop token is threaded through.",
+      "cppEvidence": "`McpOAuthSignInTest.cpp:246-295` covers callback/paste success but no cancellation; `McpOAuthFlowTest.cpp` covers successful discovery/registration. Pike's flow has a 300 s timer but no caller-cancellation propagation, so a stalled discovery/registration keeps running after the session ends.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "upstream-captured"
+      },
+      "recommendation": "Thread an `AbortSignal` equivalent through the whole flow and callback wait; classify callback expiry as pi does. Add the three captured cancellation cases, asserting the stalled request is aborted and token requests remain zero.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-external-signin-pickup",
+      "capability": "Pick up sign-ins performed outside the session",
+      "operation": "At each turn start, compare stored MCP tokens with the snapshot at sign-in and reconnect a server whose credentials changed outside the session (for example `pi mcp login` in another process).",
+      "consumer": "`createMcpExtension` `turn_start`/`reconnectSignedIn`, `McpServerConnection`, `mcp-auth.json`.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/index.ts:turn_start,reconnectSignedIn",
+          "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.tokensAtSignIn"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/runtime/McpSessionManager` has no per-turn token snapshot or external-sign-in hook; only its own sign-in action reconnects.",
+      "cppEvidence": "No C++ test covers an external `mcp-auth.json` change between turns. The manager reconnects only through `/mcp` or a failed call.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "unverified"
+      },
+      "recommendation": "Add a per-turn token fingerprint check on the manager and reconnect a server whose stored tokens changed. Test with an in-memory store mutated from a second handle.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-stdio-stderr-tail",
+      "capability": "Stdio failure diagnostics",
+      "operation": "Keep the last 2000 characters of a failed stdio server's stderr and surface them with the failure.",
+      "consumer": "`McpServerConnection.stderrTail`, the management panel and failure messages.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/runtime.ts:stderrTail",
+          "packages/mcp/src/transports/stdio.ts:stderrTail"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/runtime/McpProductionAdapters.cpp` checks `transport.stderr.trim()` for `StdioTransport`, but `McpStdioClient` drains stderr to `/dev/null`; `McpLiveConnection::stderr_tail` is always absent.",
+      "cppEvidence": "`McpSessionManagerTest.cpp:371` asserts a failed server reports the stderr tail, but the production adapter has no source for it. This is a code gap masked by a scripted test.",
+      "status": {
+        "membership": "supported",
+        "implementation": "missing",
+        "verification": "unverified"
+      },
+      "recommendation": "Capture a 64 KiB ring in `McpStdioClient` and expose it through `ProductionMcpConnection`. Add a real child-process failure test; do not rely on the scripted fake.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-deferred-tool-search",
+      "capability": "Deferred exposure and `tool_search`",
+      "operation": "A `deferred` server's tools stay undeclared until `tool_search` loads them for the next model call; activation of `deferred` activates `tool_search`, not codemode.",
+      "consumer": "MCP exposure policy, `tool_search`, the `mcp_servers` section and the model tool set.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/coding-agent/src/extensions/mcp/index.ts:ensureDiscoveryActive",
+          "packages/coding-agent/src/extensions/tool-search/tool.ts:TOOL_SEARCH_TOOL_NAME,createToolSearchTool",
+          "packages/coding-agent/src/extensions/mcp/index.ts:MCP_EXPOSURE_ALIASES"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "`src/coding_agent/mcp/McpExposure.hpp:McpExposure::Deferred`; `src/coding_agent/runtime/McpSessionManager.cpp:ensure_discovery_active`; there is no `tool_search` tool in Pike.",
+      "cppEvidence": "`McpServersSectionTest.cpp:91` renders the `(tool_search)` clause, but `McpSessionManager::ensure_discovery_active` activates nothing for deferred servers; the manager warning states neither codemode nor tool_search is active. Deferred tools are registered but unreachable.",
+      "status": {
+        "membership": "supported",
+        "implementation": "partial",
+        "verification": "unverified"
+      },
+      "recommendation": "Either add the `tool_search` owner surface or record deferred as unreachable in the membership ledger. Do not silently treat deferred as direct or codemode.",
+      "blockers": []
+    },
+    {
+      "id": "mcp-prompts-sampling",
+      "capability": "MCP prompts, sampling and client-side request surfaces",
+      "operation": "v1.3.0's public client surface covers tools, resources, roots, ping, logging and notifications; prompts, sampling and elicitation are not exposed by `McpClient`.",
+      "consumer": "No selected Pike consumer; the supported MCP client does not implement these operations.",
+      "upstreamEvidence": {
+        "sources": [
+          "packages/mcp/src/client.ts:McpClient",
+          "packages/mcp/README.md:supported operations"
+        ],
+        "scenarios": []
+      },
+      "cppSeam": "No Pike seam. `McpServerConnection` exposes only request/notify plus tools/resources; no prompts or sampling surface exists.",
+      "cppEvidence": "No C++ tests or consumers target prompts/sampling. This row records exclusion, not a missing implementation.",
+      "status": {
+        "membership": "excluded",
+        "implementation": "not-applicable",
+        "verification": "not-applicable"
+      },
+      "recommendation": "Keep excluded unless a later membership decision adds the upstream client surface. Do not infer support from the MCP protocol version.",
+      "blockers": []
+    }
+  ]
+}

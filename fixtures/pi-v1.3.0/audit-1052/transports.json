@@ -1,0 +1,158 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1052",
+  "family": "audit-1052",
+  "capturedAt": "2026-10-19T17:56:18.012Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport,McpAuthRequiredError",
+    "packages/mcp/src/transports/transport.ts:McpTransport",
+    "packages/coding-agent/src/extensions/mcp/config.ts:loadMcpConfig,validateMcpServerConfig",
+    "packages/mcp/test/streamable-http.test.ts:StreamableHttpTransport",
+    "packages/coding-agent/test/mcp-extension.test.ts:loadMcpConfig"
+  ],
+  "scenarios": [
+    {
+      "name": "application config accepts http and https but rejects another scheme",
+      "inputs": {
+        "urls": {
+          "plain": "http://127.0.0.1:1/mcp",
+          "tls": "https://127.0.0.1:1/mcp",
+          "rejected": "ftp://127.0.0.1/mcp"
+        }
+      },
+      "expected": {
+        "serverNames": [
+          "plain",
+          "tls"
+        ],
+        "errors": [
+          "<agent-dir>/mcp.json: server \"rejected\": url must be an http or https URL"
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "streamable HTTP transport connects over plain http",
+      "inputs": {
+        "url": "http://127.0.0.1:<port>/mcp"
+      },
+      "expected": {
+        "urlScheme": "http:",
+        "connected": "connected",
+        "serverName": "fixture",
+        "requests": [
+          {
+            "method": "POST",
+            "path": "/mcp",
+            "rpc": "initialize",
+            "status": 200
+          },
+          {
+            "method": "POST",
+            "path": "/mcp",
+            "rpc": "notifications/initialized",
+            "status": 202
+          }
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "HTTPS transport connects when its certificate is trusted",
+      "inputs": {
+        "url": "https://127.0.0.1:<port>/mcp",
+        "certificate": "self-signed RSA-2048, SAN IP:127.0.0.1"
+      },
+      "expected": {
+        "connected": "connected",
+        "serverName": "fixture",
+        "certificate": "self-signed RSA-2048, SAN IP:127.0.0.1",
+        "trust": "custom CA passed to undici Agent.connect.ca"
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "HTTPS transport rejects an untrusted certificate",
+      "inputs": {
+        "url": "https://127.0.0.1:<port>/mcp",
+        "certificate": "self-signed RSA-2048, SAN IP:127.0.0.1",
+        "trust": "default Node CA store"
+      },
+      "expected": {
+        "error": {
+          "name": "TypeError",
+          "message": "fetch failed",
+          "causeCode": "DEPTH_ZERO_SELF_SIGNED_CERT"
+        },
+        "tlsValidationEnforced": true
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "same-origin redirect is followed and keeps the request auth header",
+      "inputs": {
+        "entrypoint": "/redirect-same",
+        "target": "/mcp",
+        "redirectStatus": 307,
+        "authorization": "Bearer static"
+      },
+      "expected": {
+        "redirectStatus": 307,
+        "redirectMethod": "POST",
+        "targetPath": "/mcp",
+        "targetMethod": "POST",
+        "authorizationForwarded": true,
+        "connected": "connected"
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "cross-origin redirect is followed without Authorization and is rejected",
+      "inputs": {
+        "entrypoint": "/redirect-cross",
+        "targetOrigin": "a second loopback fixture",
+        "redirectStatus": 307,
+        "authorization": "Bearer static"
+      },
+      "expected": {
+        "sourceRedirectStatus": 307,
+        "sourceAuthorization": "Bearer static",
+        "targetAuthorization": null,
+        "targetStatus": 401,
+        "error": {
+          "name": "McpAuthRequiredError",
+          "message": "MCP server requires authentication"
+        }
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,201 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1052",
+  "family": "audit-1052",
+  "capturedAt": "2026-10-19T17:56:18.012Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/extensions/mcp/index.ts:createMcpExtension,startConnection,before_agent_start,waitForDirectServers",
+    "packages/coding-agent/src/extensions/mcp/runtime.ts:McpServerConnection.connectOnce,McpServerConnection.allResources,McpServerConnection.close",
+    "packages/coding-agent/src/extensions/mcp/resources.ts:createMcpResourceToolDefinitions",
+    "packages/coding-agent/test/mcp-extension.test.ts:McpExtension",
+    "packages/coding-agent/test/suite/agent-session-mcp.test.ts:MCP"
+  ],
+  "scenarios": [
+    {
+      "name": "connecting a server lists tools but not resources",
+      "inputs": {
+        "serverCapabilities": {
+          "tools": {},
+          "resources": {}
+        },
+        "transport": "in-memory"
+      },
+      "expected": {
+        "state": "connected",
+        "tools": [
+          "echo"
+        ],
+        "hasResources": true,
+        "methodsAtConnect": [
+          "initialize",
+          "tools/list"
+        ],
+        "resourcesListedAtConnect": false
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "resources are listed on demand after the connection is ready",
+      "inputs": {
+        "serverCapabilities": {
+          "tools": {},
+          "resources": {}
+        },
+        "transport": "in-memory"
+      },
+      "expected": {
+        "before": [
+          "initialize",
+          "tools/list"
+        ],
+        "after": [
+          "initialize",
+          "tools/list",
+          "resources/list"
+        ],
+        "resources": [
+          "docs://intro"
+        ],
+        "toolsStillAvailable": [
+          "echo"
+        ],
+        "state": "connected"
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "a resources/list failure leaves the server connected and usable for tools",
+      "inputs": {
+        "serverCapabilities": {
+          "tools": {},
+          "resources": {}
+        },
+        "resourcesList": "JSON-RPC error"
+      },
+      "expected": {
+        "state": "connected",
+        "error": {
+          "name": "McpError",
+          "message": "resource boom"
+        },
+        "tools": [
+          "echo"
+        ],
+        "methods": [
+          "initialize",
+          "tools/list",
+          "resources/list"
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "closing while initialize is pending returns without waiting",
+      "inputs": {
+        "server": "never answers initialize",
+        "transport": "in-memory"
+      },
+      "expected": {
+        "closeMs": "<=250ms",
+        "state": "closed",
+        "tools": [],
+        "pendingInitializeError": {
+          "name": "Error",
+          "message": "MCP server \"slow\" failed to connect: MCP client is closed"
+        }
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "first prompt does not wait for a codemode server still initializing",
+      "inputs": {
+        "exposure": "codemode",
+        "server": "never answers initialize",
+        "startupWaitMs": 10000
+      },
+      "expected": {
+        "elapsedMs": "<=250ms",
+        "startupWaitMs": 10000,
+        "notification": [],
+        "section": "MCP servers whose tools are not declared to you. Call the tools of `codemode` servers from codemode scripts.\n- mcp__slow (codemode)",
+        "activeTools": [
+          "codemode"
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "first prompt waits startupWaitMs for a direct server and reports still connecting",
+      "inputs": {
+        "exposure": "direct",
+        "server": "never answers initialize",
+        "startupWaitMs": 40
+      },
+      "expected": {
+        "elapsedMs": "40-999ms",
+        "startupWaitMs": 40,
+        "notification": [
+          {
+            "message": "MCP servers are still connecting; their tools become available once connected.",
+            "level": "info"
+          }
+        ],
+        "section": null,
+        "tools": []
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "direct server tools become available when it connects within startupWaitMs",
+      "inputs": {
+        "exposure": "direct",
+        "initializeDelayMs": 30,
+        "startupWaitMs": 500
+      },
+      "expected": {
+        "elapsedMs": "<=250ms",
+        "registeredTools": [
+          "mcp__slow__echo"
+        ],
+        "activeTools": [],
+        "notifications": [],
+        "methods": [
+          "initialize",
+          "tools/list"
+        ]
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    }
+  ]
+}

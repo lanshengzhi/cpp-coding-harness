@@ -1,0 +1,216 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1052",
+  "family": "audit-1052",
+  "capturedAt": "2026-10-19T17:56:18.012Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/transports/streamable-http.ts:StreamableHttpTransport.authorizedFetch,StreamableHttpTransport.close",
+    "packages/mcp/src/oauth/discovery.ts:discoverOAuthServerInfo,discoverProtectedResourceMetadata",
+    "packages/mcp/src/oauth/flow.ts:authorizeMcp,adaptOAuthProvider,startAuthorization,exchangeAuthorizationCode",
+    "packages/mcp/src/oauth/provider.ts:McpOAuthProvider",
+    "packages/coding-agent/src/extensions/mcp/oauth.ts:createMcpAuthProvider,signInMcpServer,McpOAuthCredentialStore",
+    "packages/coding-agent/test/mcp-oauth-refresh.test.ts:refresh",
+    "packages/coding-agent/test/suite/agent-session-mcp-oauth.test.ts:OAuth",
+    "packages/mcp/test/oauth.test.ts:authorizeMcp"
+  ],
+  "scenarios": [
+    {
+      "name": "cancelling a tool call during OAuth refresh never sends it after the refresh completes",
+      "inputs": {
+        "mode": "abort",
+        "seedAccessToken": "access-0",
+        "seedRefreshToken": "refresh-0",
+        "stalledEndpoint": "/token"
+      },
+      "expected": {
+        "mode": "abort",
+        "error": {
+          "name": "AbortError",
+          "message": "MCP request aborted"
+        },
+        "elapsedMs": "<1s",
+        "refreshRequests": 1,
+        "refreshResponses": 1,
+        "toolCalls": [
+          {
+            "method": "tools/call",
+            "token": "access-0",
+            "status": 401,
+            "id": 2
+          }
+        ],
+        "toolCallsAfterRefresh": 0,
+        "storedAccessTokenAfterRefresh": "access-1"
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "a tool call that times out during OAuth refresh never sends it after the refresh completes",
+      "inputs": {
+        "mode": "timeout",
+        "timeoutMs": 250,
+        "seedAccessToken": "access-0",
+        "seedRefreshToken": "refresh-0",
+        "stalledEndpoint": "/token"
+      },
+      "expected": {
+        "mode": "timeout",
+        "error": {
+          "name": "McpTimeoutError",
+          "message": "MCP request timed out after 250ms"
+        },
+        "elapsedMs": "<1s",
+        "refreshRequests": 1,
+        "refreshResponses": 1,
+        "toolCalls": [
+          {
+            "method": "tools/call",
+            "token": "access-0",
+            "status": 401,
+            "id": 2
+          }
+        ],
+        "toolCallsAfterRefresh": 0,
+        "storedAccessTokenAfterRefresh": "access-1"
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "closing while a token refresh is in flight does not wait for the refresh",
+      "inputs": {
+        "seedAccessToken": "access-0",
+        "seedRefreshToken": "refresh-0",
+        "tokenExpiry": "within REFRESH_SKEW_MS",
+        "stalledEndpoint": "/token"
+      },
+      "expected": {
+        "closeMs": "<=250ms",
+        "closeReturnedWhileRefreshStalled": true,
+        "refreshRequests": 1,
+        "refreshCompleted": true,
+        "deleteToken": "access-0"
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "authorization response from another issuer is rejected before token exchange",
+      "inputs": {
+        "authorizationCode": "code-forged",
+        "iss": "https://attacker.example"
+      },
+      "expected": {
+        "error": {
+          "name": "OAuthIssuerMismatchError",
+          "message": "OAuth issuer mismatch: expected \"<loopback>\", received \"https://attacker.example\""
+        },
+        "expectedIssuer": "<loopback>",
+        "receivedIssuer": "https://attacker.example",
+        "issuerMatchesServer": false,
+        "tokenRequests": 0,
+        "authorizationRequests": 0
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "cancellation during protected-resource discovery aborts the flow",
+      "inputs": {
+        "stalledEndpoint": "/.well-known/oauth-protected-resource/mcp",
+        "cancellation": "AbortSignal"
+      },
+      "expected": {
+        "error": {
+          "name": "AbortError",
+          "message": "This operation was aborted"
+        },
+        "stalledPath": "/.well-known/oauth-protected-resource/mcp",
+        "requestSocketDestroyed": true,
+        "tokenRequests": 0,
+        "registrations": 0
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "cancellation during dynamic client registration aborts the flow",
+      "inputs": {
+        "stalledEndpoint": "/register",
+        "cancellation": "AbortSignal"
+      },
+      "expected": {
+        "error": {
+          "name": "AbortError",
+          "message": "This operation was aborted"
+        },
+        "stalledPath": "/register",
+        "tokenRequests": 0,
+        "authorizations": 0
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    },
+    {
+      "name": "cancellation while waiting for the browser callback stops sign-in",
+      "inputs": {
+        "stalledAt": "promptForRedirectUrl",
+        "cancellation": "AbortSignal"
+      },
+      "expected": {
+        "error": {
+          "name": "McpSignInCancelledError",
+          "message": "Sign-in cancelled"
+        },
+        "authorizationUrlShown": true,
+        "authorizationUrl": {
+          "origin": "<issuer>",
+          "path": "/authorize",
+          "queryKeys": [
+            "response_type",
+            "client_id",
+            "code_challenge",
+            "code_challenge_method",
+            "redirect_uri",
+            "state",
+            "resource"
+          ],
+          "redirectUri": "http://<loopback>/callback",
+          "codeChallengeMethod": "S256",
+          "hasState": true
+        },
+        "authorizationRequests": 0,
+        "registrations": 1,
+        "tokenRequests": 0,
+        "pkceChallengePresent": true
+      },
+      "normalizations": [
+        "ephemeral loopback ports and local paths are omitted",
+        "elapsed times and errors are reported as bounded values or names"
+      ]
+    }
+  ]
+}
