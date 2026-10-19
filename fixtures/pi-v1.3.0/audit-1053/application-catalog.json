@@ -1,0 +1,284 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1053",
+  "family": "audit-1053",
+  "capturedAt": "2026-10-19T20:39:02.332Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/extensions/codemode/tool.ts:createCodemodeDescription,toCodemodeDeclaration,getCodemodeCallableTools,createCodemodeToolDefinition",
+    "packages/coding-agent/src/extensions/codemode/index.ts:createCodemodeExtension",
+    "packages/coding-agent/test/tool-search.test.ts:createCodemodeDescription",
+    "packages/coding-agent/test/suite/agent-session-codemode.test.ts:createCodemodeExtension,createCodemodeTool"
+  ],
+  "scenarios": [
+    {
+      "name": "the empty codemode catalog still declares globals, discovery and the options grammar",
+      "inputs": {
+        "tools": []
+      },
+      "expected": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.",
+      "observed": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "createCodemodeDescription"
+      }
+    },
+    {
+      "name": "a tool declaration defaults its output schema to string and appends prompt guidelines",
+      "inputs": {
+        "tool": "read",
+        "guidelines": [
+          "Read before editing."
+        ]
+      },
+      "expected": {
+        "name": "read",
+        "description": "Read a file\n\n- Read before editing.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          }
+        },
+        "outputSchema": {
+          "type": "string"
+        }
+      },
+      "observed": {
+        "name": "read",
+        "description": "Read a file\n\n- Read before editing.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string"
+            }
+          }
+        },
+        "outputSchema": {
+          "type": "string"
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "toCodemodeDeclaration"
+      }
+    },
+    {
+      "name": "a listed tool section carries its declaration, output type and guidelines",
+      "inputs": {
+        "tool": "mcp__docs__search",
+        "outputSchema": "object"
+      },
+      "expected": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `mcp__docs__search`\nSearch docs\n\n- Search before reading.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+      "observed": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `mcp__docs__search`\nSearch docs\n\n- Search before reading.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "renderToolSection"
+      }
+    },
+    {
+      "name": "namespaces group sections and the inline budget omits tools with an explicit marker",
+      "inputs": {
+        "tools": [
+          "read",
+          "mcp__docs__search"
+        ],
+        "namespace": "docs",
+        "inlineBudget": 40
+      },
+      "expected": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs (tools not listed)\nDocumentation tools",
+      "observed": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs (tools not listed)\nDocumentation tools",
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "selectCatalog"
+      }
+    },
+    {
+      "name": "deferred tools are never listed and do not change the description",
+      "inputs": {
+        "tools": [
+          "alpha",
+          "beta"
+        ],
+        "deferred": [
+          "beta"
+        ]
+      },
+      "expected": {
+        "deferredOmitted": true,
+        "sameAsSingleTool": true,
+        "emptyDeferredIsEmptyDescription": true
+      },
+      "observed": {
+        "deferredOmitted": true,
+        "sameAsSingleTool": true,
+        "emptyDeferredIsEmptyDescription": true
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "createCodemodeDescription deferred"
+      }
+    },
+    {
+      "name": "the models declaration line is present only when models are enabled",
+      "inputs": {
+        "models": [
+          false,
+          true
+        ]
+      },
+      "expected": {
+        "withoutModels": false,
+        "withModels": true,
+        "mentionsClassifiersAndImages": true
+      },
+      "observed": {
+        "withoutModels": false,
+        "withModels": true,
+        "mentionsClassifiersAndImages": true
+      },
+      "normalizations": [
+        "the docs path in the models line is host-specific and is not part of this comparison"
+      ],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "describeGlobals"
+      }
+    },
+    {
+      "name": "the callable tool set excludes codemode itself",
+      "inputs": {
+        "tools": [
+          "read",
+          "codemode",
+          "mcp__docs__search"
+        ]
+      },
+      "expected": [
+        "read",
+        "mcp__docs__search"
+      ],
+      "observed": [
+        "read",
+        "mcp__docs__search"
+      ],
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "getCodemodeCallableTools"
+      }
+    },
+    {
+      "name": "the extension registers an inactive model-only codemode tool with the source grammar",
+      "inputs": {
+        "models": false
+      },
+      "expected": {
+        "name": "codemode",
+        "label": "codemode",
+        "exposure": "model-only",
+        "defaultActive": false,
+        "grammarEqualsSource": true,
+        "snippet": "Run JavaScript that calls other tools",
+        "guidelines": [
+          "Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of many separate calls."
+        ],
+        "inlineBudget": 3000
+      },
+      "observed": {
+        "name": "codemode",
+        "label": "codemode",
+        "exposure": "model-only",
+        "defaultActive": false,
+        "grammarEqualsSource": true,
+        "snippet": "Run JavaScript that calls other tools",
+        "guidelines": [
+          "Use codemode to batch independent tool calls (Promise.allSettled), chain them, or filter large output, instead of many separate calls."
+        ],
+        "inlineBudget": 3000
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/index.ts",
+        "case": "createCodemodeExtension"
+      }
+    },
+    {
+      "name": "the on loadout lists only non-direct callable tools and adds script-call descriptions",
+      "inputs": {
+        "mode": "on",
+        "tools": [
+          "read (direct)",
+          "mcp__docs__search (codemode)"
+        ]
+      },
+      "expected": {
+        "hiddenDeclarations": [],
+        "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n## docs\nDocumentation tools\n\n### `mcp__docs__search`\nSearch docs\n\n- Use docs.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+        "readDescription": "Read a file\n\nCodemode: `tools.read(args)` resolves to a string.",
+        "searchDescription": "Search docs\n\nCodemode: `tools.mcp__docs__search(args)` resolves to `{ results }`."
+      },
+      "observed": {
+        "hiddenDeclarations": [],
+        "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n## docs\nDocumentation tools\n\n### `mcp__docs__search`\nSearch docs\n\n- Use docs.\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<{ results: Array<string>; }>; };\n```",
+        "readDescription": "Read a file\n\nCodemode: `tools.read(args)` resolves to a string.",
+        "searchDescription": "Search docs\n\nCodemode: `tools.mcp__docs__search(args)` resolves to `{ results }`."
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "prepareCodemodeLoadout mode on"
+      }
+    },
+    {
+      "name": "the only loadout lists every callable tool and hides direct declarations",
+      "inputs": {
+        "mode": "only",
+        "tools": [
+          "read (direct)",
+          "mcp__docs__search (codemode)"
+        ]
+      },
+      "expected": {
+        "hiddenDeclarations": [
+          "read"
+        ],
+        "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs\n\n### `mcp__docs__search`\nSearch docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<string>; };\n```",
+        "descriptions": [
+          "codemode"
+        ]
+      },
+      "observed": {
+        "hiddenDeclarations": [
+          "read"
+        ],
+        "codemodeDescription": "Run JavaScript that calls other tools. The input is raw JavaScript (not JSON, no code fence), run as an async function body in a QuickJS sandbox: top-level `await` and `return` work. No Node, file system, network, or timers.\n- `await tools.<name>({ ...args })` resolves to a string, or an object if the tool's declaration says so, and rejects with an Error on failure. A tool whose declaration returns an object resolves on failure too when it returned that object; check its fields. Calls still running when the script ends are cancelled.\n- Optional first line: `// @options: {\"max_output_tokens\": 10000, \"timeout_ms\": 60000}`\n\nGlobals:\n- `text(value)`, `image(dataUrlOrImageBlock)`, `console.log(...)`, and top-level `return` add output; `exit()` ends the script. With several text items, each starts with a `==> text N/M <==` line, and `console` lines follow the other output in one `<console_output>` block. `image()` also saves the image to a temp file and the result names its path.\n- `store(key, value)` and `load(key)` keep JSON values across codemode calls.\n- `ALL_TOOLS`, `await searchTools(query, { limit?, namespace? })`, `await describeTool(name)`, `await describeNamespace(name)`: find unlisted tools, such as MCP tools.\n\nNested tools:\n\n### `read`\nRead a file\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { read(args: { query?: string; }): Promise<string>; };\n```\n\n## docs\n\n### `mcp__docs__search`\nSearch docs\n\ncodemode tool declaration:\n```ts\ndeclare const tools: { mcp__docs__search(args: { query?: string; }): Promise<string>; };\n```",
+        "descriptions": [
+          "codemode"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/extensions/codemode/tool.ts",
+        "case": "prepareCodemodeLoadout mode only"
+      }
+    }
+  ]
+}
