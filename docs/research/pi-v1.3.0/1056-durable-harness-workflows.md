@@ -108,7 +108,7 @@ The Linux environment scenario observed real file append/read/list/stat, a missi
 0.1 seconds. The coding-tool scenario executed `write`, `read`, `edit`, `read`, `bash` in sequence and
 observed the final file `omega\n`. Photon passed an upright 40x20 PNG through byte-identically and
 resized the same image to 10x5 under a 10x10 limit; invalid bytes returned `undefined`. The read tool
-returned a 216-byte-base64 image plus the exact coordinate-mapping diagnostic. A BMP without a
+returned a 216-character base64 image plus the exact coordinate-mapping diagnostic. A BMP without a
 processor returned the explicit unsupported-image result, while an inline 2x2 PNG passed through
 unchanged.
 
@@ -123,7 +123,7 @@ sidecars and reopened the same transcript.
 ## Capability ledger
 
 Machine ledger: `docs/research/pi-v1.3.0/1056-durable-harness-workflows.json`.
-It follows the `pike/pi-v1.3.0-audit-ledger/1` lane shape used by #1054/#1055 and keeps membership,
+It follows the `pike/pi-v1.3.0-audit-ledger/1` lane shape used by the prior #1053/#1055 evidence ledgers and keeps membership,
 implementation and verification as separate values.
 
 - Rows: **70** — 66 supported, 4 excluded.
@@ -155,7 +155,7 @@ pieces are:
 
 - `cch_agent_core`: `src/agent/include/cch/agent/harness/session/SessionStore.hpp`,
   `SessionTree.hpp`, `SessionResume.hpp`, `Compaction.hpp`; `src/agent/harness/session/*`;
-  `src/agent/harness/TaskScheduler.*`, `TaskStore.*`; `harness/FileSystem.hpp`, `Shell.hpp`,
+  `src/agent/harness/TaskScheduler.*`, `src/agent/harness/session/TaskStore.*`; `harness/FileSystem.hpp`, `Shell.hpp`,
   `LocalFileSystem.hpp`, `LocalShell.hpp`; `tools/ToolFactories.hpp` and
   `src/agent/tools/AsyncToolFactories.cpp`. These are application husks and old durable pieces, not
   the v1.3.0 public Harness.

@@ -165,7 +165,7 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/harness/harness.ts:HarnessImpl.subscribeCommits",
+          "packages/durable/src/session/session.ts:SessionImpl.subscribeCommits",
           "packages/durable/test/harness-lifecycle.test.ts:commit publication"
         ],
         "scenarios": [
@@ -347,7 +347,7 @@
         ]
       },
       "cppSeam": "`AgentSession::prompt`/`AgentSessionExecution` run application turns; `TaskScheduler` can persist a handler task but no GenerationTask type, submission admission or durable settlement receipt exists.",
-      "cppEvidence": "`AgentSessionExecutionTest`/`SessionLifecycleTest.cpp` cover application turns and close. No durable submission admission or generation task test.",
+      "cppEvidence": "`SessionLifecycleTest.cpp`/`SessionCloseTest.cpp` cover application turns and close. No durable submission admission or generation task test.",
       "recommendation": "Make generation a durable task that writes one terminal receipt and commits entries/tool tasks transactionally. Keep application prompt execution out of the durable task identity.",
       "blockers": [
         "no durable GenerationTask or submission receipt"
@@ -367,7 +367,7 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/harness/generation.ts:GenerationTask.#response",
+          "packages/durable/src/harness/generation.ts:GenerationTask",
           "packages/durable/src/harness/agent.ts:DEFAULT_RETRY_POLICY"
         ],
         "scenarios": [
@@ -396,7 +396,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/harness/agent.ts:resolveAgent",
-          "packages/durable/src/harness/generation.ts:#prepare",
+          "packages/durable/src/harness/generation.ts:GenerationTask",
           "packages/durable/test/harness-lifecycle.test.ts:prompt sections"
         ],
         "scenarios": [
@@ -479,8 +479,8 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/harness/compaction.ts:CompactionTask,#prepare",
-          "packages/durable/src/harness/generation.ts:#prepare"
+          "packages/durable/src/harness/compaction.ts:CompactionTask",
+          "packages/durable/src/harness/generation.ts:GenerationTask"
         ],
         "scenarios": [
           "a blocking threshold compaction appends its summary before the request it protects"
@@ -561,7 +561,7 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/harness/generation.ts:GenerationTask.#response",
+          "packages/durable/src/harness/generation.ts:GenerationTask",
           "packages/durable/test/harness-compaction.test.ts:overflow"
         ],
         "scenarios": []
@@ -644,7 +644,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/tasks.ts:defineTask",
-          "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases"
+          "packages/durable/src/harness/scheduler.ts:#reserve,#run"
         ],
         "scenarios": [
           "inspect derives ready, running, waiting and blocked task states without running task code",
@@ -758,7 +758,7 @@
       "upstreamEvidence": {
         "sources": [
           "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md:selected capability additions",
-          "packages/durable/src/harness/types.ts:Extensions,hooks"
+          "packages/durable/src/harness/types.ts:Extension,GenerationHooks,ToolHooks"
         ],
         "scenarios": []
       },
@@ -981,8 +981,8 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/harness/submissions.ts",
-          "packages/durable/src/harness/inbox.ts",
+          "packages/durable/src/harness/submissions.ts:Submissions",
+          "packages/durable/src/harness/inbox.ts:InboxDoc",
           "packages/durable/test/harness-submissions.test.ts:admission"
         ],
         "scenarios": []
@@ -1416,7 +1416,7 @@
         ],
         "scenarios": []
       },
-      "cppSeam": "The application codemode explicitly has no `models.*` namespace (`CodemodeTool.hpp:cmodemode_globals_text`). C++ has no durable model-global bridge; classifier/image-generation provider execution is outside the AI baseline.",
+      "cppSeam": "The application codemode explicitly has no `models.*` namespace (`CodemodeTool.hpp:codemode_globals_text`). C++ has no durable model-global bridge; classifier/image-generation provider execution is outside the AI baseline.",
       "cppEvidence": "`CodemodeParityTest.cpp` pins the no-models description; no durable models-global test.",
       "recommendation": "Keep `models.*` behind a capability gate backed by the retained Magpie contract. Do not add classifier/image-generation provider support merely to fill the namespace.",
       "blockers": [
@@ -1492,7 +1492,7 @@
       "implementationTicket": null,
       "upstreamEvidence": {
         "sources": [
-          "packages/durable/src/tool-search/tool-search.ts",
+          "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool,createToolSearchExtension",
           "packages/durable/src/harness/agent.ts:addTools"
         ],
         "scenarios": []
@@ -1519,7 +1519,8 @@
       "upstreamEvidence": {
         "sources": [
           "packages/chord/src/context/index.ts:Context",
-          "packages/durable/src/documents.ts:defineDoc,DocumentScope"
+          "packages/durable/src/documents.ts:defineDoc,defineDocFamily",
+          "packages/durable/src/types.ts:DocumentAddress"
         ],
         "scenarios": [
           "the root conversation is created lazily in one commit with its five built-in documents",
@@ -1548,7 +1549,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/harness/view.ts:ConversationViews",
-          "packages/durable/src/harness/harness.ts:subscribeCommits"
+          "packages/durable/src/session/session.ts:SessionImpl.subscribeCommits"
         ],
         "scenarios": [
           "conversation watch publishes delta frames whose final view equals a fresh hydration"
@@ -1665,7 +1666,7 @@
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/types.ts:TaskDefinition.migrate",
-          "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases"
+          "packages/durable/src/harness/scheduler.ts:#reserve,#run"
         ],
         "scenarios": []
       },
