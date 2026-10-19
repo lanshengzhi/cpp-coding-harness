@@ -18,6 +18,10 @@ _Avoid_: Missing contract, unsupported stub
 The released coding-agent application, combining an Agent Session with its command-line and Native TUI surfaces.
 _Avoid_: `cpp_harness`, Owner library, SDK
 
+**Durable Runtime**:
+The independent runtime for persistent conversations, documents, submissions and resumable tasks, distinct from the application Agent Session used by Pike's CLI.
+_Avoid_: SQLite session backend, task store, replacement CLI runtime
+
 **Supported Platform**:
 The host platform on which Pike accepts build, runtime, and Semantic Parity obligations for Supported Capabilities.
 _Avoid_: Development host, portable source, rolling latest, best-effort platform

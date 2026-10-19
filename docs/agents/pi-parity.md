@@ -58,7 +58,16 @@ a private adapter without losing that benefit. Record the affected claim and its
 rationale; an implementation shortcut or accidental drift does not qualify. This
 criterion does not extend Semantic Parity to capabilities with no such claim.
 
-## Selected Linux TUI contract
+## Selected pi-v1.3.0 migration
+
+[ADR 0075](../adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
+is the accepted target for selected non-AI capabilities, package migration and complete Linux
+durable support. It advances the Linux TUI target from v1.0.4 to v1.3.0 and identifies clause-level
+supersessions, retained Magpie/XDG boundaries, AI exclusions and required independent evidence.
+Implementation and evidence capture remain separate obligations; the manifest still describes the
+currently configured graph until changed with implementation.
+
+## Historical Linux TUI contract
 
 For TUI toolkit or Native TUI work under [#946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946), read [ADR 0067](../adr/0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md). It selects the complete Linux `pi-v1.0.4` capability target and frozen evidence baseline, superseding the older regular-only subset and listed behavioral exemptions. The Product Architecture Contract still owns package boundaries. Accepted scope requires independent implementation evidence; native `blockedBy` relationships order the 79 sub-issues.
 

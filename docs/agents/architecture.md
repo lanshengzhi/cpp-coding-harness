@@ -4,6 +4,17 @@ Read this for architecture, Owner packages, module structure, Owner Interface he
 
 Mirror note: the machine-readable authority is the Parity Architecture Manifest (`cmake/parity/manifest.json`); the fail-closed check is the Parity Architecture Gate (`ctest --preset vcpkg -L architecture`). On conflict the manifest wins; this file links, it does not re-decide.
 
+## Accepted package migration
+
+[ADR 0075](../adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
+selects pi-v1.3.0 for non-AI capability alignment and a staged Owner migration, including independent
+durable, MCP, codemode and durable-required Chord owners. It also replaces historical behavioral
+exemptions for selected capabilities, including extra Agent queue limits and MCP TLS-only/no-redirect
+behavior. Its target graph is not yet the configured graph: update the manifest and architecture
+tests with each implementation slice. The current tables below describe the configured ownership;
+they are not authority to retain placements superseded by that migration. Magpie/XDG and the explicit
+AI exclusions remain; do not infer an overall cch_ai baseline advancement.
+
 ## Capability Owner Packages
 
 The repository has four authoritative Capability Owner Packages and one pi-neutral C++ Support Package (ADR 0039, ADR 0045, `cmake/parity/manifest.json`). The only released product executable is `pike` (ADR 0045).

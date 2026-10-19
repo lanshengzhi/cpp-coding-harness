@@ -4,6 +4,10 @@ status: accepted
 
 # Advance the cch_coding_agent baseline to pi v0.87.1 and adopt the sectioned System Prompt and transcript system messages
 
+> Target amendment: [ADR 0075](0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
+> advances selected application capabilities to pi-v1.3.0. This record and its evidence retain
+> historical identity; the new target is not a claim that implementation or capture is complete.
+
 The `cch_coding_agent` application layer — the headless Agent Session owner together with the CLI
 and Native TUI frontends — is re-pinned from the historical baseline
 `83114817c68f5413e4d7ba6d7003ddc511cd31d2` (the `@earendil-works/pi-coding-agent@0.83.0`-correlated

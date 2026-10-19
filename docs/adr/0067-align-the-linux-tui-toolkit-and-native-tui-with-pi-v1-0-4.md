@@ -4,6 +4,11 @@ status: accepted
 
 # Align the Linux TUI Toolkit and Native TUI with pi v1.0.4
 
+> Target amendment: [ADR 0075](0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
+> advances the complete Linux target to pi-v1.3.0 and carries unresolved v1.0.4 work forward.
+> Historical evidence retains its revision; implementation and verification must establish the
+> new target rather than relabel this record's results.
+
 [Spec #946](https://github.com/lanshengzhi/cpp-coding-harness/issues/946) selects the complete
 Linux TUI capability surface and its necessary product consumers, replacing the historical
 regular-only subset and its behavioral exemptions. This record is attributed to that spec

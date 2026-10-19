@@ -12,6 +12,12 @@ status: accepted
 > have been implemented or verified. Unrelated membership decisions and open questions below
 > retain their own authority; historical inventories do not reopen the TUI scope.
 
+> v1.3.0 membership amendment: [ADR 0075](0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md)
+> selects complete Linux durable and TUI targets, explicit MCP/codemode/application additions and
+> new package boundaries. Conflicting historical Deferred/exemption rows below are superseded for
+> those targets; incomplete implementation remains work, not Deferred. Unrelated exclusions and
+> No decision rows retain their status. The amendment does not claim completion.
+
 ## Context
 
 [ADR 0053](0053-replace-pi-parity-authority-with-the-product-architecture-contract.md) made pi
