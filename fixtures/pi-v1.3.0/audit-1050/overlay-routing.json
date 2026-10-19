@@ -1,0 +1,76 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T17:21:56.094Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1",
+    "TERM": "xterm-256color",
+    "pinnedVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "COLORTERM",
+      "KITTY_WINDOW_ID",
+      "GHOSTTY_RESOURCES_DIR",
+      "WEZTERM_PANE",
+      "ITERM_SESSION_ID",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_HYPERLINKS",
+      "PI_IMAGE_PROTOCOL",
+      "PI_TRUE_COLOR",
+      "PI_PROGRAM_STATUS",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR"
+    ]
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/tui-alt-screen.ts:TuiAltScreen.handleWheelReport,routeWheel,shouldDeferViewportInputToOverlay,handleViewportInput",
+    "packages/tui/test/tui-alt-screen.test.ts:scrolls the transcript on wheel input a focused overlay does not handle",
+    "packages/tui/test/tui-alt-screen.test.ts:gives viewport keys to a focused overlay"
+  ],
+  "scenarios": [
+    {
+      "name": "overlay-unhandled-wheel-scrolls-transcript",
+      "dimensions": {
+        "columns": 20,
+        "rows": 6
+      },
+      "inputs": {
+        "root": "AltScreen",
+        "contentRows": 12,
+        "overlay": "focused InputOverlay",
+        "events": [
+          "showOverlay(top-left,10)",
+          "wheel-up(3,1)",
+          "pageDown"
+        ]
+      },
+      "expected": {
+        "overlayFocused": true,
+        "viewportTop": {
+          "before": 6,
+          "afterOverlay": 6,
+          "afterWheel": 5,
+          "afterPageDown": 5
+        },
+        "overlayInputs": [
+          "\u001b[6~"
+        ],
+        "screenAfterWheel": [
+          "\u001b[0m\u001b]8;;\u0007overlay   \u001b[0m\u001b]8;;\u0007          \u001b[0m\u001b]8;;\u0007",
+          "line 7              \u001b[0m\u001b]8;;\u0007",
+          "line 8              \u001b[0m\u001b]8;;\u0007",
+          "line 9              \u001b[0m\u001b]8;;\u0007",
+          "line 10             \u001b[0m\u001b]8;;\u0007",
+          "line 11             \u001b[0m\u001b]8;;\u0007"
+        ]
+      }
+    }
+  ]
+}

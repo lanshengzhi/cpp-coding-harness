@@ -1,0 +1,280 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T17:21:56.094Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1",
+    "TERM": "xterm-256color",
+    "pinnedVariables": [
+      "TERM_PROGRAM",
+      "TERM_PROGRAM_VERSION",
+      "COLORTERM",
+      "KITTY_WINDOW_ID",
+      "GHOSTTY_RESOURCES_DIR",
+      "WEZTERM_PANE",
+      "ITERM_SESSION_ID",
+      "TMUX",
+      "TERMUX_VERSION",
+      "PI_HYPERLINKS",
+      "PI_IMAGE_PROTOCOL",
+      "PI_TRUE_COLOR",
+      "PI_PROGRAM_STATUS",
+      "PI_TUI_WRITE_LOG",
+      "PI_HARDWARE_CURSOR"
+    ]
+  },
+  "sourceEndpoints": [
+    "packages/tui/src/components/input.ts:render",
+    "packages/tui/src/components/editor.ts:render",
+    "packages/tui/src/tui.ts:CURSOR_MARKER,renderFakeCursor,TuiBase.resolveFakeCursors",
+    "packages/tui/src/tui-main-screen.ts:render",
+    "packages/tui/src/utils.ts:stripTerminalSequences,sliceByColumn,visibleWidth",
+    "packages/tui/src/terminal.ts:showCursor,hideCursor,moveBy",
+    "packages/tui/test/tui-render.test.ts:TUI fake cursor"
+  ],
+  "scenarios": [
+    {
+      "name": "standalone-input-fake-cursor-is-strippable",
+      "dimensions": {
+        "columns": 10,
+        "rows": 1
+      },
+      "inputs": {
+        "component": "Input",
+        "value": "abc",
+        "focused": true,
+        "width": 10
+      },
+      "expected": {
+        "rawLine": "> \u001b_pi:c\u0007\u001b_pi:fc\u0007a\u001b_pi:/fc\u0007bc     ",
+        "strippedLine": "> abc     ",
+        "visibleWidth": 10,
+        "fakeCursorMarkerCount": 1
+      }
+    },
+    {
+      "name": "standalone-editor-fake-cursor-is-strippable",
+      "dimensions": {
+        "columns": 10,
+        "rows": 3
+      },
+      "inputs": {
+        "component": "Editor",
+        "text": "hi",
+        "width": 10,
+        "tuiStarted": false
+      },
+      "expected": {
+        "rawLines": [
+          "\u001b[2m──────────\u001b[22m",
+          "hi\u001b_pi:fc\u0007 \u001b_pi:/fc\u0007       ",
+          "\u001b[2m──────────\u001b[22m"
+        ],
+        "strippedLines": [
+          "──────────",
+          "hi        ",
+          "──────────"
+        ],
+        "visibleWidths": [
+          10,
+          10,
+          10
+        ],
+        "fakeCursorMarkerCount": 1
+      }
+    },
+    {
+      "name": "main-screen-focused-fake-cursor-drawn",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "default-false",
+        "component": "Input",
+        "value": "abc"
+      },
+      "expected": {
+        "writes": [
+          "\u001b[?2026h> \u001b[7ma\u001b[27mbc               \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+          "\u001b[3G"
+        ],
+        "cursorEvents": [
+          "hide",
+          "hide"
+        ],
+        "screen": [
+          "> abc               ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "fakeCursorVisible": true,
+        "hardwareCursorPositioned": true
+      }
+    },
+    {
+      "name": "main-screen-focused-hardware-cursor-omits-fake-cursor",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "enabled",
+        "component": "Input",
+        "value": "abc"
+      },
+      "expected": {
+        "writes": [
+          "\u001b[?2026h> abc               \u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+          "\u001b[3G"
+        ],
+        "cursorEvents": [
+          "hide",
+          "show"
+        ],
+        "screen": [
+          "> abc               ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "fakeCursorVisible": false,
+        "hardwareCursorPositioned": true
+      }
+    },
+    {
+      "name": "main-screen-unfocused-fake-cursor-stays-visible",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "enabled",
+        "component": "Input",
+        "focused": false
+      },
+      "expected": {
+        "writes": [
+          "\u001b[?2026h> \u001b[7ma\u001b[27mbc               \u001b[0m\u001b]8;;\u0007\u001b[?2026l"
+        ],
+        "cursorEvents": [
+          "hide",
+          "hide"
+        ],
+        "screen": [
+          "> abc               ",
+          "",
+          "",
+          "",
+          ""
+        ],
+        "fakeCursorVisible": true,
+        "hardwareCursorPositioned": false
+      }
+    },
+    {
+      "name": "truncated-line-drops-unterminated-fake-cursor",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "preference": "enabled",
+        "line": "ab<CURSOR_MARKER><fake:c>def",
+        "slice": [
+          0,
+          3
+        ]
+      },
+      "expected": {
+        "writes": [
+          "\u001b[?2026habc\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+          "\u001b[3G"
+        ],
+        "cursorEvents": [
+          "hide",
+          "show"
+        ],
+        "fakeCursorVisible": false,
+        "hardwareCursorPositioned": true
+      }
+    },
+    {
+      "name": "overlay-left-of-cursor-keeps-cursor-fake",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "showHardwareCursor": false,
+        "base": "abc<CURSOR_MARKER><fake:d>ef",
+        "overlay": "XXX",
+        "overlayBounds": {
+          "row": 0,
+          "col": 0,
+          "width": 3
+        }
+      },
+      "expected": {
+        "writes": [
+          "\u001b[?2026h\u001b[0m\u001b]8;;\u0007XXX\u001b[0m\u001b]8;;\u0007\u001b[7md\u001b[27mef              \u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+          "\u001b[4A\u001b[4G"
+        ],
+        "cursorEvents": [
+          "hide",
+          "hide",
+          "hide"
+        ],
+        "overlayText": true,
+        "fakeCursorVisible": true,
+        "hardwareCursorPositioned": true
+      }
+    },
+    {
+      "name": "overlay-left-of-cursor-keeps-cursor-hardware",
+      "dimensions": {
+        "columns": 20,
+        "rows": 5
+      },
+      "inputs": {
+        "root": "MainScreen",
+        "showHardwareCursor": true,
+        "base": "abc<CURSOR_MARKER><fake:d>ef",
+        "overlay": "XXX",
+        "overlayBounds": {
+          "row": 0,
+          "col": 0,
+          "width": 3
+        }
+      },
+      "expected": {
+        "writes": [
+          "\u001b[?2026h\u001b[0m\u001b]8;;\u0007XXX\u001b[0m\u001b]8;;\u0007def              \u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\r\n\u001b[0m\u001b]8;;\u0007\u001b[?2026l",
+          "\u001b[4A\u001b[4G"
+        ],
+        "cursorEvents": [
+          "hide",
+          "hide",
+          "show"
+        ],
+        "overlayText": true,
+        "fakeCursorVisible": false,
+        "hardwareCursorPositioned": true
+      }
+    }
+  ]
+}
