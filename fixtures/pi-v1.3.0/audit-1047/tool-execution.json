@@ -1,0 +1,528 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T15:59:06.183Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/agent/src/agent-loop.ts:prepareToolCall,executePreparedToolCall,finalizeExecutedToolCall,emitToolExecutionEnd,createToolResultMessage,runToolCall",
+    "packages/agent/src/types.ts:AgentToolCallOutcome,BeforeToolCallResult,AfterToolCallResult",
+    "packages/ai/src/types.ts:ToolResultMessage",
+    "packages/coding-agent/src/core/nested-tool-calls.ts:NestedToolCallRunner",
+    "packages/coding-agent/src/core/session-manager.ts:SessionManager.appendMessage,SessionManager.open",
+    "packages/agent/test/agent-loop.test.ts:tool execution",
+    "packages/coding-agent/test/nested-tool-calls.test.ts:NestedToolCallRunner"
+  ],
+  "scenarios": [
+    {
+      "name": "hook and execute activity are distinguishable in duration and wall time",
+      "inputs": {
+        "tool": "slow",
+        "beforeHookDelayMs": 60,
+        "executeDelayMs": 10,
+        "afterHookDelayMs": 50
+      },
+      "expected": {
+        "hookCalls": 2,
+        "durationPresent": true,
+        "durationAtMostExecuteDelayPlusTolerance": true,
+        "durationLessThanBeforeHookDelay": true,
+        "wallClockStartToEndIncludesHookTime": true,
+        "durationLessThanWallClockStartToEnd": true
+      },
+      "normalizations": [
+        "raw durationMs and wall-clock milliseconds are volatile observations; the expected value keeps presence, absence, ordering and threshold relations"
+      ],
+      "observed": {
+        "durationMs": 10,
+        "wallClockMs": 121,
+        "hooks": {
+          "before": 1,
+          "after": 1
+        },
+        "hookCalls": 2,
+        "durationPresent": true,
+        "durationAtMostExecuteDelayPlusTolerance": true,
+        "durationLessThanBeforeHookDelay": true,
+        "wallClockStartToEndIncludesHookTime": true,
+        "durationLessThanWallClockStartToEnd": true
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "records how long execute() took on the tool result, excluding hooks"
+      }
+    },
+    {
+      "name": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
+      "inputs": {
+        "toolExecution": "sequential",
+        "calls": [
+          "ok",
+          "throws",
+          "blocked",
+          "missing"
+        ]
+      },
+      "expected": {
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:ok",
+          "tool_execution_end:ok:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:ok:duration=present",
+          "tool_execution_start:throws",
+          "tool_execution_end:throws:duration=present:error=true",
+          "message_start:toolResult",
+          "message_end:toolResult:throws:duration=present",
+          "tool_execution_start:blocked",
+          "tool_execution_end:blocked:duration=absent:error=true",
+          "message_start:toolResult",
+          "message_end:toolResult:blocked:duration=absent",
+          "tool_execution_start:missing",
+          "tool_execution_end:missing:duration=absent:error=true",
+          "message_start:toolResult",
+          "message_end:toolResult:missing:duration=absent",
+          "turn_end:assistant:tools=4",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=7"
+        ],
+        "executeCalls": {
+          "ok": 1,
+          "throws": 1
+        },
+        "durationPresent": {
+          "ok": true,
+          "throws": true,
+          "blocked": false,
+          "missing": false
+        },
+        "isError": {
+          "ok": false,
+          "throws": true,
+          "blocked": true,
+          "missing": true
+        },
+        "blockedText": "denied",
+        "unknownToolText": "Tool missing not found"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should ignore tool updates after the tool execution settles"
+      }
+    },
+    {
+      "name": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
+      "inputs": {
+        "tool": "prep",
+        "rawArguments": {
+          "oldText": "before",
+          "newText": "after"
+        },
+        "hookMutation": 123
+      },
+      "expected": {
+        "beforeValue": "beforeafter",
+        "executedValue": 123,
+        "executedValueType": "number",
+        "resultText": "123",
+        "durationPresent": true
+      },
+      "normalizations": [],
+      "observed": {
+        "beforeValue": "beforeafter",
+        "executedValue": 123,
+        "executedValueType": "number",
+        "resultText": "123",
+        "durationPresent": true
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should execute mutated beforeToolCall args without revalidation"
+      }
+    },
+    {
+      "name": "a call from a length-truncated message never executes and has no duration",
+      "inputs": {
+        "tool": "echo",
+        "stopReason": "length"
+      },
+      "expected": {
+        "executeCalls": 0,
+        "durationPresent": false,
+        "isError": true,
+        "resultText": "Tool call \"echo\" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.",
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:length",
+          "tool_execution_start:trunc",
+          "tool_execution_end:trunc:duration=absent:error=true",
+          "message_start:toolResult",
+          "message_end:toolResult:trunc:duration=absent",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=4"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should not execute tool calls from a length-truncated assistant message"
+      }
+    },
+    {
+      "name": "parallel tool ends follow completion order while result messages keep source order",
+      "inputs": {
+        "calls": [
+          {
+            "name": "slow",
+            "delayMs": 30
+          },
+          {
+            "name": "fast",
+            "delayMs": 1
+          }
+        ]
+      },
+      "expected": {
+        "startOrder": [
+          "slow",
+          "fast"
+        ],
+        "completionOrder": [
+          "fast",
+          "slow"
+        ],
+        "resultOrder": [
+          "slow",
+          "fast"
+        ],
+        "maxConcurrent": 2,
+        "durationPresent": [
+          true,
+          true
+        ]
+      },
+      "normalizations": [
+        "the completion ordering observation relies on the 30ms versus 1ms execute delays, not on exact millisecond values"
+      ],
+      "observed": {
+        "maxActive": 2,
+        "maxConcurrent": 2,
+        "startOrder": [
+          "slow",
+          "fast"
+        ],
+        "durationPresent": [
+          true,
+          true
+        ],
+        "completionOrder": [
+          "fast",
+          "slow"
+        ],
+        "resultOrder": [
+          "slow",
+          "fast"
+        ],
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:slow",
+          "tool_execution_start:fast",
+          "tool_execution_end:fast:duration=present:error=false",
+          "tool_execution_end:slow:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:slow:duration=present",
+          "message_start:toolResult",
+          "message_end:toolResult:fast:duration=present",
+          "turn_end:assistant:tools=2",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=5"
+        ]
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should emit tool_execution_end in completion order but persist tool results in source order"
+      }
+    },
+    {
+      "name": "runToolCall runs the hooks and reports execute-only duration",
+      "inputs": {
+        "calls": [
+          "ok",
+          "blocked"
+        ]
+      },
+      "expected": {
+        "ok": {
+          "durationPresent": true,
+          "isError": false,
+          "beforeCalls": 1,
+          "afterCalls": 1,
+          "executeCalls": 1,
+          "text": "hi"
+        },
+        "blocked": {
+          "durationPresent": false,
+          "isError": true,
+          "text": "no"
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "validates, runs the hooks, and reports failures as error outcomes"
+      }
+    },
+    {
+      "name": "afterToolCall content replacement drops structuredContent but keeps duration",
+      "inputs": {
+        "tool": "echo",
+        "toolStructuredContent": {
+          "value": "ok"
+        },
+        "replacement": "content only"
+      },
+      "expected": {
+        "hasStructuredContent": false,
+        "content": "replaced",
+        "details": {},
+        "durationPresent": true
+      },
+      "normalizations": [],
+      "observed": {
+        "hasStructuredContent": false,
+        "content": "replaced",
+        "details": {},
+        "durationPresent": true
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "lets afterToolCall replace structured content and drops it when only content is replaced"
+      }
+    },
+    {
+      "name": "nested calls forward parent ids and separate record duration from execute duration",
+      "inputs": {
+        "caller": "caller",
+        "tool": "echo",
+        "executeDelayMs": 5
+      },
+      "expected": {
+        "eventTypes": [
+          "tool_execution_start",
+          "tool_execution_end"
+        ],
+        "parentIds": [
+          "caller",
+          "caller"
+        ],
+        "endDurationPresent": true,
+        "endDurationMatchesOutcome": true,
+        "recordStatus": "ok",
+        "recordDurationPresent": true
+      },
+      "normalizations": [
+        "nested record duration contains event emission and the full tool pipeline; exact milliseconds are volatile"
+      ],
+      "observed": {
+        "eventTypes": [
+          "tool_execution_start",
+          "tool_execution_end"
+        ],
+        "parentIds": [
+          "caller",
+          "caller"
+        ],
+        "endDurationPresent": true,
+        "endDurationMatchesOutcome": true,
+        "recordStatus": "ok",
+        "recordDurationPresent": true,
+        "recordAtLeastOutcome": true
+      },
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/nested-tool-calls.test.ts",
+        "case": "records nested calls and their usage on the model-issued result"
+      }
+    },
+    {
+      "name": "replacing state.tools narrows the executable set and declares the system tool delta",
+      "inputs": {
+        "initialTools": [
+          "a",
+          "b"
+        ],
+        "replacementTools": [
+          "b"
+        ],
+        "issuedCall": "a"
+      },
+      "expected": {
+        "assignedTools": [
+          "b"
+        ],
+        "executed": {
+          "a": 0,
+          "b": 0
+        },
+        "systemDeclarations": [
+          {
+            "added": [
+              "a",
+              "b"
+            ],
+            "removed": []
+          },
+          {
+            "added": [],
+            "removed": [
+              "a"
+            ]
+          }
+        ],
+        "totalMessages": 6,
+        "resultText": "Tool a not found",
+        "durationPresent": false,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:system",
+          "message_end:system",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:removed-1",
+          "tool_execution_end:removed-1:duration=absent:error=true",
+          "message_start:toolResult",
+          "message_end:toolResult:removed-1:duration=absent",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=5"
+        ]
+      },
+      "normalizations": [],
+      "observed": {
+        "assignedTools": [
+          "b"
+        ],
+        "executed": {
+          "a": 0,
+          "b": 0
+        },
+        "declarations": [
+          {
+            "added": [
+              "a",
+              "b"
+            ],
+            "removed": []
+          },
+          {
+            "added": [],
+            "removed": [
+              "a"
+            ]
+          }
+        ],
+        "systemDeclarations": [
+          {
+            "added": [
+              "a",
+              "b"
+            ],
+            "removed": []
+          },
+          {
+            "added": [],
+            "removed": [
+              "a"
+            ]
+          }
+        ],
+        "totalMessages": 6,
+        "resultText": "Tool a not found",
+        "durationPresent": false,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:system",
+          "message_end:system",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:removed-1",
+          "tool_execution_end:removed-1:duration=absent:error=true",
+          "message_start:toolResult",
+          "message_end:toolResult:removed-1:duration=absent",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=5"
+        ]
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "declares tool loadout changes and resolves calls against the executable set"
+      }
+    },
+    {
+      "name": "tool duration survives the public session record round trip",
+      "inputs": {
+        "sessionRecord": "toolResult",
+        "durationMs": 4200
+      },
+      "expected": {
+        "role": "toolResult",
+        "durationMs": 4200,
+        "isError": false
+      },
+      "normalizations": [],
+      "observed": {
+        "role": "toolResult",
+        "durationMs": 4200,
+        "isError": false
+      },
+      "upstreamTest": {
+        "path": "packages/coding-agent/src/core/session-manager.ts",
+        "case": "appendMessage and SessionManager.open preserve the message record"
+      }
+    }
+  ]
+}

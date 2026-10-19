@@ -1,0 +1,356 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T15:59:06.183Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/agent/src/agent.ts:Agent.prompt,Agent.subscribe,Agent.waitForIdle,Agent.reset,Agent.state",
+    "packages/agent/src/agent-loop.ts:runAgentLoop,runLoop,streamAssistantResponse",
+    "packages/agent/src/types.ts:AgentEvent,AgentOptions,QueueMode",
+    "packages/agent/test/agent.test.ts:Agent",
+    "packages/agent/test/agent-loop.test.ts:runAgentLoop"
+  ],
+  "scenarios": [
+    {
+      "name": "turn and event ordering for a tool turn and a final response",
+      "inputs": {
+        "prompt": "go",
+        "tool": "echo",
+        "executionMode": "default"
+      },
+      "expected": {
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:echo-1",
+          "tool_execution_end:echo-1:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:echo-1:duration=present",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=4"
+        ],
+        "finalMessageRoles": [
+          "system",
+          "user",
+          "assistant",
+          "toolResult",
+          "assistant"
+        ],
+        "toolResultText": "a"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should handle tool calls and results"
+      }
+    },
+    {
+      "name": "ordinary stream injection drives assistant updates and the final message",
+      "inputs": {
+        "prompt": "go",
+        "streamEvents": [
+          "start",
+          "text_start",
+          "text_delta",
+          "text_end",
+          "done"
+        ]
+      },
+      "expected": {
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_update:text_start",
+          "message_update:text_delta",
+          "message_update:text_end",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=2"
+        ],
+        "lastAssistantText": "Hi",
+        "streamedUpdates": [
+          "text_start",
+          "text_delta",
+          "text_end"
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should subscribe to events"
+      }
+    },
+    {
+      "name": "agent_end listeners settle before prompt and waitForIdle resolve",
+      "inputs": {
+        "prompt": "go",
+        "agentEndListenerDelayMs": 20
+      },
+      "expected": {
+        "order": [
+          "agent_end:listener_start",
+          "agent_end:listener_end",
+          "waitForIdle:resolved",
+          "prompt:resolved"
+        ],
+        "isStreamingDuringAgentEndListener": true,
+        "isStreamingAfterWaitForIdle": false
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "waitForIdle should wait for async subscribers"
+      }
+    },
+    {
+      "name": "Agent defaults select off thinking, parallel tools and one-at-a-time queues",
+      "inputs": {
+        "options": {
+          "streamFn": "unused"
+        }
+      },
+      "expected": {
+        "thinkingLevel": "off",
+        "modelId": "unknown",
+        "toolCount": 0,
+        "messageCount": 0,
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "toolExecution": "parallel",
+        "transport": "auto",
+        "isStreaming": false
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should create an agent instance with default state"
+      }
+    },
+    {
+      "name": "the default thinking level remains off for a reasoning-capable model",
+      "inputs": {
+        "model": {
+          "id": "reasoning-mock",
+          "reasoning": true
+        },
+        "explicitThinkingLevel": false
+      },
+      "expected": {
+        "thinkingLevel": "off",
+        "modelId": "reasoning-mock"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should create an agent instance with custom initial state"
+      }
+    },
+    {
+      "name": "reset restores the prompt baseline and clears both queues",
+      "inputs": {
+        "prompt": "go",
+        "queuedBeforeReset": [
+          "steer",
+          "follow"
+        ]
+      },
+      "expected": {
+        "roles": [
+          "system"
+        ],
+        "systemPrompt": "sys",
+        "hasQueuedMessages": false,
+        "isStreaming": false
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "restores the transcript baseline when reset"
+      }
+    },
+    {
+      "name": "prepareRequest observes the pending prompt before the provider request",
+      "inputs": {
+        "prompt": "go",
+        "prepareRequestReturns": "undefined"
+      },
+      "expected": {
+        "calls": [
+          {
+            "roles": [
+              "user"
+            ],
+            "model": "unknown",
+            "thinkingLevel": "off"
+          }
+        ]
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "prepares the initial request after pending messages and can replace request state"
+      }
+    },
+    {
+      "name": "prepareNextTurn runs once before a continuing turn and can append messages",
+      "inputs": {
+        "tool": "echo",
+        "preparedMessage": "prepared"
+      },
+      "expected": {
+        "prepareNextTurnCalls": 1,
+        "secondRequestRoles": [
+          "system",
+          "user",
+          "assistant",
+          "toolResult",
+          "user"
+        ],
+        "secondRequestLastUser": "prepared"
+      },
+      "normalizations": [],
+      "observed": {
+        "prepareCalls": 1,
+        "requestContexts": [
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "lastUser": "go"
+          },
+          {
+            "roles": [
+              "system",
+              "user",
+              "assistant",
+              "toolResult",
+              "user"
+            ],
+            "lastUser": "prepared"
+          }
+        ],
+        "prepareNextTurnCalls": 1,
+        "secondRequestRoles": [
+          "system",
+          "user",
+          "assistant",
+          "toolResult",
+          "user"
+        ],
+        "secondRequestLastUser": "prepared"
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should use prepareNextTurn snapshot before continuing"
+      }
+    },
+    {
+      "name": "finishTurn action end stops the run before follow-up polling",
+      "inputs": {
+        "finishTurnAction": "end",
+        "queuedFollowUp": "follow"
+      },
+      "expected": {
+        "finishTurnCalls": 1,
+        "requestCount": 1,
+        "remainingQueued": true,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=2"
+        ]
+      },
+      "normalizations": [],
+      "observed": {
+        "finishCalls": 1,
+        "finishTurnCalls": 1,
+        "requestCount": 1,
+        "remaining": true,
+        "remainingQueued": true,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=2"
+        ]
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "action:end skips queue polling and next-turn preparation"
+      }
+    },
+    {
+      "name": "a provider error terminal emits one failed assistant lifecycle",
+      "inputs": {
+        "providerEvent": "error",
+        "errorMessage": "provider boom"
+      },
+      "expected": {
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:error",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=2"
+        ],
+        "errorMessage": "provider boom",
+        "isStreaming": false
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "emits full lifecycle events for thrown run failures"
+      }
+    },
+    {
+      "name": "a second prompt while a run is active is rejected without replacing the run",
+      "inputs": {
+        "firstPrompt": "first",
+        "secondPromptWhileActive": "second"
+      },
+      "expected": {
+        "secondPromptError": "Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion."
+      },
+      "normalizations": [],
+      "observed": {
+        "secondPromptError": "Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion."
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should throw when prompt() called while streaming"
+      }
+    }
+  ]
+}

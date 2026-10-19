@@ -1,0 +1,1558 @@
+{
+  "schema": "cch/pi-v1.3.0-audit-ledger/1",
+  "ticket": "1047",
+  "title": "Audit Agent execution, tool timing and input admission",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "platform": "linux-x86_64-glibc",
+  "status": "audit-complete-upstream-captured; no production fix in this ticket",
+  "statusVocabulary": {
+    "membership": {
+      "supported": "The frozen behavior is in the ticket's parity surface and must be owned by the named C++ package/consumer chain.",
+      "excluded": "Deliberately outside #1047; reason is mandatory."
+    },
+    "implementation": {
+      "implemented": "C++ has the behavior and the acceptance seam exists.",
+      "partial": "C++ has part of the behavior or a consumer/projection gap remains.",
+      "missing": "C++ has no implementation of the frozen behavior."
+    },
+    "verification": {
+      "upstream-captured": "A named frozen scenario exists in a published bundle; this is not a C++ proof.",
+      "unverified": "No frozen comparison artifact exists.",
+      "not-applicable": "No verification is meaningful for this row."
+    },
+    "noRowIsVerified": "No row is marked verified: #1047 is an audit and does not run new C++ tests."
+  },
+  "evidenceBundle": {
+    "manifest": "fixtures/pi-v1.3.0/audit-1047/manifest.json",
+    "manifestSha256": "0d146159a27ceaf1e657cd22997c1ebdc972818215054a860d88226e7d58d59a",
+    "captureCommand": "PI_CHECKOUT=/tmp/cch-1047-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1047-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1047/capture-agent.mts",
+    "environment": {
+      "platform": "linux",
+      "arch": "x64",
+      "libc": "glibc",
+      "glibcVersion": "2.44",
+      "node": "v26.12.0",
+      "tsx": "4.22.1"
+    },
+    "artifacts": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "sha256": "2aef0aa9b2d85e7267e3ab1d0b9a865e47a61aa0b71b801374cb4a8fe974eebd",
+        "bytes": 10153,
+        "scenarioCount": 11,
+        "sourceEndpoints": [
+          "packages/agent/src/agent.ts:Agent.prompt,Agent.subscribe,Agent.waitForIdle,Agent.reset,Agent.state",
+          "packages/agent/src/agent-loop.ts:runAgentLoop,runLoop,streamAssistantResponse",
+          "packages/agent/src/types.ts:AgentEvent,AgentOptions,QueueMode",
+          "packages/agent/test/agent.test.ts:Agent",
+          "packages/agent/test/agent-loop.test.ts:runAgentLoop"
+        ]
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "sha256": "fbc55adb5947c3e722fdf6902ec0e6e057a3947f2d154982f3466dbacb080a35",
+        "bytes": 15721,
+        "scenarioCount": 10,
+        "sourceEndpoints": [
+          "packages/agent/src/agent-loop.ts:prepareToolCall,executePreparedToolCall,finalizeExecutedToolCall,emitToolExecutionEnd,createToolResultMessage,runToolCall",
+          "packages/agent/src/types.ts:AgentToolCallOutcome,BeforeToolCallResult,AfterToolCallResult",
+          "packages/ai/src/types.ts:ToolResultMessage",
+          "packages/coding-agent/src/core/nested-tool-calls.ts:NestedToolCallRunner",
+          "packages/coding-agent/src/core/session-manager.ts:SessionManager.appendMessage,SessionManager.open",
+          "packages/agent/test/agent-loop.test.ts:tool execution",
+          "packages/coding-agent/test/nested-tool-calls.test.ts:NestedToolCallRunner"
+        ]
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "sha256": "48039a377d500663012497882bf5fbdca384d6fcc60ec74c1f6075982693f609",
+        "bytes": 12111,
+        "scenarioCount": 6,
+        "sourceEndpoints": [
+          "packages/agent/src/agent.ts:PendingMessageQueue,Agent.steer,Agent.followUp,Agent.peekQueuedMessages,Agent.clearSteeringQueue,Agent.clearAllQueues,Agent.continue",
+          "packages/agent/src/agent-loop.ts:runLoop,getSteeringMessages,getFollowUpMessages",
+          "packages/agent/src/types.ts:QueueMode",
+          "packages/agent/test/agent.test.ts:Agent queues",
+          "packages/agent/test/agent-loop.test.ts:queued messages"
+        ]
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1047/cancellation.json",
+        "sha256": "45d932a1915958d0aa27365f0bdffa1a3c6c5f4e1de78d5f2be41b385e08c37e",
+        "bytes": 5034,
+        "scenarioCount": 3,
+        "sourceEndpoints": [
+          "packages/agent/src/agent.ts:Agent.abort,Agent.signal,Agent.waitForIdle,Agent.prompt",
+          "packages/agent/src/agent-loop.ts:executeToolCallsSequential,runLoop",
+          "packages/agent/src/types.ts:AgentEvent,AgentTool",
+          "packages/agent/test/agent.test.ts:should handle abort controller",
+          "packages/agent/test/agent-loop.test.ts:sequential execution"
+        ]
+      }
+    ],
+    "scenarioCount": 30
+  },
+  "rows": [
+    {
+      "id": "agent-core:Agent:default-state",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentOptions(effective defaults)",
+        "AgentState.thinkingLevel",
+        "AgentState.model",
+        "AgentState.steeringMode",
+        "AgentState.followUpMode",
+        "AgentOptions.toolExecution",
+        "AgentOptions.transport"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::Impl::Impl"
+          ]
+        },
+        {
+          "path": "src/agent/include/cch/agent/Agent.hpp",
+          "symbols": [
+            "AgentOptions",
+            "AgentState"
+          ]
+        },
+        {
+          "path": "src/agent/include/cch/agent/AgentTool.hpp",
+          "symbols": [
+            "ToolConcurrency"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "Agent defaults select off thinking, parallel tools and one-at-a-time queues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "Agent defaults select off thinking, parallel tools and one-at-a-time queues",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should create an agent instance with default state"
+      ],
+      "verification": "upstream-captured",
+      "notes": "C++ requests thinking_level \"medium\" then clamps by model (src/agent/Agent.cpp Agent::Impl::Impl); the unknown default model clamps to \"off\", but a reasoning-capable model keeps \"medium\" (frozen pi keeps \"off\"; see adjacent lifecycle scenario). Queue modes and unknown model match; per-tool concurrency does not (see parallel-scheduling). transport/toolExecution surface differs (C++ ToolConcurrency plus optional bounded parallel)."
+    },
+    {
+      "id": "agent-core:Agent:reset",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.reset"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent"
+          ]
+        },
+        {
+          "path": "src/agent/include/cch/agent/Agent.hpp",
+          "symbols": [
+            "Agent"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "scenario": "reset restores the prompt baseline and clears both queues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "reset restores the prompt baseline and clears both queues",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:restores the transcript baseline when reset"
+      ],
+      "verification": "upstream-captured",
+      "notes": "No Agent::reset in C++ and no equivalent system-prompt/message re-seed. Frozen reset re-applies the initial system prompt/tools/model/thinking and clears both queues plus transient streaming/error state."
+    },
+    {
+      "id": "agent-core:Agent:prompt-busy",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.prompt"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::prompt",
+            "Agent::continue_run"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "a second prompt while a run is active is rejected without replacing the run",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "a second prompt while a run is active is rejected without replacing the run",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should throw when prompt() called while streaming"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionExecution.cpp",
+        "symbols": [
+          "AgentSession::Impl::run_prompt"
+        ],
+        "chainTo": "AgentSession::prompt"
+      },
+      "notes": "C++ rejects a concurrent prompt/continue but the diagnostic text is \"agent is busy (prompt already in flight)\" rather than pi's exact message. The frozen run remains the active one."
+    },
+    {
+      "id": "agent-core:Agent:wait-for-idle",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.waitForIdle"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::wait_idle"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "agent_end listeners settle before prompt and waitForIdle resolve",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "agent_end listeners settle before prompt and waitForIdle resolve",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:waitForIdle should wait for async subscribers"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionExecution.cpp",
+        "symbols": [
+          "AgentSession::Impl::run_prompt"
+        ],
+        "chainTo": "AgentSession::prompt"
+      },
+      "notes": "Frozen settlement order is listener_start, listener_end, waitForIdle, prompt. C++ run_loop awaits event commitment before returning; later C++ settlement test must observe the same order, not just eventual idle."
+    },
+    {
+      "id": "agent-core:Agent:abort",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.abort",
+        "Agent.signal"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::abort"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "Agent::Impl::run_loop",
+            "Agent::Impl::run_turns"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "abort during sequential execution skips the next call and settles through an aborted provider turn",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/cancellation.json",
+        "scenario": "abort during sequential execution skips the next call and settles through an aborted provider turn",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should force sequential execution when a tool has executionMode=sequential"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionExecution.cpp",
+        "symbols": [
+          "AgentSession::abort"
+        ],
+        "chainTo": "AgentSession::abort"
+      },
+      "notes": "Captured additionally: stream abort is idempotent and yields one aborted assistant terminal; abort while idle is a no-op. C++ uses a run-owned stop_source rather than Agent.signal. C++ never starts later sequential calls after stop; no C++ test was run in this audit."
+    },
+    {
+      "id": "agent-core:Agent:event-lifecycle",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentEvent",
+        "AgentEventSink",
+        "Agent.subscribe"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/AgentEvent.hpp",
+          "symbols": [
+            "AgentLifecycleEvent",
+            "ToolExecutionStartEvent",
+            "ToolExecutionEndEvent"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "Agent::Impl::run_turns",
+            "emit_agent_event"
+          ]
+        },
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "ToolCallExecutor::execute_single_call"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "turn and event ordering for a tool turn and a final response",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "turn and event ordering for a tool turn and a final response",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should handle tool calls and results"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionInteraction.cpp",
+        "symbols": [
+          "AgentSession::Impl::apply_event"
+        ],
+        "chainTo": "ProjectionStream patches"
+      },
+      "notes": "Captured order: agent_start, turn_start, user message, assistant toolUse, tool start/end, toolResult message, turn_end, next turn, agent_end. Tool start/end are strictly paired, including unknown/blocked/truncated calls. C++ emits start before registry resolution, matching frozen order; C++ end event lacks durationMs."
+    },
+    {
+      "id": "agent-core:Agent:stream-injection",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentOptions.streamFn",
+        "AssistantMessageEventStream"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/Agent.hpp",
+          "symbols": [
+            "ai::ModelStreamFactory"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "Agent::Impl::run_turns",
+            "AgentRunPolicy::stream_factory"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "ordinary stream injection drives assistant updates and the final message",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "ordinary stream injection drives assistant updates and the final message",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should subscribe to events"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionExecution.cpp",
+        "symbols": [
+          "AgentSession::Impl::make_stream_factory"
+        ],
+        "chainTo": "ModelRuntime stream"
+      },
+      "notes": "Frozen stream events text_start/text_delta/text_end appear as message_update and the final message is the done message. No streamProxy protocol capture; explicitly out of scope."
+    },
+    {
+      "id": "agent-core:Agent:provider-error",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentEvent",
+        "AgentState.errorMessage"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "Agent::Impl::run_turns"
+          ]
+        },
+        {
+          "path": "src/agent/include/cch/agent/AgentEvent.hpp",
+          "symbols": [
+            "AgentEndEvent"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "a provider error terminal emits one failed assistant lifecycle",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "a provider error terminal emits one failed assistant lifecycle",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:emits full lifecycle events for thrown run failures"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen runner emits message_start assistant, message_end assistant:error, turn_end and agent_end; state.errorMessage is set. This is the stream error terminal, distinct from a thrown-run failure path."
+    },
+    {
+      "id": "agent-core:Agent:continue",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.continue"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::continue_run",
+            "continue_run_with_queue_fallback"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "continue from an assistant tail drains steering before follow-up",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "scenario": "continue from an assistant tail drains steering before follow-up",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:continue() should process queued follow-up messages after an assistant turn"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionExecution.cpp",
+        "symbols": [
+          "AgentSession::Impl::run_prompt"
+        ],
+        "chainTo": "AgentSession::Impl::run_prompt retry/continue path"
+      },
+      "notes": "Frozen continue appends steering first, otherwise follow-up, and rejects an assistant tail with both queues empty. C++ matches the drain preference and continuation_no_messages_error; exact error text not captured."
+    },
+    {
+      "id": "agent-core:Agent:prepare-request-hook",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentOptions.prepareRequest"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/Agent.hpp",
+          "symbols": [
+            "AgentOptions"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "AgentRunPolicy"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "scenario": "prepareRequest observes the pending prompt before the provider request",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "prepareRequest observes the pending prompt before the provider request",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:prepares the initial request after pending messages and can replace request state"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen prepareRequest sees the pending Agent messages (context.messages excludes the separately carried system prompt) before each provider request and may replace request context/model/thinking. C++ has no prepareRequest option; transform_context is a different earlier hook."
+    },
+    {
+      "id": "agent-core:Agent:finish-turn-hook",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentOptions.finishTurn",
+        "AgentTurnAction"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/Agent.hpp",
+          "symbols": [
+            "ShouldStopAfterTurnHook",
+            "AgentLoopTurnUpdate"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "should_stop_after_turn"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "finishTurn action end stops the run before follow-up polling",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "finishTurn action end stops the run before follow-up polling",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:action:end skips queue polling and next-turn preparation"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen finishTurn chooses continue (with replacement context) or end; end skips queue polling and next-turn preparation. C++ only has should_stop_after_turn bool, so it cannot express the continuing replacement-context action and runs the stop check at a different seam."
+    },
+    {
+      "id": "agent-core:Agent:prepare-next-turn-hook",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentOptions.prepareNextTurn"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/Agent.hpp",
+          "symbols": [
+            "PrepareNextTurnHook",
+            "AgentLoopTurnUpdate"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "Agent::Impl::run_turns"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "prepareNextTurn runs once before a continuing turn and can append messages",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/lifecycle.json",
+        "scenario": "prepareNextTurn runs once before a continuing turn and can append messages",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should use prepareNextTurn snapshot before continuing"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen hook runs once after a tool turn and its appended user message is emitted before the next provider request. C++ PrepareNextTurnHook returns model/context/thinking only (AgentLoopTurnUpdate has no messages), so it cannot append the captured message."
+    },
+    {
+      "id": "agent-core:InputQueue:admission",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.steer",
+        "Agent.followUp",
+        "Agent.hasQueuedMessages"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/AgentContext.hpp",
+          "symbols": [
+            "kDefaultMaxQueuedMessages",
+            "kDefaultMaxQueuedBytes",
+            "AgentInputQueues"
+          ]
+        },
+        {
+          "path": "src/agent/AgentImpl.hpp",
+          "symbols": [
+            "admit_queued_message"
+          ]
+        },
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::steer",
+            "Agent::follow_up"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "queue admission is unbounded and both queues default to one-at-a-time",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "scenario": "queue admission is unbounded and both queues default to one-at-a-time",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should support steering message queue"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSession.hpp",
+        "symbols": [
+          "AgentSession::steer",
+          "AgentSession::follow_up"
+        ],
+        "chainTo": "Agent::steer/follow_up"
+      },
+      "notes": "Frozen queues accept 300+300 messages and steer/followUp return void. C++ defaults 256 messages / 16 MiB and returns ExpectedVoid with capacity errors; ADR 0022 amendment makes frozen admission authoritative and the caps a migration obligation. C++ queue modes match."
+    },
+    {
+      "id": "agent-core:InputQueue:steering-one-at-a-time",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.steer",
+        "steeringMode"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::Impl::drain"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "run_loop"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "one-at-a-time steering injects the oldest message after the tool turn",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "scenario": "one-at-a-time steering injects the oldest message after the tool turn",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should inject queued messages after all tool calls complete"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Each requested message is appended as a user message and forces another turn; agent_end.messages=7 for 1 assistant + 1 toolResult + 3 user + 2 assistant + 1 user sequence. C++ drain(front) matches; exact event digest not yet compared by a C++ test."
+    },
+    {
+      "id": "agent-core:InputQueue:steering-all",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.steer",
+        "steeringMode=\"all\""
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::Impl::drain"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "all-mode steering injects every queued message in FIFO order in one turn",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "scenario": "all-mode steering injects every queued message in FIFO order in one turn",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should support steering message queue"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen all-mode drains both queued user messages into one turn (one request after the tool result); C++ drain(All) moves the vector in FIFO order."
+    },
+    {
+      "id": "agent-core:InputQueue:follow-up",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.followUp",
+        "followUpMode"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "run_loop"
+          ]
+        },
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::Impl::drain"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "follow-up runs only after an otherwise stopping assistant turn",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "scenario": "follow-up runs only after an otherwise stopping assistant turn",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should support follow-up message queue"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen follow-up is not injected before a tool result; it starts a new turn only when the assistant turn stops. C++ polls follow-up after a non-tool terminal; one-at-a-time and all modes share drain."
+    },
+    {
+      "id": "agent-core:InputQueue:peek-clear",
+      "path": "agent-core",
+      "piSymbols": [
+        "Agent.peekSteering",
+        "Agent.peekFollowUp",
+        "Agent.clearSteeringQueue",
+        "Agent.clearFollowUpQueue",
+        "Agent.clearAllQueues"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::peek_steering",
+            "Agent::peek_follow_up",
+            "Agent::clear_steering_queue",
+            "Agent::clear_follow_up_queue",
+            "Agent::clear_all_queues"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "peek prefers steering and clearAllQueues removes both queues",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "scenario": "peek prefers steering and clearAllQueues removes both queues",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:previews the next selected queued messages without consuming them"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen peek returns the oldest steering message when present and otherwise the oldest follow-up; clearAllQueues empties both. C++ has the same methods; no capacity interaction remains after the admission fix."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:duration",
+      "path": "agent-core",
+      "piSymbols": [
+        "ToolExecutionEndEvent.durationMs",
+        "ToolResultMessage.durationMs",
+        "ToolCallOutcome.durationMs"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/AgentEvent.hpp",
+          "symbols": [
+            "ToolExecutionEndEvent"
+          ]
+        },
+        {
+          "path": "src/ai/include/cch/ai/Message.hpp",
+          "symbols": [
+            "ToolResultMessage"
+          ]
+        },
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "execute_resolved_call",
+            "execute_single_call"
+          ]
+        },
+        {
+          "path": "src/agent/include/cch/agent/NestedToolCalls.hpp",
+          "symbols": [
+            "NestedToolCallRecord.duration_ms"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "scenario": "hook and execute activity are distinguishable in duration and wall time",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "hook and execute activity are distinguishable in duration and wall time",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:records how long execute() took on the tool result, excluding hooks"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionInteraction.cpp",
+        "symbols": [
+          "AgentSession::Impl::apply_event",
+          "make_projection_tool_execution"
+        ],
+        "chainTo": "ToolExecutionSnapshot -> ProjectionStream"
+      },
+      "notes": "Frozen durationMs is measured with perf.now around execute only (after prepareArguments, beforeToolCall and before afterToolCall): a 120 ms before hook plus 10 ms execute produced durationMs=10 and wallClock=121. Frozen end event and tool-result message carry durationMs only for executed calls; blocked/unknown/truncated lack the key. C++ ToolExecutionEndEvent and ToolResultMessage have no duration; only NestedToolCallRecord.duration_ms exists. This is the central acceptance gap."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:outcomes",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentTool.execute",
+        "BeforeToolCallResult.block"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "resolve_tool_call",
+            "execute_single_call",
+            "apply_after_result"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should ignore tool updates after the tool execution settles"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionInteraction.cpp",
+        "symbols": [
+          "AgentSession::Impl::apply_event"
+        ],
+        "chainTo": "ToolExecutionStatus"
+      },
+      "notes": "C++ classifies success/thrown/blocked/unknown and keeps start/end pairs, but diagnostics differ: frozen unknown text is \"Tool <name> not found\" and a block with no reason is the supplied reason; C++ emits \"unknown tool: <name> (argument location: root)\" and \"Tool execution was blocked\". Duration absence is the contract differentiator, not the is_error flag alone."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:prepare-arguments",
+      "path": "agent-core",
+      "piSymbols": [
+        "ToolDefinition.prepareArguments"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "resolve_tool_call",
+            "prepare_tool_arguments"
+          ]
+        },
+        {
+          "path": "src/agent/include/cch/agent/AgentTool.hpp",
+          "symbols": [
+            "Tool"
+          ]
+        },
+        {
+          "path": "src/agent/ToolArgumentPreparation.hpp",
+          "symbols": [
+            "prepare_tool_arguments"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "scenario": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should execute mutated beforeToolCall args without revalidation"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen order is prepareArguments -> validate -> beforeToolCall -> execute; a beforeToolCall mutation from string to number executed without revalidation. C++ resolves/validates raw arguments and has no prepareArguments hook, so a tool cannot normalize a model payload before validation."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:argument-mutation",
+      "path": "agent-core",
+      "piSymbols": [
+        "BeforeToolCallResult.args"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "execute_single_call",
+            "BeforeToolCallContext"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should execute mutated beforeToolCall args without revalidation"
+      ],
+      "verification": "upstream-captured",
+      "notes": "C++ passes validated invocation.arguments to beforeToolCall, then executes the returned args without revalidation. The captured case (string \"123\" mutated to number 123) matches once prepareArguments is added; the captured assertion is the combined order/mutation case."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:truncation",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentLoopConfig.getToolCalls",
+        "ToolCallOutcome"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "Agent::Impl::run_turns"
+          ]
+        },
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "execute_single_call"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "a call from a length-truncated message never executes and has no duration",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "a call from a length-truncated message never executes and has no duration",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should not execute tool calls from a length-truncated assistant message"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen emitted the exact text \"Tool call \\\"echo\\\" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.\", no execute, and no durationMs on event or result. C++ has the same message path; adding duration must not add it here."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:parallel-scheduling",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentOptions.toolExecution",
+        "Tool.executionMode"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/AgentTool.hpp",
+          "symbols": [
+            "ToolConcurrency"
+          ]
+        },
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "execute_single_call",
+            "ToolExecutionPermits"
+          ]
+        },
+        {
+          "path": "src/agent/AgentRun.cpp",
+          "symbols": [
+            "execute_tool_calls"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "parallel tool ends follow completion order while result messages keep source order",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "parallel tool ends follow completion order while result messages keep source order",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:should emit tool_execution_end in completion order but persist tool results in source order"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen toolExecution defaults to parallel and an omitted executionMode permits concurrency (maxActive=2); tool_execution_end follows completion order while toolResult messages keep assistant source order. C++ AgentTool.hpp documents ParallelSafe as the omitted default but Tool::concurrency is initialized to Exclusive, so a pi-defined tool serializes unless explicitly changed. C++ batch result assembly is source-ordered."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:run-tool-call",
+      "path": "agent-core",
+      "piSymbols": [
+        "runToolCall"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "ToolCallExecutor::execute_single_call"
+          ]
+        },
+        {
+          "path": "src/agent/NestedToolCalls.cpp",
+          "symbols": [
+            "run_nested_tool"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "scenario": "runToolCall runs the hooks and reports execute-only duration",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "runToolCall runs the hooks and reports execute-only duration",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:validates, runs the hooks, and reports failures as error outcomes"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen exports runToolCall as an independent public function returning {ok,result,durationMs,startedAt} or a blocked outcome with no duration. C++ exposes only the executor/nested-runner internals; there is no public equivalent result shape."
+    },
+    {
+      "id": "agent-core:ToolCallExecutor:after-tool-call",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentOptions.afterToolCall"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "apply_after_result",
+            "AfterToolCallResult"
+          ]
+        },
+        {
+          "path": "src/ai/include/cch/ai/Message.hpp",
+          "symbols": [
+            "ToolResultMessage"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "afterToolCall content replacement drops structuredContent but keeps duration",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "afterToolCall content replacement drops structuredContent but keeps duration",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:lets afterToolCall replace structured content and drops it when only content is replaced"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen afterToolCall content replacement drops structuredContent (details remains {}) while durationMs survives. C++ has details rather than structuredContent and no duration, so the captured content/details outcome can match but the duration-preservation half cannot until the field exists."
+    },
+    {
+      "id": "agent-core:ToolRegistry:active-set",
+      "path": "agent-core",
+      "piSymbols": [
+        "AgentState.tools",
+        "AgentTool",
+        "prepareToolCall"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/Agent.hpp",
+          "symbols": [
+            "Agent::set_active_tools",
+            "Agent::active_tools",
+            "Agent::tool_definitions"
+          ]
+        },
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "resolve_tool_call"
+          ]
+        },
+        {
+          "path": "src/agent/Agent.cpp",
+          "symbols": [
+            "Agent::set_active_tools"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "replacing state.tools narrows the executable set and declares the system tool delta",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "replacing state.tools narrows the executable set and declares the system tool delta",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:declares tool loadout changes and resolves calls against the executable set"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/runtime/McpSessionManager.cpp",
+        "symbols": [
+          "McpSessionManager::refresh_tools",
+          "active_tools",
+          "set_active_tools"
+        ],
+        "chainTo": "Agent::set_active_tools -> ToolCallExecutor"
+      },
+      "notes": "Frozen state.tools is the executable set: assignment copies the replacement array, a removed tool call returns \"Tool a not found\" and never executes, and the next request receives a system message declaring toolsAdded/toolsRemoved. C++ set_active_tools only narrows the declared snapshot; ToolCallExecutor resolves every call against the full registry, so an inactive tool still executes and no system tool-delta message is emitted. Later C++ test must assert execute count 0 for the removed name, not only that the prompt declaration hides it."
+    },
+    {
+      "id": "agent-core:NestedToolCalls:parent-ids",
+      "path": "agent-core",
+      "piSymbols": [
+        "NestedToolCallRunner",
+        "ctx.executeTool"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/NestedToolCalls.hpp",
+          "symbols": [
+            "NestedToolCallHost",
+            "NestedToolCallRunner"
+          ]
+        },
+        {
+          "path": "src/agent/NestedToolCalls.cpp",
+          "symbols": [
+            "NestedToolCallRunner::run_nested_tool"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "implemented",
+      "scenario": "nested calls forward parent ids and separate record duration from execute duration",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "nested calls forward parent ids and separate record duration from execute duration",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/coding-agent/test/nested-tool-calls.test.ts:records nested calls and their usage on the model-issued result"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen emits tool_execution_start/end for a nested call with parentToolCallId=caller and records the result under nestedCalls. C++ forwards parent_tool_call_id and records nestedCalls; the captured shape is implemented."
+    },
+    {
+      "id": "agent-core:NestedToolCalls:duration",
+      "path": "agent-core",
+      "piSymbols": [
+        "ToolExecutionEndEvent.durationMs",
+        "NestedToolCallRecord.durationMs"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/agent/include/cch/agent/NestedToolCalls.hpp",
+          "symbols": [
+            "NestedToolCallRecord.duration_ms"
+          ]
+        },
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "run_nested_tool",
+            "execute_single_call"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "nested calls forward parent ids and separate record duration from execute duration",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "nested calls forward parent ids and separate record duration from execute duration",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/coding-agent/test/nested-tool-calls.test.ts:records nested calls and their usage on the model-issued result"
+      ],
+      "verification": "upstream-captured",
+      "notes": "Frozen nested tool_execution_end.durationMs equals the nested execute duration (runToolCall), while the record duration includes the full nested pipeline. C++ has only the record duration and no end-event duration, so the two clocks cannot be distinguished."
+    },
+    {
+      "id": "agent-core:ToolResult:duration-field",
+      "path": "agent-core",
+      "piSymbols": [
+        "ToolResultMessage.durationMs"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/ai/include/cch/ai/Message.hpp",
+          "symbols": [
+            "ToolResultMessage"
+          ]
+        },
+        {
+          "path": "src/agent/ToolCallExecutor.cpp",
+          "symbols": [
+            "execute_single_call"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "missing",
+      "scenario": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should ignore tool updates after the tool execution settles"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/agent/harness/session/SessionMessageJson.hpp",
+        "symbols": [
+          "MessageDto",
+          "to_message_dto(ai::ToolResultMessage)",
+          "message_from_dto"
+        ],
+        "chainTo": "EntrySerializer -> JsonlSessionStore/SqliteSessionStore/SessionJournal"
+      },
+      "notes": "Frozen toolResult.durationMs is 4200 after appending a user message and reading the session record; absent for blocked/unknown/truncated results. C++ ToolResultMessage and MessageDto have no durationMs, so the public session record cannot round-trip it. This blocks the persistence acceptance case even if the live event gains the field."
+    },
+    {
+      "id": "coding-agent:AgentSession:tool-telemetry",
+      "path": "apps",
+      "piSymbols": [
+        "AgentSession tool projection"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/coding_agent/AgentSessionInteraction.cpp",
+          "symbols": [
+            "AgentSession::Impl::apply_event",
+            "make_projection_tool_execution",
+            "ToolFinishedPatch"
+          ]
+        },
+        {
+          "path": "src/coding_agent/include/cch/coding_agent/AgentSessionSnapshot.hpp",
+          "symbols": [
+            "ToolExecutionSnapshot"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "hook and execute activity are distinguishable in duration and wall time",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "hook and execute activity are distinguishable in duration and wall time",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:records how long execute() took on the tool result, excluding hooks"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/AgentSessionInteraction.cpp",
+        "symbols": [
+          "ToolFinishedPatch"
+        ],
+        "chainTo": "ProjectionStream -> TUI"
+      },
+      "notes": "AgentSession projects tool start/end into ToolExecutionSnapshot/ProjectionStream but carries no duration or started/ended timestamps. Adding end-event duration to AgentEvent will not reach AgentSession consumers until this projection seam carries it."
+    },
+    {
+      "id": "coding-agent:TUI:tool-duration",
+      "path": "apps",
+      "piSymbols": [
+        "ToolExecutionComponent",
+        "BashRenderer duration"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/coding_agent/tui/ToolExecutionComponent.cpp",
+          "symbols": [
+            "ToolExecutionComponent::mark_execution_started",
+            "ToolExecutionComponent::update_result",
+            "ToolRenderContext.started_at_ms",
+            "ToolRenderContext.ended_at_ms"
+          ]
+        },
+        {
+          "path": "src/coding_agent/tui/BashRenderer.cpp",
+          "symbols": [
+            "BashRenderer::render_result"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "hook and execute activity are distinguishable in duration and wall time",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/tool-execution.json",
+        "scenario": "hook and execute activity are distinguishable in duration and wall time",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent-loop.test.ts:records how long execute() took on the tool result, excluding hooks"
+      ],
+      "verification": "upstream-captured",
+      "consumer": {
+        "path": "src/coding_agent/tui/ChatContainer.cpp",
+        "symbols": [
+          "ChatContainer::Impl::apply_agent_event"
+        ],
+        "chainTo": "ToolExecutionComponent -> BashRenderer \"Took\""
+      },
+      "notes": "C++ TUI stamps wall-clock start at tool_execution_start receipt and end at update_result, then BashRenderer renders a \"Took\" span. Frozen durationMs is monotonic execute-only and excludes hooks; the TUI must consume the event/result duration (or be proven a non-contract display) rather than derive it from wall time. A later C++ test should force a >100 ms hook and a short execute and assert the displayed duration differs from the wall-clock span."
+    },
+    {
+      "id": "coding-agent:AgentSession:queue-admission",
+      "path": "apps",
+      "piSymbols": [
+        "AgentSession.steer",
+        "AgentSession.followUp"
+      ],
+      "cchTargets": [
+        {
+          "path": "src/coding_agent/AgentSession.hpp",
+          "symbols": [
+            "AgentSession::steer",
+            "AgentSession::follow_up"
+          ]
+        },
+        {
+          "path": "src/coding_agent/AgentSessionInteraction.cpp",
+          "symbols": [
+            "AgentSession::Impl::steer",
+            "AgentSession::Impl::follow_up"
+          ]
+        }
+      ],
+      "membership": "supported",
+      "implementation": "partial",
+      "scenario": "queue admission is unbounded and both queues default to one-at-a-time",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1047/queue-admission.json",
+        "scenario": "queue admission is unbounded and both queues default to one-at-a-time",
+        "result": "upstream-captured"
+      },
+      "piTests": [
+        "packages/agent/test/agent.test.ts:should support steering message queue"
+      ],
+      "verification": "upstream-captured",
+      "notes": "AgentSession forwards to Agent::steer/follow_up, so it inherits the C++ caps and ExpectedVoid return. The frozen public AgentSession callers expect a queue that accepts without a capacity result; fixing Agent admission must not leave a stale capacity check at this facade."
+    }
+  ],
+  "excluded": [
+    {
+      "id": "stream-proxy-protocol",
+      "reason": "Explicitly excluded by #1047: the streamProxy protocol is a separate pi-ai/AI audit, not an Agent execution observation."
+    },
+    {
+      "id": "assistant-and-thinking-event-timing",
+      "reason": "Assistant message_update/thinking/message timing belongs to the AI stream audit; #1047 captures only ordinary stream injection into Agent lifecycle ordering."
+    },
+    {
+      "id": "provider-retry-transport",
+      "reason": "Provider retry, transport selection, thinkingBudgets and onPayload/onResponse hooks are AI/provider behavior, not Agent tool execution or queue admission."
+    },
+    {
+      "id": "tool-result-usage-field",
+      "reason": "ToolResultMessage.usage is an AI message-shape concern; #1047 records only the Agent-owned duration field and result outcome."
+    },
+    {
+      "id": "concrete-filesystem-shell-relocation",
+      "reason": "The frozen coding-agent concrete tools (read/bash/edit/write) live in the cch_coding_agent-owned harness layer, not in this ticket's cch_agent_core package. Recording the required target/ownership gap does not authorize a move in an audit."
+    }
+  ],
+  "ownershipGaps": [
+    {
+      "id": "cch-agent-core-concrete-tools",
+      "package": "cch_agent_core",
+      "requiredTarget": "cch_coding_agent",
+      "status": "unresolved-deferred",
+      "evidence": "src/agent/ToolRegistry.cpp contains concrete tool registration (read/bash/edit/write/etc.) under the core package",
+      "followUp": "#1052 decides the package boundary; #1047 neither moves code nor rewrites ADR ownership."
+    }
+  ],
+  "gaps": [
+    {
+      "id": "G1-tool-duration",
+      "severity": "blocker",
+      "statement": "ToolExecutionEndEvent and ToolResultMessage have no durationMs; AgentSession/ProjectionStream cannot carry it.",
+      "required": "Measure monotonic execute-only duration after prepareArguments/beforeToolCall and before afterToolCall; attach it to the end event and the executed tool-result message; omit it for blocked/unknown/truncated calls.",
+      "evidence": [
+        "src/agent/include/cch/agent/AgentEvent.hpp:ToolExecutionEndEvent",
+        "src/ai/include/cch/ai/Message.hpp:ToolResultMessage",
+        "src/coding_agent/AgentSessionInteraction.cpp:apply_event"
+      ]
+    },
+    {
+      "id": "G2-session-round-trip",
+      "severity": "blocker",
+      "statement": "MessageDto/SessionMessageJson lacks durationMs, so the session record cannot round-trip the frozen field.",
+      "required": "Add optional durationMs to ToolResultMessage and MessageDto serialize/deserialize without inventing it for absent calls.",
+      "evidence": [
+        "src/agent/harness/session/SessionMessageJson.hpp:to_message_dto(ai::ToolResultMessage)",
+        "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:tool duration survives the public session record round trip"
+      ]
+    },
+    {
+      "id": "G3-tui-wall-clock",
+      "severity": "high",
+      "statement": "ToolExecutionComponent/BashRenderer derive the visible duration from wall-clock start/end timestamps, not the frozen monotonic execute-only duration.",
+      "required": "Consume the event/result duration or prove the visible timer is intentionally non-contract; add a discriminating test with a long hook and short execute.",
+      "evidence": [
+        "src/coding_agent/tui/ToolExecutionComponent.cpp:now_ms",
+        "src/coding_agent/tui/BashRenderer.cpp"
+      ]
+    },
+    {
+      "id": "G4-prepare-arguments",
+      "severity": "blocker",
+      "statement": "C++ has no ToolDefinition.prepareArguments hook; raw model arguments are validated before any normalization.",
+      "required": "Run prepareArguments before validation and beforeToolCall, preserving the no-revalidation contract for hook mutations.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:prepareArguments runs before validation and beforeToolCall mutations execute without revalidation"
+      ]
+    },
+    {
+      "id": "G5-default-tool-concurrency",
+      "severity": "blocker",
+      "statement": "Tool::concurrency defaults to Exclusive although the header documents ParallelSafe as the omitted default and frozen pi runs omitted executionMode concurrently.",
+      "required": "Default to ParallelSafe (or otherwise preserve per-tool sequential overrides and the batch sequential rule) and add a concurrency test.",
+      "evidence": [
+        "src/agent/include/cch/agent/AgentTool.hpp:ToolConcurrency",
+        "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:parallel tool ends follow completion order while result messages keep source order"
+      ]
+    },
+    {
+      "id": "G6-queue-admission",
+      "severity": "blocker",
+      "statement": "C++ imposes 256-message/16-MiB caps and returns capacity errors; frozen steer/followUp are unbounded and return void.",
+      "required": "Remove max_queued_messages/max_queued_bytes admission limits and the capacity result surface (or retain only a non-capacity error shape); update AgentSession callers and tests. ADR 0022 amendment records this migration obligation.",
+      "evidence": [
+        "src/agent/include/cch/agent/AgentContext.hpp:kDefaultMaxQueuedMessages",
+        "fixtures/pi-v1.3.0/audit-1047/queue-admission.json:queue admission is unbounded and both queues default to one-at-a-time"
+      ]
+    },
+    {
+      "id": "G7-loop-hooks",
+      "severity": "medium",
+      "statement": "prepareRequest is absent; finishTurn is a bool stop check; prepareNextTurn cannot append messages.",
+      "required": "Add prepareRequest, model finishTurn continue/end semantics, and allow prepareNextTurn messages in the next turn.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1047/lifecycle.json:prepareRequest observes the pending prompt before the provider request",
+        "fixtures/pi-v1.3.0/audit-1047/lifecycle.json:finishTurn action end stops the run before follow-up polling",
+        "fixtures/pi-v1.3.0/audit-1047/lifecycle.json:prepareNextTurn runs once before a continuing turn and can append messages"
+      ]
+    },
+    {
+      "id": "G8-reset",
+      "severity": "medium",
+      "statement": "Agent reset is missing; no path re-seeds the initial system prompt/tools and clears queues/transient state.",
+      "required": "Implement Agent.reset with frozen prompt baseline semantics.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1047/lifecycle.json:reset restores the prompt baseline and clears both queues"
+      ]
+    },
+    {
+      "id": "G9-thinking-default",
+      "severity": "low",
+      "statement": "C++ default thinking_level is \"medium\" before model clamping; frozen default is \"off\" even for a reasoning-capable model.",
+      "required": "Make the Agent default \"off\" and keep clamping only when an explicit level is supplied.",
+      "evidence": [
+        "src/agent/Agent.cpp:Agent::Impl::Impl",
+        "fixtures/pi-v1.3.0/audit-1047/lifecycle.json:the default thinking level remains off for a reasoning-capable model"
+      ]
+    },
+    {
+      "id": "G10-diagnostic-text",
+      "severity": "medium",
+      "statement": "Several user-visible diagnostics differ from frozen text: unknown tool, default block reason, busy prompt; abort/truncation message paths need comparison.",
+      "required": "Align exact executable/result text where it is part of the public outcome; do not substitute generic diagnostics.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
+        "fixtures/pi-v1.3.0/audit-1047/lifecycle.json:a second prompt while a run is active is rejected without replacing the run"
+      ]
+    },
+    {
+      "id": "G11-public-run-tool-call",
+      "severity": "medium",
+      "statement": "C++ has no public runToolCall-equivalent outcome carrying durationMs; only executor/nested internals.",
+      "required": "Decide the C++ public seam for the frozen runToolCall contract before tool timing can be consumed by non-Agent callers.",
+      "evidence": [
+        "src/agent/ToolCallExecutor.cpp:ToolCallExecutor::execute_single_call",
+        "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:runToolCall runs the hooks and reports execute-only duration"
+      ]
+    },
+    {
+      "id": "G13-active-tool-execution",
+      "severity": "high",
+      "statement": "C++ active_tools narrows only the model-visible definition snapshot; the executor resolves calls against the full registry, and no toolsAdded/toolsRemoved system message is emitted.",
+      "required": "Resolve model-issued and nested calls against the active executable set (the captured replacement leaves only b, so a returns \"Tool a not found\" without executing) and declare the tool delta in the transcript.",
+      "evidence": [
+        "fixtures/pi-v1.3.0/audit-1047/tool-execution.json:replacing state.tools narrows the executable set and declares the system tool delta",
+        "src/agent/ToolCallExecutor.cpp:resolve_tool_call",
+        "src/coding_agent/runtime/McpSessionManager.cpp:refresh_tools"
+      ]
+    },
+    {
+      "id": "G12-package-boundary",
+      "severity": "info",
+      "statement": "Concrete filesystem/shell tools still live under cch_agent_core instead of the cch_coding_agent harness layer required by ADR 0075.",
+      "required": "#1052 decides the package target; #1047 records the ownership gap and does not move code.",
+      "evidence": [
+        "docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md",
+        "src/agent/ToolRegistry.cpp"
+      ]
+    }
+  ],
+  "consumerChains": [
+    {
+      "producer": "Agent::Impl/ToolCallExecutor",
+      "handoff": "AgentLifecycleEvent + AgentEventCommitter",
+      "consumer": "AgentSession::Impl::apply_event (src/coding_agent/AgentSessionInteraction.cpp)",
+      "then": "ProjectionStream ToolStarted/ToolPartial/ToolFinished patches",
+      "status": "duration absent from all hops"
+    },
+    {
+      "producer": "AgentSession tool projection",
+      "handoff": "ToolExecutionSnapshot",
+      "consumer": "ChatContainer::Impl::apply_agent_event (src/coding_agent/tui/ChatContainer.cpp)",
+      "then": "ToolExecutionComponent -> BashRenderer",
+      "status": "wall-clock timer only"
+    },
+    {
+      "producer": "ai::ToolResultMessage",
+      "handoff": "MessageDto / SessionMessageJson",
+      "consumer": "EntrySerializer -> SessionJournal/JsonlSessionStore/SqliteSessionStore",
+      "then": "session record read",
+      "status": "duration field missing"
+    },
+    {
+      "producer": "Agent::steer/follow_up",
+      "handoff": "AgentInputQueues",
+      "consumer": "AgentSession::steer/follow_up",
+      "then": "AgentSessionExecution prompt loop",
+      "status": "capacity rejection leaks through facade"
+    },
+    {
+      "producer": "Agent::set_active_tools",
+      "handoff": "AgentState.active_tool_names",
+      "consumer": "Agent::snapshot declaration and McpSessionManager refresh",
+      "then": "ToolCallExecutor model-issued lookup",
+      "status": "declaration narrowed but execution still resolves full registry"
+    }
+  ]
+}

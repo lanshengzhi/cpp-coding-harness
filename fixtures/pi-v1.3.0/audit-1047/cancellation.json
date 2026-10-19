@@ -1,0 +1,165 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T15:59:06.183Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/agent/src/agent.ts:Agent.abort,Agent.signal,Agent.waitForIdle,Agent.prompt",
+    "packages/agent/src/agent-loop.ts:executeToolCallsSequential,runLoop",
+    "packages/agent/src/types.ts:AgentEvent,AgentTool",
+    "packages/agent/test/agent.test.ts:should handle abort controller",
+    "packages/agent/test/agent-loop.test.ts:sequential execution"
+  ],
+  "scenarios": [
+    {
+      "name": "abort during sequential execution skips the next call and settles through an aborted provider turn",
+      "inputs": {
+        "toolExecution": "sequential",
+        "calls": [
+          "slow",
+          "never"
+        ],
+        "abortDuringExecute": true
+      },
+      "expected": {
+        "executeCalls": [
+          "a"
+        ],
+        "startedToolCalls": [
+          "slow"
+        ],
+        "requestCount": 2,
+        "secondRequestSignalAborted": true,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:slow",
+          "tool_execution_end:slow:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:slow:duration=present",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:aborted",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=4"
+        ],
+        "errorMessage": "Request was aborted",
+        "isStreaming": false
+      },
+      "normalizations": [
+        "the exact tool durationMs is volatile; the expected value keeps its presence and the event ordering"
+      ],
+      "observed": {
+        "requestCount": 2,
+        "secondRequestSignalAborted": true,
+        "executed": [
+          "a"
+        ],
+        "executeCalls": [
+          "a"
+        ],
+        "startedToolCalls": [
+          "slow"
+        ],
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:slow",
+          "tool_execution_end:slow:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:slow:duration=present",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:assistant",
+          "message_end:assistant:aborted",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=4"
+        ],
+        "errorMessage": "Request was aborted",
+        "isStreaming": false
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should force sequential execution when a tool has executionMode=sequential"
+      }
+    },
+    {
+      "name": "abort while streaming produces one aborted assistant terminal and is idempotent",
+      "inputs": {
+        "abortDuringStream": true,
+        "abortCalls": 2
+      },
+      "expected": {
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:aborted",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=2"
+        ],
+        "errorMessage": "Request was aborted",
+        "isStreaming": false,
+        "signalWasAborted": true,
+        "signalPresentAfterRun": false
+      },
+      "normalizations": [],
+      "observed": {
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:aborted",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=2"
+        ],
+        "errorMessage": "Request was aborted",
+        "isStreaming": false,
+        "signalWasAborted": true,
+        "signalAfterRun": "none",
+        "signalPresentAfterRun": false
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should handle abort controller"
+      }
+    },
+    {
+      "name": "abort and waitForIdle are no-ops while the Agent is idle",
+      "inputs": {
+        "abortWhileIdle": true
+      },
+      "expected": {
+        "signalPresent": false,
+        "isStreaming": false,
+        "messageCount": 0
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should handle abort controller"
+      }
+    }
+  ]
+}

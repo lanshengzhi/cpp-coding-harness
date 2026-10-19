@@ -1,0 +1,1520 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1047",
+  "family": "audit-1047",
+  "capturedAt": "2026-10-19T15:59:06.183Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1047/capture-agent.mts",
+    "sha256": "738de5b2947b1913c086b3592d7ab422ab7863477d8a56046cc5ee167ef3e791",
+    "command": "PI_CHECKOUT=/tmp/cch-1047-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1047-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1047/capture-agent.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1047/capture-agent.mts",
+        "sha256": "738de5b2947b1913c086b3592d7ab422ab7863477d8a56046cc5ee167ef3e791"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1047/scenarios.mts",
+        "sha256": "b1807548f8fa2b2bc4f9bd1de5e2ab9fd460efe2311c8c4285205557dfc480f6"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "lifecycle.json",
+      "family": "audit-1047",
+      "bytes": 10153,
+      "sha256": "2aef0aa9b2d85e7267e3ab1d0b9a865e47a61aa0b71b801374cb4a8fe974eebd",
+      "sourceEndpoints": [
+        "packages/agent/src/agent.ts:Agent.prompt,Agent.subscribe,Agent.waitForIdle,Agent.reset,Agent.state",
+        "packages/agent/src/agent-loop.ts:runAgentLoop,runLoop,streamAssistantResponse",
+        "packages/agent/src/types.ts:AgentEvent,AgentOptions,QueueMode",
+        "packages/agent/test/agent.test.ts:Agent",
+        "packages/agent/test/agent-loop.test.ts:runAgentLoop"
+      ],
+      "scenarios": [
+        {
+          "name": "turn and event ordering for a tool turn and a final response",
+          "inputs": {
+            "prompt": "go",
+            "tool": "echo",
+            "executionMode": "default"
+          },
+          "expected": {
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:echo-1",
+              "tool_execution_end:echo-1:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:echo-1:duration=present",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=4"
+            ],
+            "finalMessageRoles": [
+              "system",
+              "user",
+              "assistant",
+              "toolResult",
+              "assistant"
+            ],
+            "toolResultText": "a"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "should handle tool calls and results"
+          }
+        },
+        {
+          "name": "ordinary stream injection drives assistant updates and the final message",
+          "inputs": {
+            "prompt": "go",
+            "streamEvents": [
+              "start",
+              "text_start",
+              "text_delta",
+              "text_end",
+              "done"
+            ]
+          },
+          "expected": {
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_update:text_start",
+              "message_update:text_delta",
+              "message_update:text_end",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=2"
+            ],
+            "lastAssistantText": "Hi",
+            "streamedUpdates": [
+              "text_start",
+              "text_delta",
+              "text_end"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should subscribe to events"
+          }
+        },
+        {
+          "name": "agent_end listeners settle before prompt and waitForIdle resolve",
+          "inputs": {
+            "prompt": "go",
+            "agentEndListenerDelayMs": 20
+          },
+          "expected": {
+            "order": [
+              "agent_end:listener_start",
+              "agent_end:listener_end",
+              "waitForIdle:resolved",
+              "prompt:resolved"
+            ],
+            "isStreamingDuringAgentEndListener": true,
+            "isStreamingAfterWaitForIdle": false
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "waitForIdle should wait for async subscribers"
+          }
+        },
+        {
+          "name": "Agent defaults select off thinking, parallel tools and one-at-a-time queues",
+          "inputs": {
+            "options": {
+              "streamFn": "unused"
+            }
+          },
+          "expected": {
+            "thinkingLevel": "off",
+            "modelId": "unknown",
+            "toolCount": 0,
+            "messageCount": 0,
+            "steeringMode": "one-at-a-time",
+            "followUpMode": "one-at-a-time",
+            "toolExecution": "parallel",
+            "transport": "auto",
+            "isStreaming": false
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should create an agent instance with default state"
+          }
+        },
+        {
+          "name": "the default thinking level remains off for a reasoning-capable model",
+          "inputs": {
+            "model": {
+              "id": "reasoning-mock",
+              "reasoning": true
+            },
+            "explicitThinkingLevel": false
+          },
+          "expected": {
+            "thinkingLevel": "off",
+            "modelId": "reasoning-mock"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should create an agent instance with custom initial state"
+          }
+        },
+        {
+          "name": "reset restores the prompt baseline and clears both queues",
+          "inputs": {
+            "prompt": "go",
+            "queuedBeforeReset": [
+              "steer",
+              "follow"
+            ]
+          },
+          "expected": {
+            "roles": [
+              "system"
+            ],
+            "systemPrompt": "sys",
+            "hasQueuedMessages": false,
+            "isStreaming": false
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "restores the transcript baseline when reset"
+          }
+        },
+        {
+          "name": "prepareRequest observes the pending prompt before the provider request",
+          "inputs": {
+            "prompt": "go",
+            "prepareRequestReturns": "undefined"
+          },
+          "expected": {
+            "calls": [
+              {
+                "roles": [
+                  "user"
+                ],
+                "model": "unknown",
+                "thinkingLevel": "off"
+              }
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "prepares the initial request after pending messages and can replace request state"
+          }
+        },
+        {
+          "name": "prepareNextTurn runs once before a continuing turn and can append messages",
+          "inputs": {
+            "tool": "echo",
+            "preparedMessage": "prepared"
+          },
+          "expected": {
+            "prepareNextTurnCalls": 1,
+            "secondRequestRoles": [
+              "system",
+              "user",
+              "assistant",
+              "toolResult",
+              "user"
+            ],
+            "secondRequestLastUser": "prepared"
+          },
+          "normalizations": [],
+          "observed": {
+            "prepareCalls": 1,
+            "requestContexts": [
+              {
+                "roles": [
+                  "system",
+                  "user"
+                ],
+                "lastUser": "go"
+              },
+              {
+                "roles": [
+                  "system",
+                  "user",
+                  "assistant",
+                  "toolResult",
+                  "user"
+                ],
+                "lastUser": "prepared"
+              }
+            ],
+            "prepareNextTurnCalls": 1,
+            "secondRequestRoles": [
+              "system",
+              "user",
+              "assistant",
+              "toolResult",
+              "user"
+            ],
+            "secondRequestLastUser": "prepared"
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "should use prepareNextTurn snapshot before continuing"
+          }
+        },
+        {
+          "name": "finishTurn action end stops the run before follow-up polling",
+          "inputs": {
+            "finishTurnAction": "end",
+            "queuedFollowUp": "follow"
+          },
+          "expected": {
+            "finishTurnCalls": 1,
+            "requestCount": 1,
+            "remainingQueued": true,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=2"
+            ]
+          },
+          "normalizations": [],
+          "observed": {
+            "finishCalls": 1,
+            "finishTurnCalls": 1,
+            "requestCount": 1,
+            "remaining": true,
+            "remainingQueued": true,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=2"
+            ]
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "action:end skips queue polling and next-turn preparation"
+          }
+        },
+        {
+          "name": "a provider error terminal emits one failed assistant lifecycle",
+          "inputs": {
+            "providerEvent": "error",
+            "errorMessage": "provider boom"
+          },
+          "expected": {
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:error",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=2"
+            ],
+            "errorMessage": "provider boom",
+            "isStreaming": false
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "emits full lifecycle events for thrown run failures"
+          }
+        },
+        {
+          "name": "a second prompt while a run is active is rejected without replacing the run",
+          "inputs": {
+            "firstPrompt": "first",
+            "secondPromptWhileActive": "second"
+          },
+          "expected": {
+            "secondPromptError": "Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion."
+          },
+          "normalizations": [],
+          "observed": {
+            "secondPromptError": "Agent is already processing a prompt. Use steer() or followUp() to queue messages, or wait for completion."
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should throw when prompt() called while streaming"
+          }
+        }
+      ]
+    },
+    {
+      "path": "tool-execution.json",
+      "family": "audit-1047",
+      "bytes": 15721,
+      "sha256": "fbc55adb5947c3e722fdf6902ec0e6e057a3947f2d154982f3466dbacb080a35",
+      "sourceEndpoints": [
+        "packages/agent/src/agent-loop.ts:prepareToolCall,executePreparedToolCall,finalizeExecutedToolCall,emitToolExecutionEnd,createToolResultMessage,runToolCall",
+        "packages/agent/src/types.ts:AgentToolCallOutcome,BeforeToolCallResult,AfterToolCallResult",
+        "packages/ai/src/types.ts:ToolResultMessage",
+        "packages/coding-agent/src/core/nested-tool-calls.ts:NestedToolCallRunner",
+        "packages/coding-agent/src/core/session-manager.ts:SessionManager.appendMessage,SessionManager.open",
+        "packages/agent/test/agent-loop.test.ts:tool execution",
+        "packages/coding-agent/test/nested-tool-calls.test.ts:NestedToolCallRunner"
+      ],
+      "scenarios": [
+        {
+          "name": "hook and execute activity are distinguishable in duration and wall time",
+          "inputs": {
+            "tool": "slow",
+            "beforeHookDelayMs": 60,
+            "executeDelayMs": 10,
+            "afterHookDelayMs": 50
+          },
+          "expected": {
+            "hookCalls": 2,
+            "durationPresent": true,
+            "durationAtMostExecuteDelayPlusTolerance": true,
+            "durationLessThanBeforeHookDelay": true,
+            "wallClockStartToEndIncludesHookTime": true,
+            "durationLessThanWallClockStartToEnd": true
+          },
+          "normalizations": [
+            "raw durationMs and wall-clock milliseconds are volatile observations; the expected value keeps presence, absence, ordering and threshold relations"
+          ],
+          "observed": {
+            "durationMs": 10,
+            "wallClockMs": 121,
+            "hooks": {
+              "before": 1,
+              "after": 1
+            },
+            "hookCalls": 2,
+            "durationPresent": true,
+            "durationAtMostExecuteDelayPlusTolerance": true,
+            "durationLessThanBeforeHookDelay": true,
+            "wallClockStartToEndIncludesHookTime": true,
+            "durationLessThanWallClockStartToEnd": true
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "records how long execute() took on the tool result, excluding hooks"
+          }
+        },
+        {
+          "name": "executed success, thrown failure, blocked and unknown calls keep distinct duration presence",
+          "inputs": {
+            "toolExecution": "sequential",
+            "calls": [
+              "ok",
+              "throws",
+              "blocked",
+              "missing"
+            ]
+          },
+          "expected": {
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:ok",
+              "tool_execution_end:ok:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:ok:duration=present",
+              "tool_execution_start:throws",
+              "tool_execution_end:throws:duration=present:error=true",
+              "message_start:toolResult",
+              "message_end:toolResult:throws:duration=present",
+              "tool_execution_start:blocked",
+              "tool_execution_end:blocked:duration=absent:error=true",
+              "message_start:toolResult",
+              "message_end:toolResult:blocked:duration=absent",
+              "tool_execution_start:missing",
+              "tool_execution_end:missing:duration=absent:error=true",
+              "message_start:toolResult",
+              "message_end:toolResult:missing:duration=absent",
+              "turn_end:assistant:tools=4",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=7"
+            ],
+            "executeCalls": {
+              "ok": 1,
+              "throws": 1
+            },
+            "durationPresent": {
+              "ok": true,
+              "throws": true,
+              "blocked": false,
+              "missing": false
+            },
+            "isError": {
+              "ok": false,
+              "throws": true,
+              "blocked": true,
+              "missing": true
+            },
+            "blockedText": "denied",
+            "unknownToolText": "Tool missing not found"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should ignore tool updates after the tool execution settles"
+          }
+        },
+        {
+          "name": "prepareArguments runs before validation and beforeToolCall mutations execute without revalidation",
+          "inputs": {
+            "tool": "prep",
+            "rawArguments": {
+              "oldText": "before",
+              "newText": "after"
+            },
+            "hookMutation": 123
+          },
+          "expected": {
+            "beforeValue": "beforeafter",
+            "executedValue": 123,
+            "executedValueType": "number",
+            "resultText": "123",
+            "durationPresent": true
+          },
+          "normalizations": [],
+          "observed": {
+            "beforeValue": "beforeafter",
+            "executedValue": 123,
+            "executedValueType": "number",
+            "resultText": "123",
+            "durationPresent": true
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "should execute mutated beforeToolCall args without revalidation"
+          }
+        },
+        {
+          "name": "a call from a length-truncated message never executes and has no duration",
+          "inputs": {
+            "tool": "echo",
+            "stopReason": "length"
+          },
+          "expected": {
+            "executeCalls": 0,
+            "durationPresent": false,
+            "isError": true,
+            "resultText": "Tool call \"echo\" was not executed: the response hit the output token limit, so its arguments may be truncated. Re-issue the tool call with complete arguments.",
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:length",
+              "tool_execution_start:trunc",
+              "tool_execution_end:trunc:duration=absent:error=true",
+              "message_start:toolResult",
+              "message_end:toolResult:trunc:duration=absent",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=4"
+            ]
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "should not execute tool calls from a length-truncated assistant message"
+          }
+        },
+        {
+          "name": "parallel tool ends follow completion order while result messages keep source order",
+          "inputs": {
+            "calls": [
+              {
+                "name": "slow",
+                "delayMs": 30
+              },
+              {
+                "name": "fast",
+                "delayMs": 1
+              }
+            ]
+          },
+          "expected": {
+            "startOrder": [
+              "slow",
+              "fast"
+            ],
+            "completionOrder": [
+              "fast",
+              "slow"
+            ],
+            "resultOrder": [
+              "slow",
+              "fast"
+            ],
+            "maxConcurrent": 2,
+            "durationPresent": [
+              true,
+              true
+            ]
+          },
+          "normalizations": [
+            "the completion ordering observation relies on the 30ms versus 1ms execute delays, not on exact millisecond values"
+          ],
+          "observed": {
+            "maxActive": 2,
+            "maxConcurrent": 2,
+            "startOrder": [
+              "slow",
+              "fast"
+            ],
+            "durationPresent": [
+              true,
+              true
+            ],
+            "completionOrder": [
+              "fast",
+              "slow"
+            ],
+            "resultOrder": [
+              "slow",
+              "fast"
+            ],
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:slow",
+              "tool_execution_start:fast",
+              "tool_execution_end:fast:duration=present:error=false",
+              "tool_execution_end:slow:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:slow:duration=present",
+              "message_start:toolResult",
+              "message_end:toolResult:fast:duration=present",
+              "turn_end:assistant:tools=2",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=5"
+            ]
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "should emit tool_execution_end in completion order but persist tool results in source order"
+          }
+        },
+        {
+          "name": "runToolCall runs the hooks and reports execute-only duration",
+          "inputs": {
+            "calls": [
+              "ok",
+              "blocked"
+            ]
+          },
+          "expected": {
+            "ok": {
+              "durationPresent": true,
+              "isError": false,
+              "beforeCalls": 1,
+              "afterCalls": 1,
+              "executeCalls": 1,
+              "text": "hi"
+            },
+            "blocked": {
+              "durationPresent": false,
+              "isError": true,
+              "text": "no"
+            }
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "validates, runs the hooks, and reports failures as error outcomes"
+          }
+        },
+        {
+          "name": "afterToolCall content replacement drops structuredContent but keeps duration",
+          "inputs": {
+            "tool": "echo",
+            "toolStructuredContent": {
+              "value": "ok"
+            },
+            "replacement": "content only"
+          },
+          "expected": {
+            "hasStructuredContent": false,
+            "content": "replaced",
+            "details": {},
+            "durationPresent": true
+          },
+          "normalizations": [],
+          "observed": {
+            "hasStructuredContent": false,
+            "content": "replaced",
+            "details": {},
+            "durationPresent": true
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "lets afterToolCall replace structured content and drops it when only content is replaced"
+          }
+        },
+        {
+          "name": "nested calls forward parent ids and separate record duration from execute duration",
+          "inputs": {
+            "caller": "caller",
+            "tool": "echo",
+            "executeDelayMs": 5
+          },
+          "expected": {
+            "eventTypes": [
+              "tool_execution_start",
+              "tool_execution_end"
+            ],
+            "parentIds": [
+              "caller",
+              "caller"
+            ],
+            "endDurationPresent": true,
+            "endDurationMatchesOutcome": true,
+            "recordStatus": "ok",
+            "recordDurationPresent": true
+          },
+          "normalizations": [
+            "nested record duration contains event emission and the full tool pipeline; exact milliseconds are volatile"
+          ],
+          "observed": {
+            "eventTypes": [
+              "tool_execution_start",
+              "tool_execution_end"
+            ],
+            "parentIds": [
+              "caller",
+              "caller"
+            ],
+            "endDurationPresent": true,
+            "endDurationMatchesOutcome": true,
+            "recordStatus": "ok",
+            "recordDurationPresent": true,
+            "recordAtLeastOutcome": true
+          },
+          "upstreamTest": {
+            "path": "packages/coding-agent/test/nested-tool-calls.test.ts",
+            "case": "records nested calls and their usage on the model-issued result"
+          }
+        },
+        {
+          "name": "replacing state.tools narrows the executable set and declares the system tool delta",
+          "inputs": {
+            "initialTools": [
+              "a",
+              "b"
+            ],
+            "replacementTools": [
+              "b"
+            ],
+            "issuedCall": "a"
+          },
+          "expected": {
+            "assignedTools": [
+              "b"
+            ],
+            "executed": {
+              "a": 0,
+              "b": 0
+            },
+            "systemDeclarations": [
+              {
+                "added": [
+                  "a",
+                  "b"
+                ],
+                "removed": []
+              },
+              {
+                "added": [],
+                "removed": [
+                  "a"
+                ]
+              }
+            ],
+            "totalMessages": 6,
+            "resultText": "Tool a not found",
+            "durationPresent": false,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:system",
+              "message_end:system",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:removed-1",
+              "tool_execution_end:removed-1:duration=absent:error=true",
+              "message_start:toolResult",
+              "message_end:toolResult:removed-1:duration=absent",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=5"
+            ]
+          },
+          "normalizations": [],
+          "observed": {
+            "assignedTools": [
+              "b"
+            ],
+            "executed": {
+              "a": 0,
+              "b": 0
+            },
+            "declarations": [
+              {
+                "added": [
+                  "a",
+                  "b"
+                ],
+                "removed": []
+              },
+              {
+                "added": [],
+                "removed": [
+                  "a"
+                ]
+              }
+            ],
+            "systemDeclarations": [
+              {
+                "added": [
+                  "a",
+                  "b"
+                ],
+                "removed": []
+              },
+              {
+                "added": [],
+                "removed": [
+                  "a"
+                ]
+              }
+            ],
+            "totalMessages": 6,
+            "resultText": "Tool a not found",
+            "durationPresent": false,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:system",
+              "message_end:system",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:removed-1",
+              "tool_execution_end:removed-1:duration=absent:error=true",
+              "message_start:toolResult",
+              "message_end:toolResult:removed-1:duration=absent",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=5"
+            ]
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "declares tool loadout changes and resolves calls against the executable set"
+          }
+        },
+        {
+          "name": "tool duration survives the public session record round trip",
+          "inputs": {
+            "sessionRecord": "toolResult",
+            "durationMs": 4200
+          },
+          "expected": {
+            "role": "toolResult",
+            "durationMs": 4200,
+            "isError": false
+          },
+          "normalizations": [],
+          "observed": {
+            "role": "toolResult",
+            "durationMs": 4200,
+            "isError": false
+          },
+          "upstreamTest": {
+            "path": "packages/coding-agent/src/core/session-manager.ts",
+            "case": "appendMessage and SessionManager.open preserve the message record"
+          }
+        }
+      ]
+    },
+    {
+      "path": "queue-admission.json",
+      "family": "audit-1047",
+      "bytes": 12111,
+      "sha256": "48039a377d500663012497882bf5fbdca384d6fcc60ec74c1f6075982693f609",
+      "sourceEndpoints": [
+        "packages/agent/src/agent.ts:PendingMessageQueue,Agent.steer,Agent.followUp,Agent.peekQueuedMessages,Agent.clearSteeringQueue,Agent.clearAllQueues,Agent.continue",
+        "packages/agent/src/agent-loop.ts:runLoop,getSteeringMessages,getFollowUpMessages",
+        "packages/agent/src/types.ts:QueueMode",
+        "packages/agent/test/agent.test.ts:Agent queues",
+        "packages/agent/test/agent-loop.test.ts:queued messages"
+      ],
+      "scenarios": [
+        {
+          "name": "queue admission is unbounded and both queues default to one-at-a-time",
+          "inputs": {
+            "steeringMessages": 300,
+            "followUpMessages": 300
+          },
+          "expected": {
+            "steeringMode": "one-at-a-time",
+            "followUpMode": "one-at-a-time",
+            "steeringEnqueued": 300,
+            "followUpEnqueued": 300,
+            "enqueueReturnsVoid": true,
+            "hasQueuedMessages": true,
+            "peekCount": 1,
+            "peekText": "s0"
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should support steering message queue"
+          }
+        },
+        {
+          "name": "one-at-a-time steering injects the oldest message after the tool turn",
+          "inputs": {
+            "steeringMessages": [
+              "steer1",
+              "steer2"
+            ],
+            "tool": "echo"
+          },
+          "expected": {
+            "requestRoles": [
+              [
+                "system",
+                "user"
+              ],
+              [
+                "system",
+                "user",
+                "assistant",
+                "toolResult",
+                "user"
+              ],
+              [
+                "system",
+                "user",
+                "assistant",
+                "toolResult",
+                "user",
+                "assistant",
+                "user"
+              ]
+            ],
+            "lastUserMessages": [
+              "go",
+              "steer1",
+              "steer2"
+            ],
+            "agentEndMessages": 7,
+            "remainingQueued": false,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:echo-1",
+              "tool_execution_end:echo-1:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:echo-1:duration=present",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=7"
+            ]
+          },
+          "normalizations": [],
+          "observed": {
+            "requests": [
+              {
+                "roles": [
+                  "system",
+                  "user"
+                ],
+                "lastUser": "go"
+              },
+              {
+                "roles": [
+                  "system",
+                  "user",
+                  "assistant",
+                  "toolResult",
+                  "user"
+                ],
+                "lastUser": "steer1"
+              },
+              {
+                "roles": [
+                  "system",
+                  "user",
+                  "assistant",
+                  "toolResult",
+                  "user",
+                  "assistant",
+                  "user"
+                ],
+                "lastUser": "steer2"
+              }
+            ],
+            "requestRoles": [
+              [
+                "system",
+                "user"
+              ],
+              [
+                "system",
+                "user",
+                "assistant",
+                "toolResult",
+                "user"
+              ],
+              [
+                "system",
+                "user",
+                "assistant",
+                "toolResult",
+                "user",
+                "assistant",
+                "user"
+              ]
+            ],
+            "lastUserMessages": [
+              "go",
+              "steer1",
+              "steer2"
+            ],
+            "requestCount": 3,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:echo-1",
+              "tool_execution_end:echo-1:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:echo-1:duration=present",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=7"
+            ],
+            "remaining": false,
+            "remainingQueued": false,
+            "agentEndMessages": 7
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "should inject queued messages after all tool calls complete"
+          }
+        },
+        {
+          "name": "all-mode steering injects every queued message in FIFO order in one turn",
+          "inputs": {
+            "steeringMode": "all",
+            "steeringMessages": [
+              "steer1",
+              "steer2"
+            ],
+            "tool": "echo"
+          },
+          "expected": {
+            "requestRoles": [
+              [
+                "system",
+                "user"
+              ],
+              [
+                "system",
+                "user",
+                "assistant",
+                "toolResult",
+                "user",
+                "user"
+              ]
+            ],
+            "requestCount": 2,
+            "agentEndMessages": 6,
+            "remainingQueued": false
+          },
+          "normalizations": [],
+          "observed": {
+            "requests": [
+              {
+                "roles": [
+                  "system",
+                  "user"
+                ],
+                "lastUser": "go"
+              },
+              {
+                "roles": [
+                  "system",
+                  "user",
+                  "assistant",
+                  "toolResult",
+                  "user",
+                  "user"
+                ],
+                "lastUser": "steer2"
+              }
+            ],
+            "requestRoles": [
+              [
+                "system",
+                "user"
+              ],
+              [
+                "system",
+                "user",
+                "assistant",
+                "toolResult",
+                "user",
+                "user"
+              ]
+            ],
+            "requestCount": 2,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:echo-1",
+              "tool_execution_end:echo-1:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:echo-1:duration=present",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=6"
+            ],
+            "remaining": false,
+            "remainingQueued": false,
+            "agentEndMessages": 6
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should support steering message queue"
+          }
+        },
+        {
+          "name": "follow-up runs only after an otherwise stopping assistant turn",
+          "inputs": {
+            "followUpMessage": "follow",
+            "firstAssistantText": "first"
+          },
+          "expected": {
+            "requestRoles": [
+              [
+                "user"
+              ],
+              [
+                "user",
+                "assistant",
+                "user"
+              ]
+            ],
+            "lastUserMessages": [
+              "go",
+              "follow"
+            ],
+            "agentEndMessages": 4,
+            "remainingQueued": false
+          },
+          "normalizations": [],
+          "observed": {
+            "requestRoles": [
+              [
+                "user"
+              ],
+              [
+                "user",
+                "assistant",
+                "user"
+              ]
+            ],
+            "lastUsers": [
+              "go",
+              "follow"
+            ],
+            "lastUserMessages": [
+              "go",
+              "follow"
+            ],
+            "requestCount": 2,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=4"
+            ],
+            "remaining": false,
+            "remainingQueued": false,
+            "agentEndMessages": 4
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should support follow-up message queue"
+          }
+        },
+        {
+          "name": "peek prefers steering and clearAllQueues removes both queues",
+          "inputs": {
+            "steeringMessages": [
+              "steer1",
+              "steer2"
+            ],
+            "followUpMessage": "follow"
+          },
+          "expected": {
+            "peekBefore": "steer1",
+            "peekAfterSteeringClear": "follow",
+            "hasQueuedMessages": false,
+            "peekCount": 0
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "previews the next selected queued messages without consuming them"
+          }
+        },
+        {
+          "name": "continue from an assistant tail drains steering before follow-up",
+          "inputs": {
+            "lastMessage": "assistant",
+            "steering": "steer",
+            "followUp": "follow"
+          },
+          "expected": {
+            "requestRoles": [
+              [
+                "assistant",
+                "user"
+              ],
+              [
+                "assistant",
+                "user",
+                "assistant",
+                "user"
+              ]
+            ],
+            "lastUserMessages": [
+              "steer",
+              "follow"
+            ],
+            "remainingQueued": false,
+            "agentEndMessages": 4
+          },
+          "normalizations": [],
+          "observed": {
+            "requestRoles": [
+              [
+                "assistant",
+                "user"
+              ],
+              [
+                "assistant",
+                "user",
+                "assistant",
+                "user"
+              ]
+            ],
+            "lastUsers": [
+              "steer",
+              "follow"
+            ],
+            "lastUserMessages": [
+              "steer",
+              "follow"
+            ],
+            "requestCount": 2,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:stop",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=4"
+            ],
+            "remaining": false,
+            "remainingQueued": false,
+            "agentEndMessages": 4
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "continue() should process queued follow-up messages after an assistant turn"
+          }
+        }
+      ]
+    },
+    {
+      "path": "cancellation.json",
+      "family": "audit-1047",
+      "bytes": 5034,
+      "sha256": "45d932a1915958d0aa27365f0bdffa1a3c6c5f4e1de78d5f2be41b385e08c37e",
+      "sourceEndpoints": [
+        "packages/agent/src/agent.ts:Agent.abort,Agent.signal,Agent.waitForIdle,Agent.prompt",
+        "packages/agent/src/agent-loop.ts:executeToolCallsSequential,runLoop",
+        "packages/agent/src/types.ts:AgentEvent,AgentTool",
+        "packages/agent/test/agent.test.ts:should handle abort controller",
+        "packages/agent/test/agent-loop.test.ts:sequential execution"
+      ],
+      "scenarios": [
+        {
+          "name": "abort during sequential execution skips the next call and settles through an aborted provider turn",
+          "inputs": {
+            "toolExecution": "sequential",
+            "calls": [
+              "slow",
+              "never"
+            ],
+            "abortDuringExecute": true
+          },
+          "expected": {
+            "executeCalls": [
+              "a"
+            ],
+            "startedToolCalls": [
+              "slow"
+            ],
+            "requestCount": 2,
+            "secondRequestSignalAborted": true,
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:slow",
+              "tool_execution_end:slow:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:slow:duration=present",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:aborted",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=4"
+            ],
+            "errorMessage": "Request was aborted",
+            "isStreaming": false
+          },
+          "normalizations": [
+            "the exact tool durationMs is volatile; the expected value keeps its presence and the event ordering"
+          ],
+          "observed": {
+            "requestCount": 2,
+            "secondRequestSignalAborted": true,
+            "executed": [
+              "a"
+            ],
+            "executeCalls": [
+              "a"
+            ],
+            "startedToolCalls": [
+              "slow"
+            ],
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:toolUse",
+              "tool_execution_start:slow",
+              "tool_execution_end:slow:duration=present:error=false",
+              "message_start:toolResult",
+              "message_end:toolResult:slow:duration=present",
+              "turn_end:assistant:tools=1",
+              "turn_start",
+              "message_start:assistant",
+              "message_end:assistant:aborted",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=4"
+            ],
+            "errorMessage": "Request was aborted",
+            "isStreaming": false
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent-loop.test.ts",
+            "case": "should force sequential execution when a tool has executionMode=sequential"
+          }
+        },
+        {
+          "name": "abort while streaming produces one aborted assistant terminal and is idempotent",
+          "inputs": {
+            "abortDuringStream": true,
+            "abortCalls": 2
+          },
+          "expected": {
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:aborted",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=2"
+            ],
+            "errorMessage": "Request was aborted",
+            "isStreaming": false,
+            "signalWasAborted": true,
+            "signalPresentAfterRun": false
+          },
+          "normalizations": [],
+          "observed": {
+            "events": [
+              "agent_start",
+              "turn_start",
+              "message_start:user",
+              "message_end:user",
+              "message_start:assistant",
+              "message_end:assistant:aborted",
+              "turn_end:assistant:tools=0",
+              "agent_end:messages=2"
+            ],
+            "errorMessage": "Request was aborted",
+            "isStreaming": false,
+            "signalWasAborted": true,
+            "signalAfterRun": "none",
+            "signalPresentAfterRun": false
+          },
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should handle abort controller"
+          }
+        },
+        {
+          "name": "abort and waitForIdle are no-ops while the Agent is idle",
+          "inputs": {
+            "abortWhileIdle": true
+          },
+          "expected": {
+            "signalPresent": false,
+            "isStreaming": false,
+            "messageCount": 0
+          },
+          "normalizations": [],
+          "upstreamTest": {
+            "path": "packages/agent/test/agent.test.ts",
+            "case": "should handle abort controller"
+          }
+        }
+      ]
+    }
+  ]
+}

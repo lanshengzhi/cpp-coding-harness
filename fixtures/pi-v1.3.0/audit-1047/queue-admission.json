@@ -1,0 +1,470 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-19T15:59:06.183Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/agent/src/agent.ts:PendingMessageQueue,Agent.steer,Agent.followUp,Agent.peekQueuedMessages,Agent.clearSteeringQueue,Agent.clearAllQueues,Agent.continue",
+    "packages/agent/src/agent-loop.ts:runLoop,getSteeringMessages,getFollowUpMessages",
+    "packages/agent/src/types.ts:QueueMode",
+    "packages/agent/test/agent.test.ts:Agent queues",
+    "packages/agent/test/agent-loop.test.ts:queued messages"
+  ],
+  "scenarios": [
+    {
+      "name": "queue admission is unbounded and both queues default to one-at-a-time",
+      "inputs": {
+        "steeringMessages": 300,
+        "followUpMessages": 300
+      },
+      "expected": {
+        "steeringMode": "one-at-a-time",
+        "followUpMode": "one-at-a-time",
+        "steeringEnqueued": 300,
+        "followUpEnqueued": 300,
+        "enqueueReturnsVoid": true,
+        "hasQueuedMessages": true,
+        "peekCount": 1,
+        "peekText": "s0"
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should support steering message queue"
+      }
+    },
+    {
+      "name": "one-at-a-time steering injects the oldest message after the tool turn",
+      "inputs": {
+        "steeringMessages": [
+          "steer1",
+          "steer2"
+        ],
+        "tool": "echo"
+      },
+      "expected": {
+        "requestRoles": [
+          [
+            "system",
+            "user"
+          ],
+          [
+            "system",
+            "user",
+            "assistant",
+            "toolResult",
+            "user"
+          ],
+          [
+            "system",
+            "user",
+            "assistant",
+            "toolResult",
+            "user",
+            "assistant",
+            "user"
+          ]
+        ],
+        "lastUserMessages": [
+          "go",
+          "steer1",
+          "steer2"
+        ],
+        "agentEndMessages": 7,
+        "remainingQueued": false,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:echo-1",
+          "tool_execution_end:echo-1:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:echo-1:duration=present",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=7"
+        ]
+      },
+      "normalizations": [],
+      "observed": {
+        "requests": [
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "lastUser": "go"
+          },
+          {
+            "roles": [
+              "system",
+              "user",
+              "assistant",
+              "toolResult",
+              "user"
+            ],
+            "lastUser": "steer1"
+          },
+          {
+            "roles": [
+              "system",
+              "user",
+              "assistant",
+              "toolResult",
+              "user",
+              "assistant",
+              "user"
+            ],
+            "lastUser": "steer2"
+          }
+        ],
+        "requestRoles": [
+          [
+            "system",
+            "user"
+          ],
+          [
+            "system",
+            "user",
+            "assistant",
+            "toolResult",
+            "user"
+          ],
+          [
+            "system",
+            "user",
+            "assistant",
+            "toolResult",
+            "user",
+            "assistant",
+            "user"
+          ]
+        ],
+        "lastUserMessages": [
+          "go",
+          "steer1",
+          "steer2"
+        ],
+        "requestCount": 3,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:echo-1",
+          "tool_execution_end:echo-1:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:echo-1:duration=present",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=7"
+        ],
+        "remaining": false,
+        "remainingQueued": false,
+        "agentEndMessages": 7
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent-loop.test.ts",
+        "case": "should inject queued messages after all tool calls complete"
+      }
+    },
+    {
+      "name": "all-mode steering injects every queued message in FIFO order in one turn",
+      "inputs": {
+        "steeringMode": "all",
+        "steeringMessages": [
+          "steer1",
+          "steer2"
+        ],
+        "tool": "echo"
+      },
+      "expected": {
+        "requestRoles": [
+          [
+            "system",
+            "user"
+          ],
+          [
+            "system",
+            "user",
+            "assistant",
+            "toolResult",
+            "user",
+            "user"
+          ]
+        ],
+        "requestCount": 2,
+        "agentEndMessages": 6,
+        "remainingQueued": false
+      },
+      "normalizations": [],
+      "observed": {
+        "requests": [
+          {
+            "roles": [
+              "system",
+              "user"
+            ],
+            "lastUser": "go"
+          },
+          {
+            "roles": [
+              "system",
+              "user",
+              "assistant",
+              "toolResult",
+              "user",
+              "user"
+            ],
+            "lastUser": "steer2"
+          }
+        ],
+        "requestRoles": [
+          [
+            "system",
+            "user"
+          ],
+          [
+            "system",
+            "user",
+            "assistant",
+            "toolResult",
+            "user",
+            "user"
+          ]
+        ],
+        "requestCount": 2,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:toolUse",
+          "tool_execution_start:echo-1",
+          "tool_execution_end:echo-1:duration=present:error=false",
+          "message_start:toolResult",
+          "message_end:toolResult:echo-1:duration=present",
+          "turn_end:assistant:tools=1",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=6"
+        ],
+        "remaining": false,
+        "remainingQueued": false,
+        "agentEndMessages": 6
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should support steering message queue"
+      }
+    },
+    {
+      "name": "follow-up runs only after an otherwise stopping assistant turn",
+      "inputs": {
+        "followUpMessage": "follow",
+        "firstAssistantText": "first"
+      },
+      "expected": {
+        "requestRoles": [
+          [
+            "user"
+          ],
+          [
+            "user",
+            "assistant",
+            "user"
+          ]
+        ],
+        "lastUserMessages": [
+          "go",
+          "follow"
+        ],
+        "agentEndMessages": 4,
+        "remainingQueued": false
+      },
+      "normalizations": [],
+      "observed": {
+        "requestRoles": [
+          [
+            "user"
+          ],
+          [
+            "user",
+            "assistant",
+            "user"
+          ]
+        ],
+        "lastUsers": [
+          "go",
+          "follow"
+        ],
+        "lastUserMessages": [
+          "go",
+          "follow"
+        ],
+        "requestCount": 2,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=4"
+        ],
+        "remaining": false,
+        "remainingQueued": false,
+        "agentEndMessages": 4
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "should support follow-up message queue"
+      }
+    },
+    {
+      "name": "peek prefers steering and clearAllQueues removes both queues",
+      "inputs": {
+        "steeringMessages": [
+          "steer1",
+          "steer2"
+        ],
+        "followUpMessage": "follow"
+      },
+      "expected": {
+        "peekBefore": "steer1",
+        "peekAfterSteeringClear": "follow",
+        "hasQueuedMessages": false,
+        "peekCount": 0
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "previews the next selected queued messages without consuming them"
+      }
+    },
+    {
+      "name": "continue from an assistant tail drains steering before follow-up",
+      "inputs": {
+        "lastMessage": "assistant",
+        "steering": "steer",
+        "followUp": "follow"
+      },
+      "expected": {
+        "requestRoles": [
+          [
+            "assistant",
+            "user"
+          ],
+          [
+            "assistant",
+            "user",
+            "assistant",
+            "user"
+          ]
+        ],
+        "lastUserMessages": [
+          "steer",
+          "follow"
+        ],
+        "remainingQueued": false,
+        "agentEndMessages": 4
+      },
+      "normalizations": [],
+      "observed": {
+        "requestRoles": [
+          [
+            "assistant",
+            "user"
+          ],
+          [
+            "assistant",
+            "user",
+            "assistant",
+            "user"
+          ]
+        ],
+        "lastUsers": [
+          "steer",
+          "follow"
+        ],
+        "lastUserMessages": [
+          "steer",
+          "follow"
+        ],
+        "requestCount": 2,
+        "events": [
+          "agent_start",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "turn_start",
+          "message_start:user",
+          "message_end:user",
+          "message_start:assistant",
+          "message_end:assistant:stop",
+          "turn_end:assistant:tools=0",
+          "agent_end:messages=4"
+        ],
+        "remaining": false,
+        "remainingQueued": false,
+        "agentEndMessages": 4
+      },
+      "upstreamTest": {
+        "path": "packages/agent/test/agent.test.ts",
+        "case": "continue() should process queued follow-up messages after an assistant turn"
+      }
+    }
+  ]
+}
