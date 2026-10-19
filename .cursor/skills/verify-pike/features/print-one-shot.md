@@ -8,7 +8,7 @@ exiting 0. A terminal or abort outcome writes a diagnostic to stderr and exits
 ## Sub-features
 
 - `print-success-shape` — stdout carries only the final assistant text, exit 0.
-- `print-offline-failure` — no credential yields the deterministic provider
+- `print-offline-failure` — no reachable gateway yields the deterministic
   error on stderr, exit 1.
 - `print-stdin` — a prompt may come from stdin instead of an argument.
 
@@ -25,13 +25,14 @@ Preconditions:
 
 - **Offline failure.** `out="$(env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
   $BIN --print ping </dev/null 2>"$EVIDENCE_DIR/err.txt")"; echo "exit=$?"`. Expect
-  exit 1, empty stdout, and `$EVIDENCE_DIR/err.txt` containing `Unknown provider: unknown`.
+  exit 1, empty stdout, and `$EVIDENCE_DIR/err.txt` containing `has no API implementation`.
 - **Stdin prompt.** `printf 'hello' | env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME"
   $BIN --print 2>"$EVIDENCE_DIR/err.txt"`; offline it fails the same deterministic
   way.
-- **Success shape (configured provider).** With a valid credential/model, the
-  same command exits 0 and stdout holds only the assistant text. Requires live
-  credentials and user authorization; out of scope for the offline default.
+- **Success shape (running local gateway).** With `magpie serve` reachable and a
+  discovered model selected, the same command exits 0 and stdout holds only the
+  assistant text. Requires live gateway traffic and user authorization; out of
+  scope for the offline default.
 - **Proof.** Capture stdout, stderr, and exit code into
   `$EVIDENCE_DIR/print-*.txt`. The offline proof shows the deterministic
   error and exit code; do not present it as a successful model call.
@@ -42,7 +43,7 @@ Preconditions:
   literal prompt.
 - A run with no prompt prints nothing and exits 0.
 - `--print` exits 143 on SIGTERM and 129 on SIGHUP; match on the documented
-  exit codes, not on a generic nonzero. The offline provider failure is exit 1;
+  exit codes, not on a generic nonzero. The offline gateway-model failure is exit 1;
   do not lump it in with the signal exits.
 - The deterministic offline error string is the contract the CI relocation
   smoke relies on (`scripts/ci/release-artifact-smoke.sh`); do not assert a

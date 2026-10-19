@@ -13,11 +13,11 @@ is `.cursor/skills/verify-pike/SKILL.md`.
   `mktemp -d` tree. Pike's Agent Config Directory is `$XDG_CONFIG_HOME/pike/agent`
   and **no env var relocates it** — isolation is via `HOME`/`XDG_CONFIG_HOME`.
 - The default proof is **offline and credential-free**: submitting a prompt with
-  no model configured deterministically yields `Error: Unknown provider: unknown`
-  (exit 1 in `--print`). A real provider round trip needs explicit credentials
-  and user authorization.
+  no reachable gateway deterministically yields `Provider unknown has no API
+  implementation for "unknown"` (exit 1 in `--print`). A real model round trip
+  needs a running local Magpie gateway and user authorization.
 - Doctor (`SKILL.md`) passes: binary present, `--help` shows `--print`, offline
-  error is the deterministic provider error.
+  error is the deterministic gateway-model failure.
 
 ## Driving conventions
 
@@ -31,7 +31,7 @@ is `.cursor/skills/verify-pike/SKILL.md`.
 - Drive the TUI through `helpers/pike_tui.py` (`spawn`/`send`/`screen`/`expect`/
   `kill`) or a real tmux pane (`send-keys`/`capture-pane`). Drive the one-shot
   CLI with a plain `env … pike --print` subprocess. Pick one TUI driver per run.
-- Prefer stable text anchors (`Available commands:`, `Error: Unknown provider:`,
+- Prefer stable text anchors (`Available commands:`, `has no API implementation`,
   `Resume Session (Current Folder)`) over coordinates.
 - Treat helper commands as literal; keep quoted names unchanged.
 - Clear the editor with `ctrl+c` before typing a slash command; the router only

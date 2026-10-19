@@ -538,11 +538,12 @@ struct CliModelResolution {
     std::optional<std::string> thinking_level;
 };
 
-/// Resolve a CLI `--model` pattern (with optional `--provider`) against the
-/// live runtime catalog using all models (not only pre-configured ones), so
-/// `--api-key` can enable first-time setup (pi `resolveCliModel` subset).
-/// The shared pattern parser preserves full model-id matches before interpreting
-/// a final `:thinking` suffix, including provider-qualified spellings.
+/// Resolve a CLI `--model` pattern against the live runtime catalog using all
+/// models (not only pre-configured ones), so `--api-key` can enable first-time
+/// setup (pi `resolveCliModel` subset). The shared pattern parser preserves
+/// full model-id matches before interpreting a final `:thinking` suffix,
+/// including provider-qualified spellings. `cli_provider` is a passive
+/// entry-point qualifier; the retired `--provider` flag never sets it.
 [[nodiscard]] support::Expected<CliModelResolution> resolve_cli_model_pattern(
         const ModelRuntime& runtime, const std::optional<std::string>& cli_provider, std::string_view cli_model) {
     const auto all_models = runtime.models();

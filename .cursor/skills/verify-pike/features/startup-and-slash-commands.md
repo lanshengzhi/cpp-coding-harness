@@ -40,9 +40,10 @@ Preconditions:
 
 ## Gotchas
 
-- Without a model configured, the startup banner shows `Warning: No models
-  available.` and any prompt submission surfaces `Error: Unknown provider:
-  unknown`. This is expected offline, not a fault.
+- Without a reachable gateway, the startup banner shows the warning `No models
+  available. Start the local Magpie gateway with magpie serve, then run
+  /reload.` and any prompt submission surfaces `Provider unknown has no API
+  implementation for "unknown"`. This is expected offline, not a fault.
 - The slash router only runs on direct editor submissions in the TUI, not in
   `--print` mode.
 - The router dispatches on the first token only. If the editor already holds

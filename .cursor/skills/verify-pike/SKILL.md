@@ -3,7 +3,7 @@ name: verify-pike
 description: >-
   Drive the real `pike` coding-agent Runtime and capture evidence. Use when you
   need to launch the Pike native TUI or its one-shot `--print` CLI, exercise a
-  user-facing feature (slash commands, sessions, resume, trust, provider
+  user-facing feature (slash commands, sessions, resume, trust, gateway
   errors), and prove the behavior with screenshots/transcripts and side-effect
   checks. Surfaces: interactive Native TUI (a real TTY via the bundled PTY
   helper or tmux) and the non-interactive `--print` text CLI.
@@ -20,9 +20,9 @@ Pike is a C++23 coding-agent Runtime. It has two user-facing surfaces:
 
 Both are driven against the **real binary**. There is no separate "test mode" or
 test-only endpoint; the supported offline harness configures an isolated state
-root and relies on deterministic, credential-free provider errors for the
-round-trip path. Live-provider round trips are possible but require explicit
-user-provided credentials and are out of scope for the default offline proof.
+root and relies on the deterministic, credential-free gateway failure for the
+round-trip path. Live round trips require a running local Magpie gateway and are
+out of scope for the default offline proof.
 
 ## Using this skill
 
@@ -186,8 +186,8 @@ test -x "$BIN"                          # binary is executable
 # Isolation is real: the resolved state root must be under our disposable HOME,
 # never the developer's real home.
 resolved="$(env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" "$BIN" --print x 2>&1 >/dev/null || true)"
-# The offline error must be the deterministic provider error, not a crash.
-grep -qF "Unknown provider" <<<"$resolved"
+# The offline error must be the deterministic gateway-model failure, not a crash.
+grep -qF 'has no API implementation' <<<"$resolved"
 ```
 
 A doctor failure means: the binary is missing or unusable (rebuild), the flag
@@ -248,7 +248,7 @@ export PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run"
 - **Slash dispatch is first-token.** A `/`-prefixed submission routes only when
   the editor buffer starts with `/`. Clear a stale buffer with `ctrl+c` before
   typing a slash command, or the leftover text prepends and the whole buffer
-  submits as a literal prompt (and fails offline with the provider error).
+  submits as a literal prompt (and fails offline with the gateway-model error).
 
 Anchors that are stable on the real binary:
 
@@ -256,18 +256,18 @@ Anchors that are stable on the real binary:
 | --- | --- | --- |
 | Startup | spawn a TUI session | `Press ctrl+o to show full startup help`, footer shows the cwd |
 | Slash router | type `/help` + Enter | `Available commands:` then the command list (`/clear /new /quit …`) |
-| No-provider error | submit any prompt with no model configured | `Error: Unknown provider: unknown` |
+| No-gateway error | submit any prompt with no gateway catalog | `Provider unknown has no API implementation for "unknown"` |
 | Command list | `/help` | `/login /logout /resume /fork /tree /reload /compact /trust` |
 | Resume picker | `/resume` + Enter | `Resume Session (Current Folder)` header, scope/sort hints, session rows |
 | Resume scope | `tab` inside the picker | `Resume Session (All)` header; sessions from other workspaces appear |
 | Session persistence | submit a prompt in a non-`--no-session` run | a `.jsonl` appears under `$XDG_CONFIG_HOME/pike/agent/sessions/<workspace-key>/` |
 
-To drive a **real provider round trip** (not the default offline path), put a
-credential in the isolated `auth.json` or export the provider env var (e.g.
-`KIMI_API_KEY`) and select a model (`--model kimi-for-coding`). This sends live
-network traffic and spends quota — only with explicit user authorization. For an
-offline-but-configured run, point `models.json` `baseUrl` at a local stub to
-observe the request without contacting a vendor.
+To drive a **real model round trip** (not the default offline path), run a local
+Magpie gateway (`magpie serve`) reachable at `http://127.0.0.1:3425` and select one
+of its discovered models (`--model <gateway model id>`). Provide `MAGPIE_API_KEY`
+or `--api-key` when the gateway requires one. This sends live network traffic and
+spends quota — only with explicit user authorization. Tests and offline proofs
+must inject a scripted transport instead of contacting the gateway.
 
 ## Evidence
 
@@ -299,10 +299,11 @@ screen, and must **verify the side effect** alongside what's visible.
   per-message fields (`role`, `content`, `stopReason`, `errorMessage`) are
   nested under a `message` object, not top level. The transcript is the real
   record of the user turn and the assistant/error response.
-- **Offline determinism.** The credential-free round trip fails deterministically
-  with `Unknown provider: unknown` and exit 1 (print mode). This is a real
-  user-path result, not a mock: the provider resolution seam genuinely runs. Do
-  not present it as a successful model call.
+- **Offline determinism.** With no reachable gateway the credential-free round trip
+  fails deterministically with `Provider unknown has no API implementation for
+  "unknown"` and exit 1 (print mode). This is a real user-path result, not a mock:
+  discovery and the single stream contract genuinely run. Do not present it as a
+  successful model call.
 
 **Run id, and where evidence lives.** Give every run its own id and its own
 evidence directory. `$EVIDENCE_DIR` below is the only place captures go:

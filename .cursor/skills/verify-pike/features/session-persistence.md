@@ -31,16 +31,16 @@ Preconditions:
   --cwd "$VERIFY_ROOT/ws" --env "HOME=$HOME" --env "XDG_CONFIG_HOME=$XDG_CONFIG_HOME"`.
   The TUI opens with a normal prompt (no `--no-session` marker).
 - **Send a prompt.** `"$HELPER" send --name sess --text "persist me"`, then
-  `"$HELPER" send --name sess --key enter`. Expect the provider error:
-  `"$HELPER" expect --name sess --text "Error: Unknown provider"`.
+  `"$HELPER" send --name sess --key enter`. Expect the gateway-model error:
+  `"$HELPER" expect --name sess --text "has no API implementation"`.
 - **Verify the side effect.** `find "$XDG_CONFIG_HOME/pike/agent/sessions" -name
   '*.jsonl'` returns one new file under a workspace-keyed directory. Read it:
   the first line is `{"type":"session",…}`, followed by a
   `thinking_level_change` and `message` entries. The per-message fields are
   nested: each `message` entry carries a `message` object whose `role` is
   `"user"` (with the sent text) or `"assistant"` (with `stopReason:"error"` and
-  `errorMessage:"Unknown provider: unknown"`). Do not read `role`/`stopReason`
-  at the top level; they live one level down.
+  `errorMessage:"Provider unknown has no API implementation for \"unknown\""`).
+  Do not read `role`/`stopReason` at the top level; they live one level down.
 - **Proof.** The screen snapshot after submission, the path of the new `.jsonl`,
   and its parsed entries together prove persistence. Capture the file path and
   first entries into ``$EVIDENCE_DIR/session-transcript.txt``.
