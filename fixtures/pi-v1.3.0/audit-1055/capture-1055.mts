@@ -186,7 +186,7 @@ function scenarioInputs(name: string): Record<string, unknown> {
             replacementVersion: 2,
             boundary: "after p1 checkpoint commit",
         },
-        "inadmissible child ownership is rejected before the commit writes": {
+        "inadmissible child ownership is rejected by the transaction": {
             cases: ["terminal owner", "missing owner", "background child", "other conversation"],
         },
         "a storage failure at the terminal commit fails the Session and the task reruns after reopen": {

@@ -674,7 +674,7 @@ export async function inadmissibleOwnership(): Promise<Scenario> {
     );
     await harness.close(BACKGROUND_CONTEXT);
     return {
-        name: "inadmissible child ownership is rejected before the commit writes",
+        name: "inadmissible child ownership is rejected by the transaction",
         source: "packages/durable/src/session/transaction.ts:Transaction.createTask",
         expected: errors,
     };

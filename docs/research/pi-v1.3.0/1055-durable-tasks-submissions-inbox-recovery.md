@@ -29,13 +29,13 @@ of the full durable target.
 
 | Artifact | Scenarios | SHA-256 |
 |---|---:|---|
-| `task-lifecycle.json` | 5 | `f758d5cda5bf83485f9d7d4bf25bad596b0f9c1c9877997434262ff285fa8cec` |
-| `task-versioning.json` | 7 | `905e9577dd4935499f4b5b914e6023429c8cedc631092ef9da0b0b5f54081191` |
-| `ownership-abort.json` | 5 | `39052eaa758f72f39074325f4dc4413d7dadb7e9e4dc14d008b3f4165c6be438` |
-| `submissions-inbox.json` | 12 | `58686c32e5d2df71a1ed6b4a3526eb371115b30019aecc33f2d7dd239da04acb` |
-| `crash-recovery.json` | 5 | `1a17f92618a9f9264b4a7fb0d15cdaaa3f2946e9154dfc89815443c93a3ce4ab` |
+| `task-lifecycle.json` | 5 | `413511ba940dc2c0a4a3a85c45ac50f56f6b9af84ab88be8de01e38af0fe1e8e` |
+| `task-versioning.json` | 7 | `7fae5080c87f11397279dc8fc158c31e4a841163e6c16c8af67a2a09c30fba1f` |
+| `ownership-abort.json` | 5 | `e913d57038013a5773977e1db5eeb40089474e4e34f9bc8f504a7fad7f7fdc06` |
+| `submissions-inbox.json` | 12 | `4e1e2e365a3bb772c2e992a2f396eb4cb0596e62e6c364e91de657dcfa4bb2d0` |
+| `crash-recovery.json` | 5 | `19b205fdbc79f4d7c0a96d95caa0c85e8fdf26eef4dc79549af7b54180a1eec3` |
 
-`manifest.json` SHA-256: `070a22ff5e021475ff8cbe3c5417bbb391bb9200e8768abd1cd94b526a415c62`.
+`manifest.json` SHA-256: `0468e8d06857687ed21198a3fc89f74fc76cb3035213601085b566519de7333e`.
 
 The exact capture command (run from the Pike repository; the capture re-executes itself under the
 frozen checkout’s `tsx` so the recorded runtime belongs to that install):
@@ -54,7 +54,7 @@ accepted the bundle and printed this registry record:
 {
   "audit-1055": {
     "manifest": "audit-1055/manifest.json",
-    "manifestSha256": "070a22ff5e021475ff8cbe3c5417bbb391bb9200e8768abd1cd94b526a415c62"
+    "manifestSha256": "0468e8d06857687ed21198a3fc89f74fc76cb3035213601085b566519de7333e"
   }
 }
 ```
@@ -192,8 +192,7 @@ live siblings; it cannot represent either captured join.
 
 Ownership itself is also only partial. C++ stores `parent_task_id` and recursively marks
 descendants, but `create_task` accepts any parent and has no conversation ownership, background
-flag, terminal/missing owner check, or cross-conversation check. The frozen `createTask` rejections
-were observed before any write:
+flag, terminal/missing owner check, or cross-conversation check. The frozen `createTask` rejections were observed at the transaction boundary:
 
 ```text
 Task owner 7 is terminal

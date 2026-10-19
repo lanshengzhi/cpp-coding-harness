@@ -10,29 +10,29 @@
   "evidence": {
     "family": "audit-1055",
     "manifest": "fixtures/pi-v1.3.0/audit-1055/manifest.json",
-    "manifestSha256": "070a22ff5e021475ff8cbe3c5417bbb391bb9200e8768abd1cd94b526a415c62",
+    "manifestSha256": "0468e8d06857687ed21198a3fc89f74fc76cb3035213601085b566519de7333e",
     "report": "docs/research/pi-v1.3.0/1055-durable-tasks-submissions-inbox-recovery.md",
     "capture": "fixtures/pi-v1.3.0/audit-1055/capture-1055.mts",
     "artifacts": {
       "task-lifecycle.json": {
         "scenarios": 5,
-        "sha256": "f758d5cda5bf83485f9d7d4bf25bad596b0f9c1c9877997434262ff285fa8cec"
+        "sha256": "413511ba940dc2c0a4a3a85c45ac50f56f6b9af84ab88be8de01e38af0fe1e8e"
       },
       "task-versioning.json": {
         "scenarios": 7,
-        "sha256": "905e9577dd4935499f4b5b914e6023429c8cedc631092ef9da0b0b5f54081191"
+        "sha256": "7fae5080c87f11397279dc8fc158c31e4a841163e6c16c8af67a2a09c30fba1f"
       },
       "ownership-abort.json": {
         "scenarios": 5,
-        "sha256": "39052eaa758f72f39074325f4dc4413d7dadb7e9e4dc14d008b3f4165c6be438"
+        "sha256": "e913d57038013a5773977e1db5eeb40089474e4e34f9bc8f504a7fad7f7fdc06"
       },
       "submissions-inbox.json": {
         "scenarios": 12,
-        "sha256": "58686c32e5d2df71a1ed6b4a3526eb371115b30019aecc33f2d7dd239da04acb"
+        "sha256": "4e1e2e365a3bb772c2e992a2f396eb4cb0596e62e6c364e91de657dcfa4bb2d0"
       },
       "crash-recovery.json": {
         "scenarios": 5,
-        "sha256": "1a17f92618a9f9264b4a7fb0d15cdaaa3f2946e9154dfc89815443c93a3ce4ab"
+        "sha256": "19b205fdbc79f4d7c0a96d95caa0c85e8fdf26eef4dc79549af7b54180a1eec3"
       }
     }
   },
@@ -384,7 +384,7 @@
           "packages/durable/test/harness-ownership.test.ts:ownership"
         ],
         "scenarios": [
-          "inadmissible child ownership is rejected before the commit writes",
+          "inadmissible child ownership is rejected by the transaction",
           "a failFast join aborts live siblings and the parent reads ordered terminal outcomes",
           "aborting a parent runs descendants' abort handlers before the parent and preserves order"
         ]
