@@ -1,16 +1,15 @@
 # TLS test credentials (issue #638)
 
-Committed credentials securing the local `wss://` mock in
-`tests/ai/providers/BoostBeastWebSocketTransportTest.cpp`:
+Committed credentials secure the local HTTPS mocks used by the coding-agent
+MCP HTTP and OAuth session tests:
 
-- `test-ca.pem` — test CA certificate; the client-side trust anchor injected
-  through the test-only `WebSocketConnectRequest::trusted_ca_certificate_pem`.
+- `test-ca.pem` — test CA certificate loaded by the test process through
+  `SSL_CERT_FILE`.
 - `test-server.pem` / `test-server-key.pem` — mock server certificate and
   private key (SAN: IP 127.0.0.1, DNS localhost).
 
-The CA private key is deliberately not committed; there is nothing to protect,
-but nothing to sign either — regeneration creates a fresh set. Regenerate
-everything with (openssl 3.x):
+The CA private key is deliberately not committed. Regeneration creates a
+fresh set. Regenerate everything with OpenSSL 3.x:
 
 ```sh
 openssl req -x509 -newkey rsa:2048 -keyout test-ca-key.pem -out test-ca.pem \

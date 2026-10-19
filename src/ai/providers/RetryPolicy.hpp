@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/ai/Auth.hpp>
+#include "ai/Headers.hpp"
 #include <cch/ai/InferenceFailure.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -15,7 +15,7 @@ namespace cch::ai::providers {
 struct ProviderFailure {
     bool network_error{false};
     std::optional<int> status{std::nullopt};
-    ProviderHeaders headers{};
+    HeaderValues headers{};
     /// Diagnostic text is retained for reporting only. It is never consulted
     /// by retry classification.
     std::string message{};

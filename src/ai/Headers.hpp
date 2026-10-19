@@ -1,12 +1,15 @@
 #pragma once
 
 #include <algorithm>
+#include <map>
 #include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
 
 namespace cch::ai {
+
+using HeaderValues = std::map<std::string, std::string, std::less<>>;
 
 /// ASCII case-insensitive header name equality (HTTP field names are ASCII).
 [[nodiscard]] inline bool header_name_equal(std::string_view left, std::string_view right) {

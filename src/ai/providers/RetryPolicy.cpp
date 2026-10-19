@@ -1,7 +1,7 @@
 #include "RetryPolicy.hpp"
 
 #include "ai/Headers.hpp"
-#include <cch/ai/JsonAccess.hpp>
+#include <cch/support/JsonAccess.hpp>
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -19,6 +19,8 @@
 
 namespace cch::ai::providers {
 namespace {
+
+using cch::support::json_string_member;
 
 constexpr std::uint64_t kDefaultMaxRetryDelayMs = 60000;
 

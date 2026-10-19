@@ -23,9 +23,8 @@ struct ContextTokenEstimate {
     const Model& model,
     const AiContext& context,
     std::uint64_t max_tokens);
-[[nodiscard]] std::string clamp_openai_prompt_cache_key(std::string_view key);
+[[nodiscard]] std::string clamp_prompt_cache_key(std::string_view key);
 [[nodiscard]] CacheRetention resolve_cache_retention(
-    std::optional<CacheRetention> requested,
-    const ProviderEnv& env);
+        std::optional<CacheRetention> requested, const RequestEnvironment& env);
 
 } // namespace cch::ai::detail

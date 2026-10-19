@@ -2,13 +2,6 @@ include_guard(GLOBAL)
 
 # Orchestration include: top-level CMakeLists.txt only (relies on CMAKE_CURRENT_SOURCE_DIR = repo root).
 
-    find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
-    add_test(
-        NAME cch_generated_catalog_regeneration
-        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ai/GeneratedCatalogTest.py
-    )
-    set_tests_properties(cch_generated_catalog_regeneration PROPERTIES
-        LABELS "ai;catalog;issue760;spec")
     add_test(
         NAME cch_pi_ai_provenance
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/ai/PiAiProvenanceTest.py
@@ -40,32 +33,21 @@ include_guard(GLOBAL)
     add_executable(cch_tests_ai
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
-        tests/ai/BuiltinProvidersTest.cpp
-        tests/ai/CatalogParityTest.cpp
         tests/ai/MessageContractTest.cpp
         tests/ai/MessageConversionTest.cpp
         tests/ai/ModelTest.cpp
         tests/ai/ModelsTest.cpp
+        tests/ai/ModelsGatewayTest.cpp
         tests/ai/ProviderPolicyTest.cpp
         tests/ai/InferenceFailureTest.cpp
         tests/ai/SimpleOptionsTest.cpp
         tests/ai/T0CostProbeTest.cpp
         tests/ai/ToolContractTest.cpp
         tests/ai/UsageTest.cpp
-        tests/ai/api/AnthropicMessagesAdapterTest.cpp
-        tests/ai/api/OpenAICodexResponsesAdapterTest.cpp
+        tests/ai/api/CompletionsStreamExecutionTest.cpp
         tests/ai/api/OpenAICompletionsAdapterTest.cpp
-        tests/ai/api/OpenAIResponsesAdapterTest.cpp
         tests/ai/api/PartialJsonTest.cpp
-        tests/ai/auth/OpenAIChatGPTOAuthTest.cpp
-        tests/ai/auth/OpenAICodexOAuthTest.cpp
-        tests/ai/auth/OpenRouterOAuthTest.cpp
-        tests/ai/providers/BoostBeastStreamTransportTest.cpp
-        tests/ai/providers/BoostBeastWebSocketTransportTest.cpp
-        tests/ai/providers/ComposedProviderTest.cpp
         tests/ai/providers/ScriptedProviderTest.cpp
-        tests/ai/providers/SseParserTest.cpp
-        tests/ai/providers/StreamExecutionEngineTest.cpp
 )
     target_include_directories(cch_tests_ai PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_ai

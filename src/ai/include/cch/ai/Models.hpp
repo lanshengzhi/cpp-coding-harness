@@ -1,152 +1,81 @@
 #pragma once
 
-#include <cch/ai/Auth.hpp>
 #include <cch/ai/Context.hpp>
-#include <cch/ai/CredentialStore.hpp>
 #include <cch/ai/ModelStream.hpp>
 #include <cch/ai/RequestOptions.hpp>
-#include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/support/AsyncResult.hpp>
 
-#include <expected>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <stop_token>
 #include <vector>
 
 namespace cch::ai {
-namespace providers {
-struct ProviderTestAccess;
+namespace detail {
+struct ModelsTestAccess;
 }
 
-/// Complete pre-runtime description of one Provider. The authentication hooks
-/// make this value move-only; transports and stream capabilities are assembled
-/// privately by Models.
-struct ProviderDefinition {
-    std::string id{};
-    std::string name{};
+/// Trusted startup inputs for gateway Request Authentication (ADR 0072).
+/// The host supplies ambient environment state explicitly; Models owns key
+/// precedence and never exposes the effective key through catalog values.
+struct ModelsOptions {
+    std::optional<std::string> api_key{std::nullopt};
+    std::optional<std::string> environment_api_key{std::nullopt};
+    std::string gateway_url{"http://127.0.0.1:3425"};
+};
+
+/// Passive gateway facts, never a request-authentication or availability value.
+struct GatewayStatus {
+    std::string base_url{};
+    std::optional<std::string> name{std::nullopt};
+    std::optional<std::string> version{std::nullopt};
     std::vector<Model> models{};
-    ProviderAuth auth{};
+    std::optional<std::string> connection_error{std::nullopt};
+    std::optional<std::string> catalog_error{std::nullopt};
 };
 
-/// One Provider installation or removal. A present definition installs or
-/// replaces the provider identified by `provider_id`; an absent definition
-/// removes that provider. The id is repeated for installation so a change has
-/// one explicit target in either form.
-struct ProviderChange {
-    std::string provider_id{};
-    std::optional<ProviderDefinition> definition{std::nullopt};
-};
-
-/// Passive summary of one authentication method exposed by Provider Info.
-struct AuthMethodInfo {
-    AuthType type{AuthType::ApiKey};
-    std::string name{};
-    bool has_login{false};
-};
-
-/// Passive projection of one installed Provider for hosts and frontends.
-struct ProviderInfo {
-    std::string id{};
-    std::string name{};
-    std::vector<AuthMethodInfo> auth_methods{};
-};
-
-/// Returns fresh definitions for the supported built-in providers. Each call
-/// creates independent model catalogs and authentication hooks.
-[[nodiscard]] std::vector<ProviderDefinition> builtin_provider_definitions();
-
-/// Runtime collection of long-lived Providers plus live authentication and
-/// request-time stream delegation.
-///
-/// Concurrency contract: `Models` and the Providers it owns are not internally
-/// synchronized; Providers hold long-lived state (e.g. the Codex WebSocket
-/// session cache) and adapters are driven by the calling executor. All
-/// operations on one `Models`/`Provider` graph must be driven by a
-/// single-threaded executor or otherwise serialized; do not drive the same
-/// graph from two threads. One runtime is shared across sessions (ADR 0029),
-/// so callers must serialize every session's calls onto one executor.
+/// Gateway model catalog and one-turn inference. All operations on a shared
+/// Models value must be serialized by its calling executor (ADR 0040).
 class Models final : public std::enable_shared_from_this<Models> {
 public:
-    Models(
-        std::shared_ptr<CredentialStore> credentials,
-        std::shared_ptr<AuthContext> auth_context);
+    explicit Models(ModelsOptions options = {});
     Models(Models&&) noexcept;
     Models& operator=(Models&&) noexcept;
     ~Models();
     Models(const Models&) = delete;
     Models& operator=(const Models&) = delete;
 
-    /// Install or remove one provider while keeping construction private to
-    /// the AI Owner. A missing provider removal succeeds as a no-op.
-    [[nodiscard]] cch::support::ExpectedVoid apply_provider(ProviderChange change);
+    /// Bind an explicit startup override before the first gateway request.
+    /// Repeating the same key is harmless for shared Session assembly; changing
+    /// it after any gateway request is rejected. No key is persisted or returned.
+    [[nodiscard]] support::ExpectedVoid configure_startup_key(std::string api_key);
 
-    /// Remove all installed providers before a full composition refresh.
-    void clear_providers();
-
-    [[nodiscard]] std::vector<ProviderInfo> provider_info() const;
+    /// Refresh atomically; failure clears the catalog, cancellation preserves it.
+    /// Pending operations retain Models and run on the consuming executor.
+    [[nodiscard]] support::AsyncResult<void> refresh(std::stop_token stop_token = {});
+    [[nodiscard]] std::optional<support::Error> discovery_error() const;
+    /// Inspect hello and catalog independently without changing the active catalog.
+    [[nodiscard]] support::AsyncResult<GatewayStatus> inspect_gateway(std::stop_token stop_token = {});
     [[nodiscard]] std::vector<Model> models(std::optional<std::string_view> provider_id = std::nullopt) const;
-    [[nodiscard]] std::optional<Model> model(
-        std::string_view provider_id,
-        std::string_view model_id) const;
+    [[nodiscard]] std::optional<Model> model(std::string_view provider_id, std::string_view model_id) const;
 
-    /// Side-effect-free authentication status. OAuth credentials are never
-    /// refreshed by this operation.
-    [[nodiscard]] cch::support::AsyncResult<std::optional<AuthCheck>> check_auth(
-        std::string provider_id);
-
-    /// Live authentication resolution. OAuth refresh is double-checked and
-    /// persisted through CredentialStore::modify immediately before use.
-    [[nodiscard]] cch::support::AsyncResult<std::optional<AuthResult>> get_auth(
-        std::string provider_id,
-        std::optional<std::string> explicit_api_key = std::nullopt);
-    [[nodiscard]] cch::support::AsyncResult<std::optional<AuthResult>> get_auth(
-        Model model,
-        std::optional<std::string> explicit_api_key = std::nullopt);
-
-    /// Remove a locally stored credential. No remote revocation is attempted.
-    [[nodiscard]] cch::support::AsyncResult<void> logout(
-        std::string provider_id);
-
-    /// Run a provider-owned login flow and persist its returned credential via
-    /// CredentialStore::modify, the only write path. Login-flow failures
-    /// propagate unwrapped to the host; only CredentialStore failures wrap as
-    /// the `auth` category. Login errors never enter the stream error channel.
-    /// `options` supplies the optional app context (device-id hook) that
-    /// provider login flows may consult.
-    [[nodiscard]] cch::support::AsyncResult<Credential> login(
-        std::string provider_id,
-        AuthType type,
-        AuthInteraction interaction,
-        std::optional<LoginOptions> options = std::nullopt);
-
-    /// Produce one AI-owned move-only `ModelStream` for a single turn
-    /// (ADR 0040 / #455). The returned value is consumed exactly once through
-    /// `run`/`start`; its closure shares this Models Runtime's
-    /// lifetime and captures the consuming executor privately. The sink is
-    /// supplied at consumption, keeping `ModelStream` composable and free of
-    /// third-party execution types. Model/provider/auth/request failures
-    /// normalize to one terminal event and a final AssistantMessage value;
-    /// only sink or infrastructure failure uses the Expected error alternative.
-    [[nodiscard]] ModelStream stream(
-        Model model,
-        AiContext context,
-        SimpleStreamOptions options);
+    /// Produce a lazy, move-only stream retaining the Models lifetime. Domain
+    /// failures deliver a terminal event and AssistantMessage; sink and
+    /// infrastructure failures use the Expected error alternative.
+    [[nodiscard]] ModelStream stream(Model model, AiContext context, SimpleStreamOptions options);
 
     struct Impl;
 
 private:
-    friend struct providers::ProviderTestAccess;
+    friend struct detail::ModelsTestAccess;
+    [[nodiscard]] support::ExpectedVoid replace_models(std::vector<Model> models);
     std::unique_ptr<Impl> impl_;
 };
 
-/// Produces one move-only `ModelStream` per call. The closure deliberately
-/// shares the Models Runtime lifetime (ADR 0040). The executor capture stays
-/// private to `ai::Models`; the Agent consumes the resulting `ModelStream`
-/// value without naming a third-party execution type.
-using ModelStreamFactory = std::move_only_function<
-    ModelStream(Model, AiContext, SimpleStreamOptions)>;
+using ModelStreamFactory = std::move_only_function<ModelStream(Model, AiContext, SimpleStreamOptions)>;
 
 } // namespace cch::ai

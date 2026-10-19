@@ -6,7 +6,6 @@
 #include <cch/ai/Models.hpp>
 
 #include "ai/SimpleOptions.hpp"
-#include "ai/providers/EnvApiKeyAuth.hpp"
 
 #include <fstream>
 #include <iterator>
@@ -20,8 +19,7 @@ namespace cch::tests {
 
 /// Shared scenario vocabulary for the adapter/wire tests (#721): one run
 /// harness, fixture loading, event-name rendering, and scripted-provider
-/// wiring, replacing the per-file copies the Responses / Anthropic / Codex
-/// adapter test files each carried.
+/// wiring shared across AI test files.
 
 struct RunResult {
     support::Expected<ai::AssistantMessage> result;
@@ -75,15 +73,13 @@ struct RunResult {
 /// Wire one env-api-key scripted provider (id == name == model.provider) into
 /// a fresh Models runtime. Returns nullptr when installation fails.
 [[nodiscard]] inline std::shared_ptr<ai::Models> make_scripted_models(
-        const ai::Model& model, ScriptedTransportOptions transport = {}) {
-    auto models = std::make_shared<ai::Models>(
-            std::make_shared<EmptyCredentialStore>(), std::make_shared<EmptyAuthContext>());
+        const ai::Model& model, ScriptedTransportOptions transport = {}, ai::ModelsOptions gateway = {}) {
+    auto models = std::make_shared<ai::Models>(std::move(gateway));
     ScriptedProviderDefinition definition;
-    definition.definition = ai::ProviderDefinition{
-            .id = std::string{model.provider},
-            .name = std::string{model.provider},
+    definition.definition = ScriptedModelCatalog{
+            .id = model.provider,
+            .name = model.provider,
             .models = {model},
-            .auth = ai::providers::make_env_api_key_auth("API key", {}),
     };
     definition.transport = std::move(transport);
     if (auto registered = apply_scripted_provider(*models, std::move(definition)); !registered) {

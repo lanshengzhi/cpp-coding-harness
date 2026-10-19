@@ -1,81 +1,13 @@
 #include <cch/ai/RequestOptions.hpp>
-#include "ai/api/Termination.hpp"
 #include "ai/providers/RetryPolicy.hpp"
-#include "support/PiFixture.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
 #include <optional>
 #include <string>
-#include <string_view>
 
 using namespace cch;
-
-namespace {
-
-std::string_view stop_reason_name(ai::AssistantStopReason reason) {
-    switch (reason) {
-    case ai::AssistantStopReason::Pending:
-        return "pending";
-    case ai::AssistantStopReason::Stop:
-        return "stop";
-    case ai::AssistantStopReason::Length:
-        return "length";
-    case ai::AssistantStopReason::ToolUse:
-        return "toolUse";
-    case ai::AssistantStopReason::Error:
-        return "error";
-    case ai::AssistantStopReason::Aborted:
-        return "aborted";
-    case ai::AssistantStopReason::Count:
-        break;
-    }
-    return "unknown";
-}
-
-} // namespace
-
-TEST_CASE(
-        "Provider termination mapping follows the committed terminal matrix", "[ai][provider-policy][issue339][spec]") {
-    const auto fixture = tests::read_pi_fixture("termination/matrix.json");
-    REQUIRE(fixture);
-
-    const auto& responses = fixture->at("responses").get_object();
-    for (const auto& [terminal, expected] : responses) {
-        const bool has_tool_call = terminal == "completed_with_tool_call";
-        auto wire_terminal = has_tool_call ? "completed" : terminal == "missing" ? "" : terminal;
-        // B-4: the refined matrix rows carry the provider's incomplete reason
-        // as "<status>.<reason>"; mapStopReason splits on it.
-        std::optional<std::string_view> incomplete_reason;
-        if (const auto dot = terminal.find('.'); dot != std::string::npos) {
-            incomplete_reason = std::string_view{terminal}.substr(dot + 1);
-            wire_terminal = std::string_view{terminal}.substr(0, dot);
-        }
-        const auto mapped = ai::api::map_responses_termination(wire_terminal, has_tool_call, incomplete_reason);
-        REQUIRE(mapped);
-        CHECK(stop_reason_name(mapped->reason) == expected.get_string());
-    }
-
-    const auto& anthropic = fixture->at("anthropic").get_object();
-    for (const auto& [terminal, expected] : anthropic) {
-        const auto wire_terminal = terminal == "missing_message_stop"
-            ? std::string_view{}
-            : terminal == "unknown" ? std::string_view{"future_reason"} : terminal;
-        const auto mapped = ai::api::map_anthropic_termination(wire_terminal);
-        if (expected.get_string() == "stream_error") {
-            REQUIRE_FALSE(mapped);
-            CHECK(mapped.error().message.find("future_reason") != std::string::npos);
-            continue;
-        }
-        REQUIRE(mapped);
-        CHECK(stop_reason_name(mapped->reason) == expected.get_string());
-        if (terminal == "refusal" || terminal == "sensitive" ||
-            terminal == "missing_message_stop") {
-            REQUIRE(mapped->error_message);
-        }
-    }
-}
 
 TEST_CASE("Provider retry policy classifies transient failures and bounds server delays",
         "[ai][provider-policy][issue339][spec]") {

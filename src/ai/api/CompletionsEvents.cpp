@@ -1,7 +1,7 @@
 #include "CompletionsEvents.hpp"
 
 #include "PartialJson.hpp"
-#include <cch/ai/JsonAccess.hpp>
+#include <cch/support/JsonAccess.hpp>
 #include <cch/ai/Timestamps.hpp>
 #include "ai/api/UsageNormalization.hpp"
 #include "ai/providers/ProviderError.hpp"
@@ -21,6 +21,15 @@
 
 namespace cch::ai::api {
 namespace {
+
+using cch::support::json_array_member;
+using cch::support::json_bool_member;
+using cch::support::json_integer_member;
+using cch::support::json_member;
+using cch::support::json_number_member;
+using cch::support::json_object;
+using cch::support::json_object_member;
+using cch::support::json_string_member;
 
 using JsonObject = support::JsonValue::object_t;
 
@@ -445,14 +454,13 @@ support::Expected<CompletionsProcessOutcome> CompletionsEventProcessor::process(
                 return std::unexpected(emitted.error());
             }
         }
+        // A relayed upstream keeps its own reasoning spelling, so the decoder
+        // accepts every Chat Completions variant the gateway can pass through
+        // and remembers which one it saw as the thinking signature (ADR 0074).
         for (const auto field : {"reasoning_content", "reasoning", "reasoning_text"}) {
             if (const auto reasoning = json_string_member(*delta, field); reasoning && !reasoning->empty()) {
-                const std::string signature =
-                        impl_->model.provider == "opencode-go" && std::string_view{field} == "reasoning"
-                                ? "reasoning_content"
-                                : field;
                 auto emitted =
-                        emit_thinking_delta(std::string{*reasoning}, signature, assistant, impl_->thinking_index, sink);
+                        emit_thinking_delta(std::string{*reasoning}, field, assistant, impl_->thinking_index, sink);
                 if (!emitted) {
                     return std::unexpected(emitted.error());
                 }

@@ -2,13 +2,9 @@
 
 #include <cch/support/Error.hpp>
 
-#include <algorithm>
-#include <array>
 #include <cmath>
 #include <format>
-#include <span>
 #include <string_view>
-#include <type_traits>
 
 namespace cch::ai {
 namespace {
@@ -113,36 +109,6 @@ support::ExpectedVoid validate_model(const Model& model) {
                 !result) {
                 return result;
             }
-        }
-    }
-    if (model.compat) {
-        // The Responses compat shape is shared by two catalog API identities:
-        // `openai-responses` and `openai-codex-responses` both carry the
-        // grammar-tool flag (ADR 0033's #885 amendment), so the Responses
-        // alternative accepts either. The other alternatives pin exactly one
-        // api.
-        static constexpr std::array<std::string_view, 1> kAnthropicApis{"anthropic-messages"};
-        static constexpr std::array<std::string_view, 1> kCompletionsApis{"openai-completions"};
-        static constexpr std::array<std::string_view, 2> kResponsesApis{"openai-responses", "openai-codex-responses"};
-        const auto [compat_name, expected_apis] = std::visit(
-                [](const auto& compat) -> std::pair<std::string_view, std::span<const std::string_view>> {
-                    using Compat = std::decay_t<decltype(compat)>;
-                    if constexpr (std::is_same_v<Compat, AnthropicMessagesCompat>) {
-                        return {"AnthropicMessagesCompat", kAnthropicApis};
-                    } else if constexpr (std::is_same_v<Compat, OpenAICompletionsCompat>) {
-                        return {"OpenAICompletionsCompat", kCompletionsApis};
-                    } else {
-                        return {"OpenAIResponsesCompat", kResponsesApis};
-                    }
-                },
-                *model.compat);
-        if (std::ranges::find(expected_apis, model.api) == expected_apis.end()) {
-            return std::unexpected(support::make_error(support::ErrorCode::ModelValidation,
-                    "invalid model compat",
-                    std::format("{} requires api '{}', but model api is '{}'",
-                            compat_name,
-                            expected_apis.front(),
-                            model.api)));
         }
     }
     return {};

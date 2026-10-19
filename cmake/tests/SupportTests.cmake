@@ -7,6 +7,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/support/AllocationCounter.cpp
         tests/support/AsyncResultTest.cpp
+        tests/support/BoostBeastStreamTransportTest.cpp
         tests/support/BoundedTextTest.cpp
         tests/support/ExpectedErrorTest.cpp
         tests/support/ExpectedMacrosTest.cpp
@@ -15,6 +16,7 @@ include_guard(GLOBAL)
         tests/support/OutputLimiterTest.cpp
         tests/support/PumpUntilTest.cpp
         tests/support/RedactorTest.cpp
+        tests/support/SseParserTest.cpp
         tests/support/TestRunnerIsolationTest.cpp
 )
     target_include_directories(cch_tests_support PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

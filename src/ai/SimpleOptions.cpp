@@ -252,7 +252,9 @@ std::uint64_t clamp_max_tokens_to_context(
     return std::min(requested, std::max<std::uint64_t>(1, available));
 }
 
-std::string clamp_openai_prompt_cache_key(std::string_view key) {
+/// Clamp a session-derived prompt cache key to the 64-character limit the
+/// OpenAI-style `prompt_cache_key` field carries (ADR 0074).
+std::string clamp_prompt_cache_key(std::string_view key) {
     std::size_t index = 0;
     std::size_t characters = 0;
     while (index < key.size() && characters < 64) {
@@ -262,9 +264,7 @@ std::string clamp_openai_prompt_cache_key(std::string_view key) {
     return std::string{key.substr(0, index)};
 }
 
-CacheRetention resolve_cache_retention(
-    std::optional<CacheRetention> requested,
-    const ProviderEnv& env) {
+CacheRetention resolve_cache_retention(std::optional<CacheRetention> requested, const RequestEnvironment& env) {
     if (requested) {
         return *requested;
     }

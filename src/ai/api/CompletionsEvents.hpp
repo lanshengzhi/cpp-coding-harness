@@ -25,7 +25,7 @@ struct CompletionsProcessOutcome {
 
 /// Private Chat Completions event processor. It owns only decoded stream
 /// state; SSE framing, request retries, cancellation, and terminal event
-/// commitment remain in OpenAICompletionsAdapter and StreamExecutionEngine.
+/// commitment remain in CompletionsPipeline and StreamExecutionEngine.
 class CompletionsEventProcessor final {
 public:
     explicit CompletionsEventProcessor(Model model);

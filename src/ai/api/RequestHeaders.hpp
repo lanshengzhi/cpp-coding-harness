@@ -1,47 +1,34 @@
 #pragma once
 
 #include "ai/Headers.hpp"
-#include "ai/providers/Provider.hpp"
+#include <cch/ai/RequestOptions.hpp>
 
-#include <utility>
+#include <string_view>
 
 namespace cch::ai::api {
 
-[[nodiscard]] inline support::ExpectedVoid prepare_stream_request_headers(
-        const Model& model, ProviderStreamOptions& options, RequestHeaders adapter_defaults = {}) {
-    RequestHeaders headers;
-    for (auto& [name, value] : options.auth.headers) {
-        headers.emplace(name, std::move(value));
-    }
-    options.auth.headers.clear();
+/// True when `name` (any casing) stays deleted in the resolved request
+/// headers: an explicit null tombstone suppresses the adapter default.
+[[nodiscard]] inline bool has_header_tombstone(const ResolvedHeaders& headers, std::string_view name) {
+    const auto found = headers.find(name);
+    return found != headers.end() && !found->second;
+}
 
-    if (model.provider == "opencode-go" && options.session_id && !options.session_id->empty() &&
-            !find_header(headers, "x-opencode-session")) {
-        set_header(headers, "x-opencode-session", *options.session_id);
+/// Merges the trusted authentication headers with the caller's request
+/// header overrides into the resolved request header list
+/// (`RequestOptions.hpp` explicit-null deletion contract): a null override
+/// stays deleted as a tombstone, `authorization` is always erased because
+/// the gateway key reintroduces it or the request fails the no-key check,
+/// and surviving callers keep the casing of their own entry.
+[[nodiscard]] inline ResolvedHeaders resolve_stream_request_headers(
+        const HeaderValues& auth_headers, const RequestHeaders& overrides) {
+    ResolvedHeaders headers;
+    for (const auto& [name, value] : auth_headers) {
+        headers.emplace(name, value);
     }
-    for (auto& [name, value] : adapter_defaults) {
-        if (!find_header(headers, name)) {
-            headers.emplace(name, std::move(value));
-        }
-    }
-    merge_headers(headers, options.header_overrides);
-    if (options.transform_headers) {
-        auto transformed = std::move(options.transform_headers)(std::move(headers));
-        if (!transformed) {
-            return std::unexpected(transformed.error());
-        }
-        headers = std::move(*transformed);
-    }
-
-    options.deleted_headers.clear();
-    for (auto& [name, value] : headers) {
-        if (value) {
-            options.auth.headers.emplace(name, std::move(*value));
-        } else {
-            options.deleted_headers.push_back(name);
-        }
-    }
-    return {};
+    merge_headers(headers, overrides);
+    erase_header(headers, "authorization");
+    return headers;
 }
 
 } // namespace cch::ai::api

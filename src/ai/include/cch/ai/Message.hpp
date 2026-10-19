@@ -8,6 +8,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -60,6 +61,8 @@ struct UserMessage {
     TimestampMs timestamp{};
 };
 
+inline constexpr std::string_view kDefaultAbortDiagnostic{"Request was aborted"};
+
 struct AssistantMessage {
     std::vector<AssistantContent> content{};
     std::string api{};
@@ -73,6 +76,14 @@ struct AssistantMessage {
     std::optional<std::string> error_message{};
     std::optional<std::vector<DiagnosticEntry>> diagnostics{};
     TimestampMs timestamp{};
+
+    /// Whether this aborted message carries the canonical diagnostic rather
+    /// than a provider-specific explanation. Presentation surfaces can choose
+    /// their own wording for the default without comparing diagnostic text.
+    [[nodiscard]] bool uses_default_abort_diagnostic() const noexcept {
+        return stop_reason == AssistantStopReason::Aborted &&
+               (!error_message || error_message->empty() || *error_message == kDefaultAbortDiagnostic);
+    }
 };
 
 struct ToolResultMessage {

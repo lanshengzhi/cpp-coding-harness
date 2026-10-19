@@ -335,3 +335,22 @@ TEST_CASE("assistant stop reason wire vocabulary matches pi's strings", "[ai][u3
 
     CHECK_FALSE(ai::stop_reason_from_string("future_reason").has_value());
 }
+
+TEST_CASE("assistant messages identify the default abort diagnostic without text checks", "[ai][contract][issue1042]") {
+    ai::AssistantMessage message;
+    message.stop_reason = ai::AssistantStopReason::Aborted;
+    CHECK(message.uses_default_abort_diagnostic());
+
+    message.error_message = std::string{};
+    CHECK(message.uses_default_abort_diagnostic());
+
+    message.error_message = std::string{ai::kDefaultAbortDiagnostic};
+    CHECK(message.uses_default_abort_diagnostic());
+
+    message.error_message = "provider-specific cancellation detail";
+    CHECK_FALSE(message.uses_default_abort_diagnostic());
+
+    message.stop_reason = ai::AssistantStopReason::Error;
+    message.error_message = std::string{ai::kDefaultAbortDiagnostic};
+    CHECK_FALSE(message.uses_default_abort_diagnostic());
+}

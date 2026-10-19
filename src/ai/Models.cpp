@@ -1,189 +1,162 @@
 #include <cch/ai/Models.hpp>
 
+#include "ai/MagpieCatalog.hpp"
+#include "ai/ModelsImpl.hpp"
+#include "ai/ModelsInternal.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include "ai/Headers.hpp"
-#include "ai/ModelStreamBridge.hpp"
-#include <cch/ai/Timestamps.hpp>
-#include <cch/ai/BoostBeastStreamTransport.hpp>
-#include "ai/providers/BoostBeastWebSocketTransport.hpp"
-#include "ai/providers/ComposedProvider.hpp"
-#include "ai/providers/ProviderTestAccess.hpp"
-#include "ai/providers/RetryPolicy.hpp"
-#include "SimpleOptions.hpp"
-#include <cch/support/BoundedText.hpp>
-#include "support/ExpectedMacros.hpp"
-
-#include <boost/asio/async_result.hpp>
-#include <boost/asio/bind_executor.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/this_coro.hpp>
-#include <boost/asio/use_awaitable.hpp>
+#include "support/BoostBeastStreamTransport.hpp"
 
 #include <algorithm>
 #include <chrono>
-#include <exception>
-#include <map>
-#include <memory>
-#include <optional>
-#include <string>
-#include <type_traits>
 #include <utility>
-#include <variant>
-#include <vector>
-
-#include "ModelsImpl.hpp"
 
 namespace cch::ai {
 namespace {
 
-[[nodiscard]] std::vector<Model> safe_provider_models(const Provider& provider_value) {
-    return provider_value.models();
+[[nodiscard]] support::Error cancelled_refresh() {
+    return support::make_error(support::ErrorCode::Cancelled, "model catalog refresh cancelled");
 }
 
-[[nodiscard]] std::shared_ptr<Provider> make_default_provider(ProviderDefinition definition) {
-    auto http_transport = std::make_shared<providers::BoostBeastStreamTransport>();
-    auto websocket_transport = std::make_shared<providers::BoostBeastWebSocketTransport>();
-    return providers::make_composed_provider(std::move(definition.id),
-            std::move(definition.name),
-            std::move(definition.models),
-            std::move(definition.auth),
-            std::move(http_transport),
-            std::move(websocket_transport));
+[[nodiscard]] support::Error cancelled_inspect() {
+    return support::make_error(support::ErrorCode::Cancelled, "gateway status inspection cancelled");
 }
 
 } // namespace
 
-support::ExpectedVoid providers::ProviderTestAccess::install(Models& models, std::shared_ptr<Provider> provider) {
-    return models.impl_->install_provider(std::move(provider));
-}
-
-support::ExpectedVoid providers::ProviderTestAccess::replace_transports(Models& models,
-        std::shared_ptr<StreamTransport> http_transport,
-        std::shared_ptr<WebSocketTransport> ws_transport,
-        CodexWebSocketCacheConfig cache_config) {
-    for (const auto& [provider_id, provider] : models.impl_->providers) {
-        auto replacement = providers::make_composed_provider(provider_id,
-                std::string{provider->name()},
-                provider->models(),
-                std::move(provider->auth()),
-                http_transport,
-                ws_transport,
-                cache_config);
-        if (auto installed = models.impl_->install_provider(std::move(replacement)); !installed) {
-            return std::unexpected(installed.error());
-        }
+Models::Models(ModelsOptions options) : impl_(std::make_unique<Impl>()) {
+    // ADR 0072: gateway keys are invocation state, never persisted credentials.
+    impl_->api_key = options.api_key && !options.api_key->empty() ? std::move(*options.api_key)
+                     : options.environment_api_key && !options.environment_api_key->empty()
+                             ? std::move(*options.environment_api_key)
+                             : "magpie";
+    impl_->gateway_url = options.gateway_url.empty() ? "http://127.0.0.1:3425" : std::move(options.gateway_url);
+    while (impl_->gateway_url.ends_with('/')) {
+        impl_->gateway_url.pop_back();
     }
-    return {};
+    if (impl_->gateway_url.empty()) {
+        impl_->gateway_url = "http://127.0.0.1:3425";
+    }
+    impl_->transport = std::make_shared<support::BoostBeastStreamTransport>();
 }
-
-Models::Models(
-    std::shared_ptr<CredentialStore> credentials,
-    std::shared_ptr<AuthContext> auth_context)
-    : impl_(std::make_unique<Impl>(Impl{
-          .credentials = std::move(credentials),
-          .auth_context = std::move(auth_context),
-          .providers = {},
-      })) {}
 
 Models::Models(Models&&) noexcept = default;
 Models& Models::operator=(Models&&) noexcept = default;
 Models::~Models() = default;
 
-support::ExpectedVoid Models::apply_provider(ProviderChange change) {
-    if (change.definition) {
-        auto definition = std::move(*change.definition);
-        if (definition.id.empty()) {
-            return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
-        }
-        if (!change.provider_id.empty() && change.provider_id != definition.id) {
-            return std::unexpected(support::make_error(support::ErrorCode::Provider,
-                    "provider change id does not match provider definition",
-                    definition.id));
-        }
-        for (const auto& model : definition.models) {
-            if (auto valid = validate_model(model); !valid) {
-                auto error = valid.error();
-                error.code = support::ErrorCode::ModelValidation;
-                error.message = "invalid model for provider \"" + definition.id + "\"";
-                if (error.detail.empty()) {
-                    error.detail = valid.error().message;
-                } else {
-                    error.detail = valid.error().message + ": " + error.detail;
-                }
-                return std::unexpected(std::move(error));
-            }
-        }
-        return impl_->install_provider(make_default_provider(std::move(definition)));
+support::ExpectedVoid Models::configure_startup_key(std::string api_key) {
+    if (api_key.empty()) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "gateway API key is empty"));
     }
-    if (change.provider_id.empty()) {
-        return std::unexpected(support::make_error(support::ErrorCode::Provider, "provider id is required"));
+    if (impl_->request_started && api_key != impl_->api_key) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "gateway API key is fixed after the first request; create another model runtime for a different key"));
     }
-    impl_->remove_provider(change.provider_id);
+    impl_->api_key = std::move(api_key);
     return {};
 }
 
-void Models::clear_providers() {
-    impl_->providers.clear();
+support::AsyncResult<void> Models::refresh(std::stop_token stop_token) {
+    auto self = shared_from_this();
+    return support::detail::make_async_result([self, stop_token]() -> boost::asio::awaitable<support::ExpectedVoid> {
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(cancelled_refresh());
+        }
+        self->impl_->request_started = true;
+        auto fetched = co_await fetch_magpie_models(*self->impl_->transport,
+                self->impl_->gateway_url + "/v1",
+                self->impl_->api_key,
+                std::chrono::milliseconds{3000},
+                stop_token);
+        if (stop_token.stop_requested() || (!fetched && fetched.error().code == support::ErrorCode::Cancelled)) {
+            co_return std::unexpected(cancelled_refresh());
+        }
+        if (fetched) {
+            if (auto applied = self->replace_models(std::move(*fetched)); applied) {
+                self->impl_->discovery_error.reset();
+                co_return support::ExpectedVoid{};
+            } else {
+                fetched = std::unexpected(applied.error());
+            }
+        }
+        // ADR 0073 extends the approved AI diagnostic policy to discovery.
+        auto error = safe_error(std::move(fetched.error()), self->impl_->api_key);
+        self->impl_->catalog.clear();
+        self->impl_->discovery_error = error;
+        co_return std::unexpected(std::move(error));
+    });
 }
 
-std::vector<ProviderInfo> Models::provider_info() const {
-    std::vector<ProviderInfo> result;
-    result.reserve(impl_->providers.size());
-    for (const auto& [_, provider_value] : impl_->providers) {
-        ProviderInfo info{
-                .id = std::string{provider_value->id()},
-                .name = std::string{provider_value->name()},
-                .auth_methods = {},
-        };
-        const auto& auth = provider_value->auth();
-        // Keep the existing login presentation order: OAuth before API key.
-        if (auth.oauth) {
-            info.auth_methods.push_back(AuthMethodInfo{
-                    .type = AuthType::OAuth,
-                    .name = auth.oauth->name,
-                    .has_login = static_cast<bool>(auth.oauth->login),
+std::optional<support::Error> Models::discovery_error() const { return impl_->discovery_error; }
+
+support::AsyncResult<GatewayStatus> Models::inspect_gateway(std::stop_token stop_token) {
+    auto self = shared_from_this();
+    return support::detail::make_async_result(
+            [self, stop_token]() -> boost::asio::awaitable<support::Expected<GatewayStatus>> {
+                if (stop_token.stop_requested()) {
+                    co_return std::unexpected(cancelled_inspect());
+                }
+                GatewayStatus status{.base_url = self->impl_->gateway_url};
+                self->impl_->request_started = true;
+                auto hello = co_await fetch_magpie_hello(*self->impl_->transport,
+                        self->impl_->gateway_url,
+                        self->impl_->api_key,
+                        std::chrono::milliseconds{3000},
+                        stop_token);
+                if (stop_token.stop_requested() || (!hello && hello.error().code == support::ErrorCode::Cancelled)) {
+                    co_return std::unexpected(cancelled_inspect());
+                }
+                if (hello) {
+                    status.name = std::move(hello->name);
+                    status.version = std::move(hello->version);
+                } else {
+                    status.connection_error = safe_error(std::move(hello.error()), self->impl_->api_key).message;
+                }
+                auto catalog = co_await fetch_magpie_models(*self->impl_->transport,
+                        self->impl_->gateway_url + "/v1",
+                        self->impl_->api_key,
+                        std::chrono::milliseconds{3000},
+                        stop_token);
+                if (stop_token.stop_requested() ||
+                        (!catalog && catalog.error().code == support::ErrorCode::Cancelled)) {
+                    co_return std::unexpected(cancelled_inspect());
+                }
+                if (catalog) {
+                    status.models = std::move(*catalog);
+                } else {
+                    status.catalog_error = safe_error(std::move(catalog.error()), self->impl_->api_key).message;
+                }
+                co_return status;
             });
+}
+
+support::ExpectedVoid Models::replace_models(std::vector<Model> models) {
+    for (const auto& model : models) {
+        if (auto valid = validate_model(model); !valid) {
+            return std::unexpected(valid.error());
         }
-        if (auth.api_key) {
-            info.auth_methods.push_back(AuthMethodInfo{
-                    .type = AuthType::ApiKey,
-                    .name = auth.api_key->name,
-                    .has_login = static_cast<bool>(auth.api_key->login),
-            });
-        }
-        result.push_back(std::move(info));
     }
-    return result;
+    impl_->catalog = std::move(models);
+    return {};
 }
 
 std::vector<Model> Models::models(std::optional<std::string_view> provider_id) const {
-    if (provider_id) {
-        const auto selected = impl_->provider(*provider_id);
-        return selected ? safe_provider_models(*selected) : std::vector<Model>{};
+    if (!provider_id) {
+        return impl_->catalog;
     }
     std::vector<Model> result;
-    for (const auto& [_, provider_value] : impl_->providers) {
-        auto current = safe_provider_models(*provider_value);
-        result.insert(
-            result.end(),
-            std::make_move_iterator(current.begin()),
-            std::make_move_iterator(current.end()));
+    for (const auto& model : impl_->catalog) {
+        if (model.provider == *provider_id) {
+            result.push_back(model);
+        }
     }
     return result;
 }
 
-std::optional<Model> Models::model(
-    std::string_view provider_id,
-    std::string_view model_id) const {
-    auto available = models(provider_id);
-    const auto found = std::find_if(
-        available.begin(), available.end(), [&model_id](const Model& value) {
-            return value.id == model_id;
-        });
-    if (found == available.end()) {
-        return std::nullopt;
-    }
-    return *found;
+std::optional<Model> Models::model(std::string_view provider_id, std::string_view model_id) const {
+    const auto found = std::ranges::find_if(impl_->catalog, [provider_id, model_id](const Model& model) {
+        return model.provider == provider_id && model.id == model_id;
+    });
+    return found == impl_->catalog.end() ? std::nullopt : std::optional<Model>{*found};
 }
 
 } // namespace cch::ai

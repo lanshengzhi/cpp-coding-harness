@@ -1,12 +1,10 @@
 #include "ai/api/MessageConversion.hpp"
 #include "support/ModelFixture.hpp"
-#include "support/PiFixture.hpp"
 #include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
-#include <array>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -16,106 +14,25 @@ using namespace cch;
 
 namespace {
 
-void check_payload_fixture(
-    const support::JsonValue& actual,
-    std::string_view relative_path) {
-    const auto expected = tests::read_pi_fixture(relative_path);
-    REQUIRE(expected);
-    const auto actual_json = support::write_json(actual);
-    const auto expected_json = support::write_json(*expected);
-    REQUIRE(actual_json);
-    REQUIRE(expected_json);
-    CHECK(*actual_json == *expected_json);
-}
-
-ai::AiContext responses_context() {
-    ai::AiContext context;
-    context.system_prompt = "system";
-    context.messages.push_back(ai::UserMessage{
-        .content = std::vector<ai::Content>{
-            ai::text_content("hi"), ai::image_content("YWJj", "image/png")},
-        .timestamp = 1,
-    });
-    ai::AssistantMessage assistant;
-    assistant.api = "openai-responses";
-    assistant.provider = "deepseek";
-    assistant.model = "deepseek-v4-flash";
-    assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-    assistant.timestamp = 2;
-    assistant.content.push_back(ai::ThinkingContent{
-        .thinking = "",
-        .thinking_signature =
-            "{\"encrypted_content\":\"dummy-encrypted\",\"id\":\"rs_1\",\"summary\":[],\"type\":\"reasoning\"}",
-    });
-    assistant.content.push_back(ai::TextContent{
-        .text = "answer",
-        .text_signature = "{\"v\":1,\"id\":\"msg_1\",\"phase\":\"final_answer\"}",
-    });
-    context.messages.push_back(std::move(assistant));
-    context.messages.push_back(ai::user_text_message("next", 3));
-
-    ai::AssistantMessage foreign_assistant;
-    foreign_assistant.api = "openai-codex-responses";
-    foreign_assistant.provider = "openai-codex";
-    foreign_assistant.model = "gpt-5.5";
-    foreign_assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-    foreign_assistant.timestamp = 4;
-    foreign_assistant.content.push_back(ai::ToolCallContent{
-        .id = "call bad!|item bad!",
-        .name = "lookup",
-        .arguments = support::JsonValue::object_t{{"q", "x"}},
-        .raw_arguments = "{\"q\":\"x\"}",
-        .thought_signature = std::nullopt,
-        .arguments_valid = true,
-        .argument_error = std::nullopt,
-    });
-    context.messages.push_back(std::move(foreign_assistant));
-    context.messages.push_back(ai::ToolResultMessage{
-        .tool_call_id = "call bad!|item bad!",
-        .tool_name = "lookup",
-        .content = {ai::text_content("ok")},
-        .details = std::nullopt,
-        .is_error = true,
-        .timestamp = 5,
-    });
-    context.tools.push_back(ai::Tool{
-        .name = "lookup",
-        .description = "Look up a value",
-        .parameters = support::JsonValue::object_t{
-            {"properties", support::JsonValue::object_t{{"q", support::JsonValue::object_t{{"type", "string"}}}}},
-            {"required", support::JsonValue::array_t{"q"}},
-            {"type", "object"},
-        },
-    });
-    return context;
-}
-
-void collect_string_leaves(const support::JsonValue& value, std::vector<std::string>& out) {
-    if (value.holds<support::JsonValue::array_t>()) {
-        for (const auto& item : value.get<support::JsonValue::array_t>()) {
-            collect_string_leaves(item, out);
-        }
-    } else if (value.holds<support::JsonValue::object_t>()) {
-        for (const auto& entry : value.get<support::JsonValue::object_t>()) {
-            collect_string_leaves(entry.second, out);
-        }
-    } else if (value.holds<std::string>()) {
-        out.push_back(value.get<std::string>());
-    }
-}
-
-/// Every string leaf of a payload's message list (`input` for the Responses
-/// adapters, `messages` for Anthropic). Structural absence assertions read the
-/// values a leaked message would have to appear as, rather than a byte spelling
-/// the serializer happened to produce (issue #675's reload form).
 [[nodiscard]] std::vector<std::string> payload_string_leaves(const support::JsonValue& payload) {
-    const auto& object = payload.get<support::JsonValue::object_t>();
-    const auto found = object.find(object.contains("input") ? "input" : "messages");
-    if (found == object.end()) {
-        return {};
-    }
     std::vector<std::string> texts;
-    collect_string_leaves(found->second, texts);
+    const auto& messages = payload.at("messages").get_array();
+    const auto collect = [&texts](const auto& self, const support::JsonValue& value) -> void {
+        if (value.holds<support::JsonValue::array_t>()) {
+            for (const auto& item : value.get<support::JsonValue::array_t>()) {
+                self(self, item);
+            }
+        } else if (value.holds<support::JsonValue::object_t>()) {
+            for (const auto& [_, item] : value.get<support::JsonValue::object_t>()) {
+                self(self, item);
+            }
+        } else if (value.holds<std::string>()) {
+            texts.push_back(value.get<std::string>());
+        }
+    };
+    for (const auto& message : messages) {
+        collect(collect, message);
+    }
     return texts;
 }
 
@@ -124,17 +41,6 @@ void collect_string_leaves(const support::JsonValue& value, std::vector<std::str
             texts, [needle](const std::string& text) { return text.find(needle) != std::string::npos; });
 }
 
-/// The four frozen adapters every exclusion assertion drives, so the rule has
-/// one consumer list.
-constexpr std::array kConsumerAdapters{
-        ai::api::AdapterKind::OpenAIResponses,
-        ai::api::AdapterKind::OpenAICodexResponses,
-        ai::api::AdapterKind::OpenAICompletions,
-        ai::api::AdapterKind::AnthropicMessages,
-};
-
-/// One User Bash message in the shape the assertions drive through the
-/// adapters; `exclude_from_context` is the `!!` policy flag the rule reads.
 [[nodiscard]] ai::BashExecutionMessage user_bash(
         std::string command, std::string output, bool exclude_from_context, ai::TimestampMs timestamp) {
     ai::BashExecutionMessage message;
@@ -145,41 +51,21 @@ constexpr std::array kConsumerAdapters{
     return message;
 }
 
+[[nodiscard]] ai::Model completions_model() { return tests::make_model("text-only", "deepseek", "openai-completions"); }
+
 } // namespace
 
-TEST_CASE("Responses conversion matches the frozen DeepSeek payload golden", "[ai][conversion][issue339][compat-pi]") {
-    auto model = tests::make_model(
-        "deepseek-v4-flash", "deepseek", "openai-responses");
-    model.reasoning = true;
-    model.input = {ai::ModelInput::Text, ai::ModelInput::Image};
-    model.thinking_level_map = ai::ThinkingLevelMap{{ai::ModelThinkingLevel::High, "max"}};
-    ai::ProviderStreamOptions options;
-    options.temperature = 0.2;
-    options.max_tokens = 123;
-    options.reasoning = ai::ModelThinkingLevel::High;
-    options.session_id = "session-1";
-    options.cache_retention = ai::CacheRetention::Long;
-
-    const auto payload = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAIResponses,
-        model,
-        responses_context(),
-        options);
-
-    REQUIRE(payload);
-    check_payload_fixture(*payload, "conversion/openai-responses-deepseek.json");
-}
-
-TEST_CASE("Responses conversion sanitizes malformed text and fills orphaned tool results",
+TEST_CASE("Completions conversion sanitizes text and fills orphaned tool results",
         "[ai][conversion][issue339][compat-pi]") {
-    auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    const auto model = completions_model();
     ai::AiContext context;
     context.messages.push_back(ai::UserMessage{
-        .content = std::vector<ai::Content>{
-            ai::text_content(std::string{"bad"} + "\xed\xa0\x80"),
-            ai::image_content("YWJj", "image/png"),
-        },
-        .timestamp = 1,
+            .content =
+                    std::vector<ai::Content>{
+                            ai::text_content(std::string{"bad"} + "\xed\xa0\x80"),
+                            ai::image_content("YWJj", "image/png"),
+                    },
+            .timestamp = 1,
     });
     ai::AssistantMessage assistant;
     assistant.api = model.api;
@@ -188,320 +74,85 @@ TEST_CASE("Responses conversion sanitizes malformed text and fills orphaned tool
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
     assistant.content.push_back(ai::tool_call_content("orphan!", "lookup", "{}", support::JsonValue::object_t{}));
     context.messages.push_back(std::move(assistant));
-    ai::ProviderStreamOptions options;
+    const ai::api::PreparedStreamOptions options;
 
-    const auto payload = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAIResponses,
-        model,
-        context,
-        options);
+    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
 
     REQUIRE(payload);
-    const auto serialized = support::write_json(*payload);
-    REQUIRE(serialized);
-    const auto sanitized = std::string{"bad"} + "\xef\xbf\xbd";
-    CHECK(serialized->find(sanitized) != std::string::npos);
-    CHECK(serialized->find(std::string{"\xef\xbf\xbd"} + "\xef\xbf\xbd") ==
-          std::string::npos);
-    CHECK(serialized->find("(image omitted: model does not support images)") != std::string::npos);
-    CHECK(serialized->find("No result provided") != std::string::npos);
-    CHECK(serialized->find("orphan") != std::string::npos);
+    const auto texts = payload_string_leaves(*payload);
+    CHECK(any_leaf_contains(texts, std::string{"bad"} + "\xef\xbf\xbd"));
+    CHECK(any_leaf_contains(texts, "(image omitted: model does not support images)"));
+    CHECK(any_leaf_contains(texts, "No result provided"));
+    CHECK(any_leaf_contains(texts, "orphan"));
 }
 
-TEST_CASE("Omitted reasoning uses each scoped adapter default without a summary",
-        "[ai][conversion][issue339][compat-pi]") {
-    auto model = tests::make_model("deepseek-v4-flash", "deepseek", "openai-responses");
-    model.reasoning = true;
-    ai::ProviderStreamOptions options;
-    const ai::AiContext context;
-
-    const auto responses = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAIResponses,
-        model,
-        context,
-        options);
-    REQUIRE(responses);
-    const auto& reasoning = responses->at("reasoning").get_object();
-    CHECK(reasoning.at("effort").get_string() == "none");
-    CHECK(reasoning.find("summary") == reasoning.end());
-
-    model.id = "gpt-5.5";
-    model.provider = "openai-codex";
-    model.api = "openai-codex-responses";
-    const auto codex = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAICodexResponses,
-        model,
-        context,
-        options);
-    REQUIRE(codex);
-    CHECK(codex->get_object().find("reasoning") == codex->get_object().end());
-}
-
-TEST_CASE("Responses replay drops empty signatures and clamps prompt cache keys",
-        "[ai][conversion][issue339][compat-pi]") {
-    auto model = tests::make_model("deepseek-v4-flash", "deepseek", "openai-responses");
-    ai::AiContext context;
-    ai::AssistantMessage assistant;
-    assistant.api = model.api;
-    assistant.provider = model.provider;
-    assistant.model = model.id;
-    assistant.stop_reason = ai::AssistantStopReason::Stop;
-    assistant.content = {
-        ai::ThinkingContent{.thinking = "", .thinking_signature = ""},
-        ai::TextContent{
-            .text = "answer",
-            .text_signature = "{\"v\":1,\"id\":\"\"}",
-        },
-    };
-    context.messages.push_back(std::move(assistant));
-    ai::ProviderStreamOptions options;
-    options.session_id = std::string(65, 's');
-
-    const auto payload = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAIResponses,
-        model,
-        context,
-        options);
-
-    REQUIRE(payload);
-    CHECK(payload->at("prompt_cache_key").get_string() == std::string(64, 's'));
-    const auto serialized = support::write_json(*payload);
-    REQUIRE(serialized);
-    CHECK(serialized->find("msg_pi_0") != std::string::npos);
-    CHECK(serialized->find("Invalid Responses thinking signature") == std::string::npos);
-}
-
-TEST_CASE("Codex conversion matches the frozen Responses payload golden", "[ai][conversion][issue339][compat-pi]") {
-    auto model = tests::make_model(
-        "gpt-5.5", "openai-codex", "openai-codex-responses");
-    model.reasoning = true;
-    model.thinking_level_map = ai::ThinkingLevelMap{
-        {ai::ModelThinkingLevel::XHigh, "xhigh"},
-    };
-    ai::AiContext context;
-    context.messages.push_back(ai::user_text_message("hello", 1));
-
-    ai::AssistantMessage foreign_assistant;
-    foreign_assistant.api = "openai-responses";
-    foreign_assistant.provider = "deepseek";
-    foreign_assistant.model = "deepseek-v4-flash";
-    foreign_assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-    foreign_assistant.timestamp = 2;
-    foreign_assistant.content.push_back(ai::tool_call_content(
-        "call bad!|foreign/item|ignored",
-        "lookup",
-        "{\"q\":\"x\"}",
-        support::JsonValue::object_t{{"q", "x"}}));
-    context.messages.push_back(std::move(foreign_assistant));
-    context.messages.push_back(ai::ToolResultMessage{
-        .tool_call_id = "call bad!|foreign/item|ignored",
-        .tool_name = "lookup",
-        .content = {ai::text_content("foreign result")},
-        .details = std::nullopt,
-        .is_error = false,
-        .timestamp = 3,
-    });
-    context.messages.push_back(ai::user_text_message("next", 4));
-
-    ai::AssistantMessage different_model_assistant;
-    different_model_assistant.api = model.api;
-    different_model_assistant.provider = model.provider;
-    different_model_assistant.model = "gpt-5.4";
-    different_model_assistant.stop_reason = ai::AssistantStopReason::ToolUse;
-    different_model_assistant.timestamp = 5;
-    different_model_assistant.content.push_back(ai::tool_call_content(
-        "other call|item bad!",
-        "lookup",
-        "{}",
-        support::JsonValue::object_t{}));
-    context.messages.push_back(std::move(different_model_assistant));
-    context.messages.push_back(ai::ToolResultMessage{
-        .tool_call_id = "other call|item bad!",
-        .tool_name = "lookup",
-        .content = {ai::text_content("different-model result")},
-        .details = std::nullopt,
-        .is_error = false,
-        .timestamp = 6,
-    });
-    context.tools = responses_context().tools;
-    ai::ProviderStreamOptions options;
-    options.reasoning = ai::ModelThinkingLevel::XHigh;
-    options.session_id = "codex-session";
-    options.cache_retention = ai::CacheRetention::Short;
-
-    const auto payload = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAICodexResponses,
-        model,
-        context,
-        options);
-
-    REQUIRE(payload);
-    check_payload_fixture(*payload, "conversion/openai-codex-responses.json");
-}
-
-TEST_CASE("Anthropic history caching does not mark an earlier user turn", "[ai][conversion][issue339][compat-pi]") {
-    auto model = tests::make_model("claude-sonnet", "anthropic", "anthropic-messages");
-    ai::AiContext context;
-    context.messages.push_back(ai::user_text_message("question", 1));
-    ai::AssistantMessage assistant;
-    assistant.api = model.api;
-    assistant.provider = model.provider;
-    assistant.model = model.id;
-    assistant.stop_reason = ai::AssistantStopReason::Stop;
-    assistant.content.push_back(ai::text_content("answer"));
-    context.messages.push_back(std::move(assistant));
-    ai::ProviderStreamOptions options;
-    options.cache_retention = ai::CacheRetention::Short;
-
-    const auto payload = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::AnthropicMessages,
-        model,
-        context,
-        options);
-
-    REQUIRE(payload);
-    const auto serialized = support::write_json(*payload);
-    REQUIRE(serialized);
-    CHECK(serialized->find("cache_control") == std::string::npos);
-}
-TEST_CASE("String-content user messages pass the non-vision image downgrade untouched",
-        "[ai][conversion][issue365][compat-pi]") {
-    auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+TEST_CASE("String-content user messages pass the image downgrade untouched", "[ai][conversion][issue365][compat-pi]") {
+    const auto model = completions_model();
     ai::AiContext context;
     context.messages.push_back(ai::UserMessage{
-        .content = std::string{"plain string content"},
-        .timestamp = 1,
+            .content = std::string{"plain string content"},
+            .timestamp = 1,
     });
-    ai::ProviderStreamOptions options;
-    options.cache_retention = ai::CacheRetention::None;
+    const ai::api::PreparedStreamOptions options;
 
-    const auto responses = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAIResponses,
-        model,
-        context,
-        options);
-    REQUIRE(responses);
-    const auto responses_serialized = support::write_json(*responses);
-    REQUIRE(responses_serialized);
-    // The string alternative is emitted as exactly one sanitized input_text
-    // item and is never rewritten into the placeholder-carrying block shape.
-    CHECK(responses_serialized->find(
-              R"("content":[{"text":"plain string content","type":"input_text"}],"role":"user")") !=
-        std::string::npos);
-    CHECK(responses_serialized->find("(image omitted: model does not support images)") ==
-        std::string::npos);
+    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
 
-    const auto anthropic = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::AnthropicMessages,
-        model,
-        context,
-        options);
-    REQUIRE(anthropic);
-    const auto anthropic_serialized = support::write_json(*anthropic);
-    REQUIRE(anthropic_serialized);
-    // Anthropic emits the string alternative as a raw JSON string, untouched
-    // by the non-vision image downgrade. (Cache-retention promotion of a
-    // trailing string is pinned by the T3 wire evidence, not here.)
-    CHECK(anthropic_serialized->find(R"("content":"plain string content","role":"user")") !=
-        std::string::npos);
-    CHECK(anthropic_serialized->find("(image omitted: model does not support images)") ==
-        std::string::npos);
-}
-
-TEST_CASE("Synthesized user messages still arrive as block arrays", "[ai][conversion][issue365][compat-pi]") {
-    auto model = tests::make_model("text-only", "deepseek", "openai-responses");
-    ai::AiContext context;
-    ai::BashExecutionMessage bash;
-    bash.command = "echo hello";
-    bash.output = "hello\n";
-    bash.exit_code = 0;
-    bash.timestamp = 1;
-    context.messages.push_back(std::move(bash));
-    ai::ProviderStreamOptions options;
-
-    const auto payload = ai::api::build_adapter_payload(
-        ai::api::AdapterKind::OpenAIResponses,
-        model,
-        context,
-        options);
     REQUIRE(payload);
-    const auto& input = payload->at("input").get<support::JsonValue::array_t>();
-    REQUIRE(input.size() == 1);
-    const auto& user_message = input.front().get<support::JsonValue::object_t>();
-    CHECK(user_message.at("role").get_string() == "user");
-    // The synthesized message keeps the block-array alternative: content is a
-    // JSON array, never a plain string.
-    REQUIRE(user_message.at("content").holds<support::JsonValue::array_t>());
-    const auto& blocks = user_message.at("content").get<support::JsonValue::array_t>();
-    REQUIRE(blocks.size() == 1);
-    const auto& block = blocks.front().get<support::JsonValue::object_t>();
-    CHECK(block.at("type").get_string() == "input_text");
-    CHECK(block.at("text").get_string().find("Ran `echo hello`") != std::string::npos);
+    const auto& messages = payload->at("messages").get_array();
+    REQUIRE(messages.size() == 1);
+    CHECK(messages.front().at("content").get_string() == "plain string content");
 }
 
-TEST_CASE("Excluded bash output never reaches a provider adapter payload", "[ai][conversion][issue668][compat-pi]") {
-    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+TEST_CASE("Synthesized user messages arrive as Completions content", "[ai][conversion][issue365][compat-pi]") {
+    const auto model = completions_model();
+    ai::AiContext context;
+    context.messages.push_back(user_bash("echo hello", "hello\n", false, 1));
+    const ai::api::PreparedStreamOptions options;
+
+    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+
+    REQUIRE(payload);
+    const auto& messages = payload->at("messages").get_array();
+    REQUIRE(messages.size() == 1);
+    CHECK(messages.front().at("role").get_string() == "user");
+    CHECK(any_leaf_contains(payload_string_leaves(*payload), "Ran `echo hello`"));
+}
+
+TEST_CASE("Excluded bash output never reaches the Completions payload", "[ai][conversion][issue668][compat-pi]") {
+    const auto model = completions_model();
     ai::AiContext context;
     context.messages.push_back(user_bash("echo included", "included output\n", false, 1));
     context.messages.push_back(ai::user_text_message("later prompt", 2));
     context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 3));
-    ai::ProviderStreamOptions options;
+    const ai::api::PreparedStreamOptions options;
 
-    // `extended_message_to_user_message` drops excluded messages on the
-    // conversion path — the rule's one application path (#650, #668); the
-    // loop additionally keeps them invisible to tool-call pairing. Every
-    // adapter reaches it through its
-    // provider-boundary conversion, so a recorded request that still carries
-    // the message cannot leak it into the wire payload.
-    for (const auto adapter : kConsumerAdapters) {
-        const auto payload = ai::api::build_adapter_payload(adapter, model, context, options);
-        REQUIRE(payload);
-        const auto texts = payload_string_leaves(*payload);
-        CHECK_FALSE(any_leaf_contains(texts, "excluded output"));
-        // The included message proves the walk reaches bash-rendered text at
-        // all, so the absence above cannot mean "no message was inspected".
-        CHECK(any_leaf_contains(texts, "included output"));
+    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
 
-        const auto serialized = support::write_json(*payload);
-        REQUIRE(serialized);
-        CHECK(serialized->find("excluded output") == std::string::npos);
-        CHECK(serialized->find("included output") != std::string::npos);
-    }
+    REQUIRE(payload);
+    const auto texts = payload_string_leaves(*payload);
+    CHECK_FALSE(any_leaf_contains(texts, "excluded output"));
+    CHECK(any_leaf_contains(texts, "included output"));
 }
 
-TEST_CASE("An all-excluded context converts to an empty provider payload without a local error",
-        "[ai][conversion][issue668][compat-pi]") {
-    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+TEST_CASE("An all-excluded context converts to an empty Completions payload", "[ai][conversion][issue668][compat-pi]") {
+    const auto model = completions_model();
     ai::AiContext context;
     context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 1));
-    ai::ProviderStreamOptions options;
+    const ai::api::PreparedStreamOptions options;
 
-    // The converter's half of the #668 decision: an all-excluded context yields
-    // zero provider messages instead of a local error, as in pi, where
-    // `convertToLlm`'s result flows into `streamSimple`. The Session-level half
-    // has no machine backstop: the harness cannot build an all-excluded request
-    // (every turn's context carries the message that started it), so no test
-    // reaches it and review is the only check. The Agent's generic
-    // `convertToLlm returned no messages` guard stays the hook contract
-    // (`tests/agent/AgentBehaviorTest.cpp` covers the guard itself).
-    const auto responses =
-            ai::api::build_adapter_payload(ai::api::AdapterKind::OpenAIResponses, model, context, options);
-    REQUIRE(responses);
-    CHECK(responses->at("input").get<support::JsonValue::array_t>().empty());
+    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
 
-    const auto anthropic =
-            ai::api::build_adapter_payload(ai::api::AdapterKind::AnthropicMessages, model, context, options);
-    REQUIRE(anthropic);
-    CHECK(anthropic->at("messages").get<support::JsonValue::array_t>().empty());
+    REQUIRE(payload);
+    CHECK(payload->at("messages").get_array().empty());
 }
 
-TEST_CASE("An excluded message between a tool call and its result does not orphan the call",
+TEST_CASE("An excluded message between a tool call and result does not orphan the call",
         "[ai][conversion][issue668][compat-pi]") {
-    const auto model = tests::make_model("text-only", "deepseek", "openai-responses");
+    const auto model = completions_model();
     ai::AssistantMessage assistant;
-    assistant.api = "openai-responses";
-    assistant.provider = "deepseek";
-    assistant.model = "text-only";
+    assistant.api = model.api;
+    assistant.provider = model.provider;
+    assistant.model = model.id;
     assistant.stop_reason = ai::AssistantStopReason::ToolUse;
     assistant.timestamp = 1;
     assistant.content.push_back(ai::tool_call_content("call-1", "bash", R"({"command":"echo x"})"));
@@ -509,27 +160,13 @@ TEST_CASE("An excluded message between a tool call and its result does not orpha
     context.messages.push_back(std::move(assistant));
     context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 2));
     context.messages.push_back(ai::tool_result_message("call-1", "bash", "real tool output", false, 3));
-    ai::ProviderStreamOptions options;
+    const ai::api::PreparedStreamOptions options;
 
-    // The excluded message stays invisible to the tool-call pairing state
-    // machine: it closes no pending batch and synthesizes no orphan result
-    // (#668). A conversion that let it reach the fallthrough would append its
-    // own "No result provided" result for `call-1` beside the real one, while
-    // pi drops the message before the pairing transform ever sees it.
-    for (const auto adapter : kConsumerAdapters) {
-        const auto payload = ai::api::build_adapter_payload(adapter, model, context, options);
-        REQUIRE(payload);
-        const auto texts = payload_string_leaves(*payload);
-        CHECK_FALSE(any_leaf_contains(texts, "No result provided"));
-        CHECK_FALSE(any_leaf_contains(texts, "excluded output"));
-        // The real result proves the pair still converts, so the absences above
-        // cannot mean "the tool call was dropped entirely".
-        CHECK(any_leaf_contains(texts, "real tool output"));
+    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
 
-        const auto serialized = support::write_json(*payload);
-        REQUIRE(serialized);
-        CHECK(serialized->find("No result provided") == std::string::npos);
-        CHECK(serialized->find("excluded output") == std::string::npos);
-        CHECK(serialized->find("real tool output") != std::string::npos);
-    }
+    REQUIRE(payload);
+    const auto texts = payload_string_leaves(*payload);
+    CHECK_FALSE(any_leaf_contains(texts, "No result provided"));
+    CHECK_FALSE(any_leaf_contains(texts, "excluded output"));
+    CHECK(any_leaf_contains(texts, "real tool output"));
 }

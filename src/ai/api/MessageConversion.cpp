@@ -4,21 +4,12 @@
 
 namespace cch::ai::api {
 
-support::Expected<support::JsonValue> build_adapter_payload(
-    AdapterKind adapter,
-    const Model& model,
-    const AiContext& context,
-    const ProviderStreamOptions& options) {
+support::Expected<support::JsonValue> build_openai_completions_payload(
+        const Model& model, const AiContext& context, const PreparedStreamOptions& options) {
     if (auto valid = validate_model(model); !valid) {
         return std::unexpected(valid.error());
     }
-    if (adapter == AdapterKind::AnthropicMessages) {
-        return build_anthropic_payload(model, context, options);
-    }
-    if (adapter == AdapterKind::OpenAICompletions) {
-        return build_completions_payload(model, context, options);
-    }
-    return build_responses_payload(adapter, model, context, options);
+    return build_completions_wire_payload(model, context, options);
 }
 
 } // namespace cch::ai::api

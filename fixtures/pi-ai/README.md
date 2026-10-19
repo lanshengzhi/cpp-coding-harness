@@ -171,7 +171,7 @@ must be pinned explicitly. Clamping (`clamp_thinking_level` in `src/ai/SimpleOpt
 resolves the unsupported alias levels to the nearest supported real level, so a Medium request
 yields `high` and an XHigh request yields `max`, reproducing the vendor's alias table while the
 wire carries only documented values (`OpenAICompletionsAdapterTest` `"Kimi Coding maps every
-vendor thinking level without undocumented effort values"` pins this).
+vendor thinking level to a documented effort or the gateway none"` pins this).
 
 ## Historical pinned baseline and shard artifact (not the current acceptance target)
 
@@ -228,9 +228,11 @@ this divergence cannot affect request payloads, only cost accounting.
 ### Models (`models/`)
 
 - `models/default-model.json` mirrors pi Agent's `DEFAULT_MODEL`; omitted optional members mean no
-  thinking map, headers, cost tiers, or API compat.
-- `models/complete-anthropic-model.json` exercises every supported Model field. Its absent `off`
-  thinking key means provider default, while `"low": null` means that level is unsupported.
+  thinking map, headers, or cost tiers.
+- `models/complete-anthropic-model.json` exercises every supported Model field (a pi-shape
+  provenance record; the `compat` member it also carries is not part of the C++ surface —
+  ADR 0074). Its absent `off` thinking key means provider default, while `"low": null` means that
+  level is unsupported.
 - `models/models.json` pins the DeepSeek `deepseek-v4-flash` custom-model upsert: a config-only
   `deepseek` provider (`baseUrl`, `api: "openai-responses"`, literal `apiKey`, one custom model with
   `reasoning`/`thinkingLevelMap`/`input`/`cost`) composed by `ModelRuntime.refresh()` purely from
@@ -241,10 +243,11 @@ this divergence cannot affect request payloads, only cost accounting.
   shard was removed when the provider moved to the vendor-authoritative API-key catalog; the
   upstream `models/providers/kimi-coding.json` record above is retained as explicit provenance,
   not a production model source.
-  The check does not exercise Model JSON serialization and excludes `compat` (#649). The deferred
+  The check does not exercise Model JSON serialization; its former `compat` exclusion (#649) is
+  retired with the field (ADR 0074). The deferred
   Codex flags `supportsOpenAIGrammarTools`/`supportsToolSearch` remain absent from the C++ surface.
 
-### Conversion, usage, termination (`conversion/`, `usage/`, `termination/`)
+### Conversion and usage goldens (`conversion/`, `usage/`)
 
 These transport-independent goldens land with #339 (the shared conversion/usage/cost layer) and remain
 shared by the scoped adapters:
@@ -253,17 +256,23 @@ shared by the scoped adapters:
   normalized message histories as request payload shapes (system-prompt placement, image blocks,
   encrypted/thinking signatures, Responses text-signature v1 replay, normalized tool-call ids,
   grouped tool results with `is_error`, and cache/session fields).
-- `usage/normalization-and-cost.json` pins Responses cache subtraction, the DeepSeek
-  uncached/cached split, Anthropic partial usage, reasoning details, cost-tier selection, and the
-  one-hour cache-write rule.
-- `termination/matrix.json` pins the Responses and Anthropic stop-reason matrices, including
-  missing-terminal errors.
+- `usage/normalization-and-cost.json` pins the Chat Completions uncached/cached/reasoning split
+  (the `deepseek` entry is the `normalize_completions_usage` oracle in `UsageTest`); its Responses
+  and Anthropic entries remain as historical evidence of the retired adapter families
+  (ADR 0074).
+- `termination/` was retired with the adapter families (ADR 0074; issue #1040). The Responses and
+  Anthropic stop-reason matrices died with their consumers; the live Chat Completions terminal
+  policy and the unknown-`finish_reason` lock live in `CompletionsEvents.cpp` and
+  `OpenAICompletionsAdapterTest` (evidence row 16 below).
 
 ### Wire goldens (`wire/`)
 
 - `wire/openai-completions-deepseek-ts-request.json` + `.sse` + `-ts-events.json`
   (`#761`): the current-baseline pi-ai DeepSeek Chat Completions request bytes, raw SSE
-  sequence, and full assistant event snapshot. Regenerate from the sibling pinned checkout
+  sequence, and full assistant event snapshot. ADR 0074 retires the request-bytes comparison:
+  the adapter executes the single gateway contract, so the `.sse` decode and the
+  `-ts-events.json` snapshot remain the acceptance target, and the captured request bytes stay
+  as committed provenance to probe against, not an asserted equality. Regenerate from the sibling pinned checkout
   with `../pi/node_modules/.bin/tsx fixtures/pi-ai/capture/capture-completions-ts-events.mts`;
   the script refuses any checkout whose `git rev-parse HEAD` does not match the revision the
   selected baseline records, and refuses to write into a bundle owned by another baseline.
@@ -420,7 +429,7 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | --- | --- | --- | --- | --- |
 | 1 | Complete passive `Model` (independent `provider`/`id`/`api`, required name/baseUrl/reasoning/input/cost/contextWindow/maxTokens, static headers) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ProviderComposerTest` `"the frozen complete Model fixture composes to the expected ai::Model"` → `models/complete-anthropic-model.json` |
 | 2 | Null-aware `thinkingLevelMap` (missing key = provider default, null = unsupported) | `packages/ai/src/types.ts` | `include/cch/ai/Model.hpp` | `ModelConfigTest` `"the frozen complete Model fixture preserves the null-aware thinking level map"`, `SimpleOptionsTest` |
-| 3 | Typed adapter compatibility remains explicit; no generic compat bag | `types.ts` | `Model.hpp` | `AnthropicMessagesAdapterTest` generic adapter coverage |
+| 3 | Typed adapter compatibility remains explicit; no generic compat bag | `types.ts` | `Model.hpp` (the historical typed `compat` alternative is retired — ADR 0074) | `AnthropicMessagesAdapterTest` generic adapter coverage |
 | 4 | Concrete Agent `kDefaultModel` mirroring pi `DEFAULT_MODEL` (`"unknown"` identity, zeroed capabilities) | `packages/agent/src/agent.ts` | `src/agent/AgentDefaults.hpp` | `ModelTest` → `models/default-model.json` |
 | 5 | `SimpleStreamOptions` harness-consumer set (`temperature`, `maxTokens`, cancellation, `apiKey`, `headers`, `env`, `transformHeaders`, `reasoning`, `sessionId`, `cacheRetention`, `timeoutMs`, `maxRetries`, `maxRetryDelayMs`) | `simple-options.ts`, `agent-harness.ts` | `include/cch/ai/RequestOptions.hpp` | `SimpleOptionsTest`, `ModelsTest` `"Models prepares the complete streamSimple request before Provider dispatch"` |
 | 6 | `Models`/`ModelRuntime` two-layer ownership; `ModelRuntime` the sole public `shared_ptr` seam | `models.ts`, `core/model-runtime.ts` | `Models.hpp`, `ModelRuntime.hpp`, `Sdk.hpp` | `ModelsTest`, `ModelRuntimeTest`, `SdkSessionTest` |
@@ -432,8 +441,8 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 12 | `openai-responses` adapter (DeepSeek stateless full-context replay, no `previous_response_id`, developer-role prompt, session-affinity headers silently ignored) | `api/openai-responses.ts` + `openai-responses-shared.ts` | `src/ai/api/OpenAIResponsesAdapter.*` | `OpenAIResponsesAdapterTest` (7 cases) + `ModelRuntimeTest` → `wire/openai-responses-deepseek-*` (full-payload `-ts-events.json`) |
 | 13 | Generic `anthropic-messages` adapter: system extraction, text/image blocks, cache and terminal handling | `api/anthropic-messages.ts` | `src/ai/api/AnthropicMessagesAdapter.*` | `AnthropicMessagesAdapterTest` inline generic stream |
 | 14 | Message/history conversion alignment per path (system placement, surrogate sanitization, tool-result grouping with `is_error`, tool-call id normalization `[A-Za-z0-9_-]`/64, image blocks, encrypted/text-signature replay) | `utils/transform-messages.ts`, `api/*-shared.ts` | `src/ai/api/MessageConversion.*` | `MessageConversionTest` (9 cases) → `conversion/*.json` |
-| 15 | Usage/cost normalization (Responses cached subtraction, Anthropic partial-field updates, DeepSeek uncached/cached split, shared `calculateCost` with tiers + 1h cache-write 2×) | `utils/calculate-cost.ts` etc. | `src/ai/api/UsageNormalization.*`, `src/ai/Usage.cpp` | `UsageTest` (2 cases) → `usage/normalization-and-cost.json` |
-| 16 | Termination matrices (Responses `completed`/`incomplete`/`failed`, no `[DONE]` for DeepSeek; Anthropic `end_turn`…/missing `message_stop` carry) | adapter sources | `src/ai/api/Termination.*` | `ProviderPolicyTest` → `termination/matrix.json`; per-adapter terminal cases |
+| 15 | Usage/cost normalization (Chat Completions uncached/cached/reasoning split, shared `calculateCost` with tiers + 1h cache-write 2×; the retired Responses/Anthropic helper families are deleted — ADR 0074) | `utils/calculate-cost.ts` etc. | `src/ai/api/UsageNormalization.*`, `src/ai/Usage.cpp` | `UsageTest` → `usage/normalization-and-cost.json` (`deepseek` entry) |
+| 16 | Termination matrices (Responses `completed`/`incomplete`/`failed`, no `[DONE]` for DeepSeek; Anthropic `end_turn`…/missing `message_stop` carry) — retired with the adapter families; deleted — ADR 0074 | adapter sources | _deleted (`src/ai/api/Termination.*`, `termination/matrix.json`)_ | the Chat Completions `finish_reason` mapping in `CompletionsEvents.cpp` `set_finish_reason` carries the live terminal policy; unknown-reason lock: `OpenAICompletionsAdapterTest` `"Completions maps an unknown finish_reason to one error terminal"` |
 | 17 | Retries: zero by default; configured retries cover network + transient 429/5xx, never terminal quota/billing; exponential base or Retry-After ≤ 60s | `utils/retry.ts` | `src/ai/providers/RetryPolicy.*` | `ProviderPolicyTest`, per-adapter retry cases |
 | 18 | Cancellation → exactly one `aborted` terminal event (`"Request was aborted"`); transport/socket/reader cancellation | `stream-fn` semantics | `Models.cpp`, `StreamEvent.hpp`, transports | `ModelsTest` `"Models cancellation is one aborted terminal value"`, per-adapter cancellation cases |
 | 19 | Terminal-error-event stream semantics: every setup failure → exactly one terminal error event + final `AssistantMessage`; `Expected` error reserved for sink/infrastructure | `StreamFn` contract | `Models.cpp`, `StreamEvent.hpp` | `ModelsTest`, `ScriptedProviderTest` `"scripted fake Models normalizes static request failures into a terminal value"` |
@@ -452,9 +461,9 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 32 | CLI flag surface `--provider`/`--model`/`--models`/`--api-key`; `--auth`/`--api-key-env`/`--base-url` removed and fail loudly; resume persists only `model_change {provider, modelId}` re-resolved live | `cli/args.ts`, `core/agent-session.ts` | `CliParse.cpp`, `SessionResume.hpp` | `CliParseTest`, `CliSmokeTest`, `AgentSessionSnapshotTest` |
 | 33 | Assistant-lifecycle partial construction: every partial assistant message carries the `pending` stop reason on all scoped adapters; Responses partials flip to `stop` once a `message` item with `phase: "final_answer"` arrives (pi `applyMessagePhaseStopReason`), replaced by terminal mapping exactly where pi does | `api/openai-responses.ts:124`; `api/openai-codex-responses.ts:266`; `api/anthropic-messages.ts:509`; `api/openai-responses-shared.ts:426-428` | `src/ai/api/OpenAIResponsesAdapter.cpp`/`OpenAICodexResponsesAdapter.cpp`/`AnthropicMessagesAdapter.cpp` (partials built `AssistantStopReason::Pending`), `ResponsesEventProcessor.cpp` | `AnthropicMessagesAdapterTest`/`OpenAIResponsesAdapterTest`/`OpenAICodexResponsesAdapterTest` `[issue374]` partial cases (`partial_stop_reasons`), full-payload `-ts-events.json` snapshots (every partial carries `"stopReason": "pending"`) |
 | 34 | End-of-stream guard: a stream ending without a terminal stop mapping is a terminal error through the six-category channel. The Responses family surfaces pi's shared-processor wording "OpenAI Responses stream ended before a terminal response event" — the observably reachable guard; pi's wrapper checks (`openai-responses.ts:170-171`, `openai-codex-responses.ts:118-119`) are defensive in pi and not mirrored. The Anthropic family surfaces "Anthropic stream ended without a stop reason", guarded on the pending reason itself | `api/openai-responses-shared.ts:733`; `api/anthropic-messages.ts:751-752`; defensive wrappers `api/openai-responses.ts:170-171`, `api/openai-codex-responses.ts:118-119` | `src/ai/api/ResponsesEventProcessor.cpp` saw-terminal guard (adapters delegate); `src/ai/api/AnthropicMessagesAdapter.cpp` pending guard | `OpenAIResponsesAdapterTest`/`OpenAICodexResponsesAdapterTest`/`AnthropicMessagesAdapterTest` `[issue374]` terminal cases (frozen per-family wording), `OpenAIResponsesAdapterTest` `[issue375]` differential `wire/openai-responses-deepseek-no-terminal-ts-events.json` |
-| 35 | Raw-stop-reason capture: the Anthropic adapter records the pre-mapping `message_delta.stop_reason` and the Responses family records terminal `status` as `rawStopReason` | `api/anthropic-messages.ts:709-711`; `api/openai-responses-shared.ts:567`; `types.ts:411` | `src/ai/api/AnthropicMessagesAdapter.cpp`, `Message.hpp`, `Termination.*` | generic Anthropic and Responses adapter tests |
+| 35 | Raw-stop-reason capture: the Anthropic adapter records the pre-mapping `message_delta.stop_reason` and the Responses family records terminal `status` as `rawStopReason` — retired with the adapter families — ADR 0074; the field and its session JSON round-trip stay live | `api/anthropic-messages.ts:709-711`; `api/openai-responses-shared.ts:567`; `types.ts:411` | `Message.hpp` (`rawStopReason`), `SessionMessageJson.hpp` | `SessionMessageJsonTest` `[issue374]` round-trip; Chat Completions records the raw `finish_reason` |
 | 36 | `"pending"` accepted and emitted by the message JSON mapping in both directions; `rawStopReason` round-trips through the glaze surface under pi's key with absence preserved | `types.ts:391,411` | `src/agent/harness/session/SessionMessageJson.hpp`, `Message.hpp` | `SessionMessageJsonTest` `[issue374]` round-trip and absence cases |
-| 37 | Unknown-stop-reason policy checked-and-aligned: unknown/unsupported reasons error on both sides (pi `Unhandled stop reason` throw; C++ terminal error) — no behavior change, regression-locked; no frozen pi test exercises the path, so the row pins it via the C++ seams | `api/openai-responses-shared.ts:753`; `api/anthropic-messages.ts:1349` | `src/ai/api/Termination.*` unknown → error | `AnthropicMessagesAdapterTest` `[issue374]` `future_reason` raw-capture case (mapped to error), termination-matrix unknown cases (`ProviderPolicyTest` → `termination/matrix.json`), "unknown stop reasons still error" regression lock |
+| 37 | Unknown-stop-reason policy: unknown/unsupported reasons error on both sides (pi `Unhandled stop reason` throw; C++ terminal error) — no behavior change, regression-locked; no frozen pi test exercises the path. The Responses/Anthropic matrices died with the adapter families (ADR 0074); the live Chat Completions `finish_reason` fall-through carries the property | `api/openai-responses-shared.ts:753`; `api/anthropic-messages.ts:1349` | `CompletionsEvents.cpp` `set_finish_reason` unknown → error terminal | `OpenAICompletionsAdapterTest` `"Completions maps an unknown finish_reason to one error terminal"` — the migrated "unknown stop reasons still error" regression lock |
 | 38 | `UserMessage.content` passive sum type `string \| (TextContent \| ImageContent)[]` remains distinguishable end to end; Responses and generic Anthropic conversion preserve their scoped string/cache semantics | `types.ts`; adapter shared sources | `Message.hpp`, `SessionMessageJson.hpp`, `MessageConversion.cpp` | `MessageContractTest`, `SessionMessageJsonTest`, `MessageConversionTest`, adapter tests |
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
@@ -527,11 +536,12 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
 ### Per-capability evidence map
 
 - **Adapters** — request payload bytes, SSE/WS event sequences, full-payload TS event snapshots,
-  terminal matrix, and usage/cost normalization are all covered by deterministic goldens:
+  and usage/cost normalization are all covered by deterministic goldens:
   `OpenAICodexResponsesAdapterTest`, `OpenAIResponsesAdapterTest`,
   `OpenAICompletionsAdapterTest`, and `AnthropicMessagesAdapterTest`, plus
   `ProviderPolicyTest`, `UsageTest`, `MessageConversionTest`, and the `ModelRuntime` re-drive of
-  the DeepSeek wire path.
+  the DeepSeek wire path. The terminal matrix was retired with its adapters after this gate
+  (ADR 0074, issue #1040); its live successors are listed in evidence row 16.
 - **OAuth lifecycle** — Codex login, refresh, logout, cancellation, and expiry-at-request-time
   are covered by `OpenAICodexOAuthTest` (21); shared persistence under locking is covered by
   `AuthStorageTest` (7). Kimi has no OAuth lifecycle by design.
@@ -572,13 +582,14 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
    (`build_authorize_url`).
 7. **Kimi completions parity was live-verified on 2026-09-23 (single-turn, non-streaming,
    `kimi-for-coding` at `api.kimi.com/coding/v1`).** The endpoint rejects the OpenAI `developer`
-   instruction role (HTTP 400 "role 'developer' is not allowed"), so every Kimi catalog entry
-   pins `compat.supportsDeveloperRole: false` in the hand-authored vendor oracle; the completions
-   payload resolves to the `system` instruction role (regression case in
-   `OpenAICompletionsAdapterTest`). Accepted live: `system` role, `reasoning_effort: "high"`,
-   `max_completion_tokens`, `store: false`. Still verified only by scripted-transport tests:
-   multi-turn assistant replay (reasoning-content replay semantics), streaming shape, and any
-   vendor behavior that changes after this date.
+   instruction role (HTTP 400 "role 'developer' is not allowed"); the unified gateway contract
+   (ADR 0074) sends the `system` instruction role for every model (regression case in
+   `OpenAICompletionsAdapterTest`), so the recorded vendor `supportsDeveloperRole` pin retires
+   with the field. Accepted live: `system` role, `reasoning_effort: "high"`,
+   `max_completion_tokens`, `store: false`. The adapter no longer emits `store`; the gateway
+   retries without it where an upstream refuses it (`optionalFields`). Still verified only by
+   scripted-transport tests: multi-turn assistant replay (reasoning-content replay semantics),
+   streaming shape, and any vendor behavior that changes after this date.
 8. **The login prompt rejects empty submissions (deliberate divergence from pi).** A blank or
    whitespace-only `Enter` never resolves a login prompt (API key or authorization code), so an
    empty credential can never be "Saved"; pi's `login-dialog.ts` resolves the input value

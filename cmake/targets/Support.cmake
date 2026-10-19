@@ -16,9 +16,14 @@ cch_parity_declare_target(
     OWNER cch_support
     SOURCES
         src/support/BoostExceptionHandler.cpp
+        src/support/BoostBeastStreamTransport.cpp
         src/support/Json.cpp
+        src/support/SseParser.cpp
     DEPENDS
         Boost::headers@boost
+        Threads::Threads@threads
+        OpenSSL::SSL@openssl
+        OpenSSL::Crypto@openssl
 )
 cch_owner_include_roots(cch_support src/support/include)
 # Boost's no-exception configuration leaves the application-owned

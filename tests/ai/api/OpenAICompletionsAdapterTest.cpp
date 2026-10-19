@@ -1,5 +1,6 @@
 #include <cch/ai/Models.hpp>
 
+#include "ai/Headers.hpp"
 #include "ai/api/MessageConversion.hpp"
 #include "support/AiScenarioKit.hpp"
 #include "support/Json.hpp"
@@ -14,9 +15,12 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <format>
 #include <memory>
+#include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -44,7 +48,6 @@ using tests::read_pi_fixture_text;
 
 [[nodiscard]] ai::Model deepseek_model() {
     auto model = tests::make_model("deepseek-flash", "deepseek", "openai-completions");
-    model.base_url = "https://api.deepseek.com/";
     model.reasoning = true;
     model.thinking_level_map = ai::ThinkingLevelMap{
             {ai::ModelThinkingLevel::High, "high"},
@@ -55,13 +58,6 @@ using tests::read_pi_fixture_text;
             .cache_read = 1,
             .cache_write = 3,
     };
-    model.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
-            .supports_store = false,
-            .supports_strict_mode = true,
-            .max_tokens_field = ai::OpenAICompletionsMaxTokensField::MaxTokens,
-            .requires_reasoning_content_on_assistant_messages = true,
-            .thinking_format = ai::OpenAICompletionsThinkingFormat::DeepSeek,
-    }};
     return model;
 }
 
@@ -73,38 +69,34 @@ using tests::read_pi_fixture_text;
     return context;
 }
 
-[[nodiscard]] ai::Model openrouter_model() {
-    auto model = tests::make_model("openai/gpt-5", "openrouter", "openai-completions");
-    model.base_url = "https://openrouter.ai/api/v1";
-    model.reasoning = true;
-    model.thinking_level_map = ai::ThinkingLevelMap{
-            {ai::ModelThinkingLevel::Off, "none"},
-            {ai::ModelThinkingLevel::High, "high"},
-    };
-    model.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
-            .supports_strict_mode = true,
-            .thinking_format = ai::OpenAICompletionsThinkingFormat::OpenRouter,
-    }};
-    return model;
-}
-
 [[nodiscard]] ai::Model kimi_model(std::string_view id) {
-    for (const auto& definition : ai::builtin_provider_definitions()) {
-        if (definition.id != "kimi-coding") {
-            continue;
-        }
-        for (const auto& model : definition.models) {
-            if (model.id == id) {
-                return model;
-            }
-        }
-    }
-    return {};
+    auto model = tests::make_model(std::string{id}, "kimi-coding", "openai-completions");
+    model.reasoning = true;
+    model.thinking_level_map = id == "kimi-for-coding-highspeed"
+            ? ai::ThinkingLevelMap{
+                      {ai::ModelThinkingLevel::Off, std::nullopt},
+                      {ai::ModelThinkingLevel::Minimal, std::nullopt},
+                      {ai::ModelThinkingLevel::Low, std::nullopt},
+                      {ai::ModelThinkingLevel::Medium, std::nullopt},
+                      {ai::ModelThinkingLevel::High, std::nullopt},
+                      {ai::ModelThinkingLevel::XHigh, std::nullopt},
+                      {ai::ModelThinkingLevel::Max, std::nullopt},
+              }
+            : ai::ThinkingLevelMap{
+                      {ai::ModelThinkingLevel::Off, std::nullopt},
+                      {ai::ModelThinkingLevel::Minimal, std::nullopt},
+                      {ai::ModelThinkingLevel::Low, std::optional<std::string>{"low"}},
+                      {ai::ModelThinkingLevel::Medium, std::nullopt},
+                      {ai::ModelThinkingLevel::High, std::optional<std::string>{"high"}},
+                      {ai::ModelThinkingLevel::XHigh, std::nullopt},
+                      {ai::ModelThinkingLevel::Max, std::optional<std::string>{"max"}},
+              };
+    return model;
 }
 
 } // namespace
 
-TEST_CASE("DeepSeek Chat Completions streams reasoning text tool calls and usage", "[ai][api][completions][issue761]") {
+TEST_CASE("Chat Completions streams reasoning text tool calls and usage", "[ai][api][completions][issue761]") {
     const auto sse = read_pi_fixture_text("wire/openai-completions-deepseek.sse");
     REQUIRE(sse);
     auto transport = std::make_shared<tests::ScriptedTransport>();
@@ -125,7 +117,7 @@ TEST_CASE("DeepSeek Chat Completions streams reasoning text tool calls and usage
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-deepseek-key";
+
     options.max_tokens = 4096;
     options.reasoning = ai::ThinkingLevel::High;
     const auto run = tests::run_models(*models, model, request_context(), std::move(options));
@@ -167,29 +159,27 @@ TEST_CASE("DeepSeek Chat Completions streams reasoning text tool calls and usage
 
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
-    CHECK(request.url == "https://api.deepseek.com/chat/completions");
-    CHECK(request.headers.at("Authorization") == "Bearer dummy-deepseek-key");
+    CHECK(request.url == "http://127.0.0.1:3425/v1/chat/completions");
+    CHECK(request.headers.at("Authorization") == "Bearer magpie");
     const auto body = support::read_json(request.body);
     REQUIRE(body);
     CHECK(body->at("messages").get_array().front().at("role").get_string() == "system");
-    CHECK(body->at("max_tokens").get_number() == 4096);
-    CHECK(body->at("thinking").at("type").get_string() == "enabled");
+    CHECK(body->at("max_completion_tokens").get_number() == 4096);
     CHECK(body->at("reasoning_effort").get_string() == "high");
     CHECK(body->at("stream_options").at("include_usage").get_boolean());
     CHECK_FALSE(body->get_object().contains("store"));
-    CHECK(body->at("tools").get_array().front().at("function").at("strict").get_boolean() == false);
-    auto expected_request = read_pi_fixture_text("wire/openai-completions-deepseek-ts-request.json");
-    REQUIRE(expected_request);
-    if (expected_request->back() == '\n') {
-        expected_request->pop_back();
-    }
-    CHECK(request.body == *expected_request);
+    CHECK_FALSE(body->get_object().contains("thinking"));
+    CHECK_FALSE(body->get_object().contains("reasoning"));
+    CHECK_FALSE(body->get_object().contains("prompt_cache_key"));
+    CHECK_FALSE(body->at("tools").get_array().front().at("function").get_object().contains("strict"));
+    CHECK_FALSE(request.headers.contains("x-session-id"));
+    CHECK_FALSE(request.headers.contains("X-Magpie-Session"));
 
     ai::AiContext continuation;
     continuation.messages.push_back(*run.result);
     continuation.messages.push_back(ai::tool_result_message(call.id, call.name, "tool answer"));
     ai::SimpleStreamOptions replay_options;
-    replay_options.api_key = "dummy-deepseek-key";
+
     replay_options.max_tokens = 4096;
     const auto replay = tests::run_models(*models, model, std::move(continuation), std::move(replay_options));
     REQUIRE(replay.result);
@@ -208,7 +198,41 @@ TEST_CASE("DeepSeek Chat Completions streams reasoning text tool calls and usage
     CHECK(replay_messages[1].at("tool_call_id").get_string() == "call_1");
 }
 
-TEST_CASE("OpenRouter Chat Completions selects developer reasoning and affinity defaults",
+TEST_CASE("an off thinking request states the gateway's explicit none", "[ai][api][completions][issue761][spec]") {
+    const auto model = deepseek_model();
+    const ai::AiContext no_context;
+
+    // No reasoning option (pi's `reasoning: undefined`) is the agent's "off"
+    // thinking level, and an explicit Off clamp states the same thing.
+    ai::api::PreparedStreamOptions omitted;
+    omitted.max_tokens = 64;
+    const auto omitted_payload = ai::api::build_openai_completions_payload(model, no_context, omitted);
+    REQUIRE(omitted_payload);
+    CHECK(omitted_payload->at("reasoning_effort").get_string() == "none");
+
+    ai::api::PreparedStreamOptions explicit_off;
+    explicit_off.max_tokens = 64;
+    explicit_off.reasoning = ai::ModelThinkingLevel::Off;
+    const auto off_payload = ai::api::build_openai_completions_payload(model, no_context, explicit_off);
+    REQUIRE(off_payload);
+    CHECK(off_payload->at("reasoning_effort").get_string() == "none");
+
+    // A level the map does not mention falls back to the level's own name.
+    ai::api::PreparedStreamOptions unmapped;
+    unmapped.max_tokens = 64;
+    unmapped.reasoning = ai::ModelThinkingLevel::Low;
+    const auto unmapped_payload = ai::api::build_openai_completions_payload(model, no_context, unmapped);
+    REQUIRE(unmapped_payload);
+    CHECK(unmapped_payload->at("reasoning_effort").get_string() == "low");
+
+    // A model without reasoning never states an effort at all.
+    const auto plain = tests::make_model("plain", "magpie", "openai-completions");
+    const auto plain_payload = ai::api::build_openai_completions_payload(plain, no_context, explicit_off);
+    REQUIRE(plain_payload);
+    CHECK_FALSE(plain_payload->get_object().contains("reasoning_effort"));
+}
+
+TEST_CASE("a session-scoped request carries the gateway session header and the unified body",
         "[ai][api][completions][issue761]") {
     auto transport = std::make_shared<tests::ScriptedTransport>();
     transport->attempts.push_back(tests::TransportAttempt{
@@ -220,12 +244,17 @@ TEST_CASE("OpenRouter Chat Completions selects developer reasoning and affinity 
                             "data: [DONE]\n\n",
                     },
     });
-    auto model = openrouter_model();
+    auto model = tests::make_model("openai/gpt-5", "openrouter", "openai-completions");
+    model.reasoning = true;
+    model.thinking_level_map = ai::ThinkingLevelMap{
+            {ai::ModelThinkingLevel::Off, "none"},
+            {ai::ModelThinkingLevel::High, "high"},
+    };
     auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-openrouter-key";
+
     options.max_tokens = 123;
     options.reasoning = ai::ThinkingLevel::High;
     options.session_id = "router-session";
@@ -235,16 +264,19 @@ TEST_CASE("OpenRouter Chat Completions selects developer reasoning and affinity 
     CHECK(run.result->stop_reason == ai::AssistantStopReason::Stop);
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
-    CHECK(request.url == "https://openrouter.ai/api/v1/chat/completions");
-    CHECK(request.headers.at("Authorization") == "Bearer dummy-openrouter-key");
-    CHECK(request.headers.at("x-session-id") == "router-session");
+    CHECK(request.url == "http://127.0.0.1:3425/v1/chat/completions");
+    CHECK(request.headers.at("Authorization") == "Bearer magpie");
+    CHECK(request.headers.at("X-Magpie-Session") == "router-session");
+    CHECK_FALSE(request.headers.contains("x-session-id"));
     const auto body = support::read_json(request.body);
     REQUIRE(body);
-    CHECK(body->at("messages").get_array().front().at("role").get_string() == "developer");
+    CHECK(body->at("messages").get_array().front().at("role").get_string() == "system");
     CHECK(body->at("max_completion_tokens").get_number() == 123);
-    CHECK(body->at("store").get_boolean() == false);
-    CHECK(body->at("reasoning").at("effort").get_string() == "high");
-    CHECK(body->at("tools").get_array().front().at("function").at("strict").get_boolean() == false);
+    CHECK(body->at("prompt_cache_key").get_string() == "router-session");
+    CHECK_FALSE(body->get_object().contains("store"));
+    CHECK_FALSE(body->get_object().contains("reasoning"));
+    CHECK(body->at("reasoning_effort").get_string() == "high");
+    CHECK_FALSE(body->at("tools").get_array().front().at("function").get_object().contains("strict"));
 }
 
 namespace {
@@ -271,11 +303,10 @@ namespace {
     return std::move(*body);
 }
 
-/// A reasoning Completions model with no typed `compat`, so the wire
-/// specialization under test comes from the provider id alone.
-[[nodiscard]] ai::Model vendor_id_model(std::string id, std::string provider, std::string base_url) {
+/// A reasoning Completions model whose identity is the only thing a provider
+/// id could change; the wire contract itself is uniform (ADR 0074).
+[[nodiscard]] ai::Model provider_id_model(std::string id, std::string provider) {
     auto model = tests::make_model(std::move(id), std::move(provider), "openai-completions");
-    model.base_url = std::move(base_url);
     model.reasoning = true;
     model.thinking_level_map = ai::ThinkingLevelMap{{ai::ModelThinkingLevel::High, "high"}};
     return model;
@@ -287,13 +318,18 @@ struct ScriptedRun {
     support::JsonValue body;
 };
 
-[[nodiscard]] ScriptedRun run_vendor_id_model(ai::Model model, std::uint64_t max_tokens, bool with_session_id) {
+[[nodiscard]] ScriptedRun run_provider_model(ai::Model model,
+        std::uint64_t max_tokens,
+        bool with_session_id,
+        std::string gateway_url = "https://gateway.internal.example") {
     auto transport = ok_transport();
-    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    auto models = tests::make_scripted_models(model,
+            tests::ScriptedTransportOptions{.http_transport = transport},
+            {.gateway_url = std::move(gateway_url)});
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-gateway-key";
+
     options.max_tokens = max_tokens;
     options.reasoning = ai::ThinkingLevel::High;
     if (with_session_id) {
@@ -307,87 +343,136 @@ struct ScriptedRun {
 
 } // namespace
 
-TEST_CASE("OpenRouter wire specialization survives a non-vendor gateway base URL",
-        "[ai][api][completions][provider-identity]") {
-    const auto run = run_vendor_id_model(
-            vendor_id_model("openai/gpt-5", "openrouter", "https://gateway.internal.example/v1"), 123, true);
+TEST_CASE("provider identity does not change the Chat Completions body", "[ai][api][completions][provider-identity]") {
+    constexpr std::array<std::string_view, 5> providers{
+            "deepseek",
+            "openrouter",
+            "openai",
+            "corp-gateway",
+            "magpie",
+    };
+    std::optional<std::string> reference;
+    for (const auto provider : providers) {
+        const auto run = run_provider_model(provider_id_model("gpt-5", std::string{provider}), 123, true);
+        auto serialized = support::write_json(run.body);
+        REQUIRE(serialized);
+        if (!reference) {
+            reference = *serialized;
+        }
+        CAPTURE(provider);
+        CHECK(*serialized == *reference);
+        CHECK(run.transport->requests.front().headers.at("X-Magpie-Session") == "gateway-session");
+        CHECK_FALSE(run.transport->requests.front().headers.contains("x-session-id"));
+    }
 
-    CHECK(run.transport->requests.front().url == "https://gateway.internal.example/v1/chat/completions");
-    CHECK(run.transport->requests.front().headers.at("x-session-id") == "gateway-session");
-    CHECK(run.body.at("messages").get_array().front().at("role").get_string() == "developer");
-    CHECK(run.body.at("reasoning").at("effort").get_string() == "high");
-    CHECK_FALSE(run.body.get_object().contains("reasoning_effort"));
-}
-
-TEST_CASE("DeepSeek wire specialization survives a non-vendor gateway base URL",
-        "[ai][api][completions][provider-identity]") {
-    const auto run = run_vendor_id_model(
-            vendor_id_model("deepseek-flash", "deepseek", "https://gateway.internal.example/v1"), 4096, false);
-
+    // The unified body carries none of the retired vendor-specific members.
+    const auto run = run_provider_model(provider_id_model("gpt-5", "deepseek"), 123, true);
+    const auto& raw = run.transport->requests.front().body;
+    for (const auto field : {"store",
+                 "thinking",
+                 "reasoning",
+                 "enable_thinking",
+                 "cache_control",
+                 "strict",
+                 "max_tokens",
+                 "prompt_cache_retention"}) {
+        CHECK(raw.find(std::format("\"{}\"", field)) == std::string::npos);
+    }
+    CHECK(run.body.at("max_completion_tokens").get_number() == 123);
+    CHECK(run.body.at("reasoning_effort").get_string() == "high");
     CHECK(run.body.at("messages").get_array().front().at("role").get_string() == "system");
-    CHECK(run.body.at("max_tokens").get_number() == 4096);
-    CHECK_FALSE(run.body.get_object().contains("max_completion_tokens"));
-    CHECK(run.body.at("thinking").at("type").get_string() == "enabled");
-    CHECK(run.body.at("reasoning_effort").get_string() == "high");
-    CHECK_FALSE(run.body.get_object().contains("store"));
 }
 
-TEST_CASE("A non-vendor provider id does not inherit vendor specialization from a vendor host",
-        "[ai][api][completions][provider-identity]") {
-    const auto run = run_vendor_id_model(
-            vendor_id_model("openai/gpt-5", "corp-gateway", "https://openrouter.ai/api/v1"), 123, true);
-
-    CHECK_FALSE(run.transport->requests.front().headers.contains("x-session-id"));
-    CHECK(run.body.at("reasoning_effort").get_string() == "high");
-    CHECK_FALSE(run.body.get_object().contains("reasoning"));
-}
-
-TEST_CASE("The typed session-affinity flag overrides the provider id default",
-        "[ai][api][completions][provider-identity]") {
-    auto suppressed = vendor_id_model("openai/gpt-5", "openrouter", "https://openrouter.ai/api/v1");
-    suppressed.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
-            .send_session_affinity_headers = false,
-    }};
-    const auto suppressed_run = run_vendor_id_model(std::move(suppressed), 123, true);
-    CHECK_FALSE(suppressed_run.transport->requests.front().headers.contains("x-session-id"));
-
-    auto requested = vendor_id_model("openai/gpt-5", "corp-gateway", "https://gateway.internal.example/v1");
-    requested.compat = ai::ModelCompatVariant{ai::OpenAICompletionsCompat{
-            .send_session_affinity_headers = true,
-    }};
-    const auto requested_run = run_vendor_id_model(std::move(requested), 123, true);
-    CHECK(requested_run.transport->requests.front().headers.at("x-session-id") == "gateway-session");
-}
-
-TEST_CASE("The OpenAI prompt cache key follows the provider id, not the endpoint host",
-        "[ai][api][completions][provider-identity]") {
-    auto run_one = [](std::string provider, std::string base_url) {
+TEST_CASE("the prompt cache key follows the session not the provider id", "[ai][api][completions][provider-identity]") {
+    auto run_one = [](std::string provider, std::optional<std::string> session_id, ai::CacheRetention retention) {
         auto transport = ok_transport();
         auto model = tests::make_model("gpt-5", std::move(provider), "openai-completions");
-        model.base_url = std::move(base_url);
+        auto models = tests::make_scripted_models(model,
+                tests::ScriptedTransportOptions{.http_transport = transport},
+                {.gateway_url = "https://gateway.internal.example"});
+        REQUIRE(models);
+
+        ai::SimpleStreamOptions options;
+
+        options.cache_retention = retention;
+        options.session_id = std::move(session_id);
+        const auto run = tests::run_models(*models, model, request_context(), std::move(options));
+        REQUIRE(run.result);
+        return single_request_body(*transport);
+    };
+
+    for (const auto provider : {"openai", "corp-gateway", "magpie"}) {
+        const auto body = run_one(provider, "cache-session", ai::CacheRetention::Short);
+        CHECK(body.at("prompt_cache_key").get_string() == "cache-session");
+        CHECK_FALSE(body.get_object().contains("prompt_cache_retention"));
+    }
+    CHECK_FALSE(run_one("openai", std::nullopt, ai::CacheRetention::Short).get_object().contains("prompt_cache_key"));
+    CHECK_FALSE(run_one("openai", "cache-session", ai::CacheRetention::None).get_object().contains("prompt_cache_key"));
+}
+
+TEST_CASE("session affinity is the gateway session header", "[ai][api][completions][provider-identity]") {
+    auto run_one = [](std::optional<std::string> session_id, std::optional<std::string> caller_value) {
+        auto transport = ok_transport();
+        auto model = tests::make_model("gpt-5.6-luna", "corp-gateway", "openai-completions");
         auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
         REQUIRE(models);
 
         ai::SimpleStreamOptions options;
-        options.api_key = "dummy-openai-key";
-        options.session_id = "cache-session";
-        const auto run = tests::run_models(*models, model, request_context(), std::move(options));
-        REQUIRE(run.result);
-        const auto body = single_request_body(*transport);
-        return body.get_object().contains("prompt_cache_key");
+        options.max_tokens = 16;
+        options.session_id = std::move(session_id);
+        if (caller_value) {
+            options.headers["X-Magpie-Session"] = *caller_value;
+        }
+        const auto run = tests::run_models(*models, model, ai::AiContext{}, std::move(options));
+
+        REQUIRE(transport->requests.size() == 1);
+        const auto& request = transport->requests.front();
+        CHECK(request.url == "http://127.0.0.1:3425/v1/chat/completions");
+        CHECK(request.headers.at("Authorization") == "Bearer magpie");
+        return request.headers;
     };
 
-    CHECK(run_one("openai", "https://gateway.internal.example/v1"));
-    CHECK_FALSE(run_one("corp-gateway", "https://api.openai.com/v1"));
+    // The session id rides the gateway's own header and no vendor spelling
+    // (the retired x-opencode-session / x-session-id) is ever added.
+    const auto injected = run_one("session-abc", std::nullopt);
+    CHECK(injected.at("X-Magpie-Session") == "session-abc");
+    CHECK_FALSE(injected.contains("x-session-id"));
+    CHECK_FALSE(injected.contains("x-opencode-session"));
+
+    // A caller-set value wins over the injected one; without a session id the
+    // header is absent.
+    CHECK(run_one("session-abc", "caller-value").at("X-Magpie-Session") == "caller-value");
+    CHECK_FALSE(ai::find_header(run_one(std::nullopt, std::nullopt), "X-Magpie-Session").has_value());
+
+    // An explicit null caller value is a tombstone: the adapter default stays
+    // suppressed even when the request carries a session id.
+    {
+        auto transport = ok_transport();
+        auto model = tests::make_model("gpt-5.6-luna", "corp-gateway", "openai-completions");
+        auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+        REQUIRE(models);
+
+        ai::SimpleStreamOptions options;
+        options.session_id = "session-abc";
+        options.headers["x-magpie-session"] = std::nullopt;
+        options.headers["content-type"] = std::nullopt;
+        options.headers["accept"] = std::nullopt;
+        const auto run = tests::run_models(*models, model, ai::AiContext{}, std::move(options));
+        REQUIRE(run.result);
+
+        REQUIRE(transport->requests.size() == 1);
+        CHECK_FALSE(ai::find_header(transport->requests.front().headers, "X-Magpie-Session").has_value());
+        CHECK_FALSE(ai::find_header(transport->requests.front().headers, "Content-Type").has_value());
+        CHECK_FALSE(ai::find_header(transport->requests.front().headers, "Accept").has_value());
+    }
 }
 
-TEST_CASE("Kimi Coding uses the vendor Completions catalog and omits effort for highspeed",
+TEST_CASE("an unsupported thinking vocabulary reports the gateway's explicit none",
         "[ai][api][completions][kimi][issue763][spec]") {
     const auto highspeed = kimi_model("kimi-for-coding-highspeed");
     REQUIRE_FALSE(highspeed.id.empty());
     CHECK(highspeed.api == "openai-completions");
     CHECK(highspeed.provider == "kimi-coding");
-    CHECK(highspeed.base_url == "https://api.kimi.com/coding/v1");
     CHECK_FALSE(highspeed.headers.has_value());
     REQUIRE(highspeed.thinking_level_map);
     CHECK(highspeed.thinking_level_map->size() == 7);
@@ -418,7 +503,7 @@ TEST_CASE("Kimi Coding uses the vendor Completions catalog and omits effort for 
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-kimi-key";
+
     options.max_tokens = 512;
     options.reasoning = ai::ThinkingLevel::High;
     ai::AiContext context;
@@ -428,21 +513,23 @@ TEST_CASE("Kimi Coding uses the vendor Completions catalog and omits effort for 
     REQUIRE(run.result);
     REQUIRE(transport->requests.size() == 1);
     const auto& request = transport->requests.front();
-    CHECK(request.url == "https://api.kimi.com/coding/v1/chat/completions");
-    CHECK(request.headers.at("Authorization") == "Bearer dummy-kimi-key");
+    CHECK(request.url == "http://127.0.0.1:3425/v1/chat/completions");
+    CHECK(request.headers.at("Authorization") == "Bearer magpie");
     CHECK_FALSE(request.headers.contains("User-Agent"));
     const auto body = support::read_json(request.body);
     REQUIRE(body);
     CHECK(body->at("max_completion_tokens").get_number() == 512);
-    CHECK_FALSE(body->get_object().contains("reasoning_effort"));
+    // The clamped request lands on Off, which the gateway contract states as
+    // `reasoning_effort: "none"` — never as a vendor effort object.
+    CHECK(body->at("reasoning_effort").get_string() == "none");
     CHECK_FALSE(body->get_object().contains("effort"));
     CHECK_FALSE(body->at("tools").get_array().front().at("function").get_object().contains("strict"));
 }
 
-TEST_CASE(
-        "Kimi completions sends the system instruction role, not developer", "[ai][api][completions][kimi][issue757]") {
+TEST_CASE("Chat Completions sends the system instruction role", "[ai][api][completions][kimi][issue757]") {
     // Live-verified Kimi vendor rule (2026-09-23, HTTP 400 "role 'developer' is
     // not allowed"): the completions endpoint only accepts system/user/assistant.
+    // The unified gateway contract always sends the system role.
     const auto model = kimi_model("kimi-for-coding");
     REQUIRE_FALSE(model.id.empty());
     REQUIRE(model.reasoning);
@@ -461,7 +548,7 @@ TEST_CASE(
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-kimi-key";
+
     options.max_tokens = 512;
     const auto run = tests::run_models(*models, model, request_context(), std::move(options));
 
@@ -474,7 +561,7 @@ TEST_CASE(
     CHECK(messages.front().at("role").get_string() == "system");
 }
 
-TEST_CASE("Kimi Coding maps every vendor thinking level without undocumented effort values",
+TEST_CASE("Kimi Coding maps every vendor thinking level to a documented effort or the gateway none",
         "[ai][api][completions][kimi][issue763][spec]") {
     constexpr std::array model_ids{
             std::string_view{"k3"},
@@ -505,31 +592,33 @@ TEST_CASE("Kimi Coding maps every vendor thinking level without undocumented eff
                 CHECK(std::ranges::find(documented_efforts, *mapped) != documented_efforts.end());
             }
 
-            ai::ProviderStreamOptions options;
+            ai::api::PreparedStreamOptions options;
             options.max_tokens = 512;
             options.reasoning = clamped;
-            const auto payload =
-                    ai::api::build_adapter_payload(ai::api::AdapterKind::OpenAICompletions, model, {}, options);
+            const auto payload = ai::api::build_openai_completions_payload(model, {}, options);
             REQUIRE(payload);
             const auto& object = payload->get_object();
             const auto effort = object.find("reasoning_effort");
-            CHECK((effort != object.end()) == mapped.has_value());
-            if (mapped) {
+            if (clamped == ai::ModelThinkingLevel::Off) {
+                REQUIRE(effort != object.end());
+                CHECK(effort->second.get_string() == "none");
+            } else if (mapped) {
                 REQUIRE(effort != object.end());
                 CHECK(effort->second.get_string() == *mapped);
+            } else {
+                CHECK(effort == object.end());
             }
         }
 
-        ai::ProviderStreamOptions omitted_options;
+        ai::api::PreparedStreamOptions omitted_options;
         omitted_options.max_tokens = 512;
-        const auto omitted =
-                ai::api::build_adapter_payload(ai::api::AdapterKind::OpenAICompletions, model, {}, omitted_options);
+        const auto omitted = ai::api::build_openai_completions_payload(model, {}, omitted_options);
         REQUIRE(omitted);
-        CHECK_FALSE(omitted->get_object().contains("reasoning_effort"));
+        CHECK(omitted->get_object().at("reasoning_effort").get_string() == "none");
     }
 }
 
-TEST_CASE("Completions replay normalizes reasoning and pipe-separated tool history",
+TEST_CASE("Chat Completions replays reasoning and tool history with the received ids",
         "[ai][conversion][completions][issue761]") {
     auto model = deepseek_model();
     ai::AiContext context;
@@ -555,20 +644,19 @@ TEST_CASE("Completions replay normalizes reasoning and pipe-separated tool histo
     };
     context.messages.push_back(std::move(assistant));
     context.messages.push_back(ai::tool_result_message("call_1|fc_1", "lookup", "ok"));
-    ai::ProviderStreamOptions options;
+    ai::api::PreparedStreamOptions options;
     options.max_tokens = 64;
 
-    const auto payload =
-            ai::api::build_adapter_payload(ai::api::AdapterKind::OpenAICompletions, model, context, options);
+    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
 
     REQUIRE(payload);
     const auto& messages = payload->at("messages").get_array();
     REQUIRE(messages.size() == 2);
     CHECK(messages[0].at("role").get_string() == "assistant");
     CHECK(messages[0].at("reasoning_content").get_string() == "plan");
-    CHECK(messages[0].at("tool_calls").get_array().front().at("id").get_string() == "call_1_fc_1");
+    CHECK(messages[0].at("tool_calls").get_array().front().at("id").get_string() == "call_1|fc_1");
     CHECK(messages[1].at("role").get_string() == "tool");
-    CHECK(messages[1].at("tool_call_id").get_string() == "call_1_fc_1");
+    CHECK(messages[1].at("tool_call_id").get_string() == "call_1|fc_1");
 }
 
 TEST_CASE("Completions rejects DONE and clean EOF without finish_reason", "[ai][api][completions][issue761]") {
@@ -583,7 +671,7 @@ TEST_CASE("Completions rejects DONE and clean EOF without finish_reason", "[ai][
         auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
         REQUIRE(models);
         ai::SimpleStreamOptions options;
-        options.api_key = "dummy-key";
+
         const auto run = tests::run_models(*models, model, {}, std::move(options));
 
         REQUIRE(run.result);
@@ -591,6 +679,35 @@ TEST_CASE("Completions rejects DONE and clean EOF without finish_reason", "[ai][
         REQUIRE_FALSE(run.events.empty());
         CHECK(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
     }
+}
+
+TEST_CASE("Completions maps an unknown finish_reason to one error terminal", "[ai][api][completions][issue1040]") {
+    // Retired with the Responses/Anthropic termination matrices (ADR 0074),
+    // the unknown-stop-reason regression lock now lives here, on the live
+    // Chat Completions fall-through (CompletionsEvents set_finish_reason):
+    // a provider reason outside the mapped vocabulary errors and keeps the
+    // provider wording visible, it never masquerades as a mapped stop reason.
+    auto transport = std::make_shared<tests::ScriptedTransport>();
+    transport->attempts.push_back(tests::TransportAttempt{
+            .chunks = {std::string{"data: {\"choices\":[{\"delta\":{\"content\":\"some\"},"
+                                   "\"finish_reason\":\"future_reason\"}]}\n\n"}},
+    });
+    const auto model = deepseek_model();
+    auto models = tests::make_scripted_models(model, tests::ScriptedTransportOptions{.http_transport = transport});
+    REQUIRE(models);
+    ai::SimpleStreamOptions options;
+
+    const auto run = tests::run_models(*models, model, {}, std::move(options));
+
+    REQUIRE(run.result);
+    CHECK(run.result->stop_reason == ai::AssistantStopReason::Error);
+    CHECK(run.result->error_message == "Provider finish_reason: future_reason");
+    CHECK(run.result->raw_stop_reason == std::optional<std::string>{"future_reason"});
+    REQUIRE_FALSE(run.events.empty());
+    CHECK(std::holds_alternative<ai::AssistantErrorEvent>(run.events.back()));
+    CHECK(std::ranges::count_if(run.events, [](const ai::AssistantStreamEvent& event) {
+        return std::holds_alternative<ai::AssistantErrorEvent>(event);
+    }) == 1);
 }
 
 TEST_CASE("Completions cancellation after partial text retains the text with one aborted terminal",
@@ -610,7 +727,7 @@ TEST_CASE("Completions cancellation after partial text retains the text with one
     std::stop_source stop;
     transport->on_request = [&stop] { stop.request_stop(); };
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-key";
+
     options.stop_token = stop.get_token();
     const auto run = tests::run_models(*models, model, {}, std::move(options));
 
@@ -650,7 +767,7 @@ TEST_CASE("Completions cancellation after partial tool arguments retains the arg
     std::stop_source stop;
     transport->on_request = [&stop] { stop.request_stop(); };
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-key";
+
     options.stop_token = stop.get_token();
     const auto run = tests::run_models(*models, model, {}, std::move(options));
 
@@ -688,7 +805,7 @@ TEST_CASE("Completions cancellation yields one aborted terminal", "[ai][api][com
     std::stop_source stop;
     transport->on_request = [&stop] { stop.request_stop(); };
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-key";
+
     options.stop_token = stop.get_token();
     const auto run = tests::run_models(*models, model, {}, std::move(options));
 
@@ -711,7 +828,7 @@ TEST_CASE("Completions transport failures yield one error terminal", "[ai][api][
     REQUIRE(models);
 
     ai::SimpleStreamOptions options;
-    options.api_key = "dummy-key";
+
     const auto run = tests::run_models(*models, model, {}, std::move(options));
 
     REQUIRE(run.result);

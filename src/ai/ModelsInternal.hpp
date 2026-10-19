@@ -1,34 +1,27 @@
 #pragma once
 
 #include <cch/ai/Timestamps.hpp>
-#include "support/AsyncResultBridge.hpp"
-#include <cch/support/BoundedText.hpp>
-
 #include <cch/support/AsyncResult.hpp>
+#include <cch/support/BoundedText.hpp>
 #include <cch/support/Error.hpp>
+#include "support/AsyncResultBridge.hpp"
 
-#include <chrono>
-
+#include <boost/algorithm/string/replace.hpp>
 #include <boost/asio/awaitable.hpp>
 
+#include <chrono>
+#include <cstdint>
 #include <expected>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 
-#include <cstdint>
-
 namespace cch::ai {
 
-/// Shared small vocabulary for the Models implementation files: credential
-/// expiry, error categorization/scrubbing, and the AsyncResult await bridge.
+/// Shared error categorization/scrubbing for model-stream delivery.
 
-inline constexpr std::chrono::milliseconds kOAuthMinimumValidity{std::chrono::minutes{5}};
 inline constexpr std::size_t kMaxPublicErrorBytes = 1024;
-
-[[nodiscard]] inline bool expires_soon(const OAuthCredential& credential) {
-    return credential.expires <= current_timestamp_ms() + kOAuthMinimumValidity.count();
-}
 
 [[nodiscard]] inline support::Error categorized_error(
         support::ErrorCode code, std::string message, const support::Error& cause) {
@@ -42,11 +35,21 @@ inline constexpr std::size_t kMaxPublicErrorBytes = 1024;
             support::bounded_redacted_text(std::move(detail), kMaxPublicErrorBytes, "..."));
 }
 
-[[nodiscard]] inline support::Error safe_error(support::Error error) {
-    error.message = support::bounded_redacted_text(std::move(error.message), kMaxPublicErrorBytes, "...");
-    error.detail = support::bounded_redacted_text(std::move(error.detail), kMaxPublicErrorBytes, "...");
+[[nodiscard]] inline std::string safe_diagnostic_text(std::string text, std::string_view request_key = {}) {
+    if (!request_key.empty() && request_key != "magpie") {
+        boost::algorithm::replace_all(text, request_key, support::kRedactionMarker);
+    }
+    return support::bounded_redacted_text(std::move(text), kMaxPublicErrorBytes, "...");
+}
+
+[[nodiscard]] inline support::Error safe_error(support::Error error, std::string_view request_key = {}) {
+    // ADR 0073: a gateway may echo its invocation key without a recognizable
+    // token prefix. Scrub that exact request secret before bounding diagnostics.
+    // The default "magpie" placeholder is not a secret and must not be redacted.
+    error.message = safe_diagnostic_text(std::move(error.message), request_key);
+    error.detail = safe_diagnostic_text(std::move(error.detail), request_key);
     if (error.context) {
-        error.context = support::bounded_redacted_text(std::move(*error.context), kMaxPublicErrorBytes, "...");
+        error.context = safe_diagnostic_text(std::move(*error.context), request_key);
     }
     return error;
 }
