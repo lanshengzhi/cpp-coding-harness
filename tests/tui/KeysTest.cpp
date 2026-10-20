@@ -171,6 +171,7 @@ TEST_CASE("keypad alternate shifted-symbol reports normalize before matching and
     REQUIRE(plain_keypad);
     CHECK(cch::tui::key_id(*plain_keypad) == "+");
     CHECK(plain_keypad->text == "+");
+    CHECK(cch::tui::matches_key(*plain_keypad, "+"));
     CHECK_FALSE(cch::tui::matches_key(*plain_keypad, "shift+="));
 
     const auto modify_other_keys = cch::tui::parse_key("\x1b[27;2;57413~", /*kitty_protocol_active=*/true);
@@ -178,4 +179,10 @@ TEST_CASE("keypad alternate shifted-symbol reports normalize before matching and
     CHECK(cch::tui::key_id(*modify_other_keys) == "+");
     CHECK(cch::tui::matches_key(*modify_other_keys, "+"));
     CHECK_FALSE(cch::tui::matches_key(*modify_other_keys, "shift+="));
+
+    const auto modify_other_keys_ctrl = cch::tui::parse_key("\x1b[27;6;57413~", /*kitty_protocol_active=*/true);
+    REQUIRE(modify_other_keys_ctrl);
+    CHECK(cch::tui::key_id(*modify_other_keys_ctrl) == "ctrl++");
+    CHECK(cch::tui::matches_key(*modify_other_keys_ctrl, "ctrl++"));
+    CHECK_FALSE(cch::tui::printable_text(*modify_other_keys_ctrl));
 }
