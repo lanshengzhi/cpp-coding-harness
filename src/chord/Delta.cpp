@@ -499,9 +499,12 @@ support::Expected<Json> apply_immutable_batches(const Json& target, const std::v
 }
 
 support::ExpectedVoid apply(Json& target, const OpBatch& ops) {
-    auto result = apply_immutable(target, ops);
-    if (!result) return std::unexpected(std::move(result.error()));
-    target = std::move(*result);
+    if (auto valid = validate_batch(ops); !valid) return valid;
+    for (const auto& op : ops) {
+        auto result = apply_immutable(target, OpBatch{op});
+        if (!result) return std::unexpected(std::move(result.error()));
+        target = std::move(*result);
+    }
     return {};
 }
 

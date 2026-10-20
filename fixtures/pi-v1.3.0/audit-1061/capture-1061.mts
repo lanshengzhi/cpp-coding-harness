@@ -1,6 +1,8 @@
 /**
  * `audit-1061` capture: frozen Chord observations that audit-1057 recorded as
- * gaps — `Tracker.prepareReplace` and the draft array-hole rejection.
+ * gaps — `Tracker.prepareReplace`, the draft array-hole rejection, and the
+ * review-repair distinctions for mutable apply, draft reads, adoption
+ * revocation and operation folding.
  *
  * The script refuses to write evidence unless the private checkout is the exact
  * baseline revision and its tracked source is clean. It re-executes itself
@@ -19,6 +21,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Scenario } from "./scenarios.mts";
+import {
+    adoptionInvalidationScenarios,
+    draftReadScenarios,
+    mutableApplyScenarios,
+    operationFoldingScenarios,
+} from "./review-fixes.mts";
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const REPO = join(dirname(SCRIPT), "../../..");
@@ -149,6 +157,17 @@ const artifacts = await Promise.all([
         "packages/chord/src/delta/tracker.ts:deleteProperty",
         "packages/chord/src/delta/index.ts:Op",
     ]),
+    artifactFor("review-fixes.json", async () => [
+        ...(await mutableApplyScenarios()),
+        ...(await draftReadScenarios()),
+        ...(await adoptionInvalidationScenarios()),
+        ...(await operationFoldingScenarios()),
+    ], [
+        "packages/chord/src/delta/index.ts:apply,applyOps",
+        "packages/chord/src/delta/tracker.ts:getProperty,getArrayIndex",
+        "packages/chord/src/delta/tracker.ts:TrackerImpl.adopt,TrackerImpl.#invalidate,assertReadable,assertWritable",
+        "packages/chord/src/delta/tracker.ts:deleteProperty,emitObjectOperations,setProperty,materializePrepared",
+    ]),
 ]);
 
 const bundle = join(REPO, "fixtures/pi-v1.3.0", FAMILY);
@@ -164,6 +183,7 @@ const generatorPath = "fixtures/pi-v1.3.0/audit-1061/capture-1061.mts";
 const sourceFiles = [
     "fixtures/pi-v1.3.0/audit-1061/capture-1061.mts",
     "fixtures/pi-v1.3.0/audit-1061/scenarios.mts",
+    "fixtures/pi-v1.3.0/audit-1061/review-fixes.mts",
 ];
 const manifest = {
     schema: "pike/pi-v1.3.0-audit-evidence/1",

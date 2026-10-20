@@ -268,11 +268,13 @@ TEST_CASE("draft reads see writes while the committed revision stays unchanged",
 
     auto read = draft.get(keys({"value"}));
     REQUIRE(read);
-    CHECK(*read == Json{2});
+    REQUIRE(read->has_value());
+    CHECK(**read == Json{2});
     auto text = draft.get(keys({"text"}));
     REQUIRE(text);
-    CHECK(text->as_string() != nullptr);
-    CHECK(*text->as_string() == "abcd");
+    REQUIRE(text->has_value());
+    CHECK(text->value().as_string() != nullptr);
+    CHECK(*text->value().as_string() == "abcd");
     CHECK(tracker.value() == snapshot);
     CHECK(tracker.revision() == 0);
 
@@ -281,6 +283,123 @@ TEST_CASE("draft reads see writes while the committed revision stays unchanged",
     auto prepared = change.prepare();
     REQUIRE(prepared);
     REQUIRE(prepared->ops().size() == 2);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/review-fixes.json
+// "draft reads distinguish absent leaves from null and from absent receiver paths".
+TEST_CASE("draft reads distinguish absent leaves nulls and invalid traversal",
+        "[chord][delta][revision][draft][read][issue1061][spec]") {
+    auto tracker = track(object({
+            {"present", Json{1}},
+            {"nil", Json{nullptr}},
+            {"object", object({{"present", Json{2}}})},
+            {"items", array({Json{10}})},
+    }));
+    auto change = tracker.begin_change();
+    auto draft = change.draft();
+
+    auto present = draft.get(keys({"present"}));
+    REQUIRE(present);
+    REQUIRE(present->has_value());
+    CHECK(**present == Json{1});
+
+    auto missing_leaf = draft.get(keys({"missing"}));
+    REQUIRE(missing_leaf);
+    CHECK_FALSE(missing_leaf->has_value());
+
+    auto null_leaf = draft.get(keys({"nil"}));
+    REQUIRE(null_leaf);
+    REQUIRE(null_leaf->has_value());
+    CHECK(**null_leaf == Json{nullptr});
+
+    auto nested_missing_leaf = draft.get(Path{path_key("object"), path_key("missing")});
+    REQUIRE(nested_missing_leaf);
+    CHECK_FALSE(nested_missing_leaf->has_value());
+
+    auto missing_array_index = draft.get(Path{path_key("items"), path_index(2)});
+    REQUIRE(missing_array_index);
+    CHECK_FALSE(missing_array_index->has_value());
+
+    const auto missing_receiver = draft.get(Path{path_key("missing"), path_key("deep")});
+    REQUIRE_FALSE(missing_receiver);
+    CHECK(missing_receiver.error().message.starts_with("unresolvable path"));
+
+    const auto null_receiver = draft.get(Path{path_key("nil"), path_key("deep")});
+    REQUIRE_FALSE(null_receiver);
+    CHECK(null_receiver.error().message.starts_with("unresolvable path"));
+
+    auto prepared = change.prepare();
+    REQUIRE(prepared);
+    const auto settled = draft.get(keys({"missing"}));
+    REQUIRE_FALSE(settled);
+    CHECK(settled.error().message == "Cannot use a settled overlay");
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/review-fixes.json
+// "adoption immediately revokes competing open drafts while prepared competitors retain normal prepared abort and stale
+// states".
+TEST_CASE("adoption immediately revokes escaped competing draft handles",
+        "[chord][delta][revision][adopt][draft][issue1061][spec]") {
+    auto tracker = track(object({{"x", Json{1}}}));
+    auto open = tracker.begin_change();
+    auto open_draft = open.draft();
+    REQUIRE(open_draft.set(keys({"x"}), Json{5}));
+
+    auto prepared_competitor = tracker.begin_change();
+    REQUIRE(prepared_competitor.draft().set(keys({"x"}), Json{6}));
+    auto prepared = prepared_competitor.prepare();
+    REQUIRE(prepared);
+    auto aborted_competitor = tracker.prepare_replace(object({{"x", Json{3}}}));
+    REQUIRE(aborted_competitor);
+
+    auto winner = tracker.prepare_replace(object({{"x", Json{2}}}));
+    REQUIRE(winner);
+    REQUIRE(tracker.adopt(*winner));
+    CHECK(tracker.revision() == 1);
+
+    const auto open_prepare = open.prepare();
+    REQUIRE_FALSE(open_prepare);
+    CHECK(open_prepare.error().message == "Cannot use a settled overlay");
+
+    const auto open_read = open_draft.get(keys({"x"}));
+    REQUIRE_FALSE(open_read);
+    CHECK(open_read.error().message == "Cannot use a settled overlay");
+
+    const auto open_write = open_draft.set(keys({"x"}), Json{7});
+    REQUIRE_FALSE(open_write);
+    CHECK(open_write.error().message == "Cannot use a settled overlay");
+
+    open.abort();
+    const auto stale = tracker.adopt(*prepared);
+    REQUIRE_FALSE(stale);
+    CHECK(stale.error().message == "Prepared change is stale");
+
+    aborted_competitor->abort();
+    const auto aborted = tracker.adopt(*aborted_competitor);
+    REQUIRE_FALSE(aborted);
+    CHECK(aborted.error().message == "Prepared change has been aborted");
+    CHECK(tracker.value() == object({{"x", Json{2}}}));
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/review-fixes.json
+// "adding a key and erasing it again normalizes to an empty batch over the unchanged base".
+TEST_CASE("erasing a newly added key prepares an empty batch over the unchanged base",
+        "[chord][delta][revision][ordering][normalize][issue1061][spec]") {
+    auto tracker = track(object({{"a", Json{1}}}));
+    auto change = tracker.begin_change();
+    auto draft = change.draft();
+    REQUIRE(draft.set(keys({"added"}), object({{"leaf", Json{3}}})));
+    REQUIRE(draft.erase(Path{path_key("added"), path_key("leaf")}));
+    REQUIRE(draft.erase(keys({"added"})));
+
+    auto prepared = change.prepare();
+    REQUIRE(prepared);
+    CHECK(prepared->ops().empty());
+    CHECK(prepared->value().shares_container_with(tracker.value()));
+    CHECK(prepared->value() == object({{"a", Json{1}}}));
+    REQUIRE(tracker.adopt(*prepared));
+    CHECK(tracker.revision() == 1);
+    CHECK(tracker.value() == object({{"a", Json{1}}}));
 }
 
 // Frozen observation: packages/chord/src/delta/tracker.ts:emitObjectOperations

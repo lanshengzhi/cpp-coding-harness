@@ -163,14 +163,28 @@ TEST_CASE("unsafe paths and malformed operations are rejected before target acce
     REQUIRE_FALSE(missing_array_element);
     CHECK(missing_array_element.error().message.starts_with("unresolvable path"));
 
-    // A valid leading operation must not publish before a later operation fails.
+    // Upfront syntax validation rejects the complete batch before any access.
+    const auto syntax_invalid = apply(target,
+            OpBatch{
+                    SetOp{.path = keys({"value"}), .value = Json{2}},
+                    SetOp{.path = Path{path_key("__proto__"), path_key("value")}, .value = Json{3}},
+            });
+    REQUIRE_FALSE(syntax_invalid);
+    CHECK(syntax_invalid.error().message == "unsafe path segment: __proto__");
+    CHECK(target == before);
+
+    // Frozen evidence: fixtures/pi-v1.3.0/audit-1061/review-fixes.json
+    // "a later traversal failure keeps the preceding mutable write".
+    // A syntactically valid leading operation is applied in place; a later
+    // traversal failure does not roll it back.
     const auto partially_valid = apply(target,
             OpBatch{
                     SetOp{.path = keys({"value"}), .value = Json{2}},
-                    DeleteOp{.path = Path{path_key("items"), path_index(3)}},
+                    SetOp{.path = Path{path_key("missing"), path_key("value")}, .value = Json{3}},
             });
     REQUIRE_FALSE(partially_valid);
-    CHECK(target == before);
+    CHECK(partially_valid.error().message.starts_with("unresolvable path"));
+    CHECK(target == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json

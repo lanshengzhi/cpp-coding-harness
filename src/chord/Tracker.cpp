@@ -33,6 +33,7 @@ struct TrackerState {
     std::shared_ptr<const RevisionToken> revision_token{std::make_shared<const RevisionToken>()};
     Json value;
     std::uint64_t revision{0};
+    std::vector<std::weak_ptr<ChangeState>> changes;
 };
 
 struct PreparedState {
@@ -54,6 +55,7 @@ struct ChangeState {
     OpBatch recorded;
     bool structural{false};
     bool settled{false};
+    bool stale{false};
     std::shared_ptr<PreparedState> prepared;
 };
 
@@ -161,7 +163,10 @@ void emit_write(const detail::ChangeState& state, const Path& path, OpBatch& ope
                 break;
             }
         }
-        delete_kept[index] = !covered;
+        // A delete only belongs in a batch when the key existed in the base.
+        // Erasing a key that this draft added is already captured by the final
+        // candidate value and must not leave a redundant DeleteOp.
+        delete_kept[index] = !covered && detail::try_get_path(state.base, deletion->path).has_value();
     }
 
     OpBatch operations;
@@ -183,10 +188,28 @@ void emit_write(const detail::ChangeState& state, const Path& path, OpBatch& ope
 
 } // namespace
 
-support::Expected<Json> Draft::get(const Path& path) const {
+support::Expected<std::optional<Json>> Draft::get(const Path& path) const {
     if (!state_ || state_->settled) return std::unexpected(settled_overlay_error());
     if (auto safe = detail::validate_safe_path(path); !safe) return std::unexpected(std::move(safe.error()));
-    return detail::get_path(state_->candidate, path);
+    if (path.empty()) return std::optional<Json>{state_->candidate};
+
+    const Path parent(path.begin(), path.end() - 1);
+    const auto receiver = detail::try_get_path(state_->candidate, parent);
+    if (!receiver) return std::unexpected(path_error(path));
+    const auto& segment = path.back();
+    if (const auto* key = std::get_if<PathKey>(&segment)) {
+        const auto* object = receiver->as_object();
+        if (object == nullptr) return std::unexpected(path_error(path));
+        const auto found = object->find(key->key);
+        if (found == object->end()) return std::optional<Json>{};
+        return std::optional<Json>{found->second};
+    }
+    const auto* array = receiver->as_array();
+    if (array == nullptr) return std::unexpected(path_error(path));
+    const auto* position = std::get_if<PathIndex>(&segment);
+    if (position == nullptr) return std::unexpected(path_error(path));
+    if (position->index >= array->size()) return std::optional<Json>{};
+    return std::optional<Json>{(*array)[position->index]};
 }
 
 support::ExpectedVoid Draft::set(const Path& path, Json value) {
@@ -305,6 +328,7 @@ Draft Change::draft() const { return Draft(state_); }
 
 support::Expected<Prepared> Change::prepare() {
     if (!state_ || state_->settled) {
+        if (state_ && state_->stale) return std::unexpected(settled_overlay_error());
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "Change has already been settled"));
     }
     OpBatch operations = state_->structural ? recorded_ops(*state_) : collapse_ops(*state_);
@@ -343,6 +367,7 @@ Change Tracker::begin_change() {
     change->base_revision = state_->revision;
     change->base = state_->value;
     change->candidate = state_->value;
+    state_->changes.push_back(change);
     return Change(std::move(change));
 }
 
@@ -388,6 +413,13 @@ support::ExpectedVoid Tracker::adopt(const Prepared& prepared) {
     state_->revision_token = std::make_shared<const detail::RevisionToken>();
     state_->revision += 1;
     candidate.status = detail::PreparedStatus::Consumed;
+    for (auto& weak_change : state_->changes) {
+        if (auto change = weak_change.lock(); change && !change->settled) {
+            change->settled = true;
+            change->stale = true;
+        }
+    }
+    state_->changes.clear();
     return {};
 }
 

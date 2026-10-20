@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -102,9 +103,11 @@ using OpBatch = std::vector<Op>;
 /// not exposed, and `target` is unchanged.
 [[nodiscard]] support::Expected<Json> apply_immutable_batches(const Json& target, const std::vector<OpBatch>& batches);
 
-/// Apply decoded operations to a caller-owned mutable value. The value changes
-/// only when the complete batch succeeds; a root replacement becomes the new
-/// value. Shared input containers must not be aliased by another revision.
+/// Apply decoded operations to a caller-owned mutable value. Syntax validation
+/// rejects the complete batch before target access; once execution starts, each
+/// successful operation remains applied if a later traversal fails. A root
+/// replacement becomes the new value. Shared input containers must not be
+/// aliased by another revision.
 [[nodiscard]] support::ExpectedVoid apply(Json& target, const OpBatch& ops);
 
 /// Longest suffix of `a` that is a prefix of `b`, bounded like pi `overlap`.
@@ -126,7 +129,7 @@ public:
     Draft& operator=(Draft&&) noexcept = default;
     ~Draft() = default;
 
-    [[nodiscard]] support::Expected<Json> get(const Path& path) const;
+    [[nodiscard]] support::Expected<std::optional<Json>> get(const Path& path) const;
     [[nodiscard]] support::ExpectedVoid set(const Path& path, Json value);
     [[nodiscard]] support::ExpectedVoid erase(const Path& path);
     [[nodiscard]] support::ExpectedVoid append_string(const Path& path, std::string text);
