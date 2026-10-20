@@ -1,5 +1,7 @@
 #include <cch/chord/ReplicatedState.hpp>
 
+#include "support/UniqueFd.hpp"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
@@ -185,15 +187,16 @@ void TestAttachment::dispose() noexcept {
 
 /// Captures the process's stderr into a pipe so a default diagnostic can be
 /// compared exactly (the strict-no-exception mapping of pi's async rethrow).
+/// The descriptors are owned by `support::UniqueFd` (CODING_STANDARDS §7.8).
 class StderrCapture {
 public:
     StderrCapture() {
         int fds[2];
         if (::pipe(fds) != 0) return;
-        read_fd_ = fds[0];
-        saved_fd_ = ::dup(STDERR_FILENO);
-        if (saved_fd_ >= 0) (void)::dup2(fds[1], STDERR_FILENO);
-        (void)::close(fds[1]);
+        read_fd_.reset(fds[0]);
+        support::UniqueFd write_end(fds[1]);
+        saved_fd_.reset(::dup(STDERR_FILENO));
+        if (saved_fd_) (void)::dup2(write_end.get(), STDERR_FILENO);
     }
 
     StderrCapture(const StderrCapture&) = delete;
@@ -202,26 +205,24 @@ public:
     ~StderrCapture() { (void)finish(); }
 
     [[nodiscard]] std::string finish() {
-        if (read_fd_ < 0) return {};
+        if (!read_fd_) return {};
         std::fflush(stderr);
-        if (saved_fd_ >= 0) {
-            (void)::dup2(saved_fd_, STDERR_FILENO);
-            (void)::close(saved_fd_);
-            saved_fd_ = -1;
+        if (saved_fd_) {
+            (void)::dup2(saved_fd_.get(), STDERR_FILENO);
+            (void)saved_fd_.close();
         }
         std::string text;
         char buffer[256];
         ssize_t count = 0;
-        while ((count = ::read(read_fd_, buffer, sizeof buffer)) > 0)
+        while ((count = ::read(read_fd_.get(), buffer, sizeof buffer)) > 0)
             text.append(buffer, static_cast<std::size_t>(count));
-        (void)::close(read_fd_);
-        read_fd_ = -1;
+        (void)read_fd_.close();
         return text;
     }
 
 private:
-    int read_fd_{-1};
-    int saved_fd_{-1};
+    support::UniqueFd read_fd_;
+    support::UniqueFd saved_fd_;
 };
 
 void record_delivery(
@@ -793,7 +794,7 @@ TEST_CASE("two subscriptions of the same listener behavior are delivered indepen
     second_subscribe();
 }
 
-// Review edge: libraries/pi-v1.3.0/audit-1062/review-edges.json
+// Review edge: fixtures/pi-v1.3.0/audit-1062/review-edges.json
 // "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once".
 TEST_CASE("a snapshot cursor outside the safe integer range fails attach and disposes the attachment once",
         "[chord][replicated_state][issue1062][review]") {
@@ -899,7 +900,7 @@ TEST_CASE(
         auto attached = AttachedReplicatedState::attach(source,
                 ReplicatedStateSourceOptions{
                         .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
-        REQUIRE(attached.has_value());
+        CHECK(attached.has_value());
         source.commit_at(revision(2), 3);
         diagnostics = capture.finish();
     }
@@ -947,7 +948,7 @@ TEST_CASE("a subscriber destroying its own attached state inside a callback does
         other_received.push_back(number_of(value));
         return ready();
     });
-    REQUIRE(owner.has_value());
+    CHECK(owner.has_value());
 
     source.commit(revision(1));
     CHECK_FALSE(owner.has_value());
@@ -1024,11 +1025,17 @@ TEST_CASE("a retained value reference keeps the revision it was read at",
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
 
-    const Json& retained = attached->value();
-    CHECK(number_of(retained) == 0.0);
+    // The frozen observation: the retained revision is the committed revision
+    // 1, the current revision is 2, the retained value is the old object, and
+    // the current revision is not that object.
     source.commit(revision(1));
-    CHECK(number_of(retained) == 0.0);
-    CHECK(number_of(attached->value()) == 1.0);
+    const Json retained = attached->value();
+    source.commit(revision(2));
+    const Json current = attached->value();
+
+    CHECK(number_of(retained) == 1.0);
+    CHECK(number_of(current) == 2.0);
+    CHECK_FALSE(retained.shares_container_with(current));
     CHECK((std::is_same_v<decltype(attached->value()), Json>));
 }
 

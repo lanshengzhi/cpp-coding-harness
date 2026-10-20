@@ -87,7 +87,9 @@ struct ReplicatedStateSourceOptions {
 };
 
 /// Receives every committed source frame in commit order (pi attachment
-/// `activate` listener).
+/// `activate` listener). It runs in the same single caller-chosen serialized
+/// domain as the sink, the error hook, and every state operation (see
+/// `ReplicatedStateSink`).
 using ReplicatedStateFrameSink = std::move_only_function<void(const ReplicatedStateSourceFrame&)>;
 
 /// The atomic attachment to one authoritative revision source (pi
@@ -107,7 +109,9 @@ public:
     /// in source commit order. Single-use: an attachment that is already
     /// active or disposed is an invariant violation. The callback may dispose
     /// this attachment synchronously; the drain then stops and later buffered
-    /// frames are not delivered.
+    /// frames are not delivered. Activation and every frame it delivers run in
+    /// the same single caller-chosen serialized domain as the sink, the error
+    /// hook, and every state operation (see `ReplicatedStateSink`).
     virtual void activate(ReplicatedStateFrameSink listener) = 0;
 
     /// Stop delivery and release source resources. Idempotent, and may be
