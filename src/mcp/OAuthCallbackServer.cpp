@@ -1,5 +1,7 @@
-#include "OAuthCallbackServer.hpp"
-#include "coding_agent/mcp/Pkce.hpp"
+#include <cch/mcp/OAuthCallbackServer.hpp>
+
+#include "support/AsyncResultBridge.hpp"
+#include <cch/mcp/Pkce.hpp>
 
 #include "support/ExpectedMacros.hpp"
 
@@ -28,7 +30,7 @@
 #include <utility>
 #include <vector>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
 
 using OAuthExecutor = boost::asio::io_context::executor_type;
@@ -266,15 +268,19 @@ std::uint16_t OAuthCallbackServer::bound_port() const {
     return endpoint.port();
 }
 
-boost::asio::awaitable<support::Expected<OAuthCallbackResult>> OAuthCallbackServer::wait_for_code() {
-    WaitResult result{OAuthCallbackResult{}};
-    boost::system::error_code receive_error;
-    result = co_await impl_->wait_channel.async_receive(
-            boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
-    if (receive_error) {
-        co_return OAuthCallbackResult{};
-    }
-    co_return result;
+support::AsyncResult<OAuthCallbackResult> OAuthCallbackServer::wait_for_code() {
+    auto impl = impl_;
+    return support::detail::make_async_result(
+            [impl]() -> boost::asio::awaitable<support::Expected<OAuthCallbackResult>> {
+                WaitResult result{OAuthCallbackResult{}};
+                boost::system::error_code receive_error;
+                result = co_await impl->wait_channel.async_receive(
+                        boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+                if (receive_error) {
+                    co_return OAuthCallbackResult{};
+                }
+                co_return result;
+            });
 }
 
 void OAuthCallbackServer::cancel_wait() {
@@ -300,7 +306,9 @@ void OAuthCallbackServer::close() {
     });
 }
 
-boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>> OAuthCallbackServer::start(
+namespace {
+
+boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>> start_callback_server(
         OAuthCallbackServerOptions options) {
     namespace asio = boost::asio;
     namespace beast = boost::beast;
@@ -308,7 +316,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>> 
     using tcp = asio::ip::tcp;
 
     const auto executor = oauth_executor(co_await asio::this_coro::executor);
-    auto impl = std::make_shared<Impl>(executor, std::move(options));
+    auto impl = std::make_shared<OAuthCallbackServer::Impl>(executor, std::move(options));
 
     boost::system::error_code error;
     OAuthResolver resolver(executor);
@@ -380,7 +388,8 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>> 
                                     } else {
                                         impl->claimed = true;
                                         if (impl->options.callback_handler) {
-                                            auto callback_result = co_await impl->options.callback_handler(target.code);
+                                            auto callback_result = co_await support::detail::await_async_result(
+                                                    impl->options.callback_handler(target.code));
                                             if (callback_result) {
                                                 response = html_response(
                                                         200, oauth_success_html(impl->options.success_message));
@@ -437,4 +446,15 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>> 
     co_return std::make_shared<OAuthCallbackServer>(impl);
 }
 
-} // namespace cch::coding_agent::mcp
+} // namespace
+
+support::AsyncResult<std::shared_ptr<OAuthCallbackServer>> OAuthCallbackServer::start(
+        OAuthCallbackServerOptions options) {
+    return support::detail::make_async_result(
+            [options = std::move(options)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::shared_ptr<OAuthCallbackServer>>> {
+                co_return co_await start_callback_server(std::move(options));
+            });
+}
+
+} // namespace cch::mcp

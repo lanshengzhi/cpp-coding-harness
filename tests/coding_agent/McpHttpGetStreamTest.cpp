@@ -10,6 +10,7 @@
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "support/StreamTransport.hpp"
 
+#include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 #include "support/ReleaseGate.hpp"
 
@@ -263,6 +264,24 @@ public:
     ~Loop() {
         work_.reset();
         io_.stop();
+    }
+
+    template <typename T, typename E> [[nodiscard]] std::expected<T, E> run(support::AsyncResult<T, E> operation) {
+        std::optional<std::expected<T, E>> result;
+        bool done = false;
+        boost::asio::co_spawn(
+                io_,
+                [&result, &done, operation = std::move(operation)]() mutable -> boost::asio::awaitable<void> {
+                    result.emplace(co_await support::detail::await_async_result(std::move(operation)));
+                    done = true;
+                },
+                boost::asio::detached);
+        while (!done) {
+            io_.restart();
+            io_.poll_one();
+            std::this_thread::sleep_for(1ms);
+        }
+        return std::move(*result);
     }
 
     template <typename T> [[nodiscard]] T run(boost::asio::awaitable<T> operation) {
@@ -576,16 +595,20 @@ TEST_CASE("MCP GET stream: notifications/cancelled aborts the in-flight handler"
     Loop loop;
     auto client = connect_client(loop, transport);
     client->set_request_handler("test/wait",
-            [](const support::JsonValue&,
-                    std::stop_token stop) -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
-                auto executor = co_await boost::asio::this_coro::executor;
-                boost::asio::steady_timer timer(executor);
-                while (!stop.stop_requested()) {
-                    timer.expires_after(1ms);
-                    boost::system::error_code error;
-                    co_await timer.async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, error));
-                }
-                co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "MCP request aborted"));
+            [](const support::JsonValue&, std::stop_token stop) -> support::AsyncResult<support::JsonValue> {
+                return support::detail::make_async_result(
+                        [stop]() -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+                            auto executor = co_await boost::asio::this_coro::executor;
+                            boost::asio::steady_timer timer(executor);
+                            while (!stop.stop_requested()) {
+                                timer.expires_after(1ms);
+                                boost::system::error_code error;
+                                co_await timer.async_wait(
+                                        boost::asio::redirect_error(boost::asio::use_awaitable, error));
+                            }
+                            co_return std::unexpected(
+                                    support::make_error(support::ErrorCode::Cancelled, "MCP request aborted"));
+                        });
             });
 
     REQUIRE(loop.pump_until([&] { return transport->posted_response(9).has_value(); }, 3s));

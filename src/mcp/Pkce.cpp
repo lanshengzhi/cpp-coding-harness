@@ -1,4 +1,4 @@
-#include "Pkce.hpp"
+#include <cch/mcp/Pkce.hpp>
 
 #include "support/Json.hpp"
 
@@ -14,7 +14,7 @@
 #include <string_view>
 #include <utility>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
 
 [[nodiscard]] support::Expected<std::string> random_bytes(std::size_t count) {
@@ -324,4 +324,4 @@ support::Expected<std::string> extract_account_id(std::string_view access_token)
     }
 }
 
-} // namespace cch::coding_agent::mcp
+} // namespace cch::mcp

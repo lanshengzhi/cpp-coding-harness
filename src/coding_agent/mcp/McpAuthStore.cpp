@@ -1,7 +1,7 @@
 // pi's MCP OAuth credential store (`mcp-auth.json`), spec #882 ticket #884.
 // pi source at `7c10bd43` (v1.0.4): `packages/coding-agent/src/extensions/mcp/
 // oauth.ts` (`McpOAuthCredentialStore`, `storeKeys`) and
-// `packages/mcp/src/oauth/provider.ts` (`McpOAuthState`). The file is
+// `packages/mcp/src/oauth/provider.ts` (`OAuthState`). The file is
 // `JSON.stringify(states, null, 2)` with a trailing newline. The legacy
 // bare-URL key is taken over on the first load; the `#875` `auth.json`
 // `mcp__<server>` record is migrated in. Private to `cch_coding_agent`.
@@ -124,12 +124,12 @@ using JsonObject = support::JsonValue::object_t;
     return std::string_view{found->second.get_string()};
 }
 
-[[nodiscard]] std::optional<McpOAuthTokens> tokens_from(const JsonObject& object) {
+[[nodiscard]] std::optional<OAuthTokens> tokens_from(const JsonObject& object) {
     const auto access = string_member(object, "access_token");
     if (!access) {
         return std::nullopt;
     }
-    McpOAuthTokens tokens;
+    OAuthTokens tokens;
     tokens.access_token = std::string{*access};
     tokens.token_type = std::string{string_member(object, "token_type").value_or("Bearer")};
     if (const auto refresh = string_member(object, "refresh_token"); refresh && !refresh->empty()) {
@@ -142,12 +142,12 @@ using JsonObject = support::JsonValue::object_t;
 }
 
 /// One stored state read from JSON. `nullopt` when the value is not an object.
-[[nodiscard]] std::optional<McpOAuthState> state_from(const support::JsonValue& value) {
+[[nodiscard]] std::optional<OAuthState> state_from(const support::JsonValue& value) {
     const auto* object = value.get_if<JsonObject>();
     if (object == nullptr) {
         return std::nullopt;
     }
-    McpOAuthState state;
+    OAuthState state;
     state.server_url = std::string{string_member(*object, "serverUrl").value_or("")};
     if (const auto tokens = object->find("tokens");
             tokens != object->end() && tokens->second.get_if<JsonObject>() != nullptr) {
@@ -157,7 +157,7 @@ using JsonObject = support::JsonValue::object_t;
             client != object->end() && client->second.get_if<JsonObject>() != nullptr) {
         const auto& client_object = *client->second.get_if<JsonObject>();
         if (const auto id = string_member(client_object, "client_id")) {
-            McpOAuthClientInformation information;
+            OAuthClientInformation information;
             information.client_id = std::string{*id};
             if (const auto secret = string_member(client_object, "client_secret"); secret && !secret->empty()) {
                 information.client_secret = std::string{*secret};
@@ -186,7 +186,7 @@ using JsonObject = support::JsonValue::object_t;
     return state;
 }
 
-[[nodiscard]] support::JsonValue state_to_json(const McpOAuthState& state) {
+[[nodiscard]] support::JsonValue state_to_json(const OAuthState& state) {
     JsonObject object;
     object.emplace("serverUrl", support::JsonValue{state.server_url});
     if (state.client_information) {
@@ -241,7 +241,7 @@ std::string McpAuthStore::store_key(std::string_view name, std::string_view serv
 
 McpAuthStore::McpAuthStore(std::filesystem::path file) : file_(std::move(file)) {}
 
-support::Expected<std::optional<McpOAuthState>> McpAuthStore::load(std::string_view name, std::string_view server_url) {
+support::Expected<std::optional<OAuthState>> McpAuthStore::load(std::string_view name, std::string_view server_url) {
     auto states = read_states(file_);
     if (!states) {
         return std::unexpected(std::move(states.error()));
@@ -264,11 +264,10 @@ support::Expected<std::optional<McpOAuthState>> McpAuthStore::load(std::string_v
         }
         return state;
     }
-    return std::optional<McpOAuthState>{};
+    return std::optional<OAuthState>{};
 }
 
-support::ExpectedVoid McpAuthStore::save(
-        std::string_view name, std::string_view server_url, const McpOAuthState& state) {
+support::ExpectedVoid McpAuthStore::save(std::string_view name, std::string_view server_url, const OAuthState& state) {
     auto states = read_states(file_);
     if (!states) {
         return std::unexpected(std::move(states.error()));
@@ -277,14 +276,13 @@ support::ExpectedVoid McpAuthStore::save(
     return write_states(file_, *states);
 }
 
-support::Expected<std::optional<McpOAuthTokens>> McpAuthStore::tokens(
-        std::string_view name, std::string_view server_url) {
+support::Expected<std::optional<OAuthTokens>> McpAuthStore::tokens(std::string_view name, std::string_view server_url) {
     auto states = read_states(file_);
     if (!states) {
         return std::unexpected(std::move(states.error()));
     }
     // The namespaced key wins; the legacy key is read but not taken over.
-    const auto lookup = [&states](const std::string& candidate) -> std::optional<McpOAuthTokens> {
+    const auto lookup = [&states](const std::string& candidate) -> std::optional<OAuthTokens> {
         const auto found = states->find(candidate);
         if (found == states->end()) {
             return std::nullopt;
@@ -305,7 +303,7 @@ support::Expected<std::optional<McpOAuthTokens>> McpAuthStore::tokens(
     if (auto found = lookup(std::string{server_url})) {
         return found;
     }
-    return std::optional<McpOAuthTokens>{};
+    return std::optional<OAuthTokens>{};
 }
 
 support::Expected<bool> McpAuthStore::remove(std::string_view name, std::string_view server_url) {
@@ -352,9 +350,9 @@ support::Expected<bool> McpAuthStore::migrate_from_auth_json(
     if (!access || access->empty()) {
         return false;
     }
-    McpOAuthState state;
+    OAuthState state;
     state.server_url = std::string{server_url};
-    McpOAuthTokens tokens;
+    OAuthTokens tokens;
     tokens.access_token = std::string{*access};
     tokens.token_type = "Bearer";
     if (const auto refresh = string_member(*record, "refresh"); refresh && !refresh->empty()) {

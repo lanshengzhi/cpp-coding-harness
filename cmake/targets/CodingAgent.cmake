@@ -24,21 +24,12 @@ cch_parity_declare_target(
         src/coding_agent/mcp/McpConfigFile.cpp
         src/coding_agent/mcp/McpConfigWrite.cpp
         src/coding_agent/mcp/McpExtensionToolSource.cpp
-        src/coding_agent/mcp/McpHttpClient.cpp
         src/coding_agent/mcp/McpHttpServerConfig.cpp
-        src/coding_agent/mcp/McpOAuthDiscovery.cpp
-        src/coding_agent/mcp/McpOAuthFlow.cpp
-        src/coding_agent/mcp/McpOAuthProvider.cpp
-        src/coding_agent/mcp/McpOAuthServerConfig.cpp
+        src/coding_agent/mcp/McpOAuthLogin.cpp
         src/coding_agent/mcp/McpOAuthSignIn.cpp
         src/coding_agent/mcp/McpOAuthTokenResolver.cpp
         src/coding_agent/mcp/McpResourceTools.cpp
         src/coding_agent/mcp/McpServersSection.cpp
-        src/coding_agent/mcp/McpStdioClient.cpp
-        src/coding_agent/mcp/McpUrl.cpp
-        src/coding_agent/mcp/OAuthCallbackServer.cpp
-        src/coding_agent/mcp/OAuthHttpClient.cpp
-        src/coding_agent/mcp/Pkce.cpp
         src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp
         src/coding_agent/extensions/codemode/CodemodeTool.cpp
         src/coding_agent/extensions/codemode/CodemodeToolSource.cpp
@@ -74,6 +65,7 @@ cch_parity_declare_target(
         cch_agent_core
         cch_ai
         cch_codemode
+        cch_mcp
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
@@ -84,6 +76,7 @@ cch_parity_declare_target(
         cch_agent_core
         cch_ai
         cch_codemode
+        cch_mcp
         cch_support
 )
 cch_owner_include_roots(cch_coding_agent src/coding_agent/include)

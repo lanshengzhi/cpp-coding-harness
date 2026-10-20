@@ -196,6 +196,12 @@ private:
     bool closed_{false};
 };
 
+/// Run a ready-or-pending Owner operation through the fixture Runtime.
+template <typename T, typename E>
+[[nodiscard]] std::expected<T, E> run_awaitable(RuntimeFixture& runtime, support::AsyncResult<T, E> operation) {
+    return runtime.run(std::move(operation));
+}
+
 template <typename T> [[nodiscard]] T run_awaitable(RuntimeFixture& runtime, boost::asio::awaitable<T> awaitable) {
     return runtime.run(support::detail::make_async_result(
             [awaitable = std::move(awaitable)]() mutable -> boost::asio::awaitable<T> {

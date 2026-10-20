@@ -9,15 +9,17 @@
 // outbound client transport (`support::StreamTransport`, ADR 0054); this
 // file owns only the MCP protocol and opens no second HTTP stack.
 //
-// The transport is private to cch_coding_agent and is reached only through
-// `McpExtensionToolSource`; nothing here is an Owner Interface.
+// The wire machinery is private to cch_mcp; callers use the
+// <cch/mcp/HttpClient.hpp> interface.
 
-#include "coding_agent/mcp/McpHttpClient.hpp"
+#include "HttpClientImpl.hpp"
 
-#include "coding_agent/mcp/McpOAuthProvider.hpp"
-#include "coding_agent/mcp/McpProtocol.hpp"
+#include <cch/mcp/Auth.hpp>
 
-#include "coding_agent/mcp/McpAuth.hpp"
+#include "support/AsyncResultBridge.hpp"
+#include "support/BoostBeastStreamTransport.hpp"
+
+#include <filesystem>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -46,7 +48,7 @@
 #include <utility>
 #include <vector>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
 
 using detail::transport_error;
@@ -328,25 +330,23 @@ private:
 
 } // namespace
 
-McpHttpClient::McpHttpClient(ConstructionKey,
-        boost::asio::any_io_executor executor,
-        McpHttpServerConfig config,
+HttpClientImpl::HttpClientImpl(boost::asio::any_io_executor executor,
+        HttpServerConfig config,
         std::shared_ptr<support::StreamTransport> transport,
-        std::shared_ptr<McpRequestAuthSource> request_auth,
-        McpHttpGetStreamOptions get_stream_options)
+        std::shared_ptr<RequestAuthSource> request_auth,
+        HttpGetStreamOptions get_stream_options)
     : executor_(std::move(executor)), config_(std::move(config)), transport_(std::move(transport)),
       request_auth_(std::move(request_auth)), get_stream_options_(std::move(get_stream_options)) {
     // pi `client.ts` installs `ping` by default; every other server request is
     // answered `-32601` until a handler is registered.
-    request_handlers_["ping"] =
-            [](const support::JsonValue&,
-                    std::stop_token) -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
-        co_return support::JsonValue{support::JsonValue::object_t{}};
+    request_handlers_["ping"] = [](const support::JsonValue&,
+                                        std::stop_token) -> support::AsyncResult<support::JsonValue> {
+        return support::AsyncResult<support::JsonValue>{
+                support::Expected<support::JsonValue>{support::JsonValue{support::JsonValue::object_t{}}}};
     };
     // pi `roots/list`: answer server-to-client roots requests with file://<cwd> root.
-    request_handlers_["roots/list"] =
-            [](const support::JsonValue&,
-                    std::stop_token) -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+    request_handlers_["roots/list"] = [](const support::JsonValue&,
+                                              std::stop_token) -> support::AsyncResult<support::JsonValue> {
         const auto cwd = std::filesystem::current_path();
         const std::string uri = "file://" + cwd.string();
         const std::string name = cwd.filename().string();
@@ -357,16 +357,17 @@ McpHttpClient::McpHttpClient(ConstructionKey,
         support::JsonValue::object_t result{
                 {"roots", support::JsonValue{support::JsonValue::array_t{support::JsonValue{std::move(root_item)}}}},
         };
-        co_return support::JsonValue{std::move(result)};
+        return support::AsyncResult<support::JsonValue>{
+                support::Expected<support::JsonValue>{support::JsonValue{std::move(result)}}};
     };
 }
 
-boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHttpClient::connect(
-        McpHttpServerConfig config,
+boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpClientImpl::connect_impl(
+        HttpServerConfig config,
         std::shared_ptr<support::StreamTransport> transport,
-        std::shared_ptr<McpRequestAuthSource> request_auth,
-        McpHttpGetStreamOptions get_stream_options) {
-    if (auto valid = validate_mcp_http_server_config(config); !valid) {
+        std::shared_ptr<RequestAuthSource> request_auth,
+        HttpGetStreamOptions get_stream_options) {
+    if (auto valid = validate_http_server_config(config); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
     if (transport == nullptr) {
@@ -375,8 +376,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
     }
     auto executor = co_await boost::asio::this_coro::executor;
     const std::string server_name = config.name;
-    auto client = std::make_shared<McpHttpClient>(ConstructionKey{},
-            std::move(executor),
+    auto client = std::make_shared<HttpClientImpl>(std::move(executor),
             std::move(config),
             std::move(transport),
             std::move(request_auth),
@@ -435,7 +435,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpHttpClient>>> McpHtt
     co_return client;
 }
 
-support::AsyncResult<support::JsonValue> McpHttpClient::request(
+support::AsyncResult<support::JsonValue> HttpClientImpl::request(
         std::string method, std::optional<support::JsonValue> params, RequestOptions options) {
     const std::stop_token stop_token = options.stop_token;
     return support::AsyncResult<support::JsonValue>{support::AsyncProducer<support::JsonValue, support::Error>{
@@ -464,11 +464,11 @@ support::AsyncResult<support::JsonValue> McpHttpClient::request(
             }}};
 }
 
-void McpHttpClient::notify(std::string method, std::optional<support::JsonValue> params) {
+void HttpClientImpl::notify(std::string method, std::optional<support::JsonValue> params) {
     enqueue_frame(detail::build_notification_body(method, params), 0, std::nullopt);
 }
 
-void McpHttpClient::enqueue_frame(std::string frame,
+void HttpClientImpl::enqueue_frame(std::string frame,
         int id,
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
         std::stop_token stop_token,
@@ -494,7 +494,7 @@ void McpHttpClient::enqueue_frame(std::string frame,
     }
 }
 
-boost::asio::awaitable<void> McpHttpClient::pump() {
+boost::asio::awaitable<void> HttpClientImpl::pump() {
     while (!queue_.empty()) {
         auto item = std::move(queue_.front());
         queue_.pop_front();
@@ -512,13 +512,13 @@ boost::asio::awaitable<void> McpHttpClient::pump() {
     pumping_ = false;
 }
 
-void McpHttpClient::complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome) {
+void HttpClientImpl::complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome) {
     if (frame.completion.has_value()) {
         (*frame.completion)(std::move(outcome));
     }
 }
 
-boost::asio::awaitable<support::Expected<support::StreamResponse>> McpHttpClient::post(
+boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImpl::post(
         std::string_view body, std::stop_token stop_token, support::BodyChunkHandler on_body_chunk) {
     CCH_TRY(headers, co_await request_headers_for_call());
     support::StreamRequest request;
@@ -539,7 +539,7 @@ boost::asio::awaitable<support::Expected<support::StreamResponse>> McpHttpClient
     co_return co_await transport_->async_stream(request, std::move(on_body_chunk));
 }
 
-boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::send_request(
+boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::send_request(
         std::string_view frame, int id, std::stop_token stop_token, bool cancellable, ProgressCallback on_progress) {
     // A request without a progress observer keeps the plain buffered POST:
     // the transport's deadline covers connection and headers, and the body
@@ -693,7 +693,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpHttpClient::sen
     co_return interpret_response(id, *response);
 }
 
-boost::asio::awaitable<std::optional<support::Error>> McpHttpClient::send_notification(std::string_view frame) {
+boost::asio::awaitable<std::optional<support::Error>> HttpClientImpl::send_notification(std::string_view frame) {
     auto response = co_await post(frame, {});
     if (!response) {
         co_return std::move(response.error());
@@ -706,7 +706,7 @@ boost::asio::awaitable<std::optional<support::Error>> McpHttpClient::send_notifi
     co_return std::nullopt;
 }
 
-boost::asio::awaitable<void> McpHttpClient::notify_cancelled(int id, std::string reason) {
+boost::asio::awaitable<void> HttpClientImpl::notify_cancelled(int id, std::string reason) {
     support::JsonValue params{support::JsonValue::object_t{
             {"requestId", static_cast<double>(id)},
             {"reason", std::move(reason)},
@@ -717,7 +717,7 @@ boost::asio::awaitable<void> McpHttpClient::notify_cancelled(int id, std::string
     (void)co_await send_notification(detail::build_notification_body("notifications/cancelled", params));
 }
 
-std::map<std::string, std::string> McpHttpClient::request_headers() const {
+std::map<std::string, std::string> HttpClientImpl::request_headers() const {
     std::map<std::string, std::string> headers = config_.headers;
     headers["content-type"] = "application/json";
     headers["accept"] = "application/json, text/event-stream";
@@ -730,7 +730,7 @@ std::map<std::string, std::string> McpHttpClient::request_headers() const {
     return headers;
 }
 
-boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> McpHttpClient::resolve_headers(
+boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> HttpClientImpl::resolve_headers(
         std::map<std::string, std::string> headers) {
     if (request_auth_ == nullptr) {
         co_return headers;
@@ -749,21 +749,21 @@ boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> Mc
 }
 
 boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
-McpHttpClient::request_headers_for_call() {
+HttpClientImpl::request_headers_for_call() {
     co_return co_await resolve_headers(request_headers());
 }
 
-void McpHttpClient::set_notification_listener(NotificationListener listener) {
+void HttpClientImpl::set_notification_listener(NotificationListener listener) {
     notification_listener_ = std::move(listener);
 }
 
-void McpHttpClient::set_error_listener(ErrorListener listener) { error_listener_ = std::move(listener); }
+void HttpClientImpl::set_error_listener(ErrorListener listener) { error_listener_ = std::move(listener); }
 
-void McpHttpClient::set_request_handler(std::string method, ServerRequestHandler handler) {
+void HttpClientImpl::set_request_handler(std::string method, ServerRequestHandler handler) {
     request_handlers_.insert_or_assign(std::move(method), std::move(handler));
 }
 
-void McpHttpClient::post_message(support::JsonValue message) {
+void HttpClientImpl::post_message(support::JsonValue message) {
     auto serialized = support::write_json(message);
     if (!serialized) {
         return;
@@ -774,7 +774,7 @@ void McpHttpClient::post_message(support::JsonValue message) {
     enqueue_frame(std::move(*serialized), 0, std::nullopt);
 }
 
-boost::asio::awaitable<void> McpHttpClient::serve_server_request(
+boost::asio::awaitable<void> HttpClientImpl::serve_server_request(
         support::JsonValue id, std::string method, support::JsonValue params) {
     const auto handler = request_handlers_.find(method);
     if (handler == request_handlers_.end()) {
@@ -794,7 +794,8 @@ boost::asio::awaitable<void> McpHttpClient::serve_server_request(
     const std::string key = detail::json_or_empty(id);
     std::stop_source source;
     incoming_handlers_.insert_or_assign(key, source);
-    support::Expected<support::JsonValue> outcome = co_await serve(params, source.get_token());
+    support::Expected<support::JsonValue> outcome =
+            co_await support::detail::await_async_result(serve(params, source.get_token()));
     incoming_handlers_.erase(key);
     if (outcome) {
         post_message(support::JsonValue{support::JsonValue::object_t{
@@ -816,7 +817,7 @@ boost::asio::awaitable<void> McpHttpClient::serve_server_request(
     }});
 }
 
-void McpHttpClient::handle_stream_message(const support::JsonValue& message) {
+void HttpClientImpl::handle_stream_message(const support::JsonValue& message) {
     const auto* object = message.get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
         return;
@@ -876,7 +877,7 @@ void McpHttpClient::handle_stream_message(const support::JsonValue& message) {
     }
 }
 
-boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> McpHttpClient::get_stream_headers(
+boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> HttpClientImpl::get_stream_headers(
         const std::optional<std::string>& last_event_id) {
     std::map<std::string, std::string> headers = config_.headers;
     if (!session_id_.empty()) {
@@ -893,7 +894,7 @@ boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> Mc
     co_return co_await resolve_headers(std::move(headers));
 }
 
-boost::asio::awaitable<std::pair<McpHttpClient::GetStreamAttempt, support::Error>> McpHttpClient::consume_get_stream(
+boost::asio::awaitable<std::pair<HttpClientImpl::GetStreamAttempt, support::Error>> HttpClientImpl::consume_get_stream(
         GetStreamCursor& cursor) {
     auto headers = co_await get_stream_headers(cursor.last_event_id);
     if (!headers) {
@@ -963,7 +964,8 @@ boost::asio::awaitable<std::pair<McpHttpClient::GetStreamAttempt, support::Error
     co_return std::pair{GetStreamAttempt::Ended, support::Error{}};
 }
 
-std::chrono::milliseconds McpHttpClient::reconnect_delay(int attempt, const std::optional<int>& server_delay_ms) const {
+std::chrono::milliseconds HttpClientImpl::reconnect_delay(
+        int attempt, const std::optional<int>& server_delay_ms) const {
     if (server_delay_ms.has_value()) {
         return std::chrono::milliseconds{*server_delay_ms};
     }
@@ -973,7 +975,7 @@ std::chrono::milliseconds McpHttpClient::reconnect_delay(int attempt, const std:
     return backoff < get_stream_options_.max_delay ? backoff : get_stream_options_.max_delay;
 }
 
-boost::asio::awaitable<bool> McpHttpClient::reconnect_wait(std::chrono::milliseconds delay) {
+boost::asio::awaitable<bool> HttpClientImpl::reconnect_wait(std::chrono::milliseconds delay) {
     if (stream_stop_.stop_requested()) {
         co_return false;
     }
@@ -986,7 +988,7 @@ boost::asio::awaitable<bool> McpHttpClient::reconnect_wait(std::chrono::millisec
     co_return !stream_stop_.stop_requested();
 }
 
-boost::asio::awaitable<void> McpHttpClient::run_get_stream() {
+boost::asio::awaitable<void> HttpClientImpl::run_get_stream() {
     GetStreamCursor cursor;
     for (int attempt = 0; !closed_;) {
         const auto opened_at = std::chrono::steady_clock::now();
@@ -1028,7 +1030,7 @@ boost::asio::awaitable<void> McpHttpClient::run_get_stream() {
     }
 }
 
-void McpHttpClient::start_get_stream() {
+void HttpClientImpl::start_get_stream() {
     if (!get_stream_options_.enabled || closed_) {
         return;
     }
@@ -1038,7 +1040,7 @@ void McpHttpClient::start_get_stream() {
             boost::asio::detached);
 }
 
-boost::asio::awaitable<void> McpHttpClient::delete_session() {
+boost::asio::awaitable<void> HttpClientImpl::delete_session() {
     std::map<std::string, std::string> headers = config_.headers;
     if (!session_id_.empty()) {
         headers["mcp-session-id"] = session_id_;
@@ -1060,7 +1062,7 @@ boost::asio::awaitable<void> McpHttpClient::delete_session() {
     (void)co_await transport_->async_stream(request, {});
 }
 
-void McpHttpClient::close() noexcept {
+void HttpClientImpl::close() noexcept {
     if (closed_) {
         return;
     }
@@ -1074,13 +1076,13 @@ void McpHttpClient::close() noexcept {
     }
 }
 
-void McpHttpClient::capture_session(const support::StreamResponse& response) {
+void HttpClientImpl::capture_session(const support::StreamResponse& response) {
     if (std::string session = header_value(response.head.headers, "mcp-session-id"); !session.empty()) {
         session_id_ = std::move(session);
     }
 }
 
-support::Expected<support::JsonValue> McpHttpClient::interpret_response(
+support::Expected<support::JsonValue> HttpClientImpl::interpret_response(
         int id, const support::StreamResponse& response) const {
     const int status = response.head.status_code;
     if (status < 200 || status >= 300) {
@@ -1114,4 +1116,28 @@ support::Expected<support::JsonValue> McpHttpClient::interpret_response(
             config_.name, "sent an unsupported response content type", type.empty() ? "missing content-type" : type));
 }
 
-} // namespace cch::coding_agent::mcp
+support::AsyncResult<std::shared_ptr<HttpClient>> HttpClient::connect(HttpServerConfig config,
+        std::shared_ptr<support::StreamTransport> transport,
+        std::shared_ptr<RequestAuthSource> request_auth,
+        HttpGetStreamOptions get_stream_options) {
+    return support::detail::make_async_result(
+            [config = std::move(config),
+                    transport = std::move(transport),
+                    request_auth = std::move(request_auth),
+                    get_stream_options = std::move(get_stream_options)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClient>>> {
+                if (transport == nullptr) {
+                    transport = std::make_shared<support::BoostBeastStreamTransport>();
+                }
+                auto connected = co_await HttpClientImpl::connect_impl(std::move(config),
+                        std::move(transport),
+                        std::move(request_auth),
+                        std::move(get_stream_options));
+                if (!connected) {
+                    co_return std::unexpected(std::move(connected.error()));
+                }
+                co_return std::shared_ptr<HttpClient>{std::move(*connected)};
+            });
+}
+
+} // namespace cch::mcp

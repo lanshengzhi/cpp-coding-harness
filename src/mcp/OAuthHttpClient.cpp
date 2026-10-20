@@ -1,4 +1,6 @@
-#include "coding_agent/mcp/OAuthHttpClient.hpp"
+#include "OAuthHttpClientImpl.hpp"
+
+#include "support/AsyncResultBridge.hpp"
 
 #include "support/CancellationBridge.hpp"
 #include "support/TransportExecutor.hpp"
@@ -28,7 +30,7 @@
 #include <string_view>
 #include <utility>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
 
 [[nodiscard]] support::Error network_error(std::string message, boost::system::error_code ec) {
@@ -141,18 +143,30 @@ namespace {
 
 } // namespace
 
-boost::asio::awaitable<support::Expected<OAuthHttpResponse>> BoostBeastOAuthHttpClient::post(std::string url,
+support::AsyncResult<OAuthHttpResponse> BoostBeastOAuthHttpClient::post(std::string url,
         std::map<std::string, std::string, std::less<>> headers,
         std::string body,
         std::stop_token stop_token) {
-    co_return co_await perform_https_request(
-            boost::beast::http::verb::post, std::move(url), std::move(headers), std::move(body), stop_token);
+    return support::detail::make_async_result(
+            [url = std::move(url), headers = std::move(headers), body = std::move(body), stop_token]() mutable
+                    -> boost::asio::awaitable<support::Expected<OAuthHttpResponse>> {
+                co_return co_await perform_https_request(boost::beast::http::verb::post,
+                        std::move(url),
+                        std::move(headers),
+                        std::move(body),
+                        stop_token);
+            });
 }
 
-boost::asio::awaitable<support::Expected<OAuthHttpResponse>> BoostBeastOAuthHttpClient::get(
+support::AsyncResult<OAuthHttpResponse> BoostBeastOAuthHttpClient::get(
         std::string url, std::map<std::string, std::string, std::less<>> headers, std::stop_token stop_token) {
-    co_return co_await perform_https_request(
-            boost::beast::http::verb::get, std::move(url), std::move(headers), std::string{}, stop_token);
+    return support::detail::make_async_result([url = std::move(url), headers = std::move(headers), stop_token]() mutable
+                                                      -> boost::asio::awaitable<support::Expected<OAuthHttpResponse>> {
+        co_return co_await perform_https_request(
+                boost::beast::http::verb::get, std::move(url), std::move(headers), std::string{}, stop_token);
+    });
 }
 
-} // namespace cch::coding_agent::mcp
+std::shared_ptr<OAuthHttpClient> default_oauth_http_client() { return std::make_shared<BoostBeastOAuthHttpClient>(); }
+
+} // namespace cch::mcp

@@ -314,8 +314,8 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                     const mcp::McpHttpServerConfig config = *http;
                     source = [config, request_auth]()
                             -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                        auto client = co_await mcp::McpHttpClient::connect(
-                                config, std::make_shared<support::BoostBeastStreamTransport>(), request_auth);
+                        auto client = co_await support::detail::await_async_result(mcp::McpHttpClient::connect(
+                                config, std::make_shared<support::BoostBeastStreamTransport>(), request_auth));
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
                         }
@@ -327,7 +327,8 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                 } else {
                     const mcp::McpStdioServerConfig config = std::get<mcp::McpStdioServerConfig>(entry.config);
                     source = [config]() -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                        auto client = co_await mcp::McpStdioClient::connect(config);
+                        auto client =
+                                co_await support::detail::await_async_result(mcp::McpStdioClient::connect(config));
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
                         }
