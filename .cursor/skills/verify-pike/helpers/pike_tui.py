@@ -892,7 +892,8 @@ def cmd_kill(a):
             pid = st.get(pidkey)
             if not pid:
                 continue
-            fd, reason = open_verified(pid, st.get(pidkey + "_starttime"))
+            fd, reason = open_verified(
+                pid, st.get(pidkey.removesuffix("_pid") + "_starttime"))
             if fd is not None:
                 handles[pidkey] = fd
             elif reason == "unidentified" and unverified is None:
