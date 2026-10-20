@@ -168,7 +168,7 @@ public:
 private:
     struct Impl;
 
-    explicit AttachedReplicatedState(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
+    explicit AttachedReplicatedState(std::unique_ptr<Impl> impl) noexcept;
 
     std::unique_ptr<Impl> impl_;
 };

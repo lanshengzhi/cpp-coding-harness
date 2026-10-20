@@ -67,18 +67,21 @@ public:
             StateDelivery frame = std::move(pending_.front());
             pending_.pop_front();
             started_ = true;
-            // Distinguishes an inline settlement (the synchronous listener
-            // path, which keeps this loop) from a deferred one whose
-            // completion resumes draining.
-            auto settled = std::make_shared<std::atomic_bool>(false);
+            // Handshake between the listener's completion and this loop:
+            // 0 = the listener is running, 1 = the loop will return and the
+            // completion owns resuming, 2 = the completion settled inline so
+            // this loop continues synchronously (pi's synchronous listener).
+            auto handshake = std::make_shared<std::atomic<int>>(0);
             listener_(std::move(frame.value), std::move(frame.context), frame.delivery)
-                    .start([self = shared_from_this(), settled](
+                    .start([self = shared_from_this(), handshake](
                                    std::expected<void, support::Error> outcome) mutable noexcept {
-                        const bool deferred = !settled->exchange(true, std::memory_order_acq_rel);
                         if (!outcome) self->report(outcome.error());
-                        if (deferred) self->resume();
+                        int state = 0;
+                        if (handshake->compare_exchange_strong(state, 2, std::memory_order_acq_rel)) return;
+                        self->resume(); // deferred settlement owns the next drain
                     });
-            if (!settled->load(std::memory_order_acquire)) return;
+            int state = 0;
+            if (handshake->compare_exchange_strong(state, 1, std::memory_order_acq_rel)) return;
         }
     }
 
@@ -117,7 +120,7 @@ public:
     };
 
     ReplicatedStatePublisher(Json initial, std::shared_ptr<ReplicatedStateErrorHook> report_error)
-        : value_(std::move(initial)), report_error_(std::move(report_error)) {}
+        : report_error_(std::move(report_error)), value_(std::move(initial)) {}
 
     [[nodiscard]] const Json& value() const noexcept { return value_; }
 
@@ -241,6 +244,8 @@ private:
     std::int64_t cursor_{0};
     bool disposed_{false};
 };
+
+AttachedReplicatedState::AttachedReplicatedState(std::unique_ptr<Impl> impl) noexcept : impl_(std::move(impl)) {}
 
 support::Expected<AttachedReplicatedState> AttachedReplicatedState::attach(
         ReplicatedStateSource& source, ReplicatedStateSourceOptions options) {

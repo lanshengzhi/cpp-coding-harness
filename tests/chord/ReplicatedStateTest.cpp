@@ -44,7 +44,7 @@ using Completion = support::AsyncCompletion<void, support::Error>;
 /// callback): the producer stores the terminal completion in `slot`.
 [[nodiscard]] support::AsyncResult<void> hold(std::optional<Completion>& slot) {
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
-            [&slot](Completion completion) { slot = std::move(completion); }}};
+            [&slot](Completion completion) noexcept { slot = std::move(completion); }}};
 }
 
 void settle(std::optional<Completion>& slot) {
@@ -259,7 +259,7 @@ TEST_CASE("reentrant commits buffer in order and a late subscriber hydrates at t
     std::vector<DeliveryEvent> late_deliveries;
     bool nested = false;
     ReplicatedStateUnsubscribeHook late_unsubscribe;
-    auto early_unsubscribe = attached->subscribe([&](Json value, Context, ReplicatedStateDelivery delivery) {
+    auto early_unsubscribe = attached->subscribe([&](Json, Context, ReplicatedStateDelivery delivery) {
         if (delivery.kind != ReplicatedStateDeliveryKind::Update || delivery.sequence != 1 || nested) return ready();
         nested = true;
         source.commit(revision(2));
