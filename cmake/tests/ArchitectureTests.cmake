@@ -126,6 +126,24 @@ include_guard(GLOBAL)
     set_tests_properties(cch_parity_gate_evidence_atomicity PROPERTIES
         LABELS "architecture;parity-gate;issue734;spec")
 
+    # Compiler-gate concurrency accounting (#1044): both the Owner Interface
+    # standalone compile and the zero-warning gate spawn their own compiler
+    # workers, so they share one explicit budget capped by the measured
+    # four-job host ceiling in docs/agents/validation.md (six concurrent jobs
+    # were not safe). Each gate reserves that same width from CTest via
+    # PROCESSORS, so a default `ctest -j4` serializes the gates instead of
+    # stacking their workers on top of sibling tests.
+    cmake_host_system_information(RESULT CCH_COMPILER_GATE_JOBS QUERY NUMBER_OF_LOGICAL_CORES)
+    if(NOT CCH_COMPILER_GATE_JOBS)
+        set(CCH_COMPILER_GATE_JOBS 4)
+    endif()
+    if(CCH_COMPILER_GATE_JOBS GREATER 4)
+        set(CCH_COMPILER_GATE_JOBS 4)
+    endif()
+    if(CCH_COMPILER_GATE_JOBS LESS 1)
+        set(CCH_COMPILER_GATE_JOBS 1)
+    endif()
+
     # Owner Interface standalone compile (ADR 0039; #469): every Owner
     # Interface header compiles alone with the include path restricted to its
     # declared package interface dependencies (own root, support, legal direct
@@ -139,8 +157,11 @@ include_guard(GLOBAL)
             --compiler ${CMAKE_CXX_COMPILER}
             --manifest ${CMAKE_CURRENT_SOURCE_DIR}/cmake/parity/manifest.json
             --project-root ${CMAKE_CURRENT_SOURCE_DIR}
+            --jobs ${CCH_COMPILER_GATE_JOBS}
     )
-    set_tests_properties(cch_owner_interface_standalone PROPERTIES LABELS "architecture;parity-gate;issue469;spec")
+    set_tests_properties(cch_owner_interface_standalone PROPERTIES
+        LABELS "architecture;parity-gate;issue469;spec"
+        PROCESSORS ${CCH_COMPILER_GATE_JOBS})
 
     # Zero-compiler-warning gate (issue #492): recompiles every project-owned
     # compile command from the generated compile_commands.json with the
@@ -152,17 +173,6 @@ include_guard(GLOBAL)
     # regressions. Requires the build to have produced compile_commands.json;
     # the build-phase Gate custom target is already a prerequisite of every
     # test shard.
-    # Concurrency accounting: the gate's compile workers are a machine-wide
-    # load, so size them to the host and reserve the same width from CTest
-    # via PROCESSORS. Under a narrower `ctest -j N` the gate then runs
-    # exclusively once all N slots drain instead of stacking its workers on
-    # top of N sibling tests, keeping the host fully but never
-    # oversubscribed. Host core count is safe to query: cross-compilation is
-    # unsupported (ADR 0039).
-    cmake_host_system_information(RESULT CCH_WARNING_GATE_JOBS QUERY NUMBER_OF_LOGICAL_CORES)
-    if(NOT CCH_WARNING_GATE_JOBS)
-        set(CCH_WARNING_GATE_JOBS 4)
-    endif()
     add_test(
         NAME cch_warning_gate
         COMMAND
@@ -171,9 +181,26 @@ include_guard(GLOBAL)
             --compile-commands ${CMAKE_BINARY_DIR}/compile_commands.json
             --project-root ${CMAKE_CURRENT_SOURCE_DIR}
             --exclude-root ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
-            --jobs ${CCH_WARNING_GATE_JOBS}
+            --jobs ${CCH_COMPILER_GATE_JOBS}
     )
     set_tests_properties(cch_warning_gate PROPERTIES
         LABELS "architecture;build;issue492;spec"
-        PROCESSORS ${CCH_WARNING_GATE_JOBS}
+        PROCESSORS ${CCH_COMPILER_GATE_JOBS}
         TIMEOUT 900)
+
+    # Registration regression for the shared compiler budget (#1044): the
+    # fixture configures this file in a throwaway project and asserts that
+    # the actual CTest JSON carries the bounded --jobs count and the matching
+    # PROCESSORS property for both gates. It never runs either gate, so it
+    # adds no compile work to the suite.
+    add_test(
+        NAME cch_architecture_compiler_budget_registration
+        COMMAND
+            ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/architecture_registration_test.py
+            --cmake ${CMAKE_COMMAND}
+            --ctest ${CMAKE_CTEST_COMMAND}
+            --source-dir ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(cch_architecture_compiler_budget_registration PROPERTIES
+        LABELS "architecture;build;issue1044;spec")
