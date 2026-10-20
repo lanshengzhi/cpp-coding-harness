@@ -49639,7 +49639,7 @@
       "evidence": null,
       "gaps": [
         "non-index capability not individually re-audited against v1.3.0",
-        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+        "no #1051 row observes the tuiMode setting or the regular/fullscreen default; v1.3.0 product behavior is unaudited"
       ],
       "notes": "default fullscreen only at #1024 Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
@@ -49684,7 +49684,7 @@
       "evidence": null,
       "gaps": [
         "non-index capability not individually re-audited against v1.3.0",
-        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+        "no #1051 row observes the --tui-mode CLI flag; v1.3.0 product behavior is unaudited"
       ],
       "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
@@ -49729,7 +49729,7 @@
       "evidence": null,
       "gaps": [
         "non-index capability not individually re-audited against v1.3.0",
-        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+        "no #1051 row observes runInteractiveMode assembly; the mode-switch-renderer row observes a live renderer switch, not this entry; v1.3.0 product behavior is unaudited"
       ],
       "notes": "mode switch/exit/fullscreen assembly tickets Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
@@ -49774,7 +49774,7 @@
       "evidence": null,
       "gaps": [
         "non-index capability not individually re-audited against v1.3.0",
-        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+        "only the adjacent #1051 exit-restoration row touches exit output and terminal restoration, and it does not observe this setting; v1.3.0 product behavior is unaudited"
       ],
       "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
@@ -49819,7 +49819,7 @@
       "evidence": null,
       "gaps": [
         "non-index capability not individually re-audited against v1.3.0",
-        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+        "no #1051 row observes copy-on-select; v1.3.0 product behavior is unaudited"
       ],
       "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
@@ -49864,7 +49864,7 @@
       "evidence": null,
       "gaps": [
         "non-index capability not individually re-audited against v1.3.0",
-        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+        "no #1051 row observes the fullscreenWheelScrollLines setting; v1.3.0 product behavior is unaudited"
       ],
       "notes": "Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",
@@ -49909,7 +49909,7 @@
       "evidence": null,
       "gaps": [
         "non-index capability not individually re-audited against v1.3.0",
-        "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
+        "only the adjacent #1051 hardware-cursor row touches the toolkit cursor switch, and it does not observe this setting; v1.3.0 product behavior is unaudited"
       ],
       "notes": "real emulator evidence in #1021 Frozen source file changed since v1.0.4; this non-index capability was not individually re-audited.",
       "kind": "product-entry",

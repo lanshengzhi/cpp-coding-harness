@@ -82,6 +82,25 @@ class CorrectionScopeTest(unittest.TestCase):
         self.assertEqual(sources, [recorded])
         self.assertEqual(applied, [])
 
+    def test_source_row_id_scope_rewrites_only_its_own_lane_row(self) -> None:
+        """A scope naming the lane's source row id applies there and nowhere else."""
+        plan = load(PLAN)
+        item = correction(plan, "C1051-1")
+        item["appliesTo"] = ["output-pad"]
+        identities = consolidate.scope_ids("cch_coding_agent:output-pad", ["output-pad"])
+
+        sources, applied = consolidate.apply_corrections(
+            "1051", identities, [item["recorded"]], plan
+        )
+        self.assertEqual(sources, [item["actual"]])
+        self.assertEqual(applied, ["C1051-1"])
+
+        other_lane, applied = consolidate.apply_corrections(
+            "1056", identities, [item["recorded"]], plan
+        )
+        self.assertEqual(other_lane, [item["recorded"]])
+        self.assertEqual(applied, [])
+
 
 class CommittedLedgerTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -217,6 +236,19 @@ class ProductRoutingTest(unittest.TestCase):
             for adjacent in item["adjacent"]:
                 self.assertIn(adjacent, self.overlap["adjacentRows"], item["row"])
 
+    def test_lane_gaps_state_the_missing_observation_instead_of_a_1051_audit(self) -> None:
+        """The inherited 1050 gap must match the routing: two adjacent rows, five with no row."""
+        for item in self.overlap["rowRouting"]:
+            gap_text = " ".join(self.rows[item["row"]]["gaps"])
+            self.assertNotIn("audited by #1051", gap_text, item["row"])
+            self.assertIn("unaudited", gap_text, item["row"])
+            if item["adjacent"]:
+                self.assertIn("does not observe this setting", gap_text, item["row"])
+                for adjacent in item["adjacent"]:
+                    self.assertIn(adjacent.split(":")[-1], gap_text, item["row"])
+            else:
+                self.assertIn("no #1051 row observes", gap_text, item["row"])
+
 
 class CheckerRejectionTest(unittest.TestCase):
     def setUp(self) -> None:
@@ -267,6 +299,35 @@ class CheckerRejectionTest(unittest.TestCase):
         with self.assertRaisesRegex(consolidate.ConsolidationError, "survived the corrections index"):
             self.check()
 
+    def test_accepts_a_scope_naming_the_lane_source_row_id(self) -> None:
+        """The checker must accept the same scope identities the builder accepts."""
+        item = correction(self.plan, "C1051-1")
+        item["appliesTo"] = ["output-pad"]
+        index = next(entry for entry in self.ledger["correctionsIndex"] if entry["id"] == "C1051-1")
+        index["appliesTo"] = ["output-pad"]
+        self.check()
+
+    def test_still_rejects_a_surviving_pointer_under_a_source_row_id_scope(self) -> None:
+        """A source-row-id scope must reach the survived-pointer check, not skip the row."""
+        item = correction(self.plan, "C1051-1")
+        item["appliesTo"] = ["output-pad"]
+        index = next(entry for entry in self.ledger["correctionsIndex"] if entry["id"] == "C1051-1")
+        index["appliesTo"] = ["output-pad"]
+        row = self.rows()["cch_coding_agent:output-pad"]
+        row["source"][-1] = item["recorded"]
+        row["appliedCorrections"] = []
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "survived the corrections index"):
+            self.check()
+
+    def test_rejects_a_source_row_id_scope_from_another_lane(self) -> None:
+        item = correction(self.plan, "C1051-1")
+        item["appliesTo"] = ["output-pad"]
+        index = next(entry for entry in self.ledger["correctionsIndex"] if entry["id"] == "C1051-1")
+        index["appliesTo"] = ["output-pad"]
+        index["ticket"] = "1056"
+        with self.assertRaises(consolidate.ConsolidationError):
+            self.check()
+
     def test_rejects_a_replacement_that_rewrote_nothing(self) -> None:
         for row in self.ledger["rows"]:
             row["appliedCorrections"] = [
@@ -290,6 +351,21 @@ class CheckerRejectionTest(unittest.TestCase):
         row = self.rows()["cch_coding_agent:product.showHardwareCursor"]
         row["verification"] = "upstream-captured"
         with self.assertRaises(consolidate.ConsolidationError):
+            self.check()
+
+    def test_rejects_a_product_gap_that_claims_a_1051_audit(self) -> None:
+        row = self.rows()["cch_coding_agent:product.tuiMode"]
+        row["gaps"][-1] = (
+            "application product row; v1.3.0 product behavior is audited by #1051 "
+            "and is not carried as unchanged"
+        )
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "still claims #1051 audits"):
+            self.check()
+
+    def test_rejects_an_adjacent_gap_that_omits_its_counterpart(self) -> None:
+        row = self.rows()["cch_coding_agent:product.showHardwareCursor"]
+        row["gaps"][-1] = "no #1051 row observes this product setting; v1.3.0 product behavior is unaudited"
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "does not name its adjacent"):
             self.check()
 
 

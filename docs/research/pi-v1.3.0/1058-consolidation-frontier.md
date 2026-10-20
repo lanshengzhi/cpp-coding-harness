@@ -155,7 +155,7 @@ contracts stay as separate rows with an explicit resolution:
 
 | Overlap | Resolution |
 | --- | --- |
-| `overlap-toolkit-product` | The 1050 toolkit export contract belongs to cch_tui; the seven product-entry rows (`tuiMode`, `--tui-mode`, `runInteractiveMode`, `fullscreenExitOutput`, `fullscreenCopyOnSelect`, `fullscreenWheelScrollLines`, `showHardwareCursor`) are cch_coding_agent product behavior and stay `not-audited`/`unverified`. #1051 holds three adjacent capability rows in the same product area: `mode-switch-renderer`, `exit-restoration` and `hardware-cursor`. Only two product rows name a counterpart, `fullscreenExitOutput` -> `exit-restoration` and `showHardwareCursor` -> `hardware-cursor`, and a counterpart is adjacent, not equal: neither 1051 row observes the 1050 setting, and neither is verified. The other five, including `runInteractiveMode` (the adjacent switch scenario observes a renderer switch, not that assembly), have no 1051 row and no v1.3.0 observation. Every row keeps its visible missing-observation statement. |
+| `overlap-toolkit-product` | The 1050 toolkit export contract belongs to cch_tui; the seven product-entry rows (`tuiMode`, `--tui-mode`, `runInteractiveMode`, `fullscreenExitOutput`, `fullscreenCopyOnSelect`, `fullscreenWheelScrollLines`, `showHardwareCursor`) are cch_coding_agent product behavior and stay `not-audited`/`unverified`. #1051 holds three adjacent capability rows in the same product area: `mode-switch-renderer`, `exit-restoration` and `hardware-cursor`. Only two product rows name a counterpart, `fullscreenExitOutput` -> `exit-restoration` and `showHardwareCursor` -> `hardware-cursor`, and a counterpart is adjacent, not equal: neither 1051 row observes the 1050 setting, and neither is verified. The other five, including `runInteractiveMode` (the adjacent switch scenario observes a renderer switch, not that assembly), have no 1051 counterpart for their own operation and no v1.3.0 observation. Every row keeps its visible missing-observation statement. |
 | `overlap-session-storage` | The application Session transcript (JSONL session files, cch_coding_agent) and the durable Session (transactional document/entry storage, cch_durable) are different runtimes. The legacy in-core SQLite SessionStore is the third, no-decision row; it is not the durable contract. |
 | `overlap-tasks-harness` | Both lanes drive the same `Harness.open` entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage. |
 | `overlap-codemode-chord` | The codemode rows name codemode execution and the chord rows name the durable-required Chord subset; the durable Harness consumes both, but neither is the other's contract. |
@@ -167,7 +167,9 @@ six overlap resolutions and the three orphan scenarios are validated for known i
 resolutions and registered scenario names. The toolkit/product resolution additionally requires
 every named counterpart to be a real `1051` row that is not verified, every routed product row to
 stay `not-audited`/`unverified` with a missing-observation statement, and at least one product row
-to stay visibly unmatched.
+to stay visibly unmatched. It also ties the routed row back to its inherited `1050` lane gap, which
+must state the missing observation and name its adjacent `#1051` row when it has one, so the
+consolidation cannot report a product behavior as audited by a lane that never observed it.
 
 ## 6. Retained limitations (honest missing observations)
 
@@ -359,9 +361,9 @@ bytes and then validates source-row coverage and the alias bijection, the status
 owner/consumer adjacency against the target graph (including the forbidden durable/application
 edges), evidence routes against the registered bundle manifests, scenario coverage with no unrouted
 registered scenario and the registered orphans kept explicit, the groups/overlaps/orphan
-registrations including the toolkit/product routing (only real 1051 counterparts, no promotion), the
-corrections index (every replacement rewrote a scoped pointer, no rewrite outside its scope, no
-unused non-record-only item), the
+registrations including the toolkit/product routing (only real 1051 counterparts, no promotion, and
+the inherited 1050 lane gap kept truthful), the corrections index (every replacement rewrote a
+scoped pointer, no rewrite outside its scope, no unused non-record-only item), the
 frontier's draft graph (acyclic, dependency-ordered, real coverage prefixes, registered capture
 scenarios), migration-step placement against the transitive prerequisite graph (including a
 negative probe reproducing the old F7-before-P7 order and a positive control), the residual

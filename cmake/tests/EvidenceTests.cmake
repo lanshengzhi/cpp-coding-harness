@@ -14,10 +14,12 @@ include_guard(GLOBAL)
     set_tests_properties(cch_pi_v130_named_evidence PROPERTIES
         LABELS "evidence;differential;issue1046;spec")
 
-    # #1058: the consolidated capability ledger is a generated 48k-line artifact, so its
+    # #1058: the consolidated capability ledger is a large generated artifact, so its
     # deterministic rebuild, semantic checks and pointer-correction scoping are an ordinary
-    # required test rather than a command a human remembers to run. The timeout bounds the
-    # deterministic rebuild plus the frozen-pointer scan.
+    # required test rather than a command a human remembers to run. The entry runs offline: it
+    # resolves no frozen checkout. `consolidate_audits.py check --pi-root <checkout>` adds the
+    # separate optional frozen-source validation, which a default CTest run must not require.
+    # The timeout bounds the deterministic rebuild plus the semantic and scope checks.
     add_test(
         NAME cch_pi_v130_consolidation_check
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check
