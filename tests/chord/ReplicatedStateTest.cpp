@@ -1018,6 +1018,7 @@ TEST_CASE("subscribers are delivered in registration order with reentrant unsubs
     c();
 }
 
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/review-edges.json
 // "a retained value reference keeps the revision it was read at across a later commit".
 TEST_CASE("a retained value reference keeps the revision it was read at",
         "[chord][replicated_state][issue1062][review]") {
@@ -1025,11 +1026,17 @@ TEST_CASE("a retained value reference keeps the revision it was read at",
     auto attached = AttachedReplicatedState::attach(source);
     REQUIRE(attached.has_value());
 
-    // The frozen observation: the retained revision is the committed revision
-    // 1, the current revision is 2, the retained value is the old object, and
-    // the current revision is not that object.
+    // The frozen observation: `retainedIsTheOldObject: true` (the retained
+    // revision IS the object committed as revision 1) and
+    // `currentIsTheRetainedObject: false` (the current revision is not that
+    // object), with retainedValue 1 and currentValue 2.
     source.commit(revision(1));
-    const Json retained = attached->value();
+    // The by-value result is a snapshot of one revision. Holding it as a
+    // const reference extends the returned revision's lifetime, so this
+    // observation must still read revision 1 after a later commit. A
+    // re-aliased `const Json&` result would instead read the publisher's live
+    // revision 2 here and fail this assertion.
+    const Json& retained = attached->value();
     source.commit(revision(2));
     const Json current = attached->value();
 
