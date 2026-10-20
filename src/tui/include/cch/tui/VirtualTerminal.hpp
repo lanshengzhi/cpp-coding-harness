@@ -77,9 +77,6 @@ public:
     [[nodiscard]] support::ExpectedVoid apply_cell_pixel_dimensions(CellPixelDimensions pixels) override;
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
     [[nodiscard]] support::ExpectedVoid set_program_status(const ProgramStatus& status) override;
-    /// Latest status reported through set_program_status; absent before the
-    /// first report or after a `Clear` report.
-    [[nodiscard]] const std::optional<ProgramStatus>& last_program_status() const { return last_program_status_; }
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
             std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
     [[nodiscard]] support::ExpectedVoid enter_output_only() override;
@@ -120,7 +117,6 @@ public:
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;
-    std::optional<ProgramStatus> last_program_status_{std::nullopt};
 };
 
 } // namespace cch::tui

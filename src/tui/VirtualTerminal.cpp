@@ -658,11 +658,6 @@ support::ExpectedVoid VirtualTerminal::set_progress(bool active) {
 support::ExpectedVoid VirtualTerminal::set_program_status(const ProgramStatus& status) {
     if (auto result = require_started(*impl_); !result) return std::unexpected(result.error());
     impl_->output.push_back(format_program_status(status));
-    if (status.state == ProgramStatus::State::Clear) {
-        last_program_status_.reset();
-    } else {
-        last_program_status_ = status;
-    }
     return {};
 }
 

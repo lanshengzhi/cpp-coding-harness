@@ -197,8 +197,12 @@ InteractiveEngine::InteractiveEngine(
       fullscreen_host_(std::make_unique<AltScreenHost>(terminal, action_sink_, action_generation_)),
       tui_(tui_mode == coding_agent::TuiMode::Fullscreen ? static_cast<cch::tui::ITui*>(&fullscreen_host_->tui())
                                                          : main_screen_.get()),
-      program_status_(terminal_, "pike"), executor_(std::move(executor)), exit_wait_(executor_),
-      flows_settled_(executor_) {
+      program_status_(terminal_,
+              "pike",
+              [this]() -> std::optional<std::string> {
+                  return session_ != nullptr ? session_->session_name() : std::nullopt;
+              }),
+      executor_(std::move(executor)), exit_wait_(executor_), flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
     // The owned fullscreen root registers the same platform-action adapter an

@@ -13,6 +13,8 @@
 #include <boost/asio/io_context.hpp>
 #include <catch2/catch_test_macros.hpp>
 
+#include "support/IoContextRunner.hpp"
+
 #include <chrono>
 #include <memory>
 #include <mutex>
@@ -26,19 +28,8 @@ using namespace cch;
 
 namespace {
 
-struct IoContextRunner {
-    boost::asio::io_context io;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> guard{io.get_executor()};
-    std::jthread worker{[this] { io.run(); }};
-
-    ~IoContextRunner() {
-        guard.reset();
-        io.stop();
-    }
-};
-
-IoContextRunner& issue949_io() {
-    static IoContextRunner runner;
+cch::tests::IoContextRunner& issue949_io() {
+    static cch::tests::IoContextRunner runner;
     return runner;
 }
 

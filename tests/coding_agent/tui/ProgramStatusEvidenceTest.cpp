@@ -61,58 +61,37 @@ using tests::pump_until;
 
 namespace {
 
-[[nodiscard]] std::string state_name(tui::ProgramStatus::State state) {
-    switch (state) {
-    case tui::ProgramStatus::State::Idle:
-        return "idle";
-    case tui::ProgramStatus::State::Working:
-        return "working";
-    case tui::ProgramStatus::State::Blocked:
-        return "blocked";
-    case tui::ProgramStatus::State::Done:
-        return "done";
-    case tui::ProgramStatus::State::Error:
-        return "error";
-    case tui::ProgramStatus::State::Clear:
-        return "clear";
-    }
-    return "unknown";
-}
-
-[[nodiscard]] std::string kind_name(tui::ProgramStatus::Kind kind) {
-    switch (kind) {
-    case tui::ProgramStatus::Kind::Permission:
-        return "permission";
-    case tui::ProgramStatus::Kind::Question:
-        return "question";
-    case tui::ProgramStatus::Kind::Auth:
-        return "auth";
-    }
-    return "unknown";
-}
-
-/// `state[:kind][:message]`, the compact order evidence a reviewer can read.
-[[nodiscard]] std::string describe(const tui::ProgramStatus& status) {
-    auto text = state_name(status.state);
-    if (status.kind) text += ":" + kind_name(*status.kind);
-    if (status.message) text += ":" + *status.message;
-    return text;
-}
-
-[[nodiscard]] std::vector<std::string> reported_states(const tests::ProtocolRecordingTerminal& terminal) {
-    std::vector<std::string> states;
+/// Serialize every recorded status through the Owner's formatter. The expected
+/// values below are frozen wire literals from
+/// fixtures/pi-v1.3.0/audit-1051/program-status.json (unnamed) and
+/// fixtures/pi-v1.3.0/audit-1123/named-session-program-status.json, never built
+/// by the same formatter.
+[[nodiscard]] std::vector<std::string> reported_wire(const tests::ProtocolRecordingTerminal& terminal) {
+    std::vector<std::string> wires;
     for (const auto& op : terminal.ops()) {
         if (op.kind == tests::ProtocolRecordingTerminal::OpKind::SetProgramStatus) {
-            states.push_back(describe(op.program_status));
+            wires.push_back(tui::format_program_status(op.program_status));
         }
     }
-    return states;
+    return wires;
 }
 
-[[nodiscard]] bool reported(const tests::ProtocolRecordingTerminal& terminal, std::string_view state) {
-    const auto states = reported_states(terminal);
-    return std::find(states.begin(), states.end(), state) != states.end();
+[[nodiscard]] bool reported_wire_contains(const tests::ProtocolRecordingTerminal& terminal, std::string_view wire) {
+    const auto wires = reported_wire(terminal);
+    return std::find(wires.begin(), wires.end(), wire) != wires.end();
 }
+
+constexpr std::string_view kIdleWire = "\x1b]7501;state=idle:app=pike\x1b\\";
+constexpr std::string_view kWorkingWire = "\x1b]7501;state=working:app=pike\x1b\\";
+constexpr std::string_view kDoneWire = "\x1b]7501;state=done:app=pike\x1b\\";
+constexpr std::string_view kErrorWire = "\x1b]7501;state=error:app=pike:msg=SW52YWxpZCBBUEkga2V5\x1b\\";
+constexpr std::string_view kBlockedTrustWire =
+        "\x1b]7501;state=blocked:app=pike:kind=question:msg=VHJ1c3QgcHJvamVjdCBmb2xkZXI/\x1b\\";
+constexpr std::string_view kNamedWorkingWire = "\x1b]7501;state=working:app=pike:msg=cmV2aWV3LXNlc3Npb24=\x1b\\";
+constexpr std::string_view kNamedDoneWire = "\x1b]7501;state=done:app=pike:msg=cmV2aWV3LXNlc3Npb24=\x1b\\";
+constexpr std::string_view kRenamedAfterDoneWire = "\x1b]7501;state=done:app=pike:msg=cmVuYW1lZC1zZXNzaW9u\x1b\\";
+constexpr std::string_view kRenamedWhileWorkingWire =
+        "\x1b]7501;state=working:app=pike:msg=cmVuYW1lZC13aGlsZS13b3JraW5n\x1b\\";
 
 /// The most recent report, or a default status when none was recorded.
 [[nodiscard]] tui::ProgramStatus last_status(const tests::ProtocolRecordingTerminal& terminal) {
@@ -141,6 +120,9 @@ struct SessionProbe {
     tests::EnvVarGuard home_guard{"HOME"};
     tests::ScriptedRuntimeFixture scripted;
     tests::RuntimeFixture runtime;
+    /// When set, boot a persisted session so `/name` has a `session_info`
+    /// surface (`InMemorySessionTarget` drops the name).
+    std::filesystem::path persisted_session;
     std::unique_ptr<coding_agent::AgentSession> session;
     /// Services the Session's RuntimeRoot loop while the interactive mode runs
     /// on the test's io_context; declared after the fixture it borrows.
@@ -150,7 +132,10 @@ struct SessionProbe {
         home_guard.set(config.path().string());
         coding_agent::runtime::AgentSessionCreationRequest request;
         request.workspace = workspace.path();
-        request.session_target = coding_agent::InMemorySessionTarget{};
+        request.session_target = persisted_session.empty()
+                                         ? coding_agent::SessionTarget{coding_agent::InMemorySessionTarget{}}
+                                         : coding_agent::SessionTarget{
+                                                   coding_agent::ExplicitOpenOrCreateSessionTarget{persisted_session}};
         request.session_facts.model = "fake/fake-model";
         request.session_facts.no_skills = true;
         request.session_facts.no_prompt_templates = true;
@@ -218,24 +203,28 @@ TEST_CASE("Native TUI reports idle, working, and done for a normal prompt",
 
     InteractiveProbe probe;
     probe.start(*session_fixture.session, session_fixture.config.path());
-    REQUIRE(pump_until(probe.io, [&] { return reported_states(probe.recording) == std::vector<std::string>{"idle"}; }));
+    REQUIRE(pump_until(probe.io,
+            [&] { return reported_wire(probe.recording) == std::vector<std::string>{std::string{kIdleWire}}; }));
 
     probe.type("status prompt\r");
-    REQUIRE(pump_until(probe.io, [&] { return reported(probe.recording, "working"); }));
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kWorkingWire); }));
     // The run is held open: working stays reported and no outcome leaks early.
-    CHECK(reported_states(probe.recording) == std::vector<std::string>{"idle", "working"});
+    CHECK(reported_wire(probe.recording) ==
+            std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}});
 
     session_fixture.scripted.control->release();
-    REQUIRE(pump_until(probe.io, [&] { return reported(probe.recording, "done"); }));
-    CHECK(reported_states(probe.recording) == std::vector<std::string>{"idle", "working", "done"});
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kDoneWire); }));
+    CHECK(reported_wire(probe.recording) ==
+            std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}, std::string{kDoneWire}});
     // The resting status stays done while the prompt waits for the next turn.
     REQUIRE(pump_until(probe.io, [&] { return probe.screen().find("status answer") != std::string::npos; }));
-    CHECK(reported_states(probe.recording).back() == "done");
+    CHECK(reported_wire(probe.recording).back() == kDoneWire);
 
     probe.exit();
     // The TUI reports nothing after the settled outcome; removing the report
     // is the terminal contract's job on stop.
-    CHECK(reported_states(probe.recording) == std::vector<std::string>{"idle", "working", "done"});
+    CHECK(reported_wire(probe.recording) ==
+            std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}, std::string{kDoneWire}});
 }
 
 TEST_CASE("Native TUI reports a failed run's error first line instead of done",
@@ -251,17 +240,18 @@ TEST_CASE("Native TUI reports a failed run's error first line instead of done",
 
     InteractiveProbe probe;
     probe.start(*session_fixture.session, session_fixture.config.path());
-    REQUIRE(pump_until(probe.io, [&] { return reported_states(probe.recording) == std::vector<std::string>{"idle"}; }));
+    REQUIRE(pump_until(probe.io,
+            [&] { return reported_wire(probe.recording) == std::vector<std::string>{std::string{kIdleWire}}; }));
 
     probe.type("error prompt\r");
-    REQUIRE(pump_until(probe.io, [&] { return reported(probe.recording, "error:Invalid API key"); }));
-    const auto statuses = reported_states(probe.recording);
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kErrorWire); }));
+    const auto statuses = reported_wire(probe.recording);
     REQUIRE(statuses.size() == 3);
-    CHECK(statuses[0] == "idle");
-    CHECK(statuses[1] == "working");
+    CHECK(statuses[0] == kIdleWire);
+    CHECK(statuses[1] == kWorkingWire);
     // Only the first line is reported, and the failure never becomes done.
-    CHECK(statuses[2] == "error:Invalid API key");
-    CHECK(std::count(statuses.begin(), statuses.end(), "done") == 0);
+    CHECK(statuses[2] == kErrorWire);
+    CHECK(std::count(statuses.begin(), statuses.end(), kDoneWire) == 0);
 
     probe.exit();
 }
@@ -275,22 +265,75 @@ TEST_CASE("Native TUI returns to idle when a run is interrupted, then reports th
 
     InteractiveProbe probe;
     probe.start(*session_fixture.session, session_fixture.config.path());
-    REQUIRE(pump_until(probe.io, [&] { return reported_states(probe.recording) == std::vector<std::string>{"idle"}; }));
+    REQUIRE(pump_until(probe.io,
+            [&] { return reported_wire(probe.recording) == std::vector<std::string>{std::string{kIdleWire}}; }));
 
     probe.type("interrupt me\r");
-    REQUIRE(pump_until(probe.io, [&] { return reported(probe.recording, "working"); }));
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kWorkingWire); }));
     // Interrupt the held run: the prompt settles aborted, so the status
     // returns to idle instead of reporting the interrupted turn as done.
     probe.type("\x1b");
-    REQUIRE(pump_until(probe.io,
-            [&] { return reported_states(probe.recording) == std::vector<std::string>{"idle", "working", "idle"}; }));
+    REQUIRE(pump_until(probe.io, [&] {
+        return reported_wire(probe.recording) ==
+               std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}, std::string{kIdleWire}};
+    }));
 
     // The next turn runs normally: a new working report follows the idle one,
     // so the interrupted outcome cannot be mistaken for this turn's result.
     probe.type("after cancel\r");
     REQUIRE(pump_until(probe.io, [&] {
-        return reported_states(probe.recording) ==
-               std::vector<std::string>{"idle", "working", "idle", "working", "done"};
+        return reported_wire(probe.recording) == std::vector<std::string>{std::string{kIdleWire},
+                                                         std::string{kWorkingWire},
+                                                         std::string{kIdleWire},
+                                                         std::string{kWorkingWire},
+                                                         std::string{kDoneWire}};
+    }));
+
+    probe.exit();
+}
+
+TEST_CASE("Native TUI reports the persisted session name while working and done",
+        "[coding_agent][tui][program-status][issue1123][spec]") {
+    SessionProbe session_fixture;
+    session_fixture.persisted_session = session_fixture.workspace.path() / "named-session.jsonl";
+    session_fixture.boot();
+    REQUIRE(session_fixture.session->session_name() == std::nullopt);
+    session_fixture.scripted.control->gate_at = 0;
+    session_fixture.scripted.control->responses.push_back(ai::assistant_text_message("named answer"));
+
+    InteractiveProbe probe;
+    probe.start(*session_fixture.session, session_fixture.config.path());
+    REQUIRE(pump_until(probe.io,
+            [&] { return reported_wire(probe.recording) == std::vector<std::string>{std::string{kIdleWire}}; }));
+
+    // `/name` persists the name before the run starts; the working report
+    // carries it as the frozen named-session message did.
+    probe.type("/name review-session\r");
+    drain_ready(probe.io);
+    REQUIRE(session_fixture.session->session_name() == std::optional<std::string>{"review-session"});
+    probe.type("named prompt\r");
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kNamedWorkingWire); }));
+    CHECK(reported_wire(probe.recording) ==
+            std::vector<std::string>{std::string{kIdleWire}, std::string{kNamedWorkingWire}});
+
+    session_fixture.scripted.control->release();
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kNamedDoneWire); }));
+
+    // A rename after the run refreshes the resting done report.
+    probe.type("/name renamed-session\r");
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire(probe.recording).back() == kRenamedAfterDoneWire; }));
+
+    // A rename while the next run is working refreshes the working report.
+    session_fixture.scripted.control->gate_at = 1;
+    session_fixture.scripted.control->responses.push_back(ai::assistant_text_message("renamed answer"));
+    probe.type("renamed prompt\r");
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kNamedDoneWire); }));
+    probe.type("/name renamed-while-working\r");
+    REQUIRE(pump_until(probe.io, [&] { return reported_wire_contains(probe.recording, kRenamedWhileWorkingWire); }));
+    session_fixture.scripted.control->release();
+    REQUIRE(pump_until(probe.io, [&] {
+        return reported_wire(probe.recording).back() ==
+               "\x1b]7501;state=done:app=pike:msg=cmVuYW1lZC13aGlsZS13b3JraW5n\x1b\\";
     }));
 
     probe.exit();
@@ -350,7 +393,8 @@ TEST_CASE("Native TUI reports the boot project-trust question as the blocked sta
     // The startup idle report precedes the dialog block, exactly as the frozen
     // observation recorded idle then blocked.
     REQUIRE(pump_until(io, [&] {
-        return reported_states(recording) == std::vector<std::string>{"idle", "blocked:question:Trust project folder?"};
+        return reported_wire(recording) ==
+               std::vector<std::string>{std::string{kIdleWire}, std::string{kBlockedTrustWire}};
     }));
     const auto blocked_status = last_status(recording);
     CHECK(blocked_status.app == "pike");
@@ -362,8 +406,9 @@ TEST_CASE("Native TUI reports the boot project-trust question as the blocked sta
     REQUIRE(terminal.inject_input("\r"));
     REQUIRE(pump_until(io, [&] {
         return recorder.replacement_completions.load(std::memory_order_acquire) >= 1 &&
-               reported_states(recording) ==
-                       std::vector<std::string>{"idle", "blocked:question:Trust project folder?", "idle"};
+               reported_wire(recording) == std::vector<std::string>{std::string{kIdleWire},
+                                                   std::string{kBlockedTrustWire},
+                                                   std::string{kIdleWire}};
     }));
 
     REQUIRE(terminal.inject_input("\x04"));

@@ -4,6 +4,7 @@
 
 #include <cch/ai/Message.hpp>
 
+#include <functional>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -29,8 +30,12 @@ struct BlockedProgramStatus {
 /// line of errors; prompts and assistant output are never reported.
 class ProgramStatusReporter final {
 public:
-    /// The terminal must outlive the reporter.
-    ProgramStatusReporter(cch::tui::Terminal& terminal, std::string app);
+    /// The terminal must outlive the reporter. `session_name` reads the
+    /// current Session (pi `getSessionName`); an empty function reports an
+    /// unnamed session.
+    ProgramStatusReporter(cch::tui::Terminal& terminal,
+            std::string app,
+            std::function<std::optional<std::string>()> session_name = {});
 
     /// pi AgentSessionEvent `agent_start`: a run is active until it settles.
     void handle_agent_start();
@@ -54,6 +59,9 @@ public:
 
     /// Forget the previous session's run, for example after switching sessions.
     void reset();
+    /// Re-report the current status after the session name changed (pi
+    /// `session_info_changed`).
+    void refresh();
 
 private:
     void report();
@@ -61,6 +69,7 @@ private:
 
     cch::tui::Terminal& terminal_;
     std::string app_;
+    std::function<std::optional<std::string>()> session_name_;
     bool run_active_{false};
     /// The run's latest response was aborted, so it returns to idle when it
     /// settles even though the Session's prompt resolves successfully (pi

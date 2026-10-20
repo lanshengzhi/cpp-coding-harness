@@ -11,6 +11,7 @@
 // claim a real emulator supports OSC 7501.
 
 #include "support/EnvVarGuard.hpp"
+#include "support/IoContextRunner.hpp"
 #include "support/PseudoTerminal.hpp"
 
 #include <cch/tui/ProcessTerminal.hpp>
@@ -37,23 +38,8 @@
 
 namespace {
 
-struct IoContextRunner {
-    IoContextRunner() : work(boost::asio::make_work_guard(io)), thread([this] { io.run(); }) {}
-    ~IoContextRunner() {
-        work.reset();
-        io.stop();
-        thread.join();
-    }
-    IoContextRunner(const IoContextRunner&) = delete;
-    IoContextRunner& operator=(const IoContextRunner&) = delete;
-
-    boost::asio::io_context io;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
-    std::jthread thread;
-};
-
-IoContextRunner& test_io() {
-    static IoContextRunner runner;
+cch::tests::IoContextRunner& test_io() {
+    static cch::tests::IoContextRunner runner;
     return runner;
 }
 
@@ -208,6 +194,27 @@ TEST_CASE("Process Terminal leaves the status unsupported when DA answers before
 
     REQUIRE(probe.terminal->stop());
     CHECK(probe.read().find(kClear) == std::string::npos);
+}
+
+TEST_CASE("Process Terminal clears the reported status on the final alternate restore stop",
+        "[tui][terminal][program-status][issue1123][spec][exit]") {
+    cch::tests::EnvVarGuard override_guard{"PI_PROGRAM_STATUS", std::optional<std::string>{"1"}};
+    TerminalProbe probe;
+    REQUIRE(probe.open());
+    REQUIRE(probe.start());
+    std::string output = probe.read();
+    REQUIRE(probe.wait_for(kOverrideQuery, output));
+    REQUIRE(probe.terminal->set_program_status(working_status()));
+    output.clear();
+    REQUIRE(probe.wait_for(kWorking, output));
+
+    // The atomic alternate-restore exit branch must remove the reported status
+    // too; the ordinary stop case above cannot discriminate this path.
+    REQUIRE(probe.terminal->set_alternate_screen(true));
+    REQUIRE(probe.terminal->stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true}));
+    const auto stop_output = probe.read();
+    CHECK(stop_output.find(kClear) != std::string::npos);
+    CHECK(stop_output.find("\x1b[?1049l") != std::string::npos);
 }
 
 TEST_CASE("Process Terminal skips the query and reports immediately with PI_PROGRAM_STATUS=1",

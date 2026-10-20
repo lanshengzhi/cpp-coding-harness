@@ -12,6 +12,8 @@ namespace {
 
 /// First line of an error, trimmed, with pi's "Error" fallback when nothing
 /// remains (pi `firstLine`).
+/// pi `interactive/program-status-reporter.ts:7` `firstLine` (not the MCP
+/// `firstLine` in `extensions/mcp/index.ts:127`, which keeps different text).
 [[nodiscard]] std::string first_line(const std::optional<std::string>& text) {
     auto line = text.value_or(std::string{});
     const auto newline = line.find_first_of("\r\n");
@@ -24,8 +26,9 @@ namespace {
 
 } // namespace
 
-ProgramStatusReporter::ProgramStatusReporter(cch::tui::Terminal& terminal, std::string app)
-    : terminal_(terminal), app_(std::move(app)) {}
+ProgramStatusReporter::ProgramStatusReporter(
+        cch::tui::Terminal& terminal, std::string app, std::function<std::optional<std::string>()> session_name)
+    : terminal_(terminal), app_(std::move(app)), session_name_(std::move(session_name)) {}
 
 void ProgramStatusReporter::handle_agent_start() {
     run_active_ = true;
@@ -97,6 +100,8 @@ void ProgramStatusReporter::set_blocked(std::string source, std::optional<Blocke
     report();
 }
 
+void ProgramStatusReporter::refresh() { report(); }
+
 void ProgramStatusReporter::reset() {
     run_active_ = false;
     run_aborted_ = false;
@@ -128,10 +133,16 @@ cch::tui::ProgramStatus ProgramStatusReporter::current_status() const {
                 .message = "Compacting context",
         };
     }
-    // pi names the session in working and done reports; pike sessions are
-    // unnamed, so the message stays absent (the frozen unnamed-session
-    // observation).
-    return run_active_ ? cch::tui::ProgramStatus{.state = cch::tui::ProgramStatus::State::Working} : resting_status_;
+    // pi names the session in working and done reports
+    // (`program-status-reporter.ts:108`); the getter reads the current Session,
+    // so a rename is picked up by refresh() without parallel state.
+    cch::tui::ProgramStatus status =
+            run_active_ ? cch::tui::ProgramStatus{.state = cch::tui::ProgramStatus::State::Working} : resting_status_;
+    if (status.state == cch::tui::ProgramStatus::State::Working ||
+            status.state == cch::tui::ProgramStatus::State::Done) {
+        if (session_name_) status.message = session_name_();
+    }
+    return status;
 }
 
 } // namespace cch::coding_agent::tui

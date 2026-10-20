@@ -1,9 +1,12 @@
 #include <cch/tui/ProgramStatus.hpp>
 
+#include "tui/Base64.hpp"
+
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <utility>
 
 namespace cch::tui {
 namespace {
@@ -28,7 +31,7 @@ constexpr std::size_t kMaxMessageBytes = 2048;
     case ProgramStatus::State::Clear:
         return "clear";
     }
-    return "idle";
+    std::unreachable();
 }
 
 [[nodiscard]] std::string_view kind_name(ProgramStatus::Kind kind) {
@@ -40,7 +43,7 @@ constexpr std::size_t kMaxMessageBytes = 2048;
     case ProgramStatus::Kind::Auth:
         return "auth";
     }
-    return "question";
+    std::unreachable();
 }
 
 /// `[A-Za-z0-9_.+-]{1,32}` (pi `APP_PATTERN`).
@@ -133,6 +136,10 @@ constexpr std::size_t kMaxMessageBytes = 2048;
     return value == ' ' || value == '\t' || value == '\n' || value == '\r' || value == '\v' || value == '\f';
 }
 
+/// JS `String.prototype.trim` on the ASCII whitespace pike can receive. It is
+/// deliberately separate from `TerminalImage.cpp`'s tmux list trim: that one
+/// handles ` \t\r\n` only and is a different policy, so the two copies stay
+/// per endpoint.
 [[nodiscard]] std::string trim_ascii(std::string value) {
     std::size_t begin = 0;
     while (begin < value.size() && ascii_whitespace(value[begin]))
@@ -167,27 +174,6 @@ constexpr std::size_t kMaxMessageBytes = 2048;
     return std::string(text.substr(0, offset));
 }
 
-/// Standard base64 with padding (pi `Buffer.toString("base64")`).
-[[nodiscard]] std::string base64_encode(std::string_view value) {
-    constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string result;
-    result.reserve((value.size() + 2) / 3 * 4);
-    for (std::size_t offset = 0; offset < value.size(); offset += 3) {
-        const auto remaining = value.size() - offset;
-        const auto first = static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset]));
-        const auto second =
-                remaining > 1 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 1])) : 0;
-        const auto third =
-                remaining > 2 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 2])) : 0;
-        const auto grouped = (first << 16) | (second << 8) | third;
-        result.push_back(kAlphabet[(grouped >> 18) & 0x3f]);
-        result.push_back(kAlphabet[(grouped >> 12) & 0x3f]);
-        result.push_back(remaining > 1 ? kAlphabet[(grouped >> 6) & 0x3f] : '=');
-        result.push_back(remaining > 2 ? kAlphabet[grouped & 0x3f] : '=');
-    }
-    return result;
-}
-
 } // namespace
 
 std::string format_program_status(const ProgramStatus& status) {
@@ -205,7 +191,7 @@ std::string format_program_status(const ProgramStatus& status) {
             truncate_utf8(trim_ascii(sanitize_message(status.message.value_or(std::string{}))), kMaxMessageBytes);
     if (!message.empty()) {
         pairs += ":msg=";
-        pairs += base64_encode(message);
+        pairs += detail::base64_encode(message);
     }
     return "\x1b]7501;" + pairs + "\x1b\\";
 }

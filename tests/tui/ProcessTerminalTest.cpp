@@ -4,6 +4,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include "support/ImageEnvironmentGuard.hpp"
+#include "support/IoContextRunner.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
@@ -72,24 +73,6 @@ private:
     std::optional<std::string> original_;
 };
 
-class IoContextRunner final {
-public:
-    IoContextRunner() : work(boost::asio::make_work_guard(io)), thread([this] { io.run(); }) {}
-
-    ~IoContextRunner() {
-        work.reset();
-        io.stop();
-        thread.join();
-    }
-
-    IoContextRunner(const IoContextRunner&) = delete;
-    IoContextRunner& operator=(const IoContextRunner&) = delete;
-
-    boost::asio::io_context io;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
-
-    std::jthread thread;
-};
 class MinimalShell final : public cch::tui::Component, public cch::tui::InputHandler, public cch::tui::Focusable {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -148,8 +131,8 @@ private:
     bool focused_{false};
 };
 
-IoContextRunner& test_io() {
-    static IoContextRunner runner;
+cch::tests::IoContextRunner& test_io() {
+    static cch::tests::IoContextRunner runner;
     return runner;
 }
 

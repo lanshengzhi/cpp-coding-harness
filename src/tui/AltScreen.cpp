@@ -1,5 +1,6 @@
 #include <cch/tui/AltScreen.hpp>
 
+#include "tui/Base64.hpp"
 #include "tui/Layout.hpp"
 #include "tui/LineCompositor.hpp"
 #include "tui/MouseRouting.hpp"
@@ -74,24 +75,6 @@ void retain_error(support::ExpectedVoid& accumulated, support::ExpectedVoid cand
     return !value.starts_with("tmux") && !value.starts_with("screen");
 }
 
-[[nodiscard]] std::string base64_encode(std::string_view value) {
-    constexpr std::string_view alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    std::string result;
-    for (std::size_t offset = 0; offset < value.size(); offset += 3) {
-        const auto remaining = value.size() - offset;
-        const auto first = static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset]));
-        const auto second =
-                remaining > 1 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 1])) : 0U;
-        const auto third =
-                remaining > 2 ? static_cast<std::uint32_t>(static_cast<unsigned char>(value[offset + 2])) : 0U;
-        const auto bits = (first << 16U) | (second << 8U) | third;
-        result.push_back(alphabet[(bits >> 18U) & 0x3fU]);
-        result.push_back(alphabet[(bits >> 12U) & 0x3fU]);
-        result.push_back(remaining > 1 ? alphabet[(bits >> 6U) & 0x3fU] : '=');
-        result.push_back(remaining > 2 ? alphabet[bits & 0x3fU] : '=');
-    }
-    return result;
-}
 
 [[nodiscard]] std::string apply_selection_inverse(std::string_view text) {
     std::string result{"\x1b[7m"};
@@ -180,7 +163,7 @@ struct SelectionWordSegment {
 }
 
 [[nodiscard]] support::ExpectedVoid write_osc52(Terminal& terminal, std::string_view text) {
-    return terminal.write(std::format("\x1b]52;c;{}\x07", base64_encode(text)));
+    return terminal.write(std::format("\x1b]52;c;{}\x07", detail::base64_encode(text)));
 }
 
 void scroll_scrollbar_to_pointer(ScrollView& scroll_view,

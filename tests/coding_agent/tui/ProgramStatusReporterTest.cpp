@@ -36,7 +36,9 @@ using cch::tui::ProgramStatus;
 struct ReporterFixture {
     cch::tui::VirtualTerminal terminal{{.columns = 80, .rows = 24}};
     cch::tests::ProtocolRecordingTerminal recording{terminal};
-    cch::coding_agent::tui::ProgramStatusReporter reporter{recording, "pike"};
+    /// pi `getSessionName`: the current Session's name, absent when unnamed.
+    std::optional<std::string> session_name;
+    cch::coding_agent::tui::ProgramStatusReporter reporter{recording, "pike", [this] { return session_name; }};
 
     ReporterFixture() {
         REQUIRE(recording.start([](std::string) -> cch::support::ExpectedVoid { return {}; },
@@ -88,6 +90,71 @@ TEST_CASE("Program status reporter reports idle, working during a run, and done 
     for (const auto& status : fixture.reports()) {
         if (status.message) CHECK(*status.message != "secret assistant output");
     }
+}
+
+TEST_CASE("Program status reporter reports the session name while working and done",
+        "[coding_agent][tui][program-status][issue1123][spec]") {
+    ReporterFixture fixture;
+    fixture.reporter.reset();
+    fixture.session_name = "review-session";
+    fixture.reporter.handle_agent_start();
+    REQUIRE(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Working, .app = "pike", .message = "review-session"});
+    fixture.reporter.handle_settled(false);
+    CHECK(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Done, .app = "pike", .message = "review-session"});
+
+    // pi `session_info_changed` re-reports the resting done status after a rename.
+    fixture.session_name = "renamed-session";
+    fixture.reporter.refresh();
+    CHECK(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Done, .app = "pike", .message = "renamed-session"});
+
+    // A rename during a run refreshes the working report.
+    fixture.reporter.handle_agent_start();
+    fixture.session_name = "renamed-while-working";
+    fixture.reporter.refresh();
+    CHECK(fixture.last() == ProgramStatus{
+                                    .state = ProgramStatus::State::Working,
+                                    .app = "pike",
+                                    .message = "renamed-while-working",
+                            });
+}
+
+TEST_CASE("Program status reporter keeps the session name off error, blocked and compaction reports",
+        "[coding_agent][tui][program-status][issue1123][spec]") {
+    ReporterFixture fixture;
+    fixture.session_name = "named-session";
+    fixture.reporter.reset();
+    fixture.reporter.handle_agent_start();
+    REQUIRE(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Working, .app = "pike", .message = "named-session"});
+
+    // The compaction override replaces the name with its own message.
+    fixture.reporter.handle_compaction_start();
+    CHECK(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Working, .app = "pike", .message = "Compacting context"});
+    fixture.reporter.handle_compaction_end(false, std::nullopt, "auto");
+    CHECK(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Working, .app = "pike", .message = "named-session"});
+
+    // The settled error reports only the first line, never the name.
+    fixture.reporter.handle_message_end(
+            assistant_end(cch::ai::AssistantStopReason::Error, std::string{"Invalid API key\n{details}"}));
+    CHECK(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Working, .app = "pike", .message = "named-session"});
+    fixture.reporter.handle_settled(false);
+    CHECK(fixture.last() ==
+            ProgramStatus{.state = ProgramStatus::State::Error, .app = "pike", .message = "Invalid API key"});
+
+    // A blocked dialog reports its own message, not the session name.
+    fixture.reporter.set_blocked("trust",
+            cch::coding_agent::tui::BlockedProgramStatus{
+                    .kind = ProgramStatus::Kind::Question, .message = "Trust project folder?"});
+    CHECK(fixture.last() == ProgramStatus{.state = ProgramStatus::State::Blocked,
+                                    .app = "pike",
+                                    .kind = ProgramStatus::Kind::Question,
+                                    .message = "Trust project folder?"});
 }
 
 TEST_CASE("Program status reporter reports only the outcome of the run",
