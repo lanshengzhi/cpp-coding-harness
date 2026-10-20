@@ -1,0 +1,288 @@
+#pragma once
+
+#include <cch/durable/Records.hpp>
+#include <cch/support/AsyncResult.hpp>
+#include <cch/support/Error.hpp>
+
+#include <cstddef>
+#include <functional>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+namespace cch::durable {
+
+class Storage;
+
+/// One logical document definition with its initial value (frozen pi
+/// `defineDoc`).
+///
+/// The definition owns the identity of its kind: a token is created once and
+/// the kind it carries is part of the public protocol, so a copy of the token
+/// is the same definition rather than a second definition claiming the same
+/// kind. The token is therefore move-only, and the initial-value operation is
+/// a stored move-only operation (CODING_STANDARDS.md §6.2).
+///
+/// Frozen authority: `CommonDocDefinition.initial(): T` is a method of the
+/// definition, so the initial value is supplied once when the token is
+/// defined, not per access.
+class DocumentDefinition {
+public:
+    DocumentDefinition(DocumentDefinition&&) noexcept;
+    DocumentDefinition& operator=(DocumentDefinition&&) noexcept;
+    ~DocumentDefinition();
+
+    DocumentDefinition(const DocumentDefinition&) = delete;
+    DocumentDefinition& operator=(const DocumentDefinition&) = delete;
+
+    /// The stable document definition kind (frozen `DocumentDefinition.kind`).
+    [[nodiscard]] const std::string& kind() const noexcept;
+
+    /// The initial value of a newly created incarnation (frozen
+    /// `DocumentDefinition.initial`).
+    [[nodiscard]] chord::Json initial_value() const;
+
+private:
+    friend DocumentDefinition define_document(std::string kind, std::move_only_function<chord::Json()> initial);
+
+    struct Impl;
+
+    explicit DocumentDefinition(std::unique_ptr<Impl> impl);
+
+    std::unique_ptr<Impl> impl_;
+};
+
+/// Define one document kind (frozen pi `defineDoc`). The returned token owns
+/// the identity of `kind`; the caller keeps the only copy.
+[[nodiscard]] DocumentDefinition define_document(std::string kind, std::move_only_function<chord::Json()> initial);
+
+/// One logical document address: a Session document has no conversation, a
+/// conversation document names its conversation (frozen pi `DocumentAddress`).
+struct DocumentAddress {
+    std::optional<ConversationId> conversation_id;
+};
+
+/// The transaction surface of one Session commit callback (frozen pi `Tx`).
+///
+/// Table reads and creation results are trusted immutable values and may be
+/// shared with internal commit state. A table read after the first table write
+/// of the same transaction is rejected: read every required row before
+/// writing.
+class Transaction {
+public:
+    Transaction(const Transaction&) = delete;
+    Transaction(Transaction&&) = delete;
+    Transaction& operator=(const Transaction&) = delete;
+    Transaction& operator=(Transaction&&) = delete;
+    ~Transaction();
+
+    /// Create a conversation with ownerless ownership (frozen pi
+    /// `Tx.createConversation`).
+    [[nodiscard]] support::Expected<ConversationRecord> create_conversation();
+
+    /// Append one entry to a conversation (frozen pi `Tx.appendEntry`).
+    [[nodiscard]] support::Expected<EntryRecord> append_entry(
+            ConversationId conversation_id, std::string kind, chord::Json data);
+
+    /// Look up one conversation (frozen pi `Tx.conversation`). Rejected with
+    /// `Tx.conversation() cannot read tables after the first table write` when
+    /// the transaction already wrote a table.
+    [[nodiscard]] support::Expected<std::optional<ConversationRecord>> conversation(ConversationId id);
+
+    /// Look up one entry (frozen pi `Tx.entry`). Rejected with
+    /// `Tx.entry() cannot read tables after the first table write` when the
+    /// transaction already wrote a table.
+    [[nodiscard]] support::Expected<std::optional<EntryRecord>> entry(EntryId id);
+
+    /// Scan the conversations (frozen pi `Tx.scanConversations`). Rejected
+    /// with `Tx.scanConversations() cannot read tables after the first table
+    /// write` when the transaction already wrote a table.
+    [[nodiscard]] support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit);
+
+    /// Scan the visible entries of one conversation (frozen pi
+    /// `Tx.scanEntries`). Rejected with
+    /// `Tx.scanEntries() cannot read tables after the first table write` when
+    /// the transaction already wrote a table.
+    [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
+            ConversationId conversation_id, std::size_t limit);
+
+    /// Acquire the draft of one document incarnation, creating the incarnation
+    /// when it does not exist yet (frozen pi `Tx.doc`). The returned draft is
+    /// a handle: every operation on it fails once the transaction settles.
+    [[nodiscard]] support::Expected<chord::Draft> doc(const DocumentDefinition& definition, DocumentAddress address);
+
+private:
+    friend class Session;
+
+    struct Impl;
+
+    explicit Transaction(std::unique_ptr<Impl> impl);
+
+    std::unique_ptr<Impl> impl_;
+};
+
+/// One committed document frame delivered to a watch (frozen pi `WatchFrame`).
+struct DocumentFrame {
+    /// The exact adopted immutable revision.
+    chord::Json value;
+    /// The exact adopted operations; empty for a creation.
+    chord::OpBatch ops;
+};
+
+/// Receives one committed document frame (frozen pi `WatchHandle.start`).
+///
+/// Serialized domain: every frame delivery of one watch must run in the one
+/// serialized execution domain the caller chooses (the Session's mutation
+/// line when the Session publishes from it).
+using DocumentFrameListener = std::move_only_function<void(DocumentFrame)>;
+
+/// The terminal result of one document watch (frozen pi `WatchEnd`).
+enum class WatchEndReason {
+    Stopped,
+    Cancelled,
+    SessionClosed,
+    SessionFailed,
+};
+
+/// One committed document watch (frozen pi `DocumentWatch`).
+///
+/// The watch holds the revision it was acquired at until it is started, and
+/// buffers every committed frame until then. A started watch delivers the
+/// buffered frames in commit order, one at a time.
+class DocumentWatch {
+public:
+    DocumentWatch(DocumentWatch&&) noexcept;
+    DocumentWatch& operator=(DocumentWatch&&) noexcept;
+    ~DocumentWatch();
+
+    DocumentWatch(const DocumentWatch&) = delete;
+    DocumentWatch& operator=(const DocumentWatch&) = delete;
+
+    /// The acquisition revision before `start`; the latest delivered revision
+    /// afterwards.
+    [[nodiscard]] const chord::Json& value() const noexcept;
+
+    /// Install the sole listener and deliver every buffered frame in commit
+    /// order. Single-use: an already-started or stopped watch is rejected.
+    [[nodiscard]] support::ExpectedVoid start(DocumentFrameListener listener);
+
+    /// Idempotently stop future deliveries and return this watch's terminal
+    /// result (frozen pi `WatchHandle.stop`).
+    [[nodiscard]] WatchEndReason stop();
+
+private:
+    friend class Session;
+
+    struct Impl;
+
+    explicit DocumentWatch(std::shared_ptr<Impl> impl);
+
+    /// The watch and the Session's registry share the watch state: the
+    /// Session delivers the committed frames to it, and the watch outlives
+    /// the Session's own reference to it.
+    std::shared_ptr<Impl> impl_;
+};
+
+/// Observes every committed batch (frozen pi `Session.subscribeCommits`).
+using CommitListener = std::move_only_function<void(const CommitPublication&)>;
+
+/// Observes the end of the Session (frozen pi `Session.subscribeClose`).
+using CloseListener = std::move_only_function<void()>;
+
+/// How a Session ended (frozen pi `SessionEnd`).
+enum class SessionEndReason {
+    /// The Session is still open.
+    Open,
+    /// The Session ended by an ordinary close.
+    Closed,
+    /// The Session ended by a failure.
+    Failed,
+};
+
+/// How a Session ended (frozen pi `SessionEnd`).
+struct SessionEnd {
+    /// The terminal reason of the Session.
+    SessionEndReason reason{SessionEndReason::Open};
+    /// Whether the Session ended by a failure.
+    bool failed{false};
+    /// The error that failed the Session; absent for an ordinary close.
+    std::optional<std::string> error_message{};
+};
+
+/// One durable Session kernel over one storage backend (frozen pi `Session`).
+///
+/// The Session owns one mutation line: every commit callback, preparation,
+/// storage settlement, adoption and publication runs while that line is held,
+/// and only committed state is observable. The line runs in the one
+/// serialized execution domain the caller chooses; this package owns no
+/// thread, loop or scheduler.
+///
+/// Storage failures are final. The first error a storage method reports fails
+/// the Session: that call gets the error, every later call and every storage
+/// call still underway gets the frozen `SessionFailed` message, and the
+/// Session then closes itself, storage included.
+class Session {
+public:
+    Session(Session&&) noexcept;
+    Session& operator=(Session&&) noexcept;
+    ~Session();
+
+    Session(const Session&) = delete;
+    Session& operator=(const Session&) = delete;
+
+    /// Open a Session over one storage backend (frozen pi `createSession`).
+    /// The storage must outlive the Session.
+    [[nodiscard]] static std::unique_ptr<Session> create(Storage& storage);
+
+    /// Run one atomic transaction on the Session mutation line (frozen pi
+    /// `Session.commit`). The callback receives the transaction's view; a
+    /// callback that reports an error rolls the transaction back, publishes
+    /// nothing, and leaves the Session usable.
+    [[nodiscard]] support::AsyncResult<void> commit(
+            std::move_only_function<support::Expected<void>(Transaction&)> change);
+
+    /// Seal admission, settle admitted commits, then close the storage
+    /// (frozen pi `Session.close`). Idempotent.
+    [[nodiscard]] support::AsyncResult<void> close();
+
+    /// Observe every committed batch (frozen pi `Session.subscribeCommits`).
+    /// The listener runs in the Session's mutation line.
+    [[nodiscard]] support::ExpectedVoid subscribe_commits(CommitListener listener);
+
+    /// Observe the end of the Session (frozen pi `Session.subscribeClose`).
+    [[nodiscard]] support::ExpectedVoid subscribe_close(CloseListener listener);
+
+    /// Read the committed value of one document without creating it (frozen pi
+    /// `Session.snapshot`).
+    [[nodiscard]] support::AsyncResult<std::optional<chord::Json>> snapshot(
+            const DocumentDefinition& definition, DocumentAddress address);
+
+    /// Acquire a watch bound to one committed document incarnation (frozen pi
+    /// `Session.watchDoc`). The acquisition revision is the committed value at
+    /// the moment of acquisition; every later commit delivers its exact frame.
+    [[nodiscard]] support::AsyncResult<std::optional<DocumentWatch>> watch_doc(
+            const DocumentDefinition& definition, DocumentAddress address);
+
+    /// Whether the Session has failed (frozen pi `SessionImpl.failure`).
+    [[nodiscard]] bool failed() const noexcept;
+
+    /// The error that failed the Session, if one did (frozen pi
+    /// `SessionImpl.failure`).
+    [[nodiscard]] const std::optional<std::string>& failure_message() const noexcept;
+
+    /// How the Session ended (frozen pi `SessionEnd`). A Session that is still
+    /// open reports neither a failure nor a close.
+    [[nodiscard]] SessionEnd closed() const noexcept;
+
+private:
+    struct Impl;
+
+    friend class Transaction;
+
+    explicit Session(std::unique_ptr<Impl> impl);
+
+    std::unique_ptr<Impl> impl_;
+};
+
+} // namespace cch::durable

@@ -8,6 +8,7 @@ include_guard(GLOBAL)
         DEPENDS
             cch_tests_support
             cch_tests_chord
+            cch_tests_durable
             cch_tests_tui
             cch_tests_ai
             cch_tests_ai_async_bridge

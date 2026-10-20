@@ -132,6 +132,12 @@
       "interface_root": "src/chord/include/cch/chord",
       "legal_owner_dependencies": []
     },
+    "cch_durable": {
+      "role": "owner",
+      "root": "src/durable",
+      "interface_root": "src/durable/include/cch/durable",
+      "legal_owner_dependencies": ["cch_chord"]
+    },
     "cch_support": {
       "role": "support",
       "root": "src/support",

@@ -1,0 +1,663 @@
+#include <cch/durable/Session.hpp>
+
+#include <cch/durable/Storage.hpp>
+
+#include <cstddef>
+#include <cstdint>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace cch::durable {
+
+namespace {
+
+/// The frozen message of a table read after the first table write (frozen pi
+/// `ReadAfterWrite`).
+[[nodiscard]] support::Error read_after_write_error(std::string_view method) {
+    return support::make_error(support::ErrorCode::Validation,
+            std::string{"Tx."} + std::string{method} + "() cannot read tables after the first table write");
+}
+
+/// The frozen message of a rejected operation on a closed Session (frozen pi
+/// `SessionImpl.assertUsable`).
+[[nodiscard]] support::Error session_closed_error() {
+    return support::make_error(support::ErrorCode::Session, "Session is closed");
+}
+
+/// The frozen message of a Session that failed (frozen pi `SessionFailed`).
+[[nodiscard]] support::Error session_failed_error() {
+    return support::make_error(
+            support::ErrorCode::Session, "Session failed after a storage error; close and reopen it");
+}
+
+/// The address key of one document: a Session document and a conversation
+/// document are different documents.
+[[nodiscard]] std::string address_key(std::string_view kind, std::optional<ConversationId> conversation_id) {
+    std::string key{kind};
+    key += '|';
+    if (conversation_id.has_value()) {
+        key += std::to_string(conversation_id->value);
+    } else {
+        key += "session";
+    }
+    return key;
+}
+
+/// One staged document incarnation: its record, its address, its Chord tracker
+/// holding the candidate revision, and the open change the draft came from.
+struct StagedDocument {
+    DocumentRecord record{};
+    DocumentAddress address{};
+    std::string kind{};
+    chord::Tracker tracker;
+    chord::Change change;
+    bool created{false};
+};
+
+/// One committed document incarnation the Session knows, by address key.
+struct CachedDocument {
+    DocumentRecord record{};
+    chord::Json value{};
+};
+
+} // namespace
+
+// ── DocumentDefinition ──────────────────────────────────────────────────────
+
+struct DocumentDefinition::Impl {
+    std::string kind;
+    std::move_only_function<chord::Json()> initial;
+};
+
+DocumentDefinition::DocumentDefinition(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+DocumentDefinition::DocumentDefinition(DocumentDefinition&&) noexcept = default;
+
+DocumentDefinition& DocumentDefinition::operator=(DocumentDefinition&&) noexcept = default;
+
+DocumentDefinition::~DocumentDefinition() = default;
+
+const std::string& DocumentDefinition::kind() const noexcept { return impl_->kind; }
+
+chord::Json DocumentDefinition::initial_value() const { return impl_->initial(); }
+
+DocumentDefinition define_document(std::string kind, std::move_only_function<chord::Json()> initial) {
+    auto impl = std::make_unique<DocumentDefinition::Impl>();
+    impl->kind = std::move(kind);
+    impl->initial = std::move(initial);
+    return DocumentDefinition(std::move(impl));
+}
+
+// ── DocumentWatch ───────────────────────────────────────────────────────────
+
+struct DocumentWatch::Impl {
+    chord::Json value{};
+    bool started{false};
+    bool stopped{false};
+    WatchEndReason end{WatchEndReason::Stopped};
+    DocumentFrameListener listener{};
+    /// The frames committed since the acquisition, in commit order.
+    std::vector<DocumentFrame> pending{};
+};
+
+// ── Session ─────────────────────────────────────────────────────────────────
+
+struct Session::Impl {
+    /// One admitted commit whose batch the storage has not settled yet. The
+    /// prepared documents stay alive until the settlement, and the committed
+    /// values become observable only after it.
+    struct CommitState {
+        Session::Impl* session{nullptr};
+        Storage* storage{nullptr};
+        std::vector<StorageWrite> writes{};
+        std::vector<StagedDocument> documents{};
+        std::vector<chord::Prepared> prepared{};
+
+        /// Settle the admitted commit: adopt the prepared revisions, publish
+        /// the commit, and deliver its document frames. A storage failure
+        /// fails the Session and publishes nothing.
+        [[nodiscard]] support::ExpectedVoid settle(std::expected<Seq, support::Error> outcome) noexcept {
+            if (!outcome) {
+                session->fail(std::move(outcome.error()));
+                return std::unexpected(session->failure_error());
+            }
+            const Seq seq = *outcome;
+
+            // The adoption happens after the storage settled the batch: the
+            // committed revision is the adopted one.
+            std::vector<DocumentCommitChange> document_changes;
+            document_changes.reserve(documents.size());
+            for (std::size_t index = 0; index < documents.size(); ++index) {
+                StagedDocument& document = documents[index];
+                const chord::Prepared& prepared = this->prepared[index];
+                auto adopted = document.tracker.adopt(prepared);
+                if (!adopted) {
+                    // The storage already committed; a failed adoption leaves
+                    // memory behind durable state, so the Session fails.
+                    session->fail(std::move(adopted.error()));
+                    return std::unexpected(session->failure_error());
+                }
+                DocumentRecord record = document.record;
+                record.created_at = seq;
+                document_changes.push_back(DocumentCommitChange{.record = record,
+                        .conversation_id = document.address.conversation_id,
+                        .value = prepared.value(),
+                        .ops = document.created ? chord::OpBatch{} : prepared.ops()});
+            }
+
+            // The committed document incarnations become observable now.
+            for (std::size_t index = 0; index < documents.size(); ++index) {
+                const StagedDocument& document = documents[index];
+                const std::string key = address_key(document.kind, document.address.conversation_id);
+                session->cached_documents[key] = CachedDocument{
+                        .record = document_changes[index].record, .value = document_changes[index].value};
+            }
+
+            // The publication carries every committed change.
+            CommitPublication publication{.seq = seq, .changes = {}};
+            for (const StorageWrite& write : writes) {
+                if (write.type == "conversation" && write.conversation.has_value()) {
+                    publication.changes.push_back(TableCommitChange{.type = "conversation",
+                            .conversation_id = write.conversation->id,
+                            .entry_id = std::nullopt});
+                } else if (write.type == "entry" && write.entry.has_value()) {
+                    publication.changes.push_back(TableCommitChange{.type = "entry",
+                            .conversation_id = write.entry->conversation_id,
+                            .entry_id = write.entry->id});
+                }
+            }
+            for (const DocumentCommitChange& change : document_changes) {
+                publication.changes.push_back(change);
+            }
+
+            // The committed document frames reach every watch of that
+            // incarnation.
+            for (const DocumentCommitChange& change : document_changes) {
+                const std::string key = address_key(change.record.kind, change.conversation_id);
+                const auto registered = session->watches.find(key);
+                if (registered == session->watches.end()) {
+                    continue;
+                }
+                for (const std::shared_ptr<DocumentWatch::Impl>& watch : registered->second) {
+                    if (watch->stopped) {
+                        continue;
+                    }
+                    watch->pending.push_back(DocumentFrame{.value = change.value, .ops = change.ops});
+                    if (!watch->started) {
+                        // A watch that is not started yet buffers its frames.
+                        continue;
+                    }
+                    std::vector<DocumentFrame> pending = std::move(watch->pending);
+                    watch->pending.clear();
+                    for (DocumentFrame& frame : pending) {
+                        watch->value = frame.value;
+                        watch->listener(frame);
+                    }
+                }
+            }
+
+            for (CommitListener& listener : session->commit_listeners) {
+                listener(publication);
+            }
+            return {};
+        }
+    };
+
+    Storage* storage{nullptr};
+    bool closed{false};
+    bool close_notified{false};
+    bool storage_closed{false};
+    bool failed{false};
+    std::optional<std::string> failure_message{};
+    std::vector<CommitListener> commit_listeners{};
+    std::vector<CloseListener> close_listeners{};
+    /// The committed document incarnations this Session knows, by address key.
+    std::map<std::string, CachedDocument> cached_documents{};
+    /// The watches bound to a committed incarnation, by address key.
+    std::map<std::string, std::vector<std::shared_ptr<DocumentWatch::Impl>>> watches{};
+
+    /// The error every later operation reports after the Session failed.
+    [[nodiscard]] support::Error failure_error() const { return session_failed_error(); }
+
+    /// Fail the Session: the failure is final, the close listeners run, and
+    /// the storage backend is closed.
+    void fail(support::Error error) {
+        if (failed) {
+            return;
+        }
+        failed = true;
+        failure_message = error.message;
+        closed = true;
+        notify_close();
+        close_storage();
+    }
+
+    /// Run the close listeners once.
+    void notify_close() {
+        if (close_notified) {
+            return;
+        }
+        close_notified = true;
+        std::vector<CloseListener> listeners = std::move(close_listeners);
+        close_listeners.clear();
+        for (CloseListener& listener : listeners) {
+            listener();
+        }
+    }
+
+    /// Close the storage backend exactly once.
+    void close_storage() {
+        if (storage_closed) {
+            return;
+        }
+        storage_closed = true;
+        (void)storage->close();
+    }
+
+    /// The committed value of one incarnation, from the cache or the storage.
+    [[nodiscard]] support::Expected<std::optional<chord::Json>> committed_value(
+            const DocumentDefinition& definition, const DocumentAddress& address) {
+        const std::string key = address_key(definition.kind(), address.conversation_id);
+        if (const auto cached = cached_documents.find(key); cached != cached_documents.end()) {
+            return std::optional<chord::Json>{cached->second.value};
+        }
+        auto found = storage->find_document(definition.kind(), address.conversation_id);
+        if (!found) {
+            return std::unexpected(std::move(found.error()));
+        }
+        if (!(*found).has_value()) {
+            return std::optional<chord::Json>{};
+        }
+        const DocumentRecord& record = **found;
+        auto stored = storage->document(record.id);
+        if (!stored) {
+            return std::unexpected(std::move(stored.error()));
+        }
+        if (!(*stored).has_value()) {
+            return std::optional<chord::Json>{};
+        }
+        cached_documents[key] = CachedDocument{.record = record, .value = *(*stored)};
+        return std::optional<chord::Json>{std::in_place, *(*stored)};
+    }
+};
+
+// ── Transaction ─────────────────────────────────────────────────────────────
+
+struct Transaction::Impl {
+    Session::Impl* session{nullptr};
+    Storage* storage{nullptr};
+    bool has_table_write{false};
+    bool sealed{false};
+    std::vector<StorageWrite> writes{};
+    std::vector<StagedDocument> documents{};
+
+    [[nodiscard]] support::ExpectedVoid reject_read(std::string_view method) const {
+        if (sealed) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Transaction has settled"));
+        }
+        if (has_table_write) {
+            return std::unexpected(read_after_write_error(method));
+        }
+        return {};
+    }
+
+    [[nodiscard]] support::ExpectedVoid reject_write() const {
+        if (sealed) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Transaction has settled"));
+        }
+        return {};
+    }
+};
+
+Transaction::Transaction(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+Transaction::~Transaction() = default;
+
+support::Expected<ConversationRecord> Transaction::create_conversation() {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    auto id = impl_->storage->mint_id();
+    if (!id) {
+        return std::unexpected(std::move(id.error()));
+    }
+    ConversationRecord record{.id = ConversationId{.value = *id}};
+    impl_->has_table_write = true;
+    impl_->writes.push_back(StorageWrite{.type = "conversation", .conversation = record});
+    return record;
+}
+
+support::Expected<EntryRecord> Transaction::append_entry(
+        ConversationId conversation_id, std::string kind, chord::Json data) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    auto id = impl_->storage->mint_id();
+    if (!id) {
+        return std::unexpected(std::move(id.error()));
+    }
+    EntryRecord record{.id = EntryId{.value = *id},
+            .conversation_id = conversation_id,
+            .kind = std::move(kind),
+            .data = std::move(data),
+            .head = std::nullopt};
+    impl_->has_table_write = true;
+    impl_->writes.push_back(StorageWrite{.type = "entry", .entry = record});
+    return record;
+}
+
+support::Expected<std::optional<ConversationRecord>> Transaction::conversation(ConversationId id) {
+    if (auto rejected = impl_->reject_read("conversation"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->conversation(id);
+}
+
+support::Expected<std::optional<EntryRecord>> Transaction::entry(EntryId id) {
+    if (auto rejected = impl_->reject_read("entry"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    auto stored = impl_->storage->entry(id);
+    if (!stored) {
+        return std::unexpected(std::move(stored.error()));
+    }
+    if (!(*stored).has_value()) {
+        return std::optional<EntryRecord>{};
+    }
+    return std::optional<EntryRecord>{std::in_place, (*stored)->entry};
+}
+
+support::Expected<std::vector<ConversationRecord>> Transaction::scan_conversations(std::size_t limit) {
+    if (auto rejected = impl_->reject_read("scanConversations"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->scan_conversations(limit);
+}
+
+support::Expected<std::vector<EntryRecord>> Transaction::scan_entries(
+        ConversationId conversation_id, std::size_t limit) {
+    if (auto rejected = impl_->reject_read("scanEntries"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->scan_entries(conversation_id, limit);
+}
+
+support::Expected<chord::Draft> Transaction::doc(const DocumentDefinition& definition, DocumentAddress address) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    const std::string key = address_key(definition.kind(), address.conversation_id);
+
+    // The incarnation is loaded from the committed state when it exists, and
+    // created otherwise. A document write is not a table write: reading and
+    // writing documents stays available after the first table write.
+    std::optional<DocumentRecord> record;
+    chord::Json base;
+    bool created = false;
+    if (impl_->session != nullptr) {
+        if (const auto cached = impl_->session->cached_documents.find(key);
+                cached != impl_->session->cached_documents.end()) {
+            record = cached->second.record;
+            base = cached->second.value;
+        }
+    }
+    if (!record.has_value()) {
+        auto found = impl_->storage->find_document(definition.kind(), address.conversation_id);
+        if (!found) {
+            return std::unexpected(std::move(found.error()));
+        }
+        if ((*found).has_value()) {
+            record = *(*found);
+            auto stored = impl_->storage->document(record->id);
+            if (!stored) {
+                return std::unexpected(std::move(stored.error()));
+            }
+            if ((*stored).has_value()) {
+                base = *(*stored);
+            }
+        } else {
+            auto id = impl_->storage->mint_id();
+            if (!id) {
+                return std::unexpected(std::move(id.error()));
+            }
+            // The frozen backend stamps the incarnation with the sequence of
+            // the commit that created it; the Session does not know that
+            // sequence before the commit settles, so the record keeps the
+            // placeholder and the Session stamps it after the settlement.
+            record = DocumentRecord{.id = DocumentId{.value = *id}, .kind = definition.kind(), .created_at = 0};
+            base = definition.initial_value();
+            created = true;
+        }
+    }
+
+    auto tracker = chord::track(std::move(base));
+    auto change = tracker.begin_change();
+    auto draft = change.draft();
+
+    impl_->documents.push_back(StagedDocument{.record = *record,
+            .address = std::move(address),
+            .kind = definition.kind(),
+            .tracker = std::move(tracker),
+            .change = std::move(change),
+            .created = created});
+    return draft;
+}
+
+// ── DocumentWatch ───────────────────────────────────────────────────────────
+
+DocumentWatch::DocumentWatch(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+DocumentWatch::DocumentWatch(DocumentWatch&&) noexcept = default;
+
+DocumentWatch& DocumentWatch::operator=(DocumentWatch&&) noexcept = default;
+
+DocumentWatch::~DocumentWatch() = default;
+
+const chord::Json& DocumentWatch::value() const noexcept { return impl_->value; }
+
+support::ExpectedVoid DocumentWatch::start(DocumentFrameListener listener) {
+    if (impl_->stopped) {
+        return std::unexpected(support::make_error(support::ErrorCode::Session, "Watch is stopped"));
+    }
+    if (impl_->started) {
+        return std::unexpected(support::make_error(support::ErrorCode::Session, "Watch is already started"));
+    }
+    impl_->started = true;
+    impl_->listener = std::move(listener);
+    // The buffered frames are delivered in commit order, one at a time.
+    std::vector<DocumentFrame> pending = std::move(impl_->pending);
+    impl_->pending.clear();
+    for (DocumentFrame& frame : pending) {
+        impl_->value = frame.value;
+        impl_->listener(frame);
+    }
+    return {};
+}
+
+WatchEndReason DocumentWatch::stop() {
+    if (!impl_->stopped) {
+        impl_->stopped = true;
+        impl_->end = WatchEndReason::Stopped;
+        impl_->pending.clear();
+    }
+    return impl_->end;
+}
+
+// ── Session ─────────────────────────────────────────────────────────────────
+
+Session::Session(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+Session::Session(Session&&) noexcept = default;
+
+Session& Session::operator=(Session&&) noexcept = default;
+
+Session::~Session() = default;
+
+std::unique_ptr<Session> Session::create(Storage& storage) {
+    auto impl = std::make_unique<Session::Impl>();
+    impl->storage = &storage;
+    return std::unique_ptr<Session>(new Session(std::move(impl)));
+}
+
+bool Session::failed() const noexcept { return impl_->failed; }
+
+const std::optional<std::string>& Session::failure_message() const noexcept { return impl_->failure_message; }
+
+SessionEnd Session::closed() const noexcept {
+    if (impl_->failed) {
+        return SessionEnd{.reason = SessionEndReason::Failed, .failed = true, .error_message = impl_->failure_message};
+    }
+    if (impl_->closed) {
+        return SessionEnd{.reason = SessionEndReason::Closed, .failed = false, .error_message = std::nullopt};
+    }
+    return SessionEnd{.reason = SessionEndReason::Open, .failed = false, .error_message = std::nullopt};
+}
+
+support::AsyncResult<void> Session::commit(std::move_only_function<support::Expected<void>(Transaction&)> change) {
+    if (impl_->failed) {
+        return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(session_failed_error())}};
+    }
+    if (impl_->closed) {
+        return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(session_closed_error())}};
+    }
+
+    auto transaction_impl = std::make_unique<Transaction::Impl>();
+    transaction_impl->session = impl_.get();
+    transaction_impl->storage = impl_->storage;
+    Transaction transaction{std::move(transaction_impl)};
+
+    auto outcome = change(transaction);
+    if (!outcome) {
+        // A failed callback publishes nothing and leaves the Session usable.
+        // The staged writes are discarded and every staged change is aborted,
+        // so no draft escapes the failed transaction.
+        transaction.impl_->sealed = true;
+        for (StagedDocument& document : transaction.impl_->documents) {
+            document.change.abort();
+        }
+        return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(outcome.error()))}};
+    }
+
+    auto state = std::make_shared<Session::Impl::CommitState>();
+    state->session = impl_.get();
+    state->storage = impl_->storage;
+    state->documents = std::move(transaction.impl_->documents);
+    state->writes = std::move(transaction.impl_->writes);
+    transaction.impl_->sealed = true;
+
+    // The staged documents are prepared before the batch is admitted, so a
+    // prepared draft is never observable before the storage settles it.
+    for (StagedDocument& document : state->documents) {
+        auto prepared = document.change.prepare();
+        if (!prepared) {
+            return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(prepared.error()))}};
+        }
+        state->prepared.push_back(std::move(*prepared));
+    }
+
+    // The document writes join the batch. A creation carries the record and
+    // the base value; a change carries the incarnation and the exact
+    // operations.
+    for (std::size_t index = 0; index < state->documents.size(); ++index) {
+        const StagedDocument& document = state->documents[index];
+        const chord::Prepared& prepared = state->prepared[index];
+        StorageWrite write{.type = document.created ? "document.create" : "document.change"};
+        write.document_conversation_id = document.address.conversation_id;
+        if (document.created) {
+            write.document_record = document.record;
+        } else {
+            write.document_id = document.record.id;
+            write.document_ops = prepared.ops();
+        }
+        write.document_value = prepared.value();
+        state->writes.push_back(std::move(write));
+    }
+
+    if (state->writes.empty()) {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [state = std::move(state)](support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                state->storage->commit(state->writes)
+                        .start([state, completion = std::move(completion)](
+                                       std::expected<Seq, support::Error> outcome) mutable noexcept {
+                            completion(state->settle(std::move(outcome)));
+                        });
+            }}};
+}
+
+support::AsyncResult<void> Session::close() {
+    impl_->notify_close();
+    impl_->closed = true;
+    impl_->close_storage();
+    return support::AsyncResult<void>{support::ExpectedVoid{}};
+}
+
+support::ExpectedVoid Session::subscribe_commits(CommitListener listener) {
+    if (impl_->failed) {
+        return std::unexpected(session_failed_error());
+    }
+    if (impl_->closed) {
+        return std::unexpected(session_closed_error());
+    }
+    impl_->commit_listeners.push_back(std::move(listener));
+    return {};
+}
+
+support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
+    if (impl_->closed) {
+        return std::unexpected(session_closed_error());
+    }
+    impl_->close_listeners.push_back(std::move(listener));
+    return {};
+}
+
+support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
+        const DocumentDefinition& definition, DocumentAddress address) {
+    if (impl_->failed) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(session_failed_error())};
+    }
+    if (impl_->closed) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(session_closed_error())};
+    }
+    auto value = impl_->committed_value(definition, address);
+    if (!value) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(std::move(value.error()))};
+    }
+    return support::AsyncResult<std::optional<chord::Json>>{std::move(*value)};
+}
+
+support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
+        const DocumentDefinition& definition, DocumentAddress address) {
+    if (impl_->failed) {
+        return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(session_failed_error())};
+    }
+    if (impl_->closed) {
+        return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(session_closed_error())};
+    }
+    auto value = impl_->committed_value(definition, address);
+    if (!value) {
+        return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(std::move(value.error()))};
+    }
+    if (!value->has_value()) {
+        return support::AsyncResult<std::optional<DocumentWatch>>{std::optional<DocumentWatch>{}};
+    }
+
+    auto watch_impl = std::make_shared<DocumentWatch::Impl>();
+    watch_impl->value = *(*value);
+
+    // The watch receives every committed frame of this incarnation from now
+    // on; the frames committed before it is started are buffered.
+    const std::string key = address_key(definition.kind(), address.conversation_id);
+    impl_->watches[key].push_back(watch_impl);
+    return support::AsyncResult<std::optional<DocumentWatch>>{std::optional<DocumentWatch>{DocumentWatch{watch_impl}}};
+}
+
+} // namespace cch::durable

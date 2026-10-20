@@ -1,0 +1,481 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1063",
+  "family": "audit-1063",
+  "capturedAt": "2026-10-20T11:44:01.343Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1063/capture-1063.mts",
+    "sha256": "bee50b2a834e3193a6322b55eb19aecc7f0d5dce8778e3e1e1b6573d9299334f",
+    "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1063/capture-1063.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1063/capture-1063.mts",
+        "sha256": "bee50b2a834e3193a6322b55eb19aecc7f0d5dce8778e3e1e1b6573d9299334f"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1063/scenarios.mts",
+        "sha256": "0a1c96add8e41b5573e9f9c3d4eae2940dc950c2595c1390040c9637d7e17830"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1063/pi.mts",
+        "sha256": "52c5b81bcedd4bda807b5d4b38eeb7f717b7ea6209c3d5f22657abb65ba57c97"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "session-transactions.json",
+      "family": "audit-1063",
+      "bytes": 13869,
+      "sha256": "5c8228521e16dd4ab93a6304c2624011faea7c823d059d0d9949f313b0dab19f",
+      "sourceEndpoints": [
+        "packages/durable/src/session/session.ts:createSession,SessionImpl.commit,SessionImpl.close,SessionImpl.assertUsable",
+        "packages/durable/src/session/transaction.ts:Transaction,Transaction.#read,Transaction.#write,Transaction.settleFailure",
+        "packages/durable/src/session/observation.ts:CommittedWatch",
+        "packages/durable/src/storage/memory.ts:MemoryStorage,MemoryStorage.commit,MemoryStorage.prepareCommit,MemoryStorage.mintId",
+        "packages/durable/src/types.ts:Storage,StorageWrite,CommitPublication,SessionEnd",
+        "packages/durable/src/errors.ts:ReadAfterWrite,SessionFailed",
+        "packages/durable/src/entries.ts:defineEntry",
+        "packages/durable/src/documents.ts:defineDoc",
+        "packages/durable/test/session-tables.test.ts:allows table reads only before the first table write",
+        "packages/durable/test/session-watches.test.ts:can replay every delivered exact operation batch from the acquisition revision",
+        "packages/durable/test/session-documents.test.ts:aborts every change when the callback fails",
+        "packages/chord/src/state.ts:ReplicatedStateSource,ReplicatedStateSourceAttachment",
+        "packages/chord/src/delta/index.ts:applyImmutable"
+      ],
+      "scenarios": [
+        {
+          "name": "a table read after the first table write is rejected and the transaction still commits its document",
+          "source": "packages/durable/test/session-tables.test.ts:allows table reads only before the first table write; packages/durable/src/errors.ts:ReadAfterWrite; packages/durable/src/session/transaction.ts:Transaction.#read,Transaction.#write",
+          "inputs": {
+            "backend": "MemoryStorage",
+            "operation": "append an entry, then read a table, then access a document"
+          },
+          "expected": {
+            "conversationRead": {
+              "rejected": true,
+              "name": "ReadAfterWrite",
+              "message": "Tx.conversation() cannot read tables after the first table write"
+            },
+            "taskRead": {
+              "rejected": true,
+              "name": "ReadAfterWrite",
+              "message": "Tx.task() cannot read tables after the first table write"
+            },
+            "entryRead": {
+              "rejected": true,
+              "name": "ReadAfterWrite",
+              "message": "Tx.entry() cannot read tables after the first table write"
+            },
+            "scanRead": {
+              "rejected": true,
+              "name": "ReadAfterWrite",
+              "message": "Tx.scanConversations() cannot read tables after the first table write"
+            },
+            "documentAfterWrite": "after-write",
+            "snapshot": {
+              "text": "after-write",
+              "revision": 1
+            },
+            "entryCount": 1,
+            "publicationCount": 2,
+            "publications": [
+              {
+                "seq": 1,
+                "changes": [
+                  {
+                    "type": "conversation",
+                    "id": 2,
+                    "kind": null
+                  }
+                ]
+              },
+              {
+                "seq": 2,
+                "changes": [
+                  {
+                    "type": "entry",
+                    "id": 7,
+                    "kind": null
+                  },
+                  {
+                    "type": "document",
+                    "recordId": 8,
+                    "kind": "audit1063.latest",
+                    "value": {
+                      "text": "after-write",
+                      "revision": 1
+                    },
+                    "ops": []
+                  }
+                ]
+              }
+            ]
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a close rejects every later session operation and closes the storage backend",
+          "source": "packages/durable/src/session/session.ts:SessionImpl.close,SessionImpl.#notifyClose,SessionImpl.assertUsable; packages/durable/src/storage/memory.ts:MemoryStorage.close,MemoryStorage.assertOpen",
+          "inputs": {
+            "backend": "MemoryStorage",
+            "operation": "close the session, then commit, snapshot and call the backend"
+          },
+          "expected": {
+            "closeNotifications": 1,
+            "commitAfterClose": {
+              "rejected": true,
+              "name": "Error",
+              "message": "Session is closed"
+            },
+            "snapshotAfterClose": {
+              "rejected": true,
+              "name": "Error",
+              "message": "Session is closed"
+            },
+            "storageCallAfterClose": {
+              "rejected": true,
+              "name": "Error",
+              "message": "MemoryStorage is closed"
+            },
+            "storageCloseCalls": 1,
+            "sessionEnd": {
+              "reason": "closed"
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a failed commit leaves the storage sequence unchanged and the session reopens from what was committed",
+          "source": "packages/durable/src/storage/memory.ts:MemoryStorage.commit,MemoryStorage.prepareCommit,MemoryStorage.applyPreparedCommit; packages/durable/src/session/session.ts:SessionImpl.#runCommit,SessionImpl.close,SessionImpl.fail",
+          "inputs": {
+            "backend": "MemoryStorage",
+            "operation": "a failing commit callback, a later commit, a reopen over the same storage, and a failing storage commit"
+          },
+          "expected": {
+            "failure": {
+              "rejected": true,
+              "name": "Error",
+              "message": "callback failed"
+            },
+            "storageCommitCallsBeforeFailure": 2,
+            "storageCommitCallsAfterFailure": 2,
+            "laterCommitSeq": 3,
+            "laterEntryId": 5,
+            "committedEntryId": 3,
+            "reopenedEntryIds": [
+              5,
+              3
+            ],
+            "reopenedConversationId": 2,
+            "storageFailure": {
+              "rejected": true,
+              "name": "Error",
+              "message": "disk vanished"
+            },
+            "sessionEnd": {
+              "reason": "failed",
+              "errorMessage": "disk vanished"
+            },
+            "storageFailurePublications": 1,
+            "storageFailureCloseCalls": 1
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a commit callback that fails after staging writes publishes nothing and leaves the session usable",
+          "source": "packages/durable/src/session/session.ts:SessionImpl.#runCommit; packages/durable/src/session/transaction.ts:Transaction.settleFailure,Transaction.#abortChanges; packages/durable/test/session-documents.test.ts:aborts every change when the callback fails",
+          "inputs": {
+            "backend": "MemoryStorage",
+            "operation": "the commit callback appends an entry and mutates a committed document, then throws"
+          },
+          "expected": {
+            "failure": {
+              "rejected": true,
+              "name": "Error",
+              "message": "callback failed"
+            },
+            "mintedEntryId": 4,
+            "snapshotBefore": {
+              "text": "baseline",
+              "revision": 1
+            },
+            "entriesAfterFailure": [],
+            "snapshotAfterFailure": {
+              "text": "baseline",
+              "revision": 1
+            },
+            "publicationCountAfterFailure": 2,
+            "nextEntryId": 5,
+            "nextEntryKind": "audit1063.note"
+          },
+          "normalizations": []
+        },
+        {
+          "name": "the same public operation yields the same session and transaction records on a reopen over memory storage",
+          "source": "packages/durable/src/types.ts:Storage.commit,Storage.mintId; packages/durable/src/storage/memory.ts:MemoryStorage.commit,MemoryStorage.mintId,MemoryStorage.entry",
+          "inputs": {
+            "backend": "MemoryStorage",
+            "operation": "a conversation, one entry and one document commit, then a second session over the same storage"
+          },
+          "expected": {
+            "conversationId": 2,
+            "entryId": 3,
+            "entryKind": "audit1063.note",
+            "entryCommitSeq": 2,
+            "documentRecordId": 4,
+            "documentCreatedAt": 3,
+            "documentValue": "kept",
+            "reopenedConversationId": 2,
+            "reopenedEntryId": 3,
+            "reopenedEntryKind": "audit1063.note",
+            "reopenedEntryCount": 1,
+            "reopenedSnapshot": {
+              "text": "kept",
+              "revision": 4
+            },
+            "reopenedNextEntryId": 5
+          },
+          "normalizations": []
+        },
+        {
+          "name": "a watch acquired at an older revision replays every op-bearing committed frame to the current revision",
+          "source": "packages/durable/test/session-watches.test.ts:can replay every delivered exact operation batch from the acquisition revision; packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/session/session.ts:SessionImpl.#attachDocument; packages/chord/src/state.ts:ReplicatedStateSource,ReplicatedStateSourceAttachment",
+          "inputs": {
+            "backend": "MemoryStorage",
+            "document": "audit1063.frames",
+            "initial": {
+              "value": 0,
+              "items": [
+                "a"
+              ],
+              "nested": {
+                "count": 0
+              }
+            },
+            "watchedAfterCommit": 1,
+            "commits": [
+              {
+                "mutation": "value = 2"
+              },
+              {
+                "mutation": "items.push(\"c\"); nested.count = 1"
+              }
+            ]
+          },
+          "expected": {
+            "acquisitionValue": {
+              "value": 1,
+              "items": [
+                "a"
+              ],
+              "nested": {
+                "count": 0
+              }
+            },
+            "commitSeqs": [
+              1,
+              2,
+              3
+            ],
+            "publicationOps": [
+              [],
+              [
+                [
+                  "s",
+                  [
+                    "value"
+                  ],
+                  2
+                ]
+              ],
+              [
+                [
+                  "p",
+                  [
+                    "items"
+                  ],
+                  1,
+                  0,
+                  [
+                    "c"
+                  ]
+                ],
+                [
+                  "s",
+                  [
+                    "nested",
+                    "count"
+                  ],
+                  1
+                ]
+              ]
+            ],
+            "frames": [
+              {
+                "value": {
+                  "value": 2,
+                  "items": [
+                    "a"
+                  ],
+                  "nested": {
+                    "count": 0
+                  }
+                },
+                "ops": [
+                  [
+                    "s",
+                    [
+                      "value"
+                    ],
+                    2
+                  ]
+                ]
+              },
+              {
+                "value": {
+                  "value": 2,
+                  "items": [
+                    "a",
+                    "c"
+                  ],
+                  "nested": {
+                    "count": 1
+                  }
+                },
+                "ops": [
+                  [
+                    "p",
+                    [
+                      "items"
+                    ],
+                    1,
+                    0,
+                    [
+                      "c"
+                    ]
+                  ],
+                  [
+                    "s",
+                    [
+                      "nested",
+                      "count"
+                    ],
+                    1
+                  ]
+                ]
+              }
+            ],
+            "nonEmptyFrameOps": true,
+            "replayMatchesFinal": true,
+            "finalSnapshot": {
+              "value": 2,
+              "items": [
+                "a",
+                "c"
+              ],
+              "nested": {
+                "count": 1
+              }
+            }
+          },
+          "normalizations": [
+            "`ops` are the exact emitted tuples for this run; a C++ test compares frame order, the replay of the recorded tuples onto the acquisition value, and the final value. Chord does not document operation spelling as canonical, so a C++ producer may emit an equivalent batch."
+          ]
+        },
+        {
+          "name": "a document watch acquired before start buffers committed frames and delivers them in commit order",
+          "source": "packages/durable/test/session-watches.test.ts:keeps the acquisition revision until start and delivers exact committed frames; packages/durable/src/session/observation.ts:CommittedWatch.start,CommittedWatch.advance",
+          "inputs": {
+            "backend": "MemoryStorage",
+            "document": "audit1063.frames",
+            "acquisition": "the watch is acquired after the first commit and started after two later commits"
+          },
+          "expected": {
+            "acquisitionValue": {
+              "value": 1,
+              "items": [
+                "a"
+              ],
+              "nested": {
+                "count": 0
+              }
+            },
+            "deliveredValues": [
+              2,
+              2
+            ],
+            "deliveryCount": 2,
+            "deliveries": [
+              {
+                "value": {
+                  "value": 2,
+                  "items": [
+                    "a"
+                  ],
+                  "nested": {
+                    "count": 0
+                  }
+                },
+                "ops": [
+                  [
+                    "s",
+                    [
+                      "value"
+                    ],
+                    2
+                  ]
+                ]
+              },
+              {
+                "value": {
+                  "value": 2,
+                  "items": [
+                    "a",
+                    "c"
+                  ],
+                  "nested": {
+                    "count": 1
+                  }
+                },
+                "ops": [
+                  [
+                    "p",
+                    [
+                      "items"
+                    ],
+                    1,
+                    0,
+                    [
+                      "c"
+                    ]
+                  ],
+                  [
+                    "s",
+                    [
+                      "nested",
+                      "count"
+                    ],
+                    1
+                  ]
+                ]
+              }
+            ],
+            "maxConcurrentCallbacks": 1
+          },
+          "normalizations": []
+        }
+      ]
+    }
+  ]
+}
