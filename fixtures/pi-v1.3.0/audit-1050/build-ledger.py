@@ -588,6 +588,41 @@ NEW_MEMBERS = [
     },
 ]
 
+# The seven application product-entry rows are not observed by the #1051 application lane. Three
+# #1051 capability rows are adjacent in the same product area; only two product entries name one as
+# an adjacent counterpart, and neither observes the 1050 setting, while the other five product
+# entries have no #1051 row for their own operation. Each gap states that per row, so this lane
+# never claims a 1051 audit it does not have. The key set is checked against the historical
+# product-entry ids below, so a new entry cannot inherit a stale claim.
+PRODUCT_ENTRY_GAPS = {
+    "product.tuiMode": (
+        "no #1051 row observes the tuiMode setting or the regular/fullscreen default; "
+        "v1.3.0 product behavior is unaudited"
+    ),
+    "product.--tui-mode": (
+        "no #1051 row observes the --tui-mode CLI flag; v1.3.0 product behavior is unaudited"
+    ),
+    "product.runInteractiveMode": (
+        "no #1051 row observes runInteractiveMode assembly; the mode-switch-renderer row observes a "
+        "live renderer switch, not this entry; v1.3.0 product behavior is unaudited"
+    ),
+    "product.fullscreenExitOutput": (
+        "only the adjacent #1051 exit-restoration row touches exit output and terminal "
+        "restoration, and it does not observe this setting; v1.3.0 product behavior is unaudited"
+    ),
+    "product.fullscreenCopyOnSelect": (
+        "no #1051 row observes copy-on-select; v1.3.0 product behavior is unaudited"
+    ),
+    "product.fullscreenWheelScrollLines": (
+        "no #1051 row observes the fullscreenWheelScrollLines setting; v1.3.0 product behavior is "
+        "unaudited"
+    ),
+    "product.showHardwareCursor": (
+        "only the adjacent #1051 hardware-cursor row touches the toolkit cursor switch, and it "
+        "does not observe this setting; v1.3.0 product behavior is unaudited"
+    ),
+}
+
 CPP_INTERFACE_OVERRIDE = {
     "Editor.render": "cch_tui::Editor::render / cch_tui::EditorLayout",
     "Input.render": "cch_tui::Input::render",
@@ -850,6 +885,15 @@ def main() -> int:
     historical_non_index = [
         row for row in historical["rows"] if row.get("member") is None and row["kind"] not in INDEX_EXPORT_KINDS
     ]
+    product_entry_ids = {
+        row["id"] for row in historical_non_index if row["path"].startswith("packages/coding-agent/")
+    }
+    if product_entry_ids != set(PRODUCT_ENTRY_GAPS):
+        raise SystemExit(
+            "product-entry gap set drifted: "
+            f"missing={sorted(product_entry_ids - set(PRODUCT_ENTRY_GAPS))} "
+            f"extra={sorted(set(PRODUCT_ENTRY_GAPS) - product_entry_ids)}"
+        )
     if set(historical_exports) != set(exports):
         missing = sorted(set(exports) - set(historical_exports))
         extra = sorted(set(historical_exports) - set(exports))
@@ -1251,9 +1295,7 @@ def main() -> int:
             )
             gaps = ["non-index capability not individually re-audited against v1.3.0"]
             if historical_extra["path"].startswith("packages/coding-agent/"):
-                gaps.append(
-                    "application product row; v1.3.0 product behavior is audited by #1051 and is not carried as unchanged"
-                )
+                gaps.append(PRODUCT_ENTRY_GAPS[historical_extra["id"]])
         else:
             notes.append("Frozen source file unchanged since v1.0.4; historical implementation/evidence carried.")
             gaps = [

@@ -246,8 +246,24 @@ def matches_recorded_pointer(recorded: str, source: str) -> bool:
     )
 
 
+def scope_ids(row_id: str, source_row_ids: Iterable[str]) -> set[str]:
+    """The identities a correction's `appliesTo` may name for one consolidated row.
+
+    The plan may scope a correction by the consolidated id or by the lane's own source row id.
+    Both are accepted here so the builder and both checker loops share one identity rule; the
+    source row ids come from this row's `sourceRows`, so an id belonging to another lane cannot
+    match.
+    """
+    return {row_id, *source_row_ids}
+
+
+def scope_names(scope: str | list[str], identities: set[str]) -> bool:
+    """True when a correction's `appliesTo` scope covers this row."""
+    return scope == "*" or bool(identities.intersection(scope))
+
+
 def apply_corrections(
-    lane: str, row_ids: Iterable[str], sources: list[str], plan: dict
+    lane: str, identities: Iterable[str], sources: list[str], plan: dict
 ) -> tuple[list[str], list[str]]:
     """Apply pointer-spelling corrections; return (corrected sources, applied correction ids).
 
@@ -259,11 +275,11 @@ def apply_corrections(
     """
     applied: list[str] = []
     result = list(sources)
-    scope_ids = set(row_ids)
+    row_identities = set(identities)
     for correction in plan["corrections"]:
         if correction["ticket"] != lane or correction["kind"] == "record-only":
             continue
-        if correction["appliesTo"] != "*" and not scope_ids.intersection(correction["appliesTo"]):
+        if not scope_names(correction["appliesTo"], row_identities):
             continue
         changed = False
         for index, source in enumerate(result):
@@ -555,7 +571,7 @@ def build_ledger(
             membership, implementation, verification = status_of(lane, raw)
             sources, frozen_symbols = extract_sources(lane, raw)
             sources, applied = apply_corrections(
-                lane, (raw["id"], consolidated_id), sources, plan
+                lane, scope_ids(consolidated_id, [raw["id"]]), sources, plan
             )
             raw_rows.append(
                 {
@@ -726,6 +742,23 @@ def check_product_routing(rows_by_id: dict[str, dict], overlaps: list[dict]) -> 
             require(
                 adjacent_id in adjacent,
                 f"{item['row']}: adjacent row {adjacent_id} is not a named 1051 counterpart",
+            )
+    for item in routing:
+        # The lane gap is the source statement; it must agree with the routing instead of claiming an
+        # audit the 1051 lane does not hold.
+        gap_text = " ".join(rows_by_id[item["row"]]["gaps"])
+        require(
+            "audited by #1051" not in gap_text,
+            f"{item['row']}: lane gap still claims #1051 audits the product behavior",
+        )
+        require(
+            "unaudited" in gap_text,
+            f"{item['row']}: lane gap does not state that the v1.3.0 product behavior is unaudited",
+        )
+        for adjacent_id in item["adjacent"]:
+            require(
+                adjacent_id.split(":")[-1] in gap_text,
+                f"{item['row']}: lane gap does not name its adjacent #1051 row {adjacent_id}",
             )
     require(
         any(not item["adjacent"] for item in routing),
@@ -1009,6 +1042,7 @@ def check_ledger(
     # 5. Corrections index rewrote exactly the recorded pointer in exactly the scoped rows.
     index = {correction["id"]: correction for correction in ledger["correctionsIndex"]}
     for row in rows:
+        identities = scope_ids(row["id"], (source["rowId"] for source in row["sourceRows"]))
         for correction_id in row["appliedCorrections"]:
             item = index.get(correction_id)
             require(item is not None, f"{row['id']}: applied unknown correction {correction_id}")
@@ -1021,7 +1055,7 @@ def check_ledger(
                 f"{row['id']}: correction {correction_id} belongs to lane {item['ticket']}",
             )
             require(
-                item["appliesTo"] == "*" or row["id"] in item["appliesTo"],
+                scope_names(item["appliesTo"], identities),
                 f"{row['id']}: correction {correction_id} was applied outside its scope",
             )
             require(
@@ -1035,7 +1069,10 @@ def check_ledger(
         for row in rows:
             if row["lane"] != correction["ticket"]:
                 continue
-            if correction["appliesTo"] != "*" and row["id"] not in correction["appliesTo"]:
+            if not scope_names(
+                correction["appliesTo"],
+                scope_ids(row["id"], (source["rowId"] for source in row["sourceRows"])),
+            ):
                 continue
             require(
                 not any(

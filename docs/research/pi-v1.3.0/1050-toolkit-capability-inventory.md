@@ -45,7 +45,7 @@ Manifest: `fixtures/pi-v1.3.0/audit-1050/manifest.json`, SHA-256 `3f479083b10886
 
 ## Change inventory: v1.0.4 → v1.3.0
 
-The index grew from 173 to 176 exports; none was removed. Fourteen `packages/tui/src` files changed, and `packages/coding-agent/src/cli/args.ts` plus `packages/coding-agent/src/modes/interactive/interactive-mode.ts` also changed. The 7 application product entries that point at those coding-agent sources are `not-audited` with a separate `historicalEvidence` provenance pointer; their v1.3.0 product behavior belongs to the #1051 application audit and is not carried as unchanged. The table below is the operation/consumer/status summary for every changed TUI capability. The complete per-operation ledger is `docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json`.
+The index grew from 173 to 176 exports; none was removed. Fourteen `packages/tui/src` files changed, and `packages/coding-agent/src/cli/args.ts` plus `packages/coding-agent/src/modes/interactive/interactive-mode.ts` also changed. The 7 application product entries that point at those coding-agent sources are `not-audited` with a separate `historicalEvidence` provenance pointer. #1051 holds three adjacent capability rows in the same product area (`mode-switch-renderer`, `exit-restoration`, `hardware-cursor`); only `fullscreenExitOutput` and `showHardwareCursor` name one as an adjacent counterpart, and neither 1051 row observes the 1050 setting, while the other five product entries have no #1051 row for their own operation. Every product entry therefore keeps an explicit unaudited gap, and none is carried as unchanged. The table below is the operation/consumer/status summary for every changed TUI capability. The complete per-operation ledger is `docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json`.
 
 | Area | v1.3.0 operations/members | Frozen observation | C++ status | Required caller / C++ consumer |
 |---|---|---|---|---|
@@ -292,7 +292,7 @@ The 42 `not-audited` rows are listed in the ledger with `comparisonRoute: not-au
 1. The registry record is applied by the serial merger; keep the family covered by `verify` (the C++ rows remain unverified until a native comparison exists).
 2. In a #1058 implementation slice, start with the independent TUI gaps: `renderFakeCursor`/marker resolution and hardware-cursor suppression; `Box::set_padding_x`; `AltScreen::reset_text_selection`; shifted-symbol `parse_key`/`matches_key`; fragmented terminal-reply buffering; Herdr detection; then the overlay-wheel routing change.
 3. Implement OSC 7501 as a terminal-layer capability plus a `cch_coding_agent` program-status reporter; the native reporter is a #1051 product row, not a TUI audit deliverable.
-4. Add a C++ differential capture for the 49 upstream-captured rows before claiming `verified`, and use the 42 `not-audited` rows as the review queue for the changed-file triage; the 7 application product entries are cross-referenced to #1051 rather than treated as unchanged.
+4. Add a C++ differential capture for the 49 upstream-captured rows before claiming `verified`, and use the 42 `not-audited` rows as the review queue for the changed-file triage; the 7 application product entries stay unaudited against v1.3.0 rather than being treated as unchanged or as covered by #1051.
 
 ## Pointers
 
