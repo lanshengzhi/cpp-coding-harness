@@ -6,11 +6,13 @@
 // the discovery speaks the same HTTPS client as the rest of the OAuth flow and
 // a test scripts it without a network.
 
-#include "coding_agent/mcp/McpOAuthDiscovery.hpp"
-#include "coding_agent/mcp/McpUrl.hpp"
+#include <cch/mcp/OAuthDiscovery.hpp>
+
+#include "support/AsyncResultBridge.hpp"
+#include <cch/mcp/Url.hpp>
 
 #include <cch/support/JsonAccess.hpp>
-#include "coding_agent/mcp/OAuthHttpClient.hpp"
+#include <cch/mcp/OAuthHttpClient.hpp>
 
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
@@ -22,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
 
 [[nodiscard]] support::Error invalid(std::string name, std::string detail = {}) {
@@ -58,7 +60,7 @@ struct DiscoveryUrl {
 }
 
 [[nodiscard]] std::optional<DiscoveryUrl> parse_discovery_url(std::string_view value) {
-    auto parsed = parse_mcp_url(value);
+    auto parsed = parse_url(value);
     if (!parsed.valid || is_forbidden_scheme(parsed.scheme)) {
         return std::nullopt;
     }
@@ -128,7 +130,8 @@ struct DiscoveryUrl {
             {"Accept", "application/json"},
             {"MCP-Protocol-Version", std::move(protocol_version)},
     };
-    co_return co_await http->get(std::move(url), std::move(headers), std::stop_token{});
+    co_return co_await support::detail::await_async_result(
+            http->get(std::move(url), std::move(headers), std::stop_token{}));
 }
 
 /// The parsed JSON of a metadata response body; a body that is not JSON is a
@@ -144,7 +147,7 @@ struct DiscoveryUrl {
 
 } // namespace
 
-support::Expected<McpProtectedResourceMetadata> parse_protected_resource_metadata(const support::JsonValue& value) {
+support::Expected<ProtectedResourceMetadata> parse_protected_resource_metadata(const support::JsonValue& value) {
     const auto* object = support::json_object(value);
     if (object == nullptr) {
         return std::unexpected(invalid("OAuth protected resource metadata"));
@@ -157,7 +160,7 @@ support::Expected<McpProtectedResourceMetadata> parse_protected_resource_metadat
     if (!is_safe_url(*resource_text)) {
         return std::unexpected(invalid("OAuth protected resource metadata resource"));
     }
-    McpProtectedResourceMetadata metadata;
+    ProtectedResourceMetadata metadata;
     metadata.resource = *resource_text;
     if (const auto* servers = support::json_member(*object, "authorization_servers"); servers != nullptr) {
         auto strings = optional_strings(*servers);
@@ -186,7 +189,7 @@ support::Expected<McpProtectedResourceMetadata> parse_protected_resource_metadat
     return metadata;
 }
 
-support::Expected<McpAuthorizationServerMetadata> parse_authorization_server_metadata(const support::JsonValue& value) {
+support::Expected<AuthorizationServerMetadata> parse_authorization_server_metadata(const support::JsonValue& value) {
     const auto* object = support::json_object(value);
     if (object == nullptr) {
         return std::unexpected(invalid("authorization server metadata"));
@@ -218,7 +221,7 @@ support::Expected<McpAuthorizationServerMetadata> parse_authorization_server_met
         return std::unexpected(std::move(token_endpoint.error()));
     }
 
-    McpAuthorizationServerMetadata metadata;
+    AuthorizationServerMetadata metadata;
     metadata.issuer = std::move(*issuer);
     metadata.authorization_endpoint = std::move(*authorization_endpoint);
     metadata.token_endpoint = std::move(*token_endpoint);
@@ -271,8 +274,8 @@ support::Expected<McpAuthorizationServerMetadata> parse_authorization_server_met
     return metadata;
 }
 
-McpOAuthChallenge parse_www_authenticate(std::string_view header) {
-    McpOAuthChallenge challenge;
+OAuthChallenge parse_www_authenticate(std::string_view header) {
+    OAuthChallenge challenge;
     const auto first = header.find_first_not_of(" \t");
     if (first == std::string_view::npos) {
         return challenge;
@@ -338,7 +341,7 @@ McpOAuthChallenge parse_www_authenticate(std::string_view header) {
 }
 
 support::Expected<std::optional<std::string>> select_resource(
-        std::string_view server_url, const std::optional<McpProtectedResourceMetadata>& metadata) {
+        std::string_view server_url, const std::optional<ProtectedResourceMetadata>& metadata) {
     if (!metadata.has_value()) {
         return std::optional<std::string>{};
     }
@@ -378,8 +381,8 @@ std::vector<std::string> authorization_server_discovery_urls(std::string_view au
     return urls;
 }
 
-boost::asio::awaitable<support::Expected<McpProtectedResourceMetadata>> discover_protected_resource_metadata(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options) {
+boost::asio::awaitable<support::Expected<ProtectedResourceMetadata>> discover_protected_resource_metadata_awaitable(
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
     const auto server = parse_discovery_url(server_url);
     if (!server) {
         co_return std::unexpected(invalid("MCP server URL", server_url));
@@ -405,9 +408,9 @@ boost::asio::awaitable<support::Expected<McpProtectedResourceMetadata>> discover
     co_return parse_protected_resource_metadata(parsed);
 }
 
-boost::asio::awaitable<support::Expected<std::optional<McpAuthorizationServerMetadata>>>
-discover_authorization_server_metadata(
-        std::shared_ptr<OAuthHttpClient> http, std::string authorization_server_url, McpOAuthDiscoveryOptions options) {
+boost::asio::awaitable<support::Expected<std::optional<AuthorizationServerMetadata>>>
+discover_authorization_server_metadata_awaitable(
+        std::shared_ptr<OAuthHttpClient> http, std::string authorization_server_url, OAuthDiscoveryOptions options) {
     for (const auto& url : authorization_server_discovery_urls(authorization_server_url)) {
         CCH_TRY(response, co_await fetch_metadata(http, url, options.protocol_version));
         if (response.status_code < 200 || response.status_code >= 300) {
@@ -435,15 +438,15 @@ discover_authorization_server_metadata(
                         "the authorization server metadata names another issuer"));
             }
         }
-        co_return std::optional<McpAuthorizationServerMetadata>{std::move(metadata)};
+        co_return std::optional<AuthorizationServerMetadata>{std::move(metadata)};
     }
-    co_return std::optional<McpAuthorizationServerMetadata>{};
+    co_return std::optional<AuthorizationServerMetadata>{};
 }
 
-boost::asio::awaitable<support::Expected<McpOAuthServerInfo>> discover_oauth_server_info(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, McpOAuthDiscoveryOptions options) {
-    std::optional<McpProtectedResourceMetadata> resource_metadata;
-    auto discovered = co_await discover_protected_resource_metadata(http, server_url, options);
+boost::asio::awaitable<support::Expected<OAuthServerInfo>> discover_oauth_server_info_awaitable(
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
+    std::optional<ProtectedResourceMetadata> resource_metadata;
+    auto discovered = co_await discover_protected_resource_metadata_awaitable(http, server_url, options);
     if (discovered) {
         resource_metadata = std::move(*discovered);
     } else if (discovered.error().code == support::ErrorCode::Network ||
@@ -461,7 +464,7 @@ boost::asio::awaitable<support::Expected<McpOAuthServerInfo>> discover_oauth_ser
         }
         CCH_TRY(parsed, parse_metadata_body(response.body, "authorization server metadata"));
         CCH_TRY(metadata, parse_authorization_server_metadata(parsed));
-        co_return McpOAuthServerInfo{
+        co_return OAuthServerInfo{
                 .authorization_server_url = metadata.issuer,
                 .authorization_server_metadata = std::move(metadata),
                 .resource_metadata = std::move(resource_metadata),
@@ -476,12 +479,45 @@ boost::asio::awaitable<support::Expected<McpOAuthServerInfo>> discover_oauth_ser
                                                                  !resource_metadata->authorization_servers->empty()
                                                          ? resource_metadata->authorization_servers->front()
                                                          : server->origin + "/";
-    CCH_TRY(metadata, co_await discover_authorization_server_metadata(http, authorization_server_url, options));
-    co_return McpOAuthServerInfo{
+    CCH_TRY(metadata,
+            co_await discover_authorization_server_metadata_awaitable(http, authorization_server_url, options));
+    co_return OAuthServerInfo{
             .authorization_server_url = authorization_server_url,
             .authorization_server_metadata = std::move(metadata),
             .resource_metadata = std::move(resource_metadata),
     };
 }
 
-} // namespace cch::coding_agent::mcp
+support::AsyncResult<ProtectedResourceMetadata> discover_protected_resource_metadata(
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
+    return support::detail::make_async_result(
+            [http = std::move(http), server_url = std::move(server_url), options = std::move(options)]() mutable
+                    -> boost::asio::awaitable<support::Expected<ProtectedResourceMetadata>> {
+                co_return co_await discover_protected_resource_metadata_awaitable(
+                        std::move(http), std::move(server_url), std::move(options));
+            });
+}
+
+support::AsyncResult<std::optional<AuthorizationServerMetadata>> discover_authorization_server_metadata(
+        std::shared_ptr<OAuthHttpClient> http, std::string authorization_server_url, OAuthDiscoveryOptions options) {
+    return support::detail::make_async_result(
+            [http = std::move(http),
+                    authorization_server_url = std::move(authorization_server_url),
+                    options = std::move(options)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::optional<AuthorizationServerMetadata>>> {
+                co_return co_await discover_authorization_server_metadata_awaitable(
+                        std::move(http), std::move(authorization_server_url), std::move(options));
+            });
+}
+
+support::AsyncResult<OAuthServerInfo> discover_oauth_server_info(
+        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
+    return support::detail::make_async_result(
+            [http = std::move(http), server_url = std::move(server_url), options = std::move(options)]() mutable
+                    -> boost::asio::awaitable<support::Expected<OAuthServerInfo>> {
+                co_return co_await discover_oauth_server_info_awaitable(
+                        std::move(http), std::move(server_url), std::move(options));
+            });
+}
+
+} // namespace cch::mcp

@@ -1,12 +1,12 @@
-#include "coding_agent/mcp/McpUrl.hpp"
+#include <cch/mcp/Url.hpp>
 
 #include <cctype>
 #include <charconv>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 
-McpParsedUrl parse_mcp_url(std::string_view value) {
-    McpParsedUrl result;
+ParsedUrl parse_url(std::string_view value) {
+    ParsedUrl result;
     const auto scheme_end = value.find("://");
     if (scheme_end == std::string_view::npos || scheme_end == 0) {
         return result;
@@ -95,9 +95,9 @@ McpParsedUrl parse_mcp_url(std::string_view value) {
     return result;
 }
 
-std::string extract_mcp_host(std::string_view url_or_authority) {
+std::string extract_host(std::string_view url_or_authority) {
     if (url_or_authority.find("://") != std::string_view::npos) {
-        const auto parsed = parse_mcp_url(url_or_authority);
+        const auto parsed = parse_url(url_or_authority);
         return parsed.valid ? parsed.host : std::string{};
     }
     // Bare authority
@@ -129,4 +129,4 @@ std::string extract_mcp_host(std::string_view url_or_authority) {
     return host;
 }
 
-} // namespace cch::coding_agent::mcp
+} // namespace cch::mcp

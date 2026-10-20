@@ -13,6 +13,7 @@
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthConfig.hpp"
 #include "coding_agent/mcp/McpRequestAuthSource.hpp"
+#include "coding_agent/mcp/OAuthHttpClient.hpp"
 
 #include <cch/support/AsyncResult.hpp>
 
@@ -30,7 +31,6 @@
 
 namespace cch::coding_agent::mcp {
 
-class OAuthHttpClient;
 
 /// pi `FALLBACK_REDIRECT_URL`: the redirect URI a request-time refresh sends
 /// when the stored client registered none. Refreshing never redirects the
@@ -59,7 +59,7 @@ struct McpOAuthCallbackSettings {
 
 /// pi `registeredRedirectUrls(state.clientInformation)[0] ?? FALLBACK`: the
 /// redirect URI the request-time refresh sends for a stored registration.
-[[nodiscard]] std::string mcp_oauth_registered_redirect_url(const std::optional<McpOAuthState>& state);
+[[nodiscard]] std::string mcp_oauth_registered_redirect_url(const std::optional<OAuthState>& state);
 
 /// pi `signInPrompt` plus the CLI's `--timeout`: the authorization URL to show,
 /// and the pasted-redirect-URL fallback for when the browser cannot reach the

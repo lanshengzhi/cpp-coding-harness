@@ -30,11 +30,11 @@ using namespace cch;
 
 namespace {
 
-namespace mcp = cch::coding_agent::mcp;
+namespace app_mcp = cch::coding_agent::mcp;
 
 /// One scripted `McpServerConnection`: every `tools/list` is answered from the
 /// scripted page function, recording the cursors the client followed.
-class ScriptedListConnection final : public mcp::McpServerConnection {
+class ScriptedListConnection final : public app_mcp::McpServerConnection {
 public:
     std::move_only_function<support::Expected<support::JsonValue>(const std::optional<std::string>&)> page_for;
     std::vector<std::optional<std::string>> cursors;
@@ -63,8 +63,13 @@ public:
     void notify(std::string, std::optional<support::JsonValue> = std::nullopt) override {}
 
     [[nodiscard]] const std::string& server_name() const noexcept override { return name_; }
+    [[nodiscard]] const std::optional<std::string>& server_instructions() const noexcept override {
+        return instructions_;
+    }
+    void close() noexcept override {}
 
     std::string name_{"scripted"};
+    std::optional<std::string> instructions_{};
 };
 
 [[nodiscard]] support::JsonValue tool(std::string name) {
@@ -128,8 +133,8 @@ TEST_CASE("tools/list pagination follows a nextCursor across pages", "[coding_ag
     boost::asio::thread_pool pool{1};
     auto outcome = boost::asio::co_spawn(
             pool,
-            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<mcp::McpToolDescriptor>>> {
-                co_return co_await mcp::list_mcp_server_tools(connection);
+            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<app_mcp::McpToolDescriptor>>> {
+                co_return co_await app_mcp::list_mcp_server_tools(connection);
             },
             boost::asio::use_future);
     const auto listed = outcome.get();
@@ -167,8 +172,8 @@ TEST_CASE("tools/list treats a null or empty nextCursor as the end of pagination
         boost::asio::thread_pool pool{1};
         auto outcome = boost::asio::co_spawn(
                 pool,
-                [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<mcp::McpToolDescriptor>>> {
-                    co_return co_await mcp::list_mcp_server_tools(connection);
+                [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<app_mcp::McpToolDescriptor>>> {
+                    co_return co_await app_mcp::list_mcp_server_tools(connection);
                 },
                 boost::asio::use_future);
         const auto listed = outcome.get();
@@ -189,8 +194,8 @@ TEST_CASE("tools/list rejects a duplicate cursor with pi's message", "[coding_ag
     boost::asio::thread_pool pool{1};
     auto outcome = boost::asio::co_spawn(
             pool,
-            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<mcp::McpToolDescriptor>>> {
-                co_return co_await mcp::list_mcp_server_tools(connection);
+            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<app_mcp::McpToolDescriptor>>> {
+                co_return co_await app_mcp::list_mcp_server_tools(connection);
             },
             boost::asio::use_future);
     const auto listed = outcome.get();
@@ -215,8 +220,8 @@ TEST_CASE("tools/list stops after pi's 1000-page bound", "[coding_agent][mcp][is
     boost::asio::thread_pool pool{1};
     auto outcome = boost::asio::co_spawn(
             pool,
-            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<mcp::McpToolDescriptor>>> {
-                co_return co_await mcp::list_mcp_server_tools(connection);
+            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<app_mcp::McpToolDescriptor>>> {
+                co_return co_await app_mcp::list_mcp_server_tools(connection);
             },
             boost::asio::use_future);
     const auto listed = outcome.get();
@@ -236,8 +241,8 @@ TEST_CASE("tools/list rejects a non-string cursor with pi's invalid-cursor error
     boost::asio::thread_pool pool{1};
     auto outcome = boost::asio::co_spawn(
             pool,
-            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<mcp::McpToolDescriptor>>> {
-                co_return co_await mcp::list_mcp_server_tools(connection);
+            [&connection]() -> boost::asio::awaitable<support::Expected<std::vector<app_mcp::McpToolDescriptor>>> {
+                co_return co_await app_mcp::list_mcp_server_tools(connection);
             },
             boost::asio::use_future);
     const auto listed = outcome.get();

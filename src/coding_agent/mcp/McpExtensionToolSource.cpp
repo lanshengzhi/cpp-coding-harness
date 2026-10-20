@@ -13,6 +13,7 @@
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 
 #include "coding_agent/mcp/McpHttpClient.hpp"
+#include "coding_agent/mcp/McpProtocol.hpp"
 #include "coding_agent/mcp/McpStdioClient.hpp"
 #include "coding_agent/mcp/Pkce.hpp"
 
@@ -360,7 +361,7 @@ McpExtensionToolSource::McpExtensionToolSource(
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
 McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
-    auto client = co_await McpStdioClient::connect(std::move(config));
+    auto client = co_await support::detail::await_async_result(McpStdioClient::connect(std::move(config)));
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }
@@ -373,8 +374,8 @@ McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>> McpExtensionToolSource::connect_http(
         McpHttpServerConfig config, std::shared_ptr<McpRequestAuthSource> request_auth) {
-    auto client = co_await McpHttpClient::connect(
-            std::move(config), std::make_shared<support::BoostBeastStreamTransport>(), std::move(request_auth));
+    auto client = co_await support::detail::await_async_result(McpHttpClient::connect(
+            std::move(config), std::make_shared<support::BoostBeastStreamTransport>(), std::move(request_auth)));
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }
