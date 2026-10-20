@@ -17,8 +17,9 @@ TranscriptExportHandler transcript_export_handler(cch::harness::session::Session
         for (const auto& entry : store.entries()) {
             auto line = serializer.serialize_entry(entry);
             if (!line) return std::unexpected(line.error());
+            // `serialize_entry` already terminates the wire line, so appending
+            // another newline here would emit a blank line after every entry.
             transcript += *line;
-            transcript.push_back('\n');
         }
         WorkspaceFileSystem filesystem;
         auto written = filesystem.write_file(destination, transcript, true, token);

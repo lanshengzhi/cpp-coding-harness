@@ -18,6 +18,19 @@ status: accepted
 > those targets; incomplete implementation remains work, not Deferred. Unrelated exclusions and
 > No decision rows retain their status. The amendment does not claim completion.
 
+> Retired capability amendment (#1044): the three rows below that record the in-`cch_agent_core`
+> SQLite session store as **Supported** — *Durable execution layer*, *SQLite session store*, and
+> *Session transactions* — described code that has since been deleted. `SqliteSessionStore`,
+> `SqliteDatabase`, `TaskStore`, `TaskScheduler`, `SessionStore::create_sqlite`/`open_sqlite`,
+> `SessionStore::commit_batch` and the `cch_agent_core` link against `unofficial::sqlite3` are gone;
+> the application Session Store now has exactly two alternatives, a JSONL session file and an
+> in-memory store. No production caller ever constructed the SQLite path, so no capability the
+> released runtime provided is lost. The pi-side `packages/durable` capabilities those rows size
+> remain unimplemented; ADR 0075's durable JSONL and SQLite storage obligation belongs to the
+> `cch_durable` package, which today ships only `MemoryStorage`, and is unaffected by this deletion.
+> The rows are left as written because they record what was believed at the time; this note is the
+> correction.
+
 ## Context
 
 [ADR 0053](0053-replace-pi-parity-authority-with-the-product-architecture-contract.md) made pi
