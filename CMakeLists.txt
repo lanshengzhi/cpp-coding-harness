@@ -15,6 +15,7 @@ include(cmake/ParityArchitecture.cmake) # central production-target constructors
 include(cmake/TargetHelpers.cmake)     # owner-local declaration helpers
 
 include(cmake/targets/Support.cmake)
+include(cmake/targets/Chord.cmake)
 include(cmake/targets/Tui.cmake)
 include(cmake/targets/Ai.cmake)
 include(cmake/targets/AgentCore.cmake)
@@ -39,6 +40,7 @@ if(CCH_BUILD_TESTS)
     include(cmake/tests/ArchitectureTests.cmake)
     include(cmake/tests/InstallTests.cmake)
     include(cmake/tests/SupportTests.cmake)
+    include(cmake/tests/ChordTests.cmake)
     include(cmake/tests/TuiTests.cmake)
     include(cmake/tests/AiTests.cmake)
     include(cmake/tests/EvidenceTests.cmake)

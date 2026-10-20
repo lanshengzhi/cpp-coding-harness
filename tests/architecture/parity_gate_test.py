@@ -245,7 +245,7 @@ class ManifestSchemaTest(unittest.TestCase):
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
         self.assertEqual(
             set(manifest.owners),
-            {"cch_ai", "cch_agent_core", "cch_tui", "cch_codemode", "cch_coding_agent", "cch_support"},
+            {"cch_ai", "cch_agent_core", "cch_chord", "cch_codemode", "cch_tui", "cch_coding_agent", "cch_support"},
         )
         # The headless Owner keeps its own dependencies authoritative and adds
         # the frontend-only one for non-`owner` targets (issue #658).
