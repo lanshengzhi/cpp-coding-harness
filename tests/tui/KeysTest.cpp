@@ -3,6 +3,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <array>
+#include <optional>
 #include <string>
 #include <string_view>
 
@@ -103,16 +104,17 @@ TEST_CASE("shifted-symbol reports consume the implicit shift and keep the physic
     struct ShiftedSymbolCase {
         std::string_view report;
         std::string_view identity;
+        std::optional<std::string> text;
         bool matches_plus;
         bool matches_shift_equals;
         bool matches_ctrl_plus;
         bool matches_ctrl_slash;
     };
-    constexpr ShiftedSymbolCase kCases[]{
-            {"\x1b[61:43;2u", "+", true, true, false, false},
-            {"\x1b[61:43;6u", "ctrl++", false, false, true, false},
-            {"\x1b[27;6;43~", "ctrl++", false, false, true, false},
-            {"\x1b[27;5;47~", "ctrl+/", false, false, false, true},
+    const ShiftedSymbolCase kCases[]{
+            {"\x1b[61:43;2u", "+", "+", true, true, false, false},
+            {"\x1b[61:43;6u", "ctrl++", std::nullopt, false, false, true, false},
+            {"\x1b[27;6;43~", "ctrl++", std::nullopt, false, false, true, false},
+            {"\x1b[27;5;47~", "ctrl+/", std::nullopt, false, false, false, true},
     };
 
     for (const auto& test : kCases) {
@@ -124,6 +126,10 @@ TEST_CASE("shifted-symbol reports consume the implicit shift and keep the physic
         CHECK(cch::tui::matches_key(*event, "shift+=") == test.matches_shift_equals);
         CHECK(cch::tui::matches_key(*event, "ctrl++") == test.matches_ctrl_plus);
         CHECK(cch::tui::matches_key(*event, "ctrl+/") == test.matches_ctrl_slash);
+        // pi-v1.3.0 `decodeKittyPrintable` prefers the reported shifted key
+        // for insertion text; a ctrl shortcut never carries text.
+        CHECK(event->text == test.text.value_or(std::string{}));
+        CHECK(cch::tui::printable_text(*event) == test.text);
     }
 
     // A plain legacy "+" is the produced symbol with no shift report behind it,
@@ -134,4 +140,42 @@ TEST_CASE("shifted-symbol reports consume the implicit shift and keep the physic
     CHECK(cch::tui::matches_key(*plain, "+"));
     CHECK_FALSE(cch::tui::matches_key(*plain, "shift+="));
     CHECK_FALSE(cch::tui::matches_key(*plain, "ctrl++"));
+}
+
+TEST_CASE("keypad alternate shifted-symbol reports normalize before matching and printing",
+        "[tui][input][issue1122][spec]") {
+    // Frozen pi-v1.3.0 public calls (revision 71023aec, checkout
+    // /tmp/cch-1050-pi-frozen): `getLogicalShiftedSymbolCandidate` normalizes
+    // Kitty functional/keypad codepoints before testing the symbol set, and
+    // `decodeKittyPrintable` normalizes the effective insertion codepoint.
+    // Observed: `ESC[61:57413;2u` -> parseKey "+", matches "+"/"shift+=",
+    // decode "+"; the ctrl form -> "ctrl++" with no printable text; plain
+    // KP_ADD -> "+"; modifyOtherKeys shift+KP_ADD -> "+".
+    const auto shifted = cch::tui::parse_key("\x1b[61:57413;2u", /*kitty_protocol_active=*/true);
+    REQUIRE(shifted);
+    CHECK(cch::tui::key_id(*shifted) == "+");
+    CHECK(shifted->text == "+");
+    CHECK(cch::tui::printable_text(*shifted) == std::optional<std::string>{"+"});
+    CHECK(cch::tui::matches_key(*shifted, "+"));
+    CHECK(cch::tui::matches_key(*shifted, "shift+="));
+    CHECK_FALSE(cch::tui::matches_key(*shifted, "ctrl++"));
+
+    const auto ctrl_shifted = cch::tui::parse_key("\x1b[61:57413;6u", /*kitty_protocol_active=*/true);
+    REQUIRE(ctrl_shifted);
+    CHECK(cch::tui::key_id(*ctrl_shifted) == "ctrl++");
+    CHECK(ctrl_shifted->text.empty());
+    CHECK_FALSE(cch::tui::printable_text(*ctrl_shifted));
+    CHECK(cch::tui::matches_key(*ctrl_shifted, "ctrl++"));
+
+    const auto plain_keypad = cch::tui::parse_key("\x1b[57413u", /*kitty_protocol_active=*/true);
+    REQUIRE(plain_keypad);
+    CHECK(cch::tui::key_id(*plain_keypad) == "+");
+    CHECK(plain_keypad->text == "+");
+    CHECK_FALSE(cch::tui::matches_key(*plain_keypad, "shift+="));
+
+    const auto modify_other_keys = cch::tui::parse_key("\x1b[27;2;57413~", /*kitty_protocol_active=*/true);
+    REQUIRE(modify_other_keys);
+    CHECK(cch::tui::key_id(*modify_other_keys) == "+");
+    CHECK(cch::tui::matches_key(*modify_other_keys, "+"));
+    CHECK_FALSE(cch::tui::matches_key(*modify_other_keys, "shift+="));
 }

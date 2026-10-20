@@ -12,6 +12,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -92,9 +93,12 @@ TEST_CASE("stream decoder prefers shifted key in Kitty CSI-u", "[tui][decoder][i
     REQUIRE(key != nullptr);
     CHECK(key->key == "!");
     // pi-v1.3.0 consumes the report's implicit Shift once the shifted symbol is
-    // the identity; the physical "shift+1" spelling stays matchable.
+    // the identity; the physical "shift+1" spelling stays matchable, and
+    // `decodeKittyPrintable` inserts the shifted key rather than the base '1'.
     CHECK_FALSE(key->shift);
     CHECK(tui::matches_key(*key, "shift+1"));
+    CHECK(key->text == "!");
+    CHECK(tui::printable_text(*key) == std::optional<std::string>{"!"});
 }
 
 TEST_CASE("stream decoder demuxes a cursor position report out of the byte stream", "[tui][decoder][spec]") {

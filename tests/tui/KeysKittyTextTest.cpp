@@ -44,20 +44,19 @@ TEST_CASE("a Kitty non-Latin key inserts its own character and keeps the base-la
     CHECK(tui::printable_text(*event) != event->key);
 }
 
-TEST_CASE("shifted, supplementary and legacy printables keep their own characters", "[tui][input][issue950][spec]") {
-    // CSI 49:33;2u: shift-modified '1'. The identity takes the shifted key's
-    // symbol ('!'), but the inserted text is the terminal's own reported
-    // character ('1') — verified against frozen pi 7c10bd43
-    // `decodeKittyPrintable`, which never substitutes the shifted keycode.
+TEST_CASE("shifted Kitty printables insert the shifted key while legacy text keeps its characters",
+        "[tui][input][issue950][spec]") {
+    // CSI 49:33;2u: shift-modified '1'. Frozen pi-v1.3.0 `decodeKittyPrintable`
+    // (revision 71023aec) prefers the reported shifted key, so both the
+    // shortcut identity and the inserted text are '!'; the physical "shift+1"
+    // spelling stays matchable while the implicit Shift is consumed.
     const auto shifted = kitty("\x1b[49:33;2u");
     REQUIRE(shifted);
     CHECK(shifted->key == "!");
-    // pi-v1.3.0 consumes the report's implicit Shift once the shifted symbol is
-    // the identity; the physical "shift+1" spelling stays matchable.
     CHECK_FALSE(shifted->shift);
     CHECK(tui::matches_key(*shifted, "shift+1"));
-    CHECK(shifted->text == "1");
-    CHECK(tui::printable_text(*shifted) == std::optional<std::string>{"1"});
+    CHECK(shifted->text == "!");
+    CHECK(tui::printable_text(*shifted) == std::optional<std::string>{"!"});
 
     // A supplementary codepoint is text, not a truncated code unit.
     const auto supplementary = kitty("\x1b[128512u");
@@ -65,19 +64,16 @@ TEST_CASE("shifted, supplementary and legacy printables keep their own character
     CHECK(supplementary->text == "\xf0\x9f\x98\x80");
     CHECK(tui::printable_text(*supplementary) == std::optional<std::string>{"\xf0\x9f\x98\x80"});
 
-    // A shift-modified non-Latin layout keeps its reported character as text
-    // while the identity stays the base-layout key. NOTE (verified against
-    // frozen pi 7c10bd43 `decodeKittyPrintable`): pi does NOT substitute the
-    // shifted keycode into the text path — `ESC[1060:1040:97;2u` inserts
-    // U+0424 (Ф, the reported codepoint 1060), even though group 2 carries
-    // 1040 (U+0410, А). pi's `formatParsedKey` uses the shifted key only for
-    // the shortcut identity, not for insertion text.
+    // A shift-modified non-Latin layout inserts the shifted keycode while the
+    // shortcut identity falls back to the base-layout key. Frozen pi-v1.3.0
+    // `decodeKittyPrintable` at revision 71023aec: `ESC[1060:1040:97;2u`
+    // inserts U+0410 (А, shifted key 1040), not the reported U+0424 (Ф).
     const auto shifted_cyrillic = kitty("\x1b[1060:1040:97;2u");
     REQUIRE(shifted_cyrillic);
     CHECK(shifted_cyrillic->key == "a");
     CHECK(shifted_cyrillic->shift);
-    CHECK(shifted_cyrillic->text == "\xd0\xa4");
-    CHECK(tui::printable_text(*shifted_cyrillic) == std::optional<std::string>{"\xd0\xa4"});
+    CHECK(shifted_cyrillic->text == "\xd0\x90");
+    CHECK(tui::printable_text(*shifted_cyrillic) == std::optional<std::string>{"\xd0\x90"});
 
     // The legacy paths still type what the terminal sent: the identifier is
     // canonical, the inserted text keeps the typed case and non-ASCII bytes.
@@ -190,4 +186,45 @@ TEST_CASE("Editor inserts and jumps by the Kitty character, not by the shortcut 
     // ('a') would find no match and leave the cursor where it started.
     CHECK(editor_pointer->cursor().column == 2);
     CHECK(editor_pointer->text() == "\xd1\x84x\xd1\x84");
+}
+
+TEST_CASE("Input inserts produced shifted symbols and never a ctrl shortcut", "[tui][input][issue1122][spec]") {
+    tui::Input input;
+    const auto shift_equals = kitty("\x1b[61:43;2u");
+    REQUIRE(shift_equals);
+    CHECK(shift_equals->text == "+");
+    REQUIRE(input.handle_input(tui::InputEventVariant{*shift_equals}) == tui::InputAdmissionOutcome::Consumed);
+    REQUIRE(input.handle_input(tui::InputEventVariant{*kitty("\x1b[49:33;2u")}) ==
+            tui::InputAdmissionOutcome::Consumed);
+    // A keypad alternate shifted "=" normalizes to the same produced symbol.
+    REQUIRE(input.handle_input(tui::InputEventVariant{*kitty("\x1b[61:57413;2u")}) ==
+            tui::InputAdmissionOutcome::Consumed);
+    CHECK(input.value() == "+!+");
+
+    // Ctrl+shift+= is the ctrl++ shortcut: it matches the shortcut and never
+    // inserts text.
+    const auto ctrl_plus = kitty("\x1b[61:43;6u");
+    REQUIRE(ctrl_plus);
+    CHECK(tui::matches_key(*ctrl_plus, "ctrl++"));
+    CHECK(input.handle_input(tui::InputEventVariant{*ctrl_plus}) == tui::InputAdmissionOutcome::Unhandled);
+    CHECK(input.value() == "+!+");
+}
+
+TEST_CASE("Editor inserts produced shifted symbols instead of their physical base", "[tui][editor][issue1122][spec]") {
+    tui::VirtualTerminal terminal({.columns = 12, .rows = 2});
+    tui::Tui tui(terminal);
+    auto editor = std::make_unique<tui::Editor>();
+    auto* editor_pointer = editor.get();
+    REQUIRE(tui.add_child(std::move(editor)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.set_focus(editor_pointer));
+
+    REQUIRE(terminal.inject_input("\x1b[61:43;2u"));    // shift+=        -> "+"
+    REQUIRE(terminal.inject_input("\x1b[49:33;2u"));    // shift+1        -> "!"
+    REQUIRE(terminal.inject_input("\x1b[61:57413;2u")); // keypad alternate -> "+"
+    CHECK(editor_pointer->text() == "+!+");
+
+    // The ctrl variant is the ctrl++ shortcut, not insertion text.
+    REQUIRE(terminal.inject_input("\x1b[61:43;6u"));
+    CHECK(editor_pointer->text() == "+!+");
 }
