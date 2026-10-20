@@ -359,15 +359,41 @@ def boundary_override(plan: dict, lane: str, raw_id: str) -> dict | None:
     return None
 
 
-def build_bundle_index() -> dict[str, dict[str, list[str]]]:
+def registered_families() -> set[str]:
+    """The families the named-baseline registry accepts as in-scope evidence."""
+    registry = load_json(REGISTRY_PATH)
+    return set(registry["baselines"]["pi-v1.3.0"]["bundles"])
+
+
+def build_bundle_index(families: set[str] | None = None) -> dict[str, dict[str, list[str]]]:
+    """Index the artifact scenarios of the in-scope families.
+
+    A lane may commit its `audit-<ticket>/` bundle directory before the serial merger registers
+    the family, so the registry decides which families are in scope. `families` defaults to the
+    registered families; pass an explicit set to index a different scope. A family whose manifest
+    is on disk but not registered stays out of the index: its bytes stay untouched and its
+    scenarios are not part of this consolidation.
+    """
+    if families is None:
+        families = registered_families()
     index: dict[str, dict[str, list[str]]] = {}
     for manifest_path in sorted((ROOT / "fixtures/pi-v1.3.0").glob("audit-*/manifest.json")):
         manifest = load_json(manifest_path)
         family = manifest["family"]
+        if family not in families:
+            continue
         index[family] = {}
         for artifact in manifest["artifacts"]:
             index[family][artifact["path"]] = [scenario["name"] for scenario in artifact["scenarios"]]
     return index
+
+
+def on_disk_families() -> set[str]:
+    """The families whose manifest is committed on disk, registered or not."""
+    families: set[str] = set()
+    for manifest_path in sorted((ROOT / "fixtures/pi-v1.3.0").glob("audit-*/manifest.json")):
+        families.add(load_json(manifest_path)["family"])
+    return families
 
 
 def build_scenario_index(bundles: dict[str, dict[str, list[str]]]) -> dict[str, list[tuple[str, str]]]:
@@ -551,7 +577,13 @@ def build_ledger(
 ) -> dict:
     registry = load_json(REGISTRY_PATH)
     registered = set(registry["baselines"]["pi-v1.3.0"]["bundles"])
-    require(set(bundles) == registered, f"bundle manifests and registry disagree: {sorted(set(bundles) ^ registered)}")
+    # The registry is the authority for which families are in scope: it names the families whose
+    # evidence the serial merger has accepted. A lane may commit its bundle directory before the
+    # merger registers it, so a manifest on disk that is not registered is out of scope, not a
+    # disagreement. The reverse stays fatal: a registered family without its manifest on disk
+    # would leave a row's evidence pointing at bytes nobody can read.
+    missing = registered - set(bundles)
+    require(not missing, f"registered bundle manifests are missing on disk: {sorted(missing)}")
 
     raw_rows: list[dict] = []
     source_aliases: dict[str, dict[str, str]] = {}
@@ -1037,6 +1069,7 @@ def check_ledger(
             orphan["scenario"] in bundles.get(orphan["family"], {}).get(orphan["artifact"], []),
             f"orphan {orphan['scenario']}: not a scenario of {orphan['family']}/{orphan['artifact']}",
         )
+        require(orphan.get("disposition", "").strip(), f"orphan {orphan['scenario']}: no disposition")
     notes.append(f"groups/overlaps: {len(group_ids)} groups, {len(overlap_ids)} overlap resolutions")
 
     # 5. Corrections index rewrote exactly the recorded pointer in exactly the scoped rows.
@@ -1322,7 +1355,7 @@ def main() -> int:
     args = parser.parse_args()
 
     plan = load_json(PLAN_PATH)
-    bundles = build_bundle_index()
+    bundles = build_bundle_index(registered_families())
     scenario_index = build_scenario_index(bundles)
     ledger = build_ledger(plan, bundles, scenario_index)
     payload = json_bytes(ledger)

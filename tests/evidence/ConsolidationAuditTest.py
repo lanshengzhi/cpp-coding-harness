@@ -38,6 +38,19 @@ def correction(plan: dict, correction_id: str) -> dict:
     return next(item for item in plan["corrections"] if item["id"] == correction_id)
 
 
+def orphan_keys(plan: dict) -> list[str]:
+    """The orphan coverage keys the plan registers, in plan order.
+
+    The orphan count is derived from `orphanScenarios`, so the tests read the expected value from
+    the plan instead of restating a number that changes whenever a lane registers a scenario the
+    consolidation does not route. The ledger's own output is compared against this derivation.
+    """
+    return [
+        f"{item['family']}/{item['artifact']}:{item['scenario']}"
+        for item in plan["orphanScenarios"]
+    ]
+
+
 class CorrectionScopeTest(unittest.TestCase):
     def setUp(self) -> None:
         self.plan = load(PLAN)
@@ -158,10 +171,10 @@ class CommittedLedgerTest(unittest.TestCase):
 
 class ScenarioCoverageTest(unittest.TestCase):
     def setUp(self) -> None:
+        self.plan = load(PLAN)
         self.ledger = load(LEDGER)
 
     def test_build_reads_each_bundle_manifest_once(self) -> None:
-        plan = load(PLAN)
         bundles = consolidate.build_bundle_index()
         scenario_index = consolidate.build_scenario_index(bundles)
         reads: list[str] = []
@@ -174,7 +187,7 @@ class ScenarioCoverageTest(unittest.TestCase):
 
         consolidate.load_json = counting
         try:
-            consolidate.build_ledger(plan, bundles, scenario_index)
+            consolidate.build_ledger(self.plan, bundles, scenario_index)
         finally:
             consolidate.load_json = original
         self.assertEqual(reads, [])
@@ -185,11 +198,37 @@ class ScenarioCoverageTest(unittest.TestCase):
 
     def test_reports_the_registered_orphans_and_no_unrouted_scenario(self) -> None:
         coverage = self.ledger["counts"]["scenarioCoverage"]
-        self.assertEqual(len(coverage["orphaned"]), 3)
+        expected = orphan_keys(self.plan)
+        self.assertTrue(expected)
+        self.assertEqual(coverage["orphaned"], expected)
         self.assertEqual(coverage["uncovered"], [])
         note = consolidate.coverage_note(coverage)
-        self.assertIn("3 explicit orphan", note)
+        self.assertIn(f"{len(expected)} explicit orphan", note)
         self.assertIn("0 uncovered", note)
+
+    def test_orphans_never_double_count_a_named_or_artifact_covered_scenario(self) -> None:
+        """The derived count is only meaningful when every scenario has exactly one route."""
+        coverage = self.ledger["counts"]["scenarioCoverage"]
+        named = {
+            scenario for row in self.ledger["rows"] for scenario in row["comparisonScenarios"]
+        }
+        orphaned = {item["scenario"] for item in self.plan["orphanScenarios"]}
+        self.assertFalse(orphaned & named)
+        bundles = consolidate.build_bundle_index()
+        total = sum(
+            len(scenarios)
+            for family, artifacts in bundles.items()
+            if family != "audit-1046"
+            for scenarios in artifacts.values()
+        )
+        self.assertEqual(coverage["scenarios"], total)
+        self.assertEqual(
+            coverage["scenarioNamed"]
+            + coverage["artifactCovered"]
+            + len(coverage["orphaned"])
+            + len(coverage["uncovered"]),
+            total,
+        )
 
     def test_check_command_prints_the_derived_orphan_count(self) -> None:
         result = subprocess.run(
@@ -199,7 +238,7 @@ class ScenarioCoverageTest(unittest.TestCase):
             capture_output=True,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("3 explicit orphan", result.stdout)
+        self.assertIn(f"{len(orphan_keys(self.plan))} explicit orphan", result.stdout)
         self.assertIn("0 uncovered", result.stdout)
 
 

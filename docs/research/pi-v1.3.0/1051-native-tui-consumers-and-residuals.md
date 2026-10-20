@@ -39,7 +39,7 @@ ADR 0075 exclusions remain out of scope.
 | `fixtures/pi-v1.3.0/audit-1051/extension-editor.json` | 2 | A real inline extension installing a probe `EditorFactory` through `ctx.ui.setEditorComponent`: factory inputs, copied callbacks, text/focus transfers, appearance options, thinking/Bash border tokens, restore/reinstall, and the one-editor frame invariant. |
 | `fixtures/pi-v1.3.0/audit-1051/program-status.json` | 1 | The exact `setProgramStatus` calls the interactive terminal receives for idle, blocked, working, done and error, including the dialog title and error first line. |
 
-Manifest SHA-256: `2fd33f43d8626805314898308a5b4d1e4eef575e61e3c445a8fba4c789a8ba48`
+Manifest SHA-256: `e6f851edc266cf015506bea4dab68280b82be7fdc936bedb0980738a74a6646b`
 (the manifest recorded the current capture at the time of writing; the registry patch in the handoff carries the final
 value after the last capture).
 

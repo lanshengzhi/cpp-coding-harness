@@ -441,6 +441,374 @@
       "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact.",
       "rows": ["cch_tui:Input.render"],
       "disposition": "input behavior slices must consume this observation when they touch narrow/Unicode cursor scrolling"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "prepare-replace.json",
+      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": ["cch_chord:delta:prepare-replace"],
+      "disposition": "the Chord delta slices must consume this observation when they implement prepared whole-root replacement"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "prepare-replace.json",
+      "scenario": "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
+      "rows": ["cch_chord:delta:prepare-replace"],
+      "disposition": "the Chord delta slices must consume this observation when they implement the no-op whole-root replacement"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "prepare-replace.json",
+      "scenario": "an aborted whole-root preparation cannot be adopted",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
+      "rows": ["cch_chord:delta:prepare-replace"],
+      "disposition": "the Chord delta slices must consume this observation when they implement preparation abort"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "draft-array-holes.json",
+      "scenario": "deleting an array element from a draft rejects the hole and leaves the prepared revision empty",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the draft-array-holes artifact.",
+      "rows": ["cch_chord:delta:path-validation"],
+      "disposition": "the Chord delta slices must consume this observation when they implement draft array-hole rejection"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "review-fixes.json",
+      "scenario": "a later traversal failure keeps the preceding mutable write",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
+      "rows": ["cch_chord:delta:mutable-application"],
+      "disposition": "the Chord delta slices must consume this observation when they implement partial mutable application"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "review-fixes.json",
+      "scenario": "draft reads distinguish absent leaves from null and from absent receiver paths",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
+      "rows": ["cch_chord:json:json-value"],
+      "disposition": "the Chord delta slices must consume this observation when they implement draft read semantics"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "review-fixes.json",
+      "scenario": "adoption immediately revokes competing open drafts while prepared competitors retain normal prepared abort and stale states",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
+      "rows": ["cch_chord:delta:draft-abort"],
+      "disposition": "the Chord delta slices must consume this observation when they implement adoption-time draft revocation"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "review-fixes.json",
+      "scenario": "adding a key and erasing it again normalizes to an empty batch over the unchanged base",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
+      "rows": ["cch_chord:delta:mutable-application"],
+      "disposition": "the Chord delta slices must consume this observation when they implement operation normalization"
+    },
+    {
+      "family": "audit-1061",
+      "artifact": "review-fixes.json",
+      "scenario": "an existing nested key keeps explicit delete and readd order",
+      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
+      "rows": ["cch_chord:delta:mutable-application"],
+      "disposition": "the Chord delta slices must consume this observation when they implement nested key delete and readd"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "ordered-frames.json",
+      "scenario": "an attached state restores the latest committed revision when subscribing after existing commits",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "rows": ["cch_chord:state:attached-hydration"],
+      "disposition": "the Chord state slices must consume this observation when they implement late attachment"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "ordered-frames.json",
+      "scenario": "attachment captures the snapshot before activation and drains buffered frames in commit order",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "rows": ["cch_chord:state:attached-hydration"],
+      "disposition": "the Chord state slices must consume this observation when they implement attachment activation order"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "ordered-frames.json",
+      "scenario": "exact source values are published without applying or re-diffing the frame operations",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "rows": ["cch_chord:Chord:state"],
+      "disposition": "the Chord state slices must consume this observation when they implement frame publication"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "ordered-frames.json",
+      "scenario": "a repeated cursor is reported once as a gap and keeps the last good value",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "rows": ["cch_chord:state:cursor-gap"],
+      "disposition": "the Chord state slices must consume this observation when they implement repeated-cursor gap reporting"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "ordered-frames.json",
+      "scenario": "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "rows": ["cch_chord:state:delivery-order"],
+      "disposition": "the Chord state slices must consume this observation when they implement reentrant commit buffering"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "ordered-frames.json",
+      "scenario": "one subscription serializes reentrant hydration and update callbacks in publication order",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "rows": ["cch_chord:state:delivery-order"],
+      "disposition": "the Chord state slices must consume this observation when they implement per-subscription serialization"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "ordered-frames.json",
+      "scenario": "independent attachments converge separately and dispose idempotently without affecting each other",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "rows": ["cch_chord:state:dispose"],
+      "disposition": "the Chord state slices must consume this observation when they implement independent attachment disposal"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:pending-bound"],
+      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:pending-bound"],
+      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:pending-bound"],
+      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "a held listener serializes its own updates while another subscription converges independently",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:delivery-order"],
+      "disposition": "the Chord state slices must consume this observation when they implement held-listener serialization"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:pending-bound"],
+      "disposition": "the Chord state slices must consume this observation when they implement pending-delivery overflow"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "a failing listener is reported through onError in isolation and keeps receiving later deliveries",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:listener-error"],
+      "disposition": "the Chord state slices must consume this observation when they implement listener failure isolation"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "a synchronous hydration failure is reported without removing the subscription",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:listener-error"],
+      "disposition": "the Chord state slices must consume this observation when they implement hydration failure reporting"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "unsubscribe discards queued deliveries without aborting or joining the running callback",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:dispose"],
+      "disposition": "the Chord state slices must consume this observation when they implement unsubscribe semantics"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "a callback rejection that settles after unsubscribe is still reported",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:listener-error"],
+      "disposition": "the Chord state slices must consume this observation when they implement late callback settlement"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "observer-delivery.json",
+      "scenario": "two subscriptions of the same listener are delivered independently",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "rows": ["cch_chord:state:delivery-order"],
+      "disposition": "the Chord state slices must consume this observation when they implement independent subscriptions"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "review-edges.json",
+      "scenario": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
+      "rows": ["cch_chord:state:delivery-order"],
+      "disposition": "the Chord state slices must consume this observation when they implement subscriber registration order"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "review-edges.json",
+      "scenario": "a retained value reference keeps the revision it was read at across a later commit",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
+      "rows": ["cch_chord:Chord:state"],
+      "disposition": "the Chord state slices must consume this observation when they implement retained-value revision stability"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "review-edges.json",
+      "scenario": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
+      "rows": ["cch_chord:state:listener-error"],
+      "disposition": "the Chord state slices must consume this observation when they implement source contract failure reporting"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "review-edges.json",
+      "scenario": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
+      "rows": ["cch_chord:state:dispose"],
+      "disposition": "the Chord state slices must consume this observation when they implement cursor range validation"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "review-edges.json",
+      "scenario": "negative safe integer cursors are accepted for the snapshot and later frames",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
+      "rows": ["cch_chord:state:attached-hydration"],
+      "disposition": "the Chord state slices must consume this observation when they implement negative cursor acceptance"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "review-edges.json",
+      "scenario": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
+      "rows": ["cch_chord:state:cursor-gap"],
+      "disposition": "the Chord state slices must consume this observation when they implement frame cursor range validation"
+    },
+    {
+      "family": "audit-1062",
+      "artifact": "review-edges.json",
+      "scenario": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
+      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
+      "rows": ["cch_chord:state:cursor-gap"],
+      "disposition": "the Chord state slices must consume this observation when they implement buffered-activation gap handling"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve an object structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement object structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve a non-empty array structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement array structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve an empty-array structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement empty-array structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve a string structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement string structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve an empty-string structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement empty-string structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve a false structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement boolean structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve a number-zero structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement numeric structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion preserve a null structuredContent when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement null structured content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client and conversion distinguish missing structuredContent from JSON null when content is absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_coding_agent:mcp-tool-result-conversion"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement missing-versus-null content"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client rejects JSON null content instead of treating it as absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement content validation"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client rejects non-array content instead of treating it as absent",
+      "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement content validation"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content.json",
+      "scenario": "client rejects a non-object tools/call result",
+      "reason": "Captured by #1101 after the #1058 ledger committed, but no 1052 ledger row routes to the structured-content artifact.",
+      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement result validation"
+    },
+    {
+      "family": "audit-1123",
+      "artifact": "named-session-program-status.json",
+      "scenario": "named-session-reports-working-and-done-message",
+      "reason": "Captured by #1123 after the #1058 ledger was committed, but no 1050 or 1051 ledger row routes to the named-session-program-status artifact.",
+      "rows": ["cch_tui:program-status-protocol"],
+      "disposition": "the program-status slices must consume this observation when they implement the named-session working and done message"
     }
   ],
   "groups": [
