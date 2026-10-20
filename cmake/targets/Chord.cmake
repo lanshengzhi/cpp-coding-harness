@@ -12,8 +12,8 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_chord
     SOURCES
-        src/chord/Context.cpp
-        src/chord/Json.cpp
+        src/chord/ChordContext.cpp
+        src/chord/StrictJson.cpp
         src/chord/Output.cpp
     DEPENDS
         cch_support

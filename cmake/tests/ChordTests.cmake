@@ -5,8 +5,8 @@ include_guard(GLOBAL)
     # chord
     add_executable(cch_tests_chord
         tests/Catch2Main.cpp
-        tests/chord/ContextTest.cpp
-        tests/chord/JsonTest.cpp
+        tests/chord/ChordContextTest.cpp
+        tests/chord/StrictJsonTest.cpp
         tests/chord/OutputTest.cpp
 )
     target_include_directories(cch_tests_chord PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

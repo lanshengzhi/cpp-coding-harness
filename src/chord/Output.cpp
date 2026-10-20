@@ -12,16 +12,6 @@ namespace {
 
 constexpr char kNewline = '\n';
 
-[[nodiscard]] std::size_t count_lines(std::string_view text) {
-    if (text.empty()) return 0;
-    std::size_t newlines = 0;
-    for (std::size_t index = text.find(kNewline); index != std::string_view::npos;
-            index = text.find(kNewline, index + 1)) {
-        ++newlines;
-    }
-    return newlines + (text.back() == kNewline ? 0 : 1);
-}
-
 [[nodiscard]] std::size_t count_newlines(std::string_view text) {
     std::size_t newlines = 0;
     for (std::size_t index = text.find(kNewline); index != std::string_view::npos;
@@ -29,6 +19,36 @@ constexpr char kNewline = '\n';
         ++newlines;
     }
     return newlines;
+}
+
+[[nodiscard]] std::size_t count_lines(std::string_view text) {
+    if (text.empty()) return 0;
+    return count_newlines(text) + (text.back() == kNewline ? 0 : 1);
+}
+
+// pi `sanitizeOutput`: remove control characters that break display and
+// transcripts; tabs and newlines stay. The byte scan is exact for the UTF-8
+// text this package receives: no continuation byte falls in the removed ASCII
+// ranges, and U+FFF9..U+FFFB is removed as one three-byte sequence.
+[[nodiscard]] std::string sanitize_output(std::string_view text) {
+    std::string sanitized;
+    sanitized.reserve(text.size());
+    for (std::size_t index = 0; index < text.size();) {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        if (byte <= 0x08 || (byte >= 0x0b && byte <= 0x1f)) {
+            ++index;
+            continue;
+        }
+        if (index + 2 < text.size() && byte == 0xef && static_cast<unsigned char>(text[index + 1]) == 0xbf &&
+                static_cast<unsigned char>(text[index + 2]) >= 0xb9 &&
+                static_cast<unsigned char>(text[index + 2]) <= 0xbb) {
+            index += 3;
+            continue;
+        }
+        sanitized.push_back(text[index]);
+        ++index;
+    }
+    return sanitized;
 }
 
 [[nodiscard]] std::size_t character_start(std::string_view text, std::size_t index) {
@@ -190,7 +210,7 @@ BoundedOutput OutputBuffer::snapshot() {
     }
 
     return BoundedOutput{
-            .text = kept.text,
+            .text = sanitize_output(kept.text),
             .dropped_bytes = total_bytes_ - kept.bytes,
             .dropped_lines = total_newlines_ + (ends_with_newline_ ? 0 : 1) - kept_lines,
     };
