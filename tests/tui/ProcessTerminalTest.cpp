@@ -4,6 +4,7 @@
 #include <cch/tui/Utils.hpp>
 
 #include "support/ImageEnvironmentGuard.hpp"
+#include "support/IoContextRunner.hpp"
 #include "support/TempWorkspace.hpp"
 #include "support/UniqueFd.hpp"
 #include "support/PseudoTerminal.hpp"
@@ -72,24 +73,6 @@ private:
     std::optional<std::string> original_;
 };
 
-class IoContextRunner final {
-public:
-    IoContextRunner() : work(boost::asio::make_work_guard(io)), thread([this] { io.run(); }) {}
-
-    ~IoContextRunner() {
-        work.reset();
-        io.stop();
-        thread.join();
-    }
-
-    IoContextRunner(const IoContextRunner&) = delete;
-    IoContextRunner& operator=(const IoContextRunner&) = delete;
-
-    boost::asio::io_context io;
-    boost::asio::executor_work_guard<boost::asio::io_context::executor_type> work;
-
-    std::jthread thread;
-};
 class MinimalShell final : public cch::tui::Component, public cch::tui::InputHandler, public cch::tui::Focusable {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
@@ -148,8 +131,8 @@ private:
     bool focused_{false};
 };
 
-IoContextRunner& test_io() {
-    static IoContextRunner runner;
+cch::tests::IoContextRunner& test_io() {
+    static cch::tests::IoContextRunner runner;
     return runner;
 }
 
@@ -610,7 +593,9 @@ TEST_CASE("Process Terminal delivers pseudo-terminal input and resize", "[tui][t
                 return {};
             }));
     const auto startup_output = cch::tests::read_available(pty->master.get());
-    CHECK(startup_output.find("\x1b[>7u\x1b[?u\x1b[c") != std::string::npos);
+    // The program-status query sits between the keyboard push and the DA
+    // sentinel (pi terminal.ts startup order, audit-1050).
+    CHECK(startup_output.find("\x1b[>7u\x1b[?u\x1b]7501;?\x1b\\\x1b[c") != std::string::npos);
 
     constexpr std::string_view kKittyResponse = "\x1b[?7u";
     REQUIRE(::write(pty->master.get(), kKittyResponse.data(), kKittyResponse.size()) ==
@@ -2396,6 +2381,7 @@ TEST_CASE("Process Terminal atomic stop rejects unstarted terminal or non-altern
             cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
             cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
             cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+            cch::support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus&) override { return {}; }
             cch::support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
                 return {};
             }

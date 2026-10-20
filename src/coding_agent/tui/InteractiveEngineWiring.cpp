@@ -146,6 +146,9 @@ std::shared_ptr<SessionFlowController> InteractiveEngine::make_session_flow_cont
         const auto self = weak.lock();
         return self != nullptr ? self->action_generation_ : 0;
     };
+    hooks.program_status_dialog = [weak](std::string source, std::optional<BlockedProgramStatus> status) {
+        if (const auto self = weak.lock()) self->set_program_status_dialog(std::move(source), std::move(status));
+    };
     hooks.make_session_request = [weak](std::filesystem::path workspace, SessionTarget target) {
         if (const auto self = weak.lock()) {
             return self->make_session_request(std::move(workspace), std::move(target));

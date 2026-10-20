@@ -66,7 +66,9 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/OverlayCompositorTest.cpp
         tests/tui/PasteNormalizationTest.cpp
         tests/tui/PiTuiDifferentialTest.cpp
+        tests/tui/ProcessTerminalProgramStatusTest.cpp
         tests/tui/ProcessTerminalTest.cpp
+        tests/tui/ProgramStatusTest.cpp
         tests/tui/RawInputListenerTest.cpp
         tests/tui/RenderDifferentialTest.cpp
         tests/tui/ScreenStateGoldenTest.cpp

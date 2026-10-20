@@ -33,6 +33,7 @@
 #include "coding_agent/tui/InteractiveViewActions.hpp"
 #include "coding_agent/tui/ChatViewport.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
+#include "coding_agent/tui/ProgramStatusReporter.hpp"
 #include "coding_agent/tui/SlashCommandRouter.hpp"
 
 #include <cch/coding_agent/ProjectResources.hpp>
@@ -630,9 +631,16 @@ private:
     std::shared_ptr<ModelFlowController> model_flows_;
     std::optional<EventSubscription> progress_agent_subscription_{std::nullopt};
     std::optional<SessionEventSubscription> progress_session_subscription_{std::nullopt};
+    /// Reports working, blocked, done, error, and idle to terminals that
+    /// support OSC 7501 (pi `programStatus`).
+    ProgramStatusReporter program_status_;
 
     void bind_session_progress(AgentSession& session);
     void unbind_session_progress() noexcept;
+    /// Report one open dialog as the blocked status, or clear it with
+    /// `nullopt`; the session flow controller's boot trust prompt is the
+    /// wired dialog source.
+    void set_program_status_dialog(std::string source, std::optional<BlockedProgramStatus> status);
 
     /// The `/mcp` manager flow (spec #882, ticket #884): the manage panel,
     /// the login/logout/reconnect subcommands, the argument-completion

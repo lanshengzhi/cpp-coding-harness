@@ -4,6 +4,7 @@
 #include "coding_agent/runtime/AgentSessionCreationRequest.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/ModalPresenter.hpp"
+#include "coding_agent/tui/ProgramStatusReporter.hpp"
 
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/support/AsyncResult.hpp>
@@ -59,6 +60,10 @@ struct SessionFlowHostHooks {
     std::move_only_function<ProjectResourceFileSystems(std::filesystem::path)> project_resource_filesystems{nullptr};
     /// Generation that admitted the current application action.
     std::move_only_function<std::size_t()> action_generation{nullptr};
+    /// Report an open modal dialog that waits on the user as the OSC 7501
+    /// blocked status, or clear it with `nullopt` (pi
+    /// `programStatus.setBlocked`).
+    std::move_only_function<void(std::string, std::optional<BlockedProgramStatus>)> program_status_dialog{nullptr};
 
     /// Build an in-session replacement request from the host's CLI-owned
     /// facts and the target workspace/session intent.

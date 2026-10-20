@@ -137,6 +137,9 @@ void InteractiveEngine::handle_name_command(std::string name) {
                 "Session name was normalized from {} to {}", json_quote_string(name), json_quote_string(**stored)));
     }
     view_->append_frontend_message(std::format("Session name set: {}", stored->value_or(name)));
+    // pi `session_info_changed` re-reports the name in working/done statuses;
+    // this handler is the only place the name changes.
+    program_status_.refresh();
     invalidate_frame();
 }
 

@@ -1,6 +1,7 @@
 #include "InputDecoder.hpp"
 
 #include <cch/tui/Keys.hpp>
+#include <cch/tui/ProgramStatus.hpp>
 #include "tui/InputInternal.hpp"
 
 #include <algorithm>
@@ -753,6 +754,13 @@ struct ResponseScan {
 };
 
 [[nodiscard]] ResponseScan scan_terminal_response(std::string_view sequence) {
+    // OSC 7501 program-status query reply (pi program-status.ts
+    // isProgramStatusReply): checked before keyboard negotiation and never
+    // forwarded as typed input; a non-reply 7501 sequence is ordinary input.
+    if (sequence.starts_with("\x1b]7501;")) {
+        if (!is_program_status_reply(sequence)) return {};
+        return ResponseScan{.response = ProgramStatusResponse{}, .consumed = true};
+    }
     // `CSI ? 997 ; 1|2 n` color-scheme report (pi terminal-colors.ts
     // parseTerminalColorSchemeReport): consumed even when the value is
     // unrecognized.

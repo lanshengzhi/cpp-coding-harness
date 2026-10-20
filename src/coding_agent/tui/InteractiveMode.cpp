@@ -445,8 +445,14 @@ void InteractiveEngine::prompt_finished(
         // Session (issue #466).
         return;
     }
+    // pi `agent_settled` `aborted` (`_agentRunAbortRequested`): read before
+    // `note_prompt_finished` retires this prompt's interrupt generation.
+    const bool aborted = interrupt_requested();
     note_prompt_finished();
     prompt_active_ = false;
+    // pi `agent_settled`: an aborted run returns to the idle status, otherwise
+    // the run's last outcome becomes the resting status.
+    program_status_.handle_settled(aborted);
     session_ui_->sync_session_observations();
     if (!result && view_ != nullptr && running_) {
         view_->append_diagnostic(combined_error_text(result.error()));

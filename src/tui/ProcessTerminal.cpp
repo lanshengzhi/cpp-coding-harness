@@ -65,7 +65,10 @@ constexpr std::string_view kClearScreen = "\x1b[2J\x1b[H\x1b[3J";
 constexpr std::string_view kBeginSynchronizedUpdate = "\x1b[?2026h";
 constexpr std::string_view kEndSynchronizedUpdate = "\x1b[?2026l";
 constexpr std::string_view kKeyboardProtocolPush = "\x1b[>7u";
-constexpr std::string_view kKeyboardProtocolQuery = "\x1b[?u\x1b[c";
+// pi `queryAndEnableKittyProtocol` writes the Kitty query, the optional OSC 7501
+// program-status query, then the DA sentinel as one ordered query.
+constexpr std::string_view kKeyboardProtocolQueryPrefix = "\x1b[?u";
+constexpr std::string_view kDeviceAttributesQuery = "\x1b[c";
 constexpr std::string_view kKeyboardProtocolPop = "\x1b[<u";
 // pi `TuiMainScreen` relative line-flow and scrollback flow:
 // No startup DSR query (`\x1b[6n`) is sent during regular TUI startup or rendering.
@@ -340,6 +343,19 @@ struct ProcessTerminal::Impl {
     std::optional<SynchronizedOutputState> synchronized_output_state;
     bool progress_active{false};
     std::chrono::steady_clock::time_point progress_next_keepalive{};
+    /// Latest OSC 7501 status, kept across stop() so start() can report it
+    /// again once the restarted terminal confirms support (pi `programStatus`).
+    std::optional<ProgramStatus> program_status{std::nullopt};
+    /// Whether the terminal confirmed OSC 7501 support since the last start(),
+    /// or `PI_PROGRAM_STATUS=1` (pi `programStatusSupported`).
+    bool program_status_supported{false};
+    /// The support query was sent and its DA sentinel has not arrived yet (pi
+    /// `programStatusQueryPending`).
+    bool program_status_query_pending{false};
+    /// DA replies still owed to queries since this terminal was constructed.
+    /// A reply from before a restart must not end the new query (pi
+    /// `pendingKeyboardProtocolDeviceAttributes`).
+    std::size_t program_status_device_attributes_owed{0};
     std::uint64_t next_image_handle{1};
     bool draining{false};
     std::chrono::steady_clock::time_point drain_last_activity{};
@@ -566,6 +582,16 @@ template <typename T> void enable_modify_other_keys(T& impl) {
 template <typename T> void apply_keyboard_response(T& impl, const detail::KeyboardProtocolResponse& response) {
     std::lock_guard lock(impl.mutex);
     if (response.kind == detail::KeyboardProtocolResponseKind::DeviceAttributes || response.flags == 0) {
+        // The last DA owed to a query arrived without an OSC 7501 reply before
+        // it, so this terminal does not support the program-status query (pi
+        // `handleKeyboardProtocolNegotiationSequence`).
+        if (response.kind == detail::KeyboardProtocolResponseKind::DeviceAttributes &&
+                impl.program_status_device_attributes_owed > 0) {
+            --impl.program_status_device_attributes_owed;
+            if (impl.program_status_device_attributes_owed == 0) {
+                impl.program_status_query_pending = false;
+            }
+        }
         enable_modify_other_keys(impl);
         return;
     }
@@ -785,6 +811,19 @@ template <typename T> void apply_cell_size_response(T& impl, const CellPixelDime
     }
 }
 
+/// A supporting terminal answered the startup query: record support and
+/// re-report the latest status, which may have arrived before the answer (pi
+/// `writeProgramStatus`).
+template <typename T> void apply_program_status_response(T& impl) {
+    std::lock_guard lock(impl.mutex);
+    if (!impl.program_status_query_pending) return;
+    impl.program_status_query_pending = false;
+    impl.program_status_supported = true;
+    if (!impl.program_status) return;
+    auto reported = write_all(impl.options.output_fd, format_program_status(*impl.program_status));
+    if (!reported && !impl.worker_error) impl.worker_error = reported.error();
+}
+
 template <typename T>
 void apply_terminal_responses(T& impl, const std::vector<detail::TerminalResponseVariant>& responses) {
     for (const auto& response : responses) {
@@ -796,6 +835,10 @@ void apply_terminal_responses(T& impl, const std::vector<detail::TerminalRespons
         // (#990).
         if (const auto* keyboard = std::get_if<detail::KeyboardProtocolResponse>(&response)) {
             apply_keyboard_response(impl, *keyboard);
+            continue;
+        }
+        if (std::get_if<detail::ProgramStatusResponse>(&response) != nullptr) {
+            apply_program_status_response(impl);
             continue;
         }
         if (std::get_if<CursorPosition>(&response) != nullptr) {
@@ -1112,6 +1155,15 @@ template <typename T> [[nodiscard]] support::ExpectedVoid restore_terminal_modes
         if (cleared) impl.progress_active = false;
         retain_error(first_error, std::move(cleared));
     }
+    if (impl.program_status_supported && impl.program_status) {
+        // Remove the reported status so an exited TUI does not leave a stale
+        // state on the terminal dashboard (pi `ProcessTerminal.stop`).
+        auto cleared = write_all(
+                impl.options.output_fd, format_program_status(ProgramStatus{.state = ProgramStatus::State::Clear}));
+        retain_error(first_error, std::move(cleared));
+    }
+    impl.program_status_supported = false;
+    impl.program_status_query_pending = false;
     if (impl.synchronized_update_depth > 0) {
         auto ended = write_all(impl.options.output_fd, kEndSynchronizedUpdate);
         if (ended) impl.synchronized_update_depth = 0;
@@ -1447,9 +1499,27 @@ support::ExpectedVoid ProcessTerminal::start(TerminalInputSink input_sink, Termi
     }
     impl_->keyboard_protocol_pushed = true;
 
-    auto keyboard_query = attempt_write_all(impl_->options.output_fd, kKeyboardProtocolQuery);
-    if (!keyboard_query.result) {
-        return fail_startup(keyboard_query.result.error());
+    // OSC 7501 support is queried between the Kitty query and the DA sentinel.
+    // `PI_PROGRAM_STATUS=1` forces support on, `=0` forces it off, and both
+    // skip the query (pi `queryAndEnableKittyProtocol`).
+    const auto program_status_override = environment("PI_PROGRAM_STATUS");
+    impl_->program_status_supported = program_status_override == "1";
+    impl_->program_status_query_pending = program_status_override != "1" && program_status_override != "0";
+    impl_->program_status_device_attributes_owed += 1;
+    std::string keyboard_query{kKeyboardProtocolQueryPrefix};
+    if (impl_->program_status_query_pending) keyboard_query += kProgramStatusQuery;
+    keyboard_query += kDeviceAttributesQuery;
+    auto keyboard_query_write = attempt_write_all(impl_->options.output_fd, keyboard_query);
+    if (!keyboard_query_write.result) {
+        return fail_startup(keyboard_query_write.result.error());
+    }
+    if (impl_->program_status_supported && impl_->program_status) {
+        // A restarted terminal re-reports the latest status (pi
+        // `writeProgramStatus` after the startup query).
+        auto reported = attempt_write_all(impl_->options.output_fd, format_program_status(*impl_->program_status));
+        if (!reported.result) {
+            return fail_startup(reported.result.error());
+        }
     }
 
     if (detected_images.images != InlineImageProtocol::None) {
@@ -1670,6 +1740,12 @@ support::ExpectedVoid ProcessTerminal::stop(TerminalStopOptions options) {
                 retain_error(result, std::move(res));
             }
         }
+        if (impl_->program_status_supported && impl_->program_status) {
+            retain_error(result,
+                    enqueue_output(*impl_, format_program_status(ProgramStatus{.state = ProgramStatus::State::Clear})));
+        }
+        impl_->program_status_supported = false;
+        impl_->program_status_query_pending = false;
         bool margins_enqueued = false;
         if (impl_->margins_active) {
             if (auto res = enqueue_output(*impl_, "\x1b[r"); res) {
@@ -2033,6 +2109,19 @@ support::ExpectedVoid ProcessTerminal::set_progress(bool active) {
         }
     }
     return {};
+}
+
+support::ExpectedVoid ProcessTerminal::set_program_status(const ProgramStatus& status) {
+    std::lock_guard lock(impl_->mutex);
+    // The latest status is kept even while unsupported or stopped so a later
+    // support confirmation or restart can report it (pi `setProgramStatus`).
+    if (status.state == ProgramStatus::State::Clear) {
+        impl_->program_status.reset();
+    } else {
+        impl_->program_status = status;
+    }
+    if (!impl_->program_status_supported) return {};
+    return enqueue_output(*impl_, format_program_status(status));
 }
 
 support::ExpectedVoid ProcessTerminal::drain_input(

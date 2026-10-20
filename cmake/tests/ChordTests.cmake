@@ -10,6 +10,7 @@ include_guard(GLOBAL)
         tests/chord/TrackerTest.cpp
         tests/chord/StrictJsonTest.cpp
         tests/chord/OutputTest.cpp
+        tests/chord/ReplicatedStateTest.cpp
 )
     target_include_directories(cch_tests_chord PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_chord

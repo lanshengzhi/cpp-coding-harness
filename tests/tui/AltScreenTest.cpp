@@ -133,6 +133,9 @@ public:
         return inner_.apply_cell_pixel_dimensions(pixels);
     }
     cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    cch::support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus& status) override {
+        return inner_.set_program_status(status);
+    }
     cch::support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = cch::tui::kDrainInputMaxMs,
             std::chrono::milliseconds idle_ms = cch::tui::kDrainInputIdleMs) override {
         return inner_.drain_input(max_ms, idle_ms);
@@ -1069,6 +1072,9 @@ TEST_CASE("AltScreen stop preserve_screen falls back to ordinary stop on unsuppo
         cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
         cch::support::ExpectedVoid set_title(std::string_view t) override { return inner_.set_title(t); }
         cch::support::ExpectedVoid set_progress(bool p) override { return inner_.set_progress(p); }
+        cch::support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus& status) override {
+            return inner_.set_program_status(status);
+        }
         cch::support::ExpectedVoid drain_input(std::chrono::milliseconds a, std::chrono::milliseconds b) override {
             return inner_.drain_input(a, b);
         }
@@ -1136,6 +1142,9 @@ TEST_CASE("AltScreen stop aggregates multiple errors from pre-steps and stop",
         cch::support::ExpectedVoid end_synchronized_update() override { return inner_.end_synchronized_update(); }
         cch::support::ExpectedVoid set_title(std::string_view t) override { return inner_.set_title(t); }
         cch::support::ExpectedVoid set_progress(bool p) override { return inner_.set_progress(p); }
+        cch::support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus& status) override {
+            return inner_.set_program_status(status);
+        }
         cch::support::ExpectedVoid drain_input(std::chrono::milliseconds a, std::chrono::milliseconds b) override {
             return inner_.drain_input(a, b);
         }

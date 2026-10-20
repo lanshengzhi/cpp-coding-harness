@@ -377,6 +377,7 @@ public:
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus&) override { return {}; }
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }
@@ -500,6 +501,9 @@ public:
         return inner_.apply_cell_pixel_dimensions(pixels);
     }
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+    [[nodiscard]] support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus& status) override {
+        return inner_.set_program_status(status);
+    }
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = tui::kDrainInputMaxMs,
             std::chrono::milliseconds idle_ms = tui::kDrainInputIdleMs) override {
         return inner_.drain_input(max_ms, idle_ms);
@@ -562,6 +566,7 @@ public:
     }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus&) override { return {}; }
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }
@@ -614,6 +619,7 @@ public:
     [[nodiscard]] support::ExpectedVoid end_synchronized_update() override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_title(std::string_view) override { return {}; }
     [[nodiscard]] support::ExpectedVoid set_progress(bool) override { return {}; }
+    [[nodiscard]] support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus&) override { return {}; }
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
         return {};
     }

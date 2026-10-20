@@ -193,6 +193,8 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/NativeTuiDifferentialTest.cpp
         tests/coding_agent/tui/ProcessInteractiveModeTest.cpp
         tests/coding_agent/tui/ProductCursorEvidenceTest.cpp
+        tests/coding_agent/tui/ProgramStatusEvidenceTest.cpp
+        tests/coding_agent/tui/ProgramStatusReporterTest.cpp
         tests/coding_agent/tui/ProductProgressEvidenceTest.cpp
         tests/coding_agent/tui/RendererSwitchEvidenceTest.cpp
         tests/coding_agent/tui/ScopedModelsSelectorTest.cpp
