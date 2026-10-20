@@ -1,7 +1,7 @@
 // Spec #865 fourth slice (#875), reworked for #884: MCP OAuth through the
 // existing credential semantics. The provider reuses the shared `ai::auth`
 // PKCE/callback helpers, the existing `AuthInteraction` presentation, and the
-// existing `mcp::OAuthCredential` contract; the state is stored in
+// existing `app_mcp::OAuthCredential` contract; the state is stored in
 // `<agentDir>/mcp-auth.json` under `mcp__<server>|<url>` and resolved per
 // request. The committed loopback exchange replay is
 // `fixtures/pi-mcp/oauth/replay.json`; the token transport is the scripted
@@ -31,6 +31,8 @@
 #include "support/TempWorkspace.hpp"
 
 #include "coding_agent/mcp/McpAuth.hpp"
+#include "coding_agent/mcp/McpHttpServerConfig.hpp"
+#include "coding_agent/mcp/McpOAuthServerConfig.hpp"
 #include <cch/ai/Timestamps.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -72,7 +74,7 @@
 
 using namespace cch;
 
-namespace mcp = coding_agent::mcp;
+namespace app_mcp = coding_agent::mcp;
 
 namespace {
 
@@ -103,9 +105,9 @@ namespace {
     return std::string{*value};
 }
 
-[[nodiscard]] mcp::McpOAuthServerConfig server_config_from_fixture(const support::JsonValue& fixture) {
+[[nodiscard]] app_mcp::McpOAuthServerConfig server_config_from_fixture(const support::JsonValue& fixture) {
     const auto& server = fixture_object(fixture, "server");
-    return mcp::McpOAuthServerConfig{
+    return app_mcp::McpOAuthServerConfig{
             .authorization_url = fixture_string(server, "authorization_url"),
             .token_url = fixture_string(server, "token_url"),
             .client_id = fixture_string(server, "client_id"),
@@ -147,7 +149,7 @@ struct CallbackEndpoint {
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = mcp::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = app_mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }
@@ -178,31 +180,31 @@ using SignalChannel = boost::asio::experimental::channel<void(boost::system::err
 
 struct LoginHarness {
     std::shared_ptr<tests::FakeOAuthHttpClient> http = std::make_shared<tests::FakeOAuthHttpClient>();
-    std::shared_ptr<mcp::McpAuthStore> store;
+    std::shared_ptr<app_mcp::McpAuthStore> store;
     std::string server_name{"echo"};
     std::string server_url{"https://echo.example.com/mcp"};
     std::optional<std::string> auth_url{std::nullopt};
-    std::vector<mcp::AuthEvent> events{};
-    std::vector<mcp::AuthPrompt> prompts{};
+    std::vector<app_mcp::AuthEvent> events{};
+    std::vector<app_mcp::AuthPrompt> prompts{};
     bool manual_prompt_cancelled{false};
 
     /// Runs the loop to completion. `on_auth_url` (if set) drives the loopback
     /// callback once the authorization URL is observed.
-    [[nodiscard]] support::Expected<void> run(const mcp::McpOAuthServerConfig& config,
+    [[nodiscard]] support::Expected<void> run(const app_mcp::McpOAuthServerConfig& config,
             std::move_only_function<boost::asio::awaitable<void>(std::string)> on_auth_url) {
         boost::asio::io_context io;
         auto executor = io.get_executor();
         tests::EnvVarGuard callback_host_guard{"PI_OAUTH_CALLBACK_HOST"};
         callback_host_guard.unset();
 
-        mcp::AuthInteraction interaction;
-        interaction.notify = [this](const mcp::AuthEvent& event) {
+        app_mcp::AuthInteraction interaction;
+        interaction.notify = [this](const app_mcp::AuthEvent& event) {
             events.push_back(event);
-            if (const auto* url = std::get_if<mcp::AuthUrl>(&event.kind)) {
+            if (const auto* url = std::get_if<app_mcp::AuthUrl>(&event.kind)) {
                 auth_url = url->url;
             }
         };
-        interaction.prompt = [this, executor](mcp::AuthPrompt prompt) -> support::AsyncResult<std::string> {
+        interaction.prompt = [this, executor](app_mcp::AuthPrompt prompt) -> support::AsyncResult<std::string> {
             auto cancelled = std::make_shared<SignalChannel>(executor, 1);
             return support::detail::make_async_result(
                     [this, cancelled, prompt = std::move(prompt)]() mutable
@@ -229,16 +231,16 @@ struct LoginHarness {
                         executor, 1);
         auto original_notify = std::move(interaction.notify);
         interaction.notify = [url_seen, original_notify = std::move(original_notify)](
-                                     const mcp::AuthEvent& event) mutable {
+                                     const app_mcp::AuthEvent& event) mutable {
             if (original_notify) {
                 original_notify(event);
             }
-            if (const auto* url = std::get_if<mcp::AuthUrl>(&event.kind)) {
+            if (const auto* url = std::get_if<app_mcp::AuthUrl>(&event.kind)) {
                 url_seen->try_send(boost::system::error_code{}, url->url);
             }
         };
 
-        auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
+        auto provider = std::make_shared<app_mcp::McpOAuthProvider>(config, http);
         auto store = this->store;
         auto server_name = this->server_name;
         auto server_url = this->server_url;
@@ -247,7 +249,7 @@ struct LoginHarness {
                 [provider, store, server_name, server_url, interaction = std::move(interaction)]() mutable
                         -> boost::asio::awaitable<support::ExpectedVoid> {
                     co_return co_await support::detail::await_async_result(
-                            mcp::login_mcp_server(store, server_name, server_url, *provider, std::move(interaction)));
+                            app_mcp::login_mcp_server(store, server_name, server_url, *provider, std::move(interaction)));
                 },
                 boost::asio::use_future);
 
@@ -274,10 +276,10 @@ struct LoginHarness {
 
 // ── resolver helpers ────────────────────────────────────────────────────────
 
-[[nodiscard]] mcp::McpOAuthState oauth_state(std::string access, std::string refresh, std::int64_t expires) {
-    mcp::McpOAuthState state;
+[[nodiscard]] app_mcp::McpOAuthState oauth_state(std::string access, std::string refresh, std::int64_t expires) {
+    app_mcp::McpOAuthState state;
     state.server_url = "https://echo.example.com/mcp";
-    mcp::McpOAuthTokens tokens;
+    app_mcp::McpOAuthTokens tokens;
     tokens.access_token = std::move(access);
     tokens.token_type = "Bearer";
     if (!refresh.empty()) {
@@ -285,16 +287,16 @@ struct LoginHarness {
     }
     state.tokens = std::move(tokens);
     state.tokens_expire_at = expires;
-    state.client_information = mcp::McpOAuthClientInformation{.client_id = "pike-mcp-test-client"};
+    state.client_information = app_mcp::McpOAuthClientInformation{.client_id = "pike-mcp-test-client"};
     return state;
 }
 
-void seed_state(mcp::McpAuthStore& store, const mcp::McpOAuthState& state) {
+void seed_state(app_mcp::McpAuthStore& store, const app_mcp::McpOAuthState& state) {
     auto stored = store.save("echo", state.server_url, state);
     REQUIRE(stored.has_value());
 }
 
-[[nodiscard]] std::optional<mcp::McpOAuthState> read_state(mcp::McpAuthStore& store) {
+[[nodiscard]] std::optional<app_mcp::McpOAuthState> read_state(app_mcp::McpAuthStore& store) {
     auto stored = store.load("echo", "https://echo.example.com/mcp");
     REQUIRE(stored.has_value());
     return std::move(*stored);
@@ -304,7 +306,7 @@ void seed_state(mcp::McpAuthStore& store, const mcp::McpOAuthState& state) {
 
 // ── a no-credential / per-request auth source for the transport seam ─────────
 
-class StubRequestAuth final : public mcp::McpRequestAuthSource {
+class StubRequestAuth final : public app_mcp::McpRequestAuthSource {
 public:
     explicit StubRequestAuth(std::string token) : token_(std::move(token)) {}
 
@@ -398,18 +400,18 @@ private:
     return tests::EnvVarGuard{"SSL_CERT_FILE", tls_fixture_path("test-ca.pem")};
 }
 
-[[nodiscard]] mcp::McpHttpServerConfig http_config(const HttpFixtureServer& server) {
-    mcp::McpHttpServerConfig config;
+[[nodiscard]] app_mcp::McpHttpServerConfig http_config(const HttpFixtureServer& server) {
+    app_mcp::McpHttpServerConfig config;
     config.name = "echo";
     config.url = server.url();
     return config;
 }
 
-[[nodiscard]] std::shared_ptr<mcp::McpHttpClient> connect_http_client(tests::RuntimeFixture& runtime,
-        mcp::McpHttpServerConfig config,
-        std::shared_ptr<mcp::McpRequestAuthSource> request_auth = nullptr) {
+[[nodiscard]] std::shared_ptr<app_mcp::McpHttpClient> connect_http_client(tests::RuntimeFixture& runtime,
+        app_mcp::McpHttpServerConfig config,
+        std::shared_ptr<app_mcp::McpRequestAuthSource> request_auth = nullptr) {
     auto client = tests::run_awaitable(runtime,
-            mcp::McpHttpClient::connect(std::move(config),
+            app_mcp::McpHttpClient::connect(std::move(config),
                     std::make_shared<support::BoostBeastStreamTransport>(),
                     std::move(request_auth)));
     REQUIRE(client.has_value());
@@ -417,7 +419,7 @@ private:
 }
 
 [[nodiscard]] std::string authorization_header(
-        tests::RuntimeFixture& runtime, const std::shared_ptr<mcp::McpHttpClient>& client) {
+        tests::RuntimeFixture& runtime, const std::shared_ptr<app_mcp::McpHttpClient>& client) {
     auto response = tests::run_awaitable(
             runtime, support::detail::await_async_result(client->request("debug/authorization_present")));
     REQUIRE(response.has_value());
@@ -444,7 +446,7 @@ TEST_CASE("MCP OAuth login reuses the login surface and persists into mcp-auth.j
     tests::TempWorkspace workspace;
     LoginHarness harness;
     harness.http->responses[config.token_url] = {{200, token_body}};
-    harness.store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    harness.store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
 
     auto login = harness.run(config, [&harness](std::string url) -> boost::asio::awaitable<void> {
         const auto redirect_url = query_param(url, "redirect_uri");
@@ -491,7 +493,7 @@ TEST_CASE("an MCP OAuth credential is stored in mcp-auth.json under mcp__<server
 
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
 
     LoginHarness harness;
     harness.http->responses[config.token_url] = {{200, token_body}};
@@ -517,7 +519,7 @@ TEST_CASE("an MCP OAuth credential is stored in mcp-auth.json under mcp__<server
     CHECK(*stored->tokens_expire_at > ai::current_timestamp_ms());
 
     // Revocation removes the stored state.
-    auto removed = runtime.run(mcp::logout_mcp_server(store, "echo", "https://echo.example.com/mcp"));
+    auto removed = runtime.run(app_mcp::logout_mcp_server(store, "echo", "https://echo.example.com/mcp"));
     REQUIRE(removed.has_value());
     CHECK_FALSE(read_state(*store).has_value());
 }
@@ -527,16 +529,16 @@ TEST_CASE("a valid stored MCP OAuth credential resolves the bearer token without
     const auto config = server_config_from_fixture(read_replay_fixture());
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     seed_state(*store,
             oauth_state("dummy-access-token",
                     "dummy-refresh-token",
                     ai::current_timestamp_ms() + std::chrono::hours{24}.count() * 1000));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
-    auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
+    auto provider = std::make_shared<app_mcp::McpOAuthProvider>(config, http);
     auto resolver =
-            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -554,15 +556,15 @@ TEST_CASE("a rotated MCP OAuth refresh is persisted before the request continues
 
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     // Expiring within the five-minute margin, so the request-time path refreshes.
     seed_state(*store, oauth_state("dummy-old-access-token", "dummy-refresh-token", ai::current_timestamp_ms() + 1000));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     http->responses[config.token_url] = {{200, refresh_body}};
-    auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
+    auto provider = std::make_shared<app_mcp::McpOAuthProvider>(config, http);
     auto resolver =
-            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -589,16 +591,16 @@ TEST_CASE("an invalid_grant refresh is an explicit re-login error with no retry 
 
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     seed_state(*store,
             oauth_state("dummy-old-access-token", "dummy-dead-refresh-token", ai::current_timestamp_ms() + 1000));
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     http->responses[config.token_url] = {
             {static_cast<int>(*support::json_integer_member(response, "status")), fixture_string(response, "body")}};
-    auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
+    auto provider = std::make_shared<app_mcp::McpOAuthProvider>(config, http);
     auto resolver =
-            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE_FALSE(headers.has_value());
@@ -625,12 +627,12 @@ TEST_CASE("a missing MCP OAuth credential is an explicit re-login error, never a
     const auto config = server_config_from_fixture(read_replay_fixture());
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
 
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
-    auto provider = std::make_shared<mcp::McpOAuthProvider>(config, http);
+    auto provider = std::make_shared<app_mcp::McpOAuthProvider>(config, http);
     auto resolver =
-            std::make_shared<mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE_FALSE(headers.has_value());

@@ -9,6 +9,7 @@
 // constructs these; tests inject scripted seams instead and never touch this
 // file's types.
 
+#include "coding_agent/mcp/McpServerConnection.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
 #include <cch/agent/Agent.hpp>
@@ -29,7 +30,6 @@
 
 namespace cch::coding_agent::mcp {
 class McpAuthStore;
-class McpServerConnection;
 } // namespace cch::coding_agent::mcp
 
 namespace cch::coding_agent::runtime {

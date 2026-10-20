@@ -5,15 +5,15 @@
 // app's local redirect (RFC 8252). A loopback endpoint is the only plaintext
 // form the flow accepts, and it is never used to reach a remote host.
 
-#include "coding_agent/mcp/McpOAuthServerConfig.hpp"
-#include "coding_agent/mcp/McpUrl.hpp"
+#include <cch/mcp/OAuthServerConfig.hpp>
+#include <cch/mcp/Url.hpp>
 
 #include <cch/support/Error.hpp>
 
 #include <string>
 #include <string_view>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
 
 [[nodiscard]] bool is_loopback_host(std::string_view host) {
@@ -25,7 +25,7 @@ namespace {
 
 /// The authority component of a URL (`scheme://authority/...`), lowercased and
 /// stripped of any userinfo and port. Empty when the URL has no authority.
-[[nodiscard]] std::string url_host(std::string_view url) { return extract_mcp_host(url); }
+[[nodiscard]] std::string url_host(std::string_view url) { return extract_host(url); }
 
 [[nodiscard]] support::ExpectedVoid validate_endpoint(std::string_view name, const std::string& url) {
     if (url.starts_with("https://")) {
@@ -51,7 +51,7 @@ namespace {
 
 } // namespace
 
-support::ExpectedVoid validate_mcp_oauth_server_config(const McpOAuthServerConfig& config) {
+support::ExpectedVoid validate_oauth_server_config(const OAuthServerConfig& config) {
     if (auto authorization = validate_endpoint("authorization endpoint", config.authorization_url); !authorization) {
         return authorization;
     }
@@ -66,4 +66,4 @@ support::ExpectedVoid validate_mcp_oauth_server_config(const McpOAuthServerConfi
     return {};
 }
 
-} // namespace cch::coding_agent::mcp
+} // namespace cch::mcp

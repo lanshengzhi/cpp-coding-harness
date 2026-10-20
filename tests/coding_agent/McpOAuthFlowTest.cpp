@@ -31,7 +31,7 @@
 
 using namespace cch;
 
-namespace mcp = coding_agent::mcp;
+namespace app_mcp = coding_agent::mcp;
 
 namespace {
 
@@ -60,8 +60,8 @@ const std::string kTokenUrl = "https://auth.example.com/token";
 struct Harness {
     std::shared_ptr<tests::FakeOAuthHttpClient> http = std::make_shared<tests::FakeOAuthHttpClient>();
     tests::TempWorkspace workspace;
-    std::shared_ptr<mcp::McpAuthStore> store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
-    mcp::McpOAuthConfig oauth;
+    std::shared_ptr<app_mcp::McpAuthStore> store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    app_mcp::McpOAuthConfig oauth;
     /// The discovery documents, re-scripted for every run because a flow run
     /// fetches them again (discovery is not cached in this slice).
     std::string resource_document{kResourceDocument};
@@ -72,8 +72,8 @@ struct Harness {
         http->responses[kTokenUrl] = {{200, kTokenResponse}};
     }
 
-    [[nodiscard]] support::Expected<mcp::McpOAuthFlowOutcome> run(
-            tests::RuntimeFixture& runtime, mcp::McpOAuthFlowOptions options = {}) {
+    [[nodiscard]] support::Expected<app_mcp::McpOAuthFlowOutcome> run(
+            tests::RuntimeFixture& runtime, app_mcp::McpOAuthFlowOptions options = {}) {
         // Every run starts from a fresh discovery script: one attempt discovers
         // once, and a retried attempt (pi's `invalid_client` / `invalid_grant`
         // rule) discovers again.
@@ -81,10 +81,10 @@ struct Harness {
         http->get_responses[kAuthorizationServerMetadataUrl].assign(
                 {{200, authorization_server_document}, {200, authorization_server_document}});
         return tests::run_awaitable(
-                runtime, mcp::authorize_mcp(store, "echo", kServerUrl, oauth, kRedirectUrl, http, std::move(options)));
+                runtime, app_mcp::authorize_mcp(store, "echo", kServerUrl, oauth, kRedirectUrl, http, std::move(options)));
     }
 
-    [[nodiscard]] std::optional<mcp::McpOAuthState> state() {
+    [[nodiscard]] std::optional<app_mcp::McpOAuthState> state() {
         auto stored = store->load("echo", kServerUrl);
         REQUIRE(stored.has_value());
         return std::move(*stored);
@@ -102,7 +102,7 @@ struct Harness {
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = mcp::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = app_mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }
@@ -116,7 +116,7 @@ TEST_CASE("an oauth-configured server with no client id discovers, registers, an
 
     auto outcome = harness.run(runtime);
     REQUIRE(outcome.has_value());
-    CHECK(outcome->result == mcp::McpOAuthFlowResult::Redirect);
+    CHECK(outcome->result == app_mcp::McpOAuthFlowResult::Redirect);
     REQUIRE(outcome->authorization_url.has_value());
 
     // The registration body is pi's: the redirect URI, the SEP-837
@@ -169,14 +169,14 @@ TEST_CASE("the authorization code exchange stores the tokens with the granted sc
     // A first pass registers the client and stores the PKCE verifier.
     auto redirect = harness.run(runtime);
     REQUIRE(redirect.has_value());
-    REQUIRE(redirect->result == mcp::McpOAuthFlowResult::Redirect);
+    REQUIRE(redirect->result == app_mcp::McpOAuthFlowResult::Redirect);
 
-    mcp::McpOAuthFlowOptions options;
+    app_mcp::McpOAuthFlowOptions options;
     options.authorization_code = "code-1";
     options.scope = "mcp.read mcp.write";
     auto authorized = harness.run(runtime, options);
     REQUIRE(authorized.has_value());
-    CHECK(authorized->result == mcp::McpOAuthFlowResult::Authorized);
+    CHECK(authorized->result == app_mcp::McpOAuthFlowResult::Authorized);
     CHECK_FALSE(authorized->authorization_url.has_value());
 
     REQUIRE(harness.http->requests.size() == 2);
@@ -204,10 +204,10 @@ TEST_CASE("a stored refresh token is rotated and the rotated values are persiste
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    mcp::McpOAuthState seeded;
+    app_mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
-    mcp::McpOAuthTokens tokens;
+    seeded.client_information = app_mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
+    app_mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "old-refresh";
@@ -220,7 +220,7 @@ TEST_CASE("a stored refresh token is rotated and the rotated values are persiste
             R"({"access_token":"access-2","token_type":"Bearer","expires_in":3600,"refresh_token":"refresh-2"})"}};
     auto outcome = harness.run(runtime);
     REQUIRE(outcome.has_value());
-    CHECK(outcome->result == mcp::McpOAuthFlowResult::Authorized);
+    CHECK(outcome->result == app_mcp::McpOAuthFlowResult::Authorized);
 
     REQUIRE(harness.http->requests.size() == 1);
     CHECK(harness.http->requests.front().body.find("grant_type=refresh_token") != std::string::npos);
@@ -239,10 +239,10 @@ TEST_CASE("a dead refresh token invalidates the tokens and re-authorizes instead
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    mcp::McpOAuthState seeded;
+    app_mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
-    mcp::McpOAuthTokens tokens;
+    seeded.client_information = app_mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
+    app_mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "dead-refresh";
@@ -256,7 +256,7 @@ TEST_CASE("a dead refresh token invalidates the tokens and re-authorizes instead
     REQUIRE(outcome.has_value());
     // pi's `invalid_grant` rule: the tokens are dropped and the flow runs once
     // more, which now needs the user to authorize.
-    CHECK(outcome->result == mcp::McpOAuthFlowResult::Redirect);
+    CHECK(outcome->result == app_mcp::McpOAuthFlowResult::Redirect);
 
     // One refresh attempt only, and the dead grant is gone rather than kept.
     REQUIRE(harness.http->requests.size() == 1);
@@ -271,11 +271,11 @@ TEST_CASE("a dead refresh token invalidates the tokens and re-authorizes instead
 TEST_CASE("invalid_client invalidates the registration and registers again", "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    mcp::McpOAuthState seeded;
+    app_mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
     // A registration the server no longer knows, with a refresh token to use.
-    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "stale-client"};
-    mcp::McpOAuthTokens tokens;
+    seeded.client_information = app_mcp::McpOAuthClientInformation{.client_id = "stale-client"};
+    app_mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "old-refresh";
@@ -289,7 +289,7 @@ TEST_CASE("invalid_client invalidates the registration and registers again", "[c
     // pi's `invalid_client` rule: every credential is dropped, the flow runs
     // once more, registers a fresh client, and asks for authorization.
     REQUIRE(outcome.has_value());
-    CHECK(outcome->result == mcp::McpOAuthFlowResult::Redirect);
+    CHECK(outcome->result == app_mcp::McpOAuthFlowResult::Redirect);
     REQUIRE(harness.http->requests.size() == 2);
     CHECK(harness.http->requests[0].url == kTokenUrl);
     CHECK(harness.http->requests[1].url == kRegistrationUrl);
@@ -305,15 +305,15 @@ TEST_CASE("an invalid_client during a code exchange also drops the PKCE verifier
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    mcp::McpOAuthState seeded;
+    app_mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "stale-client"};
+    seeded.client_information = app_mcp::McpOAuthClientInformation{.client_id = "stale-client"};
     seeded.code_verifier = "verifier-1";
     REQUIRE(harness.store->save("echo", kServerUrl, seeded).has_value());
     harness.http->responses[kTokenUrl] = {{401, R"({"error":"invalid_client"})"}};
     harness.http->responses[kRegistrationUrl] = {{200, R"({"client_id":"dyn-client-2"})"}};
 
-    mcp::McpOAuthFlowOptions options;
+    app_mcp::McpOAuthFlowOptions options;
     options.authorization_code = "code-1";
     auto outcome = harness.run(runtime, options);
     // pi drops the registration with the rest of the credentials, and a code
@@ -332,18 +332,18 @@ TEST_CASE("an invalid_client during a code exchange also drops the PKCE verifier
 
 TEST_CASE("SEP-837 application_type is native for loopback and custom-scheme redirect URIs",
         "[coding_agent][mcp][issue884][spec]") {
-    CHECK(mcp::derive_application_type({"http://127.0.0.1:41234/callback"}) == "native");
-    CHECK(mcp::derive_application_type({"http://localhost:41234/callback"}) == "native");
-    CHECK(mcp::derive_application_type({"http://[::1]:41234/callback"}) == "native");
-    CHECK(mcp::derive_application_type({"com.example.app:/oauth/callback"}) == "native");
-    CHECK(mcp::derive_application_type({"https://app.example.com/callback"}) == "web");
+    CHECK(app_mcp::derive_application_type({"http://127.0.0.1:41234/callback"}) == "native");
+    CHECK(app_mcp::derive_application_type({"http://localhost:41234/callback"}) == "native");
+    CHECK(app_mcp::derive_application_type({"http://[::1]:41234/callback"}) == "native");
+    CHECK(app_mcp::derive_application_type({"com.example.app:/oauth/callback"}) == "native");
+    CHECK(app_mcp::derive_application_type({"https://app.example.com/callback"}) == "web");
     // One native redirect URI makes the whole client native.
-    CHECK(mcp::derive_application_type({"https://app.example.com/callback", "http://127.0.0.1:1/callback"}) ==
+    CHECK(app_mcp::derive_application_type({"https://app.example.com/callback", "http://127.0.0.1:1/callback"}) ==
             "native");
 }
 
 TEST_CASE("a Client ID Metadata Document needs a public-client-capable server", "[coding_agent][mcp][issue884][spec]") {
-    mcp::McpAuthorizationServerMetadata supported;
+    app_mcp::McpAuthorizationServerMetadata supported;
     supported.issuer = "https://auth.example.com";
     supported.authorization_endpoint = "https://auth.example.com/authorize";
     supported.token_endpoint = "https://auth.example.com/token";
@@ -353,24 +353,24 @@ TEST_CASE("a Client ID Metadata Document needs a public-client-capable server", 
 
     // Without RFC 9207 `iss`, the document and the redirect URI are specific to
     // the MCP server.
-    auto specific = mcp::client_metadata_document(kServerUrl, kRedirectUrl, supported);
+    auto specific = app_mcp::client_metadata_document(kServerUrl, kRedirectUrl, supported);
     REQUIRE(specific.has_value());
     CHECK(specific->url.starts_with("https://pi.dev/oauth/"));
     CHECK(specific->url.ends_with("/client.json"));
     CHECK(specific->redirect_url.starts_with("http://127.0.0.1:41234/callback/"));
 
-    mcp::McpAuthorizationServerMetadata with_iss = supported;
+    app_mcp::McpAuthorizationServerMetadata with_iss = supported;
     with_iss.authorization_response_iss_parameter_supported = true;
-    auto shared = mcp::client_metadata_document(kServerUrl, kRedirectUrl, with_iss);
+    auto shared = app_mcp::client_metadata_document(kServerUrl, kRedirectUrl, with_iss);
     REQUIRE(shared.has_value());
     CHECK(shared->url == "https://pi.dev/oauth/client.json");
     CHECK(shared->redirect_url == kRedirectUrl);
 
     // A server with no support (or no `none` auth method) is an explicit
     // failure carrying pi's message.
-    mcp::McpAuthorizationServerMetadata unsupported = supported;
+    app_mcp::McpAuthorizationServerMetadata unsupported = supported;
     unsupported.client_id_metadata_document_supported = std::nullopt;
-    auto rejected = mcp::client_metadata_document(kServerUrl, kRedirectUrl, unsupported);
+    auto rejected = app_mcp::client_metadata_document(kServerUrl, kRedirectUrl, unsupported);
     REQUIRE_FALSE(rejected.has_value());
     CHECK(rejected.error().message.find("does not support Client ID Metadata Documents") != std::string::npos);
 }
@@ -379,7 +379,7 @@ TEST_CASE("cimd mode identifies through the metadata document without registerin
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    harness.oauth.client_registration = mcp::McpClientRegistration::Cimd;
+    harness.oauth.client_registration = app_mcp::McpClientRegistration::Cimd;
     harness.authorization_server_document =
             R"({"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/authorize",)" +
             std::string{R"("token_endpoint":"https://auth.example.com/token",)"} +
@@ -389,7 +389,7 @@ TEST_CASE("cimd mode identifies through the metadata document without registerin
 
     auto outcome = harness.run(runtime);
     REQUIRE(outcome.has_value());
-    CHECK(outcome->result == mcp::McpOAuthFlowResult::Redirect);
+    CHECK(outcome->result == app_mcp::McpOAuthFlowResult::Redirect);
     // No registration POST at all: the document URL is the client id.
     CHECK(harness.http->requests.empty());
     const auto& url = *outcome->authorization_url;
@@ -401,9 +401,9 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    mcp::McpOAuthState seeded;
+    app_mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
+    seeded.client_information = app_mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
     seeded.code_verifier = "verifier-1";
     REQUIRE(harness.store->save("echo", kServerUrl, seeded).has_value());
     harness.authorization_server_document =
@@ -413,7 +413,7 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
             std::string{R"("authorization_response_iss_parameter_supported":true,)"} +
             std::string{R"("token_endpoint_auth_methods_supported":["none"]})"};
 
-    mcp::McpOAuthFlowOptions options;
+    app_mcp::McpOAuthFlowOptions options;
     options.authorization_code = "code-1";
     options.iss = "https://attacker.example.com";
     auto outcome = harness.run(runtime, options);
@@ -425,7 +425,7 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
     options.iss = "https://auth.example.com";
     auto authorized = harness.run(runtime, options);
     REQUIRE(authorized.has_value());
-    CHECK(authorized->result == mcp::McpOAuthFlowResult::Authorized);
+    CHECK(authorized->result == app_mcp::McpOAuthFlowResult::Authorized);
     REQUIRE(harness.http->requests.size() == 1);
     CHECK(harness.http->requests.front().url == kTokenUrl);
 }
@@ -434,9 +434,9 @@ TEST_CASE("a server that does not support the authorization code grant or PKCE S
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    mcp::McpOAuthState seeded;
+    app_mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
+    seeded.client_information = app_mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
     REQUIRE(harness.store->save("echo", kServerUrl, seeded).has_value());
 
     harness.authorization_server_document =
@@ -461,10 +461,10 @@ TEST_CASE("a server that does not support the authorization code grant or PKCE S
 TEST_CASE("a server_error refresh is quiet and falls through to authorization", "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    mcp::McpOAuthState seeded;
+    app_mcp::McpOAuthState seeded;
     seeded.server_url = kServerUrl;
-    seeded.client_information = mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
-    mcp::McpOAuthTokens tokens;
+    seeded.client_information = app_mcp::McpOAuthClientInformation{.client_id = "dyn-client-1"};
+    app_mcp::McpOAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "old-refresh";
@@ -474,5 +474,5 @@ TEST_CASE("a server_error refresh is quiet and falls through to authorization", 
 
     auto outcome = harness.run(runtime);
     REQUIRE(outcome.has_value());
-    CHECK(outcome->result == mcp::McpOAuthFlowResult::Redirect);
+    CHECK(outcome->result == app_mcp::McpOAuthFlowResult::Redirect);
 }

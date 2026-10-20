@@ -5,12 +5,10 @@
 // the one delta a long-lived server needs: a parent-held writable stdin pipe
 // and line-by-line delivery instead of a drain to EOF.
 //
-// The transport is private to cch_coding_agent and is reached only through
-// `McpExtensionToolSource`; nothing here is an Owner Interface.
+// The process and framing machinery is private to cch_mcp; callers use the
+// <cch/mcp/StdioClient.hpp> interface.
 
-#include "coding_agent/mcp/McpStdioClient.hpp"
-
-#include "coding_agent/mcp/McpProtocol.hpp"
+#include "StdioClientImpl.hpp"
 
 #include "support/Json.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -49,7 +47,7 @@
 
 extern char** environ;
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
 
 /// pi `close`: close stdin, wait this long for a clean exit before SIGTERM.
@@ -131,18 +129,23 @@ struct OwnedPipe {
 
 } // namespace
 
-McpStdioClient::McpStdioClient(ConstructionKey, boost::asio::any_io_executor executor, McpStdioServerConfig config)
+StdioClientImpl::StdioClientImpl(boost::asio::any_io_executor executor, StdioServerConfig config)
     : executor_(std::move(executor)), config_(std::move(config)), stdin_pipe_(executor_), stdout_pipe_(executor_),
       stderr_pipe_(executor_), stderr_drained_(executor_) {
     stderr_drained_.expires_at(std::chrono::steady_clock::time_point::max());
 }
 
-McpStdioClient::~McpStdioClient() {
+StdioClientImpl::~StdioClientImpl() {
     close_transport();
     teardown_process_group();
 }
 
-support::ExpectedVoid McpStdioClient::spawn() {
+void StdioClientImpl::close() noexcept {
+    close_transport();
+    teardown_process_group();
+}
+
+support::ExpectedVoid StdioClientImpl::spawn() {
     if (config_.command.empty()) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "MCP server '" + config_.name + "' has no command"));
@@ -299,7 +302,7 @@ support::ExpectedVoid McpStdioClient::spawn() {
         return std::unexpected(transport_error(config_.name, "could not be launched", std::strerror(setup_error)));
     }
     stderr_tail_.clear();
-    std::weak_ptr<McpStdioClient> weak = weak_from_this();
+    std::weak_ptr<StdioClientImpl> weak = weak_from_this();
     boost::asio::co_spawn(
             executor_,
             [weak]() -> boost::asio::awaitable<void> {
@@ -311,7 +314,7 @@ support::ExpectedVoid McpStdioClient::spawn() {
     return {};
 }
 
-boost::asio::awaitable<void> McpStdioClient::drain_stderr() {
+boost::asio::awaitable<void> StdioClientImpl::drain_stderr() {
     std::array<char, 4096> chunk{};
     while (stderr_pipe_.is_open()) {
         const auto [error, count] = co_await stderr_pipe_.async_read_some(
@@ -328,7 +331,7 @@ boost::asio::awaitable<void> McpStdioClient::drain_stderr() {
     }
 }
 
-support::Error McpStdioClient::failure_with_stderr_tail(support::Error error) const {
+support::Error StdioClientImpl::failure_with_stderr_tail(support::Error error) const {
     if (!stderr_tail_.empty()) {
         const std::string tail = stderr_tail_.substr(
                 stderr_tail_.size() > kStderrTailCharacters ? stderr_tail_.size() - kStderrTailCharacters : 0);
@@ -340,10 +343,10 @@ support::Error McpStdioClient::failure_with_stderr_tail(support::Error error) co
     return error;
 }
 
-boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpStdioClient::connect(
-        McpStdioServerConfig config) {
+boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClientImpl>>> StdioClientImpl::connect_impl(
+        StdioServerConfig config) {
     auto executor = co_await boost::asio::this_coro::executor;
-    auto client = std::make_shared<McpStdioClient>(ConstructionKey{}, std::move(executor), std::move(config));
+    auto client = std::make_shared<StdioClientImpl>(std::move(executor), std::move(config));
     if (auto spawned = client->spawn(); !spawned) {
         co_return std::unexpected(std::move(spawned.error()));
     }
@@ -361,7 +364,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<McpStdioClient>>> McpSt
     co_return client;
 }
 
-support::AsyncResult<support::JsonValue> McpStdioClient::request(
+support::AsyncResult<support::JsonValue> StdioClientImpl::request(
         std::string method, std::optional<support::JsonValue> params, RequestOptions options) {
     const std::stop_token stop_token = options.stop_token;
     // A request made while the server is closed is still enqueued: the pump
@@ -393,7 +396,7 @@ support::AsyncResult<support::JsonValue> McpStdioClient::request(
                 // whichever thread requests stop. A weak reference keeps the
                 // registration from extending the client's lifetime.
                 if (stop_token.stop_possible()) {
-                    std::weak_ptr<McpStdioClient> weak = self;
+                    std::weak_ptr<StdioClientImpl> weak = self;
                     self->stop_registrations_[id] =
                             std::make_unique<StopRegistration>(stop_token, [weak, id]() noexcept {
                                 if (auto client = weak.lock()) {
@@ -409,7 +412,7 @@ support::AsyncResult<support::JsonValue> McpStdioClient::request(
             }}};
 }
 
-void McpStdioClient::cancel_request(int id) {
+void StdioClientImpl::cancel_request(int id) {
     if (closed_ || !request_pending(id)) {
         return;
     }
@@ -423,7 +426,7 @@ void McpStdioClient::cancel_request(int id) {
     }
 }
 
-bool McpStdioClient::request_pending(int id) const noexcept {
+bool StdioClientImpl::request_pending(int id) const noexcept {
     if (current_id_ == id) {
         return true;
     }
@@ -435,7 +438,7 @@ bool McpStdioClient::request_pending(int id) const noexcept {
     return false;
 }
 
-boost::asio::awaitable<void> McpStdioClient::write_cancellation(int id) {
+boost::asio::awaitable<void> StdioClientImpl::write_cancellation(int id) {
     support::JsonValue params{support::JsonValue::object_t{
             {"requestId", static_cast<double>(id)},
             {"reason", std::string{"cancelled"}},
@@ -446,14 +449,14 @@ boost::asio::awaitable<void> McpStdioClient::write_cancellation(int id) {
     (void)co_await write_frame(newline_frame(detail::build_notification_body("notifications/cancelled", params)));
 }
 
-void McpStdioClient::notify(std::string method, std::optional<support::JsonValue> params) {
+void StdioClientImpl::notify(std::string method, std::optional<support::JsonValue> params) {
     if (closed_) {
         return;
     }
     enqueue_frame(newline_frame(detail::build_notification_body(method, params)), 0, std::nullopt);
 }
 
-void McpStdioClient::enqueue_frame(std::string frame,
+void StdioClientImpl::enqueue_frame(std::string frame,
         int id,
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
         ProgressCallback on_progress) {
@@ -475,7 +478,7 @@ void McpStdioClient::enqueue_frame(std::string frame,
     }
 }
 
-boost::asio::awaitable<std::optional<support::Error>> McpStdioClient::reconnect_transport() {
+boost::asio::awaitable<std::optional<support::Error>> StdioClientImpl::reconnect_transport() {
     // Reached only after close; rebuild the transport from scratch so a dead
     // child's descriptors and buffered frames cannot leak into the new one.
     teardown_process_group();
@@ -508,7 +511,7 @@ boost::asio::awaitable<std::optional<support::Error>> McpStdioClient::reconnect_
     co_return std::nullopt;
 }
 
-boost::asio::awaitable<void> McpStdioClient::pump() {
+boost::asio::awaitable<void> StdioClientImpl::pump() {
     while (!queue_.empty()) {
         auto item = std::move(queue_.front());
         queue_.pop_front();
@@ -558,7 +561,7 @@ boost::asio::awaitable<void> McpStdioClient::pump() {
     pumping_ = false;
 }
 
-void McpStdioClient::complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome) {
+void StdioClientImpl::complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome) {
     if (!frame.completion.has_value()) {
         return;
     }
@@ -569,7 +572,7 @@ void McpStdioClient::complete_frame(QueuedFrame& frame, support::Expected<suppor
     (*frame.completion)(std::move(outcome));
 }
 
-boost::asio::awaitable<std::optional<support::Error>> McpStdioClient::write_frame(std::string_view frame) {
+boost::asio::awaitable<std::optional<support::Error>> StdioClientImpl::write_frame(std::string_view frame) {
     const auto [error, written] = co_await boost::asio::async_write(stdin_pipe_,
             boost::asio::buffer(frame.data(), frame.size()),
             boost::asio::as_tuple(boost::asio::use_awaitable));
@@ -580,7 +583,7 @@ boost::asio::awaitable<std::optional<support::Error>> McpStdioClient::write_fram
     co_return std::nullopt;
 }
 
-boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
+boost::asio::awaitable<std::optional<std::string>> StdioClientImpl::read_line() {
     last_read_timed_out_ = false;
     last_read_woken_ = false;
     for (;;) {
@@ -615,7 +618,7 @@ boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
             // just as the read completes), so it reaches the client through a
             // weak reference instead of capturing `this` across the async
             // boundary (§6.2/§7.5).
-            std::weak_ptr<McpStdioClient> weak = weak_from_this();
+            std::weak_ptr<StdioClientImpl> weak = weak_from_this();
             timer.async_wait([weak, timed_out](const boost::system::error_code& error) {
                 if (error) {
                     return;
@@ -666,7 +669,7 @@ boost::asio::awaitable<std::optional<std::string>> McpStdioClient::read_line() {
     }
 }
 
-boost::asio::awaitable<support::Expected<support::JsonValue>> McpStdioClient::await_response(int id) {
+boost::asio::awaitable<support::Expected<support::JsonValue>> StdioClientImpl::await_response(int id) {
     for (;;) {
         if (cancelled_.contains(id)) {
             co_await write_cancellation(id);
@@ -723,7 +726,8 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> McpStdioClient::aw
     }
 }
 
-void McpStdioClient::close_transport() noexcept {
+void StdioClientImpl::close_transport() noexcept {
+    closed_ = true;
     boost::system::error_code ignored;
     if (stdin_pipe_.is_open()) {
         stdin_pipe_.close(ignored);
@@ -737,7 +741,7 @@ void McpStdioClient::close_transport() noexcept {
     }
 }
 
-void McpStdioClient::teardown_process_group() noexcept {
+void StdioClientImpl::teardown_process_group() noexcept {
     if (child_pid_ <= 0) {
         return;
     }
@@ -785,4 +789,16 @@ void McpStdioClient::teardown_process_group() noexcept {
     child_pid_ = -1;
 }
 
-} // namespace cch::coding_agent::mcp
+support::AsyncResult<std::shared_ptr<StdioClient>> StdioClient::connect(StdioServerConfig config) {
+    return support::detail::make_async_result(
+            [config = std::move(config)]() mutable
+                    -> boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClient>>> {
+                auto connected = co_await StdioClientImpl::connect_impl(std::move(config));
+                if (!connected) {
+                    co_return std::unexpected(std::move(connected.error()));
+                }
+                co_return std::shared_ptr<StdioClient>{std::move(*connected)};
+            });
+}
+
+} // namespace cch::mcp

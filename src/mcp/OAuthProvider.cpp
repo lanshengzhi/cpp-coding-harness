@@ -7,22 +7,24 @@
 // `post_with_login_cancellation`, `parse_authorization_input`) and the existing
 // `AuthInteraction` presentation, and it returns the existing
 // `OAuthCredential`; persistence is the caller's, through the MCP-owned
-// `McpAuthStore`. The transport is private and reached only through
+// `OAuthStateStore`. The transport is private and reached only through
 // `login_mcp_server` / `McpOAuthTokenResolver`.
 
-#include "coding_agent/mcp/McpOAuthProvider.hpp"
-#include "coding_agent/mcp/McpNamespace.hpp"
-#include "coding_agent/mcp/OAuthCallbackServer.hpp"
-#include "coding_agent/mcp/Pkce.hpp"
+#include <cch/mcp/OAuthProvider.hpp>
+
+#include "OAuthProviderImpl.hpp"
+
+#include <cch/mcp/OAuthCallbackServer.hpp>
+#include <cch/mcp/Pkce.hpp>
+#include "support/AsyncResultBridge.hpp"
 
 #include <cch/support/JsonAccess.hpp>
-#include "coding_agent/mcp/OAuthHttpClient.hpp"
-#include "coding_agent/mcp/OAuthShared.hpp"
+#include <cch/mcp/OAuthHttpClient.hpp>
+#include "OAuthShared.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
-#include <cch/ai/Timestamps.hpp>
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
@@ -43,12 +45,18 @@
 #include <string_view>
 #include <utility>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 namespace {
+
+[[nodiscard]] std::int64_t current_timestamp_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch())
+            .count();
+}
 
 /// A token response that reports no `expires_in` is treated as long-lived
 /// (pi leaves `tokensExpireAt` unset); 2^53-1 is exactly representable in the
-/// JSON double the `McpAuthStore` serializer uses, so it round-trips.
+/// JSON double the `OAuthStateStore` serializer uses, so it round-trips.
 constexpr std::int64_t kNoReportedExpiry = 9007199254740991LL;
 
 const std::map<std::string, std::string, std::less<>> kFormHeaders{
@@ -121,7 +129,7 @@ const std::map<std::string, std::string, std::less<>> kFormHeaders{
         if (!std::isfinite(*expires_in) || *expires_in < 0) {
             return std::unexpected(oauth_error("MCP OAuth token response carries an invalid expires_in"));
         }
-        credential.expires = oauth_token_expiry_ms(*expires_in, ai::current_timestamp_ms());
+        credential.expires = oauth_token_expiry_ms(*expires_in, current_timestamp_ms());
     } else {
         credential.expires = kNoReportedExpiry;
     }
@@ -137,7 +145,7 @@ const std::map<std::string, std::string, std::less<>> kFormHeaders{
     return "http://" + authority + ":" + std::to_string(port) + path;
 }
 
-[[nodiscard]] std::string build_authorize_url(const McpOAuthServerConfig& config,
+[[nodiscard]] std::string build_authorize_url(const OAuthServerConfig& config,
         const std::string& redirect_url,
         const std::string& challenge,
         const std::string& state) {
@@ -156,7 +164,7 @@ const std::map<std::string, std::string, std::less<>> kFormHeaders{
     return url;
 }
 
-[[nodiscard]] std::string authorization_code_body(const McpOAuthServerConfig& config,
+[[nodiscard]] std::string authorization_code_body(const OAuthServerConfig& config,
         const std::string& code,
         const std::string& verifier,
         const std::string& redirect_url) {
@@ -168,7 +176,7 @@ const std::map<std::string, std::string, std::less<>> kFormHeaders{
     return body;
 }
 
-[[nodiscard]] std::string refresh_body(const McpOAuthServerConfig& config, const std::string& refresh_token) {
+[[nodiscard]] std::string refresh_body(const OAuthServerConfig& config, const std::string& refresh_token) {
     std::string body = "grant_type=refresh_token";
     body += "&refresh_token=" + url_query_encode(refresh_token);
     body += "&client_id=" + url_query_encode(config.client_id);
@@ -188,20 +196,15 @@ using PromptDoneChannel = boost::asio::experimental::channel<void(boost::system:
 
 } // namespace
 
-std::string mcp_oauth_provider_id(std::string_view server_name) {
-    // The credential-store provider id is the MCP tool namespace by
-    // construction (McpNamespace.hpp).
-    return detail::mcp_namespace(server_name);
-}
 
-McpOAuthProvider::McpOAuthProvider(McpOAuthServerConfig config, std::shared_ptr<OAuthHttpClient> http_client)
+OAuthProviderImpl::OAuthProviderImpl(OAuthServerConfig config, std::shared_ptr<OAuthHttpClient> http_client)
     : config_(std::move(config)), http_client_(std::move(http_client)) {}
 
-McpOAuthProvider::McpOAuthProvider(McpOAuthProvider&&) noexcept = default;
-McpOAuthProvider& McpOAuthProvider::operator=(McpOAuthProvider&&) noexcept = default;
-McpOAuthProvider::~McpOAuthProvider() = default;
+OAuthProviderImpl::OAuthProviderImpl(OAuthProviderImpl&&) noexcept = default;
+OAuthProviderImpl& OAuthProviderImpl::operator=(OAuthProviderImpl&&) noexcept = default;
+OAuthProviderImpl::~OAuthProviderImpl() = default;
 
-boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::request_token(
+boost::asio::awaitable<support::Expected<OAuthCredential>> OAuthProviderImpl::request_token(
         std::string body, std::stop_token stop_token) {
     auto response = co_await post_with_login_cancellation(
             http_client_, config_.token_url, kFormHeaders, std::move(body), stop_token);
@@ -211,8 +214,8 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::req
     co_return credential_from_response(config_.client_id, response->body, response->status_code, nullptr);
 }
 
-boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::login(AuthInteraction interaction) {
-    if (auto valid = validate_mcp_oauth_server_config(config_); !valid) {
+boost::asio::awaitable<support::Expected<OAuthCredential>> OAuthProviderImpl::login(AuthInteraction interaction) {
+    if (auto valid = validate_oauth_server_config(config_); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
     if (!interaction.prompt) {
@@ -228,7 +231,7 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::log
 
     auto redirect_url_holder = std::make_shared<std::string>();
     CCH_TRY(server,
-            co_await OAuthCallbackServer::start(OAuthCallbackServerOptions{
+            co_await support::detail::await_async_result(OAuthCallbackServer::start(OAuthCallbackServerOptions{
                     .host = config_.callback_host,
                     .port = config_.callback_port,
                     .path = callback_path,
@@ -236,7 +239,7 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::log
                     .validate_state = true,
                     .success_message = "MCP server authorization completed. You may now close this page.",
                     .exchange_error_message = "MCP server authorization failed.",
-            }));
+            })));
 
     const std::string redirect_url = callback_url(config_.callback_host, server->bound_port(), callback_path);
     *redirect_url_holder = redirect_url;
@@ -303,7 +306,7 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::log
                                                server->cancel_wait();
                                            }};
 
-    CCH_TRY(callback_result, co_await server->wait_for_code());
+    CCH_TRY(callback_result, co_await support::detail::await_async_result(server->wait_for_code()));
     if (login_stop_token.stop_requested()) {
         co_return std::unexpected(login_cancelled());
     }
@@ -345,8 +348,8 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::log
             authorization_code_body(config_, *parsed.code, pkce.verifier, redirect_url), login_stop_token);
 }
 
-boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::refresh(OAuthCredential credential) {
-    if (auto valid = validate_mcp_oauth_server_config(config_); !valid) {
+boost::asio::awaitable<support::Expected<OAuthCredential>> OAuthProviderImpl::refresh(OAuthCredential credential) {
+    if (auto valid = validate_oauth_server_config(config_); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
     if (credential.refresh.empty()) {
@@ -364,10 +367,10 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> McpOAuthProvider::ref
     co_return credential_from_response(config_.client_id, response->body, response->status_code, &credential);
 }
 
-McpOAuthState mcp_oauth_state_from_credential(const OAuthCredential& credential, std::string server_url) {
-    McpOAuthState state;
+OAuthState mcp_oauth_state_from_credential(const OAuthCredential& credential, std::string server_url) {
+    OAuthState state;
     state.server_url = std::move(server_url);
-    McpOAuthTokens tokens;
+    OAuthTokens tokens;
     tokens.access_token = credential.access;
     tokens.token_type = "Bearer";
     if (!credential.refresh.empty()) {
@@ -376,12 +379,12 @@ McpOAuthState mcp_oauth_state_from_credential(const OAuthCredential& credential,
     state.tokens = std::move(tokens);
     state.tokens_expire_at = credential.expires;
     if (credential.client_id) {
-        state.client_information = McpOAuthClientInformation{.client_id = *credential.client_id};
+        state.client_information = OAuthClientInformation{.client_id = *credential.client_id};
     }
     return state;
 }
 
-std::optional<OAuthCredential> mcp_oauth_credential_from_state(const McpOAuthState& state) {
+std::optional<OAuthCredential> mcp_oauth_credential_from_state(const OAuthState& state) {
     if (!state.tokens) {
         return std::nullopt;
     }
@@ -395,43 +398,30 @@ std::optional<OAuthCredential> mcp_oauth_credential_from_state(const McpOAuthSta
     return credential;
 }
 
-support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
-        std::string server_name,
-        std::string server_url,
-        McpOAuthProvider& provider,
-        AuthInteraction interaction) {
+
+OAuthProvider::OAuthProvider(OAuthServerConfig config, std::shared_ptr<OAuthHttpClient> http_client)
+    : config_(std::move(config)), http_client_(std::move(http_client)) {}
+
+OAuthProvider::OAuthProvider(OAuthProvider&&) noexcept = default;
+OAuthProvider& OAuthProvider::operator=(OAuthProvider&&) noexcept = default;
+OAuthProvider::~OAuthProvider() = default;
+
+support::AsyncResult<OAuthCredential> OAuthProvider::login(AuthInteraction interaction) {
     return support::detail::make_async_result(
-            [store = std::move(store),
-                    server_name = std::move(server_name),
-                    server_url = std::move(server_url),
-                    &provider,
-                    interaction = std::move(interaction)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-                auto credential = co_await provider.login(std::move(interaction));
-                if (!credential) {
-                    // Login-flow failures propagate unwrapped to the host.
-                    co_return std::unexpected(std::move(credential.error()));
-                }
-                auto state = mcp_oauth_state_from_credential(*credential, server_url);
-                auto stored = store->save(server_name, server_url, state);
-                if (!stored) {
-                    co_return std::unexpected(std::move(stored.error()));
-                }
-                co_return support::ExpectedVoid{};
+            [config = config_, http_client = http_client_, interaction = std::move(interaction)]() mutable
+                    -> boost::asio::awaitable<support::Expected<OAuthCredential>> {
+                OAuthProviderImpl impl(std::move(config), std::move(http_client));
+                co_return co_await impl.login(std::move(interaction));
             });
 }
 
-support::AsyncResult<void> logout_mcp_server(
-        std::shared_ptr<McpAuthStore> store, std::string server_name, std::string server_url) {
+support::AsyncResult<OAuthCredential> OAuthProvider::refresh(OAuthCredential credential) {
     return support::detail::make_async_result(
-            [store = std::move(store),
-                    server_name = std::move(server_name),
-                    server_url = std::move(server_url)]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                auto removed = store->remove(server_name, server_url);
-                if (!removed) {
-                    co_return std::unexpected(std::move(removed.error()));
-                }
-                co_return support::ExpectedVoid{};
+            [config = config_, http_client = http_client_, credential = std::move(credential)]() mutable
+                    -> boost::asio::awaitable<support::Expected<OAuthCredential>> {
+                OAuthProviderImpl impl(std::move(config), std::move(http_client));
+                co_return co_await impl.refresh(std::move(credential));
             });
 }
 
-} // namespace cch::coding_agent::mcp
+} // namespace cch::mcp

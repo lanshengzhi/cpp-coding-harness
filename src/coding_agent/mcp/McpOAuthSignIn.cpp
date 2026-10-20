@@ -190,7 +190,7 @@ using RaceOutcome = support::Expected<std::optional<AuthorizationResponse>>;
     boost::asio::co_spawn(
             executor,
             [server, settled]() -> boost::asio::awaitable<void> {
-                auto result = co_await server->wait_for_code();
+                auto result = co_await support::detail::await_async_result(server->wait_for_code());
                 if (!result) {
                     settled->try_send(
                             boost::system::error_code{}, RaceOutcome{std::unexpected(std::move(result.error()))});
@@ -262,7 +262,7 @@ using RaceOutcome = support::Expected<std::optional<AuthorizationResponse>>;
 
 /// The `Authorization: Bearer <access>` header for a stored state, or
 /// `std::nullopt` when it carries no tokens.
-[[nodiscard]] std::optional<std::map<std::string, std::string>> bearer_headers(const McpOAuthState& state) {
+[[nodiscard]] std::optional<std::map<std::string, std::string>> bearer_headers(const OAuthState& state) {
     const auto credential = mcp_oauth_credential_from_state(state);
     if (!credential) {
         return std::nullopt;
@@ -313,7 +313,7 @@ std::string mcp_oauth_bound_redirect_url(const McpOAuthCallbackSettings& setting
     return "http://" + redirect_authority(settings.redirect_host, bound_port) + settings.path;
 }
 
-std::string mcp_oauth_registered_redirect_url(const std::optional<McpOAuthState>& state) {
+std::string mcp_oauth_registered_redirect_url(const std::optional<OAuthState>& state) {
     if (state && state->client_information && !state->client_information->redirect_uris.empty()) {
         return state->client_information->redirect_uris.front();
     }
@@ -323,12 +323,12 @@ std::string mcp_oauth_registered_redirect_url(const std::optional<McpOAuthState>
 support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
     return support::detail::make_async_result([request = std::move(request)]() mutable
                                                       -> boost::asio::awaitable<support::ExpectedVoid> {
-        auto http = request.http ? request.http : std::make_shared<BoostBeastOAuthHttpClient>();
+        auto http = request.http ? request.http : default_oauth_http_client();
         auto loaded = request.store->load(request.server_name, request.server_url);
         if (!loaded) {
             co_return std::unexpected(std::move(loaded.error()));
         }
-        McpOAuthState working;
+        OAuthState working;
         if (loaded->has_value()) {
             working = **loaded;
         }
@@ -359,7 +359,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
             }
             extra_paths.push_back(settings.path + "/" + *callback_id);
         }
-        auto started = co_await OAuthCallbackServer::start(OAuthCallbackServerOptions{
+        auto started = co_await support::detail::await_async_result(OAuthCallbackServer::start(OAuthCallbackServerOptions{
                 .host = settings.host,
                 .port = settings.port.value_or(0),
                 .path = settings.path,
@@ -368,7 +368,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
                 .validate_state = true,
                 .success_message = "MCP server authorization completed. You may now close this page.",
                 .exchange_error_message = "MCP server authorization failed.",
-        });
+        }));
         if (!started) {
             co_return std::unexpected(std::move(started.error()));
         }
@@ -387,13 +387,13 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
         McpOAuthFlowOptions flow_options;
         flow_options.scope = request.oauth.scope;
 
-        auto outcome = co_await authorize_mcp(request.store,
+        auto outcome = co_await support::detail::await_async_result(authorize_mcp(request.store,
                 request.server_name,
                 request.server_url,
                 request.oauth,
                 redirect_url,
                 http,
-                flow_options);
+                flow_options));
         if (!outcome) {
             co_return std::unexpected(std::move(outcome.error()));
         }
@@ -419,8 +419,8 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
         exchange.scope = flow_options.scope;
         exchange.authorization_code = authorization->code;
         exchange.iss = authorization->iss;
-        auto authorized = co_await authorize_mcp(
-                request.store, request.server_name, request.server_url, request.oauth, redirect_url, http, exchange);
+        auto authorized = co_await support::detail::await_async_result(authorize_mcp(
+                request.store, request.server_name, request.server_url, request.oauth, redirect_url, http, exchange));
         if (!authorized) {
             co_return std::unexpected(std::move(authorized.error()));
         }
@@ -437,7 +437,7 @@ McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(std::shared_ptr<McpAuthStor
         McpOAuthConfig oauth,
         std::shared_ptr<OAuthHttpClient> http)
     : store_(std::move(store)), server_name_(std::move(server_name)), server_url_(std::move(server_url)),
-      oauth_(std::move(oauth)), http_(http ? std::move(http) : std::make_shared<BoostBeastOAuthHttpClient>()) {}
+      oauth_(std::move(oauth)), http_(http ? std::move(http) : default_oauth_http_client()) {}
 
 McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(McpOAuthFlowTokenResolver&&) noexcept = default;
 McpOAuthFlowTokenResolver& McpOAuthFlowTokenResolver::operator=(McpOAuthFlowTokenResolver&&) noexcept = default;
@@ -466,8 +466,8 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolv
                 // it discovers the authorization server, registers a client if
                 // none is stored, and refreshes the tokens.
                 const std::string redirect_url = mcp_oauth_registered_redirect_url(*loaded);
-                auto outcome = co_await authorize_mcp(
-                        store, server_name, server_url, oauth, redirect_url, http, McpOAuthFlowOptions{});
+                auto outcome = co_await support::detail::await_async_result(authorize_mcp(
+                        store, server_name, server_url, oauth, redirect_url, http, McpOAuthFlowOptions{}));
                 if (!outcome) {
                     co_return std::unexpected(std::move(outcome.error()));
                 }

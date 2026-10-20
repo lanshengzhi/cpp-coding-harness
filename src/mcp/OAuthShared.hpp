@@ -1,8 +1,10 @@
 #pragma once
 
-#include "coding_agent/mcp/OAuthHttpClient.hpp"
+// Private shared OAuth mechanics for cch_mcp's flow/provider implementation.
 
-#include "coding_agent/mcp/McpAuth.hpp"
+#include <cch/mcp/Auth.hpp>
+#include <cch/mcp/OAuthHttpClient.hpp>
+
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -11,12 +13,11 @@
 #include <cstdint>
 #include <map>
 #include <memory>
-#include <optional>
-#include <string>
 #include <stop_token>
+#include <string>
 #include <utility>
 
-namespace cch::coding_agent::mcp {
+namespace cch::mcp {
 
 /// Token triple parsed from an OAuth token endpoint response: `expires` is a
 /// wall-clock millisecond timestamp.
@@ -27,14 +28,14 @@ struct OAuthToken {
 };
 
 /// Shared pi `fetchWithLoginCancellation` behavior for OAuth token exchanges.
-/// The HTTP client is owned by value because the coroutine may suspend.
 [[nodiscard]] inline boost::asio::awaitable<support::Expected<OAuthHttpResponse>> post_with_login_cancellation(
         std::shared_ptr<OAuthHttpClient> http_client,
         std::string url,
         std::map<std::string, std::string, std::less<>> headers,
         std::string body,
         std::stop_token stop_token) {
-    auto response = co_await http_client->post(std::move(url), std::move(headers), std::move(body), stop_token);
+    auto response = co_await support::detail::await_async_result(
+            http_client->post(std::move(url), std::move(headers), std::move(body), stop_token));
     if (!response) {
         if (stop_token.stop_requested() || response.error().code == support::ErrorCode::Cancelled) {
             co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
@@ -55,4 +56,4 @@ template <typename Event> void notify_best_effort(AuthNotifyHook& notify, Event&
     notify(AuthEvent{std::forward<Event>(event)});
 }
 
-} // namespace cch::coding_agent::mcp
+} // namespace cch::mcp

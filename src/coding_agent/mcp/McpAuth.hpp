@@ -1,65 +1,22 @@
 #pragma once
 
-#include <cch/support/AsyncResult.hpp>
+// Bounded forwarding to the cch_mcp Owner Interface (extraction #1065).
 
-#include <cstdint>
-#include <functional>
-#include <optional>
-#include <stop_token>
-#include <string>
-#include <string_view>
-#include <variant>
+#include <cch/mcp/Auth.hpp>
 
 namespace cch::coding_agent::mcp {
 
-/// MCP token state used during authorization and refresh. Durable state is
-/// owned by McpAuthStore; these values never enter model requests or history.
-struct OAuthCredential {
-    std::string refresh{};
-    std::string access{};
-    std::int64_t expires{0};
-    std::optional<std::string> client_id{std::nullopt};
-};
-
-/// Manual redirect URL requested while the loopback callback is pending.
-/// The prompt token cancels this prompt when the callback completes first.
-struct AuthPrompt {
-    std::string message{};
-    std::optional<std::string> placeholder{std::nullopt};
-    std::optional<std::stop_token> stop_token{std::nullopt};
-};
-
-struct AuthUrl {
-    std::string url{};
-    std::optional<std::string> instructions{std::nullopt};
-};
-
-struct AuthProgress {
-    std::string message{};
-};
-
-/// Best-effort presentation values contain no credentials or authorization codes.
-using AuthEventVariant = std::variant<AuthProgress, AuthUrl>;
-
-struct AuthEvent {
-    AuthEventVariant kind{AuthProgress{}};
-};
-
-using AuthPromptHook = std::move_only_function<support::AsyncResult<std::string>(AuthPrompt)>;
-using AuthNotifyHook = std::move_only_function<void(const AuthEvent&)>;
-
-struct AuthInteraction {
-    std::stop_token stop_token{};
-    AuthPromptHook prompt{};
-    AuthNotifyHook notify{};
-};
-
-/// Expired or absent MCP credentials require server sign-in through /mcp.
-[[nodiscard]] inline std::string format_oauth_reauthenticate_message(std::string_view server) {
-    return "Authentication failed for \"" + std::string{server} +
-           "\". Credentials may have expired or network is unavailable. "
-           "Run '/mcp' to re-authenticate " +
-           std::string{server} + ".";
-}
+using cch::mcp::AuthEvent;
+using cch::mcp::AuthEventVariant;
+using cch::mcp::AuthInteraction;
+using cch::mcp::AuthNotifyHook;
+using cch::mcp::AuthProgress;
+using cch::mcp::AuthPrompt;
+using cch::mcp::AuthPromptHook;
+using cch::mcp::AuthUrl;
+using cch::mcp::OAuthCredential;
+using cch::mcp::format_oauth_reauthenticate_message;
+using cch::mcp::mcp_namespace;
+using cch::mcp::mcp_oauth_provider_id;
 
 } // namespace cch::coding_agent::mcp
