@@ -1,0 +1,265 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1062",
+  "family": "audit-1062",
+  "capturedAt": "2026-10-20T09:05:01.404Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/state.ts:replicatedState,AttachedReplicatedState,ReplicatedStateSource,ReplicatedStateSourceAttachment,ReplicatedStateSourceFrame,ReplicatedStatePublisher.publish,ReplicatedStatePublisher.subscribe",
+    "packages/chord/test/replicated-state.test.ts:authoritative replicated state sources",
+    "packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
+  ],
+  "scenarios": [
+    {
+      "name": "an attached state restores the latest committed revision when subscribing after existing commits",
+      "source": "packages/chord/test/replicated-state.test.ts:hydrates at sequence zero when attaching after existing commits; packages/chord/src/state.ts:replicatedState,AttachedReplicatedState,ReplicatedStatePublisher.subscribe",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 40
+        },
+        "commitsBeforeAttach": [
+          {
+            "value": 1,
+            "cursor": 41
+          }
+        ]
+      },
+      "expected": {
+        "attachmentActivated": true,
+        "deliveries": [
+          {
+            "kind": "hydrate",
+            "sequence": 0,
+            "value": {
+              "value": 1
+            }
+          }
+        ],
+        "finalValue": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "name": "attachment captures the snapshot before activation and drains buffered frames in commit order",
+      "source": "packages/chord/test/replicated-state.test.ts:captures before activation and drains queued commits in order; packages/chord/src/state.ts:ReplicatedStateSource.attach,ReplicatedStateSourceAttachment.activate,ReplicatedStatePublisher.publish",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 10
+        },
+        "commitsDuringAttach": [
+          {
+            "value": 1,
+            "cursor": 11
+          },
+          {
+            "value": 2,
+            "cursor": 12
+          }
+        ]
+      },
+      "expected": {
+        "deliveries": [
+          {
+            "kind": "hydrate",
+            "sequence": 2,
+            "value": {
+              "value": 2
+            }
+          }
+        ],
+        "finalValue": {
+          "value": 2
+        }
+      },
+      "normalizations": [
+        "A late subscriber converges to the latest committed revision: only one hydrate at the publisher sequence reached after the buffered drain; intermediate frames are observable through a subscriber installed before the commits."
+      ]
+    },
+    {
+      "name": "exact source values are published without applying or re-diffing the frame operations",
+      "source": "packages/chord/test/replicated-state.test.ts:publishes exact source values without applying or re-diffing; packages/chord/src/state.ts:ReplicatedStateSourceFrame,ReplicatedStatePublisher.publish",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 0
+        },
+        "committed": {
+          "value": 1,
+          "cursor": 1,
+          "ops": [
+            [
+              "s",
+              [
+                "value"
+              ],
+              7
+            ]
+          ]
+        }
+      },
+      "expected": {
+        "publishedValue": {
+          "value": 1
+        },
+        "publishedDelivery": {
+          "kind": "update",
+          "sequence": 1
+        },
+        "finalValue": {
+          "value": 1
+        }
+      },
+      "normalizations": [
+        "The frame ops intentionally disagree with the committed value: an implementation that re-applied or re-diffed them would publish 7 instead of 1."
+      ]
+    },
+    {
+      "name": "a repeated cursor is reported once as a gap and keeps the last good value",
+      "source": "packages/chord/src/state.ts:AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#fail; packages/chord/test/replicated-state.test.ts:reports cursor gaps, disposes the broken attachment, and ignores later frames",
+      "inputs": {
+        "snapshot": {
+          "value": 1,
+          "cursor": 0
+        },
+        "commits": [
+          {
+            "value": 2,
+            "cursor": 1
+          },
+          {
+            "value": 3,
+            "cursor": 1
+          },
+          {
+            "value": 4,
+            "cursor": 2
+          }
+        ]
+      },
+      "expected": {
+        "reportedErrors": [
+          {
+            "name": "Error",
+            "message": "Replicated state source cursor has a gap: expected 2, received 1"
+          }
+        ],
+        "deliveredSequences": [
+          0,
+          1
+        ],
+        "lastGoodValue": {
+          "value": 2
+        },
+        "attachmentCountAfterGap": 0,
+        "lastGoodValueAfterLaterFrame": {
+          "value": 2
+        }
+      }
+    },
+    {
+      "name": "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
+      "source": "packages/chord/test/replicated-state.test.ts:buffers reentrant frames and skips updates covered by a late hydration; packages/chord/src/state.ts:ReplicatedStatePublisher.publish,ReplicatedStatePublisher.subscribe,StateSubscriber.push",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 0
+        },
+        "frames": [
+          {
+            "value": 1,
+            "cursor": 1,
+            "reentrantCommit": {
+              "value": 2,
+              "cursor": 2
+            }
+          },
+          {
+            "value": 2,
+            "cursor": 2
+          }
+        ]
+      },
+      "expected": {
+        "earlySubscriberUpdates": [
+          1,
+          2
+        ],
+        "lateSubscriberDeliveries": [
+          {
+            "kind": "hydrate",
+            "sequence": 2,
+            "value": 2
+          }
+        ],
+        "finalValue": {
+          "value": 2
+        }
+      }
+    },
+    {
+      "name": "one subscription serializes reentrant hydration and update callbacks in publication order",
+      "source": "packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks; packages/chord/src/state.ts:StateSubscriber.drain,ReplicatedStatePublisher.publish",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 0
+        },
+        "reentrantChainUntil": 2
+      },
+      "expected": {
+        "events": [
+          "start:0",
+          "end:0",
+          "start:1",
+          "end:1",
+          "start:2",
+          "end:2"
+        ]
+      }
+    },
+    {
+      "name": "independent attachments converge separately and dispose idempotently without affecting each other",
+      "source": "packages/chord/test/replicated-state.test.ts:keeps attachments independent and disposes each idempotently; packages/chord/src/state.ts:AttachedReplicatedState.dispose,ReplicatedStateSourceAttachment.dispose",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 0
+        },
+        "commits": [
+          {
+            "value": 1,
+            "cursor": 1
+          },
+          {
+            "value": 2,
+            "cursor": 2
+          }
+        ],
+        "disposeFirstTwiceBefore": 2
+      },
+      "expected": {
+        "attachmentCountAfterAttach": 2,
+        "attachmentCountAfterFirstDispose": 1,
+        "attachmentCountAfterSecondDispose": 0,
+        "firstValueAfterDisposeAndLaterCommit": {
+          "value": 1
+        },
+        "secondValueAfterLaterCommit": {
+          "value": 2
+        }
+      }
+    }
+  ]
+}
