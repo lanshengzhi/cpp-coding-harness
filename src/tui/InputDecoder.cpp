@@ -187,15 +187,20 @@ std::optional<std::string> key_for_codepoint(unsigned int codepoint, bool shift)
     return encoded;
 }
 
-std::optional<std::string> kitty_printable_text(
-        unsigned int codepoint, std::optional<unsigned int> shifted_key, const ParsedModifiers& modifiers) {
+std::optional<std::string> kitty_printable_text(unsigned int codepoint,
+        std::optional<unsigned int> shifted_key,
+        const ParsedModifiers& modifiers,
+        bool normalize_functional_codepoint) {
     // pi `decodeKittyPrintable` (frozen pi-v1.3.0 71023aec): when Shift is
     // reported with a shifted key, the shifted key is the inserted character;
     // the effective codepoint is then normalized from Kitty's private-use
-    // functional/keypad range to its printable equivalent.
+    // functional/keypad range to its printable equivalent. The normalization
+    // is CSI-u-specific (pi's modifyOtherKeys decoder does not normalize).
     auto effective_codepoint = codepoint;
     if (modifiers.shift && shifted_key) effective_codepoint = *shifted_key;
-    effective_codepoint = normalize_kitty_functional_codepoint(effective_codepoint);
+    if (normalize_functional_codepoint) {
+        effective_codepoint = normalize_kitty_functional_codepoint(effective_codepoint);
+    }
     // Kitty functional and navigation keys keep their private-use codepoint
     // here (pi's sentinels are equivalently non-printable), so they are never
     // inserted as text.
@@ -222,7 +227,8 @@ std::optional<KeyEvent> make_key_event(unsigned int codepoint,
         KeyEventType type,
         std::optional<unsigned int> base_layout_key = std::nullopt,
         std::optional<unsigned int> shifted_key = std::nullopt,
-        std::optional<unsigned int> logical_shifted_symbol = std::nullopt) {
+        std::optional<unsigned int> logical_shifted_symbol = std::nullopt,
+        bool normalize_printable_functional_codepoint = false) {
     if (logical_shifted_symbol) {
         // pi `parseKey` + `getLogicalShiftedSymbolCandidate`: a shifted-symbol
         // report names the produced symbol as the shortcut identity and
@@ -232,7 +238,9 @@ std::optional<KeyEvent> make_key_event(unsigned int codepoint,
         if (!key) return std::nullopt;
         return KeyEvent{
                 .key = std::move(*key),
-                .text = kitty_printable_text(codepoint, shifted_key, modifiers).value_or(std::string{}),
+                .text = kitty_printable_text(
+                        codepoint, shifted_key, modifiers, normalize_printable_functional_codepoint)
+                        .value_or(std::string{}),
                 .physical_key = key_for_codepoint(codepoint, modifiers.shift).value_or(std::string{}),
                 .ctrl = modifiers.ctrl,
                 .shift = false,
@@ -259,7 +267,8 @@ std::optional<KeyEvent> make_key_event(unsigned int codepoint,
     if (!key) return std::nullopt;
     return KeyEvent{
             .key = std::move(*key),
-            .text = kitty_printable_text(codepoint, shifted_key, modifiers).value_or(std::string{}),
+            .text = kitty_printable_text(codepoint, shifted_key, modifiers, normalize_printable_functional_codepoint)
+                    .value_or(std::string{}),
             .ctrl = modifiers.ctrl,
             .shift = modifiers.shift,
             .alt = modifiers.alt,
@@ -325,7 +334,13 @@ std::optional<KeyEvent> parse_kitty_csi_u(std::string_view sequence) {
             logical_shifted_symbol = normalized_shifted_key;
         }
     }
-    return make_key_event(codepoint.value, *modifiers, type, base_layout_key, shifted_key, logical_shifted_symbol);
+    return make_key_event(codepoint.value,
+            *modifiers,
+            type,
+            base_layout_key,
+            shifted_key,
+            logical_shifted_symbol,
+            /*normalize_printable_functional_codepoint=*/true);
 }
 
 std::optional<KeyEvent> parse_modify_other_keys(std::string_view sequence) {
