@@ -194,8 +194,18 @@ std::string key_id(const KeyEvent& event) {
 
 bool matches_key(const KeyEvent& event, std::string_view identifier) {
     const auto parsed = parse_key_id(identifier);
-    return parsed && parsed->key == event.key && parsed->ctrl == event.ctrl && parsed->shift == event.shift &&
-           parsed->alt == event.alt && parsed->super == event.super;
+    if (!parsed) return false;
+    if (parsed->key == event.key && parsed->ctrl == event.ctrl && parsed->shift == event.shift &&
+            parsed->alt == event.alt && parsed->super == event.super) {
+        return true;
+    }
+    // pi `matchesKittySequence`/`matchesPrintableModifyOtherKeys` physical
+    // match: a binding that names the physical key plus Shift still matches a
+    // shifted-symbol report whose implicit Shift produced `key`. Only such a
+    // report carries `physical_key`, so a plain legacy symbol never matches a
+    // Shift binding.
+    return !event.physical_key.empty() && parsed->shift && parsed->key == event.physical_key &&
+           parsed->ctrl == event.ctrl && parsed->alt == event.alt && parsed->super == event.super;
 }
 
 std::optional<std::string> duplicate_printable_text(std::string_view data) { return kitty_duplicate_text(data); }

@@ -24,6 +24,11 @@ struct KeyEvent {
     /// own character here while `key` stays the base-layout key a shortcut
     /// matches; empty when the event carries no printable character.
     std::string text{};
+    /// The key name of the codepoint the terminal physically reported before a
+    /// shifted-symbol report was resolved to its produced symbol (pi
+    /// `matchesKittySequence` physical match). Empty when the identity did not
+    /// consume an implicit Shift; `key` is then the only shortcut spelling.
+    std::string physical_key{};
     bool ctrl{false};
     bool shift{false};
     bool alt{false};
@@ -37,11 +42,11 @@ struct KeyEvent {
     /// (pi `data === "\n"` submit) read this field directly.
     std::string raw_sequence{};
 
-    /// Semantic identity: shortcut identity, printable text, modifiers, and
-    /// press type. Excludes `raw_sequence` (see above).
+    /// Semantic identity: shortcut identity, printable text, physical
+    /// spelling, modifiers, and press type. Excludes `raw_sequence` (see above).
     [[nodiscard]] bool operator==(const KeyEvent& other) const {
-        return key == other.key && text == other.text && ctrl == other.ctrl && shift == other.shift &&
-               alt == other.alt && super == other.super && type == other.type;
+        return key == other.key && text == other.text && physical_key == other.physical_key && ctrl == other.ctrl &&
+               shift == other.shift && alt == other.alt && super == other.super && type == other.type;
     }
 };
 
