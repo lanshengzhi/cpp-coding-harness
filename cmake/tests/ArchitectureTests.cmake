@@ -204,3 +204,16 @@ include_guard(GLOBAL)
     )
     set_tests_properties(cch_architecture_compiler_budget_registration PROPERTIES
         LABELS "architecture;build;issue1044;spec")
+
+    # Pike PTY helper `kill` identity lookup (issue #1044). The helper records
+    # `broker_starttime` / `child_starttime`; this Python-only case drives the
+    # real `cmd_kill` against real state and processes and fails if a start time
+    # is looked up as `<pidkey>_starttime`. It adds no C++ compile work and
+    # takes no place in the compiler-gate worker budget.
+    add_test(
+        NAME cch_pike_tui_helper_kill_identity
+        COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/tests/architecture/PikeTuiHelperKillTest.py
+    )
+    set_tests_properties(cch_pike_tui_helper_kill_identity PROPERTIES
+        LABELS "architecture;harness;issue1044;spec")
