@@ -94,7 +94,9 @@ audit-1057 (audit-1046 is the bootstrap evidence-infrastructure bundle):
 - 3 scenarios of `audit-1050/input-standalone.json` are registered as explicit
   `orphanScenarios` with a reason, related rows and a disposition instead of being silently linked
   to a different semantics;
-- 0 scenarios are uncovered; the checker fails if any registered audit scenario has no route.
+- 0 scenarios are unrouted: no registered audit scenario is missing a route, and the three
+  orphans above stay explicit rather than being absorbed into a row; the checker fails if any
+  registered audit scenario is neither named, artifact-covered nor registered as an orphan.
 
 Route semantics enforced by the checker:
 
@@ -109,19 +111,34 @@ Route semantics enforced by the checker:
 
 ## 4. Provenance normalization
 
-The `correctionsIndex` records 37 pointer-spelling corrections (33 replacements, one
-symbol-suffix normalisation and 3 record-only items) with their authority and rationale. They
-change pointer spellings only: no frozen observation payload, artifact byte, scenario name or
-bundle is rewritten or rehashed. Corrections that resolved to a no-op stay in the index as
-recorded items; corrections that were already satisfied do not rewrite a longer, already-qualified
-pointer.
+The `correctionsIndex` records 37 pointer-spelling corrections (25 replacements and 12 record-only
+items) with their authority and rationale. They change pointer spellings only: no frozen observation
+payload, artifact byte, scenario name or bundle is rewritten or rehashed. A replacement is applied
+only to the rows its `appliesTo` scope names, and only to a pointer that is exactly the recorded
+spelling (a full pointer, or the same symbol list on a path-tail shorthand). An already-qualified
+pointer, a different symbol list on the same path, and a row outside the scope keep the lane's
+recorded provenance. `appliedCorrections` names only the corrections that actually rewrote one of
+that row's pointers; the checker fails a correction that rewrote nothing without being record-only,
+and fails a rewrite outside the correction's scope.
+
+The record-only items are the ones with nothing to rewrite in the consolidated source list: #1053's
+remote-type triple and worker-fixture label live only in the pinned artifact envelope, and its
+`src/tools/output-files.ts` spelling is absent from every lane ledger and artifact, where the
+qualified `src/utils/output-files.ts:writeOutputFile` pointer already appears; #1055's two C++
+`TaskStore` spellings and #1056's `TaskStore.` path are lane `cppSeam` text the source list never
+carried; and #1056's file-only `submissions.ts`/`inbox.ts`/`tool-search.ts` spellings are already
+qualified in the lane ledger, where the rows observe `Submissions.status` and
+`createToolSearchTool` alone as well as the wider exports. Rewriting those to the wider spelling
+would have replaced an observed member or added an export the lane never recorded. #1052's
+`validateIssuer` correction now names the function that performs the inline issuer check
+(`authorizeMcp,runFlow`) instead of the error type it throws.
 
 One consolidation defect was found and fixed during this work: the earlier substring replacement
 doubled package prefixes on 16 pointers (for example
 `packages/durable/src/harness/packages/durable/src/harness/submissions.ts:...`). The builder now
-replaces the whole recorded pointer with the authoritative spelling, the checker rejects any
-double-qualified package path, and the affected rows carry the corrected pointer. This changed only
-the consolidated ledger's source spellings; the lane ledgers and their artifacts are untouched.
+replaces only an exactly matching recorded pointer, the checker rejects any double-qualified
+package path, and the affected rows carry the corrected pointer. This changed only the consolidated
+ledger's source spellings; the lane ledgers and their artifacts are untouched.
 
 Separately from pointer corrections, the plan carries six explicit excluded-row boundary overrides
 (session share/upload, both third-party TS/JS plugin rows, the settings runtime-observation row, and
@@ -138,7 +155,7 @@ contracts stay as separate rows with an explicit resolution:
 
 | Overlap | Resolution |
 | --- | --- |
-| `overlap-toolkit-product` | The 1050 toolkit export contract belongs to cch_tui; the seven product-entry rows (`tuiMode`, `--tui-mode`, `runInteractiveMode`, `fullscreenExitOutput`, `fullscreenCopyOnSelect`, `fullscreenWheelScrollLines`, `showHardwareCursor`) are cch_coding_agent product behavior and are not-audited against v1.3.0, routed to the 1051 product differential. |
+| `overlap-toolkit-product` | The 1050 toolkit export contract belongs to cch_tui; the seven product-entry rows (`tuiMode`, `--tui-mode`, `runInteractiveMode`, `fullscreenExitOutput`, `fullscreenCopyOnSelect`, `fullscreenWheelScrollLines`, `showHardwareCursor`) are cch_coding_agent product behavior and stay `not-audited`/`unverified`. #1051 holds three adjacent capability rows in the same product area: `mode-switch-renderer`, `exit-restoration` and `hardware-cursor`. Only two product rows name a counterpart, `fullscreenExitOutput` -> `exit-restoration` and `showHardwareCursor` -> `hardware-cursor`, and a counterpart is adjacent, not equal: neither 1051 row observes the 1050 setting, and neither is verified. The other five, including `runInteractiveMode` (the adjacent switch scenario observes a renderer switch, not that assembly), have no 1051 row and no v1.3.0 observation. Every row keeps its visible missing-observation statement. |
 | `overlap-session-storage` | The application Session transcript (JSONL session files, cch_coding_agent) and the durable Session (transactional document/entry storage, cch_durable) are different runtimes. The legacy in-core SQLite SessionStore is the third, no-decision row; it is not the durable contract. |
 | `overlap-tasks-harness` | Both lanes drive the same `Harness.open` entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage. |
 | `overlap-codemode-chord` | The codemode rows name codemode execution and the chord rows name the durable-required Chord subset; the durable Harness consumes both, but neither is the other's contract. |
@@ -147,7 +164,10 @@ contracts stay as separate rows with an explicit resolution:
 
 The eight capability groups (`capabilityGroups`) are disjoint and each member is a real row; the
 six overlap resolutions and the three orphan scenarios are validated for known ids, non-empty
-resolutions and registered scenario names.
+resolutions and registered scenario names. The toolkit/product resolution additionally requires
+every named counterpart to be a real `1051` row that is not verified, every routed product row to
+stay `not-audited`/`unverified` with a missing-observation statement, and at least one product row
+to stay visibly unmatched.
 
 ## 6. Retained limitations (honest missing observations)
 
@@ -337,14 +357,21 @@ python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py check --pi-r
 `build` writes the ledger deterministically; `check` rebuilds it in memory, compares the committed
 bytes and then validates source-row coverage and the alias bijection, the status vocabularies,
 owner/consumer adjacency against the target graph (including the forbidden durable/application
-edges), evidence routes against the registered bundle manifests, scenario coverage with no
-orphaned registered scenario, the groups/overlaps/orphan registrations, the corrections index, the
+edges), evidence routes against the registered bundle manifests, scenario coverage with no unrouted
+registered scenario and the registered orphans kept explicit, the groups/overlaps/orphan
+registrations including the toolkit/product routing (only real 1051 counterparts, no promotion), the
+corrections index (every replacement rewrote a scoped pointer, no rewrite outside its scope, no
+unused non-record-only item), the
 frontier's draft graph (acyclic, dependency-ordered, real coverage prefixes, registered capture
 scenarios), migration-step placement against the transitive prerequisite graph (including a
 negative probe reproducing the old F7-before-P7 order and a positive control), the residual
 reconciliation and the report's relative links. `--pi-root` additionally
 verifies that every `packages/...` pointer resolves in the frozen pi checkout at the frozen
 revision.
+
+Both the consolidation check and the boundary regressions in
+`tests/evidence/ConsolidationAuditTest.py` are CTest entries beside the named-evidence gate; the
+regressions select the consolidation labels through the normal `ctest -L` surface.
 
 This tier is the docs/evidence tier of [validation](../../agents/validation.md): no C++ build is
 required or run by these commands, and passing them is not behavioral verification of any row. The

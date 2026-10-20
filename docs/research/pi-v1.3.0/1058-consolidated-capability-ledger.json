@@ -2275,7 +2275,7 @@
     {
       "id": "group-tui-toolkit-product",
       "title": "TUI toolkit exports (1050) and Native TUI product consumers (1051)",
-      "rationale": "The toolkit contract belongs to cch_tui; the product TUI behavior belongs to cch_coding_agent (frontend_tui). The toolkit rows for a component and the product rows that consume it are adjacent but not the same contract; the group keeps the toolkit/product split explicit and routes the seven 1050 product-entry rows to the 1051 product evidence.",
+      "rationale": "The toolkit contract belongs to cch_tui; the product TUI behavior belongs to cch_coding_agent (frontend_tui). The toolkit rows for a component and the product rows that consume it are adjacent but not the same contract; the group keeps the toolkit/product split explicit, and the overlap resolution beside it names the three adjacent 1051 rows and promotes none of the seven product rows.",
       "members": [
         "cch_coding_agent:product.tuiMode",
         "cch_coding_agent:product.--tui-mode",
@@ -2307,7 +2307,53 @@
         "1051"
       ],
       "kind": "adjacent-contracts-distinct-owner",
-      "resolution": "The toolkit export contract is cch_tui; the Native TUI product behavior is cch_coding_agent's frontend_tui implementation target. The seven 1050 product-entry rows are not-audited for v1.3.0 and route to the 1051 product evidence for the same source files; they stay explicit audit/verification blockers and are not counted as verified by the 1051 captures.",
+      "resolution": "The toolkit export contract is cch_tui; the Native TUI product behavior is cch_coding_agent's frontend_tui implementation target. The seven 1050 product-entry rows stay not-audited/unverified for v1.3.0 and are not counted as verified by any 1051 capture. #1051 holds three adjacent capability rows in the same product area (mode-switch-renderer, exit-restoration, hardware-cursor); only two product rows name a counterpart, and a counterpart is adjacent, not equal: neither 1051 row observes the 1050 setting and neither is verified. The other five rows have no 1051 row at all. Every row keeps its own visible missing-observation statement.",
+      "adjacentRows": [
+        "cch_coding_agent:mode-switch-renderer",
+        "cch_coding_agent:exit-restoration",
+        "cch_tui:hardware-cursor"
+      ],
+      "rowRouting": [
+        {
+          "row": "cch_coding_agent:product.tuiMode",
+          "adjacent": [],
+          "observation": "no #1051 row covers the tuiMode setting or the regular/fullscreen default; the frozen v1.3.0 behavior of this product entry has no observation"
+        },
+        {
+          "row": "cch_coding_agent:product.--tui-mode",
+          "adjacent": [],
+          "observation": "no #1051 row covers the --tui-mode CLI flag; the frozen v1.3.0 behavior of this product entry has no observation"
+        },
+        {
+          "row": "cch_coding_agent:product.runInteractiveMode",
+          "adjacent": [],
+          "observation": "no #1051 row covers runInteractiveMode assembly; the adjacent mode-switch-renderer row observes a live renderer switch, not this entry, so this row has no observation"
+        },
+        {
+          "row": "cch_coding_agent:product.fullscreenExitOutput",
+          "adjacent": [
+            "cch_coding_agent:exit-restoration"
+          ],
+          "observation": "adjacent counterpart only: #1051 exit-restoration observes exit output and terminal restoration, stays unverified and does not observe the fullscreenExitOutput setting; this row has no observation of its own operation"
+        },
+        {
+          "row": "cch_coding_agent:product.fullscreenCopyOnSelect",
+          "adjacent": [],
+          "observation": "no #1051 row covers copy-on-select; the frozen v1.3.0 behavior of this product entry has no observation"
+        },
+        {
+          "row": "cch_coding_agent:product.fullscreenWheelScrollLines",
+          "adjacent": [],
+          "observation": "no #1051 row covers the fullscreenWheelScrollLines setting; the frozen v1.3.0 behavior of this product entry has no observation"
+        },
+        {
+          "row": "cch_coding_agent:product.showHardwareCursor",
+          "adjacent": [
+            "cch_tui:hardware-cursor"
+          ],
+          "observation": "adjacent counterpart only: #1051 hardware-cursor observes the toolkit cursor switch, stays unverified and does not observe the showHardwareCursor product setting; this row has no observation of its own operation"
+        }
+      ],
       "rows": [
         "cch_coding_agent:product.tuiMode",
         "cch_coding_agent:product.--tui-mode",
@@ -2535,9 +2581,11 @@
       "kind": "replace",
       "recorded": "extensions/mcp/cli.ts:registerMcpCommands",
       "actual": "packages/coding-agent/src/extensions/mcp/cli.ts:runMcpCommand",
-      "appliesTo": "*",
+      "appliesTo": [
+        "cch_coding_agent:mcp-management-ui"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
-      "rationale": "The command entry point is runMcpCommand (cli.ts:185); registerMcpCommands does not exist."
+      "rationale": "The command entry point is runMcpCommand (cli.ts:185); registerMcpCommands does not exist. Only the row that records the shorthand carries the correction."
     },
     {
       "id": "C1052-2",
@@ -2545,9 +2593,12 @@
       "kind": "replace",
       "recorded": "extensions/mcp/index.ts:MCP_EXPOSURE_ALIASES",
       "actual": "packages/coding-agent/src/core/mcp-servers.ts:MCP_EXPOSURE_ALIASES",
-      "appliesTo": "*",
+      "appliesTo": [
+        "cch_coding_agent:mcp-exposure",
+        "cch_coding_agent:mcp-deferred-tool-search"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
-      "rationale": "The alias constant lives in core/mcp-servers.ts:57."
+      "rationale": "The alias constant lives in core/mcp-servers.ts:57. Both rows that record the shorthand carry the correction."
     },
     {
       "id": "C1052-3",
@@ -2555,9 +2606,11 @@
       "kind": "replace",
       "recorded": "transports/stdio.ts:stderrTail",
       "actual": "packages/mcp/src/transports/stdio.ts:get stderr",
-      "appliesTo": "*",
+      "appliesTo": [
+        "cch_mcp:mcp-stdio-stderr-tail"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
-      "rationale": "The stderr tail is exposed by the get stderr accessor (stdio.ts:86)."
+      "rationale": "The stderr tail is exposed by the get stderr accessor (stdio.ts:86). Only the row that records the shorthand carries the correction."
     },
     {
       "id": "C1052-4",
@@ -2565,9 +2618,11 @@
       "kind": "replace",
       "recorded": "mcp/README.md:supported operations",
       "actual": "packages/mcp/README.md:Supported protocol surface",
-      "appliesTo": "*",
+      "appliesTo": [
+        "cch_mcp:mcp-prompts-sampling"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
-      "rationale": "The heading is 'Supported protocol surface' (README.md:116)."
+      "rationale": "The heading is 'Supported protocol surface' (README.md:116). Only the row that records the shorthand carries the correction."
     },
     {
       "id": "C1052-5",
@@ -2575,9 +2630,13 @@
       "kind": "replace",
       "recorded": "mcp-extension.test.ts:McpExtension",
       "actual": "packages/coding-agent/test/mcp-extension.test.ts:MCP connections",
-      "appliesTo": "*",
+      "appliesTo": [
+        "cch_mcp:mcp-client-lifecycle",
+        "cch_coding_agent:mcp-application-resource-init",
+        "cch_coding_agent:mcp-reconnect-tools-changed"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
-      "rationale": "Test-file shorthand: the suite is 'MCP connections' with named cases such as 'closes a connection that is still initializing before close returns'."
+      "rationale": "Test-file shorthand: the suite is 'MCP connections' with named cases such as 'closes a connection that is still initializing before close returns'. The three rows that record the shorthand carry the correction."
     },
     {
       "id": "C1052-6",
@@ -2585,49 +2644,53 @@
       "kind": "replace",
       "recorded": "client.test.ts:cancellation",
       "actual": "packages/mcp/test/client.test.ts:cancels aborted and timed-out requests",
-      "appliesTo": "*",
+      "appliesTo": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
-      "rationale": "Cancellation shorthand: the exact case is 'cancels aborted and timed-out requests' (client.test.ts:210)."
+      "rationale": "Cancellation shorthand: the exact case is 'cancels aborted and timed-out requests' (client.test.ts:210). Only the row that records the shorthand carries the correction."
     },
     {
       "id": "C1052-7",
       "ticket": "1052",
       "kind": "replace",
-      "recorded": "oauth/flow.ts:validateIssuer",
-      "actual": "packages/mcp/src/oauth/flow.ts:OAuthIssuerMismatchError",
-      "appliesTo": "*",
+      "recorded": "packages/mcp/src/oauth/flow.ts:authorizeMcp,validateIssuer",
+      "actual": "packages/mcp/src/oauth/flow.ts:authorizeMcp,runFlow",
+      "appliesTo": [
+        "cch_mcp:mcp-oauth-issuer"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
-      "rationale": "Issuer validation is inline (flow.ts:388) and throws OAuthIssuerMismatchError; there is no validateIssuer symbol."
+      "rationale": "There is no validateIssuer symbol: the authorization-response issuer check is inline in runFlow (flow.ts:388) and throws OAuthIssuerMismatchError from oauth/errors.ts, so the pointer names the function that performs the check."
     },
     {
       "id": "C1053-1",
       "ticket": "1053",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "packages/codemode/src/types.ts:CodemodeRemoteRequest,CodemodeRemoteMessage,CodemodeRemoteReply",
       "actual": "packages/codemode/src/runtime/remote.ts:CodemodeRemoteRequest,CodemodeRemoteMessage,CodemodeRemoteReply",
       "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1053-merged.json residual_risks[4]",
-      "rationale": "Remote types are defined in runtime/remote.ts; the pinned artifact envelope keeps the recorded endpoint and is not rehashed."
+      "rationale": "The remote types are defined in runtime/remote.ts, but the lane ledger never carried this endpoint: only the pinned audit-1053 artifact envelope records it, and the artifact bytes are preserved. Recorded here instead of rewriting the envelope or a pointer the ledger does not have."
     },
     {
       "id": "C1053-2",
       "ticket": "1053",
-      "kind": "symbol-suffix",
-      "recorded": "packages/codemode/src/runtime/worker-process-exit.ts",
-      "actual": "workerProcessExit",
+      "kind": "record-only",
+      "recorded": "packages/codemode/test/fixtures/worker-process-exit.ts",
+      "actual": "packages/codemode/test/fixtures/worker-process-exit.ts:worker process exit",
       "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1053-merged.json residual_risks[5]",
-      "rationale": "File-level shorthand normalized to the exported symbol."
+      "rationale": "The frozen file is a worker entry script with no exports, so there is no workerProcessExit symbol and no symbol suffix to append. The lane ledger never carried the file-only spelling; the audit-1053 artifact endpoint keeps its recorded label."
     },
     {
       "id": "C1053-3",
       "ticket": "1053",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "src/tools/output-files.ts",
       "actual": "packages/coding-agent/src/utils/output-files.ts:writeOutputFile",
       "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1053-merged.json independent_verification.scope_checks",
-      "rationale": "The output-file helper is src/utils/output-files.ts:writeOutputFile; the old src/tools path is absent."
+      "rationale": "The lane already records packages/coding-agent/src/utils/output-files.ts:writeOutputFile; no consolidated pointer carries the old src/tools spelling."
     },
     {
       "id": "C1054-1",
@@ -2793,10 +2856,11 @@
       "recorded": "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases",
       "actual": "packages/durable/src/harness/scheduler.ts:#reserve,#step",
       "appliesTo": [
-        "task-definition-registry"
+        "cch_durable:task-definition-registry",
+        "cch_durable:definition-replacement"
       ],
       "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[0]",
-      "rationale": "#runPhases does not exist; phase dispatch is inline in #step (scheduler.ts:1325-1332)."
+      "rationale": "#runPhases does not exist; #run loops over #step, which commits each phase decision (scheduler.ts:1325-1332). Both rows that record this pointer carry the correction."
     },
     {
       "id": "C1055-2",
@@ -2805,7 +2869,7 @@
       "recorded": "packages/durable/src/harness/scheduler.ts:#blockedReason,#terminate",
       "actual": "packages/durable/src/harness/scheduler.ts:#resolve,#terminate",
       "appliesTo": [
-        "blocked-definition-orphaned"
+        "cch_durable:blocked-definition-orphaned"
       ],
       "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[1]",
       "rationale": "#blockedReason does not exist; blocked resolution is #resolve/#fit (scheduler.ts:1210-1278)."
@@ -2813,66 +2877,62 @@
     {
       "id": "C1055-3",
       "ticket": "1055",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "src/agent/harness/TaskStore.cpp:request_abort",
       "actual": "src/agent/harness/session/TaskStore.cpp:request_abort",
-      "appliesTo": [
-        "conversation-abort-effects"
-      ],
+      "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[2]",
-      "rationale": "Actual C++ path is src/agent/harness/session/TaskStore.cpp."
+      "rationale": "The lane's cppSeam text names this C++ path; the consolidated source list carries only the frozen pi pointer, so there is no consolidated pointer to rewrite."
     },
     {
       "id": "C1055-4",
       "ticket": "1055",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "TaskStore.cpp:task_descendants",
       "actual": "src/agent/harness/session/TaskStore.cpp:task_descendants",
-      "appliesTo": [
-        "task-ownership-graph"
-      ],
+      "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[3]",
-      "rationale": "Shorthand after the full TaskStore.hpp path in the same row; normalize to the full session path."
+      "rationale": "The shorthand sits in the lane's cppSeam text after the full TaskStore.hpp path; the consolidated source list never carried it, so it stays a recorded item."
     },
     {
       "id": "C1056-1",
       "ticket": "1056",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "src/agent/harness/TaskStore.",
       "actual": "src/agent/harness/session/TaskStore.",
       "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[0]",
-      "rationale": "Actual C++ path (report already corrected in a76cc708c); the ledger never carried the stale path."
+      "rationale": "Actual C++ path (report already corrected in a76cc708c); the lane ledger never carried the stale path, so there is no consolidated pointer to rewrite."
     },
     {
       "id": "C1056-2",
       "ticket": "1056",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "submissions.ts",
       "actual": "packages/durable/src/harness/submissions.ts:Submissions",
       "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[11]",
-      "rationale": "File-only source spelling normalized to the exported symbol."
+      "rationale": "The lane already records the qualified pointer; its rows observe :Submissions and :Submissions.status, so a file-only rewrite would drop the observed member. Recorded, not rewritten."
     },
     {
       "id": "C1056-3",
       "ticket": "1056",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "inbox.ts",
       "actual": "packages/durable/src/harness/inbox.ts:InboxDoc",
       "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[11]",
-      "rationale": "File-only source spelling normalized to the exported symbol."
+      "rationale": "The lane already records packages/durable/src/harness/inbox.ts:InboxDoc; no consolidated pointer carries the file-only spelling."
     },
     {
       "id": "C1056-4",
       "ticket": "1056",
-      "kind": "replace",
+      "kind": "record-only",
       "recorded": "tool-search.ts",
       "actual": "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool,createToolSearchExtension",
       "appliesTo": "*",
       "authority": "/tmp/cch-1044-context/1056-merged.json provenanceNormalization[11]",
-      "rationale": "File-only source spelling normalized to the exported symbols."
+      "rationale": "The lane already records the qualified pointer and each row keeps the exports it observed: createToolSearchTool alone, or both exports. A file-only rewrite would add an export a row never recorded."
     },
     {
       "id": "C1047-1",
@@ -25548,7 +25608,7 @@
       "capability": "Inspection of placed submissions",
       "source": [
         "packages/durable/src/harness/harness.ts:Harness.inspect",
-        "packages/durable/src/harness/submissions.ts:Submissions"
+        "packages/durable/src/harness/submissions.ts:Submissions.status"
       ],
       "frozenSymbols": [],
       "membership": "supported",
@@ -25582,9 +25642,7 @@
       "notes": "Recommendation: Expose placed submissions and their generation task in the durable inspect result; keep the store row private.",
       "lane": "1056",
       "frozenSymbolsSource": null,
-      "appliedCorrections": [
-        "C1056-2"
-      ],
+      "appliedCorrections": [],
       "sourceRows": [
         {
           "ticket": "1056",
@@ -28266,7 +28324,7 @@
       "id": "cch_durable:toolsearch-load",
       "capability": "Deferred tool search and load",
       "source": [
-        "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool,createToolSearchExtension",
+        "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool",
         "packages/durable/src/harness/tool.ts:ToolTask"
       ],
       "frozenSymbols": [],
@@ -28301,9 +28359,7 @@
       "notes": "Recommendation: Implement tool search over the durable registry/modelTools document so loads persist per branch and survive reopen.",
       "lane": "1056",
       "frozenSymbolsSource": null,
-      "appliedCorrections": [
-        "C1056-4"
-      ],
+      "appliedCorrections": [],
       "sourceRows": [
         {
           "ticket": "1056",
@@ -28319,7 +28375,7 @@
       "id": "cch_durable:toolsearch-no-match",
       "capability": "Tool search no-match behavior",
       "source": [
-        "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool,createToolSearchExtension"
+        "packages/durable/src/tool-search/tool-search.ts:createToolSearchTool"
       ],
       "frozenSymbols": [],
       "membership": "supported",
@@ -28353,9 +28409,7 @@
       "notes": "Recommendation: Persist no change on no-match and prove the next request offers the same set.",
       "lane": "1056",
       "frozenSymbolsSource": null,
-      "appliedCorrections": [
-        "C1056-4"
-      ],
+      "appliedCorrections": [],
       "sourceRows": [
         {
           "ticket": "1056",
@@ -28978,7 +29032,7 @@
       "id": "cch_mcp:mcp-oauth-issuer",
       "capability": "RFC 9207 issuer verification",
       "source": [
-        "packages/mcp/src/oauth/flow.ts:authorizeMcp,validateIssuer",
+        "packages/mcp/src/oauth/flow.ts:authorizeMcp,runFlow",
         "packages/coding-agent/src/extensions/mcp/oauth.ts:signInMcpServer"
       ],
       "frozenSymbols": [],
@@ -29011,7 +29065,9 @@
       "notes": "Recommendation: Retain; add the captured forged-issuer scenario as the C++ differential case. Keep the check before token exchange and preserve the exact server/expected/received fields.",
       "lane": "1052",
       "frozenSymbolsSource": null,
-      "appliedCorrections": [],
+      "appliedCorrections": [
+        "C1052-7"
+      ],
       "sourceRows": [
         {
           "ticket": "1052",
