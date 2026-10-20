@@ -8,12 +8,14 @@
 // must be rejected rather than accepted as metadata.
 
 #include <cch/support/JsonAccess.hpp>
-#include "coding_agent/mcp/OAuthHttpClient.hpp"
-#include "coding_agent/mcp/McpOAuthDiscovery.hpp"
 #include "support/FakeOAuthHttpClient.hpp"
 #include "support/Json.hpp"
 #include "support/RuntimeFixture.hpp"
 
+#include <cch/mcp/OAuthDiscovery.hpp>
+#include <cch/mcp/OAuthHttpClient.hpp>
+#include <cch/mcp/OAuthDiscovery.hpp>
+#include <cch/mcp/OAuthHttpClient.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -25,7 +27,7 @@
 
 using namespace cch;
 
-namespace app_mcp = coding_agent::mcp;
+namespace app_mcp = cch::mcp;
 
 namespace {
 
@@ -77,8 +79,7 @@ TEST_CASE("protected resource discovery retries the bare origin after a path-suf
     CHECK(http->get_requests[1].url == "https://mcp.example.com/.well-known/oauth-protected-resource");
     // pi's discovery headers.
     CHECK(http->get_requests[0].headers.at("Accept") == "application/json");
-    CHECK(http->get_requests[0].headers.at("MCP-Protocol-Version") ==
-            std::string{app_mcp::kMcpDiscoveryProtocolVersion});
+    CHECK(http->get_requests[0].headers.at("MCP-Protocol-Version") == std::string{cch::mcp::kDiscoveryProtocolVersion});
 }
 
 TEST_CASE("a root-path server does not retry a missed protected resource document",
@@ -192,7 +193,7 @@ TEST_CASE("authorization server metadata with a mismatched issuer is rejected", 
     CHECK(mismatched.error().message.find("OAuth issuer mismatch") != std::string::npos);
 
     // The explicit opt-out (configured metadata documents) accepts it.
-    app_mcp::McpOAuthDiscoveryOptions skip;
+    cch::mcp::OAuthDiscoveryOptions skip;
     skip.skip_issuer_validation = true;
     auto skip_http = std::make_shared<tests::FakeOAuthHttpClient>();
     skip_http->get_responses["https://auth.example.com/.well-known/oauth-authorization-server"] = {
@@ -232,7 +233,7 @@ TEST_CASE("a configured authorization server metadata URL is used instead of dis
     http->get_responses["https://idp.example.com/tenant"] = {
             {200, authorization_server_document("https://idp.example.com/tenant")}};
 
-    app_mcp::McpOAuthDiscoveryOptions options;
+    cch::mcp::OAuthDiscoveryOptions options;
     options.authorization_server_metadata_url = "https://idp.example.com/tenant";
     tests::RuntimeFixture runtime;
     auto info = tests::run_awaitable(

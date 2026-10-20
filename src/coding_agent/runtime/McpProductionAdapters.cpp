@@ -12,15 +12,16 @@
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
-#include "coding_agent/mcp/McpHttpClient.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
-#include "coding_agent/mcp/McpOAuthProvider.hpp"
 #include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "coding_agent/mcp/McpResourceTools.hpp"
-#include "coding_agent/mcp/McpStdioClient.hpp"
 
 #include "support/AsyncResultBridge.hpp"
+
+#include <cch/mcp/HttpClient.hpp>
+#include <cch/mcp/OAuthProvider.hpp>
+#include <cch/mcp/StdioClient.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -97,9 +98,8 @@ void ProductionMcpConnection::note_connect_error(support::Error error) noexcept 
     error_ = std::move(error.message);
 }
 
-support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(std::string method,
-        std::optional<support::JsonValue> params,
-        mcp::McpServerConnection::RequestOptions options) {
+support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(
+        std::string method, std::optional<support::JsonValue> params, cch::mcp::Client::RequestOptions options) {
     return support::detail::make_async_result(
             [this, method = std::move(method), params = std::move(params), stop_token = options.stop_token]() mutable
                     -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
@@ -107,15 +107,15 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(std::s
                     co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                             "MCP server '" + server_name_ + "' has no live connection"));
                 }
-                auto res = co_await support::detail::await_async_result(client_->request(
-                        method, params, mcp::McpServerConnection::RequestOptions{.stop_token = stop_token}));
+                auto res = co_await support::detail::await_async_result(
+                        client_->request(method, params, cch::mcp::Client::RequestOptions{.stop_token = stop_token}));
                 // pi `withClient`: McpSessionExpiredError on 404 retried once on a fresh session
                 if (!res && res.error().message == "MCP session expired") {
                     auto reconnected = co_await support::detail::await_async_result(reconnect());
                     if (reconnected && client_) {
                         res = co_await support::detail::await_async_result(client_->request(std::move(method),
                                 std::move(params),
-                                mcp::McpServerConnection::RequestOptions{.stop_token = stop_token}));
+                                cch::mcp::Client::RequestOptions{.stop_token = stop_token}));
                     }
                 }
                 co_return res;
@@ -125,7 +125,7 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(std::s
 support::AsyncResult<support::JsonValue> ProductionMcpConnection::call_tool(std::string_view tool,
         support::JsonValue arguments,
         std::stop_token stop_token,
-        mcp::McpServerConnection::ProgressCallback on_progress) {
+        cch::mcp::Client::ProgressCallback on_progress) {
     return support::detail::make_async_result(
             [this,
                     tool = std::string{tool},
@@ -139,7 +139,7 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::call_tool(std:
                 }};
                 auto result = co_await support::detail::await_async_result(request("tools/call",
                         std::move(params),
-                        mcp::McpServerConnection::RequestOptions{
+                        cch::mcp::Client::RequestOptions{
                                 .stop_token = stop_token, .on_progress = std::move(on_progress)}));
                 if (!result) {
                     // pi runtime: an OAuth challenge moves the connection to
@@ -160,8 +160,7 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::resources_page
     if (cursor.has_value()) {
         params = support::JsonValue{support::JsonValue::object_t{{"cursor", std::move(*cursor)}}};
     }
-    return request(
-            "resources/list", std::move(params), mcp::McpServerConnection::RequestOptions{.stop_token = stop_token});
+    return request("resources/list", std::move(params), cch::mcp::Client::RequestOptions{.stop_token = stop_token});
 }
 
 support::AsyncResult<support::JsonValue> ProductionMcpConnection::resource_templates_page(
@@ -170,16 +169,15 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::resource_templ
     if (cursor.has_value()) {
         params = support::JsonValue{support::JsonValue::object_t{{"cursor", std::move(*cursor)}}};
     }
-    return request("resources/templates/list",
-            std::move(params),
-            mcp::McpServerConnection::RequestOptions{.stop_token = stop_token});
+    return request(
+            "resources/templates/list", std::move(params), cch::mcp::Client::RequestOptions{.stop_token = stop_token});
 }
 
 support::AsyncResult<support::JsonValue> ProductionMcpConnection::read_resource(
         std::string uri, std::stop_token stop_token) {
     return request("resources/read",
             support::JsonValue{support::JsonValue::object_t{{"uri", std::move(uri)}}},
-            mcp::McpServerConnection::RequestOptions{.stop_token = stop_token});
+            cch::mcp::Client::RequestOptions{.stop_token = stop_token});
 }
 
 support::AsyncResult<void> ProductionMcpConnection::refresh() {
@@ -253,7 +251,7 @@ void ProductionMcpConnection::close() noexcept {
     if (client_) {
         // stdio teardown runs in the client's destructor; the HTTP client has
         // an explicit close (GET stream abort + session DELETE).
-        if (auto* http = dynamic_cast<mcp::McpHttpClient*>(client_.get()); http != nullptr) {
+        if (auto* http = dynamic_cast<cch::mcp::HttpClient*>(client_.get()); http != nullptr) {
             http->close();
         }
         client_.reset();
@@ -297,14 +295,14 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                     eligible = http->resolved_oauth.has_value() ||
                                (http->oauth.has_value() && !http->auth_provider.has_value() && oauth_eligible(*http));
                     oauth_url = http->url;
-                    std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
+                    std::shared_ptr<cch::mcp::RequestAuthSource> request_auth;
                     if (eligible) {
                         const std::shared_ptr<mcp::McpAuthStore> store = auth_store();
                         if (http->resolved_oauth) {
                             request_auth = std::make_shared<mcp::McpOAuthTokenResolver>(store,
                                     http->name,
                                     http->url,
-                                    std::make_shared<mcp::McpOAuthProvider>(*http->resolved_oauth));
+                                    std::make_shared<cch::mcp::OAuthProvider>(*http->resolved_oauth));
                         } else {
                             (void)store->migrate_from_auth_json(agent_dir_ / "auth.json", http->name, http->url);
                             request_auth = std::make_shared<mcp::McpOAuthFlowTokenResolver>(
@@ -314,7 +312,7 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                     const mcp::McpHttpServerConfig config = *http;
                     source = [config, request_auth]()
                             -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                        auto client = co_await support::detail::await_async_result(mcp::McpHttpClient::connect(
+                        auto client = co_await support::detail::await_async_result(cch::mcp::HttpClient::connect(
                                 config, std::make_shared<support::BoostBeastStreamTransport>(), request_auth));
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
@@ -328,7 +326,7 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                     const mcp::McpStdioServerConfig config = std::get<mcp::McpStdioServerConfig>(entry.config);
                     source = [config]() -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
                         auto client =
-                                co_await support::detail::await_async_result(mcp::McpStdioClient::connect(config));
+                                co_await support::detail::await_async_result(cch::mcp::StdioClient::connect(config));
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
                         }
@@ -474,7 +472,7 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
                         co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
                                 "MCP tool from server '" + server + "' is not callable"));
                     }
-                    mcp::McpServerConnection::ProgressCallback on_progress;
+                    cch::mcp::Client::ProgressCallback on_progress;
                     if (update_sink) {
                         on_progress = [update_sink = std::move(update_sink)](
                                               const support::JsonValue& progress) mutable {

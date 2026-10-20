@@ -12,6 +12,10 @@
 #include "coding_agent/tui/McpManagerFlow.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
+#include <cch/mcp/Client.hpp>
+#include <cch/mcp/OAuthConfig.hpp>
+#include <cch/mcp/Client.hpp>
+#include <cch/mcp/OAuthConfig.hpp>
 #include <cch/tui/Keybindings.hpp>
 
 #include "support/AsyncResultBridge.hpp"
@@ -130,10 +134,8 @@ public:
     [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override {
         return instructions_value;
     }
-    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view,
-            support::JsonValue,
-            std::stop_token,
-            coding_agent::mcp::McpServerConnection::ProgressCallback = {}) override {
+    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(
+            std::string_view, support::JsonValue, std::stop_token, cch::mcp::Client::ProgressCallback = {}) override {
         return support::AsyncResult<support::JsonValue>{
                 support::JsonValue{support::JsonValue::object_t{{"content", support::JsonValue::array_t{}}}}};
     }
@@ -335,7 +337,7 @@ void type(cch::tui::InputHandler& handler, std::string_view text) {
     McpHttpServerConfig config;
     config.name = name;
     config.url = "https://mcp.example.com/mcp";
-    config.oauth = coding_agent::mcp::McpOAuthConfig{};
+    config.oauth = cch::mcp::OAuthConfig{};
     McpConfigEntry entry;
     entry.name = std::move(name);
     entry.enabled = true;

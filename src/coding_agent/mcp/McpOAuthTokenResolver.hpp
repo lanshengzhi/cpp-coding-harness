@@ -1,8 +1,9 @@
 #pragma once
 
 #include "coding_agent/mcp/McpAuthStore.hpp"
-#include "coding_agent/mcp/McpOAuthProvider.hpp"
-#include "coding_agent/mcp/McpRequestAuthSource.hpp"
+
+#include <cch/mcp/OAuthProvider.hpp>
+#include <cch/mcp/RequestAuthSource.hpp>
 
 #include <cch/support/AsyncResult.hpp>
 
@@ -19,12 +20,12 @@ namespace cch::coding_agent::mcp {
 /// back before the request continues. A missing state, a state without tokens,
 /// or a failed refresh is an explicit re-login error — never a silent
 /// unauthenticated request, and never a retry loop.
-class McpOAuthTokenResolver final : public McpRequestAuthSource {
+class McpOAuthTokenResolver final : public cch::mcp::RequestAuthSource {
 public:
     McpOAuthTokenResolver(std::shared_ptr<McpAuthStore> store,
             std::string server_name,
             std::string server_url,
-            std::shared_ptr<McpOAuthProvider> provider);
+            std::shared_ptr<cch::mcp::OAuthProvider> provider);
 
     McpOAuthTokenResolver(McpOAuthTokenResolver&&) noexcept;
     McpOAuthTokenResolver& operator=(McpOAuthTokenResolver&&) noexcept;
@@ -38,7 +39,7 @@ private:
     std::shared_ptr<McpAuthStore> store_;
     std::string server_name_;
     std::string server_url_;
-    std::shared_ptr<McpOAuthProvider> provider_;
+    std::shared_ptr<cch::mcp::OAuthProvider> provider_;
 };
 
 } // namespace cch::coding_agent::mcp

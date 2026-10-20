@@ -161,6 +161,43 @@ const scenarios: Scenario[] = [
 	{ id: "scrollback", width: 72, inputs: ["line one\r", "line two\r", "line three\r", "line four\r", "line five\r", "line six\r"], omissions: [] },
 ];
 
+// Versioned expectation adaptations bridge the checked-in historical evidence
+// to the current product behaviour without editing the report (ADR 0053 keeps
+// one report as evidence about one baseline, and the report bytes, schema,
+// baseline, and recorded digests stay untouched). Each adaptation is narrow by
+// construction: it names the scenario, runtime, snapshot, the exact historical
+// row text it replaces, the exact current row text and style that replace it,
+// the retired literals the current capture must not resurrect, and the
+// authority that approved the change. Anything outside an adaptation still
+// compares exactly, and an adaptation whose historical anchor or current
+// requirement is not met fails closed instead of drifting open.
+type VersionedExpectationAdaptation = {
+	runtime: "pike" | "pi";
+	snapshot: number;
+	historicalText: string;
+	currentText: string;
+	// The canonical style the notice row must carry: ThemeToken::Warning is
+	// this exact truecolor value in the canonical dark profile, and every
+	// flag slot stays false.
+	requiredForeground: string;
+	retiredLiterals: string[];
+	authority: string;
+};
+
+const expectationAdaptationVersion = 1;
+
+const versionedExpectationAdaptations: Record<string, readonly VersionedExpectationAdaptation[]> = Object.freeze({
+	"model-selector": Object.freeze([{
+		runtime: "pike",
+		snapshot: 1,
+		historicalText: "Only showing models from configured providers. Use /login to add providers.",
+		currentText: "Only showing models from the local Magpie gateway.",
+		requiredForeground: "#cd9a22",
+		retiredLiterals: ["/login", "configured providers"],
+		authority: "ADR 0071 / ADR 0075",
+	} satisfies VersionedExpectationAdaptation]),
+});
+
 const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["boot-72", { classification: "product-defect", evidence: ["report.json:boot-72"], rationale: "At 72 columns the shared startup help wraps at a different segment boundary: pi keeps `! bash` together and starts the next row with `· ctrl+o more`, while Pike leaves the separator at the end of the first row. The difference remains after pi's runtime banner and onboarding copy are projected out." }],
 	["boot-100", { classification: "match", evidence: ["report.json:boot-100"], rationale: "The profile-stripped shared regular Native TUI header matches pi at 100 columns." }],
@@ -960,7 +997,31 @@ function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, 
 	};
 }
 
-// Diagnostic-only usage projection; the strict cell projection intentionally retains footer differences.
+/// The projection the legacy stable digests cover. This path is frozen: the
+/// checked-in report's recorded digests were computed over its exact output,
+/// so it stays byte-stable even where re-normalizing already-canonical styled
+/// rows would zero their colors; the comparison paths use
+/// stableProjectionForComparison instead.
+function stableProjection(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
+	const normalized = normalizeCapture(capture, scenario, repositoryRoot);
+	return {
+		runtime: normalized.runtime,
+		scenario: normalized.scenario,
+		width: normalized.width,
+		workspace: normalized.workspace,
+		inputs: normalized.inputs,
+		snapshots: (normalized.snapshots as Record<string, unknown>[]).map((snapshot) => ({
+			visible: snapshot.visible,
+			scrollback: snapshot.scrollback,
+			styledVisible: snapshot.styledVisible,
+			styledScrollback: snapshot.styledScrollback,
+			cursor: snapshot.cursor,
+			cursorVisible: snapshot.cursorVisible,
+			sgr: (snapshot.sgr as string[]).map(normalizeSgrToken),
+		})),
+	};
+}
+
 // debt: replace this text projection with typed footer evidence when the product exposes one.
 function projectDiagnosticFooterRows(rows: string[], scenario: Pick<Scenario, "id">): string[] {
 	if (!usageProfileScenarios.has(scenario.id)) return rows;
@@ -983,8 +1044,65 @@ function projectDiagnosticFooterRows(rows: string[], scenario: Pick<Scenario, "i
 	});
 }
 
-function stableProjection(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
-	const normalized = normalizeCapture(capture, scenario, repositoryRoot);
+// normalizeCapture is frozen: the checked-in report's stable digests were
+// recorded over its current output, and re-running it on an already-normalized
+// capture would re-key canonical style arrays by slot name and zero every
+// color. The comparison path therefore canonicalizes styled rows idempotently:
+// an already-canonical style array passes through unchanged. Raw captures carry
+// keyed style objects and normalize identically either way, so verify-mode
+// behaviour is unchanged.
+function idempotentNormalizeStyledRows(value: unknown, workspace: string, repositoryRoot: string, scenario: Scenario): unknown[] {
+	if (!Array.isArray(value)) return [];
+	return value.map((row) => {
+		if (!Array.isArray(row)) return [];
+		return row.map((run) => {
+			const item = run as Record<string, unknown>;
+			const style = Array.isArray(item.style) && item.style.length === canonicalStyledStyleSlots.length
+				? item.style
+				: canonicalStyledStyle(item.style);
+			return {
+				text: normalizeCellText(String(item.text ?? ""), workspace, repositoryRoot, scenario),
+				style,
+			};
+		}).filter((kept) => kept.text !== "");
+	});
+}
+
+function normalizeCaptureForComparison(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
+	const workspace = typeof capture.workspace === "string" ? capture.workspace : "/tmp/cpp-harness-pike-differential";
+	const snapshots = Array.isArray(capture.snapshots) ? capture.snapshots : [];
+	return {
+		runtime: capture.runtime,
+		scenario: capture.scenario,
+		width: capture.width,
+		workspace: typeof capture.workspace === "string" ? replaceFixturePaths(capture.workspace, workspace, repositoryRoot, scenario) : undefined,
+		inputs: capture.inputs,
+		theme: normalizeThemeEvidence(capture.theme, `${String(capture.runtime)}/${scenario.id}`),
+		snapshots: snapshots.map((item) => {
+			const snapshot = item as Record<string, unknown>;
+			const rawCursor = snapshot.cursor as Record<string, unknown> | undefined;
+			const ansi = typeof snapshot.ansi === "string" ? replaceFixturePaths(snapshot.ansi, workspace, repositoryRoot, scenario) : "";
+			const visible = Array.isArray(snapshot.visible)
+				? snapshot.visible.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
+				: [];
+			return {
+				visible,
+				scrollback: Array.isArray(snapshot.scrollback)
+					? snapshot.scrollback.map((line) => normalizeCellText(String(line), workspace, repositoryRoot, scenario))
+					: [],
+				styledVisible: idempotentNormalizeStyledRows(snapshot.styledVisible, workspace, repositoryRoot, scenario),
+				styledScrollback: idempotentNormalizeStyledRows(snapshot.styledScrollback, workspace, repositoryRoot, scenario),
+				cursor: rawCursor === undefined ? undefined : { column: rawCursor.column, row: rawCursor.row },
+				cursorVisible: snapshot.cursorVisible,
+				ansi,
+				sgr: sgrTokens(ansi),
+			};
+		}),
+	};
+}
+
+function stableProjectionForComparison(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
+	const normalized = normalizeCaptureForComparison(capture, scenario, repositoryRoot);
 	return {
 		runtime: normalized.runtime,
 		scenario: normalized.scenario,
@@ -1390,17 +1508,209 @@ function verifyProjectionPolicy(): void {
 	assert.deepEqual(chromeAboveSplit.lengthCompensation, { pike: [0], pi: [0] });
 }
 
+function verifyHistoricalComparisonPolicy(): void {
+	// Synthetic single-scenario reports exercising the live regression gate.
+	// These are the discriminating controls for the comparator contract: SGR
+	// cadence and raw-ANSI framing differences are diagnostic-only, while a
+	// settled text, style, or cursor change, a missing or restyled approved
+	// notice, and any tampering with the stored evidence stay rejected.
+	const makeTheme = () => ({
+		name: "dark",
+		colorCapability: "truecolor",
+		colors: {
+			text: "#123456",
+			muted: "#234567",
+			border: "#345678",
+			accent: "#456789",
+			success: "#56789a",
+			warning: "#cd9a22",
+			error: "#6789ab",
+			selectedBg: "#789abc",
+		},
+	});
+	const style = (foreground: string) => canonicalStyledStyle({ foreground });
+	const run = (text: string, foreground = "#123456") => [{ text, style: style(foreground) }];
+	const snapshot = (text: string, foreground = "#123456", cursor = { column: 1, row: 0 }, cursorVisible = true, ansi = ""): Record<string, unknown> => ({
+		visible: [text],
+		scrollback: [],
+		styledVisible: [run(text, foreground)],
+		styledScrollback: [],
+		cursor,
+		cursorVisible,
+		ansi,
+	});
+	const makeCapture = (scenario: Scenario, runtime: string, captures: Record<string, unknown>[]): Record<string, unknown> => ({
+		runtime,
+		scenario: scenario.id,
+		width: scenario.width,
+		workspace: "/tmp/cpp-harness-pike-differential",
+		inputs: scenario.inputs,
+		theme: makeTheme(),
+		snapshots: captures,
+	});
+	const makeItem = (scenario: Scenario, pike: Record<string, unknown>, pi: Record<string, unknown>) => {
+		const comparison = compare(pike, pi, scenario, repoRoot);
+		return {
+			id: scenario.id,
+			width: scenario.width,
+			inputs: scenario.inputs,
+			classification: triageByScenario[scenario.id].classification,
+			observedClassification: comparison.classification,
+			triage: triageByScenario[scenario.id],
+			projection: comparison.projection,
+			profileProjection: comparison.profileProjection,
+			omissionEvidence: comparison.omissionEvidence,
+			captures: { pike, pi },
+			stableDigest: digest({
+				pike: stableProjection(pike, scenario, repoRoot),
+				pi: stableProjection(pi, scenario, repoRoot),
+			}),
+		};
+	};
+	const expectGateFailure = (action: () => void, detail: string): void => {
+		try {
+			action();
+		} catch (error) {
+			assert.ok(String((error as Error).message).includes(detail), `expected a failure naming '${detail}', got: ${String(error)}`);
+			return;
+		}
+		throw new Error(`expected the historical comparison gate to fail with '${detail}'`);
+	};
+	const boot = scenarios.find((item) => item.id === "boot-72");
+	const selector = scenarios.find((item) => item.id === "model-selector");
+	assert.ok(boot !== undefined && selector !== undefined);
+
+	// Contract control: an SGR cadence / raw-ANSI framing difference with
+	// identical resolved cells is diagnostic-only. The legacy cross-report
+	// digest comparison rejects this evidence; the resolved gate accepts it.
+	const bootPike = makeCapture(boot, "pike", [snapshot("row", "#123456", { column: 1, row: 0 }, true, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m")]);
+	const bootPikeReframed = makeCapture(boot, "pike", [snapshot("row", "#123456", { column: 1, row: 0 }, true, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mr\x1b[0m\x1b[38;2;18;52;86mow\x1b[0m\x1b[1;1H")]);
+	const bootPi = makeCapture(boot, "pi", [snapshot("row", "#123456", { column: 1, row: 0 }, true, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m")]);
+	const bootExpected = makeItem(boot, bootPike, bootPi);
+	const bootActual = makeItem(boot, bootPikeReframed, bootPi);
+	assert.notEqual(bootExpected.stableDigest, bootActual.stableDigest);
+	verifyScenarioAgainstHistory(bootActual, bootExpected, boot, repoRoot);
+
+	// A changed settled cell is rejected even when it flips no comparison
+	// output: the scenario already reads unequal on another row, so every
+	// boolean stays identical while the resolved evidence still diverges. This
+	// is the case an outputs-only stand-in lets through.
+	const twoRowPike = makeCapture(boot, "pike", [{
+		...snapshot("row", "#123456", { column: 1, row: 0 }, true, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"),
+		visible: ["row", "pike chrome"],
+		styledVisible: [run("row"), run("pike chrome")],
+	}]);
+	const twoRowPi = makeCapture(boot, "pi", [{
+		...snapshot("row", "#123456", { column: 1, row: 0 }, true, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m"),
+		visible: ["row", "pi chrome"],
+		styledVisible: [run("row"), run("pi chrome")],
+	}]);
+	const twoRowExpected = makeItem(boot, twoRowPike, twoRowPi);
+	const twoRowActualPike = JSON.parse(JSON.stringify(twoRowPike)) as Record<string, unknown>;
+	(twoRowActualPike.snapshots as Record<string, unknown>[])[0].visible = ["rows", "pike chrome"];
+	(twoRowActualPike.snapshots as Record<string, unknown>[])[0].styledVisible = [run("rows"), run("pike chrome")];
+	const twoRowActual = makeItem(boot, twoRowActualPike, twoRowPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(twoRowActual, twoRowExpected, boot, repoRoot), "resolved evidence changed");
+
+	// A changed cell style is rejected.
+	const restyledActual = makeItem(boot, makeCapture(boot, "pike", [snapshot("row", "#654321", { column: 1, row: 0 }, true, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m")]), bootPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(restyledActual, bootExpected, boot, repoRoot), "diverged from the adapted checked-in evidence");
+
+	// A moved or hidden cursor is rejected.
+	const movedCursorActual = makeItem(boot, makeCapture(boot, "pike", [snapshot("row", "#123456", { column: 2, row: 0 }, true, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m")]), bootPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(movedCursorActual, bootExpected, boot, repoRoot), "diverged from the adapted checked-in evidence");
+	const hiddenCursorActual = makeItem(boot, makeCapture(boot, "pike", [snapshot("row", "#123456", { column: 1, row: 0 }, false, "\x1b[2J\x1b[H\x1b[38;2;18;52;86mrow\x1b[0m")]), bootPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(hiddenCursorActual, bootExpected, boot, repoRoot), "diverged from the adapted checked-in evidence");
+
+	// The versioned model-selector adaptation (ADR 0071 / ADR 0075) accepts
+	// exactly the approved notice replacement and nothing else.
+	const historicalNotice = "Only showing models from configured providers. Use /login to add providers.";
+	const gatewayNotice = "Only showing models from the local Magpie gateway.";
+	const notice = (text: string): Record<string, unknown> => ({
+		visible: [text],
+		scrollback: [],
+		styledVisible: [run(text, "#cd9a22")],
+		styledScrollback: [],
+		cursor: { column: 2, row: 6 },
+		cursorVisible: false,
+		ansi: "",
+	});
+	const selectorCapture = (runtime: string, noticeText: string, tailText: string) => makeCapture(selector, runtime, [
+		snapshot("selector boot"),
+		notice(noticeText),
+		snapshot(tailText),
+	]);
+	const historicalPike = selectorCapture("pike", historicalNotice, "Model: <model>");
+	const historicalPi = selectorCapture("pi", historicalNotice, "Model: <model>");
+	const currentPike = selectorCapture("pike", gatewayNotice, "Model: <model>");
+	const currentPi = selectorCapture("pi", historicalNotice, "Model: <model>");
+	const selectorExpected = makeItem(selector, historicalPike, historicalPi);
+	const selectorActual = makeItem(selector, currentPike, currentPi);
+	verifyScenarioAgainstHistory(selectorActual, selectorExpected, selector, repoRoot);
+
+	// A current capture missing the approved notice is rejected.
+	const missingNoticeActual = makeItem(selector, selectorCapture("pike", "Some other notice", "Model: <model>"), currentPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(missingNoticeActual, selectorExpected, selector, repoRoot), "must render exactly one");
+
+	// A current capture with the right text but a wrong style is rejected.
+	const wrongStylePike = selectorCapture("pike", gatewayNotice, "Model: <model>");
+	(wrongStylePike.snapshots as Record<string, unknown>[])[1].styledVisible = [run(gatewayNotice, "#ff0000")];
+	const wrongStyleActual = makeItem(selector, wrongStylePike, currentPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(wrongStyleActual, selectorExpected, selector, repoRoot), "gateway notice style changed");
+
+	// A current capture resurrecting a retired literal is rejected.
+	const retiredPike = selectorCapture("pike", gatewayNotice, "Use /login to add providers again");
+	const retiredActual = makeItem(selector, retiredPike, currentPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(retiredActual, selectorExpected, selector, repoRoot), "resurrected retired literal");
+
+	// Historical evidence that no longer carries the exact anchor row is
+	// rejected: the adaptation cannot widen silently.
+	const driftedExpected = makeItem(selector, selectorCapture("pike", "Unexpected old notice", "Model: <model>"), historicalPi);
+	expectGateFailure(() => verifyScenarioAgainstHistory(selectorActual, driftedExpected, selector, repoRoot), "exactly one historical row");
+
+	// Any other current delta beyond the approved notice row is rejected.
+	const extraRowPike = selectorCapture("pike", gatewayNotice, "Model: <model>");
+	(extraRowPike.snapshots as Record<string, unknown>[])[0].visible = ["selector boot", "unexpected extra row"];
+	(extraRowPike.snapshots as Record<string, unknown>[])[0].styledVisible = [run("selector boot"), run("unexpected extra row")];
+	const extraRowActual = makeItem(selector, extraRowPike, currentPi);
+	// The adapted comparison already reads unequal on the notice row, so the
+	// strict boolean outputs mask this extra delta; the resolved evidence
+	// comparison is the layer that still rejects it.
+	expectGateFailure(() => verifyScenarioAgainstHistory(extraRowActual, selectorExpected, selector, repoRoot), "resolved evidence changed");
+
+	// The legacy stored-evidence digest still guards the checked-in report: a
+	// tampered row is stale against the recorded digest.
+	const tamperedExpected = JSON.parse(JSON.stringify(bootExpected)) as Record<string, unknown>;
+	const tamperedCaptures = tamperedExpected.captures as Record<string, Record<string, unknown>>;
+	(tamperedCaptures.pike.snapshots as Record<string, unknown>[])[0].visible = ["tampered row"];
+	expectGateFailure(() => validateStableDigests({ scenarios: [tamperedExpected] }, repoRoot), "stale");
+
+	// Even a tamper that recomputes its own digest is rejected: the stored
+	// comparison outputs no longer reproduce from the tampered evidence.
+	const recomputedTamper = JSON.parse(JSON.stringify(bootExpected)) as Record<string, unknown>;
+	const recomputedCaptures = recomputedTamper.captures as Record<string, Record<string, unknown>>;
+	(recomputedCaptures.pike.snapshots as Record<string, unknown>[])[0].visible = ["tampered row"];
+	recomputedTamper.stableDigest = digest({
+		pike: stableProjection(recomputedCaptures.pike, boot, repoRoot),
+		pi: stableProjection(recomputedCaptures.pi, boot, repoRoot),
+	});
+	expectGateFailure(
+		() => verifyScenarioAgainstHistory(makeItem(boot, bootPike, bootPi), recomputedTamper, boot, repoRoot),
+		"does not reproduce its recorded comparison",
+	);
+}
+
 function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
 	// The styled-cell comparison resolves a cell color through the theme the
 	// capture carries. The colors ride on the comparison projection instead of
 	// inside stableProjection so the stable digest stays the cell projection it
 	// has always been; cursor position and visibility are included alongside cells.
 	const pikeProjection: Record<string, unknown> = {
-		...stableProjection(pike, scenario, repositoryRoot),
+		...stableProjectionForComparison(pike, scenario, repositoryRoot),
 		themeColors: normalizeThemeEvidence(pike.theme, `Pike/${scenario.id}`).colors,
 	};
 	const piProjection: Record<string, unknown> = {
-		...stableProjection(pi, scenario, repositoryRoot),
+		...stableProjectionForComparison(pi, scenario, repositoryRoot),
 		themeColors: normalizeThemeEvidence(pi.theme, `pi/${scenario.id}`).colors,
 	};
 	const pikeSnapshots = pikeProjection.snapshots as Record<string, unknown>[];
@@ -1619,6 +1929,262 @@ function validateStableDigests(report: Record<string, unknown>, repositoryRoot: 
 	}
 }
 
+/// The verification gate shared by `--verify` (fresh captures) and
+/// `--verify-replay` (a stored report): report metadata and structure, the
+/// legacy stored-evidence digests on both reports, and the resolved-evidence
+/// historical comparison. Any unrecognized delta fails closed.
+function verifyReports(actual: Record<string, unknown>, expected: Record<string, unknown>, repositoryRoot: string): number {
+	if (JSON.stringify(reportMetadata(actual)) !== JSON.stringify(reportMetadata(expected))) {
+		throw new Error("Native TUI differential report metadata changed; inspect the checked-in evidence.");
+	}
+	validateReportCaptures(actual);
+	validateReportCaptures(expected);
+	validateThemeParity(actual);
+	validateThemeParity(expected);
+	// The legacy stored-evidence digests guard both reports: any missing or
+	// tampered evidence (cells, styles, cursor, SGR stream, or digest) fails
+	// here, byte-for-byte, before the live comparison runs.
+	validateStableDigests(actual, repositoryRoot);
+	validateStableDigests(expected, repositoryRoot);
+	verifyResolvedEvidenceAgainstHistory(actual, expected, repositoryRoot);
+	const count = (actual.scenarios as unknown[]).length;
+	console.log(`verified ${count} Native TUI differential scenarios against ${reportPath}; stored digests, resolved evidence, and triage records are unchanged`);
+	return 0;
+}
+
+/// `--verify-replay <report.json>` re-runs the verification gate against a
+/// previously recorded report instead of a fresh capture, so a stored red run
+/// can be triaged offline without recapturing both runtimes.
+function runVerifyReplay(actualReportPath: string): number {
+	const repositoryRoot = repositoryRootFromEnvironment();
+	if (!existsSync(reportPath)) throw new Error(`checked-in report is missing: ${reportPath}; run with --write`);
+	if (!existsSync(actualReportPath)) throw new Error(`--verify-replay report is missing: ${actualReportPath}`);
+	const expected = JSON.parse(readFileSync(reportPath, "utf8")) as Record<string, unknown>;
+	const actual = JSON.parse(readFileSync(actualReportPath, "utf8")) as Record<string, unknown>;
+	console.log(`replaying stored differential report ${actualReportPath} against ${reportPath}`);
+	return verifyReports(actual, expected, repositoryRoot);
+}
+
+function adaptationRulesFor(scenario: Pick<Scenario, "id">): readonly VersionedExpectationAdaptation[] {
+	return versionedExpectationAdaptations[scenario.id] ?? [];
+}
+
+/// Replace a version-adapted historical row with the approved current row in a
+/// stored capture. The historical anchor must match exactly once in the
+/// snapshot's visible text and once in its styled projection, with the
+/// approved canonical style, and the historical text must not linger in the
+/// scrollback; anything else fails closed so an adaptation can never widen
+/// silently.
+function adaptVersionedExpectations(capture: Record<string, unknown>, scenario: Pick<Scenario, "id">): Record<string, unknown> {
+	const rules = adaptationRulesFor(scenario).filter((rule) => rule.runtime === capture.runtime);
+	if (rules.length === 0) return capture;
+	const adapted = JSON.parse(JSON.stringify(capture)) as Record<string, unknown>;
+	for (const rule of rules) {
+		const label = `${scenario.id}/${rule.runtime} snapshot ${rule.snapshot} (${rule.authority}, adaptation v${expectationAdaptationVersion})`;
+		const snapshots = adapted.snapshots as Record<string, unknown>[];
+		const snapshot = snapshots[rule.snapshot];
+		if (snapshot === undefined) throw new Error(`versioned expectation for ${label} is missing from the checked-in evidence`);
+		const visible = snapshot.visible as string[];
+		const visibleMatches = visible.filter((line) => line === rule.historicalText).length;
+		if (visibleMatches !== 1) {
+			throw new Error(`versioned expectation for ${label} requires exactly one historical row '${rule.historicalText}'; found ${visibleMatches}`);
+		}
+		snapshot.visible = visible.map((line) => (line === rule.historicalText ? rule.currentText : line));
+		const styledVisible = snapshot.styledVisible as unknown[];
+		const styledMatches = styledVisible.filter((row) => styledRowText(row) === rule.historicalText);
+		if (styledMatches.length !== 1) {
+			throw new Error(`versioned expectation for ${label} requires exactly one styled historical row; found ${styledMatches.length}`);
+		}
+		const runs = styledMatches[0] as Array<Record<string, unknown>>;
+		const requiredStyle = canonicalStyledStyle({ foreground: rule.requiredForeground });
+		if (runs.length !== 1 || JSON.stringify(runs[0]?.style) !== JSON.stringify(requiredStyle)) {
+			throw new Error(`versioned expectation for ${label} requires the historical styled row to carry the exact '${rule.requiredForeground}' canonical style`);
+		}
+		runs[0] = { ...runs[0], text: rule.currentText };
+		const scrollback = snapshot.scrollback as string[];
+		if (scrollback.some((line) => line.includes(rule.historicalText))) {
+			throw new Error(`versioned expectation for ${label} found the historical text in the scrollback; the adaptation would leave stale evidence`);
+		}
+		const styledScrollback = snapshot.styledScrollback as unknown[];
+		if (styledScrollback.some((row) => styledRowText(row).includes(rule.historicalText))) {
+			throw new Error(`versioned expectation for ${label} found the historical text in the styled scrollback; the adaptation would leave stale evidence`);
+		}
+	}
+	return adapted;
+}
+
+/// Independent current-side assertions for a scenario with versioned
+/// expectations: the current capture must render the approved notice row with
+/// the approved exact canonical style, and must not resurrect any retired
+/// literal anywhere. Assertions run on the normalized capture, so they see
+/// exactly what the comparison sees.
+function assertVersionedCurrentRequirements(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): void {
+	const rules = adaptationRulesFor(scenario).filter((rule) => rule.runtime === capture.runtime);
+	if (rules.length === 0) return;
+	const normalized = normalizeCaptureForComparison(capture, scenario, repositoryRoot);
+	for (const rule of rules) {
+		const snapshots = normalized.snapshots as Record<string, unknown>[];
+		const snapshot = snapshots[rule.snapshot];
+		if (snapshot === undefined) throw new Error(`current ${scenario.id}/${rule.runtime} capture is missing snapshot ${rule.snapshot}; the approved notice cannot be verified`);
+		const visible = snapshot.visible as string[];
+		const noticeRows = visible.filter((line) => line === rule.currentText).length;
+		if (noticeRows !== 1) {
+			throw new Error(`current ${scenario.id}/${rule.runtime} snapshot ${rule.snapshot} must render exactly one '${rule.currentText}' row (${rule.authority}); found ${noticeRows}`);
+		}
+		const styledVisible = snapshot.styledVisible as unknown[];
+		const styledNotice = styledVisible.filter((row) => styledRowText(row) === rule.currentText);
+		if (styledNotice.length !== 1) {
+			throw new Error(`current ${scenario.id}/${rule.runtime} snapshot ${rule.snapshot} must style the approved notice as one styled row; found ${styledNotice.length}`);
+		}
+		const runs = styledNotice[0] as Array<Record<string, unknown>>;
+		const requiredStyle = canonicalStyledStyle({ foreground: rule.requiredForeground });
+		if (runs.length !== 1 || JSON.stringify(runs[0]?.style) !== JSON.stringify(requiredStyle)) {
+			throw new Error(`current ${scenario.id}/${rule.runtime} gateway notice style changed; expected the exact '${rule.requiredForeground}' canonical style (${rule.authority})`);
+		}
+		for (const current of snapshots) {
+			const texts = [
+				...(current.visible as string[]),
+				...(current.scrollback as string[]),
+				...(current.styledVisible as unknown[]).map(styledRowText),
+				...(current.styledScrollback as unknown[]).map(styledRowText),
+			].join("\n");
+			for (const retired of rule.retiredLiterals) {
+				if (texts.includes(retired)) {
+					throw new Error(`current ${scenario.id}/${rule.runtime} capture resurrected retired literal '${retired}' (${rule.authority})`);
+				}
+			}
+		}
+	}
+}
+
+/// The resolved evidence projection: the comparison authority the report
+/// declares (structuralProjection) applied to one capture — profile-projected
+/// visible/scrollback cell text, styled cells resolved through the capture's
+/// own theme palette, cursor state, and input identities. Raw ANSI and the
+/// ordered SGR token stream stay diagnostic-only and are excluded, so
+/// cumulative repaint cadence never decides the historical comparison.
+function resolvedEvidenceProjection(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
+	const projection: Record<string, unknown> = {
+		...stableProjectionForComparison(capture, scenario, repositoryRoot),
+		themeColors: normalizeThemeEvidence(capture.theme, `resolved/${String(capture.runtime)}/${scenario.id}`).colors,
+	};
+	return omitProjectionLines(profileProjectionForComparison(projection, scenario), scenario.omissionPatterns ?? []);
+}
+
+function resolvedEvidenceEqual(left: Record<string, unknown>, right: Record<string, unknown>): boolean {
+	const identity = (projection: Record<string, unknown>) => ({
+		runtime: projection.runtime,
+		scenario: projection.scenario,
+		width: projection.width,
+		workspace: projection.workspace,
+		inputs: projection.inputs,
+	});
+	if (JSON.stringify(identity(left)) !== JSON.stringify(identity(right))) return false;
+	const leftSnapshots = left.snapshots as Record<string, unknown>[];
+	const rightSnapshots = right.snapshots as Record<string, unknown>[];
+	if (leftSnapshots.length !== rightSnapshots.length) return false;
+	const cells = (snapshot: Record<string, unknown>) => ({
+		visible: snapshot.visible,
+		scrollback: snapshot.scrollback,
+		cursor: snapshot.cursor,
+		cursorVisible: snapshot.cursorVisible,
+	});
+	for (let index = 0; index < leftSnapshots.length; index += 1) {
+		if (JSON.stringify(cells(leftSnapshots[index])) !== JSON.stringify(cells(rightSnapshots[index]))) return false;
+	}
+	return styledPresentationEqual(left, right);
+}
+
+/// The projection fields the cross-report gate compares. The two raw-SGR
+/// equality fields stay recorded evidence (the stored SGR stream remains
+/// byte-guarded by the legacy stable digests), but raw SGR cadence is
+/// diagnostic-only under the declared contract, so cumulative repaint
+/// differences never decide the live comparison.
+function gateComparisonProjection(projection: Record<string, unknown>): Record<string, unknown> {
+	const { sgrStructureEqual, omissionSgrStructureEqual, ...gateFields } = projection;
+	return gateFields;
+}
+
+function assertScenarioOutputsEqual(comparison: Record<string, unknown>, item: Record<string, unknown>, context: string): void {
+	const id = String(item.id);
+	if (JSON.stringify(gateComparisonProjection(comparison.projection as Record<string, unknown>)) !== JSON.stringify(gateComparisonProjection(item.projection as Record<string, unknown>))) {
+		throw new Error(`${context} for ${id}: projection no longer matches`);
+	}
+	for (const field of ["profileProjection", "omissionEvidence"] as const) {
+		if (JSON.stringify(comparison[field]) !== JSON.stringify(item[field])) {
+			throw new Error(`${context} for ${id}: ${field} no longer matches`);
+		}
+	}
+	if (comparison.classification !== item.observedClassification) {
+		throw new Error(`${context} for ${id}: observed classification ${String(comparison.classification)} does not match the recorded ${String(item.observedClassification)}`);
+	}
+}
+
+/// One scenario of the live regression gate. The curated triage record is
+/// retained exactly; the checked-in evidence must reproduce its recorded
+/// comparison under the current harness logic; the versioned expectations
+/// bridge it to the current product; and the resolved evidence must match per
+/// runtime under the declared authority. Any other delta fails closed.
+function verifyScenarioAgainstHistory(
+	actualItem: Record<string, unknown>,
+	expectedItem: Record<string, unknown>,
+	scenario: Scenario,
+	repositoryRoot: string,
+): void {
+	if (String(actualItem.id) !== String(expectedItem.id)) throw new Error("differential scenario identity mismatch between the live and checked-in reports");
+	if (JSON.stringify(actualItem.classification) !== JSON.stringify(expectedItem.classification)) {
+		throw new Error(`differential scenario ${scenario.id} triage classification changed; review the delta instead of re-triaging silently`);
+	}
+	if (JSON.stringify(actualItem.triage) !== JSON.stringify(expectedItem.triage)) {
+		throw new Error(`differential scenario ${scenario.id} triage record changed; review the delta instead of re-triaging silently`);
+	}
+	const expectedCaptures = expectedItem.captures as Record<string, Record<string, unknown>>;
+	const actualCaptures = actualItem.captures as Record<string, Record<string, unknown>>;
+	// The stored evidence must still reproduce its recorded comparison under the
+	// current harness logic; a harness drift fails closed here.
+	assertScenarioOutputsEqual(compare(expectedCaptures.pike, expectedCaptures.pi, scenario, repositoryRoot), expectedItem, "checked-in differential evidence does not reproduce its recorded comparison");
+	// The current capture must independently satisfy every versioned expectation
+	// before the adapted comparison runs, so a missing notice, a wrong style, or
+	// a resurrected retired literal names its own failure.
+	assertVersionedCurrentRequirements(actualCaptures.pike, scenario, repositoryRoot);
+	assertVersionedCurrentRequirements(actualCaptures.pi, scenario, repositoryRoot);
+	// Adapt only the declared, versioned expectations; everything else in the
+	// stored evidence still compares exactly.
+	const adaptedExpected = {
+		pike: adaptVersionedExpectations(expectedCaptures.pike, scenario),
+		pi: adaptVersionedExpectations(expectedCaptures.pi, scenario),
+	};
+	assertScenarioOutputsEqual(compare(adaptedExpected.pike, adaptedExpected.pi, scenario, repositoryRoot), actualItem, "live differential comparison diverged from the adapted checked-in evidence");
+	for (const runtime of ["pike", "pi"] as const) {
+		const expectedResolved = resolvedEvidenceProjection(adaptedExpected[runtime], scenario, repositoryRoot);
+		const actualResolved = resolvedEvidenceProjection(actualCaptures[runtime], scenario, repositoryRoot);
+		if (!resolvedEvidenceEqual(expectedResolved, actualResolved)) {
+			throw new Error(`Native TUI differential resolved evidence changed for ${scenario.id}/${runtime}; the settled cells, styles, or cursor diverged from the checked-in evidence`);
+		}
+	}
+}
+
+/// The live current-vs-historical comparison: every scenario in the checked-in
+/// report must be present in the live report and match under
+/// verifyScenarioAgainstHistory. Unrecognized or new deltas fail closed.
+function verifyResolvedEvidenceAgainstHistory(actual: Record<string, unknown>, expected: Record<string, unknown>, repositoryRoot: string): void {
+	const actualScenarios = actual.scenarios as Record<string, unknown>[];
+	const expectedScenarios = expected.scenarios as Record<string, unknown>[];
+	if (actualScenarios.length !== expectedScenarios.length) {
+		throw new Error("differential report scenario count changed between the live and checked-in reports");
+	}
+	const actualById = new Map(actualScenarios.map((item) => [String(item.id), item]));
+	const scenarioById = new Map(scenarios.map((scenario) => [scenario.id, scenario]));
+	for (const expectedItem of expectedScenarios) {
+		const id = String(expectedItem.id);
+		const scenario = scenarioById.get(id);
+		const actualItem = actualById.get(id);
+		if (!scenario) throw new Error(`differential report contains unknown scenario ${id}`);
+		if (!actualItem) throw new Error(`differential report is missing scenario ${id}`);
+		verifyScenarioAgainstHistory(actualItem, expectedItem, scenario, repositoryRoot);
+	}
+}
+
 async function runParent(): Promise<number> {
 	const scenarioIndex = process.argv.indexOf("--scenario");
 	const scenarioFilter = scenarioIndex >= 0 ? process.argv[scenarioIndex + 1] : undefined;
@@ -1732,45 +2298,7 @@ async function runParent(): Promise<number> {
 	}
 	if (!existsSync(reportPath)) throw new Error(`checked-in report is missing: ${reportPath}; run with --write`);
 	const expected = JSON.parse(readFileSync(reportPath, "utf8")) as Record<string, unknown>;
-	if (JSON.stringify(reportMetadata(report)) !== JSON.stringify(reportMetadata(expected))) {
-		throw new Error("Native TUI differential report metadata changed; inspect the checked-in evidence.");
-	}
-	validateReportCaptures(report);
-	validateReportCaptures(expected);
-	validateThemeParity(report);
-	validateThemeParity(expected);
-	validateStableDigests(expected, repositoryRoot);
-	const actualStable = (report.scenarios as Record<string, unknown>[]).map((item) => ({
-		id: item.id,
-		width: item.width,
-		inputs: item.inputs,
-		classification: item.classification,
-		observedClassification: item.observedClassification,
-		triage: item.triage,
-		projection: item.projection,
-		profileProjection: item.profileProjection,
-		omissionEvidence: item.omissionEvidence,
-		stableDigest: item.stableDigest,
-	}));
-	const expectedStable = (expected.scenarios as Record<string, unknown>[]).map((item) => ({
-		id: item.id,
-		width: item.width,
-		inputs: item.inputs,
-		classification: item.classification,
-		observedClassification: item.observedClassification,
-		triage: item.triage,
-		projection: item.projection,
-		profileProjection: item.profileProjection,
-		omissionEvidence: item.omissionEvidence,
-		stableDigest: item.stableDigest,
-	}));
-	if (JSON.stringify(actualStable) !== JSON.stringify(expectedStable)) {
-		console.error("Native TUI differential projection changed; inspect the report and classify the delta.");
-		console.error("Use --write only after reviewing Supported Capability regressions versus intentional omissions.");
-		return 1;
-	}
-	console.log(`verified ${actualStable.length} Native TUI differential report digests against ${reportPath}; classifications remain unchanged`);
-	return 0;
+	return verifyReports(report, expected, repositoryRoot);
 }
 
 function inputStateBarrier(scenario: Scenario, inputIndex: number): {
@@ -2227,9 +2755,19 @@ async function main(): Promise<number> {
 		if (process.argv.includes("--live")) return runLiveManual();
 		verifySgrNormalization();
 		verifyProjectionPolicy();
+		verifyHistoricalComparisonPolicy();
 		verifyThemeParityPolicy();
 		verifyAnsiBoundary();
 		verifyStyledRolePresentation();
+		const replayIndex = process.argv.indexOf("--verify-replay");
+		if (replayIndex >= 0) {
+			const replayArgument = process.argv[replayIndex + 1];
+			if (replayArgument === undefined || replayArgument.startsWith("--")) throw new Error("--verify-replay requires a stored report path");
+			if (process.argv.includes("--write") || process.argv.includes("--scenario")) {
+				throw new Error("--verify-replay cannot be combined with --write or --scenario");
+			}
+			return runVerifyReplay(path.resolve(replayArgument));
+		}
 		return await runParent();
 	} catch (error) {
 		if (error instanceof SkipError) {

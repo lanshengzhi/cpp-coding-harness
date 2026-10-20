@@ -9,10 +9,10 @@
 // constructs these; tests inject scripted seams instead and never touch this
 // file's types.
 
-#include "coding_agent/mcp/McpServerConnection.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
 #include <cch/agent/Agent.hpp>
+#include <cch/mcp/Client.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -39,7 +39,7 @@ namespace cch::coding_agent::runtime {
 /// `initialize` result's `instructions` (only the concrete clients retain
 /// them).
 struct ConnectedMcpTransport {
-    std::shared_ptr<mcp::McpServerConnection> client;
+    std::shared_ptr<cch::mcp::Client> client;
     std::optional<std::string> instructions;
 };
 
@@ -84,7 +84,7 @@ public:
     [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
             support::JsonValue arguments,
             std::stop_token stop_token,
-            mcp::McpServerConnection::ProgressCallback on_progress = {}) override;
+            cch::mcp::Client::ProgressCallback on_progress = {}) override;
     [[nodiscard]] support::AsyncResult<support::JsonValue> resources_page(
             std::optional<std::string> cursor, std::stop_token stop_token) override;
     [[nodiscard]] support::AsyncResult<support::JsonValue> resource_templates_page(
@@ -105,13 +105,12 @@ public:
     void set_resources_changed_listener(ResourcesChangedListener listener) override;
 
 private:
-    [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
-            std::optional<support::JsonValue> params,
-            mcp::McpServerConnection::RequestOptions options);
+    [[nodiscard]] support::AsyncResult<support::JsonValue> request(
+            std::string method, std::optional<support::JsonValue> params, cch::mcp::Client::RequestOptions options);
 
     std::string server_name_;
     ConnectSource connect_source_;
-    std::shared_ptr<mcp::McpServerConnection> client_;
+    std::shared_ptr<cch::mcp::Client> client_;
     McpServerState state_{McpServerState::Connected};
     std::vector<McpLiveTool> tools_;
     bool has_resources_{false};

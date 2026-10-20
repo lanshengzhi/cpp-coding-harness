@@ -22,6 +22,8 @@
 #include "coding_agent/mcp/McpResourceTools.hpp"
 #include "coding_agent/extensions/tool_search/ToolSearch.hpp"
 
+#include <cch/mcp/Client.hpp>
+#include <cch/mcp/Client.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -103,7 +105,7 @@ public:
     [[nodiscard]] virtual support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
             support::JsonValue arguments,
             std::stop_token stop_token,
-            mcp::McpServerConnection::ProgressCallback on_progress = {}) = 0;
+            cch::mcp::Client::ProgressCallback on_progress = {}) = 0;
     /// pi `client.listResourcesPage`: one `resources/list` page.
     [[nodiscard]] virtual support::AsyncResult<support::JsonValue> resources_page(
             std::optional<std::string> cursor, std::stop_token stop_token) = 0;
@@ -176,9 +178,8 @@ public:
 /// the tool's execute operation; it stays bound when a withdrawn tool
 /// re-registers as hidden, exactly like pi's definition map. The progress
 /// observer forwards pi `McpRequestOptions.onProgress`.
-using McpToolCall = std::function<support::AsyncResult<support::JsonValue>(support::JsonValue arguments,
-        std::stop_token stop_token,
-        mcp::McpServerConnection::ProgressCallback on_progress)>;
+using McpToolCall = std::function<support::AsyncResult<support::JsonValue>(
+        support::JsonValue arguments, std::stop_token stop_token, cch::mcp::Client::ProgressCallback on_progress)>;
 
 /// One tool the manager registers on the session tool surface (pi
 /// `ToolDefinition` narrowed to the exposure decision, plus the schemas and

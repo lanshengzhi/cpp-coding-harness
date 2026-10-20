@@ -17,7 +17,6 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
-#include "coding_agent/mcp/McpStdioClient.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -30,6 +29,8 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/mcp/StdioClient.hpp>
+#include <cch/mcp/StdioClient.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -206,7 +207,7 @@ private:
 /// call's terminal outcome. Waiting for the server's `hang-start` trace line
 /// guarantees the cancellation hits a running call rather than a queued one.
 [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> cancel_in_flight_call(
-        std::shared_ptr<coding_agent::mcp::McpStdioClient> client,
+        std::shared_ptr<cch::mcp::StdioClient> client,
         std::filesystem::path trace,
         std::stop_source& cancel,
         std::string tool_name) {
@@ -243,10 +244,9 @@ TEST_CASE("a cancelled in-flight MCP call notifies the server, fails the call, a
     tests::RuntimeFixture runtime;
     const auto trace = workspace.path() / "trace.log";
 
-    auto connected = tests::run_awaitable(
-            runtime, coding_agent::mcp::McpStdioClient::connect(echo_server_config(trace, 5000ms)));
+    auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config(trace, 5000ms)));
     REQUIRE(connected.has_value());
-    const std::shared_ptr<coding_agent::mcp::McpStdioClient> client = *connected;
+    const std::shared_ptr<cch::mcp::StdioClient> client = *connected;
 
     std::stop_source cancel;
     const auto cancelled = tests::run_awaitable(runtime, cancel_in_flight_call(client, trace, cancel, "hang"));
@@ -273,10 +273,9 @@ TEST_CASE("a server that keeps streaming after acknowledging cancellation still 
     tests::RuntimeFixture runtime;
     const auto trace = workspace.path() / "trace.log";
 
-    auto connected = tests::run_awaitable(
-            runtime, coding_agent::mcp::McpStdioClient::connect(echo_server_config(trace, 5000ms)));
+    auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config(trace, 5000ms)));
     REQUIRE(connected.has_value());
-    const std::shared_ptr<coding_agent::mcp::McpStdioClient> client = *connected;
+    const std::shared_ptr<cch::mcp::StdioClient> client = *connected;
 
     std::stop_source cancel;
     const auto cancelled = tests::run_awaitable(runtime, cancel_in_flight_call(client, trace, cancel, "hang"));
@@ -297,10 +296,9 @@ TEST_CASE("a hung MCP server fails the call with an explicit timeout, never a si
     tests::RuntimeFixture runtime;
     const auto trace = workspace.path() / "trace.log";
 
-    auto connected = tests::run_awaitable(
-            runtime, coding_agent::mcp::McpStdioClient::connect(echo_server_config(trace, 2000ms)));
+    auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config(trace, 2000ms)));
     REQUIRE(connected.has_value());
-    const std::shared_ptr<coding_agent::mcp::McpStdioClient> client = *connected;
+    const std::shared_ptr<cch::mcp::StdioClient> client = *connected;
 
     // A slow-but-answering server within the deadline resolves normally, so
     // the timeout is a deadline, not an unconditional failure.
@@ -326,10 +324,9 @@ TEST_CASE("an MCP call errors explicitly when the server dies between tools/list
     tests::RuntimeFixture runtime;
     const auto trace = workspace.path() / "trace.log";
 
-    auto connected = tests::run_awaitable(
-            runtime, coding_agent::mcp::McpStdioClient::connect(echo_server_config(trace, 5000ms)));
+    auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config(trace, 5000ms)));
     REQUIRE(connected.has_value());
-    const std::shared_ptr<coding_agent::mcp::McpStdioClient> client = *connected;
+    const std::shared_ptr<cch::mcp::StdioClient> client = *connected;
 
     const auto listed =
             tests::run_awaitable(runtime, support::detail::await_async_result(client->request("tools/list")));

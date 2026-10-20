@@ -9,6 +9,8 @@
 #include "coding_agent/tui/McpManagerView.hpp"
 #include "coding_agent/tui/Theme.hpp"
 
+#include <cch/mcp/OAuthConfig.hpp>
+#include <cch/mcp/OAuthConfig.hpp>
 #include <cch/tui/Keybindings.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -121,7 +123,7 @@ namespace {
     coding_agent::mcp::McpHttpServerConfig config;
     config.name = name;
     config.url = "https://mcp.example.com/mcp";
-    if (oauth) config.oauth = coding_agent::mcp::McpOAuthConfig{};
+    if (oauth) config.oauth = cch::mcp::OAuthConfig{};
     coding_agent::mcp::McpConfigEntry entry;
     entry.name = std::move(name);
     entry.source = "/home/u/.pi/agent/mcp.json";

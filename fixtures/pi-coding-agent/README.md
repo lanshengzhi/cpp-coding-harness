@@ -288,8 +288,19 @@ cmake --build --preset vcpkg --target cch_tests_coding_agent_interactive
 CTest runs the same command in verification mode through
 the adapter `fixtures/pi-coding-agent/capture/native-tui-differential-ctest.py` (test support
 beside the capture harness, not a `tests/<owner>` C++ test). Verification re-captures the
-report projection and checks that its report digest and triage record are stable; it does not
-mean that every scenario is a product match. The resolved comparison uses visible cell text,
+report projection and checks report metadata and structure, the legacy stored-evidence
+digests on both reports (the checked-in evidence stays byte-guarded, never rewritten), and
+the resolved current-vs-historical evidence: settled visible/scrollback cell text, the
+resolved style of each cell, cursor state, and input identities, compared per runtime
+against the checked-in captures. Raw ANSI and ordered SGR tokens remain diagnostic-only
+evidence in this comparison, so cumulative repaint cadence never decides the gate; every
+other delta fails closed. The single approved product wording change (the model-selector
+gateway notice, ADR 0071/ADR 0075) is bridged by an explicit versioned expectation
+adaptation that independently re-asserts the required current notice text, its exact
+warning style, and the absence of the retired provider-login strings. Verification does
+not mean that every scenario is a product match. `--verify-replay <report.json>` re-runs
+the same gate against a previously recorded report instead of a fresh capture, so a red
+run can be triaged offline without recapturing both runtimes. The resolved comparison uses visible cell text,
 scrollback cell rows, and the resolved style of each cell. The profile-projected scrollback
 comparison is length-compensated: a snapshot is a fixed-height viewport plus the rows retained
 above it, so a taller composed buffer retains more rows for identical scroll behaviour. The

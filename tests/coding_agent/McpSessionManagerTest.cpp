@@ -20,6 +20,8 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/mcp/Client.hpp>
+#include <cch/mcp/Client.hpp>
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -122,7 +124,7 @@ public:
     [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
             support::JsonValue arguments,
             std::stop_token,
-            coding_agent::mcp::McpServerConnection::ProgressCallback = {}) override {
+            cch::mcp::Client::ProgressCallback = {}) override {
         calls.push_back(Call{std::string{tool}, std::move(arguments)});
         return support::AsyncResult<support::JsonValue>{call_result};
     }
