@@ -234,3 +234,35 @@ TEST_CASE("Known-but-unassembled overrides diagnose as unavailable, unknown "
     CHECK(resolved->registry->find("future.action") == nullptr);
     CHECK(resolved->registry->entries().size() == 32);
 }
+
+TEST_CASE("resolved keybindings match shifted-symbol reports by produced and physical identity",
+        "[tui][keybindings][issue1122][spec]") {
+    // Frozen pi-v1.3.0 keys-and-terminal-replies.json:
+    // shifted-symbol-keys-match-produced-character. The registry is the public
+    // shortcut dispatch caller: a ctrl++ binding fires for both the Kitty
+    // ctrl+shift+= report and the modifyOtherKeys ctrl+plus report, while a
+    // produced-symbol "+" binding fires only for the unmodified shifted "=".
+    tui::KeybindingResolutionRequest request;
+    request.definitions = tui::builtin_tui_keybinding_definitions();
+    request.overrides = {
+            {.id = "tui.editor.historyPrevious", .keys = {"ctrl++"}},
+            {.id = "tui.editor.historyNext", .keys = {"+"}},
+    };
+    const auto resolved = tui::resolve_keybindings(std::move(request));
+    REQUIRE(resolved);
+
+    const auto kitty_ctrl_plus = tui::parse_key("\x1b[61:43;6u", true);
+    REQUIRE(kitty_ctrl_plus);
+    CHECK(resolved->registry->matches(*kitty_ctrl_plus, "tui.editor.historyPrevious"));
+    CHECK_FALSE(resolved->registry->matches(*kitty_ctrl_plus, "tui.editor.historyNext"));
+
+    const auto modify_other_keys_ctrl_plus = tui::parse_key("\x1b[27;6;43~", true);
+    REQUIRE(modify_other_keys_ctrl_plus);
+    CHECK(resolved->registry->matches(*modify_other_keys_ctrl_plus, "tui.editor.historyPrevious"));
+    CHECK_FALSE(resolved->registry->matches(*modify_other_keys_ctrl_plus, "tui.editor.historyNext"));
+
+    const auto kitty_shift_plus = tui::parse_key("\x1b[61:43;2u", true);
+    REQUIRE(kitty_shift_plus);
+    CHECK_FALSE(resolved->registry->matches(*kitty_shift_plus, "tui.editor.historyPrevious"));
+    CHECK(resolved->registry->matches(*kitty_shift_plus, "tui.editor.historyNext"));
+}

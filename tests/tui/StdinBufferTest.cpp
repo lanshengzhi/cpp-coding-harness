@@ -14,9 +14,12 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>
+#include <memory>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <thread>
+#include <variant>
 #include <vector>
 
 using namespace cch;
@@ -40,6 +43,37 @@ IoContextRunner& issue949_io() {
 }
 
 constexpr std::string_view kIssue954PasteSegment = "\xce\xb1\tprotocol \x1b[?997;1n \x1b[A\r\n";
+
+/// Records every key event the input edge delivers, in order.
+class KeyEventRecorder final : public tui::Component, public tui::InputHandler, public tui::Focusable {
+public:
+    [[nodiscard]] support::Expected<tui::RenderResult> render(std::size_t) override { return tui::RenderResult{}; }
+
+    void invalidate() override {}
+
+    tui::InputAdmissionOutcome handle_input(const tui::InputEventVariant& input) override {
+        const auto* key = std::get_if<tui::KeyEvent>(&input);
+        if (key == nullptr) return tui::InputAdmissionOutcome::Unhandled;
+        {
+            std::lock_guard lock(mutex_);
+            events_.push_back(*key);
+        }
+        return tui::InputAdmissionOutcome::Consumed;
+    }
+
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+    [[nodiscard]] std::vector<tui::KeyEvent> events() const {
+        std::lock_guard lock(mutex_);
+        return events_;
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::vector<tui::KeyEvent> events_;
+    bool focused_{false};
+};
 
 [[nodiscard]] std::string issue954_large_paste_body() {
     std::string body;
@@ -200,5 +234,106 @@ TEST_CASE("ProcessTerminal PTY path keeps split ESC[M !! out of Input and Editor
     CHECK(editor_pointer->text().find(' ') == std::string::npos);
     CHECK(editor_pointer->text().find('!') == std::string::npos);
 
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("StdinBuffer holds a fragmented terminal color reply until its terminator",
+        "[tui][stdin-buffer][issue1122][spec]") {
+    // Frozen pi-v1.3.0 observation: fixtures/pi-v1.3.0/audit-1050/keys-and-terminal-replies.json,
+    // scenario fragmented-color-reply-never-leaks-or-opens-editor (revision 71023aec):
+    // after the header timeout nothing was delivered and the header stayed buffered;
+    // the tail completed one reply, and a real BEL still arrived as ctrl+g.
+    tui::StdinBuffer buffer({.timeout = std::chrono::milliseconds{20}, .escape_timeout = std::chrono::milliseconds{5}});
+    std::vector<std::string> sequences;
+    buffer.set_data_handler([&](std::string sequence) { sequences.push_back(std::move(sequence)); });
+
+    buffer.process("\x1b]4;1;rgb:eaea/6c");
+    CHECK(sequences.empty());
+    CHECK(buffer.get_buffer() == "\x1b]4;1;rgb:eaea/6c");
+    // A recognized reply header waits for its terminator instead of the sequence
+    // timeout: no deadline is armed. Expire whatever deadline the edge would have
+    // used, exactly as the terminal's deadline handler does, and deliver nothing.
+    const auto deadline = buffer.deadline();
+    CHECK(deadline == std::chrono::steady_clock::time_point::max());
+    if (deadline != std::chrono::steady_clock::time_point::max()) {
+        std::this_thread::sleep_until(deadline + std::chrono::milliseconds{1});
+        (void)buffer.flush();
+    }
+    CHECK(sequences.empty());
+    CHECK(buffer.get_buffer() == "\x1b]4;1;rgb:eaea/6c");
+
+    buffer.process("6c/6d6d\x07");
+    REQUIRE(sequences == std::vector<std::string>{"\x1b]4;1;rgb:eaea/6c6c/6d6d\x07"});
+    CHECK(buffer.get_buffer().empty());
+    // The completed reply is an out-of-band answer, not a key event.
+    CHECK_FALSE(tui::parse_key(sequences.front(), true).has_value());
+
+    buffer.process("\x07");
+    REQUIRE(sequences.size() == 2);
+    CHECK(sequences.back() == "\x07");
+    const auto real_ctrl_g = tui::parse_key(sequences.back(), true);
+    REQUIRE(real_ctrl_g);
+    CHECK(tui::key_id(*real_ctrl_g) == "ctrl+g");
+}
+
+TEST_CASE("StdinBuffer recovers ambiguous Alt-bracket input within the sequence timeout",
+        "[tui][stdin-buffer][issue1122][spec]") {
+    // Frozen pi-v1.3.0 observation: same artifact, scenario
+    // ambiguous-alt-bracket-input-recovers-within-sequence-timeout. At the
+    // sequence timeout an ambiguous ESC] prefix is delivered as one Alt-prefixed
+    // sequence and the batched tail is reparsed instead of being swallowed as a
+    // reply.
+    tui::StdinBuffer buffer({.timeout = std::chrono::milliseconds{20}, .escape_timeout = std::chrono::milliseconds{5}});
+    std::vector<std::string> sequences;
+    buffer.set_data_handler([&](std::string sequence) { sequences.push_back(std::move(sequence)); });
+
+    buffer.process("\x1b]a");
+    CHECK(sequences.empty());
+    CHECK(buffer.get_buffer() == "\x1b]a");
+
+    const auto flushed = buffer.flush();
+    CHECK(flushed == std::vector<std::string>{"\x1b]a"});
+    CHECK(sequences == (std::vector<std::string>{"\x1b]", "a"}));
+
+    buffer.process("x\r");
+    CHECK(sequences == (std::vector<std::string>{"\x1b]", "a", "x", "\r"}));
+}
+
+TEST_CASE("ProcessTerminal keeps a delayed color reply out of the prompt and preserves input order",
+        "[tui][terminal][issue1122][spec]") {
+    auto pty = cch::tests::open_pseudo_terminal();
+    REQUIRE(pty);
+    cch::tests::ImageEnvironmentGuard environment;
+
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = issue949_io().io.get_executor()});
+    cch::tui::Tui tui(terminal);
+    auto recorder = std::make_unique<KeyEventRecorder>();
+    auto* recorder_pointer = recorder.get();
+    REQUIRE(tui.add_child(std::move(recorder)));
+    REQUIRE(tui.set_focus(recorder_pointer));
+    REQUIRE(tui.start());
+    (void)cch::tests::read_available(pty->master.get());
+
+    constexpr std::string_view kReplyHeader = "\x1b]4;1;rgb:eaea/6c";
+    REQUIRE(::write(pty->master.get(), kReplyHeader.data(), kReplyHeader.size()) ==
+            static_cast<ssize_t>(kReplyHeader.size()));
+    // Wait past the 50 ms sequence window: a recognized reply header must stay
+    // buffered rather than reaching the prompt as garbage or a Ctrl+G trigger.
+    std::this_thread::sleep_for(std::chrono::milliseconds{150});
+    CHECK(recorder_pointer->events().empty());
+
+    constexpr std::string_view kReplyTail = "6c/6d6d\x07";
+    REQUIRE(::write(pty->master.get(), kReplyTail.data(), kReplyTail.size()) ==
+            static_cast<ssize_t>(kReplyTail.size()));
+    REQUIRE(::write(pty->master.get(), "z", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] { return recorder_pointer->events().size() == 1; }));
+    // The tail completed the reply out of band, so the next delivered key is the
+    // ordinary "z" in normal input order, with no leaked reply characters.
+    CHECK(cch::tui::key_id(recorder_pointer->events().front()) == "z");
+
+    REQUIRE(::write(pty->master.get(), "\x07", 1) == 1);
+    REQUIRE(cch::tests::wait_until([&] { return recorder_pointer->events().size() == 2; }));
+    CHECK(cch::tui::key_id(recorder_pointer->events().back()) == "ctrl+g");
     REQUIRE(tui.stop());
 }
