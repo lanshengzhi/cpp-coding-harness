@@ -1,7 +1,6 @@
-#include "coding_agent/extensions/codemode/CodemodeSandbox.hpp"
+#include <cch/codemode/Sandbox.hpp>
 
-#include "coding_agent/extensions/codemode/CodemodePrelude.hpp"
-
+#include "codemode/Prelude.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
@@ -42,7 +41,7 @@
 #define CCH_SOURCE_DIR ""
 #endif
 
-namespace cch::coding_agent::extensions {
+namespace cch::codemode {
 
 std::filesystem::path default_codemode_guest_wasm_path() {
     // pi resolves the guest through the packaged module tree
@@ -973,4 +972,4 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
     });
 }
 
-} // namespace cch::coding_agent::extensions
+} // namespace cch::codemode

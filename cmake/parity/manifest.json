@@ -8,6 +8,7 @@
         "id": "headless-no-frontend-dependencies",
         "source_prefixes": [
           "src/agent/",
+          "src/codemode/",
           "src/coding_agent/"
         ],
         "excluded_source_prefixes": [
@@ -105,11 +106,17 @@
       "interface_root": "src/tui/include/cch/tui",
       "legal_owner_dependencies": []
     },
+    "cch_codemode": {
+      "role": "owner",
+      "root": "src/codemode",
+      "interface_root": "src/codemode/include/cch/codemode",
+      "legal_owner_dependencies": ["cch_ai"]
+    },
     "cch_coding_agent": {
       "role": "owner",
       "root": "src/coding_agent",
       "interface_root": "src/coding_agent/include/cch/coding_agent",
-      "legal_owner_dependencies": ["cch_agent_core", "cch_ai"],
+      "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_codemode"],
       "implementation_owner_dependencies": ["cch_tui"]
     },
     "cch_support": {
