@@ -14,7 +14,7 @@
 #include <string_view>
 #include <vector>
 
-namespace cch::coding_agent::extensions {
+namespace cch::codemode {
 
 /// The codemode guest module (`quickjs.wasm`) resolution, following pi's
 /// `getQuickJSWasmPath` shape (`packages/coding-agent/src/config.ts`): a
@@ -151,4 +151,4 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-} // namespace cch::coding_agent::extensions
+} // namespace cch::codemode

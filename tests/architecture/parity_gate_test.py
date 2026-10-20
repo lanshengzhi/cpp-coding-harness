@@ -245,13 +245,14 @@ class ManifestSchemaTest(unittest.TestCase):
         manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
         self.assertEqual(
             set(manifest.owners),
-            {"cch_ai", "cch_agent_core", "cch_tui", "cch_coding_agent", "cch_support"},
+            {"cch_ai", "cch_agent_core", "cch_tui", "cch_codemode", "cch_coding_agent", "cch_support"},
         )
         # The headless Owner keeps its own dependencies authoritative and adds
         # the frontend-only one for non-`owner` targets (issue #658).
         coding_agent = manifest.owners["cch_coding_agent"]
-        self.assertEqual(coding_agent.legal_owner_dependencies, ("cch_agent_core", "cch_ai"))
+        self.assertEqual(coding_agent.legal_owner_dependencies, ("cch_agent_core", "cch_ai", "cch_codemode"))
         self.assertEqual(coding_agent.implementation_owner_dependencies, ("cch_tui",))
+        self.assertEqual(manifest.owners["cch_codemode"].legal_owner_dependencies, ("cch_ai",))
 
     def test_checked_in_manifest_rejects_ai_private_includes_from_agent_sources(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"

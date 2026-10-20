@@ -40,8 +40,6 @@ cch_parity_declare_target(
         src/coding_agent/mcp/OAuthHttpClient.cpp
         src/coding_agent/mcp/Pkce.cpp
         src/coding_agent/extensions/codemode/CodemodeDiscovery.cpp
-        src/coding_agent/extensions/codemode/CodemodeSandbox.cpp
-        src/coding_agent/extensions/codemode/CodemodeSource.cpp
         src/coding_agent/extensions/codemode/CodemodeTool.cpp
         src/coding_agent/extensions/codemode/CodemodeToolSource.cpp
         src/coding_agent/GitIgnoreMatcher.cpp
@@ -75,6 +73,7 @@ cch_parity_declare_target(
     DEPENDS
         cch_agent_core
         cch_ai
+        cch_codemode
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
@@ -84,6 +83,7 @@ cch_parity_declare_target(
     INTERFACE_DEPENDS
         cch_agent_core
         cch_ai
+        cch_codemode
         cch_support
 )
 cch_owner_include_roots(cch_coding_agent src/coding_agent/include)

@@ -1,9 +1,11 @@
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
 
 #include "coding_agent/extensions/codemode/CodemodeDiscovery.hpp"
-#include "coding_agent/extensions/codemode/CodemodeSandbox.hpp"
-#include "coding_agent/extensions/codemode/CodemodeSource.hpp"
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
+
+#include <cch/codemode/Declarations.hpp>
+#include <cch/codemode/Sandbox.hpp>
+#include <cch/codemode/Source.hpp>
 
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
@@ -38,15 +40,15 @@ namespace {
 /// session that never calls codemode never loads the guest module.
 struct GuestHolder {
     std::filesystem::path path;
-    std::shared_ptr<CodemodeSandbox> sandbox;
+    std::shared_ptr<codemode::CodemodeSandbox> sandbox;
 
-    [[nodiscard]] support::Expected<CodemodeSandbox*> ensure() {
+    [[nodiscard]] support::Expected<codemode::CodemodeSandbox*> ensure() {
         if (!sandbox) {
-            auto created = CodemodeSandbox::create(path);
+            auto created = codemode::CodemodeSandbox::create(path);
             if (!created) {
                 return std::unexpected(std::move(created.error()));
             }
-            sandbox = std::shared_ptr<CodemodeSandbox>{std::move(*created)};
+            sandbox = std::shared_ptr<codemode::CodemodeSandbox>{std::move(*created)};
         }
         return sandbox.get();
     }
@@ -55,8 +57,8 @@ struct GuestHolder {
 /// A script's `@options.timeout_ms` is its deadline; without one pi's script
 /// sandbox runs with no timeout (`timeoutMs ?? Number.POSITIVE_INFINITY`), not
 /// the library's 300 s default. `CodemodeLimits.timeout == 0` disables it.
-[[nodiscard]] CodemodeLimits limits_for(const CodemodeSourceOptions& options) {
-    CodemodeLimits limits;
+[[nodiscard]] codemode::CodemodeLimits limits_for(const codemode::CodemodeSourceOptions& options) {
+    codemode::CodemodeLimits limits;
     limits.timeout = options.timeout_ms.has_value() ? std::chrono::milliseconds{*options.timeout_ms}
                                                     : std::chrono::milliseconds{0};
     return limits;
@@ -72,14 +74,14 @@ struct GuestHolder {
 /// `text()`/`image()` output, the returned value appended like `text()` on
 /// success, and a `Script error:` block on failure.
 [[nodiscard]] ExtensionToolResult to_extension_result(
-        const CodemodeRunResult& run, std::chrono::steady_clock::duration elapsed) {
+        const codemode::CodemodeRunResult& run, std::chrono::steady_clock::duration elapsed) {
     ExtensionToolResult result;
     result.is_error = run.error.has_value();
     std::string header = result.is_error ? "Script failed" : "Script completed";
     header += "\nWall time " + wall_time_seconds(elapsed) + " seconds\nOutput:\n";
     result.content.push_back(ai::text_content(std::move(header)));
     for (const auto& item : run.output) {
-        if (item.kind == CodemodeOutputItem::Kind::Image) {
+        if (item.kind == codemode::CodemodeOutputItem::Kind::Image) {
             result.content.push_back(ai::image_content(item.data, item.mime_type));
         } else {
             result.content.push_back(ai::text_content(item.data));
@@ -118,14 +120,14 @@ struct GuestHolder {
 
 /// The `toolsJson` entries the prelude binds `tools.<jsName>` and
 /// `tools["<raw name>"]` to.
-[[nodiscard]] std::vector<CodemodeToolDescriptor> to_descriptors(const std::vector<ai::Tool>& tools) {
-    std::vector<CodemodeToolDescriptor> descriptors;
+[[nodiscard]] std::vector<codemode::CodemodeToolDescriptor> to_descriptors(const std::vector<ai::Tool>& tools) {
+    std::vector<codemode::CodemodeToolDescriptor> descriptors;
     descriptors.reserve(tools.size());
     for (const auto& tool : tools) {
-        CodemodeToolDescriptor descriptor;
+        codemode::CodemodeToolDescriptor descriptor;
         descriptor.name = tool.name;
-        descriptor.js_name = to_codemode_identifier(tool.name);
-        descriptor.description = render_tool_sample(tool);
+        descriptor.js_name = codemode::to_codemode_identifier(tool.name);
+        descriptor.description = codemode::render_tool_sample(tool);
         descriptors.push_back(std::move(descriptor));
     }
     return descriptors;
@@ -189,7 +191,7 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
         if (source_text == nullptr) {
             return failed("codemode expects a `code` string argument.");
         }
-        auto parsed = parse_codemode_source(*source_text);
+        auto parsed = codemode::parse_codemode_source(*source_text);
         if (!parsed) {
             return failed("Script error:\n" + parsed.error().message);
         }
@@ -207,7 +209,7 @@ support::Expected<std::vector<ExtensionTool>> CodemodeToolSource::load_tools() {
             }
         }
         auto discovery = std::make_shared<CodemodeDiscovery>(callable);
-        auto descriptors = std::make_shared<std::vector<CodemodeToolDescriptor>>(to_descriptors(callable));
+        auto descriptors = std::make_shared<std::vector<codemode::CodemodeToolDescriptor>>(to_descriptors(callable));
         const std::string caller_id = context.call_id;
 
         return support::detail::make_async_result(

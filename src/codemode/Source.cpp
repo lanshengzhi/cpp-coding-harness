@@ -1,4 +1,4 @@
-#include "coding_agent/extensions/codemode/CodemodeSource.hpp"
+#include <cch/codemode/Source.hpp>
 
 #include "support/Json.hpp"
 
@@ -10,7 +10,7 @@
 #include <string_view>
 #include <utility>
 
-namespace cch::coding_agent::extensions {
+namespace cch::codemode {
 
 namespace {
 
@@ -117,4 +117,4 @@ support::Expected<CodemodeSource> parse_codemode_source(std::string_view input) 
     return CodemodeSource{.code = code, .options = *options};
 }
 
-} // namespace cch::coding_agent::extensions
+} // namespace cch::codemode
