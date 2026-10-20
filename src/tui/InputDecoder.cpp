@@ -166,11 +166,36 @@ std::optional<std::string> kitty_printable_text(unsigned int codepoint, const Pa
     return encoded;
 }
 
+bool is_shifted_symbol_codepoint(unsigned int codepoint) {
+    // pi `SHIFTED_SYMBOL_KEYS`: the produced forms of the physical symbol keys.
+    constexpr std::string_view kShiftedSymbols = "~!@#$%^&*()_+|{}:<>?";
+    return codepoint <= 0x7f && kShiftedSymbols.find(static_cast<char>(codepoint)) != std::string_view::npos;
+}
+
 std::optional<KeyEvent> make_key_event(unsigned int codepoint,
         ParsedModifiers modifiers,
         KeyEventType type,
         std::optional<unsigned int> base_layout_key = std::nullopt,
-        std::optional<unsigned int> shifted_key = std::nullopt) {
+        std::optional<unsigned int> shifted_key = std::nullopt,
+        std::optional<unsigned int> logical_shifted_symbol = std::nullopt) {
+    if (logical_shifted_symbol) {
+        // pi `parseKey` + `getLogicalShiftedSymbolCandidate`: a shifted-symbol
+        // report names the produced symbol as the shortcut identity and
+        // consumes the report's implicit Shift. The physical key name stays on
+        // the event so the explicit `shift+=` spelling keeps matching.
+        auto key = key_for_codepoint(*logical_shifted_symbol, false);
+        if (!key) return std::nullopt;
+        return KeyEvent{
+                .key = std::move(*key),
+                .text = kitty_printable_text(codepoint, modifiers).value_or(std::string{}),
+                .physical_key = key_for_codepoint(codepoint, modifiers.shift).value_or(std::string{}),
+                .ctrl = modifiers.ctrl,
+                .shift = false,
+                .alt = modifiers.alt,
+                .super = modifiers.super,
+                .type = type,
+        };
+    }
     // pi `formatParsedKey`: the shortcut identity uses the shifted key's
     // character when Shift is held; without shift the reported codepoint is
     // the identity. (Insertion text is a separate decision — pi
@@ -248,7 +273,12 @@ std::optional<KeyEvent> parse_kitty_csi_u(std::string_view sequence) {
     }
     const auto modifiers = parse_modifiers(modifier_value);
     if (!modifiers) return std::nullopt;
-    return make_key_event(codepoint.value, *modifiers, type, base_layout_key, shifted_key);
+    std::optional<unsigned int> logical_shifted_symbol;
+    if (modifiers->shift && shifted_key && *shifted_key <= 0x7f &&
+            is_baseline_symbol(static_cast<char>(*shifted_key))) {
+        logical_shifted_symbol = shifted_key;
+    }
+    return make_key_event(codepoint.value, *modifiers, type, base_layout_key, shifted_key, logical_shifted_symbol);
 }
 
 std::optional<KeyEvent> parse_modify_other_keys(std::string_view sequence) {
@@ -260,7 +290,12 @@ std::optional<KeyEvent> parse_modify_other_keys(std::string_view sequence) {
     if (!modifier_value.valid || !codepoint.valid) return std::nullopt;
     const auto modifiers = parse_modifiers(modifier_value.value);
     if (!modifiers) return std::nullopt;
-    return make_key_event(codepoint.value, *modifiers, KeyEventType::Press);
+    std::optional<unsigned int> logical_shifted_symbol;
+    if (modifiers->shift && is_shifted_symbol_codepoint(codepoint.value)) {
+        logical_shifted_symbol = codepoint.value;
+    }
+    return make_key_event(
+            codepoint.value, *modifiers, KeyEventType::Press, std::nullopt, std::nullopt, logical_shifted_symbol);
 }
 
 std::optional<KeyEvent> parse_kitty_navigation(std::string_view sequence) {

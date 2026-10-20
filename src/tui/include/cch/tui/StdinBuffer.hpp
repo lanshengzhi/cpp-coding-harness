@@ -29,6 +29,10 @@ public:
     void set_paste_handler(PasteHandler handler) { paste_handler_ = std::move(handler); }
 
     void process(std::string_view input);
+    /// End the fragment window (pi `flush`): returns the held fragment and
+    /// delivers it to the data handler. An ambiguous control-string fragment
+    /// that reached the timeout is delivered as its two-character prefix plus a
+    /// reparse of the tail, so batched Alt input is not swallowed as one reply.
     [[nodiscard]] std::vector<std::string> flush();
     void clear();
     void destroy() { clear(); }

@@ -52,7 +52,10 @@ TEST_CASE("shifted, supplementary and legacy printables keep their own character
     const auto shifted = kitty("\x1b[49:33;2u");
     REQUIRE(shifted);
     CHECK(shifted->key == "!");
-    CHECK(shifted->shift);
+    // pi-v1.3.0 consumes the report's implicit Shift once the shifted symbol is
+    // the identity; the physical "shift+1" spelling stays matchable.
+    CHECK_FALSE(shifted->shift);
+    CHECK(tui::matches_key(*shifted, "shift+1"));
     CHECK(shifted->text == "1");
     CHECK(tui::printable_text(*shifted) == std::optional<std::string>{"1"});
 

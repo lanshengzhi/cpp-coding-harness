@@ -13,6 +13,47 @@ constexpr char kEsc = '\x1b';
 constexpr std::string_view kPasteStart = "\x1b[200~";
 constexpr std::string_view kPasteEnd = "\x1b[201~";
 
+[[nodiscard]] bool is_control_string(std::string_view data) {
+    return data.starts_with("\x1b]") || data.starts_with("\x1bP") || data.starts_with("\x1b_");
+}
+
+/// pi `TERMINAL_REPLY_HEADER_PATTERN`: OSC 10/11, OSC 4 palette and OSC 7501
+/// query replies, XTVersion, and Kitty graphics replies. Only these strings
+/// wait for their terminator instead of the sequence timeout; a partial header
+/// that does not match yet keeps the bounded recovery path.
+[[nodiscard]] bool matches_terminal_reply_header(std::string_view data) {
+    if (data.starts_with("\x1bP")) return data.starts_with("\x1bP>|");
+    if (data.starts_with("\x1b]")) {
+        if (data.starts_with("\x1b]10;") || data.starts_with("\x1b]11;") || data.starts_with("\x1b]7501;?")) {
+            return true;
+        }
+        if (!data.starts_with("\x1b]4;")) return false;
+        std::size_t position = 4;
+        const auto digits_start = position;
+        while (position < data.size() && data[position] >= '0' && data[position] <= '9')
+            ++position;
+        const auto digits = position - digits_start;
+        return digits >= 1 && digits <= 3 && position < data.size() && data[position] == ';';
+    }
+    if (!data.starts_with("\x1b_G")) return false;
+    std::size_t position = 3;
+    while (true) {
+        if (position >= data.size() || data[position] < 'a' || data[position] > 'z') return false;
+        ++position;
+        if (position >= data.size() || data[position] != '=') return false;
+        ++position;
+        const auto digits_start = position;
+        while (position < data.size() && data[position] >= '0' && data[position] <= '9')
+            ++position;
+        if (position == digits_start) return false;
+        if (position < data.size() && data[position] == ',') {
+            ++position;
+            continue;
+        }
+        return position < data.size() && data[position] == ';';
+    }
+}
+
 enum class SequenceStatus { Complete, Incomplete, NotEscape };
 
 [[nodiscard]] SequenceStatus is_complete_csi_sequence(std::string_view data) {
@@ -98,6 +139,10 @@ struct ExtractedSequences {
     std::size_t position = 0;
     while (position < buffer.size()) {
         const auto remaining = buffer.substr(position);
+        // A recognized reply header is a delimited string, not a batch of
+        // keystrokes: CAN/SUB cancel it, and a new escape sequence aborts an
+        // unterminated reply instead of letting the terminators be typed.
+        const auto terminal_reply = is_control_string(remaining) && matches_terminal_reply_header(remaining);
         if (!remaining.starts_with(kEsc)) {
             const auto length = utf8_sequence_length(static_cast<unsigned char>(remaining.front()));
             if (remaining.size() < length) {
@@ -111,6 +156,20 @@ struct ExtractedSequences {
 
         std::size_t end = 1;
         while (end <= remaining.size()) {
+            if (terminal_reply && end > 2) {
+                const auto character = remaining[end - 1];
+                if (character == '\x18' || character == '\x1a') {
+                    // CAN and SUB cancel the string, not subsequent keyboard input.
+                    position += end;
+                    break;
+                }
+                if (character == kEsc && end < remaining.size() && remaining[end] != '\\') {
+                    // A new escape sequence aborts an unterminated reply. Keep a
+                    // trailing ESC buffered until it is distinguishable from ST.
+                    position += end - 1;
+                    break;
+                }
+            }
             const auto candidate = remaining.substr(0, end);
             const auto status = is_complete_sequence(candidate);
             if (status == SequenceStatus::Complete) {
@@ -220,6 +279,13 @@ void StdinBuffer::process(std::string_view input) {
     buffer_ = extracted.remainder;
     for (const auto& sequence : extracted.sequences)
         emit_data_sequence(sequence);
+    if (matches_terminal_reply_header(buffer_)) {
+        // A recognized reply header waits for its terminator instead of the
+        // sequence timeout; flushing it would turn a delayed tail into text
+        // and an OSC's BEL terminator into Ctrl+G (pi stdin-buffer.ts).
+        cancel_timeout();
+        return;
+    }
     schedule_timeout();
 }
 
@@ -229,8 +295,17 @@ std::vector<std::string> StdinBuffer::flush() {
     std::vector<std::string> flushed{std::move(buffer_)};
     buffer_.clear();
     pending_kitty_printable_text_.reset();
-    for (const auto& sequence : flushed)
-        emit_data_sequence(sequence);
+    for (const auto& sequence : flushed) {
+        if (sequence.size() > 2 && is_control_string(sequence)) {
+            // Recover the ambiguous Alt prefix and reparse the tail so batched
+            // text, Enter, and control keys are not swallowed as one reply
+            // (pi stdin-buffer.ts timeout callback).
+            emit_data_sequence(sequence.substr(0, 2));
+            process(sequence.substr(2));
+        } else {
+            emit_data_sequence(sequence);
+        }
+    }
     return flushed;
 }
 

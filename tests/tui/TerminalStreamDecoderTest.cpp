@@ -91,7 +91,10 @@ TEST_CASE("stream decoder prefers shifted key in Kitty CSI-u", "[tui][decoder][i
     const auto* key = std::get_if<tui::KeyEvent>(&result.events.front());
     REQUIRE(key != nullptr);
     CHECK(key->key == "!");
-    CHECK(key->shift);
+    // pi-v1.3.0 consumes the report's implicit Shift once the shifted symbol is
+    // the identity; the physical "shift+1" spelling stays matchable.
+    CHECK_FALSE(key->shift);
+    CHECK(tui::matches_key(*key, "shift+1"));
 }
 
 TEST_CASE("stream decoder demuxes a cursor position report out of the byte stream", "[tui][decoder][spec]") {
