@@ -2,7 +2,7 @@
 
 #include "coding_agent/extensions/ExtensionTool.hpp"
 #include "coding_agent/mcp/McpNamespace.hpp"
-#include "coding_agent/mcp/McpServerConnection.hpp"
+#include <cch/mcp/Client.hpp>
 
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -50,7 +50,7 @@ public:
 /// template list, matching pi's `withoutTemplates`.
 class McpConnectionResourceServer final : public McpResourceServer {
 public:
-    explicit McpConnectionResourceServer(std::shared_ptr<McpServerConnection> connection);
+    explicit McpConnectionResourceServer(std::shared_ptr<cch::mcp::Client> connection);
 
     [[nodiscard]] const std::string& name() const noexcept override;
 
@@ -62,7 +62,7 @@ public:
             std::string uri, std::stop_token stop_token) override;
 
 private:
-    std::shared_ptr<McpServerConnection> connection_;
+    std::shared_ptr<cch::mcp::Client> connection_;
 };
 
 /// The connected-time resource snapshot of one server (pi runtime

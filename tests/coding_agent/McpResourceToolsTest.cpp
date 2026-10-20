@@ -20,7 +20,6 @@
 #include "coding_agent/extensions/ExtensionTool.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpResourceTools.hpp"
-#include "coding_agent/mcp/McpStdioClient.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -29,6 +28,8 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/mcp/StdioClient.hpp>
+#include <cch/mcp/StdioClient.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -466,7 +467,7 @@ TEST_CASE("the real stdio fixture lists, templates, and reads over `resources/*`
     const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
     tests::RuntimeFixture runtime;
 
-    auto client = tests::run_awaitable(runtime, coding_agent::mcp::McpStdioClient::connect(echo_server_config()));
+    auto client = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config()));
     REQUIRE(client.has_value());
     auto server = std::make_shared<coding_agent::mcp::McpConnectionResourceServer>(*client);
     auto tools = coding_agent::mcp::create_mcp_resource_tools({server});

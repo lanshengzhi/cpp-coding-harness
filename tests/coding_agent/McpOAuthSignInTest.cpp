@@ -14,8 +14,6 @@
 // unauthenticated.
 
 #include <cch/support/JsonAccess.hpp>
-#include "coding_agent/mcp/OAuthHttpClient.hpp"
-#include "coding_agent/mcp/Pkce.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -26,6 +24,11 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Timestamps.hpp>
+#include <cch/mcp/Auth.hpp>
+#include <cch/mcp/OAuthConfig.hpp>
+#include <cch/mcp/OAuthFlow.hpp>
+#include <cch/mcp/OAuthHttpClient.hpp>
+#include <cch/mcp/Pkce.hpp>
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -86,7 +89,7 @@ const std::string kTokenUrl = "https://auth.example.com/token";
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = app_mcp::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = cch::mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }
@@ -156,7 +159,7 @@ struct SignInHarness {
     tests::TempWorkspace workspace;
     std::shared_ptr<app_mcp::McpAuthStore> store =
             std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
-    app_mcp::McpOAuthConfig oauth;
+    cch::mcp::OAuthConfig oauth;
     std::string resource_document{kResourceDocument};
     std::string authorization_server_document{kAuthorizationServerDocument};
     /// The pasted redirect URL suffix, or `std::nullopt` to leave the prompt
@@ -298,7 +301,7 @@ TEST_CASE("a server-specific Client ID Metadata Document signs in on its callbac
         "[coding_agent][mcp][issue884][spec]") {
     SignInHarness harness;
     harness.paste_suffix = std::nullopt;
-    harness.oauth.client_registration = app_mcp::McpClientRegistration::Cimd;
+    harness.oauth.client_registration = cch::mcp::ClientRegistration::Cimd;
     // Without RFC 9207 `iss`, the document and the redirect URI are specific
     // to this MCP server.
     harness.authorization_server_document =
@@ -403,7 +406,7 @@ namespace {
     }
     state.tokens = std::move(tokens);
     state.tokens_expire_at = expires;
-    app_mcp::McpOAuthClientInformation client;
+    cch::mcp::OAuthClientInformation client;
     client.client_id = "dyn-client-1";
     client.redirect_uris = {"http://127.0.0.1:41234/callback"};
     state.client_information = std::move(client);
@@ -422,7 +425,7 @@ TEST_CASE("a stored unexpired token is sent without any OAuth request", "[coding
                     .has_value());
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
-            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
+            store, "echo", kServerUrl, cch::mcp::OAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -445,7 +448,7 @@ TEST_CASE("an expiring token is refreshed through the flow and persisted", "[cod
     http->responses[kTokenUrl] = {{200,
             R"({"access_token":"new-access","token_type":"Bearer","expires_in":3600,"refresh_token":"new-refresh"})"}};
     auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
-            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
+            store, "echo", kServerUrl, cch::mcp::OAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -470,7 +473,7 @@ TEST_CASE("no stored credential fails the request closed and caches the register
     http->get_responses[kAuthorizationServerMetadataUrl].assign({{200, kAuthorizationServerDocument}});
     http->responses[kRegistrationUrl] = {{200, kRegistrationResponse}};
     auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
-            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
+            store, "echo", kServerUrl, cch::mcp::OAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE_FALSE(headers.has_value());

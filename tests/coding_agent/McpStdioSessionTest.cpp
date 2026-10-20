@@ -13,7 +13,6 @@
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
-#include "coding_agent/mcp/McpStdioClient.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/tui/ToolExecutionComponent.hpp"
@@ -27,6 +26,8 @@
 #include "support/AsyncResultBridge.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/mcp/StdioClient.hpp>
+#include <cch/mcp/StdioClient.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -333,7 +334,7 @@ TEST_CASE("an MCP process failure includes a bounded stderr tail", "[coding_agen
     config.args = {script.string()};
     tests::RuntimeFixture runtime;
 
-    auto connected = tests::run_awaitable(runtime, coding_agent::mcp::McpStdioClient::connect(std::move(config)));
+    auto connected = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(std::move(config)));
 
     REQUIRE_FALSE(connected.has_value());
     CHECK(connected.error().message.find("TAIL_MARKER") != std::string::npos);
@@ -345,7 +346,7 @@ TEST_CASE("a malformed server frame is a recoverable transport error", "[coding_
     const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
     tests::RuntimeFixture runtime;
 
-    auto client = tests::run_awaitable(runtime, coding_agent::mcp::McpStdioClient::connect(echo_server_config()));
+    auto client = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(echo_server_config()));
     REQUIRE(client.has_value());
 
     // The server writes a non-JSON line before the valid response. pi keeps

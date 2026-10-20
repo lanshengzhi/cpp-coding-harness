@@ -1,7 +1,7 @@
 // Application OAuth credential persistence: the cch_mcp flow owns sign-in and
 // refresh; this adapter stores the resulting token state in `mcp-auth.json`
-// through McpAuthStore (#1065 keeps it in the application; #1066 may narrow
-// the seam).
+// through McpAuthStore (#1065 keeps it in the application; #1066 narrowed the
+// seam to the cch_mcp Owner Interface, removing the bounded alias).
 
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
 
@@ -14,7 +14,7 @@ namespace cch::coding_agent::mcp {
 support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
         std::string server_name,
         std::string server_url,
-        McpOAuthProvider& provider,
+        cch::mcp::OAuthProvider& provider,
         cch::mcp::AuthInteraction interaction) {
     return support::detail::make_async_result(
             [store = std::move(store),
@@ -26,7 +26,7 @@ support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
                 if (!credential) {
                     co_return std::unexpected(std::move(credential.error()));
                 }
-                auto state = mcp_oauth_state_from_credential(*credential, server_url);
+                auto state = cch::mcp::mcp_oauth_state_from_credential(*credential, server_url);
                 auto stored = store->save(server_name, server_url, state);
                 if (!stored) {
                     co_return std::unexpected(std::move(stored.error()));

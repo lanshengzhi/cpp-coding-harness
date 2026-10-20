@@ -20,7 +20,6 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpServerStatus.hpp"
-#include "coding_agent/mcp/McpStdioClient.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -31,6 +30,8 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/mcp/StdioClient.hpp>
+#include <cch/mcp/StdioClient.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -453,7 +454,7 @@ TEST_CASE("a dead stdio server reports the call error and reconnects on the next
     config.name = "echo";
     config.command = "python3";
     config.args = {fixture_dir() + "/echo_server.py"};
-    auto client = tests::run_awaitable(runtime, coding_agent::mcp::McpStdioClient::connect(config));
+    auto client = tests::run_awaitable(runtime, cch::mcp::StdioClient::connect(config));
     REQUIRE(client.has_value());
 
     // `crash` exits the server without responding: the in-flight call fails

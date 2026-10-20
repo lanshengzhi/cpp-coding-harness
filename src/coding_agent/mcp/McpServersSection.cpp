@@ -1,6 +1,6 @@
 #include "coding_agent/mcp/McpServersSection.hpp"
 
-#include "coding_agent/mcp/McpNamespace.hpp"
+#include <cch/mcp/Auth.hpp>
 
 #include <algorithm>
 #include <cctype>
@@ -150,7 +150,7 @@ std::optional<std::string> render_mcp_servers_section(std::span<const McpServerL
     std::vector<std::string> heads;
     heads.reserve(listed.size());
     for (std::size_t index = 0; index < listed.size(); ++index) {
-        heads.push_back("- " + detail::mcp_namespace(listed[index].entry->name) + " (" + reaches[index] + ")");
+        heads.push_back("- " + cch::mcp::mcp_namespace(listed[index].entry->name) + " (" + reaches[index] + ")");
     }
 
     // Characters of the intro, the first `kept` server lines without
