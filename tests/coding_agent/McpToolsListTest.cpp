@@ -6,8 +6,8 @@
 // `list_mcp_server_tools`.
 
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
-#include "coding_agent/mcp/McpServerConnection.hpp"
 
+#include <cch/mcp/Client.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -34,14 +34,14 @@ namespace app_mcp = cch::coding_agent::mcp;
 
 /// One scripted `McpServerConnection`: every `tools/list` is answered from the
 /// scripted page function, recording the cursors the client followed.
-class ScriptedListConnection final : public app_mcp::McpServerConnection {
+class ScriptedListConnection final : public cch::mcp::Client {
 public:
     std::move_only_function<support::Expected<support::JsonValue>(const std::optional<std::string>&)> page_for;
     std::vector<std::optional<std::string>> cursors;
 
     [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
             std::optional<support::JsonValue> params = std::nullopt,
-            RequestOptions options = {}) override {
+            cch::mcp::RequestOptions options = {}) override {
         (void)options;
         if (method != "tools/list" || page_for == nullptr) {
             return support::AsyncResult<support::JsonValue>{support::Expected<support::JsonValue>{

@@ -22,7 +22,9 @@
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 #include "support/AsyncResultBridge.hpp"
 
-#include "coding_agent/mcp/McpAuth.hpp"
+#include <cch/mcp/Auth.hpp>
+#include <cch/mcp/OAuthProvider.hpp>
+#include <cch/mcp/RequestAuthSource.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -266,7 +268,7 @@ public:
     [[nodiscard]] boost::asio::awaitable<McpProbeResult> probe(
             const McpConfigEntry& entry, const std::filesystem::path& agent_dir) override {
         if (const auto* http = std::get_if<McpHttpServerConfig>(&entry.config)) {
-            std::shared_ptr<coding_agent::mcp::McpRequestAuthSource> request_auth;
+            std::shared_ptr<cch::mcp::RequestAuthSource> request_auth;
             const bool uses_oauth =
                     http->resolved_oauth.has_value() ||
                     (http->oauth.has_value() && !http->auth_provider && !has_authorization_header(*http));
@@ -275,7 +277,7 @@ public:
                         coding_agent::mcp::McpAuthStore::default_path(agent_dir));
                 (void)store->migrate_from_auth_json(agent_dir / "auth.json", http->name, http->url);
                 if (http->resolved_oauth) {
-                    auto provider = std::make_shared<coding_agent::mcp::McpOAuthProvider>(*http->resolved_oauth);
+                    auto provider = std::make_shared<cch::mcp::OAuthProvider>(*http->resolved_oauth);
                     request_auth = std::make_shared<coding_agent::mcp::McpOAuthTokenResolver>(
                             store, http->name, http->url, std::move(provider));
                 } else {
@@ -786,20 +788,20 @@ struct ServerReport {
     auto store = std::make_shared<coding_agent::mcp::McpAuthStore>(
             coding_agent::mcp::McpAuthStore::default_path(options.agent_dir));
     (void)store->migrate_from_auth_json(options.agent_dir / "auth.json", entry.name, url);
-    auto provider = std::make_shared<coding_agent::mcp::McpOAuthProvider>(*http->resolved_oauth);
-    coding_agent::mcp::AuthInteraction interaction;
-    interaction.notify = [&options, open_browser, name = entry.name](const coding_agent::mcp::AuthEvent& event) {
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(*http->resolved_oauth);
+    cch::mcp::AuthInteraction interaction;
+    interaction.notify = [&options, open_browser, name = entry.name](const cch::mcp::AuthEvent& event) {
         std::ostream& output = *options.output;
-        if (const auto* progress = std::get_if<coding_agent::mcp::AuthProgress>(&event.kind)) {
+        if (const auto* progress = std::get_if<cch::mcp::AuthProgress>(&event.kind)) {
             output << progress->message << '\n';
-        } else if (const auto* auth_url = std::get_if<coding_agent::mcp::AuthUrl>(&event.kind)) {
+        } else if (const auto* auth_url = std::get_if<cch::mcp::AuthUrl>(&event.kind)) {
             output << "Sign in to MCP server \"" << name << "\" in your browser:\n" << auth_url->url << '\n';
             if (open_browser && *open_browser) {
                 (*open_browser)(auth_url->url);
             }
         }
     };
-    interaction.prompt = [](coding_agent::mcp::AuthPrompt) -> support::AsyncResult<std::string> {
+    interaction.prompt = [](cch::mcp::AuthPrompt) -> support::AsyncResult<std::string> {
         // The loopback callback completes the sign-in; the paste fallback is
         // not wired here (the non-interactive path pi also leaves to the
         // callback).

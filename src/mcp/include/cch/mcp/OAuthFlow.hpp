@@ -50,7 +50,7 @@ struct OAuthClientMetadataDocument {
     std::string redirect_url;
 };
 
-/// pi `OAuthClientMetadata` with the defaults `McpOAuthProvider` applies: the
+/// pi `OAuthClientMetadata` with the defaults `cch::mcp::OAuthProvider` applies: the
 /// redirect URIs, the grant and response types, and the token-endpoint auth
 /// method derived from the configured client secret.
 struct OAuthClientMetadata {

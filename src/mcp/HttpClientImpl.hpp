@@ -37,7 +37,7 @@ namespace cch::mcp {
 ///
 /// requests and notifications are queued and served one at a time, so the one
 /// transport is never driven concurrently regardless of the tool concurrency
-/// the Agent applies, matching `McpStdioClient`. A response that is not a
+/// the Agent applies, matching `StdioClient`. A response that is not a
 /// JSON-RPC reply for the pending request fails that request explicitly; the
 /// client never treats a 200 with a non-MCP body as success.
 ///

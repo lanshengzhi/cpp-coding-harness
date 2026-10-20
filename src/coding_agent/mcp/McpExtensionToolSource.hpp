@@ -3,10 +3,10 @@
 #include "coding_agent/extensions/ExtensionTool.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
-#include "coding_agent/mcp/McpRequestAuthSource.hpp"
-#include "coding_agent/mcp/McpServerConnection.hpp"
 #include "coding_agent/mcp/McpStdioServerConfig.hpp"
 
+#include <cch/mcp/Client.hpp>
+#include <cch/mcp/RequestAuthSource.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -49,7 +49,7 @@ struct McpToolDescriptor {
 /// the assembly-time Extension Tool Source and the live session manager's
 /// production connection.
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_mcp_server_tools(
-        McpServerConnection& connection);
+        cch::mcp::Client& connection);
 
 /// pi `extensions/mcp/tools.ts`' result mapping: convert one `tools/call`
 /// result (`{content, structuredContent?, isError?}`) into the extension-side
@@ -111,7 +111,7 @@ public:
     /// ticket #875) are attached to every POST; a missing credential or a
     /// failed refresh fails the connection explicitly.
     [[nodiscard]] static boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
-    connect_http(McpHttpServerConfig config, std::shared_ptr<McpRequestAuthSource> request_auth = nullptr);
+    connect_http(McpHttpServerConfig config, std::shared_ptr<cch::mcp::RequestAuthSource> request_auth = nullptr);
 
     /// Construction passkey (§7.7): `std::make_unique` cannot reach a private
     /// constructor, so construction goes through the public constructor below,
@@ -123,7 +123,7 @@ public:
         friend class McpExtensionToolSource;
     };
     McpExtensionToolSource(
-            ConstructionKey, std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools);
+            ConstructionKey, std::shared_ptr<cch::mcp::Client> connection, std::vector<McpToolDescriptor> tools);
 
     McpExtensionToolSource(const McpExtensionToolSource&) = delete;
     McpExtensionToolSource& operator=(const McpExtensionToolSource&) = delete;
@@ -135,7 +135,7 @@ public:
     [[nodiscard]] const std::vector<McpToolDescriptor>& tools() const noexcept { return tools_; }
 
 private:
-    std::shared_ptr<McpServerConnection> connection_;
+    std::shared_ptr<cch::mcp::Client> connection_;
     std::string server_name_;
     std::vector<McpToolDescriptor> tools_;
 };

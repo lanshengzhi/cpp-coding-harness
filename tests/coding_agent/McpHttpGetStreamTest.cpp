@@ -6,7 +6,7 @@
 // it: 405 (feature absent) vs. a real failure, exhausted retries vs. a clean
 // `close()`, and a server `retry:` field vs. the client backoff.
 
-#include "coding_agent/mcp/McpHttpClient.hpp"
+#include <cch/mcp/HttpClient.hpp>
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "support/StreamTransport.hpp"
 
@@ -50,8 +50,8 @@ namespace {
 
 using namespace std::chrono_literals;
 
-using coding_agent::mcp::McpHttpClient;
-using coding_agent::mcp::McpHttpGetStreamOptions;
+using cch::mcp::HttpClient;
+using cch::mcp::HttpGetStreamOptions;
 using coding_agent::mcp::McpHttpServerConfig;
 
 [[nodiscard]] support::Error stream_cancelled() {
@@ -329,9 +329,9 @@ private:
     return config;
 }
 
-[[nodiscard]] std::shared_ptr<McpHttpClient> connect_client(
-        Loop& loop, const std::shared_ptr<ScriptedTransport>& transport, McpHttpGetStreamOptions options = {}) {
-    auto client = loop.run(McpHttpClient::connect(scripted_config(), transport, nullptr, options));
+[[nodiscard]] std::shared_ptr<HttpClient> connect_client(
+        Loop& loop, const std::shared_ptr<ScriptedTransport>& transport, HttpGetStreamOptions options = {}) {
+    auto client = loop.run(HttpClient::connect(scripted_config(), transport, nullptr, options));
     REQUIRE(client.has_value());
     return *client;
 }
@@ -387,7 +387,7 @@ TEST_CASE("MCP GET stream: a server retry field overrides the reconnect delay", 
     transport->push_get(std::move(first));
     transport->push_get(live_stream({}));
 
-    McpHttpGetStreamOptions options;
+    HttpGetStreamOptions options;
     options.initial_delay = 500ms;
     options.max_delay = 500ms;
     Loop loop;
@@ -415,7 +415,7 @@ TEST_CASE("MCP GET stream: an out-of-range server retry field is ignored, never 
     transport->push_get(std::move(first));
     transport->push_get(live_stream({}));
 
-    McpHttpGetStreamOptions options;
+    HttpGetStreamOptions options;
     options.initial_delay = 20ms;
     options.max_delay = 20ms;
     Loop loop;
@@ -435,7 +435,7 @@ TEST_CASE("MCP GET stream: exhausted retries report the dropped-stream error", "
     // A stream that opens and immediately ends, with no event: every attempt is
     // a failed reconnect.
     transport->set_default_get(GetScript{});
-    McpHttpGetStreamOptions options;
+    HttpGetStreamOptions options;
     options.initial_delay = 1ms;
     options.max_delay = 50ms;
     options.max_retries = 5;
@@ -465,7 +465,7 @@ TEST_CASE("MCP GET stream: a received event resets the reconnect attempt counter
     transport->push_get(GetScript{});
     transport->set_default_get(GetScript{});
 
-    McpHttpGetStreamOptions options;
+    HttpGetStreamOptions options;
     options.initial_delay = 1ms;
     options.max_delay = 50ms;
     options.max_retries = 1;

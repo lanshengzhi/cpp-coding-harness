@@ -17,7 +17,6 @@
 #include "support/BoostBeastStreamTransport.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
-#include "coding_agent/mcp/McpHttpClient.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -30,6 +29,8 @@
 #include "support/McpTestKit.hpp"
 
 #include <cch/ai/Content.hpp>
+#include <cch/mcp/HttpClient.hpp>
+#include <cch/mcp/HttpClient.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -166,11 +167,10 @@ private:
     return config;
 }
 
-[[nodiscard]] std::shared_ptr<coding_agent::mcp::McpHttpClient> connect_http_client(
+[[nodiscard]] std::shared_ptr<cch::mcp::HttpClient> connect_http_client(
         tests::RuntimeFixture& runtime, coding_agent::mcp::McpHttpServerConfig config) {
     auto client = tests::run_awaitable(runtime,
-            coding_agent::mcp::McpHttpClient::connect(
-                    std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
+            cch::mcp::HttpClient::connect(std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
     REQUIRE(client.has_value());
     return *client;
 }
@@ -288,7 +288,7 @@ using cch::tests::wait_for;
 /// server's `hang-start` line guarantees the cancellation hits a running call
 /// rather than a queued one.
 [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> cancel_in_flight_http_call(
-        std::shared_ptr<coding_agent::mcp::McpHttpClient> client,
+        std::shared_ptr<cch::mcp::HttpClient> client,
         std::filesystem::path trace,
         std::stop_source& cancel,
         std::string tool_name) {
@@ -402,9 +402,8 @@ TEST_CASE("a non-TLS MCP HTTP URL is rejected at registration", "[coding_agent][
 
     tests::RuntimeFixture runtime;
     // The gate runs before any socket work, so no server is needed.
-    auto refused = tests::run_awaitable(runtime,
-            coding_agent::mcp::McpHttpClient::connect(
-                    insecure, std::make_shared<support::BoostBeastStreamTransport>()));
+    auto refused = tests::run_awaitable(
+            runtime, cch::mcp::HttpClient::connect(insecure, std::make_shared<support::BoostBeastStreamTransport>()));
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == support::ErrorCode::Validation);
 

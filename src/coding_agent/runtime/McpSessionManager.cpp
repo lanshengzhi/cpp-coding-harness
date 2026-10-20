@@ -354,7 +354,7 @@ void McpSessionManager::register_tools(std::string_view server) {
         const std::string server_tool_name = tool.name;
         registration.call = [connection, server_tool_name](support::JsonValue arguments,
                                     std::stop_token stop_token,
-                                    mcp::McpServerConnection::ProgressCallback on_progress) {
+                                    cch::mcp::Client::ProgressCallback on_progress) {
             return connection->call_tool(server_tool_name, std::move(arguments), stop_token, std::move(on_progress));
         };
         definitions_[registration.name] = registration;

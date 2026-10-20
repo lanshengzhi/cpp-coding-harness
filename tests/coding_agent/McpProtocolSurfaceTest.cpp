@@ -5,7 +5,7 @@
 // verbatim message; Pike's initialize params and validation are checked
 // field by field against that bundle, not against self-captured values.
 
-#include "coding_agent/mcp/McpProtocol.hpp"
+#include <cch/mcp/Protocol.hpp>
 
 #include "support/Json.hpp"
 
@@ -48,7 +48,7 @@ namespace {
 TEST_CASE("initialize requests the bundle's LATEST protocol version and advertises roots",
         "[coding_agent][mcp][issue884][spec]") {
     const auto latest = bundle_protocol().get_object().at("protocol").get_object().at("latest").get_string();
-    const auto params = coding_agent::mcp::detail::initialize_params();
+    const auto params = cch::mcp::detail::initialize_params();
     CHECK(params.get_object().at("protocolVersion").get_string() == latest);
     const auto* capabilities = params.get_object().at("capabilities").get_if<support::JsonValue::object_t>();
     REQUIRE(capabilities != nullptr);
@@ -59,16 +59,15 @@ TEST_CASE("initialize validation accepts every version the bundle supports", "[c
     const auto supported = bundle_protocol().get_object().at("protocol").get_object().at("supported").get_array();
     REQUIRE(!supported.empty());
     for (const auto& version : supported) {
-        const auto valid = coding_agent::mcp::detail::validate_initialize_result(
-                "fixture", valid_initialize_result(version.get_string()));
+        const auto valid =
+                cch::mcp::detail::validate_initialize_result("fixture", valid_initialize_result(version.get_string()));
         CHECK(valid.has_value());
     }
 }
 
 TEST_CASE("initialize validation rejects an unsupported negotiated version with pi's message",
         "[coding_agent][mcp][issue884][spec]") {
-    const auto valid =
-            coding_agent::mcp::detail::validate_initialize_result("fixture", valid_initialize_result("1999-01-01"));
+    const auto valid = cch::mcp::detail::validate_initialize_result("fixture", valid_initialize_result("1999-01-01"));
     REQUIRE(!valid.has_value());
     CHECK(valid.error().message == "MCP server selected unsupported protocol version 1999-01-01");
 }
@@ -78,13 +77,13 @@ TEST_CASE("initialize validation requires pi's serverInfo identity shape", "[cod
     // must be strings, and a present instructions must be a string.
     auto missing_name = valid_initialize_result("2025-11-25");
     missing_name.get_object().at("serverInfo").get_object().erase("name");
-    CHECK_FALSE(coding_agent::mcp::detail::validate_initialize_result("fixture", missing_name).has_value());
+    CHECK_FALSE(cch::mcp::detail::validate_initialize_result("fixture", missing_name).has_value());
 
     auto numeric_version = valid_initialize_result("2025-11-25");
     numeric_version.get_object().at("serverInfo").get_object().at("version") = support::JsonValue{1.0};
-    CHECK_FALSE(coding_agent::mcp::detail::validate_initialize_result("fixture", numeric_version).has_value());
+    CHECK_FALSE(cch::mcp::detail::validate_initialize_result("fixture", numeric_version).has_value());
 
     auto numeric_instructions = valid_initialize_result("2025-11-25");
     numeric_instructions.get_object().emplace("instructions", support::JsonValue{1.0});
-    CHECK_FALSE(coding_agent::mcp::detail::validate_initialize_result("fixture", numeric_instructions).has_value());
+    CHECK_FALSE(cch::mcp::detail::validate_initialize_result("fixture", numeric_instructions).has_value());
 }
