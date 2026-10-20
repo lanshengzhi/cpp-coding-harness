@@ -6,6 +6,8 @@ include_guard(GLOBAL)
     add_executable(cch_tests_chord
         tests/Catch2Main.cpp
         tests/chord/ChordContextTest.cpp
+        tests/chord/DeltaTest.cpp
+        tests/chord/TrackerTest.cpp
         tests/chord/StrictJsonTest.cpp
         tests/chord/OutputTest.cpp
 )
