@@ -11,7 +11,7 @@
 #include "support/ExpectedMacros.hpp"
 
 #include <cch/ai/Timestamps.hpp>
-#include "coding_agent/mcp/McpAuth.hpp"
+#include <cch/mcp/Auth.hpp>
 #include <cch/support/Error.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -31,7 +31,7 @@ namespace {
 /// `kOAuthMinimumValidity` (ADR 0032).
 inline constexpr auto kOAuthMinimumValidity = std::chrono::minutes{5};
 
-[[nodiscard]] bool token_expires_soon(const OAuthCredential& credential) {
+[[nodiscard]] bool token_expires_soon(const cch::mcp::OAuthCredential& credential) {
     return credential.expires <= ai::current_timestamp_ms() + kOAuthMinimumValidity.count() * 1000;
 }
 
@@ -41,7 +41,7 @@ inline constexpr auto kOAuthMinimumValidity = std::chrono::minutes{5};
 [[nodiscard]] support::Error re_login_error(
         const std::string& server_name, const std::string& provider_id, std::string detail) {
     return support::make_error(support::ErrorCode::OAuth,
-            format_oauth_reauthenticate_message(provider_id),
+            cch::mcp::format_oauth_reauthenticate_message(provider_id),
             "MCP server '" + server_name + "': " + std::move(detail));
 }
 
@@ -50,7 +50,7 @@ inline constexpr auto kOAuthMinimumValidity = std::chrono::minutes{5};
 McpOAuthTokenResolver::McpOAuthTokenResolver(std::shared_ptr<McpAuthStore> store,
         std::string server_name,
         std::string server_url,
-        std::shared_ptr<McpOAuthProvider> provider)
+        std::shared_ptr<cch::mcp::OAuthProvider> provider)
     : store_(std::move(store)), server_name_(std::move(server_name)), server_url_(std::move(server_url)),
       provider_(std::move(provider)) {}
 
@@ -62,14 +62,14 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::
     return support::detail::make_async_result(
             [store = store_, server_name = server_name_, server_url = server_url_, provider = provider_]()
                     -> boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> {
-                const std::string provider_id = mcp_oauth_provider_id(server_name);
+                const std::string provider_id = cch::mcp::mcp_oauth_provider_id(server_name);
                 auto state = store->load(server_name, server_url);
                 if (!state) {
                     co_return std::unexpected(std::move(state.error()));
                 }
-                std::optional<OAuthCredential> credential;
+                std::optional<cch::mcp::OAuthCredential> credential;
                 if (state->has_value()) {
-                    credential = mcp_oauth_credential_from_state(**state);
+                    credential = cch::mcp::mcp_oauth_credential_from_state(**state);
                 }
                 if (!credential.has_value()) {
                     co_return std::unexpected(re_login_error(server_name, provider_id, "no stored OAuth credential"));
@@ -87,7 +87,7 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::
                         }
                         co_return std::unexpected(std::move(refreshed.error()));
                     }
-                    auto rotated = mcp_oauth_state_from_credential(*refreshed, server_url);
+                    auto rotated = cch::mcp::mcp_oauth_state_from_credential(*refreshed, server_url);
                     if (auto saved = store->save(server_name, server_url, rotated); !saved) {
                         co_return std::unexpected(std::move(saved.error()));
                     }

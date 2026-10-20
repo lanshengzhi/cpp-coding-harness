@@ -15,6 +15,8 @@
 #include "support/JsonCompare.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/mcp/OAuthConfig.hpp>
+#include <cch/mcp/OAuthConfig.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -121,8 +123,7 @@ using JsonArray = support::JsonValue::array_t;
                         }
                         if (typed.oauth->client_registration) {
                             block.emplace("clientRegistration",
-                                    std::string{*typed.oauth->client_registration ==
-                                                                coding_agent::mcp::McpClientRegistration::Cimd
+                                    std::string{*typed.oauth->client_registration == cch::mcp::ClientRegistration::Cimd
                                                         ? "cimd"
                                                         : "dcr"});
                         }
@@ -318,7 +319,7 @@ TEST_CASE("autoEnableCodemode is read from the global file and overridden by the
 }
 
 TEST_CASE("the mcp.json oauth block matches the pi-v1.0.4 validation rules", "[coding_agent][mcp][issue884][spec]") {
-    using coding_agent::mcp::McpClientRegistration;
+    using cch::mcp::ClientRegistration;
     const auto validate = [](support::JsonValue oauth) {
         return coding_agent::mcp::validate_mcp_server_config("demo",
                 support::JsonValue{JsonObject{{"url", "https://example.com/mcp"}, {"oauth", std::move(oauth)}}});
@@ -385,7 +386,7 @@ TEST_CASE("the mcp.json oauth block matches the pi-v1.0.4 validation rules", "[c
         const auto* http = std::get_if<coding_agent::mcp::McpHttpServerConfig>(&*validated);
         REQUIRE(http != nullptr);
         REQUIRE(http->oauth.has_value());
-        CHECK(http->oauth->client_registration == McpClientRegistration::Cimd);
+        CHECK(http->oauth->client_registration == ClientRegistration::Cimd);
     }
 }
 

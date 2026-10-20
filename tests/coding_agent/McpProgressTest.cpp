@@ -1,7 +1,6 @@
 #include <cch/agent/AgentTool.hpp>
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
-#include "coding_agent/mcp/McpProtocol.hpp"
-#include "coding_agent/mcp/McpServerConnection.hpp"
+#include <cch/mcp/Client.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -57,15 +56,15 @@ namespace {
     return token->second.get_number();
 }
 
-class ScriptedProgressConnection final : public coding_agent::mcp::McpServerConnection {
+class ScriptedProgressConnection final : public cch::mcp::Client {
 public:
     std::string recorded_method;
     std::optional<support::JsonValue> recorded_params;
-    coding_agent::mcp::McpServerConnection::ProgressCallback progress_callback;
+    cch::mcp::Client::ProgressCallback progress_callback;
 
     [[nodiscard]] support::AsyncResult<support::JsonValue> request(std::string method,
             std::optional<support::JsonValue> params = std::nullopt,
-            RequestOptions options = {}) override {
+            cch::mcp::RequestOptions options = {}) override {
         recorded_method = std::move(method);
         recorded_params = std::move(params);
         progress_callback = std::move(options.on_progress);

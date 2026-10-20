@@ -14,7 +14,9 @@
 // them against the frozen pi-v1.0.4 bundle.
 
 #include "coding_agent/mcp/McpConfigFile.hpp"
-#include "coding_agent/mcp/McpUrl.hpp"
+#include <cch/mcp/Auth.hpp>
+#include <cch/mcp/OAuthConfig.hpp>
+#include <cch/mcp/Url.hpp>
 
 #include "coding_agent/mcp/McpNamespace.hpp"
 
@@ -107,7 +109,7 @@ struct ParsedUrl {
 };
 
 [[nodiscard]] ParsedUrl parse_url(std::string_view value) {
-    auto mcp_url = parse_mcp_url(value);
+    auto mcp_url = cch::mcp::parse_url(value);
     ParsedUrl url;
     if (!mcp_url.valid) {
         return url;
@@ -133,7 +135,8 @@ struct ParsedUrl {
 /// pi `validateOAuth`: the `oauth` block's field types and cross-field rules,
 /// returning pi's verbatim message (without the `server "<name>": ` prefix) and
 /// filling `out` when valid.
-[[nodiscard]] std::optional<std::string> validate_oauth_block(const support::JsonValue& value, McpOAuthConfig& out) {
+[[nodiscard]] std::optional<std::string> validate_oauth_block(
+        const support::JsonValue& value, cch::mcp::OAuthConfig& out) {
     const auto* object = value.get_if<JsonObject>();
     if (object == nullptr) {
         return "oauth must be an object";
@@ -194,9 +197,9 @@ struct ParsedUrl {
         }
         const std::string& spelling = registration->second.get_string();
         if (spelling == "dcr") {
-            out.client_registration = McpClientRegistration::Dcr;
+            out.client_registration = cch::mcp::ClientRegistration::Dcr;
         } else if (spelling == "cimd") {
-            out.client_registration = McpClientRegistration::Cimd;
+            out.client_registration = cch::mcp::ClientRegistration::Cimd;
             if (out.client_id.has_value() || out.client_name.has_value()) {
                 return "oauth.clientRegistration \"cimd\" cannot be combined with oauth.clientId or "
                        "oauth.clientName";
@@ -426,7 +429,7 @@ support::Expected<McpServerConfigVariant> validate_mcp_server_config(
         // pi `validateOAuth`: `oauth` is validated before `auth`, and both
         // messages carry the `server "<name>": ` prefix.
         if (const auto entry = object->find("oauth"); entry != object->end()) {
-            McpOAuthConfig oauth;
+            cch::mcp::OAuthConfig oauth;
             if (auto error = validate_oauth_block(entry->second, oauth)) {
                 return std::unexpected(config_error("server \"" + server + "\": " + *error));
             }
@@ -589,7 +592,7 @@ void read_config_file(const std::filesystem::path& path,
         entry.enabled = enabled;
         bool clash = false;
         for (const auto& existing : load.servers) {
-            if (existing.name != name && detail::mcp_namespace(existing.name) == detail::mcp_namespace(name)) {
+            if (existing.name != name && cch::mcp::mcp_namespace(existing.name) == cch::mcp::mcp_namespace(name)) {
                 load.errors.push_back(
                         path.string() + ": server \"" + name + "\" conflicts with \"" + existing.name + "\"");
                 clash = true;

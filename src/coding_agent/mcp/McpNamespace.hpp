@@ -3,9 +3,9 @@
 // The one spelling of pi's MCP server namespace (`mcpNamespace`), shared by the
 // tool-name namespace (McpConfigFile's collision check) and the OAuth
 // credential-store provider id (mcp_oauth_provider_id), which are the same
-// value by construction: `mcp__<server>` with every `-` replaced by `_`.
-
-#include <cch/mcp/Auth.hpp>
+// value by construction: `mcp__<server>` with every `-` replaced by `_`. Both
+// live in cch_mcp (`cch::mcp::mcp_namespace`, extraction #1065); this header
+// keeps only the application's resource-tool name constants.
 
 #include <string>
 #include <string_view>
@@ -20,10 +20,3 @@ inline constexpr std::string_view kListMcpResourceTemplatesTool = "list_mcp_reso
 inline constexpr std::string_view kReadMcpResourceTool = "read_mcp_resource";
 
 } // namespace cch::coding_agent::mcp
-
-namespace cch::coding_agent::mcp::detail {
-
-/// pi `mcpNamespace`: one definition in cch_mcp (extraction #1065).
-using cch::mcp::mcp_namespace;
-
-} // namespace cch::coding_agent::mcp::detail

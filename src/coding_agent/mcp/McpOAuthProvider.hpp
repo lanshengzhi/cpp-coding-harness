@@ -1,8 +1,8 @@
 #pragma once
 
-// Bounded forwarding to the cch_mcp Owner Interface (extraction #1065). The
-// store-coupled login/logout helpers remain application code because
-// `mcp-auth.json` is application persistence.
+// Application OAuth login/logout over the cch_mcp Owner Interface: the
+// store-coupled helpers persist tokens into `mcp-auth.json`, which is
+// application persistence (the cch_mcp flow owns sign-in and refresh).
 
 #include "coding_agent/mcp/McpAuthStore.hpp"
 
@@ -15,10 +15,6 @@
 
 namespace cch::coding_agent::mcp {
 
-using McpOAuthProvider = cch::mcp::OAuthProvider;
-using cch::mcp::mcp_oauth_credential_from_state;
-using cch::mcp::mcp_oauth_state_from_credential;
-
 /// Run one MCP server's OAuth sign-in through the existing `AuthInteraction`
 /// surface and persist the tokens into `<agentDir>/mcp-auth.json`: the
 /// `McpOAuthCredentialStore`-shaped state under `mcp__<server>|<url>`.
@@ -27,7 +23,7 @@ using cch::mcp::mcp_oauth_state_from_credential;
 [[nodiscard]] support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
         std::string server_name,
         std::string server_url,
-        McpOAuthProvider& provider,
+        cch::mcp::OAuthProvider& provider,
         cch::mcp::AuthInteraction interaction);
 
 /// Revoke one MCP server's stored credential: local removal from

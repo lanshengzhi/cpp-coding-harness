@@ -12,12 +12,11 @@
 
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
 
-#include "coding_agent/mcp/McpHttpClient.hpp"
-#include "coding_agent/mcp/McpProtocol.hpp"
-#include "coding_agent/mcp/McpStdioClient.hpp"
-#include "coding_agent/mcp/Pkce.hpp"
-
 #include <cch/ai/Content.hpp>
+#include <cch/mcp/HttpClient.hpp>
+#include <cch/mcp/Pkce.hpp>
+#include <cch/mcp/Protocol.hpp>
+#include <cch/mcp/StdioClient.hpp>
 
 #include "support/BoostBeastStreamTransport.hpp"
 #include "support/AsyncResultBridge.hpp"
@@ -182,7 +181,7 @@ void assign_listing_names(std::string_view server, std::vector<McpToolDescriptor
 }
 
 boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_mcp_server_tools(
-        McpServerConnection& connection) {
+        cch::mcp::Client& connection) {
     const std::string server = connection.server_name();
     std::vector<McpToolDescriptor> tools;
     std::set<std::string> cursors;
@@ -252,9 +251,9 @@ boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_m
         if (!cursors.insert(next_cursor).second) {
             co_return std::unexpected(source_error("MCP tools/list returned duplicate cursor: " + next_cursor));
         }
-        if (page_number + 1 >= kMcpMaxListPages) {
+        if (page_number + 1 >= cch::mcp::kMaxListPages) {
             co_return std::unexpected(
-                    source_error("MCP tools/list exceeded " + std::to_string(kMcpMaxListPages) + " pages"));
+                    source_error("MCP tools/list exceeded " + std::to_string(cch::mcp::kMaxListPages) + " pages"));
         }
         cursor = std::move(next_cursor);
     }
@@ -281,7 +280,7 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
     std::string input{server};
     input.push_back('\0');
     input += tool;
-    auto digest = sha256_digest(input);
+    auto digest = cch::mcp::sha256_digest(input);
     if (!digest || digest->size() < 4) {
         // pi cannot fail here; a digest failure degrades to the truncated
         // plain name rather than failing tool registration.
@@ -302,12 +301,12 @@ std::string mcp_tool_name(std::string_view server, std::string_view tool) {
 std::string mcp_tool_name(
         std::string_view server, std::string_view tool, std::move_only_function<bool(const std::string&)> is_taken) {
     std::string name = plain_mcp_tool_name(server, tool);
-    if (name.size() <= kMcpMaxToolNameLength && (is_taken == nullptr || !is_taken(name))) {
+    if (name.size() <= cch::mcp::kMaxToolNameLength && (is_taken == nullptr || !is_taken(name))) {
         return name;
     }
     // pi: `${name.slice(0, MAX_TOOL_NAME_LENGTH - hash.length - 1)}_${hash}`
     // with an 8-hex hash — the kept prefix is 55 characters.
-    std::string suffixed = name.substr(0, kMcpMaxToolNameLength - 9);
+    std::string suffixed = name.substr(0, cch::mcp::kMaxToolNameLength - 9);
     suffixed += tool_name_hash_suffix(server, tool);
     return suffixed;
 }
@@ -356,12 +355,12 @@ support::JsonValue create_mcp_result_schema(const std::optional<support::JsonVal
 }
 
 McpExtensionToolSource::McpExtensionToolSource(
-        ConstructionKey, std::shared_ptr<McpServerConnection> connection, std::vector<McpToolDescriptor> tools)
+        ConstructionKey, std::shared_ptr<cch::mcp::Client> connection, std::vector<McpToolDescriptor> tools)
     : connection_(std::move(connection)), server_name_(connection_->server_name()), tools_(std::move(tools)) {}
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>>
 McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
-    auto client = co_await support::detail::await_async_result(McpStdioClient::connect(std::move(config)));
+    auto client = co_await support::detail::await_async_result(cch::mcp::StdioClient::connect(std::move(config)));
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
     }
@@ -373,8 +372,8 @@ McpExtensionToolSource::connect_stdio(McpStdioServerConfig config) {
 }
 
 boost::asio::awaitable<support::Expected<std::unique_ptr<McpExtensionToolSource>>> McpExtensionToolSource::connect_http(
-        McpHttpServerConfig config, std::shared_ptr<McpRequestAuthSource> request_auth) {
-    auto client = co_await support::detail::await_async_result(McpHttpClient::connect(
+        McpHttpServerConfig config, std::shared_ptr<cch::mcp::RequestAuthSource> request_auth) {
+    auto client = co_await support::detail::await_async_result(cch::mcp::HttpClient::connect(
             std::move(config), std::make_shared<support::BoostBeastStreamTransport>(), std::move(request_auth)));
     if (!client) {
         co_return std::unexpected(std::move(client.error()));
@@ -433,7 +432,7 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                         {"name", server_tool_name},
                                         {"arguments", std::move(arguments)},
                                 }};
-                                McpServerConnection::ProgressCallback on_progress;
+                                cch::mcp::Client::ProgressCallback on_progress;
                                 if (update_sink) {
                                     on_progress = [update_sink = std::move(update_sink)](
                                                           const support::JsonValue& progress) mutable {
@@ -446,7 +445,7 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                 connection
                                         ->request("tools/call",
                                                 std::move(params),
-                                                McpServerConnection::RequestOptions{.stop_token = stop_token,
+                                                cch::mcp::Client::RequestOptions{.stop_token = stop_token,
                                                         .on_progress = std::move(on_progress)})
                                         .start([server, completion = std::move(completion)](
                                                        support::Expected<support::JsonValue> outcome) mutable noexcept {

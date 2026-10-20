@@ -9,7 +9,8 @@
 #include "coding_agent/mcp/McpAuthStore.hpp"
 
 #include "coding_agent/PrettyJson.hpp"
-#include "coding_agent/mcp/McpNamespace.hpp"
+#include <cch/mcp/Auth.hpp>
+#include <cch/mcp/OAuthState.hpp>
 
 #include "support/Json.hpp"
 
@@ -157,7 +158,7 @@ using JsonObject = support::JsonValue::object_t;
             client != object->end() && client->second.get_if<JsonObject>() != nullptr) {
         const auto& client_object = *client->second.get_if<JsonObject>();
         if (const auto id = string_member(client_object, "client_id")) {
-            OAuthClientInformation information;
+            cch::mcp::OAuthClientInformation information;
             information.client_id = std::string{*id};
             if (const auto secret = string_member(client_object, "client_secret"); secret && !secret->empty()) {
                 information.client_secret = std::string{*secret};
@@ -236,7 +237,7 @@ std::filesystem::path McpAuthStore::default_path(const std::filesystem::path& ag
 }
 
 std::string McpAuthStore::store_key(std::string_view name, std::string_view server_url) {
-    return detail::mcp_namespace(name) + "|" + std::string{server_url};
+    return cch::mcp::mcp_namespace(name) + "|" + std::string{server_url};
 }
 
 McpAuthStore::McpAuthStore(std::filesystem::path file) : file_(std::move(file)) {}
@@ -334,7 +335,7 @@ support::Expected<bool> McpAuthStore::migrate_from_auth_json(
     if (!records) {
         return std::unexpected(std::move(records.error()));
     }
-    const std::string provider_id = detail::mcp_namespace(name);
+    const std::string provider_id = cch::mcp::mcp_namespace(name);
     const auto found = records->find(provider_id);
     if (found == records->end()) {
         return false;

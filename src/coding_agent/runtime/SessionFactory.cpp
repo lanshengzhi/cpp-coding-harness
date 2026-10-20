@@ -25,7 +25,6 @@
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpConfigFile.hpp"
 #include "coding_agent/mcp/McpExtensionToolSource.hpp"
-#include "coding_agent/mcp/McpOAuthProvider.hpp"
 #include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
@@ -36,6 +35,10 @@
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 #include "coding_agent/runtime/ToolSelection.hpp"
 #include "coding_agent/runtime/ToolNames.hpp"
+
+#include <cch/mcp/OAuthProvider.hpp>
+#include <cch/mcp/OAuthServerConfig.hpp>
+#include <cch/mcp/RequestAuthSource.hpp>
 
 #include <boost/asio/awaitable.hpp>
 
@@ -1167,11 +1170,11 @@ struct PreparedAssemblyTarget final {
 /// #884): a pre-resolved endpoint set uses the `#875` provider, an `oauth`
 /// block with no pre-resolved endpoints runs the discovery/DCR flow, and a
 /// server with neither is sent no credential (fail-closed).
-[[nodiscard]] std::shared_ptr<mcp::McpRequestAuthSource> mcp_oauth_request_auth(
+[[nodiscard]] std::shared_ptr<cch::mcp::RequestAuthSource> mcp_oauth_request_auth(
         const std::shared_ptr<mcp::McpAuthStore>& store, const mcp::McpHttpServerConfig& server) {
     if (server.resolved_oauth) {
         return std::make_shared<mcp::McpOAuthTokenResolver>(
-                store, server.name, server.url, std::make_shared<mcp::McpOAuthProvider>(*server.resolved_oauth));
+                store, server.name, server.url, std::make_shared<cch::mcp::OAuthProvider>(*server.resolved_oauth));
     }
     if (server.oauth && !server.auth_provider && !has_authorization_header_sv(server.headers)) {
         return std::make_shared<mcp::McpOAuthFlowTokenResolver>(store, server.name, server.url, *server.oauth);
@@ -1686,12 +1689,12 @@ struct PreparedAssemblyTarget final {
             co_await discard_unpublished_session();
             co_return std::unexpected(std::move(valid.error()));
         }
-        std::shared_ptr<mcp::McpRequestAuthSource> request_auth;
+        std::shared_ptr<cch::mcp::RequestAuthSource> request_auth;
         const bool uses_oauth =
                 server.resolved_oauth.has_value() ||
                 (server.oauth.has_value() && !server.auth_provider && !has_authorization_header_sv(server.headers));
         if (server.resolved_oauth) {
-            if (auto valid = mcp::validate_mcp_oauth_server_config(*server.resolved_oauth); !valid) {
+            if (auto valid = cch::mcp::validate_oauth_server_config(*server.resolved_oauth); !valid) {
                 cleanup_on_failure();
                 co_await discard_unpublished_session();
                 co_return std::unexpected(std::move(valid.error()));

@@ -273,6 +273,24 @@ TEST_CASE("mcp list reports a connected server and exits 0", "[cli][mcp][issue88
     CHECK(run.stdout_text == "echo: connected, 2 tools (codemode, global)\n  python3 server.py\n  tools: echo, sum\n");
 }
 
+TEST_CASE("mcp list connects a configured stdio server through the production probe", "[cli][mcp][issue884]") {
+    tests::TempWorkspace agent;
+    tests::TempWorkspace cwd;
+    const std::string server = (std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-mcp/echo_server.py").string();
+    agent.write(
+            "mcp.json", std::string{R"({"mcpServers":{"echo":{"command":"python3","args":[")"} + server + R"("]}}})");
+
+    // No scripted probe: `run_mcp_command` builds `DefaultMcpServerProbe`, which
+    // launches the real stdio fixture and drives the production handshake and
+    // `tools/list` through the cch_mcp clients. A scripted report cannot show
+    // that the CLI's connection wiring reaches the owner.
+    const auto run = run_direct(agent.path(), cwd.path(), {"list"});
+
+    REQUIRE(run.exit_code == 0);
+    CHECK(run.stdout_text == "echo: connected, 5 tools (codemode, global)\n  python3 " + server +
+                                     "\n  tools: echo, fail, crash, hang, slow\n");
+}
+
 TEST_CASE("mcp list exits 1 when an enabled server is not connected", "[cli][mcp][issue884]") {
     tests::TempWorkspace agent;
     tests::TempWorkspace cwd;

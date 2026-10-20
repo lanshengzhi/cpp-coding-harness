@@ -688,7 +688,7 @@ bool is_mcp_app_resource(const support::JsonValue& item) {
     return mime_type != nullptr && has_mcp_app_profile(*mime_type);
 }
 
-McpConnectionResourceServer::McpConnectionResourceServer(std::shared_ptr<McpServerConnection> connection)
+McpConnectionResourceServer::McpConnectionResourceServer(std::shared_ptr<cch::mcp::Client> connection)
     : connection_(std::move(connection)) {}
 
 const std::string& McpConnectionResourceServer::name() const noexcept { return connection_->server_name(); }
@@ -703,7 +703,7 @@ support::AsyncResult<support::JsonValue> McpConnectionResourceServer::resources_
             params = support::JsonValue{support::JsonValue::object_t{{"cursor", *cursor}}};
         }
         auto result = co_await support::detail::await_async_result(connection->request(
-                "resources/list", std::move(params), McpServerConnection::RequestOptions{.stop_token = stop_token}));
+                "resources/list", std::move(params), cch::mcp::Client::RequestOptions{.stop_token = stop_token}));
         if (!result) {
             co_return std::unexpected(std::move(result.error()));
         }
@@ -737,7 +737,7 @@ support::AsyncResult<support::JsonValue> McpConnectionResourceServer::resource_t
         }
         auto result = co_await support::detail::await_async_result(connection->request("resources/templates/list",
                 std::move(params),
-                McpServerConnection::RequestOptions{.stop_token = stop_token}));
+                cch::mcp::Client::RequestOptions{.stop_token = stop_token}));
         if (!result) {
             if (is_method_not_found(result.error())) {
                 co_return support::JsonValue{
@@ -771,7 +771,7 @@ support::AsyncResult<support::JsonValue> McpConnectionResourceServer::read_resou
                                                       -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
         co_return co_await support::detail::await_async_result(connection->request("resources/read",
                 support::JsonValue{support::JsonValue::object_t{{"uri", uri}}},
-                McpServerConnection::RequestOptions{.stop_token = stop_token}));
+                cch::mcp::Client::RequestOptions{.stop_token = stop_token}));
     });
 }
 

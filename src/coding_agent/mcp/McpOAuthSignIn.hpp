@@ -11,10 +11,10 @@
 // `mcp.json` entry needs no pre-resolved endpoints.
 
 #include "coding_agent/mcp/McpAuthStore.hpp"
-#include "coding_agent/mcp/McpOAuthConfig.hpp"
-#include "coding_agent/mcp/McpRequestAuthSource.hpp"
-#include "coding_agent/mcp/OAuthHttpClient.hpp"
 
+#include <cch/mcp/OAuthConfig.hpp>
+#include <cch/mcp/OAuthHttpClient.hpp>
+#include <cch/mcp/RequestAuthSource.hpp>
 #include <cch/support/AsyncResult.hpp>
 
 #include <boost/asio/awaitable.hpp>
@@ -50,7 +50,7 @@ struct McpOAuthCallbackSettings {
 };
 
 /// pi `callbackSettings(settings)` from an `mcp.json` `oauth` block.
-[[nodiscard]] McpOAuthCallbackSettings mcp_oauth_callback_settings(const McpOAuthConfig& oauth);
+[[nodiscard]] McpOAuthCallbackSettings mcp_oauth_callback_settings(const cch::mcp::OAuthConfig& oauth);
 
 /// The redirect URI for a sign-in: the fixed URI when the configuration names
 /// one, else the callback's bound port.
@@ -80,12 +80,12 @@ struct McpOAuthSignInRequest {
     std::shared_ptr<McpAuthStore> store;
     std::string server_name;
     std::string server_url;
-    McpOAuthConfig oauth;
+    cch::mcp::OAuthConfig oauth;
     std::chrono::milliseconds timeout{std::chrono::seconds{300}};
     /// The HTTPS client for discovery, registration, and the token grant.
     /// Defaults to the production `BoostBeastOAuthHttpClient`; tests inject a
     /// scripted one.
-    std::shared_ptr<OAuthHttpClient> http{nullptr};
+    std::shared_ptr<cch::mcp::OAuthHttpClient> http{nullptr};
     McpOAuthSignInPrompt prompt;
 };
 
@@ -101,13 +101,13 @@ struct McpOAuthSignInRequest {
 /// and refreshes the stored tokens. A server that needs a browser sign-in fails
 /// with the shared re-login error, so an `oauth` block with no pre-resolved
 /// endpoints never reaches the server unauthenticated.
-class McpOAuthFlowTokenResolver final : public McpRequestAuthSource {
+class McpOAuthFlowTokenResolver final : public cch::mcp::RequestAuthSource {
 public:
     McpOAuthFlowTokenResolver(std::shared_ptr<McpAuthStore> store,
             std::string server_name,
             std::string server_url,
-            McpOAuthConfig oauth,
-            std::shared_ptr<OAuthHttpClient> http = nullptr);
+            cch::mcp::OAuthConfig oauth,
+            std::shared_ptr<cch::mcp::OAuthHttpClient> http = nullptr);
 
     McpOAuthFlowTokenResolver(McpOAuthFlowTokenResolver&&) noexcept;
     McpOAuthFlowTokenResolver& operator=(McpOAuthFlowTokenResolver&&) noexcept;
@@ -121,8 +121,8 @@ private:
     std::shared_ptr<McpAuthStore> store_;
     std::string server_name_;
     std::string server_url_;
-    McpOAuthConfig oauth_;
-    std::shared_ptr<OAuthHttpClient> http_;
+    cch::mcp::OAuthConfig oauth_;
+    std::shared_ptr<cch::mcp::OAuthHttpClient> http_;
 };
 
 } // namespace cch::coding_agent::mcp
