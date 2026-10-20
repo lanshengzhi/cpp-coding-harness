@@ -299,14 +299,30 @@ struct ScriptedRuntimeFixture final {
             definitions.push_back(scripted_runtime_definition(
                     std::make_shared<ScriptedRuntimeProvider>(catalog_provider, control, true, std::move(catalog))));
         }
-        auto created = coding_agent::create_model_runtime_for_testing(std::move(options),
-                coding_agent::ModelRuntimeTestOptions{
-                        .providers = std::move(definitions),
-                });
-        if (!created) {
-            std::terminate();
+        if (custom_catalog) {
+            // A caller-supplied catalog is a whole deterministic Models graph.
+            // Build it through the public test-only ModelRuntime constructor
+            // (ADR 0055), not the gateway-refresh test factory: a Native TUI
+            // model-selector refresh must not replace the scripted catalog
+            // with the empty Magpie transport's answer (#1044).
+            auto models = std::make_shared<ai::Models>();
+            for (auto& definition : definitions) {
+                if (auto applied = coding_agent::apply_model_runtime_test_provider(*models, std::move(definition));
+                        !applied) {
+                    std::terminate();
+                }
+            }
+            runtime = tests::runtime_from_models(std::move(models));
+        } else {
+            auto created = coding_agent::create_model_runtime_for_testing(std::move(options),
+                    coding_agent::ModelRuntimeTestOptions{
+                            .providers = std::move(definitions),
+                    });
+            if (!created) {
+                std::terminate();
+            }
+            runtime = std::move(*created);
         }
-        runtime = std::move(*created);
 
         if (!custom_catalog) {
             if (!runtime->model("fake", "fake-model")) {
