@@ -7,8 +7,8 @@
 
 namespace cch::harness {
 
-TaskScheduler::Handler transcript_export_handler(cch::harness::session::SessionStore& store, std::string destination) {
-    return [&store, destination = std::move(destination)](std::stop_token token) -> Expected<std::string> {
+TranscriptExportHandler transcript_export_handler(cch::harness::session::SessionStore& store, std::string destination) {
+    return [&store, destination = std::move(destination)](std::stop_token token) -> support::Expected<std::string> {
         if (token.stop_requested()) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Transcript export aborted"));
         }
