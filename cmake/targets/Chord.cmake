@@ -19,6 +19,7 @@ cch_parity_declare_target(
         src/chord/Tracker.cpp
         src/chord/StrictJson.cpp
         src/chord/Output.cpp
+        src/chord/ReplicatedState.cpp
     DEPENDS
         cch_support
     INTERFACE_DEPENDS
