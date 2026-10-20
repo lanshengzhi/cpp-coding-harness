@@ -3,10 +3,12 @@
  "recordKind": "source-probe",
  "baseline": "pi-v1.3.0",
  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
- "capturedAt": "2026-10-20T10:51:18.733378Z",
+ "capturedAt": "2026-10-20T12:06:05.082Z",
  "environment": {
   "platform": "linux",
   "arch": "x64",
+  "libc": "glibc",
+  "glibcVersion": "2.44",
   "node": "v26.12.0",
   "runner": "node_modules/.bin/tsx (pi checkout)",
   "network": "none (reporter is pure; no model, no gateway)"

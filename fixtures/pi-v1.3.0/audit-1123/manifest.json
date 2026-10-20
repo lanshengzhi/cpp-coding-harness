@@ -1,0 +1,124 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1123",
+  "family": "audit-1123",
+  "capturedAt": "2026-10-20T12:06:05.082Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "runner": "node_modules/.bin/tsx (pi checkout)",
+    "network": "none (reporter is pure; no model, no gateway)"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1123/capture-1123.mts",
+    "sha256": "92a3f6ed52c3b04be18efdf05b260f45352731c20c6f601f0505634edf1d4bcd",
+    "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1123/capture-1123.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1123/capture-1123.mts",
+        "sha256": "92a3f6ed52c3b04be18efdf05b260f45352731c20c6f601f0505634edf1d4bcd"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "named-session-program-status.json",
+      "family": "audit-1123",
+      "bytes": 3900,
+      "sha256": "66b779fa84d11a6e1f5db5c6b0996cf6a4bb791aa0a4b22b60f58a763428813b",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/program-status-reporter.ts:constructor(getTerminal,getSessionName),handleEvent,setBlocked,reset,currentStatus",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:551-554 (getSessionName = sessionManager.getSessionName)",
+        "packages/tui/src/program-status.ts:formatProgramStatus"
+      ],
+      "scenarios": [
+        {
+          "name": "named-session-reports-working-and-done-message",
+          "inputs": {
+            "initialSessionName": "review-session",
+            "renameAfterDone": "renamed-session",
+            "renameWhileWorking": "renamed-while-working"
+          },
+          "observedSteps": [
+            {
+              "label": "named_agent_start_working",
+              "wire": "\u001b]7501;state=working:app=pi:msg=cmV2aWV3LXNlc3Npb24=\u001b\\"
+            },
+            {
+              "label": "named_message_end_working_unchanged",
+              "wire": null
+            },
+            {
+              "label": "named_agent_settled_done",
+              "wire": "\u001b]7501;state=done:app=pi:msg=cmV2aWV3LXNlc3Npb24=\u001b\\"
+            },
+            {
+              "label": "named_rename_after_done",
+              "wire": "\u001b]7501;state=done:app=pi:msg=cmVuYW1lZC1zZXNzaW9u\u001b\\"
+            },
+            {
+              "label": "named_second_agent_start_working",
+              "wire": "\u001b]7501;state=working:app=pi:msg=cmVuYW1lZC1zZXNzaW9u\u001b\\"
+            },
+            {
+              "label": "named_rename_while_working",
+              "wire": "\u001b]7501;state=working:app=pi:msg=cmVuYW1lZC13aGlsZS13b3JraW5n\u001b\\"
+            },
+            {
+              "label": "named_compaction_start_override",
+              "wire": "\u001b]7501;state=working:app=pi:msg=Q29tcGFjdGluZyBjb250ZXh0\u001b\\"
+            },
+            {
+              "label": "named_compaction_end_working_name",
+              "wire": "\u001b]7501;state=working:app=pi:msg=cmVuYW1lZC13aGlsZS13b3JraW5n\u001b\\"
+            },
+            {
+              "label": "named_message_end_error_while_active",
+              "wire": null
+            },
+            {
+              "label": "named_settled_error",
+              "wire": "\u001b]7501;state=error:app=pi:msg=SW52YWxpZCBBUEkga2V5\u001b\\"
+            },
+            {
+              "label": "unnamed_rename_after_error_no_message",
+              "wire": null
+            },
+            {
+              "label": "unnamed_done_no_message",
+              "wire": "\u001b]7501;state=done:app=pi\u001b\\"
+            },
+            {
+              "label": "blocked_question_named_absent",
+              "wire": "\u001b]7501;state=blocked:app=pi:kind=question:msg=VHJ1c3QgcHJvamVjdCBmb2xkZXI/\u001b\\"
+            },
+            {
+              "label": "reset_idle",
+              "wire": "\u001b]7501;state=idle:app=pi\u001b\\"
+            }
+          ],
+          "expected": {
+            "namedWorking": "\u001b]7501;state=working:app=pi:msg=cmV2aWV3LXNlc3Npb24=\u001b\\",
+            "namedDone": "\u001b]7501;state=done:app=pi:msg=cmV2aWV3LXNlc3Npb24=\u001b\\",
+            "renameAfterDone": "\u001b]7501;state=done:app=pi:msg=cmVuYW1lZC1zZXNzaW9u\u001b\\",
+            "renameWhileWorking": "\u001b]7501;state=working:app=pi:msg=cmVuYW1lZC13aGlsZS13b3JraW5n\u001b\\",
+            "compactionOverride": "\u001b]7501;state=working:app=pi:msg=Q29tcGFjdGluZyBjb250ZXh0\u001b\\",
+            "settledError": "\u001b]7501;state=error:app=pi:msg=SW52YWxpZCBBUEkga2V5\u001b\\",
+            "unnamedDone": "\u001b]7501;state=done:app=pi\u001b\\",
+            "blockedQuestion": "\u001b]7501;state=blocked:app=pi:kind=question:msg=VHJ1c3QgcHJvamVjdCBmb2xkZXI/\u001b\\",
+            "resetIdle": "\u001b]7501;state=idle:app=pi\u001b\\",
+            "messageStates": [
+              "working",
+              "done"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

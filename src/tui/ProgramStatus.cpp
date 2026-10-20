@@ -3,6 +3,7 @@
 #include "tui/Base64.hpp"
 
 #include <cstddef>
+#include <exception>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -31,7 +32,7 @@ constexpr std::size_t kMaxMessageBytes = 2048;
     case ProgramStatus::State::Clear:
         return "clear";
     }
-    std::unreachable();
+    std::terminate();
 }
 
 [[nodiscard]] std::string_view kind_name(ProgramStatus::Kind kind) {
@@ -43,7 +44,7 @@ constexpr std::size_t kMaxMessageBytes = 2048;
     case ProgramStatus::Kind::Auth:
         return "auth";
     }
-    std::unreachable();
+    std::terminate();
 }
 
 /// `[A-Za-z0-9_.+-]{1,32}` (pi `APP_PATTERN`).

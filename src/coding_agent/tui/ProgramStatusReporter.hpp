@@ -33,9 +33,16 @@ public:
     /// The terminal must outlive the reporter. `session_name` reads the
     /// current Session (pi `getSessionName`); an empty function reports an
     /// unnamed session.
+    ///
+    /// Lifetime contract (CODING_STANDARDS.md 7.5): the getter borrows the
+    /// owning object, so it is invoked only while that owner is alive. The
+    /// reporter is a member of the owner, so the callback can never outlive
+    /// its referent, and the owner must not invoke it after its own
+    /// destruction. The getter is called from the owner's serialized domain
+    /// (the interactive engine's own executor), never concurrently.
     ProgramStatusReporter(cch::tui::Terminal& terminal,
             std::string app,
-            std::function<std::optional<std::string>()> session_name = {});
+            std::move_only_function<std::optional<std::string>()> session_name = {});
 
     /// pi AgentSessionEvent `agent_start`: a run is active until it settles.
     void handle_agent_start();
@@ -65,11 +72,12 @@ public:
 
 private:
     void report();
-    [[nodiscard]] cch::tui::ProgramStatus current_status() const;
+    [[nodiscard]] cch::tui::ProgramStatus current_status();
 
     cch::tui::Terminal& terminal_;
     std::string app_;
-    std::function<std::optional<std::string>()> session_name_;
+    /// pi `getSessionName`: reads the owning object's current Session.
+    std::move_only_function<std::optional<std::string>()> session_name_;
     bool run_active_{false};
     /// The run's latest response was aborted, so it returns to idle when it
     /// settles even though the Session's prompt resolves successfully (pi

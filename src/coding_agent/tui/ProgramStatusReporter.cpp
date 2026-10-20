@@ -26,8 +26,9 @@ namespace {
 
 } // namespace
 
-ProgramStatusReporter::ProgramStatusReporter(
-        cch::tui::Terminal& terminal, std::string app, std::function<std::optional<std::string>()> session_name)
+ProgramStatusReporter::ProgramStatusReporter(cch::tui::Terminal& terminal,
+        std::string app,
+        std::move_only_function<std::optional<std::string>()> session_name)
     : terminal_(terminal), app_(std::move(app)), session_name_(std::move(session_name)) {}
 
 void ProgramStatusReporter::handle_agent_start() {
@@ -119,7 +120,7 @@ void ProgramStatusReporter::report() {
     (void)terminal_.set_program_status(status);
 }
 
-cch::tui::ProgramStatus ProgramStatusReporter::current_status() const {
+cch::tui::ProgramStatus ProgramStatusReporter::current_status() {
     if (!blocked_.empty()) {
         return cch::tui::ProgramStatus{
                 .state = cch::tui::ProgramStatus::State::Blocked,

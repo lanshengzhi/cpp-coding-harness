@@ -21,6 +21,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/ProtocolRecordingTerminal.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -30,6 +31,7 @@
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "agent/harness/RuntimeRoot.hpp"
+#include <cch/tui/ProgramStatus.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -50,6 +52,7 @@
 #include <atomic>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 #include "support/AgentRootFixture.hpp"
 
@@ -57,6 +60,23 @@ using namespace cch;
 using tests::drain_ready;
 
 namespace {
+
+/// The program-status wires the terminal received, serialized through the
+/// Owner's formatter. The expected side of every assertion is a frozen
+/// literal, never a value built by the same formatter.
+[[nodiscard]] std::vector<std::string> reported_wire(const tests::ProtocolRecordingTerminal& recording) {
+    std::vector<std::string> wires;
+    for (const auto& op : recording.ops()) {
+        if (op.kind == tests::ProtocolRecordingTerminal::OpKind::SetProgramStatus) {
+            wires.push_back(tui::format_program_status(op.program_status));
+        }
+    }
+    return wires;
+}
+
+constexpr std::string_view kIdleWire = "\x1b]7501;state=idle:app=pike\x1b\\";
+constexpr std::string_view kWorkingWire = "\x1b]7501;state=working:app=pike\x1b\\";
+constexpr std::string_view kDoneWire = "\x1b]7501;state=done:app=pike\x1b\\";
 
 [[nodiscard]] std::string visible_screen(const tui::VirtualTerminal& terminal) {
     std::string text;
@@ -84,6 +104,9 @@ struct Fixture {
 
 struct Running {
     tui::VirtualTerminal terminal{tui::VirtualTerminalOptions{.columns = 100, .rows = 40}};
+    /// The program-status recorder, enabled by the cases that assert the
+    /// terminal contract; the other cases drive the plain terminal.
+    std::optional<tests::ProtocolRecordingTerminal> recording;
     boost::asio::io_context io;
     std::optional<support::ExpectedVoid> run_result;
 };
@@ -129,15 +152,14 @@ void boot(
                        .with_async_session_replacement_sink(actions->make_async_session_replacement_sink())
                        .with_runtime_root(std::move(runtime_root))
                        .build();
-    boost::asio::co_spawn(
-        running.io,
-        coding_agent::tui::run_interactive_mode(
-            running.terminal,
-            std::move(run)),
-        [&](std::exception_ptr exception, support::ExpectedVoid result) {
-            CHECK(exception == nullptr);
-            running.run_result.emplace(std::move(result));
-        });
+    tui::Terminal& terminal = running.recording ? static_cast<tui::Terminal&>(*running.recording)
+                                                : static_cast<tui::Terminal&>(running.terminal);
+    boost::asio::co_spawn(running.io,
+            coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                running.run_result.emplace(std::move(result));
+            });
     // The deferred boot's session creation is asynchronous: wait until the
     // replacement result has crossed the seam, then drain so the engine's
     // installation continuation has run before the test drives input.
@@ -310,6 +332,134 @@ TEST_CASE(
     REQUIRE(provider->requests.size() == 1);
     provider->release();
     wait_for_screen(running, "turn 1");
+
+    REQUIRE(running.terminal.inject_input("\x04"));
+    drain_ready(running.io);
+    REQUIRE(running.run_result);
+    CHECK(*running.run_result);
+}
+
+TEST_CASE("a session replacement returns the program status to idle",
+        "[coding_agent][tui][replacement][program-status][issue1123][spec]") {
+    // pi `program-status-reporter.ts:87` documents `reset()` as "Forget the
+    // previous session's run, for example after switching sessions", and
+    // `interactive-mode.ts:2095` calls it from `rebindCurrentSession()`. The
+    // public `/new` path replaces the Session and rebinds it, so the
+    // reported status must return to the resting idle state with the frozen
+    // wire.
+    Fixture fixture;
+    Running running;
+    running.recording.emplace(running.terminal);
+    auto provider = std::make_shared<tests::GatedChatProvider>();
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    actions->replace_session_async = shared_provider_creator(provider, fixture.runtime.make_target());
+    boot(fixture, running, actions);
+
+    // The boot Session reports the resting idle status.
+    REQUIRE(tests::pump_until(running.io,
+            [&] { return reported_wire(*running.recording) == std::vector<std::string>{std::string{kIdleWire}}; }));
+
+    // A run settles into the resting done status.
+    REQUIRE(running.terminal.inject_input("first prompt\r"));
+    drain_ready(running.io);
+    REQUIRE(provider->requests.size() == 1);
+    provider->release();
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return reported_wire(*running.recording) ==
+               std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}, std::string{kDoneWire}};
+    }));
+
+    // The replacement installs the new Session and rebinds it, so the
+    // reported status returns to the resting idle state: the previous run's
+    // done outcome is forgotten.
+    REQUIRE(running.terminal.inject_input("/new\r"));
+    wait_replacement(running, actions, 2);
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return reported_wire(*running.recording) == std::vector<std::string>{std::string{kIdleWire},
+                                                            std::string{kWorkingWire},
+                                                            std::string{kDoneWire},
+                                                            std::string{kIdleWire}};
+    }));
+
+    // The replaced Session runs normally afterwards: the reset forgot the
+    // previous run, not the reporter itself.
+    REQUIRE(running.terminal.inject_input("second prompt\r"));
+    drain_ready(running.io);
+    REQUIRE(provider->requests.size() == 2);
+    provider->release();
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return reported_wire(*running.recording) == std::vector<std::string>{std::string{kIdleWire},
+                                                            std::string{kWorkingWire},
+                                                            std::string{kDoneWire},
+                                                            std::string{kIdleWire},
+                                                            std::string{kWorkingWire},
+                                                            std::string{kDoneWire}};
+    }));
+
+    REQUIRE(running.terminal.inject_input("\x04"));
+    drain_ready(running.io);
+    REQUIRE(running.run_result);
+    CHECK(*running.run_result);
+}
+
+TEST_CASE("a refused session replacement does not reset the program status",
+        "[coding_agent][tui][replacement][program-status][issue1123][spec]") {
+    // The discriminating control for the case above: a replacement that the
+    // host refuses never rebinds the Session, so the reported status must
+    // stay on the running turn instead of falling back to idle. An
+    // implementation that reset the status on every replacement ATTEMPT
+    // would report idle here and fail this case.
+    Fixture fixture;
+    Running running;
+    running.recording.emplace(running.terminal);
+    auto provider = std::make_shared<tests::GatedChatProvider>();
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    int replacement_calls = 0;
+    actions->replace_session_async =
+            [&replacement_calls, provider, runtime_target = fixture.runtime.make_target()](
+                    std::size_t /* action_generation */,
+                    coding_agent::runtime::AgentSessionCreationRequest request,
+                    std::stop_token stop_token) -> support::AsyncResult<coding_agent::CreateAgentSessionResult> {
+        ++replacement_calls;
+        if (replacement_calls > 1) {
+            return support::AsyncResult<coding_agent::CreateAgentSessionResult>{
+                    std::unexpected(support::make_error(support::ErrorCode::Session, "host refused the replacement"))};
+        }
+        request.session_facts.no_skills = true;
+        request.session_facts.no_prompt_templates = true;
+        request.execution_runtime_target = runtime_target;
+        return coding_agent::create_agent_session_async(std::move(request),
+                std::nullopt,
+                cch::tests::cli_fake_overrides(tests::models_from_provider(provider)),
+                stop_token);
+    };
+    boot(fixture, running, actions);
+
+    REQUIRE(tests::pump_until(running.io,
+            [&] { return reported_wire(*running.recording) == std::vector<std::string>{std::string{kIdleWire}}; }));
+
+    // A gated run keeps the working status reported.
+    REQUIRE(running.terminal.inject_input("running prompt\r"));
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return reported_wire(*running.recording) ==
+               std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}};
+    }));
+
+    // The host refuses the replacement: the current Session is never
+    // rebound, so the running status stays reported and no idle reset
+    // follows.
+    REQUIRE(running.terminal.inject_input("/new\r"));
+    wait_replacement(running, actions, 2);
+    wait_for_screen(running, "host refused the replacement");
+    CHECK(reported_wire(*running.recording) ==
+            std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}});
+
+    // The refused replacement left the running turn alive.
+    provider->release();
+    REQUIRE(tests::pump_until(running.io, [&] {
+        return reported_wire(*running.recording) ==
+               std::vector<std::string>{std::string{kIdleWire}, std::string{kWorkingWire}, std::string{kDoneWire}};
+    }));
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
