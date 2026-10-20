@@ -64,6 +64,10 @@
         "audit-1057": {
           "manifest": "audit-1057/manifest.json",
           "manifestSha256": "d56e0cb0f2a8afbb2045de990390d74e7898d50f7dfad9458cd34a7e23a63e6d"
+        },
+        "audit-1061": {
+          "manifest": "audit-1061/manifest.json",
+          "manifestSha256": "5fa587a84657ddc2af02770491ab154923cc4326c3aeda8197985768b9af9433"
         }
       }
     }

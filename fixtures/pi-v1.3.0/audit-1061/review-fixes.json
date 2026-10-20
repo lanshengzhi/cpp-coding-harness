@@ -1,0 +1,274 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1061",
+  "family": "audit-1061",
+  "capturedAt": "2026-10-20T07:52:46.206Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/delta/index.ts:apply,applyOps",
+    "packages/chord/src/delta/tracker.ts:getProperty,getArrayIndex",
+    "packages/chord/src/delta/tracker.ts:TrackerImpl.adopt,TrackerImpl.#invalidate,assertReadable,assertWritable",
+    "packages/chord/src/delta/tracker.ts:deleteProperty,emitObjectOperations,setProperty,materializePrepared"
+  ],
+  "scenarios": [
+    {
+      "name": "a later traversal failure keeps the preceding mutable write",
+      "source": "packages/chord/src/delta/index.ts:apply,applyOps; packages/chord/test/delta.test.ts:mutable application mutates in place except for a root replacement",
+      "inputs": {
+        "initial": {
+          "value": 1,
+          "items": [
+            "a"
+          ]
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ],
+          [
+            "s",
+            [
+              "missing",
+              "value"
+            ],
+            20
+          ]
+        ]
+      },
+      "expected": {
+        "targetAfter": {
+          "value": 2,
+          "items": [
+            "a"
+          ]
+        },
+        "pathError": {
+          "name": "PathError",
+          "message": "unresolvable path: [\"missing\"]"
+        }
+      },
+      "normalizations": [
+        "Frozen `PathError` reports the failing path after `unresolvable path: `; C++ records the same failure with `unresolvable path` and leaves the successful leading write applied."
+      ]
+    },
+    {
+      "name": "draft reads distinguish absent leaves from null and from absent receiver paths",
+      "source": "packages/chord/src/delta/tracker.ts:getProperty,getArrayIndex; packages/chord/test/delta.test.ts:reads draft state and rejects stale writes",
+      "inputs": {
+        "initial": {
+          "present": 1,
+          "nil": null,
+          "object": {
+            "present": 2
+          },
+          "items": [
+            10
+          ]
+        },
+        "paths": {
+          "present": [
+            "present"
+          ],
+          "missingLeaf": [
+            "missing"
+          ],
+          "nullLeaf": [
+            "nil"
+          ],
+          "nestedMissingLeaf": [
+            "object",
+            "missing"
+          ],
+          "missingArrayIndex": [
+            "items",
+            2
+          ],
+          "missingReceiver": [
+            "missing",
+            "deep"
+          ],
+          "nullReceiver": [
+            "nil",
+            "deep"
+          ]
+        }
+      },
+      "expected": {
+        "beforeSettlement": {
+          "present": {
+            "type": "value",
+            "value": 1
+          },
+          "missingLeaf": {
+            "type": "undefined"
+          },
+          "nullLeaf": {
+            "type": "value",
+            "value": null
+          },
+          "nestedMissingLeaf": {
+            "type": "undefined"
+          },
+          "missingArrayIndex": {
+            "type": "undefined"
+          },
+          "missingReceiver": {
+            "type": "error",
+            "error": {
+              "name": "TypeError",
+              "message": "Cannot read properties of undefined (reading 'deep')"
+            }
+          },
+          "nullReceiver": {
+            "type": "error",
+            "error": {
+              "name": "TypeError",
+              "message": "Cannot read properties of null (reading 'deep')"
+            }
+          }
+        },
+        "afterSettlement": {
+          "missingLeaf": {
+            "type": "error",
+            "error": {
+              "name": "TypeError",
+              "message": "Cannot use a settled overlay"
+            }
+          }
+        }
+      },
+      "normalizations": [
+        "Frozen absent leaves and an out-of-range array index read as JavaScript `undefined`; C++ represents those successful reads as `std::nullopt`.",
+        "Frozen absent or null receivers reject path traversal with a JavaScript TypeError; C++ records the same invalid traversal with its `unresolvable path` error.",
+        "Frozen reads after settlement reject with TypeError `Cannot use a settled overlay`; C++ retains that exact error."
+      ]
+    },
+    {
+      "name": "adoption immediately revokes competing open drafts while prepared competitors retain normal prepared abort and stale states",
+      "source": "packages/chord/src/delta/tracker.ts:TrackerImpl.adopt,TrackerImpl.#invalidate,assertReadable,assertWritable; packages/chord/test/delta.test.ts:rejects foreign, stale, and repeated preparations while allowing competing changes",
+      "inputs": {
+        "initial": {
+          "x": 1
+        },
+        "competingOpenWrite": 5,
+        "competingPreparedWrite": 6,
+        "competingReplacement": {
+          "x": 3
+        },
+        "replacement": {
+          "x": 2
+        }
+      },
+      "expected": {
+        "openStateError": {
+          "name": "TypeError",
+          "message": "Cannot use a settled overlay"
+        },
+        "openWriteError": {
+          "name": "TypeError",
+          "message": "Cannot use a settled overlay"
+        },
+        "openPrepareError": {
+          "name": "TypeError",
+          "message": "Cannot use a settled overlay"
+        },
+        "preparedAdoptError": {
+          "name": "Error",
+          "message": "Prepared change is stale"
+        },
+        "abortedPreparedAdoptError": {
+          "name": "Error",
+          "message": "Prepared change has been aborted"
+        },
+        "revision": 1,
+        "value": {
+          "x": 2
+        }
+      },
+      "normalizations": [
+        "Frozen open handles fail immediately with TypeError `Cannot use a settled overlay`; C++ retains that exact error for draft and change operations.",
+        "A prepared competitor still reports `Prepared change is stale` when adopted after the winner; aborting it first reports `Prepared change has been aborted`."
+      ]
+    },
+    {
+      "name": "adding a key and erasing it again normalizes to an empty batch over the unchanged base",
+      "source": "packages/chord/src/delta/tracker.ts:deleteProperty,emitObjectOperations; packages/chord/src/delta/tracker.ts:materializePrepared",
+      "inputs": {
+        "initial": {
+          "a": 1
+        },
+        "addedValue": {
+          "leaf": 3
+        }
+      },
+      "expected": {
+        "ops": [],
+        "value": {
+          "a": 1
+        },
+        "baseSame": true,
+        "revision": 0
+      },
+      "normalizations": [
+        "`baseSame` is JavaScript identity; C++ compares the prepared base and value with `Json::shares_container_with`."
+      ]
+    },
+    {
+      "name": "an existing nested key keeps explicit delete and readd order",
+      "source": "packages/chord/src/delta/tracker.ts:deleteProperty,emitObjectOperations,setProperty",
+      "inputs": {
+        "initial": {
+          "a": {
+            "nested": {
+              "existing": 1
+            }
+          }
+        },
+        "intermediateValue": 2,
+        "restoredValue": 1
+      },
+      "expected": {
+        "ops": [
+          [
+            "d",
+            [
+              "a",
+              "nested",
+              "existing"
+            ]
+          ],
+          [
+            "s",
+            [
+              "a",
+              "nested",
+              "existing"
+            ],
+            1
+          ]
+        ],
+        "value": {
+          "a": {
+            "nested": {
+              "existing": 1
+            }
+          }
+        },
+        "revision": 0
+      }
+    }
+  ]
+}
