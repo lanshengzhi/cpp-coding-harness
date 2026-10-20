@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1062",
   "family": "audit-1062",
-  "capturedAt": "2026-10-20T09:05:01.404Z",
+  "capturedAt": "2026-10-20T10:36:10.653Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -15,16 +15,16 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1062/capture-1062.mts",
-    "sha256": "8c71ddc060c4e97390b2307a14139c87a253d45f19caa225343d2871ec94d0d0",
+    "sha256": "a47de906b1d0d135e91b5923072efd03b4018a5838b65524454ad33577a72add",
     "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1062/capture-1062.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1062/capture-1062.mts",
-        "sha256": "8c71ddc060c4e97390b2307a14139c87a253d45f19caa225343d2871ec94d0d0"
+        "sha256": "a47de906b1d0d135e91b5923072efd03b4018a5838b65524454ad33577a72add"
       },
       {
         "path": "fixtures/pi-v1.3.0/audit-1062/scenarios.mts",
-        "sha256": "2ec35778d4ace7cd05dd2ec7a951e4d79161a2f2d05e6a16ed6ed69206edf108"
+        "sha256": "efa0f88fb418471a67cb651ce0bb19718d75990b355cbb61dce487c16559c406"
       }
     ]
   },
@@ -33,7 +33,7 @@
       "path": "ordered-frames.json",
       "family": "audit-1062",
       "bytes": 7889,
-      "sha256": "493391595744e961829928777885e8116eb2ad98235c6cdf19e37ee94b7e7467",
+      "sha256": "a8d1edb7fe56d25ef795208c9fafa1e29964e2c3c8fb2226a42ed4ebf25a644e",
       "sourceEndpoints": [
         "packages/chord/src/state.ts:replicatedState,AttachedReplicatedState,ReplicatedStateSource,ReplicatedStateSourceAttachment,ReplicatedStateSourceFrame,ReplicatedStatePublisher.publish,ReplicatedStatePublisher.subscribe",
         "packages/chord/test/replicated-state.test.ts:authoritative replicated state sources",
@@ -288,7 +288,7 @@
       "path": "observer-delivery.json",
       "family": "audit-1062",
       "bytes": 11998,
-      "sha256": "f45089cb2c814ee501605316225ef3b653eb970cae5954d691580cf1f64eaa68",
+      "sha256": "a4e0eaefb0f15d35da5abad0825ac62883c8dae2b53fffc1d3b4527e9c2f01de",
       "sourceEndpoints": [
         "packages/chord/src/state.ts:StateSubscriber.push,StateSubscriber.drain,StateSubscriber.close,AttachedReplicatedStateImpl.#receive,ReplicatedStateDelivery",
         "packages/chord/test/replicated-state-delivery.test.ts:attached listener errors; unsubscribe drops queued callbacks without joining or aborting the running callback; treats two subscriptions of the same callback independently",
@@ -718,6 +718,211 @@
               0,
               1
             ]
+          }
+        }
+      ]
+    },
+    {
+      "path": "review-edges.json",
+      "family": "audit-1062",
+      "bytes": 6378,
+      "sha256": "2286ffea931eadb52bd723a1e874c061742ac65810b55a3dd9c245d69d093332",
+      "sourceEndpoints": [
+        "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#report,reportErrorAsync,AttachedReplicatedStateImpl.#fail,ReplicatedStatePublisher.value,ReplicatedStatePublisher.subscribe,ReplicatedStatePublisher.publish",
+        "packages/chord/test/replicated-state.test.ts:TestSourceAttachment.activate,authoritative replicated state sources",
+        "packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
+      ],
+      "scenarios": [
+        {
+          "name": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
+          "source": "packages/chord/src/state.ts:ReplicatedStatePublisher.subscribe,ReplicatedStatePublisher.publish,StateSubscriber.close; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks",
+          "inputs": {
+            "snapshot": {
+              "value": 0,
+              "cursor": 0
+            },
+            "subscribers": [
+              "a",
+              "b",
+              "c"
+            ],
+            "commits": [
+              1,
+              2,
+              3
+            ]
+          },
+          "expected": {
+            "events": [
+              "a:hydrate:0",
+              "b:hydrate:0",
+              "c:hydrate:0",
+              "a:update:1",
+              "b:update:1",
+              "c:update:1",
+              "a:update:2",
+              "d:hydrate:2",
+              "c:update:2",
+              "a:update:3",
+              "c:update:3",
+              "d:update:3"
+            ]
+          }
+        },
+        {
+          "name": "a retained value reference keeps the revision it was read at across a later commit",
+          "source": "packages/chord/src/state.ts:ReplicatedStatePublisher.value,AttachedReplicatedStateImpl.value; packages/chord/test/replicated-state.test.ts:exact source values",
+          "inputs": {
+            "snapshot": {
+              "value": 0,
+              "cursor": 0
+            },
+            "retainedRevision": 1,
+            "laterRevision": 2
+          },
+          "expected": {
+            "retainedValue": {
+              "value": 1
+            },
+            "currentValue": {
+              "value": 2
+            },
+            "retainedIsTheOldObject": true,
+            "currentIsTheRetainedObject": false
+          }
+        },
+        {
+          "name": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
+          "source": "packages/chord/src/state.ts:AttachedReplicatedStateImpl.#report,reportErrorAsync,AttachedReplicatedStateImpl.#fail",
+          "inputs": {
+            "snapshot": {
+              "value": 1,
+              "cursor": 0
+            },
+            "commits": [
+              {
+                "value": 2,
+                "cursor": 1
+              },
+              {
+                "value": 3,
+                "cursor": 3
+              },
+              {
+                "value": 4,
+                "cursor": 4
+              }
+            ]
+          },
+          "expected": {
+            "observedAsynchronousFailure": "Replicated state source cursor has a gap: expected 2, received 3",
+            "disposeCalls": 1,
+            "lastGoodValue": {
+              "value": 2
+            },
+            "lastGoodValueAfterLaterFrame": {
+              "value": 2
+            }
+          }
+        },
+        {
+          "name": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
+          "source": "packages/chord/src/state.ts:assertCursor,attachReplicatedStateSource,AttachedReplicatedStateImpl.constructor",
+          "inputs": {
+            "snapshot": {
+              "value": 0,
+              "cursor": 9007199254740992
+            }
+          },
+          "expected": {
+            "message": "Replicated state source snapshot cursor must be a safe integer",
+            "disposeCalls": 1,
+            "attachmentCountAfterFailure": 0
+          }
+        },
+        {
+          "name": "negative safe integer cursors are accepted for the snapshot and later frames",
+          "source": "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive",
+          "inputs": {
+            "snapshot": {
+              "value": 0,
+              "cursor": -5
+            },
+            "commit": {
+              "value": 1,
+              "cursor": -4
+            }
+          },
+          "expected": {
+            "finalValue": {
+              "value": 1
+            }
+          }
+        },
+        {
+          "name": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+          "source": "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#fail",
+          "inputs": {
+            "snapshot": {
+              "value": 1,
+              "cursor": 9007199254740991
+            },
+            "commits": [
+              {
+                "value": 2,
+                "cursor": 9007199254740992
+              },
+              {
+                "value": 3,
+                "cursor": 9007199254740992
+              }
+            ]
+          },
+          "expected": {
+            "reportedErrors": [
+              "Replicated state source frame cursor must be a safe integer"
+            ],
+            "disposeCalls": 1,
+            "lastGoodValue": {
+              "value": 1
+            },
+            "lastGoodValueAfterLaterFrame": {
+              "value": 1
+            }
+          }
+        },
+        {
+          "name": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
+          "source": "packages/chord/test/replicated-state.test.ts:TestSourceAttachment.activate; packages/chord/src/state.ts:AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#fail",
+          "inputs": {
+            "snapshot": {
+              "value": 0,
+              "cursor": 0
+            },
+            "bufferedCommits": [
+              {
+                "value": 1,
+                "cursor": 1
+              },
+              {
+                "value": 2,
+                "cursor": 3
+              },
+              {
+                "value": 3,
+                "cursor": 4
+              }
+            ]
+          },
+          "expected": {
+            "reportedErrors": [
+              "Replicated state source cursor has a gap: expected 2, received 3"
+            ],
+            "lastGoodValue": {
+              "value": 1
+            },
+            "disposeCalls": 1,
+            "attachmentCountAfterFailure": 0
           }
         }
       ]

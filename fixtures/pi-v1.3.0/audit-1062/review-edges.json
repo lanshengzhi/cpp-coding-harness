@@ -1,0 +1,215 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1062",
+  "family": "audit-1062",
+  "capturedAt": "2026-10-20T10:36:10.653Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.0",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#report,reportErrorAsync,AttachedReplicatedStateImpl.#fail,ReplicatedStatePublisher.value,ReplicatedStatePublisher.subscribe,ReplicatedStatePublisher.publish",
+    "packages/chord/test/replicated-state.test.ts:TestSourceAttachment.activate,authoritative replicated state sources",
+    "packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
+  ],
+  "scenarios": [
+    {
+      "name": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
+      "source": "packages/chord/src/state.ts:ReplicatedStatePublisher.subscribe,ReplicatedStatePublisher.publish,StateSubscriber.close; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 0
+        },
+        "subscribers": [
+          "a",
+          "b",
+          "c"
+        ],
+        "commits": [
+          1,
+          2,
+          3
+        ]
+      },
+      "expected": {
+        "events": [
+          "a:hydrate:0",
+          "b:hydrate:0",
+          "c:hydrate:0",
+          "a:update:1",
+          "b:update:1",
+          "c:update:1",
+          "a:update:2",
+          "d:hydrate:2",
+          "c:update:2",
+          "a:update:3",
+          "c:update:3",
+          "d:update:3"
+        ]
+      }
+    },
+    {
+      "name": "a retained value reference keeps the revision it was read at across a later commit",
+      "source": "packages/chord/src/state.ts:ReplicatedStatePublisher.value,AttachedReplicatedStateImpl.value; packages/chord/test/replicated-state.test.ts:exact source values",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 0
+        },
+        "retainedRevision": 1,
+        "laterRevision": 2
+      },
+      "expected": {
+        "retainedValue": {
+          "value": 1
+        },
+        "currentValue": {
+          "value": 2
+        },
+        "retainedIsTheOldObject": true,
+        "currentIsTheRetainedObject": false
+      }
+    },
+    {
+      "name": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
+      "source": "packages/chord/src/state.ts:AttachedReplicatedStateImpl.#report,reportErrorAsync,AttachedReplicatedStateImpl.#fail",
+      "inputs": {
+        "snapshot": {
+          "value": 1,
+          "cursor": 0
+        },
+        "commits": [
+          {
+            "value": 2,
+            "cursor": 1
+          },
+          {
+            "value": 3,
+            "cursor": 3
+          },
+          {
+            "value": 4,
+            "cursor": 4
+          }
+        ]
+      },
+      "expected": {
+        "observedAsynchronousFailure": "Replicated state source cursor has a gap: expected 2, received 3",
+        "disposeCalls": 1,
+        "lastGoodValue": {
+          "value": 2
+        },
+        "lastGoodValueAfterLaterFrame": {
+          "value": 2
+        }
+      }
+    },
+    {
+      "name": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
+      "source": "packages/chord/src/state.ts:assertCursor,attachReplicatedStateSource,AttachedReplicatedStateImpl.constructor",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 9007199254740992
+        }
+      },
+      "expected": {
+        "message": "Replicated state source snapshot cursor must be a safe integer",
+        "disposeCalls": 1,
+        "attachmentCountAfterFailure": 0
+      }
+    },
+    {
+      "name": "negative safe integer cursors are accepted for the snapshot and later frames",
+      "source": "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": -5
+        },
+        "commit": {
+          "value": 1,
+          "cursor": -4
+        }
+      },
+      "expected": {
+        "finalValue": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "name": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+      "source": "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#fail",
+      "inputs": {
+        "snapshot": {
+          "value": 1,
+          "cursor": 9007199254740991
+        },
+        "commits": [
+          {
+            "value": 2,
+            "cursor": 9007199254740992
+          },
+          {
+            "value": 3,
+            "cursor": 9007199254740992
+          }
+        ]
+      },
+      "expected": {
+        "reportedErrors": [
+          "Replicated state source frame cursor must be a safe integer"
+        ],
+        "disposeCalls": 1,
+        "lastGoodValue": {
+          "value": 1
+        },
+        "lastGoodValueAfterLaterFrame": {
+          "value": 1
+        }
+      }
+    },
+    {
+      "name": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
+      "source": "packages/chord/test/replicated-state.test.ts:TestSourceAttachment.activate; packages/chord/src/state.ts:AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#fail",
+      "inputs": {
+        "snapshot": {
+          "value": 0,
+          "cursor": 0
+        },
+        "bufferedCommits": [
+          {
+            "value": 1,
+            "cursor": 1
+          },
+          {
+            "value": 2,
+            "cursor": 3
+          },
+          {
+            "value": 3,
+            "cursor": 4
+          }
+        ]
+      },
+      "expected": {
+        "reportedErrors": [
+          "Replicated state source cursor has a gap: expected 2, received 3"
+        ],
+        "lastGoodValue": {
+          "value": 1
+        },
+        "disposeCalls": 1,
+        "attachmentCountAfterFailure": 0
+      }
+    }
+  ]
+}

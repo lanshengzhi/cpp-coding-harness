@@ -4,15 +4,20 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <deque>
 #include <expected>
+#include <format>
 #include <functional>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
+
+#include <unistd.h>
 
 using namespace cch;
 using namespace cch::chord;
@@ -62,47 +67,51 @@ void settle_failure(std::optional<Completion>& slot, std::string message) {
 
 class TestSource;
 
+/// One attachment's dispatch state, owned by the source and by the attachment
+/// (the frozen source's strong Set reference and attachment fields). The
+/// source holds it strongly until dispose, and keeps the dispatch state alive
+/// through a frame callback that disposes synchronously, so a callback can
+/// never observe a destroyed callable (frozen JS keeps the attachment until
+/// its dispatch returns).
+struct TestAttachmentState {
+    ReplicatedStateSnapshot snapshot;
+    std::deque<ReplicatedStateSourceFrame> buffered;
+    std::optional<ReplicatedStateFrameSink> listener;
+    bool activated{false};
+    bool disposed{false};
+    int dispose_calls{0};
+};
+
 /// Frozen test attachment (`packages/chord/test/replicated-state.test.ts`
 /// `TestSourceAttachment`): buffers before activation, publishes to the one
-/// listener, and counts idempotent disposals.
+/// listener, and counts idempotent disposals. Dispose keeps the executing
+/// callable alive: a source may be disposed synchronously from its callback.
 class TestAttachment final : public ReplicatedStateSourceAttachment {
 public:
-    TestAttachment(ReplicatedStateSnapshot snapshot, TestSource& source)
-        : snapshot_(std::move(snapshot)), source_(source) {}
+    TestAttachment(std::shared_ptr<TestAttachmentState> state, TestSource& source)
+        : state_(std::move(state)), source_(source) {}
 
-    [[nodiscard]] const ReplicatedStateSnapshot& snapshot() const noexcept override { return snapshot_; }
+    [[nodiscard]] const ReplicatedStateSnapshot& snapshot() const noexcept override { return state_->snapshot; }
 
     void activate(ReplicatedStateFrameSink listener) override {
-        activated_ = true;
-        listener_ = std::move(listener);
-        std::deque<ReplicatedStateSourceFrame> buffered = std::move(buffered_);
-        buffered_.clear();
-        for (const ReplicatedStateSourceFrame& frame : buffered)
-            (*listener_)(frame);
+        state_->activated = true;
+        state_->listener = std::move(listener);
+        std::deque<ReplicatedStateSourceFrame> buffered = std::move(state_->buffered);
+        state_->buffered.clear();
+        for (const ReplicatedStateSourceFrame& frame : buffered) {
+            if (state_->disposed) return; // a callback disposed the source
+            (*state_->listener)(frame);
+        }
     }
 
     void dispose() noexcept override;
 
-    void publish(const ReplicatedStateSourceFrame& frame) {
-        if (disposed_) return;
-        if (listener_) {
-            (*listener_)(frame);
-            return;
-        }
-        buffered_.push_back(frame);
-    }
-
-    [[nodiscard]] bool activated() const noexcept { return activated_; }
-    [[nodiscard]] int dispose_calls() const noexcept { return dispose_calls_; }
+    [[nodiscard]] bool activated() const noexcept { return state_->activated; }
+    [[nodiscard]] int dispose_calls() const noexcept { return state_->dispose_calls; }
 
 private:
-    ReplicatedStateSnapshot snapshot_;
+    std::shared_ptr<TestAttachmentState> state_;
     TestSource& source_;
-    std::deque<ReplicatedStateSourceFrame> buffered_;
-    std::optional<ReplicatedStateFrameSink> listener_;
-    bool activated_{false};
-    bool disposed_{false};
-    int dispose_calls_{0};
 };
 
 /// Frozen test source (`packages/chord/test/replicated-state.test.ts`
@@ -113,9 +122,10 @@ public:
     explicit TestSource(Json value, std::int64_t cursor = 0) : value_(std::move(value)), cursor_(cursor) {}
 
     [[nodiscard]] support::Expected<std::unique_ptr<ReplicatedStateSourceAttachment>> attach() override {
-        auto attachment =
-                std::make_unique<TestAttachment>(ReplicatedStateSnapshot{.value = value_, .cursor = cursor_}, *this);
-        attachments_.push_back(attachment.get());
+        auto state = std::make_shared<TestAttachmentState>();
+        state->snapshot = ReplicatedStateSnapshot{.value = value_, .cursor = cursor_};
+        dispatches_.push_back(state);
+        auto attachment = std::make_unique<TestAttachment>(state, *this);
         if (on_attach) on_attach();
         return std::unique_ptr<ReplicatedStateSourceAttachment>{std::move(attachment)};
     }
@@ -129,26 +139,35 @@ public:
         cursor_ = cursor;
         const ReplicatedStateSourceFrame frame{
                 .cursor = cursor, .value = value_, .ops = std::move(ops), .context = std::move(context)};
-        const std::vector<TestAttachment*> attachments = attachments_;
-        for (TestAttachment* attachment : attachments)
-            attachment->publish(frame);
+        const std::vector<std::shared_ptr<TestAttachmentState>> dispatches = dispatches_;
+        for (const std::shared_ptr<TestAttachmentState>& state : dispatches)
+            publish(state, frame);
     }
 
-    void detach(TestAttachment& attachment) {
-        std::erase(attachments_, &attachment);
+    static void publish(const std::shared_ptr<TestAttachmentState>& state, const ReplicatedStateSourceFrame& frame) {
+        if (state->disposed) return;
+        if (state->listener) {
+            (*state->listener)(frame);
+            return;
+        }
+        state->buffered.push_back(frame);
+    }
+
+    void detach(const std::shared_ptr<TestAttachmentState>& state) {
+        std::erase(dispatches_, state);
         ++dispose_calls_;
     }
 
-    [[nodiscard]] std::size_t attachment_count() const noexcept { return attachments_.size(); }
+    [[nodiscard]] std::size_t attachment_count() const noexcept { return dispatches_.size(); }
 
     [[nodiscard]] bool attachment_activated() const noexcept {
-        return !attachments_.empty() && attachments_.front()->activated();
+        return !dispatches_.empty() && dispatches_.front()->activated;
     }
 
     [[nodiscard]] int dispose_calls() const noexcept { return dispose_calls_; }
 
     std::move_only_function<void()> on_attach;
-    std::vector<TestAttachment*> attachments_;
+    std::vector<std::shared_ptr<TestAttachmentState>> dispatches_;
 
 private:
     Json value_;
@@ -157,13 +176,53 @@ private:
 };
 
 void TestAttachment::dispose() noexcept {
-    if (disposed_) return;
-    disposed_ = true;
-    ++dispose_calls_;
-    buffered_.clear();
-    listener_.reset();
-    source_.detach(*this);
+    if (state_->disposed) return;
+    state_->disposed = true;
+    ++state_->dispose_calls;
+    state_->buffered.clear();
+    source_.detach(state_);
 }
+
+/// Captures the process's stderr into a pipe so a default diagnostic can be
+/// compared exactly (the strict-no-exception mapping of pi's async rethrow).
+class StderrCapture {
+public:
+    StderrCapture() {
+        int fds[2];
+        if (::pipe(fds) != 0) return;
+        read_fd_ = fds[0];
+        saved_fd_ = ::dup(STDERR_FILENO);
+        if (saved_fd_ >= 0) (void)::dup2(fds[1], STDERR_FILENO);
+        (void)::close(fds[1]);
+    }
+
+    StderrCapture(const StderrCapture&) = delete;
+    StderrCapture& operator=(const StderrCapture&) = delete;
+
+    ~StderrCapture() { (void)finish(); }
+
+    [[nodiscard]] std::string finish() {
+        if (read_fd_ < 0) return {};
+        std::fflush(stderr);
+        if (saved_fd_ >= 0) {
+            (void)::dup2(saved_fd_, STDERR_FILENO);
+            (void)::close(saved_fd_);
+            saved_fd_ = -1;
+        }
+        std::string text;
+        char buffer[256];
+        ssize_t count = 0;
+        while ((count = ::read(read_fd_, buffer, sizeof buffer)) > 0)
+            text.append(buffer, static_cast<std::size_t>(count));
+        (void)::close(read_fd_);
+        read_fd_ = -1;
+        return text;
+    }
+
+private:
+    int read_fd_{-1};
+    int saved_fd_{-1};
+};
 
 void record_delivery(
         std::vector<DeliveryEvent>& into, ReplicatedStateDeliveryKind kind, std::int64_t sequence, double value) {
@@ -371,7 +430,7 @@ TEST_CASE("a cursor gap is reported once and leaves the last good replicated val
         record_delivery(deliveries, delivery.kind, delivery.sequence, number_of(value));
         return ready();
     });
-    REQUIRE(deliveries.size() == 1);
+    CHECK(deliveries.size() == 1);
 
     source.commit_at(revision(9), 2);
     CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 1, received 2"}));
@@ -567,7 +626,7 @@ TEST_CASE("a failing listener is reported in isolation and keeps receiving later
     // subscriber has already converged in publication order.
     CHECK((fast_received == std::vector<double>{0.0, 1.0, 2.0, 3.0}));
     settle_failure(hydration, "async hydration");
-    REQUIRE((failing_received == std::vector<double>{0.0, 1.0, 2.0}));
+    CHECK((failing_received == std::vector<double>{0.0, 1.0, 2.0}));
     settle_failure(update, "async update");
 
     CHECK((failing_received == std::vector<double>{0.0, 1.0, 2.0, 3.0}));
@@ -732,4 +791,297 @@ TEST_CASE("two subscriptions of the same listener behavior are delivered indepen
 
     CHECK((received == std::vector<double>{0.0, 0.0, 1.0}));
     second_subscribe();
+}
+
+// Review edge: libraries/pi-v1.3.0/audit-1062/review-edges.json
+// "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once".
+TEST_CASE("a snapshot cursor outside the safe integer range fails attach and disposes the attachment once",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0), 9007199254740992LL};
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE_FALSE(attached.has_value());
+    CHECK(attached.error().message == "Replicated state source snapshot cursor must be a safe integer");
+    CHECK(source.dispose_calls() == 1);
+    CHECK(source.attachment_count() == 0);
+}
+
+// "a frame cursor outside the safe integer range fails the attachment and keeps the last good value".
+TEST_CASE("a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(1), 9007199254740991LL};
+    std::vector<std::string> errors;
+    auto attached = AttachedReplicatedState::attach(source,
+            ReplicatedStateSourceOptions{
+                    .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
+    REQUIRE(attached.has_value());
+
+    source.commit_at(revision(2), 9007199254740992LL);
+    CHECK((errors == std::vector<std::string>{"Replicated state source frame cursor must be a safe integer"}));
+    CHECK(number_of(attached->value()) == 1.0);
+    CHECK(source.dispose_calls() == 1);
+    CHECK(source.attachment_count() == 0);
+
+    source.commit_at(revision(3), 9007199254740993LL);
+    CHECK(errors.size() == 1);
+    CHECK(number_of(attached->value()) == 1.0);
+    CHECK(source.dispose_calls() == 1);
+}
+
+// "negative safe integer cursors are accepted for the snapshot and later frames".
+TEST_CASE("negative safe integer cursors are accepted for the snapshot and later frames",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0), -5};
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE(attached.has_value());
+    std::vector<double> received;
+    auto unsubscribe = attached->subscribe([&received](Json value, Context, ReplicatedStateDelivery) {
+        received.push_back(number_of(value));
+        return ready();
+    });
+
+    source.commit_at(revision(1), -4);
+    CHECK((received == std::vector<double>{0.0, 1.0}));
+    CHECK(number_of(attached->value()) == 1.0);
+    CHECK(source.attachment_count() == 1);
+    unsubscribe();
+}
+
+// "a source contract failure without an onError hook is observable asynchronously and keeps the last good value".
+TEST_CASE("a source gap without an onError hook writes the exact default diagnostic once and keeps the last good value",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(1), 0};
+    std::string diagnostics;
+    {
+        StderrCapture capture;
+        auto attached = AttachedReplicatedState::attach(source);
+        REQUIRE(attached.has_value());
+        source.commit_at(revision(2), 1);
+        source.commit_at(revision(3), 3);
+        source.commit_at(revision(4), 4);
+        CHECK(number_of(attached->value()) == 2.0);
+        diagnostics = capture.finish();
+    }
+    CHECK(diagnostics == "Replicated state source cursor has a gap: expected 2, received 3\n");
+    CHECK(source.dispose_calls() == 1);
+    CHECK(source.attachment_count() == 0);
+}
+
+TEST_CASE("a listener failure without an onError hook writes the exact default diagnostic and delivery continues",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0)};
+    std::string diagnostics;
+    std::vector<double> received;
+    {
+        StderrCapture capture;
+        auto attached = AttachedReplicatedState::attach(source);
+        REQUIRE(attached.has_value());
+        auto unsubscribe = attached->subscribe([&received](Json value, Context, ReplicatedStateDelivery) {
+            const double current = number_of(value);
+            received.push_back(current);
+            if (current == 0) return ready_failure("sync hydration");
+            return ready();
+        });
+        source.commit(revision(1));
+        unsubscribe();
+        diagnostics = capture.finish();
+    }
+    CHECK((received == std::vector<double>{0.0, 1.0}));
+    CHECK(diagnostics == "sync hydration\n");
+}
+
+TEST_CASE(
+        "an explicit onError hook suppresses the default diagnostic", "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(1), 0};
+    std::vector<std::string> errors;
+    std::string diagnostics;
+    {
+        StderrCapture capture;
+        auto attached = AttachedReplicatedState::attach(source,
+                ReplicatedStateSourceOptions{
+                        .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
+        REQUIRE(attached.has_value());
+        source.commit_at(revision(2), 3);
+        diagnostics = capture.finish();
+    }
+    CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 1, received 3"}));
+    CHECK(diagnostics.empty());
+}
+
+// "a gap while draining a buffered activation ignores later buffered frames and disposes once".
+TEST_CASE("a gap while draining buffered activation stops dispatch without touching a disposed listener",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0), 0};
+    std::vector<std::string> errors;
+    source.on_attach = [&source] {
+        source.commit_at(revision(1), 1);
+        source.commit_at(revision(2), 3);
+        source.commit_at(revision(3), 4);
+    };
+    auto attached = AttachedReplicatedState::attach(source,
+            ReplicatedStateSourceOptions{
+                    .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
+    REQUIRE(attached.has_value());
+    CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 2, received 3"}));
+    CHECK(number_of(attached->value()) == 1.0);
+    CHECK(source.dispose_calls() == 1);
+    CHECK(source.attachment_count() == 0);
+}
+
+TEST_CASE("a subscriber destroying its own attached state inside a callback does not disturb other subscribers",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0)};
+    auto created = AttachedReplicatedState::attach(source);
+    REQUIRE(created.has_value());
+    auto state = std::move(*created);
+
+    auto owner = std::make_optional(std::move(state));
+    std::vector<double> other_received;
+    auto destroyer = owner->subscribe([&owner, &source](Json, Context, ReplicatedStateDelivery delivery) {
+        if (delivery.sequence == 1) {
+            source.commit(revision(2)); // queues a publication behind the running dispatch
+            owner.reset();
+        }
+        return ready();
+    });
+    auto other = owner->subscribe([&other_received](Json value, Context, ReplicatedStateDelivery) {
+        other_received.push_back(number_of(value));
+        return ready();
+    });
+    REQUIRE(owner.has_value());
+
+    source.commit(revision(1));
+    CHECK_FALSE(owner.has_value());
+    CHECK((other_received == std::vector<double>{0.0, 1.0, 2.0}));
+    CHECK(source.dispose_calls() == 1);
+    destroyer();
+    other();
+}
+
+// "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication".
+TEST_CASE("subscribers are delivered in registration order with reentrant unsubscribe and subscribe",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0)};
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE(attached.has_value());
+
+    std::vector<std::string> events;
+    std::optional<ReplicatedStateUnsubscribeHook> b;
+    std::optional<ReplicatedStateUnsubscribeHook> d;
+    const auto record = [&events](const char* name, ReplicatedStateDelivery delivery) {
+        events.push_back(std::format("{}:{}:{}",
+                name,
+                delivery.kind == ReplicatedStateDeliveryKind::Hydrate ? "hydrate" : "update",
+                delivery.sequence));
+    };
+    auto a = attached->subscribe([&](Json, Context, ReplicatedStateDelivery delivery) {
+        record("a", delivery);
+        if (delivery.kind == ReplicatedStateDeliveryKind::Update && delivery.sequence == 2) {
+            if (b) (*b)();
+            d = attached->subscribe([&events](Json, Context, ReplicatedStateDelivery inner) {
+                events.push_back(std::format("d:{}:{}",
+                        inner.kind == ReplicatedStateDeliveryKind::Hydrate ? "hydrate" : "update",
+                        inner.sequence));
+                return ready();
+            });
+        }
+        return ready();
+    });
+    b = attached->subscribe([&](Json, Context, ReplicatedStateDelivery delivery) {
+        record("b", delivery);
+        return ready();
+    });
+    auto c = attached->subscribe([&](Json, Context, ReplicatedStateDelivery delivery) {
+        record("c", delivery);
+        return ready();
+    });
+
+    source.commit(revision(1));
+    source.commit(revision(2));
+    source.commit(revision(3));
+
+    const std::vector<std::string> expected{"a:hydrate:0",
+            "b:hydrate:0",
+            "c:hydrate:0",
+            "a:update:1",
+            "b:update:1",
+            "c:update:1",
+            "a:update:2",
+            "d:hydrate:2",
+            "c:update:2",
+            "a:update:3",
+            "c:update:3",
+            "d:update:3"};
+    CHECK(events == expected);
+    a();
+    if (d) (*d)();
+    c();
+}
+
+// "a retained value reference keeps the revision it was read at across a later commit".
+TEST_CASE("a retained value reference keeps the revision it was read at",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0)};
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE(attached.has_value());
+
+    const Json& retained = attached->value();
+    CHECK(number_of(retained) == 0.0);
+    source.commit(revision(1));
+    CHECK(number_of(retained) == 0.0);
+    CHECK(number_of(attached->value()) == 1.0);
+    CHECK((std::is_same_v<decltype(attached->value()), Json>));
+}
+
+TEST_CASE("a moved-from attached state can only be disposed or destroyed",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0)};
+    auto created = AttachedReplicatedState::attach(source);
+    REQUIRE(created.has_value());
+
+    AttachedReplicatedState first = std::move(*created);
+    first.dispose();
+    CHECK(source.dispose_calls() == 1);
+    AttachedReplicatedState moved = std::move(first);
+    moved.dispose();
+    CHECK(source.dispose_calls() == 1);
+    first.dispose();
+    CHECK(source.dispose_calls() == 1);
+}
+
+// Registration order is insertion order, not the subscriber object's address:
+// freed registrations are reused by the allocator in LIFO order, so an
+// address-keyed container reverses these deliveries.
+TEST_CASE("subscribers registered after released registrations keep insertion order",
+        "[chord][replicated_state][issue1062][review]") {
+    TestSource source{revision(0)};
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE(attached.has_value());
+    std::vector<std::string> order;
+    const auto record = [&order](const char* name, ReplicatedStateDelivery delivery) {
+        if (delivery.kind == ReplicatedStateDeliveryKind::Update) order.push_back(name);
+    };
+    std::vector<ReplicatedStateUnsubscribeHook> released;
+    for (int index = 0; index < 4; index += 1) {
+        released.push_back(
+                attached->subscribe([&record, name = "released"](Json, Context, ReplicatedStateDelivery delivery) {
+                    record(name, delivery);
+                    return ready();
+                }));
+    }
+    for (auto& hook : released)
+        hook();
+    released.clear(); // release the subscriber objects themselves
+
+    std::vector<ReplicatedStateUnsubscribeHook> subscribers;
+    for (int index = 0; index < 4; index += 1) {
+        subscribers.push_back(attached->subscribe(
+                [&record, name = std::format("s{}", index)](Json, Context, ReplicatedStateDelivery delivery) {
+                    record(name.c_str(), delivery);
+                    return ready();
+                }));
+    }
+    source.commit(revision(1));
+    CHECK((order == std::vector<std::string>{"s0", "s1", "s2", "s3"}));
+    for (auto& hook : subscribers)
+        hook();
 }

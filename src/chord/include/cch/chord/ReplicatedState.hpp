@@ -53,13 +53,27 @@ struct ReplicatedStateSnapshot {
 /// a pending producer is the awaited path whose completion serializes the next
 /// delivery of this subscription. Parameters are owned so a pending listener
 /// may retain them after the call returns.
+///
+/// Serialized domain: every state operation and callback for one attached
+/// state — source frame delivery, `subscribe`/unsubscribe, `dispose`, listener
+/// invocation, listener completion, and the error hook — must run in the one
+/// serialized execution domain the caller chooses (the producer's domain when
+/// the source publishes from one). `support::AsyncResult` carries no thread
+/// affinity: a producer that stores this listener's completion must settle it
+/// in that same domain and not concurrently with any of those operations.
 using ReplicatedStateSink = std::move_only_function<support::AsyncResult<void>(
         Json value, Context context, ReplicatedStateDelivery delivery)>;
 
 /// Receives source-contract and subscription-listener failures without
 /// throwing them into the source (pi `ReplicatedStateSourceOptions.onError`).
-/// Without a hook the failure is dropped; the state and other subscriptions
-/// keep working either way.
+/// The hook runs inside the state's serialized domain and must not throw.
+///
+/// Strict-no-exception mapping: pi's default `reportErrorAsync` rethrows the
+/// failure in a microtask. This library cannot throw, so without a hook the
+/// failure is written once to stderr as the exact error message plus a
+/// newline (see `docs/agents/architecture.md`); the state and other
+/// subscriptions keep working either way. A hook replaces that default
+/// entirely, so failures are never reported twice.
 using ReplicatedStateErrorHook = std::move_only_function<void(const support::Error&)>;
 
 /// The closure a subscription returns (pi `subscribe`'s returned function).
@@ -91,10 +105,16 @@ public:
 
     /// Install the sole listener and synchronously drain every buffered frame
     /// in source commit order. Single-use: an attachment that is already
-    /// active or disposed is an invariant violation.
+    /// active or disposed is an invariant violation. The callback may dispose
+    /// this attachment synchronously; the drain then stops and later buffered
+    /// frames are not delivered.
     virtual void activate(ReplicatedStateFrameSink listener) = 0;
 
-    /// Stop delivery and release source resources. Idempotent.
+    /// Stop delivery and release source resources. Idempotent, and may be
+    /// called synchronously from inside the frame callback (a source-contract
+    /// failure disposes its attachment). A source must keep the executing
+    /// callable and its dispatch state alive until that callback returns and
+    /// must not invoke the listener after `dispose()` returns.
     virtual void dispose() noexcept = 0;
 };
 
@@ -127,12 +147,25 @@ public:
 /// At most this many deliveries wait behind one subscription's running
 /// callback. Overflow keeps only the newest pending `value`/`context`/
 /// `delivery`, so update sequences may skip (pi `StateSubscriber.push`).
+/// This is fixed upstream pi authority, not a measured Runtime capacity;
+/// `docs/runtime-capacities.md` records the explicit exception.
 inline constexpr std::size_t kReplicatedStatePendingLimit{100};
 
 /// A synchronously hydrated publication-only view of one authoritative source
 /// (pi `AttachedReplicatedState`): it publishes the exact immutable revisions
 /// the source committed, keeps the last good value across a source contract
 /// failure, and isolates every subscription's progress and failures.
+///
+/// Serialized domain: source frame delivery and every method below must run
+/// in one serialized execution domain (see `ReplicatedStateSink`); no
+/// cross-thread synchronization is provided.
+///
+/// Lifetime: `subscribe()` and `dispose()` are reentrancy-safe — a listener,
+/// frame callback, or error hook may destroy the owning state, dispose it, or
+/// unsubscribe during a callback. Destruction is deferred until the in-flight
+/// Chord dispatch returns, matching the frozen object's retained lifetime;
+/// queued publications that were already accepted still reach the other
+/// subscriptions.
 class AttachedReplicatedState final {
 public:
     /// Attach to `source` and synchronously hydrate from its snapshot. `source`
@@ -140,8 +173,10 @@ public:
     [[nodiscard]] static support::Expected<AttachedReplicatedState> attach(
             ReplicatedStateSource& source, ReplicatedStateSourceOptions options = {});
 
-    // Owning pimpl handle: moving preserves the subscriptions; the destructor
-    // releases the source attachment.
+    // Owning handle: moving preserves the subscriptions; the destructor
+    // releases the source attachment. A moved-from state may only be
+    // destroyed, move-assigned, or `dispose()`d; `value()` and `subscribe()`
+    // require an attached state.
     AttachedReplicatedState(AttachedReplicatedState&&) noexcept;
     AttachedReplicatedState& operator=(AttachedReplicatedState&&) noexcept;
     ~AttachedReplicatedState();
@@ -149,9 +184,11 @@ public:
     AttachedReplicatedState(const AttachedReplicatedState&) = delete;
     AttachedReplicatedState& operator=(const AttachedReplicatedState&) = delete;
 
-    /// The current immutable revision. After a cursor gap this is the last
-    /// good value; after `dispose()` it is the last published value.
-    [[nodiscard]] const Json& value() const noexcept;
+    /// The current immutable revision, returned as an immutable `Json` handle:
+    /// a retained copy keeps the revision it was read at even after later
+    /// publications. After a cursor gap this is the last good value; after
+    /// `dispose()` it is the last published value.
+    [[nodiscard]] Json value() const noexcept;
 
     /// Add one independent subscription. The cold hydration is delivered
     /// before this returns; a later subscriber receives only the current
@@ -168,9 +205,9 @@ public:
 private:
     struct Impl;
 
-    explicit AttachedReplicatedState(std::unique_ptr<Impl> impl) noexcept;
+    explicit AttachedReplicatedState(std::shared_ptr<Impl> impl) noexcept;
 
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Impl> impl_;
 };
 
 } // namespace cch::chord

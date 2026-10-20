@@ -68,6 +68,7 @@ type SourceValue = Readonly<{ value: number }>;
 class TestSource {
     readonly attachments = new Set<TestSourceAttachment>();
     onAttach: (() => void) | undefined;
+    disposeCalls = 0;
     #value: SourceValue;
     #cursor: number;
 
@@ -79,7 +80,10 @@ class TestSource {
     attach(): TestSourceAttachment {
         const attachment = new TestSourceAttachment(
             Object.freeze({ value: this.#value, cursor: this.#cursor }),
-            () => this.attachments.delete(attachment),
+            () => {
+                this.attachments.delete(attachment);
+                this.disposeCalls += 1;
+            },
         );
         this.attachments.add(attachment);
         this.onAttach?.();
@@ -720,6 +724,214 @@ export async function observerDeliveryScenarios(): Promise<Scenario[]> {
                 "packages/chord/src/state.ts:ReplicatedStatePublisher.subscribe,StateSubscriber",
             inputs: { snapshot: { value: 0, cursor: 0 }, sameListenerSubscribedTwice: true, firstUnsubscribedTwice: true },
             expected: { received },
+        });
+    }
+
+    return scenarios;
+}
+
+/** Review-edge observations requested by the #1062 dispositions. */
+export async function reviewEdgeScenarios(): Promise<Scenario[]> {
+    const scenarios: Scenario[] = [];
+
+    {
+        // Registration order and reentrant subscribe/unsubscribe interaction.
+        const source = new TestSource(Object.freeze({ value: 0 }));
+        const state = replicatedState(source);
+        const events: string[] = [];
+        const stops: Record<string, () => void> = {};
+        const subscribe = (name: string, onUpdate?: () => void): void => {
+            stops[name] = state.subscribe((_value: Any, _context: Any, delivery: Any) => {
+                events.push(`${name}:${delivery.kind}:${delivery.sequence}`);
+                if (delivery.kind === "update" && delivery.sequence === 2) onUpdate?.();
+            }) as () => void;
+        };
+        subscribe("a", () => {
+            stops.b?.();
+            subscribe("d");
+        });
+        subscribe("b");
+        subscribe("c");
+        commitFrame(source, 1);
+        commitFrame(source, 2);
+        commitFrame(source, 3);
+        assert.deepEqual(events.slice(0, 3), ["a:hydrate:0", "b:hydrate:0", "c:hydrate:0"]);
+        assert.deepEqual(events.slice(3, 6), ["a:update:1", "b:update:1", "c:update:1"]);
+        assert.deepEqual(events.slice(6), [
+            "a:update:2",
+            "d:hydrate:2",
+            "c:update:2",
+            "a:update:3",
+            "c:update:3",
+            "d:update:3",
+        ]);
+        scenarios.push({
+            name: "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
+            source:
+                "packages/chord/src/state.ts:ReplicatedStatePublisher.subscribe,ReplicatedStatePublisher.publish,StateSubscriber.close; " +
+                "packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks",
+            inputs: { snapshot: { value: 0, cursor: 0 }, subscribers: ["a", "b", "c"], commits: [1, 2, 3] },
+            expected: { events },
+        });
+    }
+
+    {
+        // Retained value identity across a later publication.
+        const source = new TestSource(Object.freeze({ value: 0 }));
+        const state = replicatedState(source);
+        const first = Object.freeze({ value: 1 });
+        source.commit(first, Object.freeze([["s", ["value"], 1]]), BACKGROUND_CONTEXT, 1);
+        const retained = state.value;
+        source.commit(Object.freeze({ value: 2 }), Object.freeze([["s", ["value"], 2]]), BACKGROUND_CONTEXT, 2);
+        assert.equal(retained, first);
+        assert.notEqual(state.value, retained);
+        scenarios.push({
+            name: "a retained value reference keeps the revision it was read at across a later commit",
+            source:
+                "packages/chord/src/state.ts:ReplicatedStatePublisher.value,AttachedReplicatedStateImpl.value; " +
+                "packages/chord/test/replicated-state.test.ts:exact source values",
+            inputs: { snapshot: { value: 0, cursor: 0 }, retainedRevision: 1, laterRevision: 2 },
+            expected: {
+                retainedValue: { value: 1 },
+                currentValue: { value: 2 },
+                retainedIsTheOldObject: true,
+                currentIsTheRetainedObject: false,
+            },
+        });
+    }
+
+    {
+        // Default diagnostic: a gap with no onError hook is observable asynchronously.
+        const source = new TestSource(Object.freeze({ value: 1 }));
+        const state = replicatedState(source);
+        const uncaught: string[] = [];
+        const handler = (error: Any) => {
+            uncaught.push(error.message);
+        };
+        process.on("uncaughtException", handler);
+        source.commit(Object.freeze({ value: 2 }), Object.freeze([["s", ["value"], 2]]), BACKGROUND_CONTEXT, 1);
+        source.commit(Object.freeze({ value: 3 }), Object.freeze([["s", ["value"], 3]]), BACKGROUND_CONTEXT, 3);
+        await settled();
+        process.off("uncaughtException", handler);
+        assert.deepEqual(uncaught, ["Replicated state source cursor has a gap: expected 2, received 3"]);
+        assert.deepEqual(state.value, { value: 2 });
+        assert.equal(source.disposeCalls, 1);
+        scenarios.push({
+            name: "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
+            source:
+                "packages/chord/src/state.ts:AttachedReplicatedStateImpl.#report,reportErrorAsync,AttachedReplicatedStateImpl.#fail",
+            inputs: {
+                snapshot: { value: 1, cursor: 0 },
+                commits: [{ value: 2, cursor: 1 }, { value: 3, cursor: 3 }, { value: 4, cursor: 4 }],
+            },
+            expected: {
+                observedAsynchronousFailure: "Replicated state source cursor has a gap: expected 2, received 3",
+                disposeCalls: 1,
+                lastGoodValue: { value: 2 },
+                lastGoodValueAfterLaterFrame: { value: 2 },
+            },
+        });
+    }
+
+    {
+        // Snapshot cursor outside the safe integer range.
+        const source = new TestSource(Object.freeze({ value: 0 }), 2 ** 53);
+        let message = "";
+        try {
+            replicatedState(source);
+        } catch (error) {
+            message = (error as Error).message;
+        }
+        assert.equal(message, "Replicated state source snapshot cursor must be a safe integer");
+        assert.equal(source.disposeCalls, 1);
+        assert.equal(source.attachments.size, 0);
+        scenarios.push({
+            name: "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
+            source: "packages/chord/src/state.ts:assertCursor,attachReplicatedStateSource,AttachedReplicatedStateImpl.constructor",
+            inputs: { snapshot: { value: 0, cursor: 9007199254740992 } },
+            expected: { message, disposeCalls: 1, attachmentCountAfterFailure: 0 },
+        });
+    }
+
+    {
+        // Negative safe integer cursors are valid.
+        const source = new TestSource(Object.freeze({ value: 0 }), -5);
+        const state = replicatedState(source);
+        source.commit(Object.freeze({ value: 1 }), Object.freeze([["s", ["value"], 1]]), BACKGROUND_CONTEXT, -4);
+        assert.deepEqual(state.value, { value: 1 });
+        scenarios.push({
+            name: "negative safe integer cursors are accepted for the snapshot and later frames",
+            source: "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive",
+            inputs: { snapshot: { value: 0, cursor: -5 }, commit: { value: 1, cursor: -4 } },
+            expected: { finalValue: { value: 1 } },
+        });
+    }
+
+    {
+        // Frame cursor outside the safe integer range at the boundary.
+        const source = new TestSource(Object.freeze({ value: 1 }), Number.MAX_SAFE_INTEGER);
+        const errors: string[] = [];
+        const state = replicatedState(source, { onError: (error: Any) => errors.push(error.message) });
+        source.commit(
+            Object.freeze({ value: 2 }),
+            Object.freeze([["s", ["value"], 2]]),
+            BACKGROUND_CONTEXT,
+            Number.MAX_SAFE_INTEGER + 1,
+        );
+        source.commit(
+            Object.freeze({ value: 3 }),
+            Object.freeze([["s", ["value"], 3]]),
+            BACKGROUND_CONTEXT,
+            Number.MAX_SAFE_INTEGER + 2,
+        );
+        assert.deepEqual(errors, ["Replicated state source frame cursor must be a safe integer"]);
+        assert.deepEqual(state.value, { value: 1 });
+        assert.equal(source.disposeCalls, 1);
+        scenarios.push({
+            name: "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+            source: "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#fail",
+            inputs: {
+                snapshot: { value: 1, cursor: 9007199254740991 },
+                commits: [{ value: 2, cursor: 9007199254740992 }, { value: 3, cursor: 9007199254740993 }],
+            },
+            expected: {
+                reportedErrors: errors,
+                disposeCalls: 1,
+                lastGoodValue: { value: 1 },
+                lastGoodValueAfterLaterFrame: { value: 1 },
+            },
+        });
+    }
+
+    {
+        // Gap while draining a buffered activation with later buffered frames.
+        const source = new TestSource(Object.freeze({ value: 0 }), 0);
+        const errors: string[] = [];
+        source.onAttach = () => {
+            source.commit(Object.freeze({ value: 1 }), Object.freeze([["s", ["value"], 1]]), BACKGROUND_CONTEXT, 1);
+            source.commit(Object.freeze({ value: 2 }), Object.freeze([["s", ["value"], 2]]), BACKGROUND_CONTEXT, 3);
+            source.commit(Object.freeze({ value: 3 }), Object.freeze([["s", ["value"], 3]]), BACKGROUND_CONTEXT, 4);
+        };
+        const state = replicatedState(source, { onError: (error: Any) => errors.push(error.message) });
+        assert.deepEqual(errors, ["Replicated state source cursor has a gap: expected 2, received 3"]);
+        assert.deepEqual(state.value, { value: 1 });
+        assert.equal(source.disposeCalls, 1);
+        assert.equal(source.attachments.size, 0);
+        scenarios.push({
+            name: "a gap while draining a buffered activation ignores later buffered frames and disposes once",
+            source:
+                "packages/chord/test/replicated-state.test.ts:TestSourceAttachment.activate; " +
+                "packages/chord/src/state.ts:AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#fail",
+            inputs: {
+                snapshot: { value: 0, cursor: 0 },
+                bufferedCommits: [{ value: 1, cursor: 1 }, { value: 2, cursor: 3 }, { value: 3, cursor: 4 }],
+            },
+            expected: {
+                reportedErrors: errors,
+                lastGoodValue: { value: 1 },
+                disposeCalls: 1,
+                attachmentCountAfterFailure: 0,
+            },
         });
     }
 

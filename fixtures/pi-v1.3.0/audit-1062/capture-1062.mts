@@ -25,7 +25,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Scenario } from "./scenarios.mts";
-import { observerDeliveryScenarios, orderedFrameScenarios } from "./scenarios.mts";
+import { observerDeliveryScenarios, orderedFrameScenarios, reviewEdgeScenarios } from "./scenarios.mts";
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const REPO = join(dirname(SCRIPT), "../../..");
@@ -152,6 +152,11 @@ const artifacts = await Promise.all([
         "packages/chord/src/state.ts:StateSubscriber.push,StateSubscriber.drain,StateSubscriber.close,AttachedReplicatedStateImpl.#receive,ReplicatedStateDelivery",
         "packages/chord/test/replicated-state-delivery.test.ts:attached listener errors; unsubscribe drops queued callbacks without joining or aborting the running callback; treats two subscriptions of the same callback independently",
         "packages/chord/test/replicated-state.test.ts:reports listener failures without throwing them into the source",
+    ]),
+    artifactFor("review-edges.json", reviewEdgeScenarios, [
+        "packages/chord/src/state.ts:assertCursor,AttachedReplicatedStateImpl.#receive,AttachedReplicatedStateImpl.#report,reportErrorAsync,AttachedReplicatedStateImpl.#fail,ReplicatedStatePublisher.value,ReplicatedStatePublisher.subscribe,ReplicatedStatePublisher.publish",
+        "packages/chord/test/replicated-state.test.ts:TestSourceAttachment.activate,authoritative replicated state sources",
+        "packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks",
     ]),
 ]);
 
