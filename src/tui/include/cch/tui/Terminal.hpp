@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cch/support/Error.hpp>
+#include <cch/tui/ProgramStatus.hpp>
 
 #include <chrono>
 #include <cstddef>
@@ -223,6 +224,12 @@ public:
     /// survives terminal redraws and timeouts; stop() clears an active
     /// indicator during mode restoration.
     [[nodiscard]] virtual support::ExpectedVoid set_progress(bool active) = 0;
+
+    /// Report what the program is doing (OSC 7501). Sent only to terminals
+    /// that support it; the latest status is re-sent when support is confirmed
+    /// or the terminal restarts, and stop() clears it during mode restoration
+    /// (pi `ProcessTerminal.setProgramStatus`).
+    [[nodiscard]] virtual support::ExpectedVoid set_program_status(const ProgramStatus& status) = 0;
 
     /// Drain buffered input before exit so Kitty key-release escape sequences
     /// cannot leak into the parent shell after the TUI stops. Keyboard

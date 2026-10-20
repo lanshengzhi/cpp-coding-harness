@@ -149,7 +149,18 @@ boost::asio::awaitable<support::Expected<bool>> SessionFlowController::resolve_b
         co_return resolved.decision == ProjectTrustDecision::Trusted;
     }
 
+    // The boot trust selector is a question dialog waiting on the user: report
+    // it as the OSC 7501 blocked status until the answer arrives (pi
+    // `programStatus.setBlocked("extension-dialog", ...)`).
+    if (hooks_.program_status_dialog) {
+        hooks_.program_status_dialog("boot-trust",
+                BlockedProgramStatus{
+                        .kind = cch::tui::ProgramStatus::Kind::Question,
+                        .message = "Trust project folder?",
+                });
+    }
     auto option = co_await show_boot_trust_prompt(workspace);
+    if (hooks_.program_status_dialog) hooks_.program_status_dialog("boot-trust", std::nullopt);
     if (!option) co_return false;
     if (!option->updates.empty()) {
         if (auto saved = store.setMany(option->updates); !saved) {

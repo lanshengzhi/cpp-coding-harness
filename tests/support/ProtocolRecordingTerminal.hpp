@@ -30,6 +30,7 @@ public:
         ClearScreen,
         SetScrollMargins,
         ResetScrollMargins,
+        SetProgramStatus,
     };
 
     struct ObservedOp {
@@ -40,6 +41,7 @@ public:
         bool enabled{false};
         std::size_t margin_top{0};
         std::size_t margin_bottom{0};
+        cch::tui::ProgramStatus program_status{};
     };
 
     explicit ProtocolRecordingTerminal(cch::tui::VirtualTerminal& inner) : inner_(inner) {}
@@ -132,6 +134,14 @@ public:
     }
 
     [[nodiscard]] cch::support::ExpectedVoid set_progress(bool active) override { return inner_.set_progress(active); }
+
+    [[nodiscard]] cch::support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus& status) override {
+        ops_.push_back(ObservedOp{
+                .kind = OpKind::SetProgramStatus,
+                .program_status = status,
+        });
+        return inner_.set_program_status(status);
+    }
 
     [[nodiscard]] cch::support::ExpectedVoid drain_input(
             std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {

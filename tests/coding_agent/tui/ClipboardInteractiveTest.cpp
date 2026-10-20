@@ -100,6 +100,9 @@ public:
         return terminal_.apply_cell_pixel_dimensions(pixels);
     }
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override { return terminal_.set_progress(active); }
+    [[nodiscard]] support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus& status) override {
+        return terminal_.set_program_status(status);
+    }
     [[nodiscard]] support::ExpectedVoid drain_input(
             std::chrono::milliseconds max_ms, std::chrono::milliseconds idle_ms) override {
         return terminal_.drain_input(max_ms, idle_ms);

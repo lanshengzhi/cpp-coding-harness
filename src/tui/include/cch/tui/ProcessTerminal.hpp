@@ -69,6 +69,10 @@ public:
     /// it first (#952), and this call refines the reported cell pixels.
     [[nodiscard]] support::ExpectedVoid apply_cell_pixel_dimensions(CellPixelDimensions pixels) override;
     [[nodiscard]] support::ExpectedVoid set_progress(bool active) override;
+    /// Report the latest OSC 7501 status. The status is stored across stop()
+    /// and only written to a terminal that confirmed support (or was forced by
+    /// `PI_PROGRAM_STATUS=1`); stop() clears the reported status.
+    [[nodiscard]] support::ExpectedVoid set_program_status(const ProgramStatus& status) override;
     [[nodiscard]] support::ExpectedVoid drain_input(std::chrono::milliseconds max_ms = kDrainInputMaxMs,
             std::chrono::milliseconds idle_ms = kDrainInputIdleMs) override;
     [[nodiscard]] support::ExpectedVoid enter_output_only() override;

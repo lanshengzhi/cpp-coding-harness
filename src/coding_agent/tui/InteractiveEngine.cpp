@@ -197,7 +197,8 @@ InteractiveEngine::InteractiveEngine(
       fullscreen_host_(std::make_unique<AltScreenHost>(terminal, action_sink_, action_generation_)),
       tui_(tui_mode == coding_agent::TuiMode::Fullscreen ? static_cast<cch::tui::ITui*>(&fullscreen_host_->tui())
                                                          : main_screen_.get()),
-      executor_(std::move(executor)), exit_wait_(executor_), flows_settled_(executor_) {
+      program_status_(terminal_, "pike"), executor_(std::move(executor)), exit_wait_(executor_),
+      flows_settled_(executor_) {
     exit_wait_.expires_at(std::chrono::steady_clock::time_point::max());
     flows_settled_.expires_at(std::chrono::steady_clock::time_point::max());
     // The owned fullscreen root registers the same platform-action adapter an
@@ -341,6 +342,10 @@ support::ExpectedVoid InteractiveEngine::start(InteractiveSessionRun run) {
     if (auto started = tui_->start(); !started) return fail_start(started.error());
     tui_started_ = true;
     running_ = true;
+    // pi `interactive-mode.ts:1000`: the resting status is reported right
+    // after `ui.start()`, before any boot dialog, so the terminal shows the
+    // program idle from startup.
+    program_status_.reset();
     extension_ui_host_.bind(*tui_, std::move(extension_ui_registration_factory_));
     if (theme_controller_) theme_controller_->rebind_tui(*tui_);
 
@@ -1170,6 +1175,11 @@ support::ExpectedVoid InteractiveEngine::fail_start(const support::Error& error)
 
 void InteractiveEngine::bind_session_progress(AgentSession& session) {
     unbind_session_progress();
+    // A replaced session starts from the resting idle status, exactly as pi
+    // resets the reporter in `rebindCurrentSession`. The run's initial bind
+    // happens before the TUI owns the terminal; `start()` reports the startup
+    // idle once the terminal is started.
+    if (tui_started_) program_status_.reset();
     const auto weak = weak_from_this();
     if (auto sub = session.subscribe([weak](const agent::AgentLifecycleEvent& event) -> support::ExpectedVoid {
             if (const auto self = weak.lock()) {
@@ -1181,6 +1191,11 @@ void InteractiveEngine::bind_session_progress(AgentSession& session) {
                     if (self->settings_manager_ && self->settings_manager_->get_show_terminal_progress()) {
                         (void)self->terminal_.set_progress(false);
                     }
+                }
+                if (std::holds_alternative<agent::AgentStartEvent>(event)) {
+                    self->program_status_.handle_agent_start();
+                } else if (const auto* end = std::get_if<agent::MessageEndEvent>(&event)) {
+                    self->program_status_.handle_message_end(end->message);
                 }
             }
             return {};
@@ -1195,10 +1210,12 @@ void InteractiveEngine::bind_session_progress(AgentSession& session) {
                     if (self->settings_manager_ && self->settings_manager_->get_show_terminal_progress()) {
                         (void)self->terminal_.set_progress(true);
                     }
-                } else if (std::holds_alternative<CompactionEndEvent>(event)) {
+                    self->program_status_.handle_compaction_start();
+                } else if (const auto* end = std::get_if<CompactionEndEvent>(&event)) {
                     if (self->settings_manager_ && self->settings_manager_->get_show_terminal_progress()) {
                         (void)self->terminal_.set_progress(false);
                     }
+                    self->program_status_.handle_compaction_end(end->aborted, end->error_message, end->reason);
                 }
             }
             return {};
@@ -1206,6 +1223,10 @@ void InteractiveEngine::bind_session_progress(AgentSession& session) {
             sub) {
         progress_session_subscription_.emplace(std::move(*sub));
     }
+}
+
+void InteractiveEngine::set_program_status_dialog(std::string source, std::optional<BlockedProgramStatus> status) {
+    program_status_.set_blocked(std::move(source), std::move(status));
 }
 
 void InteractiveEngine::unbind_session_progress() noexcept {

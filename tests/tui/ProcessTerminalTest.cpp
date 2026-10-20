@@ -2396,6 +2396,7 @@ TEST_CASE("Process Terminal atomic stop rejects unstarted terminal or non-altern
             cch::support::ExpectedVoid end_synchronized_update() override { return {}; }
             cch::support::ExpectedVoid set_title(std::string_view) override { return {}; }
             cch::support::ExpectedVoid set_progress(bool) override { return {}; }
+            cch::support::ExpectedVoid set_program_status(const cch::tui::ProgramStatus&) override { return {}; }
             cch::support::ExpectedVoid drain_input(std::chrono::milliseconds, std::chrono::milliseconds) override {
                 return {};
             }

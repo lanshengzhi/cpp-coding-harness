@@ -50,8 +50,10 @@ struct ColorSchemeResponse {
 /// Out-of-band terminal control responses demuxed from the raw input stream:
 /// the CPR answer to the startup DSR query (`ESC [ rows ; cols R`, ADR 0041),
 /// the `ESC [ 6 ; h ; w t` cell-size answer, keyboard-protocol negotiation,
-/// and color-scheme/color reports.
-using TerminalResponseVariant =
-        std::variant<CursorPosition, CellSizeResponse, KeyboardProtocolResponse, ColorSchemeResponse>;
+/// the OSC 7501 program-status query reply, and color-scheme/color reports.
+struct ProgramStatusResponse {};
+
+using TerminalResponseVariant = std::
+        variant<CursorPosition, CellSizeResponse, KeyboardProtocolResponse, ProgramStatusResponse, ColorSchemeResponse>;
 
 } // namespace cch::tui::detail

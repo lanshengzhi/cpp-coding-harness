@@ -131,6 +131,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/ModelFlowController.cpp
         src/coding_agent/tui/ModelSelector.cpp
         src/coding_agent/tui/OpenBrowser.cpp
+        src/coding_agent/tui/ProgramStatusReporter.cpp
         src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/ScopedModelsSelector.cpp
         src/coding_agent/tui/SessionFlowController.cpp
