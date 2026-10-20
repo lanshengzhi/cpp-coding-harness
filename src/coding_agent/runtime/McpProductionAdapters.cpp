@@ -327,7 +327,8 @@ support::AsyncResult<std::shared_ptr<McpLiveConnection>> ProductionMcpConnection
                 } else {
                     const mcp::McpStdioServerConfig config = std::get<mcp::McpStdioServerConfig>(entry.config);
                     source = [config]() -> boost::asio::awaitable<support::Expected<ConnectedMcpTransport>> {
-                        auto client = co_await support::detail::await_async_result(mcp::McpStdioClient::connect(config));
+                        auto client =
+                                co_await support::detail::await_async_result(mcp::McpStdioClient::connect(config));
                         if (!client) {
                             co_return std::unexpected(std::move(client.error()));
                         }

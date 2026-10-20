@@ -150,23 +150,23 @@ support::AsyncResult<OAuthHttpResponse> BoostBeastOAuthHttpClient::post(std::str
     return support::detail::make_async_result(
             [url = std::move(url), headers = std::move(headers), body = std::move(body), stop_token]() mutable
                     -> boost::asio::awaitable<support::Expected<OAuthHttpResponse>> {
-                co_return co_await perform_https_request(
-                        boost::beast::http::verb::post, std::move(url), std::move(headers), std::move(body), stop_token);
+                co_return co_await perform_https_request(boost::beast::http::verb::post,
+                        std::move(url),
+                        std::move(headers),
+                        std::move(body),
+                        stop_token);
             });
 }
 
 support::AsyncResult<OAuthHttpResponse> BoostBeastOAuthHttpClient::get(
         std::string url, std::map<std::string, std::string, std::less<>> headers, std::stop_token stop_token) {
-    return support::detail::make_async_result(
-            [url = std::move(url), headers = std::move(headers), stop_token]() mutable
-                    -> boost::asio::awaitable<support::Expected<OAuthHttpResponse>> {
-                co_return co_await perform_https_request(
-                        boost::beast::http::verb::get, std::move(url), std::move(headers), std::string{}, stop_token);
-            });
+    return support::detail::make_async_result([url = std::move(url), headers = std::move(headers), stop_token]() mutable
+                                                      -> boost::asio::awaitable<support::Expected<OAuthHttpResponse>> {
+        co_return co_await perform_https_request(
+                boost::beast::http::verb::get, std::move(url), std::move(headers), std::string{}, stop_token);
+    });
 }
 
-std::shared_ptr<OAuthHttpClient> default_oauth_http_client() {
-    return std::make_shared<BoostBeastOAuthHttpClient>();
-}
+std::shared_ptr<OAuthHttpClient> default_oauth_http_client() { return std::make_shared<BoostBeastOAuthHttpClient>(); }
 
 } // namespace cch::mcp

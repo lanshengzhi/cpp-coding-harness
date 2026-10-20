@@ -248,8 +248,8 @@ struct LoginHarness {
                 io,
                 [provider, store, server_name, server_url, interaction = std::move(interaction)]() mutable
                         -> boost::asio::awaitable<support::ExpectedVoid> {
-                    co_return co_await support::detail::await_async_result(
-                            app_mcp::login_mcp_server(store, server_name, server_url, *provider, std::move(interaction)));
+                    co_return co_await support::detail::await_async_result(app_mcp::login_mcp_server(
+                            store, server_name, server_url, *provider, std::move(interaction)));
                 },
                 boost::asio::use_future);
 

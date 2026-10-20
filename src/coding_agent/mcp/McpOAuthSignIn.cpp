@@ -359,16 +359,17 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
             }
             extra_paths.push_back(settings.path + "/" + *callback_id);
         }
-        auto started = co_await support::detail::await_async_result(OAuthCallbackServer::start(OAuthCallbackServerOptions{
-                .host = settings.host,
-                .port = settings.port.value_or(0),
-                .path = settings.path,
-                .extra_paths = std::move(extra_paths),
-                .state = *working.oauth_state,
-                .validate_state = true,
-                .success_message = "MCP server authorization completed. You may now close this page.",
-                .exchange_error_message = "MCP server authorization failed.",
-        }));
+        auto started =
+                co_await support::detail::await_async_result(OAuthCallbackServer::start(OAuthCallbackServerOptions{
+                        .host = settings.host,
+                        .port = settings.port.value_or(0),
+                        .path = settings.path,
+                        .extra_paths = std::move(extra_paths),
+                        .state = *working.oauth_state,
+                        .validate_state = true,
+                        .success_message = "MCP server authorization completed. You may now close this page.",
+                        .exchange_error_message = "MCP server authorization failed.",
+                }));
         if (!started) {
             co_return std::unexpected(std::move(started.error()));
         }

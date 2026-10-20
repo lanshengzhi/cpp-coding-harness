@@ -15,9 +15,8 @@ public:
             std::string body,
             std::stop_token stop_token) override;
 
-    [[nodiscard]] support::AsyncResult<OAuthHttpResponse> get(std::string url,
-            std::map<std::string, std::string, std::less<>> headers,
-            std::stop_token stop_token) override;
+    [[nodiscard]] support::AsyncResult<OAuthHttpResponse>
+    get(std::string url, std::map<std::string, std::string, std::less<>> headers, std::stop_token stop_token) override;
 };
 
 } // namespace cch::mcp

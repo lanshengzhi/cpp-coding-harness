@@ -49,14 +49,10 @@ public:
         std::string body;
     };
 
-    support::AsyncResult<coding_agent::mcp::OAuthHttpResponse> get(std::string url,
-            std::map<std::string, std::string, std::less<>> headers,
-            std::stop_token stop_token) override {
+    support::AsyncResult<coding_agent::mcp::OAuthHttpResponse>
+    get(std::string url, std::map<std::string, std::string, std::less<>> headers, std::stop_token stop_token) override {
         return support::detail::make_async_result(
-                [this,
-                        url = std::move(url),
-                        headers = std::move(headers),
-                        stop_token]() mutable
+                [this, url = std::move(url), headers = std::move(headers), stop_token]() mutable
                         -> boost::asio::awaitable<support::Expected<coding_agent::mcp::OAuthHttpResponse>> {
                     get_requests.push_back(GetRequest{std::move(url), std::move(headers), stop_token});
                     auto& queue = get_responses[get_requests.back().url];
@@ -82,11 +78,7 @@ public:
             std::string body,
             std::stop_token stop_token) override {
         return support::detail::make_async_result(
-                [this,
-                        url = std::move(url),
-                        headers = std::move(headers),
-                        body = std::move(body),
-                        stop_token]() mutable
+                [this, url = std::move(url), headers = std::move(headers), body = std::move(body), stop_token]() mutable
                         -> boost::asio::awaitable<support::Expected<coding_agent::mcp::OAuthHttpResponse>> {
                     requests.push_back(Request{url, std::move(headers), std::move(body), stop_token});
                     if (fail_first_n_requests > 0) {

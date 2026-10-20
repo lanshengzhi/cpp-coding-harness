@@ -22,6 +22,8 @@ using cch::mcp::mcp_oauth_state_from_credential;
 /// Run one MCP server's OAuth sign-in through the existing `AuthInteraction`
 /// surface and persist the tokens into `<agentDir>/mcp-auth.json`: the
 /// `McpOAuthCredentialStore`-shaped state under `mcp__<server>|<url>`.
+/// `provider` must outlive the returned operation: the continuation borrows it
+/// and uses it when the operation is consumed asynchronously.
 [[nodiscard]] support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
         std::string server_name,
         std::string server_url,

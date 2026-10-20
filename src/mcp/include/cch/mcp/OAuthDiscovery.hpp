@@ -120,8 +120,7 @@ struct OAuthDiscoveryOptions {
 /// server's origin and path, retrying the bare origin path when the
 /// path-suffixed one is a miss (4xx or 502) and the server path is not `/`.
 /// The document must parse, else the error is explicit.
-[[nodiscard]] support::AsyncResult<ProtectedResourceMetadata>
-discover_protected_resource_metadata(
+[[nodiscard]] support::AsyncResult<ProtectedResourceMetadata> discover_protected_resource_metadata(
         std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options = {});
 
 /// pi `discoverAuthorizationServerMetadata`: try the candidate URLs in order
@@ -129,8 +128,8 @@ discover_protected_resource_metadata(
 /// is an error. `std::nullopt` means every candidate missed. A hit whose
 /// `issuer` differs from the authorization server URL (trailing-slash
 /// insensitive) is rejected unless `skip_issuer_validation`.
-[[nodiscard]] support::AsyncResult<std::optional<AuthorizationServerMetadata>>
-discover_authorization_server_metadata(std::shared_ptr<OAuthHttpClient> http,
+[[nodiscard]] support::AsyncResult<std::optional<AuthorizationServerMetadata>> discover_authorization_server_metadata(
+        std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthDiscoveryOptions options = {});
 

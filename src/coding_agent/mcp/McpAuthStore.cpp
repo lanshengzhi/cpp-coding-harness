@@ -267,8 +267,7 @@ support::Expected<std::optional<OAuthState>> McpAuthStore::load(std::string_view
     return std::optional<OAuthState>{};
 }
 
-support::ExpectedVoid McpAuthStore::save(
-        std::string_view name, std::string_view server_url, const OAuthState& state) {
+support::ExpectedVoid McpAuthStore::save(std::string_view name, std::string_view server_url, const OAuthState& state) {
     auto states = read_states(file_);
     if (!states) {
         return std::unexpected(std::move(states.error()));
@@ -277,8 +276,7 @@ support::ExpectedVoid McpAuthStore::save(
     return write_states(file_, *states);
 }
 
-support::Expected<std::optional<OAuthTokens>> McpAuthStore::tokens(
-        std::string_view name, std::string_view server_url) {
+support::Expected<std::optional<OAuthTokens>> McpAuthStore::tokens(std::string_view name, std::string_view server_url) {
     auto states = read_states(file_);
     if (!states) {
         return std::unexpected(std::move(states.error()));

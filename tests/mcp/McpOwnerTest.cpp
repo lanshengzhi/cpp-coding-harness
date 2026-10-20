@@ -8,9 +8,10 @@
 // fixture deliberately holds open. Each case runs initialize (inside connect),
 // tools/list, tools/call, and close over the public headers only.
 
-#include "support/EnvVarGuard.hpp"
 #include "support/AsyncResultBridge.hpp"
+#include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
+#include "support/UniqueFd.hpp"
 
 #include <cch/mcp/HttpClient.hpp>
 #include <cch/mcp/HttpServerConfig.hpp>
@@ -27,6 +28,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <charconv>
+#include <cerrno>
 #include <chrono>
 #include <memory>
 #include <optional>
@@ -94,8 +96,7 @@ template <typename T, typename E>
 
 /// Collect every page of `tools/list`, proving the owner's cursor loop rather
 /// than a single-page happy path.
-[[nodiscard]] std::vector<std::string> list_tool_names(
-        boost::asio::io_context& io, mcp::Client& client) {
+[[nodiscard]] std::vector<std::string> list_tool_names(boost::asio::io_context& io, mcp::Client& client) {
     std::vector<std::string> names;
     std::optional<support::JsonValue> cursor;
     while (true) {
@@ -106,7 +107,7 @@ template <typename T, typename E>
                 params.get_object().emplace("cursor", value.get_string());
             }
         }
-        auto response = run(io,client.request("tools/list", std::move(params)));
+        auto response = run(io, client.request("tools/list", std::move(params)));
         REQUIRE(response.has_value());
         const auto& tools = response->at("tools").get_array();
         for (const auto& tool : tools) {
@@ -135,17 +136,22 @@ template <typename T, typename E>
 class HttpFixtureServer final {
 public:
     HttpFixtureServer() {
-        int fds[2]{-1, -1};
-        REQUIRE(::pipe(fds) == 0);
+        int raw_fds[2]{-1, -1};
+        REQUIRE(::pipe(raw_fds) == 0);
+        support::UniqueFd read_fd(raw_fds[0]);
+        support::UniqueFd write_fd(raw_fds[1]);
         const pid_t child = ::fork();
         REQUIRE(child >= 0);
         if (child == 0) {
-            (void)::close(fds[0]);
-            (void)::dup2(fds[1], STDOUT_FILENO);
-            (void)::close(fds[1]);
-            const int devnull = ::open("/dev/null", O_WRONLY);
-            if (devnull >= 0) {
-                (void)::dup2(devnull, STDERR_FILENO);
+            (void)read_fd.close();
+            if (write_fd.get() != STDOUT_FILENO) {
+                (void)::dup2(write_fd.get(), STDOUT_FILENO);
+                (void)write_fd.close();
+            }
+            support::UniqueFd devnull(::open("/dev/null", O_WRONLY));
+            if (devnull && devnull.get() != STDERR_FILENO) {
+                (void)::dup2(devnull.get(), STDERR_FILENO);
+                (void)devnull.close();
             }
             const std::string script = fixture_path("http_server.py");
             const std::string cert = tls_fixture_path("test-server.pem");
@@ -161,37 +167,52 @@ public:
             ::_exit(127);
         }
         pid_ = child;
-        (void)::close(fds[1]);
+        (void)write_fd.close();
         std::string line;
         char character = '\0';
-        while (::read(fds[0], &character, 1) == 1) {
+        while (::read(read_fd.get(), &character, 1) == 1) {
             if (character == '\n') {
                 break;
             }
             line.push_back(character);
         }
-        (void)::close(fds[0]);
+        (void)read_fd.close();
+        if (!line.starts_with("PORT=")) {
+            terminate_child();
+        }
         REQUIRE(line.starts_with("PORT="));
         const std::string_view digits{line.data() + 5, line.size() - 5};
         int port = 0;
-        REQUIRE(std::from_chars(digits.data(), digits.data() + digits.size(), port).ec == std::errc{});
+        const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), port);
+        if (parsed.ec != std::errc{}) {
+            terminate_child();
+        }
+        REQUIRE(parsed.ec == std::errc{});
         url_ = "https://127.0.0.1:" + std::to_string(port) + "/mcp";
     }
 
     HttpFixtureServer(const HttpFixtureServer&) = delete;
     HttpFixtureServer& operator=(const HttpFixtureServer&) = delete;
 
-    ~HttpFixtureServer() {
-        if (pid_ > 0) {
-            (void)::kill(pid_, SIGTERM);
-            int status = 0;
-            (void)::waitpid(pid_, &status, 0);
-        }
-    }
+    ~HttpFixtureServer() { terminate_child(); }
 
     [[nodiscard]] const std::string& url() const noexcept { return url_; }
 
 private:
+    /// Stop and reap the fixture child. Constructor failure paths call this
+    /// before a fatal assertion so a failed `PORT=` line cannot strand the
+    /// python server; the destructor uses the same idempotent path.
+    void terminate_child() noexcept {
+        if (pid_ <= 0) {
+            return;
+        }
+        (void)::kill(pid_, SIGTERM);
+        int status = 0;
+        while (::waitpid(pid_, &status, 0) == -1 && errno == EINTR) {
+        }
+        pid_ = -1;
+    }
+
     pid_t pid_{-1};
     std::string url_;
 };
@@ -216,19 +237,21 @@ TEST_CASE("cch_mcp stdio client initializes, lists, calls and closes against a l
     const auto names = list_tool_names(io, *client);
     CHECK(names == std::vector<std::string>{"echo", "fail", "crash", "hang", "slow"});
 
-    auto call = run(io,client->request("tools/call",
-            support::JsonValue::object_t{
-                    {"name", "echo"},
-                    {"arguments", echo_arguments("owner seam")},
-            }));
+    auto call = run(io,
+            client->request("tools/call",
+                    support::JsonValue::object_t{
+                            {"name", "echo"},
+                            {"arguments", echo_arguments("owner seam")},
+                    }));
     REQUIRE(call.has_value());
     CHECK(first_text_content(*call) == "owner seam");
 
-    auto failure = run(io,client->request("tools/call",
-            support::JsonValue::object_t{
-                    {"name", "fail"},
-                    {"arguments", support::JsonValue::object_t{}},
-            }));
+    auto failure = run(io,
+            client->request("tools/call",
+                    support::JsonValue::object_t{
+                            {"name", "fail"},
+                            {"arguments", support::JsonValue::object_t{}},
+                    }));
     REQUIRE(failure.has_value());
     CHECK(failure->at("isError").get_boolean());
 
@@ -236,8 +259,7 @@ TEST_CASE("cch_mcp stdio client initializes, lists, calls and closes against a l
     CHECK(client->closed());
 }
 
-TEST_CASE("cch_mcp stdio client resolves a caller-cancelled held request as Cancelled",
-        "[mcp][owner][issue1065]") {
+TEST_CASE("cch_mcp stdio client resolves a caller-cancelled held request as Cancelled", "[mcp][owner][issue1065]") {
     boost::asio::io_context io;
     auto client = connect_stdio(io);
 
@@ -247,28 +269,29 @@ TEST_CASE("cch_mcp stdio client resolves a caller-cancelled held request as Canc
         stop.request_stop();
     });
 
-    auto cancelled = run(io,client->request("tools/call",
-            support::JsonValue::object_t{
-                    {"name", "hang"},
-                    {"arguments", support::JsonValue::object_t{}},
-            },
-            mcp::RequestOptions{.stop_token = stop.get_token()}));
+    auto cancelled = run(io,
+            client->request("tools/call",
+                    support::JsonValue::object_t{
+                            {"name", "hang"},
+                            {"arguments", support::JsonValue::object_t{}},
+                    },
+                    mcp::RequestOptions{.stop_token = stop.get_token()}));
     REQUIRE_FALSE(cancelled.has_value());
     CHECK(cancelled.error().code == support::ErrorCode::Cancelled);
 
     client->close();
 }
 
-TEST_CASE("cch_mcp stdio client reports a crashing fixture as a transport failure",
-        "[mcp][owner][issue1065]") {
+TEST_CASE("cch_mcp stdio client reports a crashing fixture as a transport failure", "[mcp][owner][issue1065]") {
     boost::asio::io_context io;
     auto client = connect_stdio(io);
 
-    auto crashed = run(io,client->request("tools/call",
-            support::JsonValue::object_t{
-                    {"name", "crash"},
-                    {"arguments", support::JsonValue::object_t{}},
-            }));
+    auto crashed = run(io,
+            client->request("tools/call",
+                    support::JsonValue::object_t{
+                            {"name", "crash"},
+                            {"arguments", support::JsonValue::object_t{}},
+                    }));
     REQUIRE_FALSE(crashed.has_value());
     CHECK(crashed.error().code != support::ErrorCode::Cancelled);
 
@@ -288,11 +311,12 @@ TEST_CASE("cch_mcp streamable HTTP client initializes, lists, calls and closes a
     const auto names = list_tool_names(io, **client);
     CHECK(names == std::vector<std::string>{"echo", "fail", "sse_echo", "hang", "slow", "crash"});
 
-    auto call = run(io,(*client)->request("tools/call",
-            support::JsonValue::object_t{
-                    {"name", "echo"},
-                    {"arguments", echo_arguments("http owner seam")},
-            }));
+    auto call = run(io,
+            (*client)->request("tools/call",
+                    support::JsonValue::object_t{
+                            {"name", "echo"},
+                            {"arguments", echo_arguments("http owner seam")},
+                    }));
     REQUIRE(call.has_value());
     CHECK(first_text_content(*call) == "http owner seam");
 

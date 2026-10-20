@@ -60,7 +60,8 @@ const std::string kTokenUrl = "https://auth.example.com/token";
 struct Harness {
     std::shared_ptr<tests::FakeOAuthHttpClient> http = std::make_shared<tests::FakeOAuthHttpClient>();
     tests::TempWorkspace workspace;
-    std::shared_ptr<app_mcp::McpAuthStore> store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    std::shared_ptr<app_mcp::McpAuthStore> store =
+            std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     app_mcp::McpOAuthConfig oauth;
     /// The discovery documents, re-scripted for every run because a flow run
     /// fetches them again (discovery is not cached in this slice).
@@ -80,8 +81,8 @@ struct Harness {
         http->get_responses[kResourceMetadataUrl].assign({{200, resource_document}, {200, resource_document}});
         http->get_responses[kAuthorizationServerMetadataUrl].assign(
                 {{200, authorization_server_document}, {200, authorization_server_document}});
-        return tests::run_awaitable(
-                runtime, app_mcp::authorize_mcp(store, "echo", kServerUrl, oauth, kRedirectUrl, http, std::move(options)));
+        return tests::run_awaitable(runtime,
+                app_mcp::authorize_mcp(store, "echo", kServerUrl, oauth, kRedirectUrl, http, std::move(options)));
     }
 
     [[nodiscard]] std::optional<app_mcp::McpOAuthState> state() {

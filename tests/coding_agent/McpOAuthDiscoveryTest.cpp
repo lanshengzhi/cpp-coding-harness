@@ -77,7 +77,8 @@ TEST_CASE("protected resource discovery retries the bare origin after a path-suf
     CHECK(http->get_requests[1].url == "https://mcp.example.com/.well-known/oauth-protected-resource");
     // pi's discovery headers.
     CHECK(http->get_requests[0].headers.at("Accept") == "application/json");
-    CHECK(http->get_requests[0].headers.at("MCP-Protocol-Version") == std::string{app_mcp::kMcpDiscoveryProtocolVersion});
+    CHECK(http->get_requests[0].headers.at("MCP-Protocol-Version") ==
+            std::string{app_mcp::kMcpDiscoveryProtocolVersion});
 }
 
 TEST_CASE("a root-path server does not retry a missed protected resource document",
@@ -87,8 +88,8 @@ TEST_CASE("a root-path server does not retry a missed protected resource documen
             {200, std::string{kProtectedResourceDocument}}};
 
     tests::RuntimeFixture runtime;
-    auto discovered =
-            tests::run_awaitable(runtime, app_mcp::discover_protected_resource_metadata(http, "https://mcp.example.com"));
+    auto discovered = tests::run_awaitable(
+            runtime, app_mcp::discover_protected_resource_metadata(http, "https://mcp.example.com"));
     REQUIRE(discovered.has_value());
     // One request: a root-path server has no second candidate to try.
     CHECK(http->get_requests.size() == 1);

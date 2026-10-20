@@ -6,8 +6,8 @@
 
 namespace cch::coding_agent::mcp {
 
+using cch::mcp::default_oauth_http_client;
 using cch::mcp::OAuthHttpClient;
 using cch::mcp::OAuthHttpResponse;
-using cch::mcp::default_oauth_http_client;
 
 } // namespace cch::coding_agent::mcp

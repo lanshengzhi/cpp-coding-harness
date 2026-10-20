@@ -154,7 +154,8 @@ struct CallbackEndpoint {
 struct SignInHarness {
     std::shared_ptr<tests::FakeOAuthHttpClient> http = std::make_shared<tests::FakeOAuthHttpClient>();
     tests::TempWorkspace workspace;
-    std::shared_ptr<app_mcp::McpAuthStore> store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    std::shared_ptr<app_mcp::McpAuthStore> store =
+            std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     app_mcp::McpOAuthConfig oauth;
     std::string resource_document{kResourceDocument};
     std::string authorization_server_document{kAuthorizationServerDocument};
@@ -208,7 +209,8 @@ struct SignInHarness {
                             return block_until_stop(stop);
                         };
                     }
-                    co_return co_await support::detail::await_async_result(app_mcp::sign_in_mcp_server(std::move(request)));
+                    co_return co_await support::detail::await_async_result(
+                            app_mcp::sign_in_mcp_server(std::move(request)));
                 },
                 boost::asio::use_future);
 
@@ -369,7 +371,8 @@ TEST_CASE("a pasted redirect URL for another redirect URI does not complete the 
                         return tests::ready_result(
                                 std::optional<std::string>{"http://127.0.0.1:1/elsewhere?code=code-1&state=x"});
                     };
-                    co_return co_await support::detail::await_async_result(app_mcp::sign_in_mcp_server(std::move(request)));
+                    co_return co_await support::detail::await_async_result(
+                            app_mcp::sign_in_mcp_server(std::move(request)));
                 },
                 boost::asio::use_future);
         (void)executor;
@@ -418,8 +421,8 @@ TEST_CASE("a stored unexpired token is sent without any OAuth request", "[coding
                          seeded_state("live-access", "live-refresh", ai::current_timestamp_ms() + 3600 * 1000))
                     .has_value());
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
-    auto resolver =
-            std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -441,8 +444,8 @@ TEST_CASE("an expiring token is refreshed through the flow and persisted", "[cod
     http->get_responses[kAuthorizationServerMetadataUrl].assign({{200, kAuthorizationServerDocument}});
     http->responses[kTokenUrl] = {{200,
             R"({"access_token":"new-access","token_type":"Bearer","expires_in":3600,"refresh_token":"new-refresh"})"}};
-    auto resolver =
-            std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -466,8 +469,8 @@ TEST_CASE("no stored credential fails the request closed and caches the register
     http->get_responses[kResourceMetadataUrl].assign({{200, kResourceDocument}});
     http->get_responses[kAuthorizationServerMetadataUrl].assign({{200, kAuthorizationServerDocument}});
     http->responses[kRegistrationUrl] = {{200, kRegistrationResponse}};
-    auto resolver =
-            std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE_FALSE(headers.has_value());

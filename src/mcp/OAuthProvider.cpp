@@ -25,7 +25,6 @@
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
-
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/detached.hpp>
 #include <boost/asio/experimental/channel.hpp>
@@ -49,8 +48,7 @@ namespace cch::mcp {
 namespace {
 
 [[nodiscard]] std::int64_t current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
             .count();
 }
 
@@ -195,7 +193,6 @@ struct ManualState {
 using PromptDoneChannel = boost::asio::experimental::channel<void(boost::system::error_code)>;
 
 } // namespace
-
 
 OAuthProviderImpl::OAuthProviderImpl(OAuthServerConfig config, std::shared_ptr<OAuthHttpClient> http_client)
     : config_(std::move(config)), http_client_(std::move(http_client)) {}
@@ -397,7 +394,6 @@ std::optional<OAuthCredential> mcp_oauth_credential_from_state(const OAuthState&
     }
     return credential;
 }
-
 
 OAuthProvider::OAuthProvider(OAuthServerConfig config, std::shared_ptr<OAuthHttpClient> http_client)
     : config_(std::move(config)), http_client_(std::move(http_client)) {}

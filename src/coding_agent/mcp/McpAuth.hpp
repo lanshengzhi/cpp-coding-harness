@@ -14,9 +14,9 @@ using cch::mcp::AuthProgress;
 using cch::mcp::AuthPrompt;
 using cch::mcp::AuthPromptHook;
 using cch::mcp::AuthUrl;
-using cch::mcp::OAuthCredential;
 using cch::mcp::format_oauth_reauthenticate_message;
 using cch::mcp::mcp_namespace;
 using cch::mcp::mcp_oauth_provider_id;
+using cch::mcp::OAuthCredential;
 
 } // namespace cch::coding_agent::mcp

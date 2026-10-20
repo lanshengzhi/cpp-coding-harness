@@ -108,10 +108,8 @@ namespace detail {
     // pi `client.ts` connect: the negotiated version must be one pi speaks,
     // rejected with pi's verbatim message.
     const auto selected = protocol_version->second.get_string();
-    const bool supported =
-            std::ranges::any_of(kSupportedProtocolVersions, [&selected](std::string_view version) {
-                return version == selected;
-            });
+    const bool supported = std::ranges::any_of(
+            kSupportedProtocolVersions, [&selected](std::string_view version) { return version == selected; });
     if (!supported) {
         return std::unexpected(support::make_error(
                 support::ErrorCode::Process, "MCP server selected unsupported protocol version " + selected));

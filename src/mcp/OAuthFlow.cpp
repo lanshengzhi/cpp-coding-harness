@@ -17,7 +17,6 @@
 #include "support/ExpectedMacros.hpp"
 #include "support/Json.hpp"
 
-
 #include <algorithm>
 #include <cctype>
 #include <charconv>
@@ -36,8 +35,7 @@ namespace {
 
 /// Wall-clock now in milliseconds (the stored `tokensExpireAt` domain).
 [[nodiscard]] std::int64_t current_timestamp_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch())
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
             .count();
 }
 
@@ -368,8 +366,7 @@ struct SplitUrl {
 
 /// The refresh grant, in the flow's error channel, with pi's merge of the old
 /// refresh token under the response.
-[[nodiscard]] boost::asio::awaitable<FlowResult<OAuthTokenResponse>> refresh_flow(
-        std::shared_ptr<OAuthHttpClient> http,
+[[nodiscard]] boost::asio::awaitable<FlowResult<OAuthTokenResponse>> refresh_flow(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
         std::string refresh_token) {
@@ -476,8 +473,8 @@ enum class InvalidateKind {
     OAuthDiscoveryOptions discovery;
     discovery.resource_metadata_url = options.resource_metadata_url;
     discovery.authorization_server_metadata_url = metadata_url;
-    auto discovered = co_await support::detail::await_async_result(
-            discover_oauth_server_info(http, server_url, discovery));
+    auto discovered =
+            co_await support::detail::await_async_result(discover_oauth_server_info(http, server_url, discovery));
     if (!discovered) {
         co_return std::unexpected(plain_error(std::move(discovered.error())));
     }
@@ -755,8 +752,8 @@ boost::asio::awaitable<support::Expected<OAuthClientInformation>> register_clien
             {"Content-Type", "application/json"},
     };
     CCH_TRY(response,
-                co_await support::detail::await_async_result(
-                        http->post(url, std::move(headers), *serialized, std::stop_token{})));
+            co_await support::detail::await_async_result(
+                    http->post(url, std::move(headers), *serialized, std::stop_token{})));
     if (response.status_code < 200 || response.status_code >= 300) {
         co_return std::unexpected(oauth_error("OAuth dynamic client registration failed with status " +
                                               std::to_string(response.status_code) + ": " + response.body));
@@ -865,7 +862,8 @@ boost::asio::awaitable<support::Expected<OAuthTokenResponse>> refresh_authorizat
     co_return std::move(*result);
 }
 
-boost::asio::awaitable<support::Expected<OAuthFlowOutcome>> authorize_mcp_awaitable(std::shared_ptr<OAuthStateStore> store,
+boost::asio::awaitable<support::Expected<OAuthFlowOutcome>> authorize_mcp_awaitable(
+        std::shared_ptr<OAuthStateStore> store,
         std::string server_name,
         std::string server_url,
         OAuthConfig oauth,
@@ -904,8 +902,7 @@ boost::asio::awaitable<support::Expected<OAuthFlowOutcome>> authorize_mcp_awaita
     co_return std::unexpected(std::move(attempt.error().error));
 }
 
-support::AsyncResult<OAuthClientInformation> register_client(
-        std::shared_ptr<OAuthHttpClient> http,
+support::AsyncResult<OAuthClientInformation> register_client(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         std::optional<AuthorizationServerMetadata> metadata,
         OAuthClientMetadata client_metadata,
@@ -915,8 +912,8 @@ support::AsyncResult<OAuthClientInformation> register_client(
                     authorization_server_url = std::move(authorization_server_url),
                     metadata = std::move(metadata),
                     client_metadata = std::move(client_metadata),
-                    scope = std::move(scope)]() mutable
-                    -> boost::asio::awaitable<support::Expected<OAuthClientInformation>> {
+                    scope = std::move(
+                            scope)]() mutable -> boost::asio::awaitable<support::Expected<OAuthClientInformation>> {
                 co_return co_await register_client_awaitable(std::move(http),
                         std::move(authorization_server_url),
                         std::move(metadata),
@@ -925,8 +922,7 @@ support::AsyncResult<OAuthClientInformation> register_client(
             });
 }
 
-support::AsyncResult<OAuthTokenResponse> exchange_authorization_code(
-        std::shared_ptr<OAuthHttpClient> http,
+support::AsyncResult<OAuthTokenResponse> exchange_authorization_code(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
         std::string code,
@@ -938,8 +934,8 @@ support::AsyncResult<OAuthTokenResponse> exchange_authorization_code(
                     request = std::move(request),
                     code = std::move(code),
                     code_verifier = std::move(code_verifier),
-                    redirect_url = std::move(redirect_url)]() mutable
-                    -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
+                    redirect_url = std::move(
+                            redirect_url)]() mutable -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
                 co_return co_await exchange_authorization_code_awaitable(std::move(http),
                         std::move(authorization_server_url),
                         std::move(request),
@@ -949,22 +945,18 @@ support::AsyncResult<OAuthTokenResponse> exchange_authorization_code(
             });
 }
 
-support::AsyncResult<OAuthTokenResponse> refresh_authorization(
-        std::shared_ptr<OAuthHttpClient> http,
+support::AsyncResult<OAuthTokenResponse> refresh_authorization(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
         std::string refresh_token) {
-    return support::detail::make_async_result(
-            [http = std::move(http),
-                    authorization_server_url = std::move(authorization_server_url),
-                    request = std::move(request),
-                    refresh_token = std::move(refresh_token)]() mutable
-                    -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
-                co_return co_await refresh_authorization_awaitable(std::move(http),
-                        std::move(authorization_server_url),
-                        std::move(request),
-                        std::move(refresh_token));
-            });
+    return support::detail::make_async_result([http = std::move(http),
+                                                      authorization_server_url = std::move(authorization_server_url),
+                                                      request = std::move(request),
+                                                      refresh_token = std::move(refresh_token)]() mutable
+                                                      -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
+        co_return co_await refresh_authorization_awaitable(
+                std::move(http), std::move(authorization_server_url), std::move(request), std::move(refresh_token));
+    });
 }
 
 support::AsyncResult<OAuthFlowOutcome> authorize_mcp(std::shared_ptr<OAuthStateStore> store,
@@ -981,7 +973,8 @@ support::AsyncResult<OAuthFlowOutcome> authorize_mcp(std::shared_ptr<OAuthStateS
                     oauth = std::move(oauth),
                     redirect_url = std::move(redirect_url),
                     http = std::move(http),
-                    options = std::move(options)]() mutable -> boost::asio::awaitable<support::Expected<OAuthFlowOutcome>> {
+                    options = std::move(
+                            options)]() mutable -> boost::asio::awaitable<support::Expected<OAuthFlowOutcome>> {
                 co_return co_await authorize_mcp_awaitable(store,
                         std::move(server_name),
                         std::move(server_url),
@@ -991,6 +984,5 @@ support::AsyncResult<OAuthFlowOutcome> authorize_mcp(std::shared_ptr<OAuthStateS
                         std::move(options));
             });
 }
-
 
 } // namespace cch::mcp

@@ -95,8 +95,7 @@ struct OAuthClientMetadata {
 /// `registration_endpoint`, or `/register` on the authorization server when it
 /// does not publish one. A non-2xx response is an explicit registration error
 /// naming the status and body; no client is invented.
-[[nodiscard]] support::AsyncResult<OAuthClientInformation> register_client(
-        std::shared_ptr<OAuthHttpClient> http,
+[[nodiscard]] support::AsyncResult<OAuthClientInformation> register_client(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         std::optional<AuthorizationServerMetadata> metadata,
         OAuthClientMetadata client_metadata,
@@ -145,8 +144,7 @@ struct OAuthTokenRequest {
 
 /// pi `refreshAuthorization`: the refresh grant, with the rotated refresh token
 /// merged over the old one so a response that omits it does not lose the grant.
-[[nodiscard]] support::AsyncResult<OAuthTokenResponse> refresh_authorization(
-        std::shared_ptr<OAuthHttpClient> http,
+[[nodiscard]] support::AsyncResult<OAuthTokenResponse> refresh_authorization(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
         std::string refresh_token);
@@ -187,8 +185,7 @@ struct OAuthFlowOutcome {
 /// more, and `oauth.invalid_grant` invalidates the tokens and runs once more,
 /// so a stale registration or a dead refresh token is corrected without a
 /// retry loop.
-[[nodiscard]] support::AsyncResult<OAuthFlowOutcome> authorize_mcp(
-        std::shared_ptr<OAuthStateStore> store,
+[[nodiscard]] support::AsyncResult<OAuthFlowOutcome> authorize_mcp(std::shared_ptr<OAuthStateStore> store,
         std::string server_name,
         std::string server_url,
         OAuthConfig oauth,

@@ -51,7 +51,6 @@ class StdioClientImpl final : public StdioClient, public std::enable_shared_from
 public:
     StdioClientImpl(boost::asio::any_io_executor executor, StdioServerConfig config);
 
-
     StdioClientImpl(const StdioClientImpl&) = delete;
     StdioClientImpl& operator=(const StdioClientImpl&) = delete;
 

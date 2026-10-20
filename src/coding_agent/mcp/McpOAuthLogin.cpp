@@ -22,8 +22,7 @@ support::AsyncResult<void> login_mcp_server(std::shared_ptr<McpAuthStore> store,
                     server_url = std::move(server_url),
                     &provider,
                     interaction = std::move(interaction)]() mutable -> boost::asio::awaitable<support::ExpectedVoid> {
-                auto credential =
-                    co_await support::detail::await_async_result(provider.login(std::move(interaction)));
+                auto credential = co_await support::detail::await_async_result(provider.login(std::move(interaction)));
                 if (!credential) {
                     co_return std::unexpected(std::move(credential.error()));
                 }

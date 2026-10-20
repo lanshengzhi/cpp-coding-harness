@@ -791,8 +791,8 @@ void StdioClientImpl::teardown_process_group() noexcept {
 
 support::AsyncResult<std::shared_ptr<StdioClient>> StdioClient::connect(StdioServerConfig config) {
     return support::detail::make_async_result(
-            [config = std::move(config)]() mutable
-                    -> boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClient>>> {
+            [config = std::move(
+                     config)]() mutable -> boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClient>>> {
                 auto connected = co_await StdioClientImpl::connect_impl(std::move(config));
                 if (!connected) {
                     co_return std::unexpected(std::move(connected.error()));

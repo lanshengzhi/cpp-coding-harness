@@ -270,16 +270,17 @@ std::uint16_t OAuthCallbackServer::bound_port() const {
 
 support::AsyncResult<OAuthCallbackResult> OAuthCallbackServer::wait_for_code() {
     auto impl = impl_;
-    return support::detail::make_async_result([impl]() -> boost::asio::awaitable<support::Expected<OAuthCallbackResult>> {
-        WaitResult result{OAuthCallbackResult{}};
-        boost::system::error_code receive_error;
-        result = co_await impl->wait_channel.async_receive(
-                boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
-        if (receive_error) {
-            co_return OAuthCallbackResult{};
-        }
-        co_return result;
-    });
+    return support::detail::make_async_result(
+            [impl]() -> boost::asio::awaitable<support::Expected<OAuthCallbackResult>> {
+                WaitResult result{OAuthCallbackResult{}};
+                boost::system::error_code receive_error;
+                result = co_await impl->wait_channel.async_receive(
+                        boost::asio::redirect_error(boost::asio::use_awaitable, receive_error));
+                if (receive_error) {
+                    co_return OAuthCallbackResult{};
+                }
+                co_return result;
+            });
 }
 
 void OAuthCallbackServer::cancel_wait() {

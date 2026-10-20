@@ -330,8 +330,7 @@ private:
 
 } // namespace
 
-HttpClientImpl::HttpClientImpl(
-        boost::asio::any_io_executor executor,
+HttpClientImpl::HttpClientImpl(boost::asio::any_io_executor executor,
         HttpServerConfig config,
         std::shared_ptr<support::StreamTransport> transport,
         std::shared_ptr<RequestAuthSource> request_auth,
@@ -340,14 +339,14 @@ HttpClientImpl::HttpClientImpl(
       request_auth_(std::move(request_auth)), get_stream_options_(std::move(get_stream_options)) {
     // pi `client.ts` installs `ping` by default; every other server request is
     // answered `-32601` until a handler is registered.
-    request_handlers_["ping"] =
-            [](const support::JsonValue&, std::stop_token) -> support::AsyncResult<support::JsonValue> {
+    request_handlers_["ping"] = [](const support::JsonValue&,
+                                        std::stop_token) -> support::AsyncResult<support::JsonValue> {
         return support::AsyncResult<support::JsonValue>{
                 support::Expected<support::JsonValue>{support::JsonValue{support::JsonValue::object_t{}}}};
     };
     // pi `roots/list`: answer server-to-client roots requests with file://<cwd> root.
-    request_handlers_["roots/list"] =
-            [](const support::JsonValue&, std::stop_token) -> support::AsyncResult<support::JsonValue> {
+    request_handlers_["roots/list"] = [](const support::JsonValue&,
+                                              std::stop_token) -> support::AsyncResult<support::JsonValue> {
         const auto cwd = std::filesystem::current_path();
         const std::string uri = "file://" + cwd.string();
         const std::string name = cwd.filename().string();
@@ -377,8 +376,7 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
     }
     auto executor = co_await boost::asio::this_coro::executor;
     const std::string server_name = config.name;
-    auto client = std::make_shared<HttpClientImpl>(
-            std::move(executor),
+    auto client = std::make_shared<HttpClientImpl>(std::move(executor),
             std::move(config),
             std::move(transport),
             std::move(request_auth),
@@ -966,7 +964,8 @@ boost::asio::awaitable<std::pair<HttpClientImpl::GetStreamAttempt, support::Erro
     co_return std::pair{GetStreamAttempt::Ended, support::Error{}};
 }
 
-std::chrono::milliseconds HttpClientImpl::reconnect_delay(int attempt, const std::optional<int>& server_delay_ms) const {
+std::chrono::milliseconds HttpClientImpl::reconnect_delay(
+        int attempt, const std::optional<int>& server_delay_ms) const {
     if (server_delay_ms.has_value()) {
         return std::chrono::milliseconds{*server_delay_ms};
     }
@@ -1130,8 +1129,10 @@ support::AsyncResult<std::shared_ptr<HttpClient>> HttpClient::connect(HttpServer
                 if (transport == nullptr) {
                     transport = std::make_shared<support::BoostBeastStreamTransport>();
                 }
-                auto connected = co_await HttpClientImpl::connect_impl(
-                        std::move(config), std::move(transport), std::move(request_auth), std::move(get_stream_options));
+                auto connected = co_await HttpClientImpl::connect_impl(std::move(config),
+                        std::move(transport),
+                        std::move(request_auth),
+                        std::move(get_stream_options));
                 if (!connected) {
                     co_return std::unexpected(std::move(connected.error()));
                 }

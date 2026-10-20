@@ -479,7 +479,8 @@ boost::asio::awaitable<support::Expected<OAuthServerInfo>> discover_oauth_server
                                                                  !resource_metadata->authorization_servers->empty()
                                                          ? resource_metadata->authorization_servers->front()
                                                          : server->origin + "/";
-    CCH_TRY(metadata, co_await discover_authorization_server_metadata_awaitable(http, authorization_server_url, options));
+    CCH_TRY(metadata,
+            co_await discover_authorization_server_metadata_awaitable(http, authorization_server_url, options));
     co_return OAuthServerInfo{
             .authorization_server_url = authorization_server_url,
             .authorization_server_metadata = std::move(metadata),
@@ -497,8 +498,7 @@ support::AsyncResult<ProtectedResourceMetadata> discover_protected_resource_meta
             });
 }
 
-support::AsyncResult<std::optional<AuthorizationServerMetadata>>
-discover_authorization_server_metadata(
+support::AsyncResult<std::optional<AuthorizationServerMetadata>> discover_authorization_server_metadata(
         std::shared_ptr<OAuthHttpClient> http, std::string authorization_server_url, OAuthDiscoveryOptions options) {
     return support::detail::make_async_result(
             [http = std::move(http),
@@ -519,6 +519,5 @@ support::AsyncResult<OAuthServerInfo> discover_oauth_server_info(
                         std::move(http), std::move(server_url), std::move(options));
             });
 }
-
 
 } // namespace cch::mcp
