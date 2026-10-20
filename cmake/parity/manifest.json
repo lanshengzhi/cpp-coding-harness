@@ -112,6 +112,12 @@
       "legal_owner_dependencies": ["cch_agent_core", "cch_ai"],
       "implementation_owner_dependencies": ["cch_tui"]
     },
+    "cch_chord": {
+      "role": "owner",
+      "root": "src/chord",
+      "interface_root": "src/chord/include/cch/chord",
+      "legal_owner_dependencies": []
+    },
     "cch_support": {
       "role": "support",
       "root": "src/support",

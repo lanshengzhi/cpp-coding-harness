@@ -17,7 +17,7 @@ AI exclusions remain; do not infer an overall cch_ai baseline advancement.
 
 ## Capability Owner Packages
 
-The repository has four authoritative Capability Owner Packages and one pi-neutral C++ Support Package (ADR 0039, ADR 0045, `cmake/parity/manifest.json`). The only released product executable is `pike` (ADR 0045).
+The repository has five authoritative Capability Owner Packages and one pi-neutral C++ Support Package (ADR 0039, ADR 0045, `cmake/parity/manifest.json`). The only released product executable is `pike` (ADR 0045).
 
 | Package | Role | Source Root | Interface Root | Authoritative Ownership | Legal Owner Dependencies |
 |---|---|---|---|---|---|
@@ -25,6 +25,7 @@ The repository has four authoritative Capability Owner Packages and one pi-neutr
 | `cch_agent_core` | owner | `src/agent/` | `<cch/agent/...>` | Agent loop, agent harness, and Tool behavior (ADR 0005, ADR 0039) | `cch_ai` |
 | `cch_tui` | owner | `src/tui/` | `<cch/tui/...>` | Reusable terminal, input, rendering, TUI toolkit (ADR 0025) | none |
 | `cch_coding_agent` | owner (private) | `src/coding_agent/` (headless core; `src/coding_agent/tui/` belongs to `frontend_tui`) | `<cch/coding_agent/...>` | Agent Session, Models Runtime (ADR 0036, ADR 0040) | `cch_agent_core`, `cch_ai`; `cch_tui` only for its non-`owner` targets (manifest `implementation_owner_dependencies`) |
+| `cch_chord` | owner | `src/chord/` | `<cch/chord/...>` | Durable-required Context, strict JSON values and bounded UTF-8 output (ADR 0075) | none |
 | `cch_support` | support | `src/support/` | `<cch/support/...>` | Pi-neutral C++ values and mechanics (`AsyncResult`, `Expected`, `JsonValue`, ADR 0046) | none |
 
 The `pike` executable compiles only `src/main.cpp` (role `composition`, owner `cch_coding_agent`) and depends only on the `frontend_cli` implementation target.
@@ -51,6 +52,7 @@ One line per package. Headers are the stable pointers; class lists are not enume
 - `cch_ai`: owns Model values, the passive model catalog, gateway Request Authentication and model-stream (`<cch/ai/...>`). `ai::Models` accepts gateway startup configuration and owns discovery, refresh, status inspection and inference using that connection (ADR 0073); protocol execution and test injection stay private. Model-provider registries, credential stores and OAuth flows are retired (ADR 0068, ADR 0072); MCP owns its independent OAuth values and interaction (ADR 0070).
 - `cch_tui`: owns reusable terminal, input, rendering, and TUI toolkit (`<cch/tui/...>`); the product TUI lives in the `frontend_tui` implementation target (`src/coding_agent/tui/`, owner `cch_coding_agent`).
 - `cch_coding_agent`: repository-private headless core (Agent Session, Models Runtime); the product frontends are its implementation targets — `frontend_tui` (Native TUI, `src/coding_agent/tui/`) and `frontend_cli` (CLI, `src/coding_agent/cli/`) — and `pike` composes only the latter. Models Runtime retains application model-selection policy and diagnostic wording, privately holds `ai::Models`, and exposes passive model values plus an AI-owned `ModelStreamFactory`; discovery and connection facts belong to cch_ai (ADR 0073). `SessionFactory` remains the sole Session assembly point (ADR 0072).
+- `cch_chord`: durable-required Chord subset (`<cch/chord/...>`): immutable keyed `Context` values with composed cancellation, strict JSON validation/copying over `support::JsonValue`, and bounded UTF-8 output helpers. Upstream Chord's plugin host, RPC links, cluster, cells/schema and Node host stay excluded (ADR 0075).
 - `cch_support`: pi-neutral C++ values and mechanics only (`<cch/support/...>`); owns no Supported Capability, depends on no Capability Owner Package. Publishes the bounded/redacted text mechanics and the pi output limiter (`BoundedText.hpp`, `Redactor.hpp`, `OutputLimiter.hpp`, ADR 0062); the Boost.Asio completion bridge stays private (ADR 0046).
 
 ### Interactive run boundary

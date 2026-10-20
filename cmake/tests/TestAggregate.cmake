@@ -7,6 +7,7 @@ include_guard(GLOBAL)
     add_custom_target(pike_tests
         DEPENDS
             cch_tests_support
+            cch_tests_chord
             cch_tests_tui
             cch_tests_ai
             cch_tests_ai_async_bridge
