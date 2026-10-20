@@ -153,6 +153,41 @@ TEST_CASE("output buffer snapshot sanitizes control characters without changing 
 }
 
 // Frozen observation at 71023aec1546d6d677a65669c5665c0927ce0dd0:
+// packages/chord/src/output.ts:sanitizeOutput removes control characters but keeps
+// tabs, newlines and other text (frozen output.test.ts sanitize case).
+TEST_CASE("output buffer snapshot matches the frozen sanitize output case",
+        "[chord][output][buffer][sanitize][issue1044][spec]") {
+    std::string input{"a\0b\tc\nd\re\a", 10};
+    input += "f\xef\xbf\xb9";
+    input += "g\xef\xbf\xbb";
+    input += "h\xf0\x9f\x98\x80";
+
+    OutputBuffer buffer(OutputLimits{1000, 10, OutputRetention::Head});
+    CHECK(buffer.push(input));
+    CHECK(buffer.snapshot().text == "ab\tc\ndefgh\xf0\x9f\x98\x80");
+}
+
+// Frozen observation at 71023aec1546d6d677a65669c5665c0927ce0dd0:
+// packages/chord/src/output.ts:OutputBuffer.snapshot sanitizes the retained window
+// but counts the raw stream (frozen output.test.ts raw-stream case).
+TEST_CASE("output buffer snapshot sanitizes each retained window while counting the raw stream",
+        "[chord][output][buffer][sanitize][issue1044][spec]") {
+    OutputBuffer buffer(OutputLimits{1000, 1, OutputRetention::Tail});
+
+    CHECK(buffer.push("a\a\n"));
+    const auto first = buffer.snapshot();
+    CHECK(first.text == "a\n");
+    CHECK(first.dropped_bytes == 0);
+    CHECK(first.dropped_lines == 0);
+
+    CHECK(buffer.push("b\x1b\n"));
+    const auto second = buffer.snapshot();
+    CHECK(second.text == "b\n");
+    CHECK(second.dropped_bytes == 3);
+    CHECK(second.dropped_lines == 1);
+}
+
+// Frozen observation at 71023aec1546d6d677a65669c5665c0927ce0dd0:
 // packages/chord/src/output.ts:sanitizeOutput removes U+FFF9..U+FFFB but keeps
 // U+FFFC, tabs, newlines and every byte of a multibyte character.
 TEST_CASE("output buffer snapshot removes interlinear controls and preserves multibyte text",
