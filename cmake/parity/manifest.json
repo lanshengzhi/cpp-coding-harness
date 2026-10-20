@@ -9,6 +9,7 @@
         "source_prefixes": [
           "src/agent/",
           "src/codemode/",
+          "src/mcp/",
           "src/coding_agent/"
         ],
         "excluded_source_prefixes": [
@@ -112,11 +113,17 @@
       "interface_root": "src/codemode/include/cch/codemode",
       "legal_owner_dependencies": ["cch_ai"]
     },
+    "cch_mcp": {
+      "role": "owner",
+      "root": "src/mcp",
+      "interface_root": "src/mcp/include/cch/mcp",
+      "legal_owner_dependencies": []
+    },
     "cch_coding_agent": {
       "role": "owner",
       "root": "src/coding_agent",
       "interface_root": "src/coding_agent/include/cch/coding_agent",
-      "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_codemode"],
+      "legal_owner_dependencies": ["cch_agent_core", "cch_ai", "cch_codemode", "cch_mcp"],
       "implementation_owner_dependencies": ["cch_tui"]
     },
     "cch_chord": {

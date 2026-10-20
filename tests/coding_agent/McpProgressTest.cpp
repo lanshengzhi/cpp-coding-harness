@@ -13,6 +13,50 @@
 namespace cch {
 namespace {
 
+[[nodiscard]] support::JsonValue with_progress_token(std::optional<support::JsonValue> params, int id) {
+    support::JsonValue::object_t meta{{"progressToken", static_cast<double>(id)}};
+    support::JsonValue::object_t merged;
+    if (params) {
+        if (const auto* object = params->get_if<support::JsonValue::object_t>()) {
+            merged = *object;
+            if (const auto existing = object->find("_meta");
+                    existing != object->end() && existing->second.get_if<support::JsonValue::object_t>() != nullptr) {
+                meta = existing->second.get_object();
+                meta["progressToken"] = static_cast<double>(id);
+            }
+        }
+    }
+    merged["_meta"] = support::JsonValue{std::move(meta)};
+    return support::JsonValue{std::move(merged)};
+}
+
+[[nodiscard]] std::optional<double> progress_token_of(const support::JsonValue& message) {
+    const auto* object = message.get_if<support::JsonValue::object_t>();
+    if (object == nullptr) {
+        return std::nullopt;
+    }
+    const auto method = object->find("method");
+    if (method == object->end() || !method->second.holds<std::string>() ||
+            method->second.get_string() != "notifications/progress") {
+        return std::nullopt;
+    }
+    const auto params = object->find("params");
+    if (params == object->end()) {
+        return std::nullopt;
+    }
+    const auto* params_object = params->second.get_if<support::JsonValue::object_t>();
+    if (params_object == nullptr) {
+        return std::nullopt;
+    }
+    const auto token = params_object->find("progressToken");
+    const auto progress = params_object->find("progress");
+    if (token == params_object->end() || !token->second.holds<double>() || progress == params_object->end() ||
+            !progress->second.holds<double>()) {
+        return std::nullopt;
+    }
+    return token->second.get_number();
+}
+
 class ScriptedProgressConnection final : public coding_agent::mcp::McpServerConnection {
 public:
     std::string recorded_method;
@@ -85,7 +129,7 @@ TEST_CASE("request with on_progress injects _meta.progressToken and progress_tok
         "[coding_agent][mcp][issue884][spec]") {
     // Use with_progress_token helper to verify contract
     auto params = support::JsonValue::object_t{{"arg", "val"}};
-    auto with_meta = coding_agent::mcp::detail::with_progress_token(support::JsonValue{params}, 42);
+    auto with_meta = with_progress_token(support::JsonValue{params}, 42);
     const auto* with_meta_obj = with_meta.get_if<support::JsonValue::object_t>();
     REQUIRE(with_meta_obj != nullptr);
     const auto meta_it = with_meta_obj->find("_meta");
@@ -104,7 +148,7 @@ TEST_CASE("request with on_progress injects _meta.progressToken and progress_tok
                             {"total", 2.0},
                     }}},
     }};
-    auto extracted = coding_agent::mcp::detail::progress_token_of(notification);
+    auto extracted = progress_token_of(notification);
     REQUIRE(extracted.has_value());
     CHECK(*extracted == 42.0);
 }

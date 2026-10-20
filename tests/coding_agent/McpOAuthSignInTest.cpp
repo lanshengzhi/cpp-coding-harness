@@ -56,7 +56,7 @@
 
 using namespace cch;
 
-namespace mcp = coding_agent::mcp;
+namespace app_mcp = coding_agent::mcp;
 
 namespace {
 
@@ -86,7 +86,7 @@ const std::string kTokenUrl = "https://auth.example.com/token";
     if (query_start == std::string_view::npos) {
         return {};
     }
-    const auto pairs = mcp::parse_query_pairs(url.substr(query_start + 1));
+    const auto pairs = app_mcp::parse_query_pairs(url.substr(query_start + 1));
     const auto found = pairs.find(std::string{key});
     return found == pairs.end() ? std::string{} : found->second;
 }
@@ -154,8 +154,9 @@ struct CallbackEndpoint {
 struct SignInHarness {
     std::shared_ptr<tests::FakeOAuthHttpClient> http = std::make_shared<tests::FakeOAuthHttpClient>();
     tests::TempWorkspace workspace;
-    std::shared_ptr<mcp::McpAuthStore> store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
-    mcp::McpOAuthConfig oauth;
+    std::shared_ptr<app_mcp::McpAuthStore> store =
+            std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    app_mcp::McpOAuthConfig oauth;
     std::string resource_document{kResourceDocument};
     std::string authorization_server_document{kAuthorizationServerDocument};
     /// The pasted redirect URL suffix, or `std::nullopt` to leave the prompt
@@ -181,7 +182,7 @@ struct SignInHarness {
         auto future = boost::asio::co_spawn(
                 io,
                 [this, url_seen]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                    mcp::McpOAuthSignInRequest request;
+                    app_mcp::McpOAuthSignInRequest request;
                     request.store = store;
                     request.server_name = "echo";
                     request.server_url = kServerUrl;
@@ -208,7 +209,8 @@ struct SignInHarness {
                             return block_until_stop(stop);
                         };
                     }
-                    co_return co_await support::detail::await_async_result(mcp::sign_in_mcp_server(std::move(request)));
+                    co_return co_await support::detail::await_async_result(
+                            app_mcp::sign_in_mcp_server(std::move(request)));
                 },
                 boost::asio::use_future);
 
@@ -234,7 +236,7 @@ struct SignInHarness {
         return future.get();
     }
 
-    [[nodiscard]] std::optional<mcp::McpOAuthState> state() {
+    [[nodiscard]] std::optional<app_mcp::McpOAuthState> state() {
         auto stored = store->load("echo", kServerUrl);
         REQUIRE(stored.has_value());
         return std::move(*stored);
@@ -296,7 +298,7 @@ TEST_CASE("a server-specific Client ID Metadata Document signs in on its callbac
         "[coding_agent][mcp][issue884][spec]") {
     SignInHarness harness;
     harness.paste_suffix = std::nullopt;
-    harness.oauth.client_registration = mcp::McpClientRegistration::Cimd;
+    harness.oauth.client_registration = app_mcp::McpClientRegistration::Cimd;
     // Without RFC 9207 `iss`, the document and the redirect URI are specific
     // to this MCP server.
     harness.authorization_server_document =
@@ -354,7 +356,7 @@ TEST_CASE("a pasted redirect URL for another redirect URI does not complete the 
         auto future = boost::asio::co_spawn(
                 io,
                 [&harness]() -> boost::asio::awaitable<support::ExpectedVoid> {
-                    mcp::McpOAuthSignInRequest request;
+                    app_mcp::McpOAuthSignInRequest request;
                     request.store = harness.store;
                     request.server_name = "echo";
                     request.server_url = kServerUrl;
@@ -369,7 +371,8 @@ TEST_CASE("a pasted redirect URL for another redirect URI does not complete the 
                         return tests::ready_result(
                                 std::optional<std::string>{"http://127.0.0.1:1/elsewhere?code=code-1&state=x"});
                     };
-                    co_return co_await support::detail::await_async_result(mcp::sign_in_mcp_server(std::move(request)));
+                    co_return co_await support::detail::await_async_result(
+                            app_mcp::sign_in_mcp_server(std::move(request)));
                 },
                 boost::asio::use_future);
         (void)executor;
@@ -389,10 +392,10 @@ TEST_CASE("a pasted redirect URL for another redirect URI does not complete the 
 
 namespace {
 
-[[nodiscard]] mcp::McpOAuthState seeded_state(std::string access, std::string refresh, std::int64_t expires) {
-    mcp::McpOAuthState state;
+[[nodiscard]] app_mcp::McpOAuthState seeded_state(std::string access, std::string refresh, std::int64_t expires) {
+    app_mcp::McpOAuthState state;
     state.server_url = kServerUrl;
-    mcp::McpOAuthTokens tokens;
+    app_mcp::McpOAuthTokens tokens;
     tokens.access_token = std::move(access);
     tokens.token_type = "Bearer";
     if (!refresh.empty()) {
@@ -400,7 +403,7 @@ namespace {
     }
     state.tokens = std::move(tokens);
     state.tokens_expire_at = expires;
-    mcp::McpOAuthClientInformation client;
+    app_mcp::McpOAuthClientInformation client;
     client.client_id = "dyn-client-1";
     client.redirect_uris = {"http://127.0.0.1:41234/callback"};
     state.client_information = std::move(client);
@@ -412,14 +415,14 @@ namespace {
 TEST_CASE("a stored unexpired token is sent without any OAuth request", "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     REQUIRE(store->save("echo",
                          kServerUrl,
                          seeded_state("live-access", "live-refresh", ai::current_timestamp_ms() + 3600 * 1000))
                     .has_value());
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
-    auto resolver =
-            std::make_shared<mcp::McpOAuthFlowTokenResolver>(store, "echo", kServerUrl, mcp::McpOAuthConfig{}, http);
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -431,7 +434,7 @@ TEST_CASE("a stored unexpired token is sent without any OAuth request", "[coding
 TEST_CASE("an expiring token is refreshed through the flow and persisted", "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     REQUIRE(store->save("echo",
                          kServerUrl,
                          seeded_state("old-access", "old-refresh", ai::current_timestamp_ms() + 1000))
@@ -441,8 +444,8 @@ TEST_CASE("an expiring token is refreshed through the flow and persisted", "[cod
     http->get_responses[kAuthorizationServerMetadataUrl].assign({{200, kAuthorizationServerDocument}});
     http->responses[kTokenUrl] = {{200,
             R"({"access_token":"new-access","token_type":"Bearer","expires_in":3600,"refresh_token":"new-refresh"})"}};
-    auto resolver =
-            std::make_shared<mcp::McpOAuthFlowTokenResolver>(store, "echo", kServerUrl, mcp::McpOAuthConfig{}, http);
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE(headers.has_value());
@@ -461,13 +464,13 @@ TEST_CASE("no stored credential fails the request closed and caches the register
         "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime;
-    auto store = std::make_shared<mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
     auto http = std::make_shared<tests::FakeOAuthHttpClient>();
     http->get_responses[kResourceMetadataUrl].assign({{200, kResourceDocument}});
     http->get_responses[kAuthorizationServerMetadataUrl].assign({{200, kAuthorizationServerDocument}});
     http->responses[kRegistrationUrl] = {{200, kRegistrationResponse}};
-    auto resolver =
-            std::make_shared<mcp::McpOAuthFlowTokenResolver>(store, "echo", kServerUrl, mcp::McpOAuthConfig{}, http);
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", kServerUrl, app_mcp::McpOAuthConfig{}, http);
 
     auto headers = tests::run_awaitable(runtime, support::detail::await_async_result(resolver->current_headers()));
     REQUIRE_FALSE(headers.has_value());

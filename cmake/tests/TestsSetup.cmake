@@ -45,6 +45,7 @@ include_guard(GLOBAL)
         ${CMAKE_CURRENT_SOURCE_DIR}/src/agent/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/chord/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/codemode/include
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/mcp/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/tui/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/coding_agent/include
         ${CMAKE_CURRENT_SOURCE_DIR}/src/support/include

@@ -78,7 +78,7 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::
                     // One refresh attempt: a failed refresh (including an
                     // `invalid_grant`) propagates, is never retried, and leaves
                     // the stored state untouched.
-                    auto refreshed = co_await provider->refresh(*credential);
+                    auto refreshed = co_await support::detail::await_async_result(provider->refresh(*credential));
                     if (!refreshed) {
                         if (refreshed.error().code == support::ErrorCode::OAuth) {
                             std::string detail = refreshed.error().detail.empty() ? refreshed.error().message
