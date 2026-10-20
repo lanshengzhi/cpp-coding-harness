@@ -2092,7 +2092,7 @@ function resolvedEvidenceEqual(left: Record<string, unknown>, right: Record<stri
 	for (let index = 0; index < leftSnapshots.length; index += 1) {
 		if (JSON.stringify(cells(leftSnapshots[index])) !== JSON.stringify(cells(rightSnapshots[index]))) return false;
 	}
-	return styledPresentationEqual(left, right, "visible") && styledPresentationEqual(left, right, "scrollback");
+	return styledPresentationEqual(left, right);
 }
 
 /// The projection fields the cross-report gate compares. The two raw-SGR
