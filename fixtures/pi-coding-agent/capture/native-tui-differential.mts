@@ -1619,6 +1619,61 @@ function validateStableDigests(report: Record<string, unknown>, repositoryRoot: 
 	}
 }
 
+/// The projection fields `--verify` compares between the freshly captured
+/// report and the checked-in report. Raw ANSI and ordered SGR tokens stay in
+/// the stored evidence (and inside the legacy stable digests) but do not
+/// participate in this cross-report comparison.
+function comparedScenarioFields(item: Record<string, unknown>): Record<string, unknown> {
+	return {
+		id: item.id,
+		width: item.width,
+		inputs: item.inputs,
+		classification: item.classification,
+		observedClassification: item.observedClassification,
+		triage: item.triage,
+		projection: item.projection,
+		profileProjection: item.profileProjection,
+		omissionEvidence: item.omissionEvidence,
+		stableDigest: item.stableDigest,
+	};
+}
+
+/// The verification gate shared by `--verify` (fresh captures) and
+/// `--verify-replay` (a stored report).
+function verifyReports(actual: Record<string, unknown>, expected: Record<string, unknown>, repositoryRoot: string): number {
+	if (JSON.stringify(reportMetadata(actual)) !== JSON.stringify(reportMetadata(expected))) {
+		throw new Error("Native TUI differential report metadata changed; inspect the checked-in evidence.");
+	}
+	validateReportCaptures(actual);
+	validateReportCaptures(expected);
+	validateThemeParity(actual);
+	validateThemeParity(expected);
+	validateStableDigests(actual, repositoryRoot);
+	validateStableDigests(expected, repositoryRoot);
+	const actualStable = (actual.scenarios as Record<string, unknown>[]).map(comparedScenarioFields);
+	const expectedStable = (expected.scenarios as Record<string, unknown>[]).map(comparedScenarioFields);
+	if (JSON.stringify(actualStable) !== JSON.stringify(expectedStable)) {
+		console.error("Native TUI differential projection changed; inspect the report and classify the delta.");
+		console.error("Use --write only after reviewing Supported Capability regressions versus intentional omissions.");
+		return 1;
+	}
+	console.log(`verified ${actualStable.length} Native TUI differential report digests against ${reportPath}; classifications remain unchanged`);
+	return 0;
+}
+
+/// `--verify-replay <report.json>` re-runs the verification gate against a
+/// previously recorded report instead of a fresh capture, so a stored red run
+/// can be triaged offline without recapturing both runtimes.
+function runVerifyReplay(actualReportPath: string): number {
+	const repositoryRoot = repositoryRootFromEnvironment();
+	if (!existsSync(reportPath)) throw new Error(`checked-in report is missing: ${reportPath}; run with --write`);
+	if (!existsSync(actualReportPath)) throw new Error(`--verify-replay report is missing: ${actualReportPath}`);
+	const expected = JSON.parse(readFileSync(reportPath, "utf8")) as Record<string, unknown>;
+	const actual = JSON.parse(readFileSync(actualReportPath, "utf8")) as Record<string, unknown>;
+	console.log(`replaying stored differential report ${actualReportPath} against ${reportPath}`);
+	return verifyReports(actual, expected, repositoryRoot);
+}
+
 async function runParent(): Promise<number> {
 	const scenarioIndex = process.argv.indexOf("--scenario");
 	const scenarioFilter = scenarioIndex >= 0 ? process.argv[scenarioIndex + 1] : undefined;
@@ -1732,45 +1787,7 @@ async function runParent(): Promise<number> {
 	}
 	if (!existsSync(reportPath)) throw new Error(`checked-in report is missing: ${reportPath}; run with --write`);
 	const expected = JSON.parse(readFileSync(reportPath, "utf8")) as Record<string, unknown>;
-	if (JSON.stringify(reportMetadata(report)) !== JSON.stringify(reportMetadata(expected))) {
-		throw new Error("Native TUI differential report metadata changed; inspect the checked-in evidence.");
-	}
-	validateReportCaptures(report);
-	validateReportCaptures(expected);
-	validateThemeParity(report);
-	validateThemeParity(expected);
-	validateStableDigests(expected, repositoryRoot);
-	const actualStable = (report.scenarios as Record<string, unknown>[]).map((item) => ({
-		id: item.id,
-		width: item.width,
-		inputs: item.inputs,
-		classification: item.classification,
-		observedClassification: item.observedClassification,
-		triage: item.triage,
-		projection: item.projection,
-		profileProjection: item.profileProjection,
-		omissionEvidence: item.omissionEvidence,
-		stableDigest: item.stableDigest,
-	}));
-	const expectedStable = (expected.scenarios as Record<string, unknown>[]).map((item) => ({
-		id: item.id,
-		width: item.width,
-		inputs: item.inputs,
-		classification: item.classification,
-		observedClassification: item.observedClassification,
-		triage: item.triage,
-		projection: item.projection,
-		profileProjection: item.profileProjection,
-		omissionEvidence: item.omissionEvidence,
-		stableDigest: item.stableDigest,
-	}));
-	if (JSON.stringify(actualStable) !== JSON.stringify(expectedStable)) {
-		console.error("Native TUI differential projection changed; inspect the report and classify the delta.");
-		console.error("Use --write only after reviewing Supported Capability regressions versus intentional omissions.");
-		return 1;
-	}
-	console.log(`verified ${actualStable.length} Native TUI differential report digests against ${reportPath}; classifications remain unchanged`);
-	return 0;
+	return verifyReports(report, expected, repositoryRoot);
 }
 
 function inputStateBarrier(scenario: Scenario, inputIndex: number): {
@@ -2230,6 +2247,15 @@ async function main(): Promise<number> {
 		verifyThemeParityPolicy();
 		verifyAnsiBoundary();
 		verifyStyledRolePresentation();
+		const replayIndex = process.argv.indexOf("--verify-replay");
+		if (replayIndex >= 0) {
+			const replayArgument = process.argv[replayIndex + 1];
+			if (replayArgument === undefined || replayArgument.startsWith("--")) throw new Error("--verify-replay requires a stored report path");
+			if (process.argv.includes("--write") || process.argv.includes("--scenario")) {
+				throw new Error("--verify-replay cannot be combined with --write or --scenario");
+			}
+			return runVerifyReplay(path.resolve(replayArgument));
+		}
 		return await runParent();
 	} catch (error) {
 		if (error instanceof SkipError) {
