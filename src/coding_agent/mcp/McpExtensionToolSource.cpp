@@ -18,6 +18,8 @@
 #include <cch/mcp/Protocol.hpp>
 #include <cch/mcp/StdioClient.hpp>
 
+#include "coding_agent/PrettyJson.hpp"
+
 #include "support/BoostBeastStreamTransport.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
@@ -71,32 +73,43 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
         return std::unexpected(source_error("MCP server '" + server + "' sent an invalid tools/call result"));
     }
     const auto content = object->find("content");
-    if (content == object->end() || content->second.get_if<support::JsonValue::array_t>() == nullptr) {
-        return std::unexpected(source_error("MCP server '" + server + "' sent a tools/call result without content"));
+    // pi `validateCallToolResult`: `content` is required by the spec, but
+    // servers that only return `structuredContent` omit it (the SDK defaults
+    // it too). Only a present non-array value is malformed; a JSON null is not
+    // the same fact as a missing member.
+    if (content != object->end() && content->second.get_if<support::JsonValue::array_t>() == nullptr) {
+        return std::unexpected(source_error("MCP server '" + server + "' sent an invalid tools/call result"));
     }
 
     extensions::ExtensionToolResult outcome;
-    for (const auto& block : content->second.get_array()) {
-        const auto* block_object = block.get_if<support::JsonValue::object_t>();
-        if (block_object == nullptr) {
-            continue;
-        }
-        const auto type = block_object->find("type");
-        const std::string block_type =
-                (type != block_object->end() && type->second.holds<std::string>()) ? type->second.get_string() : "";
-        if (block_type == "text") {
-            const auto text = block_object->find("text");
-            outcome.content.push_back(ai::text_content(
-                    text != block_object->end() && text->second.holds<std::string>() ? text->second.get_string() : ""));
-        } else if (block_type == "image") {
-            const auto data = block_object->find("data");
-            const auto mime = block_object->find("mimeType");
-            outcome.content.push_back(ai::image_content(
-                    data != block_object->end() && data->second.holds<std::string>() ? data->second.get_string() : "",
-                    mime != block_object->end() && mime->second.holds<std::string>() ? mime->second.get_string() : ""));
-        } else {
-            auto serialized = support::write_json(block);
-            outcome.content.push_back(ai::text_content(serialized ? std::move(*serialized) : std::string{}));
+    const auto* content_blocks = content != object->end() ? &content->second.get_array() : nullptr;
+    const bool has_content_blocks = content_blocks != nullptr && !content_blocks->empty();
+    if (content_blocks != nullptr) {
+        for (const auto& block : *content_blocks) {
+            const auto* block_object = block.get_if<support::JsonValue::object_t>();
+            if (block_object == nullptr) {
+                continue;
+            }
+            const auto type = block_object->find("type");
+            const std::string block_type =
+                    (type != block_object->end() && type->second.holds<std::string>()) ? type->second.get_string() : "";
+            if (block_type == "text") {
+                const auto text = block_object->find("text");
+                outcome.content.push_back(ai::text_content(
+                        text != block_object->end() && text->second.holds<std::string>() ? text->second.get_string()
+                                                                                         : ""));
+            } else if (block_type == "image") {
+                const auto data = block_object->find("data");
+                const auto mime = block_object->find("mimeType");
+                outcome.content.push_back(ai::image_content(
+                        data != block_object->end() && data->second.holds<std::string>() ? data->second.get_string()
+                                                                                         : "",
+                        mime != block_object->end() && mime->second.holds<std::string>() ? mime->second.get_string()
+                                                                                         : ""));
+            } else {
+                auto serialized = support::write_json(block);
+                outcome.content.push_back(ai::text_content(serialized ? std::move(*serialized) : std::string{}));
+            }
         }
     }
 
@@ -110,6 +123,24 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
             continue;
         }
         script_result.emplace(key, value);
+    }
+    // pi `validateCallToolResult` defaults an omitted `content` to `[]`, so
+    // the script-visible CallToolResult always carries the member.
+    if (content == object->end()) {
+        script_result.emplace("content", support::JsonValue::array_t{});
+    }
+    // pi `toLlmContent`: without content blocks, `structuredContent` becomes
+    // the model text as `JSON.stringify(value, null, 2)`. Explicit JSON null is
+    // text `null`; an absent member produces no text at all.
+    if (!has_content_blocks) {
+        const auto structured = object->find("structuredContent");
+        if (structured != object->end()) {
+            auto serialized = detail::serialize_pretty_json(structured->second, false);
+            if (!serialized) {
+                return std::unexpected(std::move(serialized.error()));
+            }
+            outcome.content.push_back(ai::text_content(std::move(*serialized)));
+        }
     }
     // pi limitMcpContent: text outputs > 20 KiB are middle-truncated, spilled to a temp file,
     // and fullOutputPath is recorded in details.

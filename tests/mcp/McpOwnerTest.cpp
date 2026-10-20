@@ -11,6 +11,7 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
+#include "support/JsonCompare.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <cch/mcp/HttpClient.hpp>
@@ -92,6 +93,31 @@ template <typename T, typename E>
     auto client = run(io, mcp::StdioClient::connect(echo_server_config()));
     REQUIRE(client.has_value());
     return *client;
+}
+
+[[nodiscard]] mcp::StdioServerConfig structured_server_config() {
+    mcp::StdioServerConfig config;
+    config.name = "structured";
+    config.command = "python3";
+    config.args = {fixture_path("structured_content_server.py")};
+    return config;
+}
+
+[[nodiscard]] std::shared_ptr<mcp::StdioClient> connect_structured_stdio(boost::asio::io_context& io) {
+    auto client = run(io, mcp::StdioClient::connect(structured_server_config()));
+    REQUIRE(client.has_value());
+    return *client;
+}
+
+[[nodiscard]] support::JsonValue call_structured(boost::asio::io_context& io, mcp::Client& client, std::string kind) {
+    auto response = run(io,
+            client.request("tools/call",
+                    support::JsonValue::object_t{
+                            {"name", "structured"},
+                            {"arguments", support::JsonValue::object_t{{"kind", std::move(kind)}}},
+                    }));
+    REQUIRE(response.has_value());
+    return std::move(*response);
 }
 
 /// Collect every page of `tools/list`, proving the owner's cursor loop rather
@@ -257,6 +283,46 @@ TEST_CASE("cch_mcp stdio client initializes, lists, calls and closes against a l
 
     client->close();
     CHECK(client->closed());
+}
+
+TEST_CASE("cch_mcp stdio client preserves every JSON structuredContent type from tools/call",
+        "[mcp][owner][issue1101][spec]") {
+    boost::asio::io_context io;
+    auto live = connect_structured_stdio(io);
+    const std::vector<std::pair<std::string, support::JsonValue>> cases{
+            {"object",
+                    support::JsonValue::object_t{
+                            {"nested", support::JsonValue::array_t{true, nullptr, "x"}}, {"ok", true}}},
+            {"array", support::JsonValue::array_t{1, support::JsonValue::object_t{{"x", true}}, nullptr}},
+            {"empty-array", support::JsonValue::array_t{}},
+            {"string", "text"},
+            {"empty-string", ""},
+            {"false", false},
+            {"zero", 0},
+            {"null", nullptr},
+    };
+    for (const auto& [kind, expected] : cases) {
+        INFO("structured kind: " << kind);
+        const auto result = call_structured(io, *live, kind);
+        const auto* object = result.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        CHECK_FALSE(object->contains("content"));
+        const auto structured = object->find("structuredContent");
+        REQUIRE(structured != object->end());
+        const auto mismatch = tests::json_mismatch(expected, structured->second);
+        CHECK_FALSE(mismatch.has_value());
+        if (mismatch) {
+            INFO(*mismatch);
+        }
+    }
+
+    const auto missing = call_structured(io, *live, "missing");
+    const auto* missing_object = missing.get_if<support::JsonValue::object_t>();
+    REQUIRE(missing_object != nullptr);
+    CHECK_FALSE(missing_object->contains("content"));
+    CHECK_FALSE(missing_object->contains("structuredContent"));
+
+    live->close();
 }
 
 TEST_CASE("cch_mcp stdio client resolves a caller-cancelled held request as Cancelled", "[mcp][owner][issue1065]") {
