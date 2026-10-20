@@ -13,7 +13,7 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "coding_agent/AgentSession.hpp"
-#include "coding_agent/extensions/codemode/CodemodeSource.hpp"
+#include <cch/codemode/Source.hpp>
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -41,6 +41,7 @@ using namespace cch;
 
 namespace {
 
+namespace codemode = cch::codemode;
 namespace extensions = cch::coding_agent::extensions;
 
 [[nodiscard]] std::filesystem::path bundle_root() {
@@ -110,11 +111,11 @@ TEST_CASE("the codemode grammar variant is pi's frozen CODEMODE_SOURCE_GRAMMAR",
 
     // Byte-for-byte, including the leading and trailing newline String.raw
     // preserves.
-    CHECK(std::string{extensions::kCodemodeSourceGrammar} == fixture);
+    CHECK(std::string{codemode::kCodemodeSourceGrammar} == fixture);
 
     const auto tool = bundle_tool();
     const auto& variants = field(field(tool, "constrainedSampling"), "variants");
-    CHECK(std::string{extensions::kCodemodeSourceGrammar} == field(variants, "openai_lark").get_string());
+    CHECK(std::string{codemode::kCodemodeSourceGrammar} == field(variants, "openai_lark").get_string());
 }
 
 TEST_CASE("the model-facing codemode tool definition matches the pi-v1.0.4 bundle",
@@ -130,7 +131,7 @@ TEST_CASE("the model-facing codemode tool definition matches the pi-v1.0.4 bundl
     CHECK(std::string{extensions::kCodemodeStoreEntryType} == field(bundle, "storeEntryType").get_string());
     CHECK(extensions::kCodemodeDefaultInlineBudget ==
             static_cast<std::int64_t>(field(bundle, "defaultInlineBudget").get_number()));
-    CHECK(std::string{extensions::kCodemodeOptionsPrefix} == field(bundle, "optionsPrefix").get_string());
+    CHECK(std::string{codemode::kCodemodeOptionsPrefix} == field(bundle, "optionsPrefix").get_string());
 
     // The description is the frozen literal: DESCRIPTION_INTRO, a blank line,
     // then the Globals block (models disabled).

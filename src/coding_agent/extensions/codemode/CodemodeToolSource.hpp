@@ -2,7 +2,7 @@
 
 #include "coding_agent/extensions/ExtensionTool.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
-#include "coding_agent/extensions/codemode/CodemodeSandbox.hpp"
+#include <cch/codemode/Sandbox.hpp>
 
 #include <filesystem>
 
@@ -17,7 +17,7 @@ namespace cch::coding_agent::extensions {
 /// calls codemode does not touch the guest.
 class CodemodeToolSource final : public ExtensionToolSource {
 public:
-    explicit CodemodeToolSource(std::filesystem::path guest_wasm_path = default_codemode_guest_wasm_path());
+    explicit CodemodeToolSource(std::filesystem::path guest_wasm_path = codemode::default_codemode_guest_wasm_path());
 
     /// Contribute the one `codemode` tool. Loading never touches the guest
     /// module: a missing or invalid guest surfaces as the tool call's explicit

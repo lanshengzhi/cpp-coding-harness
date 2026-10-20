@@ -9,9 +9,11 @@
 // both the returned value and the absence of the side effect on disk, and pair a
 // caught escape (returns "refused") with an uncaught one (an explicit error).
 
-#include "coding_agent/extensions/codemode/CodemodePrelude.hpp"
-#include "coding_agent/extensions/codemode/CodemodeSandbox.hpp"
 #include "coding_agent/extensions/codemode/CodemodeToolSource.hpp"
+
+#include <cch/codemode/Sandbox.hpp>
+
+#include "codemode/Prelude.hpp"
 #include "support/StreamAdapterFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -39,13 +41,13 @@ using namespace cch;
 
 namespace {
 
-using coding_agent::extensions::CodemodeError;
-using coding_agent::extensions::CodemodeLimits;
-using coding_agent::extensions::CodemodeOutputItem;
-using coding_agent::extensions::CodemodeRunResult;
-using coding_agent::extensions::CodemodeSandbox;
-using coding_agent::extensions::CodemodeToolCallHandler;
-using coding_agent::extensions::CodemodeToolDescriptor;
+using codemode::CodemodeError;
+using codemode::CodemodeLimits;
+using codemode::CodemodeOutputItem;
+using codemode::CodemodeRunResult;
+using codemode::CodemodeSandbox;
+using codemode::CodemodeToolCallHandler;
+using codemode::CodemodeToolDescriptor;
 using coding_agent::extensions::CodemodeToolSource;
 
 [[nodiscard]] std::filesystem::path guest_path() {
@@ -86,7 +88,7 @@ TEST_CASE("the codemode guest fixture is the pinned quickjs-wasi module", "[codi
 TEST_CASE("the embedded codemode prelude matches the committed fixture", "[coding_agent][codemode][issue874][spec]") {
     const auto fixture =
             read_file(std::filesystem::path{CCH_SOURCE_DIR} / "fixtures" / "codemode" / "quickjs" / "prelude.js");
-    CHECK(std::string{coding_agent::extensions::kCodemodePreludeSource} == fixture);
+    CHECK(std::string{codemode::kCodemodePreludeSource} == fixture);
 }
 
 TEST_CASE("a script runs in the sandbox and returns its value and text output",

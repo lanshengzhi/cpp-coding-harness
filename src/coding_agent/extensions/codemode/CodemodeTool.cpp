@@ -1,6 +1,6 @@
 #include "coding_agent/extensions/codemode/CodemodeTool.hpp"
 
-#include "coding_agent/extensions/codemode/CodemodeSource.hpp"
+#include <cch/codemode/Source.hpp>
 
 #include <string>
 #include <utility>
@@ -88,7 +88,7 @@ ai::Tool codemode_tool_definition() {
     tool.description = codemode_description();
     tool.parameters = codemode_parameters();
     tool.constrained_sampling = ai::ConstrainedSampling{
-            .variants = {{"openai_lark", std::string{kCodemodeSourceGrammar}}},
+            .variants = {{"openai_lark", std::string{codemode::kCodemodeSourceGrammar}}},
     };
     return tool;
 }

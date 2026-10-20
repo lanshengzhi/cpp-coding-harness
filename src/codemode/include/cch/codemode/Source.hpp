@@ -7,7 +7,7 @@
 #include <string>
 #include <string_view>
 
-namespace cch::coding_agent::extensions {
+namespace cch::codemode {
 
 /// pi `CODEMODE_OPTIONS_PREFIX` (`packages/codemode/src/source.ts`).
 inline constexpr std::string_view kCodemodeOptionsPrefix = "// @options:";
@@ -45,4 +45,4 @@ struct CodemodeSource {
 /// typed Validation errors (never a silent fallback to "no options").
 [[nodiscard]] support::Expected<CodemodeSource> parse_codemode_source(std::string_view input);
 
-} // namespace cch::coding_agent::extensions
+} // namespace cch::codemode

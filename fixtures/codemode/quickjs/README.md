@@ -31,7 +31,7 @@ the readable reference for the WASI subset the guest imports (the sandbox
 registers those imports directly through WasmEdge). `prelude.js` is the runtime
 string of pi's codemode prelude (`packages/codemode/src/runtime/prelude-source.ts`
 `PRELUDE_SOURCE`, TS placeholders expanded); the sandbox embeds the same bytes
-as `src/coding_agent/extensions/codemode/CodemodePrelude.hpp` and a test asserts
+as `src/codemode/Prelude.hpp` and a test asserts
 they stay equal.
 
 ## Imports the guest declares

@@ -7,7 +7,7 @@
 // exactly as pi's worker does. Do not edit by hand; see
 // `fixtures/codemode/quickjs/README.md`.
 
-namespace cch::coding_agent::extensions {
+namespace cch::codemode {
 
 inline constexpr char kCodemodePreludeSource[] =
         R"CODEMODE_PRELUDE((function (bridge, toolsJson, globalsJson, storeJson) {
@@ -478,4 +478,4 @@ inline constexpr char kCodemodePreludeSource[] =
 	};
 }))CODEMODE_PRELUDE";
 
-} // namespace cch::coding_agent::extensions
+} // namespace cch::codemode
