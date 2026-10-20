@@ -124,8 +124,12 @@ struct Session::Impl {
         /// fails the Session and publishes nothing.
         [[nodiscard]] support::ExpectedVoid settle(std::expected<Seq, support::Error> outcome) noexcept {
             if (!outcome) {
-                session->fail(std::move(outcome.error()));
-                return std::unexpected(session->failure_error());
+                // The call that reached the storage failure reports the
+                // STORAGE's own error; every later call reports the frozen
+                // Session failure message.
+                support::Error storage_error = std::move(outcome.error());
+                session->fail(storage_error);
+                return std::unexpected(std::move(storage_error));
             }
             const Seq seq = *outcome;
 

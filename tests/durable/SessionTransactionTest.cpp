@@ -334,13 +334,21 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
             [&publications](const CommitPublication& publication) { publications.push_back(publication); }));
 
     const ConversationId conversation_id = create_conversation(*session);
+    std::optional<EntryId> committed_entry_id;
     REQUIRE(run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
         auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{1.0});
         if (!entry) {
             return std::unexpected(std::move(entry.error()));
         }
+        committed_entry_id = entry->id;
         return {};
     }).has_value());
+    REQUIRE(committed_entry_id.has_value());
+
+    // The frozen artifact records the committed entry's identity.
+    const auto frozen_committed_entry_id = scenario.number_member("committedEntryId");
+    REQUIRE(frozen_committed_entry_id.has_value());
+    CHECK(static_cast<double>(committed_entry_id->value) == *frozen_committed_entry_id);
 
     const std::size_t commits_before_failure = storage.commit_calls();
     const std::size_t publications_before_failure = publications.size();
@@ -374,13 +382,23 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
 
     // The next successful commit takes the sequence the failed one would have
     // taken: the frozen artifact records that sequence.
+    std::optional<EntryId> later_entry_id;
     REQUIRE(run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
         auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{3.0});
         if (!entry) {
             return std::unexpected(std::move(entry.error()));
         }
+        later_entry_id = entry->id;
         return {};
     }).has_value());
+    REQUIRE(later_entry_id.has_value());
+
+    // The frozen artifact records the later entry's identity: the failed
+    // callback consumed an ID, so the later entry is the one after it.
+    const auto frozen_later_entry_id = scenario.number_member("laterEntryId");
+    REQUIRE(frozen_later_entry_id.has_value());
+    CHECK(static_cast<double>(later_entry_id->value) == *frozen_later_entry_id);
+
     REQUIRE(publications.size() == publications_before_failure + 1);
     const auto frozen_later_seq = scenario.number_member("laterCommitSeq");
     REQUIRE(frozen_later_seq.has_value());
@@ -390,12 +408,24 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
     // records: the failed callback's staged entry is not among them.
     auto reopened = Session::create(storage);
     std::size_t reopened_entry_count = 0;
+    std::vector<EntryId> reopened_entry_ids;
+    std::optional<ConversationId> reopened_conversation_id;
     auto reopened_outcome = reopened->commit([&](Transaction& transaction) -> support::Expected<void> {
+        auto conversation = transaction.conversation(conversation_id);
+        if (!conversation) {
+            return std::unexpected(std::move(conversation.error()));
+        }
+        if ((*conversation).has_value()) {
+            reopened_conversation_id = (*conversation)->id;
+        }
         auto scanned = transaction.scan_entries(conversation_id, 10);
         if (!scanned) {
             return std::unexpected(std::move(scanned.error()));
         }
         reopened_entry_count = scanned->size();
+        for (const EntryRecord& record : *scanned) {
+            reopened_entry_ids.push_back(record.id);
+        }
         return {};
     });
     REQUIRE(consume(std::move(reopened_outcome)).has_value());
@@ -403,6 +433,116 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
     const auto* frozen_reopened_ids = scenario.array_member("reopenedEntryIds");
     REQUIRE(frozen_reopened_ids != nullptr);
     CHECK(static_cast<double>(reopened_entry_count) == static_cast<double>(frozen_reopened_ids->size()));
+
+    // The frozen artifact names the exact entries the reopened session
+    // observes: the committed one and the later one, in the frozen order.
+    REQUIRE(reopened_entry_ids.size() == frozen_reopened_ids->size());
+    for (std::size_t index = 0; index < reopened_entry_ids.size(); ++index) {
+        const auto* frozen_id = frozen_reopened_ids->at(index).get_if<double>();
+        REQUIRE(frozen_id != nullptr);
+        CHECK(static_cast<double>(reopened_entry_ids[index].value) == *frozen_id);
+    }
+
+    // The frozen artifact records the conversation the reopened session
+    // observes.
+    const auto frozen_reopened_conversation_id = scenario.number_member("reopenedConversationId");
+    REQUIRE(frozen_reopened_conversation_id.has_value());
+    REQUIRE(reopened_conversation_id.has_value());
+    CHECK(static_cast<double>(reopened_conversation_id->value) == *frozen_reopened_conversation_id);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1063/session-transactions.json
+// "a failed commit leaves the storage sequence unchanged and the session
+// reopens from what was committed" (the storage-failure sub-case: "a failing
+// storage commit ends the Session as failed, publishes nothing and closes its
+// backend").
+//
+// Discriminating case: a storage commit that fails must reject its own
+// commit with the STORAGE's own error (the frozen "disk vanished"), publish
+// nothing beyond the already-committed batch, settle the Session as failed
+// with that same message, and close the backend exactly once. An
+// implementation that swallows the storage error, publishes the failed batch
+// anyway, settles the Session as closed, or leaves the backend open fails
+// this case.
+TEST_CASE("a failing storage commit fails the session, publishes nothing and closes its backend",
+        "[durable][session][failure][storage][issue1063][spec]") {
+    const FrozenScenario scenario = frozen(kN3FailedCommit);
+
+    GatedStorage storage;
+    auto session = Session::create(storage);
+    std::vector<CommitPublication> publications;
+    std::size_t close_notifications = 0;
+    REQUIRE(session->subscribe_commits(
+            [&publications](const CommitPublication& publication) { publications.push_back(publication); }));
+    REQUIRE(session->subscribe_close([&close_notifications] { close_notifications += 1; }));
+
+    // The frozen artifact names the storage failure's exact error name and
+    // message.
+    const auto* frozen_storage_failure = scenario.object_member("storageFailure");
+    REQUIRE(frozen_storage_failure != nullptr);
+    const auto* frozen_failure_name = support::json_member(*frozen_storage_failure, "name");
+    const auto* frozen_failure_message = support::json_member(*frozen_storage_failure, "message");
+    REQUIRE(frozen_failure_name != nullptr);
+    REQUIRE(frozen_failure_message != nullptr);
+    const std::string expected_failure_message = frozen_failure_message->get<std::string>();
+
+    // The committed conversation is the one publication the frozen artifact
+    // counts before the failing commit.
+    const ConversationId conversation_id = create_conversation(*session);
+    REQUIRE(publications.size() == 1);
+
+    // The storage fails the next commit with its own error.
+    storage.fail_next_commit(expected_failure_message);
+
+    auto failing = session->commit([&](Transaction& transaction) -> support::Expected<void> {
+        auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{4.0});
+        if (!entry) {
+            return std::unexpected(std::move(entry.error()));
+        }
+        return {};
+    });
+    const Outcome<void> failing_terminal = consume(std::move(failing));
+
+    // The failing commit rejects with the STORAGE's own error, not with a
+    // generic Session failure: the frozen artifact records the backend's
+    // message.
+    REQUIRE_FALSE(failing_terminal.has_value());
+    CHECK(failing_terminal.error().message == expected_failure_message);
+
+    // The failed commit published nothing: the frozen artifact records the
+    // publication count of the failed session.
+    const auto frozen_failure_publications = scenario.number_member("storageFailurePublications");
+    REQUIRE(frozen_failure_publications.has_value());
+    CHECK(static_cast<double>(publications.size()) == *frozen_failure_publications);
+
+    // The failed session closed its backend exactly once: the frozen artifact
+    // records the close-call count.
+    const auto frozen_failure_close_calls = scenario.number_member("storageFailureCloseCalls");
+    REQUIRE(frozen_failure_close_calls.has_value());
+    CHECK(static_cast<double>(storage.close_calls()) == *frozen_failure_close_calls);
+    CHECK(close_notifications == 1);
+
+    // The session settled as failed with the backend's own message: the
+    // frozen artifact records the terminal reason and the error message.
+    const auto* frozen_end = scenario.object_member("sessionEnd");
+    REQUIRE(frozen_end != nullptr);
+    const auto* frozen_end_reason = support::json_member(*frozen_end, "reason");
+    const auto* frozen_end_message = support::json_member(*frozen_end, "errorMessage");
+    REQUIRE(frozen_end_reason != nullptr);
+    REQUIRE(frozen_end_message != nullptr);
+    CHECK(frozen_end_reason->get<std::string>() == "failed");
+    CHECK(frozen_end_message->get<std::string>() == expected_failure_message);
+
+    CHECK(session->failed());
+    CHECK(session->closed().reason == SessionEndReason::Failed);
+    CHECK(session->closed().failed);
+    REQUIRE(session->closed().error_message.has_value());
+    CHECK(*session->closed().error_message == expected_failure_message);
+    REQUIRE(session->failure_message().has_value());
+    CHECK(*session->failure_message() == expected_failure_message);
+
+    // The frozen artifact records the rejected storage failure's error name.
+    CHECK(frozen_failure_name->get<std::string>() == "Error");
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1063/session-transactions.json
@@ -580,8 +720,16 @@ TEST_CASE("the same public operation yields the same session and transaction rec
     // The second session over the same storage observes the same records.
     auto reopened = Session::create(storage);
     std::optional<EntryRecord> reopened_entry;
+    std::optional<ConversationId> reopened_conversation;
     std::size_t reopened_entry_count = 0;
     auto reopened_outcome = reopened->commit([&](Transaction& transaction) -> support::Expected<void> {
+        auto conversation = transaction.conversation(conversation_id);
+        if (!conversation) {
+            return std::unexpected(std::move(conversation.error()));
+        }
+        if ((*conversation).has_value()) {
+            reopened_conversation = (*conversation)->id;
+        }
         auto entry = transaction.entry(*entry_id);
         if (!entry) {
             return std::unexpected(std::move(entry.error()));
@@ -598,6 +746,14 @@ TEST_CASE("the same public operation yields the same session and transaction rec
     });
     REQUIRE(consume(std::move(reopened_outcome)).has_value());
     REQUIRE(reopened_entry.has_value());
+    REQUIRE(reopened_conversation.has_value());
+
+    // The frozen artifact records the conversation the reopened session
+    // observes: the same conversation the first session created.
+    const auto frozen_reopened_conversation_id = scenario.number_member("reopenedConversationId");
+    REQUIRE(frozen_reopened_conversation_id.has_value());
+    CHECK(static_cast<double>(reopened_conversation->value) == *frozen_reopened_conversation_id);
+    CHECK(reopened_conversation->value == conversation_id.value);
 
     const auto frozen_entry_id = scenario.number_member("entryId");
     const auto frozen_entry_kind = scenario.string_member("entryKind");
