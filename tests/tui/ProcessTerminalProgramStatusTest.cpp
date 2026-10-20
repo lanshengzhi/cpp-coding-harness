@@ -125,6 +125,13 @@ struct TerminalProbe {
     }
 };
 
+[[nodiscard]] std::string forwarded_bytes(const TerminalProbe& probe) {
+    std::string forwarded;
+    for (const auto& fragment : probe.forwarded_input)
+        forwarded += fragment;
+    return forwarded;
+}
+
 } // namespace
 
 TEST_CASE("Process Terminal reports the latest status once the terminal answers before DA",
@@ -192,10 +199,12 @@ TEST_CASE("Process Terminal leaves the status unsupported when DA answers before
     }));
 
     // A late reply is swallowed and reports nothing, and it never reaches the
-    // typed-input stream.
+    // typed-input stream. The DA sentinel is still forwarded to the Tui's own
+    // negotiation stage (the existing decoder contract), so it stays the only
+    // fragment; the reply must add no bytes at all.
     probe.write("\x1b]7501;?\x07");
     CHECK(probe.read().find("7501;state=") == std::string::npos);
-    CHECK(probe.forwarded_input.empty());
+    CHECK(forwarded_bytes(probe) == "\x1b[?62;4;52c");
 
     REQUIRE(probe.terminal->stop());
     CHECK(probe.read().find(kClear) == std::string::npos);
@@ -273,5 +282,7 @@ TEST_CASE("Process Terminal keeps the latest status across a restart and re-repo
     probe.write("\x1b]7501;?\x07");
     output.clear();
     REQUIRE(probe.wait_for("\x1b]7501;state=done:app=pi\x1b\\", output));
-    CHECK(probe.forwarded_input.empty());
+    // The late DA is the only forwarded fragment; the reply that confirms the
+    // restarted query adds no bytes to the typed-input stream.
+    CHECK(forwarded_bytes(probe) == "\x1b[?62;4;52c");
 }

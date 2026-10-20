@@ -192,6 +192,9 @@ struct InteractiveProbe {
 
     void type(std::string_view text) {
         REQUIRE(terminal.inject_input(std::string{text}));
+        // A lone ESC stays an unresolved fragment until the decoder flushes;
+        // every submission here is complete, so resolve it immediately.
+        REQUIRE(terminal.flush_input());
         drain_ready(io);
     }
 

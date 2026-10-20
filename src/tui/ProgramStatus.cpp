@@ -55,22 +55,76 @@ constexpr std::size_t kMaxMessageBytes = 2048;
     return true;
 }
 
-/// pi `CONTROL_CHARACTERS` `[\u0000-\u001f\u007f-\u009f]+`: every run becomes
-/// one space so a terminal cannot discard the report.
+/// Decode one UTF-8 code point at `offset`; `length` receives the bytes it
+/// spans. Invalid or truncated bytes decode as themselves with length 1:
+/// pi formats JS strings, which are always valid UTF-16, so this path has no
+/// frozen parity case and the local rule is only "never drop bytes".
+[[nodiscard]] std::uint32_t decode_utf8(std::string_view text, std::size_t offset, std::size_t& length) {
+    const auto lead = static_cast<unsigned char>(text[offset]);
+    if (lead < 0x80) {
+        length = 1;
+        return lead;
+    }
+    std::size_t expected = 0;
+    std::uint32_t value = 0;
+    std::uint32_t minimum = 0;
+    if ((lead & 0xe0) == 0xc0) {
+        expected = 2;
+        value = lead & 0x1f;
+        minimum = 0x80;
+    } else if ((lead & 0xf0) == 0xe0) {
+        expected = 3;
+        value = lead & 0x0f;
+        minimum = 0x800;
+    } else if ((lead & 0xf8) == 0xf0) {
+        expected = 4;
+        value = lead & 0x07;
+        minimum = 0x10000;
+    } else {
+        length = 1;
+        return lead;
+    }
+    if (offset + expected > text.size()) {
+        length = 1;
+        return lead;
+    }
+    for (std::size_t index = 1; index < expected; ++index) {
+        const auto continuation = static_cast<unsigned char>(text[offset + index]);
+        if ((continuation & 0xc0) != 0x80) {
+            length = 1;
+            return lead;
+        }
+        value = (value << 6) | (continuation & 0x3f);
+    }
+    if (value < minimum || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+        length = 1;
+        return lead;
+    }
+    length = expected;
+    return value;
+}
+
+/// pi `CONTROL_CHARACTERS` `[\u0000-\u001f\u007f-\u009f]+`: every run of code
+/// points becomes one space so a terminal cannot discard the report. The
+/// pattern ranges are code points, so a C1 control written as two UTF-8 bytes
+/// is one replaced character, not half a byte.
 [[nodiscard]] std::string sanitize_message(std::string_view message) {
     std::string sanitized;
     sanitized.reserve(message.size());
     bool replacing = false;
-    for (const auto raw : message) {
-        const auto value = static_cast<unsigned char>(raw);
+    std::size_t offset = 0;
+    while (offset < message.size()) {
+        std::size_t length = 0;
+        const auto value = decode_utf8(message, offset, length);
         const bool control = value <= 0x1f || (value >= 0x7f && value <= 0x9f);
         if (control) {
             if (!replacing) sanitized.push_back(' ');
             replacing = true;
-            continue;
+        } else {
+            replacing = false;
+            sanitized.append(message.substr(offset, length));
         }
-        replacing = false;
-        sanitized.push_back(static_cast<char>(value));
+        offset += length;
     }
     return sanitized;
 }

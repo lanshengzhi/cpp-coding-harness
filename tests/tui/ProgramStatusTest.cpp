@@ -121,6 +121,7 @@ TEST_CASE("Program status reply recognition accepts only the frozen query echoes
     // The terminator must end the sequence: a body carrying BEL/ESC or a
     // missing terminator is not a reply.
     CHECK_FALSE(is_program_status_reply("\x1b]7501;?"));
-    CHECK_FALSE(is_program_status_reply("\x1b]7501;?a\x07b\x1b\\"));
+    CHECK_FALSE(is_program_status_reply("\x1b]7501;?a\x07"
+                                        "b\x1b\\"));
     CHECK_FALSE(is_program_status_reply("\x1b]7501;?a\x1b\\b"));
 }
