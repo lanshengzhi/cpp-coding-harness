@@ -62,7 +62,9 @@ public:
     /// Accept a chunk; returns whether anything was accepted.
     [[nodiscard]] bool push(std::string_view chunk);
 
-    /// Retained output and what the limits dropped from the whole stream.
+    /// Retained, display-sanitized output and what the limits dropped from the
+    /// whole stream. `dropped_bytes` and `dropped_lines` describe the raw
+    /// retained window before sanitization.
     [[nodiscard]] BoundedOutput snapshot();
 
     [[nodiscard]] std::size_t stored_bytes() const noexcept { return stored_bytes_; }

@@ -127,9 +127,9 @@ public:
     };
     CodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl);
 
-    ~CodemodeSandbox();
     CodemodeSandbox(CodemodeSandbox&&) noexcept;
     CodemodeSandbox& operator=(CodemodeSandbox&&) noexcept;
+    ~CodemodeSandbox();
     CodemodeSandbox(const CodemodeSandbox&) = delete;
     CodemodeSandbox& operator=(const CodemodeSandbox&) = delete;
 
