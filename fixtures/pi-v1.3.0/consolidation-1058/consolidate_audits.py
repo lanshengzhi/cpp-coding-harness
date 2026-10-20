@@ -7,7 +7,14 @@ row, applies the provenance-corrections index (pointer spellings only, never obs
 resolves the named overlaps, and routes every row's evidence to a real registered artifact scenario
 or to an honest missing-observation statement. `build` is deterministic; `check` rebuilds in memory,
 compares bytes and runs the semantic validations, so the committed ledger cannot silently drift from
-its sources, the bundles or the target owner graph.
+its sources, the bundles or the target owner graph. Both commands read each bundle manifest and
+build the bundle/scenario indexes once.
+
+A correction rewrites a pointer only in the rows its `appliesTo` scope names and only when the
+recorded pointer matches exactly (the same full pointer, or the same symbol list on a path-tail
+shorthand). A longer already-qualified pointer, a different symbol list on the same path, and a row
+outside the scope keep the lane's recorded provenance, and `appliedCorrections` names only the
+corrections that actually rewrote a pointer.
 
 Usage:
     python3 fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py build
@@ -21,6 +28,7 @@ import copy
 import json
 import re
 import sys
+from collections.abc import Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -212,32 +220,57 @@ def extract_notes(lane: str, raw: dict) -> str:
     return " ".join(parts)
 
 
-def apply_corrections(lane: str, sources: list[str], plan: dict) -> tuple[list[str], list[str]]:
+def split_pointer(pointer: str) -> tuple[str, list[str]]:
+    """Split a pointer into its path and its comma-separated symbol list."""
+    path, separator, symbols = pointer.partition(":")
+    return path, [item for item in symbols.split(",") if item] if separator else []
+
+
+def matches_recorded_pointer(recorded: str, source: str) -> bool:
+    """True when `source` carries exactly the recorded pointer spelling.
+
+    A full pointer matches by equality, or by a path-tail shorthand with the identical symbol
+    list: #1052 records `extensions/mcp/cli.ts:runMcpCommand` for the full
+    `packages/coding-agent/src/...` path. A file-only spelling matches only a pointer that is
+    exactly that file, never a longer qualified pointer: rewriting
+    `submissions.ts:Submissions.status` to `submissions.ts:Submissions` would drop the observed
+    member, and widening `tool-search.ts:createToolSearchTool` would add an export the lane never
+    recorded.
+    """
+    if source == recorded:
+        return True
+    recorded_path, recorded_symbols = split_pointer(recorded)
+    source_path, source_symbols = split_pointer(source)
+    return bool(recorded_symbols) and source_symbols == recorded_symbols and source_path.endswith(
+        f"/{recorded_path}"
+    )
+
+
+def apply_corrections(
+    lane: str, row_ids: Iterable[str], sources: list[str], plan: dict
+) -> tuple[list[str], list[str]]:
     """Apply pointer-spelling corrections; return (corrected sources, applied correction ids).
 
-    A correction replaces the whole recorded pointer with the authoritative spelling. It must not
-    rewrite a longer, already-qualified pointer by substring: that would double a package prefix
-    (for example `packages/durable/src/harness/packages/durable/...`). An entry that already
+    A correction replaces the whole recorded pointer with the authoritative spelling, and only for
+    the rows its `appliesTo` names (a source row id, a consolidated id, or `*`). The recorded
+    pointer must match exactly under `matches_recorded_pointer`; a longer, already-qualified
+    pointer and a different symbol on the same path are left as recorded. A pointer that already
     carries the authoritative spelling is left as is and the correction is not marked applied.
     """
     applied: list[str] = []
     result = list(sources)
+    scope_ids = set(row_ids)
     for correction in plan["corrections"]:
-        if correction["ticket"] != lane:
+        if correction["ticket"] != lane or correction["kind"] == "record-only":
             continue
-        if correction["kind"] == "record-only":
+        if correction["appliesTo"] != "*" and not scope_ids.intersection(correction["appliesTo"]):
             continue
         changed = False
         for index, source in enumerate(result):
-            if correction["kind"] == "replace" and correction["recorded"] in source:
-                if source != correction["actual"]:
-                    result[index] = correction["actual"]
-                    changed = True
-            elif correction["kind"] == "symbol-suffix" and source.startswith(correction["recorded"]):
-                suffix = source[len(correction["recorded"]):]
-                if suffix.startswith(":"):
-                    continue
-                result[index] = f"{correction['recorded']}:{correction['actual']}"
+            if not matches_recorded_pointer(correction["recorded"], source):
+                continue
+            if source != correction["actual"]:
+                result[index] = correction["actual"]
                 changed = True
         if changed:
             applied.append(correction["id"])
@@ -318,6 +351,15 @@ def build_bundle_index() -> dict[str, dict[str, list[str]]]:
         index[family] = {}
         for artifact in manifest["artifacts"]:
             index[family][artifact["path"]] = [scenario["name"] for scenario in artifact["scenarios"]]
+    return index
+
+
+def build_scenario_index(bundles: dict[str, dict[str, list[str]]]) -> dict[str, list[tuple[str, str]]]:
+    index: dict[str, list[tuple[str, str]]] = {}
+    for family, artifacts in bundles.items():
+        for artifact, scenarios in artifacts.items():
+            for scenario in scenarios:
+                index.setdefault(scenario, []).append((family, artifact))
     return index
 
 
@@ -488,16 +530,12 @@ def gap_matches(gap: dict, raw: dict) -> bool:
     return False
 
 
-def build_ledger(plan: dict) -> dict:
-    bundles = build_bundle_index()
+def build_ledger(
+    plan: dict, bundles: dict[str, dict[str, list[str]]], scenario_index: dict[str, list[tuple[str, str]]]
+) -> dict:
     registry = load_json(REGISTRY_PATH)
     registered = set(registry["baselines"]["pi-v1.3.0"]["bundles"])
     require(set(bundles) == registered, f"bundle manifests and registry disagree: {sorted(set(bundles) ^ registered)}")
-    scenario_index: dict[str, list[tuple[str, str]]] = {}
-    for family, artifacts in bundles.items():
-        for artifact, scenarios in artifacts.items():
-            for scenario in scenarios:
-                scenario_index.setdefault(scenario, []).append((family, artifact))
 
     raw_rows: list[dict] = []
     source_aliases: dict[str, dict[str, str]] = {}
@@ -516,7 +554,9 @@ def build_ledger(plan: dict) -> dict:
             source_aliases[lane][raw["id"]] = consolidated_id
             membership, implementation, verification = status_of(lane, raw)
             sources, frozen_symbols = extract_sources(lane, raw)
-            sources, applied = apply_corrections(lane, sources, plan)
+            sources, applied = apply_corrections(
+                lane, (raw["id"], consolidated_id), sources, plan
+            )
             raw_rows.append(
                 {
                     "id": consolidated_id,
@@ -660,6 +700,47 @@ def display_capability(consolidated_id: str) -> str:
     return " ".join(words) if words else tail
 
 
+def check_product_routing(rows_by_id: dict[str, dict], overlaps: list[dict]) -> None:
+    """The toolkit/product resolution names only real 1051 counterparts and promotes nothing."""
+    overlap = next(item for item in overlaps if item["id"] == "overlap-toolkit-product")
+    adjacent = overlap.get("adjacentRows") or []
+    require(adjacent, "overlap-toolkit-product records no adjacent 1051 counterpart")
+    for row_id in adjacent:
+        row = rows_by_id.get(row_id)
+        require(row is not None, f"overlap-toolkit-product names unknown row {row_id}")
+        require(row["lane"] == "1051", f"overlap-toolkit-product names {row_id}, which is not a 1051 row")
+        require(row["verification"] != "verified", f"{row_id}: an adjacent counterpart may not be verified")
+    routing = overlap.get("rowRouting") or []
+    require(
+        [item["row"] for item in routing] == overlap["rows"],
+        "overlap-toolkit-product routing does not cover its seven rows in order",
+    )
+    for item in routing:
+        row = rows_by_id[item["row"]]
+        require(row["lane"] == "1050", f"{item['row']}: routed product row is not a 1050 row")
+        require(item["observation"].strip(), f"{item['row']}: no routing observation")
+        require(row["evidence"]["route"] == "not-audited", f"{item['row']}: product row left the not-audited route")
+        require(row["verification"] == "unverified", f"{item['row']}: product row claims verification")
+        require(row["missingObservation"], f"{item['row']}: product row hides its missing observation")
+        for adjacent_id in item["adjacent"]:
+            require(
+                adjacent_id in adjacent,
+                f"{item['row']}: adjacent row {adjacent_id} is not a named 1051 counterpart",
+            )
+    require(
+        any(not item["adjacent"] for item in routing),
+        "overlap-toolkit-product must keep unmatched product rows visibly unmatched",
+    )
+
+
+def coverage_note(coverage: dict) -> str:
+    return (
+        f"scenario coverage: {coverage['scenarios']} scenarios, {coverage['scenarioNamed']} named by a row, "
+        f"{coverage['artifactCovered']} covered by a referenced artifact, "
+        f"{len(coverage['orphaned'])} explicit orphan(s), {len(coverage['uncovered'])} uncovered"
+    )
+
+
 def scenario_coverage(rows: list[dict], bundles: dict[str, dict[str, list[str]]], orphans: list[dict]) -> dict:
     referenced_artifacts = {row["evidence"]["artifact"] for row in rows if row["evidence"]["artifact"]}
     named = {scenario for row in rows for scenario in row["comparisonScenarios"]}
@@ -744,7 +825,13 @@ def count_rows(rows: list[dict]) -> dict:
     }
 
 
-def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
+def check_ledger(
+    plan: dict,
+    ledger: dict,
+    bundles: dict[str, dict[str, list[str]]],
+    scenario_index: dict[str, list[tuple[str, str]]],
+    pi_root: Path | None,
+) -> list[str]:
     notes: list[str] = []
     rows = ledger["rows"]
     require(ledger["schema"] == LEDGER_SCHEMA, "ledger schema mismatch")
@@ -853,12 +940,6 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
             require(rows_by_id[alias]["consumer"] == text, f"{alias}: consumer text override not applied")
 
     # 3. Evidence routes point at real registered scenarios or an honest missing observation.
-    bundles = build_bundle_index()
-    scenario_index: dict[str, list[tuple[str, str]]] = {}
-    for family, artifacts in bundles.items():
-        for artifact, scenarios in artifacts.items():
-            for scenario in scenarios:
-                scenario_index.setdefault(scenario, []).append((family, artifact))
     captured = 0
     for row in rows:
         route = row["evidence"]["route"]
@@ -894,10 +975,7 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
     notes.append(f"evidence routes: {captured} rows anchored to registered artifacts")
     coverage = scenario_coverage(rows, bundles, ledger["orphanScenarios"])
     require(not coverage["uncovered"], f"orphaned captured scenarios: {coverage['uncovered'][:10]}")
-    notes.append(
-        f"scenario coverage: {coverage['scenarios']} scenarios, {coverage['scenarioNamed']} named by a row, "
-        f"{coverage['artifactCovered']} covered by a referenced artifact, 0 orphaned"
-    )
+    notes.append(coverage_note(coverage))
 
     # 4. Groups and overlaps resolve overlapping rows without a catch-all.
     group_ids = {group["id"] for group in ledger["capabilityGroups"]}
@@ -916,6 +994,7 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
         require(overlap["resolution"].strip(), f"{overlap['id']}: no resolution text")
     required_overlaps = {"overlap-toolkit-product", "overlap-session-storage", "overlap-tasks-harness", "overlap-codemode-chord"}
     require(required_overlaps <= overlap_ids, f"named overlap resolutions missing: {sorted(required_overlaps - overlap_ids)}")
+    check_product_routing(rows_by_id, ledger["overlapResolutions"])
     for orphan in ledger["orphanScenarios"]:
         require(orphan["reason"].strip(), f"orphan {orphan['scenario']}: no reason")
         require(orphan["rows"], f"orphan {orphan['scenario']}: no related row")
@@ -927,22 +1006,48 @@ def check_ledger(plan: dict, ledger: dict, pi_root: Path | None) -> list[str]:
         )
     notes.append(f"groups/overlaps: {len(group_ids)} groups, {len(overlap_ids)} overlap resolutions")
 
-    # 5. Corrections index is applied or explicitly record-only.
+    # 5. Corrections index rewrote exactly the recorded pointer in exactly the scoped rows.
+    index = {correction["id"]: correction for correction in ledger["correctionsIndex"]}
+    for row in rows:
+        for correction_id in row["appliedCorrections"]:
+            item = index.get(correction_id)
+            require(item is not None, f"{row['id']}: applied unknown correction {correction_id}")
+            require(
+                item["kind"] != "record-only",
+                f"{row['id']}: record-only correction {correction_id} claims a rewrite",
+            )
+            require(
+                item["ticket"] == row["lane"],
+                f"{row['id']}: correction {correction_id} belongs to lane {item['ticket']}",
+            )
+            require(
+                item["appliesTo"] == "*" or row["id"] in item["appliesTo"],
+                f"{row['id']}: correction {correction_id} was applied outside its scope",
+            )
+            require(
+                item["actual"] in row["source"],
+                f"{row['id']}: correction {correction_id} is marked applied but the row does not carry "
+                f"the corrected pointer {item['actual']}",
+            )
     for correction in ledger["correctionsIndex"]:
         if correction["kind"] == "record-only":
             continue
-        covered = [
-            row
-            for row in rows
-            if row["lane"] == correction["ticket"]
-            and (correction["appliesTo"] == "*" or row["id"] in correction["appliesTo"])
-        ]
-        for row in covered:
-            if correction["kind"] == "replace":
-                require(
-                    not any(source == correction["recorded"] for source in row["source"]),
-                    f"{row['id']}: recorded pointer {correction['recorded']} survived the corrections index",
-                )
+        for row in rows:
+            if row["lane"] != correction["ticket"]:
+                continue
+            if correction["appliesTo"] != "*" and row["id"] not in correction["appliesTo"]:
+                continue
+            require(
+                not any(
+                    matches_recorded_pointer(correction["recorded"], source)
+                    for source in row["source"]
+                ),
+                f"{row['id']}: recorded pointer {correction['recorded']} survived the corrections index",
+            )
+        require(
+            any(correction["id"] in row["appliedCorrections"] for row in rows),
+            f"{correction['id']}: correction rewrote no pointer and is not record-only",
+        )
     notes.append(f"corrections index: {len(ledger['correctionsIndex'])} items")
 
     # 6. Optional frozen-source existence check.
@@ -1032,7 +1137,9 @@ def migration_placement_probe(frontier: dict) -> str:
     raise ConsolidationError("negative probe: invalid F7-before-P7 migration placement was accepted")
 
 
-def check_frontier(frontier: dict, ledger: dict) -> list[str]:
+def check_frontier(
+    frontier: dict, ledger: dict, bundles: dict[str, dict[str, list[str]]]
+) -> list[str]:
     notes: list[str] = []
     require(frontier["schema"] == FRONTIER_SCHEMA, "frontier schema mismatch")
     row_ids = {row["id"] for row in ledger["rows"]}
@@ -1075,7 +1182,7 @@ def check_frontier(frontier: dict, ledger: dict) -> list[str]:
             match = re.match(r"fixtures/pi-v1\.3\.0/(audit-\d+)/([^:]+): (.*)$", capture)
             require(match, f"{draft['id']}: capture is not a registered artifact scenario: {capture}")
             family, artifact, scenario = match.groups()
-            names = build_bundle_index().get(family, {}).get(artifact)
+            names = bundles.get(family, {}).get(artifact)
             require(names is not None, f"{draft['id']}: capture artifact is not registered: {capture}")
             require(scenario in names, f"{draft['id']}: capture scenario is not registered: {capture}")
     acyclic(
@@ -1178,7 +1285,9 @@ def main() -> int:
     args = parser.parse_args()
 
     plan = load_json(PLAN_PATH)
-    ledger = build_ledger(plan)
+    bundles = build_bundle_index()
+    scenario_index = build_scenario_index(bundles)
+    ledger = build_ledger(plan, bundles, scenario_index)
     payload = json_bytes(ledger)
     if args.command == "build":
         LEDGER_PATH.write_bytes(payload)
@@ -1187,10 +1296,12 @@ def main() -> int:
 
     require(LEDGER_PATH.exists(), f"missing {LEDGER_PATH}; run build first")
     require(LEDGER_PATH.read_bytes() == payload, "committed ledger differs from a deterministic rebuild")
-    notes = check_ledger(plan, ledger, Path(args.pi_root) if args.pi_root else None)
+    notes = check_ledger(
+        plan, ledger, bundles, scenario_index, Path(args.pi_root) if args.pi_root else None
+    )
     require(FRONTIER_PATH.exists(), f"missing {FRONTIER_PATH}")
     frontier = load_json(FRONTIER_PATH)
-    notes.extend(check_frontier(frontier, ledger))
+    notes.extend(check_frontier(frontier, ledger, bundles))
     notes.extend(check_docs(ledger, frontier))
     print("consolidation check: PASS")
     for note in notes:
