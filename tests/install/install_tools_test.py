@@ -2,8 +2,10 @@
 """Unit tests for the Runtime-only install tooling (issue #472).
 
 Covers the dependency-closure audit (ldd parsing, allowlist schema, closure
-rules) and the install freshness check (Gate evidence, depfile/Makefile
-parsing, and rebuild-required staleness detection) with synthetic fixtures.
+rules), the install freshness check (Gate evidence, depfile/Makefile parsing,
+and rebuild-required staleness detection), and the Runtime link closure the
+freshness check dates the binary against (issue #1044), with synthetic
+fixtures.
 
 Run directly: `python3 tests/install/install_tools_test.py`, or through the
 CTest case `cch_install_tools_unit` registered in `cmake/tests/InstallTests.cmake`.
@@ -15,6 +17,7 @@ import contextlib
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -262,6 +265,57 @@ class ParseMakefileDepfileTest(unittest.TestCase):
         )
 
 
+class RuntimeLinkClosureTest(unittest.TestCase):
+    """The closure comes from the build graph, so an object only some other
+    target links can never date the Runtime binary (issue #1044)."""
+
+    NINJA_GRAPH = """\
+rule touch
+  command = touch $out
+
+build linked.o: touch
+build unrelated.o: touch
+build liblinked.a: touch linked.o
+build libunrelated.a: touch unrelated.o
+build pike: touch liblinked.a
+build pike_without_objects: touch
+"""
+
+    def setUp(self):
+        self.ninja = shutil.which("ninja")
+        self.assertIsNotNone(
+            self.ninja, "ninja is required: the supported build uses the Ninja generator"
+        )
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.build_dir = Path(self.tmp.name)
+        (self.build_dir / "build.ninja").write_text(self.NINJA_GRAPH)
+
+    def closure(self, target):
+        return freshness.runtime_link_closure(
+            ninja=self.ninja, build_dir=str(self.build_dir), target=target
+        )
+
+    def test_closure_holds_only_the_targets_own_objects(self):
+        self.assertEqual(self.closure("pike"), ["linked.o"])
+
+    def test_unknown_target_fails_closed(self):
+        with self.assertRaises(freshness.LinkClosureError):
+            self.closure("no_such_target")
+
+    def test_target_without_compiled_input_fails_closed(self):
+        with self.assertRaises(freshness.LinkClosureError):
+            self.closure("pike_without_objects")
+
+    def test_missing_ninja_fails_closed(self):
+        with self.assertRaises(freshness.LinkClosureError):
+            freshness.runtime_link_closure(
+                ninja=str(self.build_dir / "no-such-ninja"),
+                build_dir=str(self.build_dir),
+                target="pike",
+            )
+
+
 class CheckFreshnessTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -272,6 +326,9 @@ class CheckFreshnessTest(unittest.TestCase):
         self.report = self.root / "parity-build-gate.json"
         self.report.write_text(json.dumps({"ok": True, "diagnostics": []}))
         self.depfiles = self.root / "parity-build-gate-depfiles.json"
+        # Objects the Runtime is linked from; each test that needs staleness
+        # adds the objects it wants dated against the binary.
+        self.link_closure: list[str] = []
 
     def write_depfile(self, name, prerequisites, *, depfile_is_older=False):
         """Write one depfile and its inputs; prerequisites sit at a fixed mtime
@@ -329,6 +386,7 @@ class CheckFreshnessTest(unittest.TestCase):
             report_path=self.report,
             depfiles_path=self.depfiles,
             binary_path=self.binary,
+            link_closure=self.link_closure,
         )
 
     def test_fresh_tree_passes(self):
@@ -382,12 +440,46 @@ class CheckFreshnessTest(unittest.TestCase):
         diagnostics = self.check()
         self.assertTrue(any("missing depfile evidence" in d for d in diagnostics))
 
-    def test_binary_older_than_a_depfile_fails(self):
+    def test_binary_older_than_a_link_closure_object_fails(self):
+        """Negative control: an object the Runtime is linked from dates it."""
         source, depfile = self.write_depfile("Agent", [])
         self.write_evidence([(source, depfile)])
-        os.utime(self.binary, (1_600_000_000, 1_600_000_000))
+        linked_object = self.root / "Agent.cpp.o"
+        linked_object.write_bytes(b"obj")
+        base = 1_700_000_000
+        os.utime(linked_object, (base, base))
+        os.utime(self.binary, (base - 100, base - 100))
+        self.link_closure = ["Agent.cpp.o"]
         diagnostics = self.check()
         self.assertTrue(any("stale Runtime binary" in d for d in diagnostics))
+        self.assertTrue(any("Agent.cpp.o" in d for d in diagnostics))
+
+    def test_object_outside_the_link_closure_does_not_date_the_binary(self):
+        """Issue #1044: an Owner library the Runtime does not link cannot make
+        a fresh Runtime look stale, however recently it was rebuilt."""
+        linked_source, linked_depfile = self.write_depfile("Linked", [])
+        unrelated_source, unrelated_depfile = self.write_depfile("Unrelated", [])
+        self.write_evidence(
+            [(linked_source, linked_depfile), (unrelated_source, unrelated_depfile)]
+        )
+        linked_object = self.root / "Linked.cpp.o"
+        linked_object.write_bytes(b"obj")
+        unrelated_object = self.root / "Unrelated.cpp.o"
+        unrelated_object.write_bytes(b"obj")
+        base = 1_700_000_000
+        os.utime(linked_object, (base, base))
+        # The unrelated object is rebuilt after the Runtime was linked.
+        os.utime(unrelated_object, (base + 200, base + 200))
+        os.utime(self.binary, (base + 100, base + 100))
+        self.link_closure = ["Linked.cpp.o"]
+        self.assertEqual(self.check(), [])
+
+    def test_missing_link_closure_object_fails(self):
+        source, depfile = self.write_depfile("Agent", [])
+        self.write_evidence([(source, depfile)])
+        self.link_closure = ["NeverBuilt.cpp.o"]
+        diagnostics = self.check()
+        self.assertTrue(any("missing link-closure object" in d for d in diagnostics))
 
     def test_missing_binary_fails(self):
         source, depfile = self.write_depfile("Agent", [])
@@ -413,7 +505,36 @@ class CheckFreshnessTest(unittest.TestCase):
         self.write_evidence_v2([(source, "Agent.o", [source, header])], deps_log=deps_log)
         binary_mtime = base + 200
         os.utime(self.binary, (binary_mtime, binary_mtime))
+        self.link_closure = ["Agent.o"]
         self.assertEqual(self.check(), [])
+
+    def test_schema_2_object_outside_the_link_closure_does_not_date_the_binary(self):
+        """Issue #1044 for the active (.ninja_deps) evidence schema: the recorded
+        entry set is whole-tree, so the closure -- not the entry set -- decides
+        which objects date the Runtime binary."""
+        base = 1_700_000_000
+        deps_log = self.root / ".ninja_deps"
+        deps_log.write_bytes(b"# ninjadeps\n\x04\x00\x00\x00")
+        entries = []
+        for name in ("Linked", "Unrelated"):
+            source = self.root / f"{name}.cpp"
+            source.write_text("// source\n")
+            output = self.root / f"{name}.o"
+            output.write_bytes(b"obj")
+            os.utime(source, (base, base))
+            object_mtime = base + 200 if name == "Unrelated" else base
+            os.utime(output, (object_mtime, object_mtime))
+            entries.append((source, f"{name}.o", [source]))
+        self.write_evidence_v2(entries, deps_log=deps_log)
+        os.utime(self.binary, (base + 100, base + 100))
+        self.link_closure = ["Linked.o"]
+        self.assertEqual(self.check(), [])
+
+        # Control: the same stale object dates the binary once it is linked in.
+        self.link_closure = ["Linked.o", "Unrelated.o"]
+        diagnostics = self.check()
+        self.assertTrue(any("stale Runtime binary" in d for d in diagnostics))
+        self.assertTrue(any("Unrelated.o" in d for d in diagnostics))
 
     def test_schema_2_missing_object_fails(self):
         source = self.root / "Agent.cpp"
@@ -444,22 +565,44 @@ class CheckFreshnessTest(unittest.TestCase):
 
 
 class FreshnessCliTest(unittest.TestCase):
-    def test_missing_arguments_fail_closed(self):
-        result = subprocess.run(
+    def run_cli(self, *args):
+        return subprocess.run(
             [
                 sys.executable,
                 str(REPO_ROOT / "cmake" / "install" / "check_install_freshness.py"),
-                "--report",
-                "/nonexistent/report.json",
-                "--depfiles",
-                "/nonexistent/depfiles.json",
-                "--binary",
-                "/nonexistent/pike",
+                *args,
             ],
             capture_output=True,
             text=True,
         )
+
+    def test_missing_arguments_fail_closed(self):
+        result = self.run_cli(
+            "--report",
+            "/nonexistent/report.json",
+            "--depfiles",
+            "/nonexistent/depfiles.json",
+            "--binary",
+            "/nonexistent/pike",
+        )
         self.assertNotEqual(result.returncode, 0)
+
+    def test_unreadable_link_closure_fails_closed(self):
+        with tempfile.TemporaryDirectory() as root:
+            result = self.run_cli(
+                "--report",
+                os.path.join(root, "report.json"),
+                "--depfiles",
+                os.path.join(root, "depfiles.json"),
+                "--binary",
+                os.path.join(root, "pike"),
+                "--ninja",
+                os.path.join(root, "no-such-ninja"),
+                "--target",
+                "pike",
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("link closure", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":

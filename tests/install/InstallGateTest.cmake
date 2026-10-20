@@ -7,7 +7,9 @@
 #   3. after a build the install succeeds with only bin/ + licenses + the
 #      codemode guest staged,
 #   4. editing a source without rebuilding fails the install as stale,
-#   5. rebuilding restores a passing install.
+#   5. rebuilding restores a passing install,
+#   6. an object outside the Runtime's link closure never dates the binary, and
+#      an object inside it still does (issue #1044).
 #
 # Required -D variables:
 #   CCH_SOURCE_DIR     repository root
@@ -99,5 +101,54 @@ endif()
 # 5. Rebuilding restores a passing install.
 run_step(rebuild TRUE "${CMAKE_COMMAND}" --build "${build_dir}")
 run_step(reinstall TRUE "${CMAKE_COMMAND}" --install "${build_dir}" --prefix "${stage_dir}")
+
+# 6. The freshness check dates the Runtime binary against its own link closure
+#    only (issue #1044). The fixture compiles cch_tui but `pike` does not link
+#    it, so the two objects below separate the closure-correct comparison from
+#    the whole-evidence-set comparison this step replaces: the old check failed
+#    on either touch, the closure-correct one fails only on the linked object.
+set(unlinked_object
+    "${build_dir}/CMakeFiles/cch_tui.dir/${fixture_src}/tui/render.cpp.o")
+set(linked_object
+    "${build_dir}/CMakeFiles/cch_coding_agent.dir/${fixture_src}/coding_agent/compose.cpp.o")
+foreach(object IN ITEMS "${unlinked_object}" "${linked_object}")
+    if(NOT EXISTS "${object}")
+        message(FATAL_ERROR "install gate fixture: expected compiled object missing: ${object}")
+    endif()
+endforeach()
+
+# 6a. Touching an object outside the closure leaves the Runtime fresh: ninja
+#     reports no work for the target, and the install passes.
+file(TOUCH "${unlinked_object}")
+run_step(ninja_after_unlinked_touch TRUE
+    "${CMAKE_COMMAND}" --build "${build_dir}" --target pike -- -n)
+if(NOT ninja_after_unlinked_touch_OUTPUT MATCHES "no work to do")
+    message(FATAL_ERROR
+        "touching an unlinked object made the Runtime target dirty:\n"
+        "${ninja_after_unlinked_touch_OUTPUT}")
+endif()
+run_step(install_after_unlinked_touch TRUE
+    "${CMAKE_COMMAND}" --install "${build_dir}" --prefix "${stage_dir}")
+
+# 6b. Negative control: touching an object inside the closure still fails the
+#     install as a stale Runtime, naming that object.
+file(TOUCH "${linked_object}")
+run_step(install_after_linked_touch FALSE
+    "${CMAKE_COMMAND}" --install "${build_dir}" --prefix "${stage_dir}")
+if(NOT install_after_linked_touch_OUTPUT MATCHES "stale Runtime binary")
+    message(FATAL_ERROR
+        "touching a linked object did not report a stale Runtime binary:\n"
+        "${install_after_linked_touch_OUTPUT}")
+endif()
+if(NOT install_after_linked_touch_OUTPUT MATCHES "compose.cpp.o")
+    message(FATAL_ERROR
+        "the stale-Runtime diagnostic did not name the linked object:\n"
+        "${install_after_linked_touch_OUTPUT}")
+endif()
+
+# 6c. Rebuilding the Runtime restores a passing install.
+run_step(rebuild_after_linked_touch TRUE "${CMAKE_COMMAND}" --build "${build_dir}")
+run_step(reinstall_after_linked_touch TRUE
+    "${CMAKE_COMMAND}" --install "${build_dir}" --prefix "${stage_dir}")
 
 message(STATUS "install gate fixture: PASS")

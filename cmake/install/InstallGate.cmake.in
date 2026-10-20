@@ -5,6 +5,11 @@
 # Architecture Gate, the Gate-evidence freshness check, and the Runtime
 # dependency-closure audit must all pass, otherwise the install aborts with
 # nothing staged. There is no opt-out flag.
+#
+# The freshness check dates the Runtime binary against its own link closure,
+# which it reads from the Ninja graph through CMAKE_MAKE_PROGRAM; the graph
+# reflects the current link line, so an Owner library the Runtime does not link
+# never dates it (issue #1044).
 
 execute_process(
     COMMAND
@@ -35,6 +40,8 @@ execute_process(
         "--report" "@CCH_IG_BUILD_DIR@/parity-build-gate.json"
         "--depfiles" "@CCH_IG_BUILD_DIR@/parity-build-gate-depfiles.json"
         "--binary" "$<TARGET_FILE:@CCH_IG_TARGET@>"
+        "--ninja" "@CMAKE_MAKE_PROGRAM@"
+        "--target" "@CCH_IG_TARGET@"
     RESULT_VARIABLE freshness_result
     OUTPUT_VARIABLE freshness_output
     ERROR_VARIABLE freshness_error
