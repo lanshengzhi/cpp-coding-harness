@@ -81,7 +81,7 @@ public:
     [[nodiscard]] const std::string& oauth_url() const noexcept override { return oauth_url_; }
     [[nodiscard]] const std::optional<std::string>& instructions() const noexcept override { return instructions_; }
 
-    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
+    [[nodiscard]] support::AsyncResult<cch::mcp::ToolCallResult> call_tool(std::string_view tool,
             support::JsonValue arguments,
             std::stop_token stop_token,
             cch::mcp::Client::ProgressCallback on_progress = {}) override;

@@ -51,13 +51,23 @@ struct McpToolDescriptor {
 [[nodiscard]] boost::asio::awaitable<support::Expected<std::vector<McpToolDescriptor>>> list_mcp_server_tools(
         cch::mcp::Client& connection);
 
-/// pi `extensions/mcp/tools.ts`' result mapping: convert one `tools/call`
-/// result (`{content, structuredContent?, isError?}`) into the extension-side
-/// outcome — text blocks to model text, image blocks to model images, any
-/// other block to its compact JSON text, so no server content is dropped
-/// silently. Shared by the assembly-time conversion and the live tool surface.
+/// pi `convertMcpResult`: convert one `tools/call` result (`content` may be
+/// absent; a present non-array, including JSON null, is invalid;
+/// `structuredContent?`, `isError?`) into the extension-side outcome — text
+/// blocks to model text, image blocks to model images, any other block to its
+/// compact JSON text, so no server content is dropped silently. An `isError`
+/// result with no text gets pi's `MCP tool <server>/<tool> returned an error`.
+/// Shared by the assembly-time conversion and the live tool surface.
 [[nodiscard]] support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result(
-        const std::string& server, const support::JsonValue& result);
+        const std::string& server,
+        const std::string& tool,
+        const support::JsonValue& result,
+        const std::optional<std::string>& structured_content_json = std::nullopt);
+
+/// Conversion entry point for a transport result that preserved the wire
+/// member order of `structuredContent` for the model-text fallback.
+[[nodiscard]] support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result(
+        const std::string& server, const std::string& tool, const cch::mcp::ToolCallResult& result);
 
 /// The Agent-visible name of one server tool (pi `createMcpToolName`): a
 /// `mcp__<server>__<tool>` identifier with everything outside `[A-Za-z0-9_]`

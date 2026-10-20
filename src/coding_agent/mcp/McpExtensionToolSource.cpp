@@ -39,6 +39,17 @@ namespace {
     return support::make_error(support::ErrorCode::Process, std::move(message), std::move(detail));
 }
 
+/// pi `validateCallToolResult` throws `McpError` with JSON-RPC `-32600` and
+/// exactly `Invalid MCP tools/call result`. The shared C++ error channel keeps
+/// the protocol code and message observable through `detail`/`context` while
+/// the process-level code remains `Process`.
+[[nodiscard]] support::Error invalid_tool_result(const std::string& server) {
+    return support::make_error(support::ErrorCode::Process,
+            "Invalid MCP tools/call result",
+            "code -32600: Invalid MCP tools/call result",
+            "MCP server '" + server + "' sent an invalid tools/call result");
+}
+
 constexpr std::size_t kMcpOutputMaxBytes = 20 * 1024;
 
 [[nodiscard]] std::string truncate_middle_mcp(std::string_view text, std::size_t max_bytes) {
@@ -66,11 +77,13 @@ constexpr std::size_t kMcpOutputMaxBytes = 20 * 1024;
 } // namespace
 
 /// Convert one `tools/call` result (see the header declaration).
-support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result(
-        const std::string& server, const support::JsonValue& result) {
+support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result(const std::string& server,
+        const std::string& tool,
+        const support::JsonValue& result,
+        const std::optional<std::string>& structured_content_json) {
     const auto* object = result.get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
-        return std::unexpected(source_error("MCP server '" + server + "' sent an invalid tools/call result"));
+        return std::unexpected(invalid_tool_result(server));
     }
     const auto content = object->find("content");
     // pi `validateCallToolResult`: `content` is required by the spec, but
@@ -78,7 +91,7 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
     // it too). Only a present non-array value is malformed; a JSON null is not
     // the same fact as a missing member.
     if (content != object->end() && content->second.get_if<support::JsonValue::array_t>() == nullptr) {
-        return std::unexpected(source_error("MCP server '" + server + "' sent an invalid tools/call result"));
+        return std::unexpected(invalid_tool_result(server));
     }
 
     extensions::ExtensionToolResult outcome;
@@ -135,13 +148,33 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
     if (!has_content_blocks) {
         const auto structured = object->find("structuredContent");
         if (structured != object->end()) {
-            auto serialized = detail::serialize_pretty_json(structured->second, false);
-            if (!serialized) {
-                return std::unexpected(std::move(serialized.error()));
+            if (structured_content_json.has_value()) {
+                outcome.content.push_back(ai::text_content(*structured_content_json));
+            } else {
+                auto serialized = detail::serialize_pretty_json(structured->second, false);
+                if (!serialized) {
+                    return std::unexpected(std::move(serialized.error()));
+                }
+                outcome.content.push_back(ai::text_content(std::move(*serialized)));
             }
-            outcome.content.push_back(ai::text_content(std::move(*serialized)));
         }
     }
+    // pi `convertMcpResult`: an error result with no model text gets one
+    // explanatory block naming the server and tool.
+    bool has_text = false;
+    for (const auto& item : outcome.content) {
+        if (const auto* text = std::get_if<ai::TextContent>(&item); text != nullptr && !text->text.empty()) {
+            has_text = true;
+            break;
+        }
+    }
+    const auto is_error_member = object->find("isError");
+    const bool is_error = is_error_member != object->end() && is_error_member->second.get_if<bool>() != nullptr &&
+                          *is_error_member->second.get_if<bool>();
+    if (is_error && !has_text) {
+        outcome.content.push_back(ai::text_content("MCP tool " + server + "/" + tool + " returned an error"));
+    }
+
     // pi limitMcpContent: text outputs > 20 KiB are middle-truncated, spilled to a temp file,
     // and fullOutputPath is recorded in details.
     std::string combined_text;
@@ -169,11 +202,13 @@ support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result
     }
 
     outcome.details = support::JsonValue{std::move(script_result)};
-    if (const auto is_error = object->find("isError");
-            is_error != object->end() && is_error->second.get_if<bool>() != nullptr) {
-        outcome.is_error = *is_error->second.get_if<bool>();
-    }
+    outcome.is_error = is_error;
     return outcome;
+}
+
+support::Expected<extensions::ExtensionToolResult> convert_mcp_tools_call_result(
+        const std::string& server, const std::string& tool, const cch::mcp::ToolCallResult& result) {
+    return convert_mcp_tools_call_result(server, tool, result.value, result.structured_content_json);
 }
 
 /// `tools/list`, following `nextCursor` to exhaustion (pi `listAll`).
@@ -459,10 +494,6 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                             support::make_error(support::ErrorCode::Cancelled, "Operation aborted")));
                                     return;
                                 }
-                                support::JsonValue params{support::JsonValue::object_t{
-                                        {"name", server_tool_name},
-                                        {"arguments", std::move(arguments)},
-                                }};
                                 cch::mcp::Client::ProgressCallback on_progress;
                                 if (update_sink) {
                                     on_progress = [update_sink = std::move(update_sink)](
@@ -474,17 +505,19 @@ support::Expected<std::vector<extensions::ExtensionTool>> McpExtensionToolSource
                                     };
                                 }
                                 connection
-                                        ->request("tools/call",
-                                                std::move(params),
+                                        ->call_tool(server_tool_name,
+                                                std::move(arguments),
                                                 cch::mcp::Client::RequestOptions{.stop_token = stop_token,
                                                         .on_progress = std::move(on_progress)})
-                                        .start([server, completion = std::move(completion)](
-                                                       support::Expected<support::JsonValue> outcome) mutable noexcept {
+                                        .start([server, server_tool_name, completion = std::move(completion)](
+                                                       support::Expected<cch::mcp::ToolCallResult>
+                                                               outcome) mutable noexcept {
                                             if (!outcome) {
                                                 completion(std::unexpected(std::move(outcome.error())));
                                                 return;
                                             }
-                                            completion(convert_mcp_tools_call_result(server, *outcome));
+                                            completion(
+                                                    convert_mcp_tools_call_result(server, server_tool_name, *outcome));
                                         });
                             }}};
         };

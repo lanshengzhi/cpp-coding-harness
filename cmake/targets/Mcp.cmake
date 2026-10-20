@@ -10,6 +10,7 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_mcp
     SOURCES
+        src/mcp/Client.cpp
         src/mcp/HttpClient.cpp
         src/mcp/HttpServerConfig.cpp
         src/mcp/OAuthCallbackServer.cpp

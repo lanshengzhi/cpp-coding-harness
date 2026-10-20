@@ -12,6 +12,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/Json.hpp"
 #include "support/JsonCompare.hpp"
+#include "support/McpTestKit.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <cch/mcp/HttpClient.hpp>
@@ -112,10 +113,14 @@ template <typename T, typename E>
 [[nodiscard]] support::JsonValue call_structured(boost::asio::io_context& io, mcp::Client& client, std::string kind) {
     auto response = run(io,
             client.request("tools/call",
-                    support::JsonValue::object_t{
-                            {"name", "structured"},
-                            {"arguments", support::JsonValue::object_t{{"kind", std::move(kind)}}},
-                    }));
+                    tests::tools_call_params("structured", support::JsonValue::object_t{{"kind", std::move(kind)}})));
+    REQUIRE(response.has_value());
+    return std::move(*response);
+}
+
+[[nodiscard]] mcp::ToolCallResult call_structured_tool(
+        boost::asio::io_context& io, mcp::Client& client, std::string kind) {
+    auto response = run(io, client.call_tool("structured", support::JsonValue::object_t{{"kind", std::move(kind)}}));
     REQUIRE(response.has_value());
     return std::move(*response);
 }
@@ -325,6 +330,94 @@ TEST_CASE("cch_mcp stdio client preserves every JSON structuredContent type from
     live->close();
 }
 
+TEST_CASE(
+        "cch_mcp call_tool preserves actual wire object order for structuredContent", "[mcp][owner][issue1101][spec]") {
+    struct OrderCase {
+        std::string kind;
+        std::string expected_text;
+        std::string map_sorted_text;
+        support::JsonValue expected_value;
+    };
+    const std::vector<OrderCase> cases{
+            {"object",
+                    "{\n  \"ok\": true,\n  \"nested\": [\n    true,\n    null,\n    \"x\"\n  ]\n}",
+                    "{\n  \"nested\": [\n    true,\n    null,\n    \"x\"\n  ],\n  \"ok\": true\n}",
+                    support::JsonValue::object_t{
+                            {"nested", support::JsonValue::array_t{true, nullptr, "x"}}, {"ok", true}}},
+            {"object-reverse",
+                    "{\n  \"z\": \"last\",\n  \"a\": \"first\",\n  \"m\": \"middle\"\n}",
+                    "{\n  \"a\": \"first\",\n  \"m\": \"middle\",\n  \"z\": \"last\"\n}",
+                    support::JsonValue::object_t{
+                            {"z", "last"},
+                            {"a", "first"},
+                            {"m", "middle"},
+                    }},
+            {"object-nested",
+                    "{\n  \"outer\": {\n    \"z\": 1,\n    \"a\": 2\n  },\n  \"first\": true\n}",
+                    "{\n  \"first\": true,\n  \"outer\": {\n    \"a\": 2,\n    \"z\": 1\n  }\n}",
+                    support::JsonValue::object_t{
+                            {"outer", support::JsonValue::object_t{{"z", 1}, {"a", 2}}},
+                            {"first", true},
+                    }},
+            {"object-integer-keys",
+                    "{\n  \"2\": \"two\",\n  \"10\": \"ten\",\n  \"b\": true,\n  \"a\": false\n}",
+                    "{\n  \"10\": \"ten\",\n  \"2\": \"two\",\n  \"a\": false,\n  \"b\": true\n}",
+                    support::JsonValue::object_t{
+                            {"10", "ten"},
+                            {"2", "two"},
+                            {"b", true},
+                            {"a", false},
+                    }},
+            {"object-numbers",
+                    "{\n  \"integer\": 42,\n  \"negative\": -7,\n  \"float\": 1.5,\n  \"large\": 9007199254740992,\n  "
+                    "\"exponent\": 1e+21\n}",
+                    "{\n  \"integer\": 42,\n  \"negative\": -7,\n  \"float\": 1.5,\n  \"large\": "
+                    "9.007199254740992E15,\n  \"exponent\": 1E21\n}",
+                    support::JsonValue::object_t{
+                            {"integer", 42},
+                            {"negative", -7},
+                            {"float", 1.5},
+                            {"large", 9007199254740992.0},
+                            {"exponent", 1e21},
+                    }},
+    };
+
+    boost::asio::io_context io;
+    auto stdio = connect_structured_stdio(io);
+    for (const auto& order_case : cases) {
+        INFO("stdio structured kind: " << order_case.kind);
+        const auto result = call_structured_tool(io, *stdio, order_case.kind);
+        REQUIRE(result.structured_content_json.has_value());
+        CHECK(*result.structured_content_json == order_case.expected_text);
+        CHECK(*result.structured_content_json != order_case.map_sorted_text);
+        const auto* object = result.value.get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        CHECK_FALSE(object->contains("content"));
+        const auto structured = object->find("structuredContent");
+        REQUIRE(structured != object->end());
+        const auto mismatch = tests::json_mismatch(order_case.expected_value, structured->second);
+        CHECK_FALSE(mismatch.has_value());
+        if (mismatch) {
+            INFO(*mismatch);
+        }
+    }
+    stdio->close();
+
+    const auto trusted_ca = tests::EnvVarGuard{"SSL_CERT_FILE", tls_fixture_path("test-ca.pem")};
+    HttpFixtureServer server;
+    auto http = run(io, mcp::HttpClient::connect(http_config(server)));
+    REQUIRE(http.has_value());
+    for (const char* tool : {"structured", "sse_structured"}) {
+        INFO("HTTP structured transport: " << tool);
+        auto http_result = run(io, (*http)->call_tool(tool, support::JsonValue::object_t{}));
+        REQUIRE(http_result.has_value());
+        REQUIRE(http_result->structured_content_json.has_value());
+        CHECK(*http_result->structured_content_json ==
+                "{\n  \"ok\": true,\n  \"nested\": [\n    true,\n    null,\n    \"x\"\n  ]\n}");
+    }
+    (*http)->close();
+}
+
 TEST_CASE("cch_mcp stdio client resolves a caller-cancelled held request as Cancelled", "[mcp][owner][issue1065]") {
     boost::asio::io_context io;
     auto client = connect_stdio(io);
@@ -375,7 +468,8 @@ TEST_CASE("cch_mcp streamable HTTP client initializes, lists, calls and closes a
     REQUIRE(client.has_value());
 
     const auto names = list_tool_names(io, **client);
-    CHECK(names == std::vector<std::string>{"echo", "fail", "sse_echo", "hang", "slow", "crash"});
+    CHECK(names == std::vector<std::string>{
+                           "echo", "fail", "sse_echo", "hang", "slow", "crash", "structured", "sse_structured"});
 
     auto call = run(io,
             (*client)->request("tools/call",

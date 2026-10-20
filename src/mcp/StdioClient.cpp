@@ -10,6 +10,8 @@
 
 #include "StdioClientImpl.hpp"
 
+#include "OrderedResultText.hpp"
+
 #include "support/Json.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/UniqueFd.hpp"
@@ -366,6 +368,13 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<StdioClientImpl>>> Stdi
 
 support::AsyncResult<support::JsonValue> StdioClientImpl::request(
         std::string method, std::optional<support::JsonValue> params, RequestOptions options) {
+    return request_with_capture(std::move(method), std::move(params), std::move(options), {});
+}
+
+support::AsyncResult<support::JsonValue> StdioClientImpl::request_with_capture(std::string method,
+        std::optional<support::JsonValue> params,
+        RequestOptions options,
+        std::shared_ptr<std::optional<RawCapture>> raw_capture) {
     const std::stop_token stop_token = options.stop_token;
     // A request made while the server is closed is still enqueued: the pump
     // reconnects a dead server before serving it (pi `connection.reconnect()`),
@@ -376,6 +385,7 @@ support::AsyncResult<support::JsonValue> StdioClientImpl::request(
                     method = std::move(method),
                     params = std::move(params),
                     options = std::move(options),
+                    raw_capture = std::move(raw_capture),
                     stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
                 if (stop_token.stop_requested()) {
@@ -408,8 +418,35 @@ support::AsyncResult<support::JsonValue> StdioClientImpl::request(
                 self->enqueue_frame(newline_frame(detail::build_request_body(id, method, params)),
                         id,
                         std::move(completion),
-                        std::move(options.on_progress));
+                        std::move(options.on_progress),
+                        std::move(raw_capture));
             }}};
+}
+
+support::AsyncResult<ToolCallResult> StdioClientImpl::call_tool(
+        std::string name, support::JsonValue arguments, RequestOptions options) {
+    return support::detail::make_async_result(
+            [self = shared_from_this(),
+                    name = std::move(name),
+                    arguments = std::move(arguments),
+                    options =
+                            std::move(options)]() mutable -> boost::asio::awaitable<support::Expected<ToolCallResult>> {
+                auto capture = std::make_shared<std::optional<RawCapture>>();
+                support::JsonValue params{support::JsonValue::object_t{
+                        {"name", std::move(name)},
+                        {"arguments", std::move(arguments)},
+                }};
+                auto result = co_await support::detail::await_async_result(
+                        self->request_with_capture("tools/call", std::move(params), std::move(options), capture));
+                if (!result) {
+                    co_return std::unexpected(std::move(result.error()));
+                }
+                std::optional<std::string> structured_text;
+                if (capture->has_value()) {
+                    structured_text = detail::format_structured_content((*capture)->raw, (*capture)->id);
+                }
+                co_return ToolCallResult{std::move(*result), std::move(structured_text)};
+            });
 }
 
 void StdioClientImpl::cancel_request(int id) {
@@ -459,13 +496,15 @@ void StdioClientImpl::notify(std::string method, std::optional<support::JsonValu
 void StdioClientImpl::enqueue_frame(std::string frame,
         int id,
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
-        ProgressCallback on_progress) {
+        ProgressCallback on_progress,
+        std::shared_ptr<std::optional<RawCapture>> raw_capture) {
     auto item = std::make_unique<QueuedFrame>();
     item->frame = std::move(frame);
     item->id = id;
     item->completion = std::move(completion);
     item->is_notification = !item->completion.has_value();
     item->on_progress = std::move(on_progress);
+    item->raw_capture = std::move(raw_capture);
     queue_.push_back(std::move(item));
     if (!pumping_) {
         pumping_ = true;
@@ -552,7 +591,11 @@ boost::asio::awaitable<void> StdioClientImpl::pump() {
         // it and the next read restarts the per-read deadline (pi
         // `armTimeout`'s re-arm).
         progress_handler_ = std::move(item->on_progress);
-        auto outcome = co_await await_response(item->id);
+        std::string matched_raw;
+        auto outcome = co_await await_response(item->id, item->raw_capture ? &matched_raw : nullptr);
+        if (item->raw_capture && outcome) {
+            *item->raw_capture = RawCapture{item->id, std::move(matched_raw)};
+        }
         progress_handler_ = {};
         awaiting_id_ = 0;
         current_id_ = 0;
@@ -669,7 +712,8 @@ boost::asio::awaitable<std::optional<std::string>> StdioClientImpl::read_line() 
     }
 }
 
-boost::asio::awaitable<support::Expected<support::JsonValue>> StdioClientImpl::await_response(int id) {
+boost::asio::awaitable<support::Expected<support::JsonValue>> StdioClientImpl::await_response(
+        int id, std::string* matched_raw) {
     for (;;) {
         if (cancelled_.contains(id)) {
             co_await write_cancellation(id);
@@ -721,6 +765,9 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> StdioClientImpl::a
             co_return std::unexpected(std::move(matched.error()));
         }
         if (matched->has_value()) {
+            if (matched_raw != nullptr) {
+                *matched_raw = *line;
+            }
             co_return std::move(**matched);
         }
     }

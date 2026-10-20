@@ -14,6 +14,8 @@
 
 #include "HttpClientImpl.hpp"
 
+#include "OrderedResultText.hpp"
+
 #include <cch/mcp/Auth.hpp>
 
 #include "support/AsyncResultBridge.hpp"
@@ -172,7 +174,7 @@ constexpr std::size_t kErrorBodyChars = 500;
 /// message; the first reply for `id` wins, mirroring pi's response-stream
 /// consumption (`consumeResponseStream`).
 [[nodiscard]] support::Expected<support::JsonValue> response_from_sse_body(
-        const std::string& server, int id, const std::string& body) {
+        const std::string& server, int id, const std::string& body, std::string* matched_raw = nullptr) {
     support::SseParser parser;
     std::vector<support::SseEvent> events;
     if (auto appended = parser.append(body); !appended) {
@@ -201,6 +203,9 @@ constexpr std::size_t kErrorBodyChars = 500;
             return std::unexpected(std::move(matched.error()));
         }
         if (matched->has_value()) {
+            if (matched_raw != nullptr) {
+                *matched_raw = event.data;
+            }
             return std::move(**matched);
         }
     }
@@ -437,12 +442,20 @@ boost::asio::awaitable<support::Expected<std::shared_ptr<HttpClientImpl>>> HttpC
 
 support::AsyncResult<support::JsonValue> HttpClientImpl::request(
         std::string method, std::optional<support::JsonValue> params, RequestOptions options) {
+    return request_with_capture(std::move(method), std::move(params), std::move(options), {});
+}
+
+support::AsyncResult<support::JsonValue> HttpClientImpl::request_with_capture(std::string method,
+        std::optional<support::JsonValue> params,
+        RequestOptions options,
+        std::shared_ptr<std::optional<RawCapture>> raw_capture) {
     const std::stop_token stop_token = options.stop_token;
     return support::AsyncResult<support::JsonValue>{support::AsyncProducer<support::JsonValue, support::Error>{
             [self = shared_from_this(),
                     method = std::move(method),
                     params = std::move(params),
                     options = std::move(options),
+                    raw_capture = std::move(raw_capture),
                     stop_token](
                     support::AsyncCompletion<support::JsonValue, support::Error> completion) mutable noexcept {
                 if (stop_token.stop_requested()) {
@@ -460,8 +473,35 @@ support::AsyncResult<support::JsonValue> HttpClientImpl::request(
                         std::move(completion),
                         stop_token,
                         /* cancellable */ method != "initialize",
-                        std::move(options.on_progress));
+                        std::move(options.on_progress),
+                        std::move(raw_capture));
             }}};
+}
+
+support::AsyncResult<ToolCallResult> HttpClientImpl::call_tool(
+        std::string name, support::JsonValue arguments, RequestOptions options) {
+    return support::detail::make_async_result(
+            [self = shared_from_this(),
+                    name = std::move(name),
+                    arguments = std::move(arguments),
+                    options =
+                            std::move(options)]() mutable -> boost::asio::awaitable<support::Expected<ToolCallResult>> {
+                auto capture = std::make_shared<std::optional<RawCapture>>();
+                support::JsonValue params{support::JsonValue::object_t{
+                        {"name", std::move(name)},
+                        {"arguments", std::move(arguments)},
+                }};
+                auto result = co_await support::detail::await_async_result(
+                        self->request_with_capture("tools/call", std::move(params), std::move(options), capture));
+                if (!result) {
+                    co_return std::unexpected(std::move(result.error()));
+                }
+                std::optional<std::string> structured_text;
+                if (capture->has_value()) {
+                    structured_text = detail::format_structured_content((*capture)->raw, (*capture)->id);
+                }
+                co_return ToolCallResult{std::move(*result), std::move(structured_text)};
+            });
 }
 
 void HttpClientImpl::notify(std::string method, std::optional<support::JsonValue> params) {
@@ -473,7 +513,8 @@ void HttpClientImpl::enqueue_frame(std::string frame,
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
         std::stop_token stop_token,
         bool cancellable,
-        ProgressCallback on_progress) {
+        ProgressCallback on_progress,
+        std::shared_ptr<std::optional<RawCapture>> raw_capture) {
     auto item = std::make_unique<QueuedFrame>();
     item->frame = std::move(frame);
     item->id = id;
@@ -482,6 +523,7 @@ void HttpClientImpl::enqueue_frame(std::string frame,
     item->stop_token = stop_token;
     item->cancellable = cancellable;
     item->on_progress = std::move(on_progress);
+    item->raw_capture = std::move(raw_capture);
     queue_.push_back(std::move(item));
     if (!pumping_) {
         pumping_ = true;
@@ -506,8 +548,12 @@ boost::asio::awaitable<void> HttpClientImpl::pump() {
             continue;
         }
         complete_frame(*item,
-                co_await send_request(
-                        item->frame, item->id, item->stop_token, item->cancellable, std::move(item->on_progress)));
+                co_await send_request(item->frame,
+                        item->id,
+                        item->stop_token,
+                        item->cancellable,
+                        std::move(item->on_progress),
+                        item->raw_capture));
     }
     pumping_ = false;
 }
@@ -539,8 +585,12 @@ boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImp
     co_return co_await transport_->async_stream(request, std::move(on_body_chunk));
 }
 
-boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::send_request(
-        std::string_view frame, int id, std::stop_token stop_token, bool cancellable, ProgressCallback on_progress) {
+boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::send_request(std::string_view frame,
+        int id,
+        std::stop_token stop_token,
+        bool cancellable,
+        ProgressCallback on_progress,
+        std::shared_ptr<std::optional<RawCapture>> raw_capture) {
     // A request without a progress observer keeps the plain buffered POST:
     // the transport's deadline covers connection and headers, and the body
     // streams unbounded until completion or cancellation.
@@ -557,7 +607,12 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
             co_return std::unexpected(std::move(response.error()));
         }
         capture_session(*response);
-        co_return interpret_response(id, *response);
+        std::string matched_raw;
+        auto outcome = interpret_response(id, *response, raw_capture ? &matched_raw : nullptr);
+        if (outcome && raw_capture) {
+            *raw_capture = RawCapture{id, std::move(matched_raw)};
+        }
+        co_return outcome;
     }
 
     // Observed request: race the POST against pi's request deadline. The
@@ -690,7 +745,12 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
         co_return std::unexpected(std::move(response.error()));
     }
     capture_session(*response);
-    co_return interpret_response(id, *response);
+    std::string matched_raw;
+    auto converted = interpret_response(id, *response, raw_capture ? &matched_raw : nullptr);
+    if (converted && raw_capture) {
+        *raw_capture = RawCapture{id, std::move(matched_raw)};
+    }
+    co_return converted;
 }
 
 boost::asio::awaitable<std::optional<support::Error>> HttpClientImpl::send_notification(std::string_view frame) {
@@ -1083,7 +1143,7 @@ void HttpClientImpl::capture_session(const support::StreamResponse& response) {
 }
 
 support::Expected<support::JsonValue> HttpClientImpl::interpret_response(
-        int id, const support::StreamResponse& response) const {
+        int id, const support::StreamResponse& response, std::string* matched_raw) const {
     const int status = response.head.status_code;
     if (status < 200 || status >= 300) {
         return std::unexpected(http_status_error(config_.name, response, !session_id_.empty()));
@@ -1094,10 +1154,13 @@ support::Expected<support::JsonValue> HttpClientImpl::interpret_response(
     }
     const std::string type = normalized_content_type(response.head.headers);
     if (type == "application/json") {
+        if (matched_raw != nullptr) {
+            *matched_raw = response.body;
+        }
         return response_from_json_body(config_.name, id, response.body);
     }
     if (type == "text/event-stream") {
-        auto parsed_response = response_from_sse_body(config_.name, id, response.body);
+        auto parsed_response = response_from_sse_body(config_.name, id, response.body, matched_raw);
         if (!parsed_response) {
             // pi `consumeResponseStream`: failure emits synthetic -32603 "MCP response stream failed: <reason>"
             support::JsonValue::object_t err_obj{

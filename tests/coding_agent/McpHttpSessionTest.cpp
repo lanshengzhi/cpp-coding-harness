@@ -331,7 +331,7 @@ TEST_CASE("connecting an MCP HTTP server lists its tools with the pi naming and 
     CHECK(source.value()->server_name() == "echo");
 
     const auto& tools = source.value()->tools();
-    REQUIRE(tools.size() == 6);
+    REQUIRE(tools.size() == 8);
     CHECK(tools[0].server_tool_name == "echo");
     CHECK(tools[0].full_name == "mcp__echo__echo");
     CHECK(tools[0].description == "Echo the incoming text back.");
@@ -341,6 +341,44 @@ TEST_CASE("connecting an MCP HTTP server lists its tools with the pi naming and 
     CHECK(tools[3].full_name == "mcp__echo__hang");
     CHECK(tools[4].full_name == "mcp__echo__slow");
     CHECK(tools[5].full_name == "mcp__echo__crash");
+    CHECK(tools[6].full_name == "mcp__echo__structured");
+    CHECK(tools[7].full_name == "mcp__echo__sse_structured");
+}
+
+TEST_CASE("an MCP HTTP tools/call preserves actual wire structuredContent order",
+        "[coding_agent][mcp][issue873][issue1101][spec]") {
+    HttpFixtureServer server;
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+
+    auto source =
+            tests::run_awaitable(runtime, coding_agent::mcp::McpExtensionToolSource::connect_http(http_config(server)));
+    REQUIRE(source.has_value());
+    auto tools = source.value()->load_tools();
+    REQUIRE(tools.has_value());
+    const auto structured = std::find_if(tools->begin(), tools->end(), [](const auto& tool) {
+        return tool.definition.name == "mcp__echo__structured";
+    });
+    REQUIRE(structured != tools->end());
+
+    auto executed = runtime.run(structured->context_execute(support::JsonValue{support::JsonValue::object_t{}},
+            coding_agent::extensions::ExtensionToolContext{},
+            std::stop_token{}));
+    REQUIRE(executed.has_value());
+    REQUIRE(executed->content.size() == 1);
+    const auto* text = std::get_if<ai::TextContent>(&executed->content.front());
+    REQUIRE(text != nullptr);
+    CHECK(text->text == "{\n  \"ok\": true,\n  \"nested\": [\n    true,\n    null,\n    \"x\"\n  ]\n}");
+    CHECK_FALSE(executed->is_error);
+    REQUIRE(executed->details.has_value());
+    const auto* details = executed->details->get_if<support::JsonValue::object_t>();
+    REQUIRE(details != nullptr);
+    const auto block = details->find("content");
+    REQUIRE(block != details->end());
+    CHECK(block->second.get_array().empty());
+    const auto value = details->find("structuredContent");
+    REQUIRE(value != details->end());
+    CHECK(value->second.at("ok").get_boolean());
 }
 
 TEST_CASE("an MCP HTTP server tool is discoverable and callable in the Agent Session",

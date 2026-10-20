@@ -105,7 +105,7 @@ TEST_CASE("truncate_middle_mcp truncates text longer than 20 KiB and records spi
                     }},
     }};
 
-    const auto converted = coding_agent::mcp::convert_mcp_tools_call_result("test-server", result);
+    const auto converted = coding_agent::mcp::convert_mcp_tools_call_result("test-server", "tool", result);
     REQUIRE(converted);
     REQUIRE_FALSE(converted->content.empty());
     const auto* text = std::get_if<ai::TextContent>(&converted->content.front());

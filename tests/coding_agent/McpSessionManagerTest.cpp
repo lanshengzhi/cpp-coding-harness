@@ -121,12 +121,12 @@ public:
         return instructions_value;
     }
 
-    [[nodiscard]] support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
+    [[nodiscard]] support::AsyncResult<cch::mcp::ToolCallResult> call_tool(std::string_view tool,
             support::JsonValue arguments,
             std::stop_token,
             cch::mcp::Client::ProgressCallback = {}) override {
         calls.push_back(Call{std::string{tool}, std::move(arguments)});
-        return support::AsyncResult<support::JsonValue>{call_result};
+        return support::AsyncResult<cch::mcp::ToolCallResult>{cch::mcp::ToolCallResult{call_result, std::nullopt}};
     }
     [[nodiscard]] support::AsyncResult<support::JsonValue> resources_page(
             std::optional<std::string>, std::stop_token) override {

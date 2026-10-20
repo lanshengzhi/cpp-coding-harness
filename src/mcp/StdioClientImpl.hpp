@@ -71,6 +71,9 @@ public:
             std::optional<support::JsonValue> params = std::nullopt,
             RequestOptions options = {}) override;
 
+    [[nodiscard]] support::AsyncResult<ToolCallResult> call_tool(
+            std::string name, support::JsonValue arguments, RequestOptions options = {}) override;
+
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
     void notify(std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
@@ -85,12 +88,22 @@ public:
     }
 
 private:
+    /// The raw response matched to one `tools/call`; the transport-owned
+    /// formatter uses it only to recover member order, never as a public value.
+    struct RawCapture {
+        int id{0};
+        std::string raw;
+    };
+
     /// One queued frame. A notification carries no `id` and no completion.
     struct QueuedFrame {
         std::string frame;
         int id{0};
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion;
         bool is_notification{false};
+        /// Set only for `call_tool`: the pump stores the matched raw response
+        /// here so the caller can format the structured member exactly.
+        std::shared_ptr<std::optional<RawCapture>> raw_capture;
         /// pi `onProgress` of this request, installed while its response is
         /// awaited (pi `requestInternal`/`armTimeout`).
         ProgressCallback on_progress{};
@@ -110,7 +123,12 @@ private:
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> write_frame(std::string_view frame);
     /// Read frames until the response for `id` arrives. Malformed/invalid
     /// frames are skipped as recoverable transport errors.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> await_response(int id);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> await_response(
+            int id, std::string* matched_raw = nullptr);
+    [[nodiscard]] support::AsyncResult<support::JsonValue> request_with_capture(std::string method,
+            std::optional<support::JsonValue> params,
+            RequestOptions options,
+            std::shared_ptr<std::optional<RawCapture>> raw_capture);
     /// Read one newline-delimited frame; nullopt on timeout, EOF, wake, or
     /// read error. `last_read_timed_out_` is set for the deadline, and
     /// `last_read_woken_` for a cancellation-driven wake (see
@@ -132,7 +150,8 @@ private:
     void enqueue_frame(std::string frame,
             int id,
             std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
-            ProgressCallback on_progress = {});
+            ProgressCallback on_progress = {},
+            std::shared_ptr<std::optional<RawCapture>> raw_capture = {});
     void complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome);
     void teardown_process_group() noexcept;
     void close_transport() noexcept;

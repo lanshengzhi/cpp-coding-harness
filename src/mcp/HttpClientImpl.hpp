@@ -73,6 +73,9 @@ public:
             std::optional<support::JsonValue> params = std::nullopt,
             RequestOptions options = {}) override;
 
+    [[nodiscard]] support::AsyncResult<ToolCallResult> call_tool(
+            std::string name, support::JsonValue arguments, RequestOptions options = {}) override;
+
     /// One JSON-RPC notification (no `id`, no response). Ordered against
     /// requests through the same queue.
     void notify(std::string method, std::optional<support::JsonValue> params = std::nullopt) override;
@@ -121,11 +124,19 @@ public:
 private:
     /// One queued request body. A notification carries no `id` and no
     /// completion.
+    struct RawCapture {
+        int id{0};
+        std::string raw;
+    };
+
     struct QueuedFrame {
         std::string frame;
         int id{0};
         std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion;
         bool is_notification{false};
+        /// Set only for `call_tool`: `send_request` stores the matched raw
+        /// response body/event here for order-preserving formatting.
+        std::shared_ptr<std::optional<RawCapture>> raw_capture;
         std::stop_token stop_token{};
         /// pi `cancellable`: `method !== "initialize"`. A cancellable request
         /// that is aborted or times out emits `notifications/cancelled` (pi
@@ -160,8 +171,16 @@ private:
     /// POST against pi's request deadline: progress on either stream re-arms
     /// it (pi `armTimeout`), and its expiry cancels the POST and fails with
     /// pi's timeout, also emitting `notifications/cancelled` when cancellable.
-    [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> send_request(
-            std::string_view frame, int id, std::stop_token stop_token, bool cancellable, ProgressCallback on_progress);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<support::JsonValue>> send_request(std::string_view frame,
+            int id,
+            std::stop_token stop_token,
+            bool cancellable,
+            ProgressCallback on_progress,
+            std::shared_ptr<std::optional<RawCapture>> raw_capture);
+    [[nodiscard]] support::AsyncResult<support::JsonValue> request_with_capture(std::string method,
+            std::optional<support::JsonValue> params,
+            RequestOptions options,
+            std::shared_ptr<std::optional<RawCapture>> raw_capture);
     /// POST one notification body; any 2xx is success and the body is ignored.
     [[nodiscard]] boost::asio::awaitable<std::optional<support::Error>> send_notification(std::string_view frame);
     /// Tell the server that `id` is cancelled (pi `cancelPending`'s
@@ -247,14 +266,15 @@ private:
     request_headers_for_call();
     void capture_session(const support::StreamResponse& response);
     [[nodiscard]] support::Expected<support::JsonValue> interpret_response(
-            int id, const support::StreamResponse& response) const;
+            int id, const support::StreamResponse& response, std::string* matched_raw = nullptr) const;
 
     void enqueue_frame(std::string frame,
             int id,
             std::optional<support::AsyncCompletion<support::JsonValue, support::Error>> completion,
             std::stop_token stop_token = {},
             bool cancellable = false,
-            ProgressCallback on_progress = {});
+            ProgressCallback on_progress = {},
+            std::shared_ptr<std::optional<RawCapture>> raw_capture = {});
     void complete_frame(QueuedFrame& frame, support::Expected<support::JsonValue> outcome);
 
     boost::asio::any_io_executor executor_;

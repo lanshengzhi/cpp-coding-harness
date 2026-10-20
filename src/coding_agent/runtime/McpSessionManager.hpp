@@ -102,7 +102,7 @@ public:
     /// pi `client.callTool`: one `tools/call` for `tool` on this connection.
     /// `on_progress` observes the call's `notifications/progress` (pi
     /// `McpRequestOptions.onProgress`); empty keeps the plain call.
-    [[nodiscard]] virtual support::AsyncResult<support::JsonValue> call_tool(std::string_view tool,
+    [[nodiscard]] virtual support::AsyncResult<cch::mcp::ToolCallResult> call_tool(std::string_view tool,
             support::JsonValue arguments,
             std::stop_token stop_token,
             cch::mcp::Client::ProgressCallback on_progress = {}) = 0;
@@ -178,7 +178,7 @@ public:
 /// the tool's execute operation; it stays bound when a withdrawn tool
 /// re-registers as hidden, exactly like pi's definition map. The progress
 /// observer forwards pi `McpRequestOptions.onProgress`.
-using McpToolCall = std::function<support::AsyncResult<support::JsonValue>(
+using McpToolCall = std::function<support::AsyncResult<cch::mcp::ToolCallResult>(
         support::JsonValue arguments, std::stop_token stop_token, cch::mcp::Client::ProgressCallback on_progress)>;
 
 /// One tool the manager registers on the session tool surface (pi

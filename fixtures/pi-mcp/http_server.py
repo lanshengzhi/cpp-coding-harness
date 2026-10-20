@@ -106,6 +106,16 @@ TOOLS = [
         "description": "Exit the server without responding.",
         "inputSchema": {"type": "object", "properties": {}},
     },
+    {
+        "name": "structured",
+        "description": "Return structuredContent with a non-sorted object order.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "sse_structured",
+        "description": "Return structuredContent over an event stream.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
 ]
 
 
@@ -232,6 +242,16 @@ class Handler(BaseHTTPRequestHandler):
         elif name == "crash":
             # Exit without responding: the client observes the connection drop.
             os._exit(3)
+        elif name == "structured":
+            self._json(rid, result={"structuredContent": {"ok": True, "nested": [True, None, "x"]}})
+        elif name == "sse_structured":
+            response = {
+                "jsonrpc": "2.0",
+                "id": rid,
+                "result": {"structuredContent": {"ok": True, "nested": [True, None, "x"]}},
+            }
+            body = ("event: message\ndata: " + json.dumps(response, separators=(",", ":")) + "\n\n").encode()
+            self._raw(200, "text/event-stream", body)
         else:
             self._json(rid, error={"code": -32602, "message": "Unknown tool: " + str(name)})
 

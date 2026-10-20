@@ -122,7 +122,7 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::request(
             });
 }
 
-support::AsyncResult<support::JsonValue> ProductionMcpConnection::call_tool(std::string_view tool,
+support::AsyncResult<cch::mcp::ToolCallResult> ProductionMcpConnection::call_tool(std::string_view tool,
         support::JsonValue arguments,
         std::stop_token stop_token,
         cch::mcp::Client::ProgressCallback on_progress) {
@@ -131,14 +131,14 @@ support::AsyncResult<support::JsonValue> ProductionMcpConnection::call_tool(std:
                     tool = std::string{tool},
                     arguments = std::move(arguments),
                     stop_token,
-                    on_progress = std::move(
-                            on_progress)]() mutable -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
-                support::JsonValue params{support::JsonValue::object_t{
-                        {"name", std::move(tool)},
-                        {"arguments", std::move(arguments)},
-                }};
-                auto result = co_await support::detail::await_async_result(request("tools/call",
-                        std::move(params),
+                    on_progress = std::move(on_progress)]() mutable
+                    -> boost::asio::awaitable<support::Expected<cch::mcp::ToolCallResult>> {
+                if (!client_) {
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                            "MCP server '" + server_name_ + "' has no live connection"));
+                }
+                auto result = co_await support::detail::await_async_result(client_->call_tool(std::move(tool),
+                        std::move(arguments),
                         cch::mcp::Client::RequestOptions{
                                 .stop_token = stop_token, .on_progress = std::move(on_progress)}));
                 if (!result) {
@@ -444,6 +444,7 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     const std::string name = tool.name;
     const mcp::McpExposure exposure = tool.exposure;
     const std::string server = tool.server;
+    const std::string server_tool_name = tool.server_tool_name;
     const std::string description = tool.description;
     extensions::ExtensionTool extension;
     extension.definition.name = name;
@@ -458,12 +459,13 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
     // streams pi's "Progress <n>[/<total>]" updates through the run's update
     // sink (the same conversion the assembly-time source uses).
     extension.context_execute =
-            [call = std::move(call), server](support::JsonValue arguments,
+            [call = std::move(call), server, server_tool_name](support::JsonValue arguments,
                     extensions::ExtensionToolContext context,
                     std::stop_token stop_token) mutable -> support::AsyncResult<extensions::ExtensionToolResult> {
         return support::detail::make_async_result(
                 [call = std::move(call),
                         server,
+                        server_tool_name,
                         arguments = std::move(arguments),
                         update_sink = std::move(context.update_sink),
                         stop_token]() mutable
@@ -487,7 +489,7 @@ void AgentMcpToolSurface::register_tool(McpRegisteredTool tool) {
                     if (!result) {
                         co_return std::unexpected(std::move(result.error()));
                     }
-                    co_return mcp::convert_mcp_tools_call_result(server, *result);
+                    co_return mcp::convert_mcp_tools_call_result(server, server_tool_name, *result);
                 });
     };
     static_cast<void>(agent_.register_tool(extensions::convert_extension_tool(std::move(extension))));

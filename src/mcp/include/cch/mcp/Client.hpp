@@ -15,6 +15,15 @@
 
 namespace cch::mcp {
 
+/// One `tools/call` result. `value` is the ordinary transport result; the
+/// optional text is the exact JavaScript `JSON.stringify(value, null, 2)` of
+/// its `structuredContent` member when the transport preserved the wire member
+/// order. The text never crosses as raw wire JSON.
+struct ToolCallResult {
+    support::JsonValue value;
+    std::optional<std::string> structured_content_json;
+};
+
 struct RequestOptions {
     std::stop_token stop_token{};
     std::move_only_function<void(const support::JsonValue& params)> on_progress{};
@@ -42,6 +51,13 @@ public:
     [[nodiscard]] virtual support::AsyncResult<support::JsonValue> request(std::string method,
             std::optional<support::JsonValue> params = std::nullopt,
             RequestOptions options = {}) = 0;
+
+    /// One `tools/call`, carrying the transport's order-preserving
+    /// `structuredContent` text when available. The default implementation
+    /// delegates to `request` and leaves the text absent, so existing clients
+    /// remain valid; the stdio and HTTP transports override it.
+    [[nodiscard]] virtual support::AsyncResult<ToolCallResult> call_tool(
+            std::string name, support::JsonValue arguments, RequestOptions options = {});
 
     /// One JSON-RPC notification (no `id`, no response).
     virtual void notify(std::string method, std::optional<support::JsonValue> params = std::nullopt) = 0;
