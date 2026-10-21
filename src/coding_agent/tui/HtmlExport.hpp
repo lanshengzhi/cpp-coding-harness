@@ -34,8 +34,7 @@ struct HtmlExportTheme {
 /// `terminalColors`) used for `""` (terminal-default) tokens; the appearance
 /// only picks the pi guessed-default pair when the theme declares no
 /// detectable colors of its own.
-[[nodiscard]] support::Expected<HtmlExportTheme> make_html_export_theme(
-        const ResolvedTheme& theme,
+[[nodiscard]] support::Expected<HtmlExportTheme> make_html_export_theme(const ResolvedTheme& theme,
         const std::optional<cch::tui::TerminalColors>& terminal_colors,
         TerminalAppearance appearance);
 
@@ -53,21 +52,18 @@ struct HtmlExportExtras {
 /// `SessionManager.getEntries()` — every entry of the session, each as its pi
 /// wire line — and `leafId` is the active leaf's id or null.
 [[nodiscard]] support::Expected<std::string> build_html_session_data_json(
-        cch::harness::session::SessionStore& store,
-        const HtmlExportExtras& extras);
+        cch::harness::session::SessionStore& store, const HtmlExportExtras& extras);
 
 /// pi `generateHtml`: substitute the vendored pi template (third_party/
 /// pi-export-html, byte-for-byte pi v1.3.0) with the base64 session-data
 /// payload, the theme variables, and the export background colors.
 [[nodiscard]] support::Expected<std::string> generate_session_html(
-        std::string_view session_data_json,
-        const HtmlExportTheme& theme);
+        std::string_view session_data_json, const HtmlExportTheme& theme);
 
 /// pi `exportSessionToHtml`: an empty `output_path` selects pi's default
 /// `pike-session-<basename>.html`; the destination is written through the
 /// workspace filesystem like the JSONL lane. Returns the written path.
-[[nodiscard]] support::Expected<std::string> export_session_to_html(
-        cch::harness::session::SessionStore& store,
+[[nodiscard]] support::Expected<std::string> export_session_to_html(cch::harness::session::SessionStore& store,
         std::string_view output_path,
         const std::filesystem::path& session_file,
         const HtmlExportTheme& theme,

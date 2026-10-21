@@ -9,8 +9,8 @@
 //     emitted HTML contains `${totalCost.toFixed(3)}` because template.js
 //     carried `$${totalCost.toFixed(3)}`,
 //   * the vendored highlight.js bundle carries `$&` inside a regex char
-//     class, so pi's own output contains exactly one literal
-//     `{{HIGHLIGHT_JS}}` at that spot — the exporter must reproduce that
+//     class, so pi's own output re-expands the matched `{{HIGHLIGHT_JS}}`
+//     placeholder at exactly that spot — the exporter reproduces that
 //     artifact to stay byte-comparable,
 //   * the base64 `SESSION_DATA` payload decodes to pi's sessionData shape
 //     (`{header, entries, leafId, ...}`), with every entry as its pi wire
@@ -90,12 +90,13 @@ std::string decode_base64(std::string_view encoded) {
 }
 
 /// Extracts the base64 `SESSION_DATA` payload pi's template.js decodes with
-/// `atob`: `const sessionData = "<payload>";`.
+/// `atob`: the template carries it as the text content of
+/// `<script id="session-data" type="application/json">`.
 std::string session_data_payload(const std::string& html) {
-    const std::string marker = "const sessionData = \"";
+    const std::string marker = R"(<script id="session-data" type="application/json">)";
     const auto begin = html.find(marker);
     REQUIRE(begin != std::string::npos);
-    const auto end = html.find('"', begin + marker.size());
+    const auto end = html.find("</script>", begin + marker.size());
     REQUIRE(end != std::string::npos);
     return html.substr(begin + marker.size(), end - begin - marker.size());
 }
@@ -119,13 +120,23 @@ harness::session::SessionMetadata metadata_for(const tests::TempWorkspace& works
 
 void append_exchange(harness::session::SessionStore& store) {
     REQUIRE(store.append(ai::MessageVariant{ai::user_text_message("first question")}));
-    REQUIRE(store.append(ai::MessageVariant{ai::assistant_text_message("first answer")}));
+    // The session writer rejects an assistant record without the identity and
+    // real timestamp a provider message carries (SessionStoreTest's contract).
+    ai::AssistantMessage assistant;
+    assistant.content.emplace_back(ai::text_content("first answer"));
+    assistant.api = "openai-completions";
+    assistant.provider = "fake";
+    assistant.model = "fake-model";
+    assistant.stop_reason = ai::AssistantStopReason::Stop;
+    assistant.timestamp = 1718000000000;
+    REQUIRE(store.append(ai::MessageVariant{std::move(assistant)}));
 }
 
-catui::HtmlExportTemplates vendored_templates() {
-    return catui::HtmlExportTemplates{
-            .dir = std::filesystem::path{CCH_SOURCE_DIR} / "third_party/pi-export-html",
-    };
+catui::HtmlExportTheme builtin_dark_export_theme() {
+    auto theme =
+            catui::make_html_export_theme(catui::builtin_dark_theme(), std::nullopt, catui::TerminalAppearance::Dark);
+    REQUIRE(theme.has_value());
+    return std::move(*theme);
 }
 
 std::string stub_session_data() {
@@ -139,9 +150,9 @@ TEST_CASE("HTML export theme resolves pi's export colors and emits hex CSS varia
     catui::ResolvedTheme theme;
     theme.name = "custom";
     theme.vars.emplace("panel", std::string{"#102030"});
-    theme.export_colors.page_bg = std::string{"panel"}; // vars reference
-    theme.export_colors.card_bg = std::string{""};      // terminal default
-    theme.export_colors.info_bg = 196;                  // xterm palette index
+    theme.export_colors.pageBg = std::string{"panel"}; // vars reference
+    theme.export_colors.cardBg = std::string{""};      // terminal default
+    theme.export_colors.infoBg = 196;                  // xterm palette index
     theme.colors[static_cast<std::size_t>(catui::ThemeToken::Accent)] =
             catui::RgbThemeColor{.red = 0xa7, .green = 0x98, .blue = 0xd7};
 
@@ -149,78 +160,67 @@ TEST_CASE("HTML export theme resolves pi's export colors and emits hex CSS varia
             .foreground = cch::tui::RgbColor{.red = 200, .green = 200, .blue = 200},
             .background = cch::tui::RgbColor{.red = 10, .green = 20, .blue = 30},
     };
-    const auto resolved =
-            catui::make_html_export_theme(theme, reported, cch::tui::TerminalAppearance::Dark);
+    const auto resolved = catui::make_html_export_theme(theme, reported, catui::TerminalAppearance::Dark);
     REQUIRE(resolved.has_value());
 
     // pi `colorToHex`: lowercase `#rrggbb`, never a CSS color function.
     CHECK(resolved->page_bg == "#102030");
-    CHECK(resolved->card_bg == "#0a141e"); // the reported background verbatim
     CHECK(resolved->info_bg == "#ff0000"); // xterm index 196
+    // pi's `resolve` maps `""` to absent, so the cardBg slot falls to the
+    // derived fallback: `deriveExportColors` darkens the userMessageBg base
+    // (the reported terminal background here) and keeps pi's `rgb()` spelling.
+    CHECK(resolved->card_bg == "rgb(9, 17, 26)");
 
     bool saw_accent = false;
-    bool saw_export_page = false;
     for (const auto& [name, value] : resolved->css_vars) {
         CHECK(value.starts_with('#'));
         CHECK(value.size() == 7);
-        if (name == "--accent") {
+        CHECK(value.find("oklch(") == std::string::npos);
+        CHECK(value.find("okhsl(") == std::string::npos);
+        if (name == "accent") {
             saw_accent = true;
             CHECK(value == "#a798d7");
         }
-        if (name == "--exportPageBg") {
-            saw_export_page = true;
-            CHECK(value == "#102030");
-        }
-        CHECK(value.find("oklch(") == std::string::npos);
-        CHECK(value.find("okhsl(") == std::string::npos);
     }
     CHECK(saw_accent);
-    CHECK(saw_export_page);
 }
 
 TEST_CASE("HTML export theme maps the builtin dark theme to pi's export surfaces",
         "[coding_agent][tui][export][html][issue1044][spec]") {
-    const auto resolved = catui::make_html_export_theme(
-            catui::builtin_dark_theme(), std::nullopt, cch::tui::TerminalAppearance::Dark);
-    REQUIRE(resolved.has_value());
-    CHECK(resolved->page_bg == "#100014");
-    CHECK(resolved->card_bg == "#150019");
-    CHECK(resolved->info_bg == "#4d3300");
-    bool saw_export_page = false;
-    for (const auto& [name, value] : resolved->css_vars) {
-        if (name == "--exportPageBg") {
-            saw_export_page = true;
-            CHECK(value == "#100014");
-        }
-    }
-    CHECK(saw_export_page);
+    const auto resolved = builtin_dark_export_theme();
+    // The builtin dark theme's explicit `export` section, hex like pi's
+    // `colorToHex` output.
+    CHECK(resolved.page_bg == "#21252c");
+    CHECK(resolved.card_bg == "#282c34");
+    CHECK(resolved.info_bg == "#4e2f1b");
 }
 
-TEST_CASE("generate_session_html substitutes every pi template slot with JS replace semantics",
+TEST_CASE("HTML export generate_session_html substitutes every pi template slot with JS replace semantics",
         "[coding_agent][tui][export][html][issue1044][spec]") {
-    const auto html = catui::generate_session_html(stub_session_data(), vendored_templates(),
-            catui::make_html_export_theme(
-                    catui::builtin_dark_theme(), std::nullopt, cch::tui::TerminalAppearance::Dark)
-                    .value());
+    const auto html = catui::generate_session_html(stub_session_data(), builtin_dark_export_theme());
     REQUIRE(html.has_value());
     CHECK_FALSE(html->empty());
 
     // Every named template slot is gone (pi's substitution contract).
-    for (const std::string_view slot : {"{{CSS}}", "{{JS}}", "{{SESSION_DATA}}", "{{MARKED_JS}}",
-                 "{{THEME_VARS}}", "{{BODY_BG}}", "{{CONTAINER_BG}}", "{{INFO_BG}}"}) {
+    for (const std::string_view slot : {"{{CSS}}",
+                 "{{JS}}",
+                 "{{SESSION_DATA}}",
+                 "{{MARKED_JS}}",
+                 "{{THEME_VARS}}",
+                 "{{BODY_BG}}",
+                 "{{CONTAINER_BG}}",
+                 "{{INFO_BG}}"}) {
         CAPTURE(slot);
         CHECK(html->find(slot) == std::string::npos);
     }
 
     // The CSS slot carries the theme: real hex variables, no placeholders.
     CHECK(html->find("--accent: #") != std::string::npos);
-    CHECK(html->find("--exportPageBg: #100014;") != std::string::npos);
+    CHECK(html->find("--exportPageBg: #21252c;") != std::string::npos);
     // The SESSION_DATA slot carries the base64 payload pi's template.js
-    // decodes (`const sessionData = "...";`).
+    // decodes (`<script id="session-data">` textContent, then `atob`).
     CHECK(session_data_payload(*html).size() > 32);
-    // The vendor bundles landed in their own slots: the client-side decode
-    // call pi's template.js makes on the injected payload is present.
-    CHECK(html->find("atob(sessionData)") != std::string::npos);
+    CHECK(html->find("atob(base64)") != std::string::npos);
 
     // JS `String.prototype.replace` semantics: template.js sources the cost
     // row as `$${totalCost.toFixed(3)}`, and pi's own emitted HTML contains
@@ -237,7 +237,7 @@ TEST_CASE("generate_session_html substitutes every pi template slot with JS repl
     CHECK(html->find("|[-+*\\/?!{{HIGHLIGHT_JS}}|:<=>@^~]") != std::string::npos);
 }
 
-TEST_CASE("SESSION_DATA decodes to pi's sessionData shape with wire-line entries",
+TEST_CASE("HTML export SESSION_DATA decodes to pi's sessionData shape with wire-line entries",
         "[coding_agent][tui][export][html][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
@@ -246,12 +246,8 @@ TEST_CASE("SESSION_DATA decodes to pi's sessionData shape with wire-line entries
     const auto leaf = store.leaf_id();
     REQUIRE_FALSE(leaf.empty());
 
-    const auto exported = catui::export_session_to_html(store,
-            (workspace.path() / "out.html").string(), session_path,
-            catui::make_html_export_theme(
-                    catui::builtin_dark_theme(), std::nullopt, cch::tui::TerminalAppearance::Dark)
-                    .value(),
-            {});
+    const auto exported = catui::export_session_to_html(
+            store, (workspace.path() / "out.html").string(), session_path, builtin_dark_export_theme(), {});
     REQUIRE(exported.has_value());
 
     const auto html = read_file(*exported);
@@ -265,7 +261,7 @@ TEST_CASE("SESSION_DATA decodes to pi's sessionData shape with wire-line entries
     // member as optional and renders a tool-name header instead).
     CHECK(object.size() == 3);
     const auto& header = object.at("header").get_object();
-    CHECK(header.at("type").get<std::string>() == "summary");
+    CHECK(header.at("type").get<std::string>() == "session");
     CHECK(header.at("id").get<std::string>() == "html-export-test");
     const auto& entries = object.at("entries").get<support::JsonValue::array_t>();
     REQUIRE(entries.size() == 2);
@@ -278,7 +274,7 @@ TEST_CASE("SESSION_DATA decodes to pi's sessionData shape with wire-line entries
     CHECK(object.at("leafId").get<std::string>() == leaf);
 }
 
-TEST_CASE("SESSION_DATA carries the optional pi AgentState members when present",
+TEST_CASE("HTML export SESSION_DATA carries the optional pi AgentState members when present",
         "[coding_agent][tui][export][html][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
@@ -288,12 +284,8 @@ TEST_CASE("SESSION_DATA carries the optional pi AgentState members when present"
     catui::HtmlExportExtras extras;
     extras.system_prompt = "You are a test assistant.";
     extras.tools = {ai::Tool{.name = "read_file", .description = "Read a file."}};
-    const auto exported = catui::export_session_to_html(store,
-            (workspace.path() / "out.html").string(), session_path,
-            catui::make_html_export_theme(
-                    catui::builtin_dark_theme(), std::nullopt, cch::tui::TerminalAppearance::Dark)
-                    .value(),
-            extras);
+    const auto exported = catui::export_session_to_html(
+            store, (workspace.path() / "out.html").string(), session_path, builtin_dark_export_theme(), extras);
     REQUIRE(exported.has_value());
     const auto decoded = decode_base64(session_data_payload(read_file(*exported)));
     const auto data = support::read_json(decoded);
@@ -303,10 +295,10 @@ TEST_CASE("SESSION_DATA carries the optional pi AgentState members when present"
     const auto& tools = object.at("tools").get<support::JsonValue::array_t>();
     REQUIRE(tools.size() == 1);
     CHECK(tools.front().get_object().at("name").get<std::string>() == "read_file");
-    CHECK(object.contains("renderedTools") == false);
+    CHECK_FALSE(object.contains("renderedTools"));
 }
 
-TEST_CASE("empty destination uses pi's default output name next to the session file",
+TEST_CASE("HTML export default output name is relative to the working directory",
         "[coding_agent][tui][export][html][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "deep" / "session-abc123.jsonl";
@@ -316,31 +308,21 @@ TEST_CASE("empty destination uses pi's default output name next to the session f
     auto store = make_store(workspace, session_path);
     append_exchange(store);
 
-    const auto exported =
-            catui::export_session_to_html(store, "", session_path,
-                    catui::make_html_export_theme(
-                            catui::builtin_dark_theme(), std::nullopt,
-                            cch::tui::TerminalAppearance::Dark)
-                            .value(),
-                    {});
+    // pi `exportSessionToHtml`: `${APP_NAME}-session-${basename}.html`
+    // resolved against the process working directory (pi `writeFileSync` on
+    // a relative path); the C++ binary's identity is "pike". The default
+    // name collides if the working directory already holds one, so clean up
+    // after the assertion.
+    const auto exported = catui::export_session_to_html(store, "", session_path, builtin_dark_export_theme(), {});
     REQUIRE(exported.has_value());
-    // pi `exportSessionToHtml`: `${APP_NAME}-session-${basename}.html` in the
-    // session file's directory; the C++ binary's identity is "pike".
-    CHECK(*exported == (workspace.path() / "deep" / "pike-session-session-abc123.html").string());
-    CHECK(std::filesystem::exists(*exported));
+    CHECK(*exported == "pike-session-session-abc123.html");
+    REQUIRE(std::filesystem::exists(*exported));
     const auto html = read_file(*exported);
     CHECK(html.starts_with("<!DOCTYPE html>"));
-    CHECK(html.ends_with("</html>"));
-}
-
-TEST_CASE("generate_session_html surfaces missing template assets as an error",
-        "[coding_agent][tui][export][html][issue1044][spec]") {
-    const auto html = catui::generate_session_html(stub_session_data(),
-            catui::HtmlExportTemplates{.dir = "/nonexistent/export-html"},
-            catui::make_html_export_theme(
-                    catui::builtin_dark_theme(), std::nullopt, cch::tui::TerminalAppearance::Dark)
-                    .value());
-    REQUIRE_FALSE(html.has_value());
+    CHECK(html.ends_with("</html>\n"));                      // the vendored template's own terminator
+    CHECK(html.find("first question") == std::string::npos); // payload is base64
+    std::filesystem::remove(*exported, error);
+    REQUIRE_FALSE(error);
 }
 
 TEST_CASE("SessionStore export_wire_snapshot mirrors header, entries, and leaf",
@@ -352,10 +334,13 @@ TEST_CASE("SessionStore export_wire_snapshot mirrors header, entries, and leaf",
 
     const auto snapshot = store.export_wire_snapshot();
     REQUIRE(snapshot.has_value());
-    CHECK(snapshot->header.find(R"("type":"summary")") != std::string::npos);
+    CHECK(snapshot->header.find(R"("type":"session")") != std::string::npos);
     REQUIRE(snapshot->entries.size() == 2);
     for (const auto& line : snapshot->entries) {
-        CHECK(line.starts_with(R"({"type":)"));
+        // The C++ wire line leads with the entry id (the session file
+        // format is Agent Core's surface); pi's emission leads with `type`.
+        CHECK(line.starts_with(R"({"id":)"));
+        CHECK(line.find(R"("type":"message")") != std::string::npos);
         CHECK_FALSE(line.ends_with('\n'));
     }
     CHECK(snapshot->entries[0].find(R"("first question")") != std::string::npos);

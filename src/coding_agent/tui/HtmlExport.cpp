@@ -108,8 +108,10 @@ struct CssRgb {
         }
         if (parts.size() != 3) return std::nullopt;
         const auto trim = [](std::string_view text) {
-            while (!text.empty() && (text.front() == ' ' || text.front() == '\t')) text.remove_prefix(1);
-            while (!text.empty() && (text.back() == ' ' || text.back() == '\t')) text.remove_suffix(1);
+            while (!text.empty() && (text.front() == ' ' || text.front() == '\t'))
+                text.remove_prefix(1);
+            while (!text.empty() && (text.back() == ' ' || text.back() == '\t'))
+                text.remove_suffix(1);
             return text;
         };
         const auto red = decimal_channel(trim(parts[0]));
@@ -160,8 +162,7 @@ struct DerivedExportColors {
         return {
                 .page_bg = adjust_brightness(*parsed, 0.96),
                 .card_bg = std::string{base_color},
-                .info_bg = std::format(
-                        "rgb({}, {}, {})",
+                .info_bg = std::format("rgb({}, {}, {})",
                         std::min(255, parsed->red + 10),
                         std::min(255, parsed->green + 5),
                         std::max(0, parsed->blue - 20)),
@@ -170,8 +171,7 @@ struct DerivedExportColors {
     return {
             .page_bg = adjust_brightness(*parsed, 0.7),
             .card_bg = adjust_brightness(*parsed, 0.85),
-            .info_bg = std::format(
-                    "rgb({}, {}, {})",
+            .info_bg = std::format("rgb({}, {}, {})",
                     std::min(255, parsed->red + 20),
                     std::min(255, parsed->green + 15),
                     parsed->blue),
@@ -232,8 +232,7 @@ struct DerivedExportColors {
 }
 
 /// One theme token resolved to the CSS value pi's `colorToHex` produces.
-[[nodiscard]] support::Expected<std::string> theme_token_css(
-        const ResolvedTheme& theme,
+[[nodiscard]] support::Expected<std::string> theme_token_css(const ResolvedTheme& theme,
         ThemeToken token,
         const std::optional<cch::tui::TerminalColors>& terminal_colors,
         TerminalAppearance appearance) {
@@ -273,15 +272,13 @@ struct DerivedExportColors {
 /// through `vars`, and unknown or circular names are errors (pi throws and
 /// its `getThemeExportColors` catch discards the whole export section).
 [[nodiscard]] support::Expected<std::string> resolve_export_reference(
-        const ThemeExportValueVariant& value,
-        const ResolvedTheme& theme,
-        std::set<std::string, std::less<>>& visited) {
+        const ThemeExportValueVariant& value, const ResolvedTheme& theme, std::set<std::string, std::less<>>& visited) {
     const ThemeExportValueVariant* current = &value;
     while (true) {
         if (const auto* number = std::get_if<int>(current)) {
             if (*number < 0 || *number > 255) {
-                return std::unexpected(export_error(
-                        std::format("ANSI color index must be an integer from 0 to 255: {}", *number)));
+                return std::unexpected(
+                        export_error(std::format("ANSI color index must be an integer from 0 to 255: {}", *number)));
             }
             const auto hex = cch::tui::color_to_hex(cch::tui::Color{cch::tui::IndexedColor{
                     static_cast<std::uint8_t>(*number),
@@ -309,8 +306,7 @@ struct DerivedExportColors {
 /// hex/index conversion, `""` reads as absent, and an okhsl function converts
 /// to hex because CSS does not understand it (oklch passes through).
 [[nodiscard]] support::Expected<std::optional<std::string>> resolve_export_color(
-        const std::optional<ThemeExportValueVariant>& value,
-        const ResolvedTheme& theme) {
+        const std::optional<ThemeExportValueVariant>& value, const ResolvedTheme& theme) {
     if (!value) return std::nullopt;
     std::set<std::string, std::less<>> visited;
     auto resolved = resolve_export_reference(*value, theme, visited);
@@ -336,9 +332,7 @@ struct DerivedExportColors {
 /// operator regex), so a plain literal replacement would not reproduce pi's
 /// output — this helper implements the exact semantics.
 [[nodiscard]] std::string replace_first_js(
-        const std::string& text,
-        const std::string& needle,
-        const std::string& replacement) {
+        const std::string& text, const std::string& needle, const std::string& replacement) {
     const auto position = text.find(needle);
     if (position == std::string::npos) return text;
     std::string result;
@@ -402,8 +396,7 @@ struct DerivedExportColors {
 
 } // namespace
 
-support::Expected<HtmlExportTheme> make_html_export_theme(
-        const ResolvedTheme& theme,
+support::Expected<HtmlExportTheme> make_html_export_theme(const ResolvedTheme& theme,
         const std::optional<cch::tui::TerminalColors>& terminal_colors,
         TerminalAppearance terminal_appearance) {
     // pi `Theme.appearance`: the theme's own detected appearance wins; the
@@ -444,8 +437,7 @@ support::Expected<HtmlExportTheme> make_html_export_theme(
 }
 
 support::Expected<std::string> build_html_session_data_json(
-        cch::harness::session::SessionStore& store,
-        const HtmlExportExtras& extras) {
+        cch::harness::session::SessionStore& store, const HtmlExportExtras& extras) {
     // pi `SessionManager.getEntries()`: every entry of the session in file
     // order, each as its pi wire line. The harness tree reading excludes the
     // header line and unknown entry kinds; every remaining kind round-trips
@@ -494,8 +486,8 @@ support::Expected<std::string> build_html_session_data_json(
             if (!description) return std::unexpected(description.error());
             auto parameters = support::write_json(tool.parameters);
             if (!parameters) return std::unexpected(parameters.error());
-            tools += R"({"name":)" + *name + R"(,"description":)" + *description + R"(,"parameters":)" +
-                    *parameters + "}";
+            tools += R"({"name":)" + *name + R"(,"description":)" + *description + R"(,"parameters":)" + *parameters +
+                     "}";
         }
         tools.push_back(']');
         with_extras.insert(with_extras.size() - 1, std::move(tools));
@@ -503,9 +495,7 @@ support::Expected<std::string> build_html_session_data_json(
     return with_extras;
 }
 
-support::Expected<std::string> generate_session_html(
-        std::string_view session_data_json,
-        const HtmlExportTheme& theme) {
+support::Expected<std::string> generate_session_html(std::string_view session_data_json, const HtmlExportTheme& theme) {
     const auto template_dir = export_html_template_dir();
     auto template_html = read_text_asset(template_dir / "template.html");
     if (!template_html) return std::unexpected(template_html.error());
@@ -552,8 +542,7 @@ support::Expected<std::string> generate_session_html(
     return html;
 }
 
-support::Expected<std::string> export_session_to_html(
-        cch::harness::session::SessionStore& store,
+support::Expected<std::string> export_session_to_html(cch::harness::session::SessionStore& store,
         std::string_view output_path,
         const std::filesystem::path& session_file,
         const HtmlExportTheme& theme,

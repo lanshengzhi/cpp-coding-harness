@@ -1534,8 +1534,8 @@ std::vector<ai::Tool> detail::AgentSessionInteractiveAccess::active_tool_definit
     std::vector<ai::Tool> tools;
     tools.reserve(active.size());
     for (const auto& name : active) {
-        const auto found = std::find_if(definitions.begin(), definitions.end(),
-                [&](const ai::Tool& tool) { return tool.name == name; });
+        const auto found = std::find_if(
+                definitions.begin(), definitions.end(), [&](const ai::Tool& tool) { return tool.name == name; });
         if (found != definitions.end()) {
             tools.push_back(*found);
         }

@@ -1,11 +1,12 @@
 // E2E `/export` dispatch (#1044): pi v1.3.0 `handleExportCommand` semantics
 // — a ".jsonl" destination takes the transcript lane; every other spelling
 // (including no destination at all) exports pi-faithful HTML, defaulting to
-// `${APP_NAME}-session-${basename}.html` next to the session file, with pi's
-// status line `Session exported to: <path>`. The HTML assertions open the
-// produced file: every named template slot must be substituted and the
-// base64 SESSION_DATA payload must be present (the harness has no
-// `renderedTools` emitters, so pi's client degrades to the tool-name header).
+// `${APP_NAME}-session-${basename}.html` in the working directory, with pi's
+// status line `Session exported to: <path>` on both lanes. The HTML
+// assertions open the produced file: every named template slot must be
+// substituted and the base64 SESSION_DATA payload must be present (the
+// harness has no `renderedTools` emitters, so pi's client degrades to the
+// tool-name header).
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
@@ -32,6 +33,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <system_error>
 
 using namespace cch;
 
@@ -83,9 +85,7 @@ struct Running {
 };
 
 void start_interactive(Fixture& fixture, Running& running) {
-    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
-                       .with_session(*fixture.session)
-                       .build();
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}.with_session(*fixture.session).build();
     boost::asio::co_spawn(running.io,
             coding_agent::tui::run_interactive_mode(running.terminal, std::move(run)),
             [&running](std::exception_ptr exception, support::ExpectedVoid result) {
@@ -124,7 +124,9 @@ TEST_CASE("/export with no destination writes pi's default HTML next to the sess
     REQUIRE(wait_for_text(running, "fake: export me"));
 
     REQUIRE(running.terminal.inject_input("/export\r"));
-    const auto expected = (fixture.session_path.parent_path() / "pike-session-dispatch-test.html").string();
+    // pi `exportSessionToHtml`: the default name is relative to the working
+    // directory, so the status line shows the bare file name.
+    const std::string expected = "pike-session-dispatch-test.html";
     REQUIRE(wait_for_text(running, "Session exported to: " + expected));
 
     // Open the produced file: pi's substitution contract holds on the real
@@ -132,13 +134,23 @@ TEST_CASE("/export with no destination writes pi's default HTML next to the sess
     REQUIRE(std::filesystem::exists(expected));
     const auto html = read_file(expected);
     CHECK(html.starts_with("<!DOCTYPE html>"));
-    for (const std::string_view slot : {"{{CSS}}", "{{JS}}", "{{SESSION_DATA}}", "{{MARKED_JS}}",
-                 "{{THEME_VARS}}", "{{BODY_BG}}", "{{CONTAINER_BG}}", "{{INFO_BG}}"}) {
+    for (const std::string_view slot : {"{{CSS}}",
+                 "{{JS}}",
+                 "{{SESSION_DATA}}",
+                 "{{MARKED_JS}}",
+                 "{{THEME_VARS}}",
+                 "{{BODY_BG}}",
+                 "{{CONTAINER_BG}}",
+                 "{{INFO_BG}}"}) {
         CAPTURE(slot);
         CHECK(html.find(slot) == std::string::npos);
     }
-    CHECK(html.find("const sessionData = \"") != std::string::npos);
-    CHECK(html.find("--exportPageBg: #100014;") != std::string::npos);
+    // The base64 payload sits in pi's `<script id="session-data">` slot.
+    CHECK(html.find("<script id=\"session-data\" type=\"application/json\">") != std::string::npos);
+    CHECK(html.find("--exportPageBg: #21252c;") != std::string::npos);
+    std::error_code error;
+    std::filesystem::remove(expected, error);
+    REQUIRE_FALSE(error);
 
     finish_interactive(running);
 }
@@ -153,14 +165,24 @@ TEST_CASE("/export with a .jsonl destination keeps the transcript lane",
     REQUIRE(running.terminal.inject_input("export me\r"));
     REQUIRE(wait_for_text(running, "fake: export me"));
 
-    const auto destination = (fixture.workspace.path() / "transcript.jsonl").string();
+    // A relative, separator-free destination keeps the editor palette closed
+    // (an absolute path's slashes reopen it and the first Enter would accept
+    // a completion instead of submitting; ModelSelectorInteractiveTest's
+    // `\r\r` spelling covers that flow). pi resolves the relative path
+    // against the working directory, matching the HTML lane's default.
+    const std::string destination = "export-transcript-lane-test.jsonl";
     REQUIRE(running.terminal.inject_input("/export " + destination + "\r"));
-    REQUIRE(wait_for_text(running, "Transcript exported to " + destination));
+    // pi prints the same status line on both lanes.
+    REQUIRE(wait_for_text(running, "Session exported to: " + destination));
 
     REQUIRE(std::filesystem::exists(destination));
     const auto transcript = read_file(destination);
-    CHECK(transcript.starts_with(R"({"type":"summary")"));
+    // pi v1.3.0's session header line leads with `type: "session"`.
+    CHECK(transcript.starts_with(R"({"type":"session")"));
     CHECK(transcript.find(R"("fake: export me")") != std::string::npos);
+    std::error_code error;
+    std::filesystem::remove(destination, error);
+    REQUIRE_FALSE(error);
 
     finish_interactive(running);
 }

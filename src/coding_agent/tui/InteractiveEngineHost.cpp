@@ -366,14 +366,16 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
             auto exported = handler({});
             if (!exported) return std::unexpected(exported.error());
             if (view_ != nullptr) {
-                view_->append_status_message(std::format("Transcript exported to {}", *exported));
+                // pi `handleExportCommand` prints the same status line for
+                // both lanes: `Session exported to: ${filePath}`.
+                view_->append_status_message(std::format("Session exported to: {}", *exported));
             }
             return {};
         }
-        const auto appearance = theme_controller_ != nullptr &&
-                        theme_controller_->terminal_theme() == tui::TerminalTheme::Light
-                ? tui::TerminalAppearance::Light
-                : tui::TerminalAppearance::Dark;
+        const auto appearance =
+                theme_controller_ != nullptr && theme_controller_->terminal_theme() == tui::TerminalTheme::Light
+                        ? tui::TerminalAppearance::Light
+                        : tui::TerminalAppearance::Dark;
         auto theme = tui::make_html_export_theme(
                 theme_controller_ != nullptr ? theme_controller_->active_resolved_theme() : tui::builtin_dark_theme(),
                 theme_controller_ != nullptr ? theme_controller_->reported_terminal_colors() : std::nullopt,
@@ -385,8 +387,7 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
             extras.system_prompt = system_prompt;
         }
         extras.tools = detail::AgentSessionInteractiveAccess::active_tool_definitions(*session_);
-        auto exported = tui::export_session_to_html(
-                *store, invocation.argument, *session_path, *theme, extras);
+        auto exported = tui::export_session_to_html(*store, invocation.argument, *session_path, *theme, extras);
         if (!exported) return std::unexpected(exported.error());
         if (view_ != nullptr) {
             view_->append_status_message(std::format("Session exported to: {}", *exported));

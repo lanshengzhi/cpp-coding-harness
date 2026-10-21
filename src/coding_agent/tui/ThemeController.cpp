@@ -527,9 +527,7 @@ const LiveTheme& ThemeController::live_theme() const {
     return impl_->live;
 }
 
-const ResolvedTheme& ThemeController::active_resolved_theme() const {
-    return impl_->active_theme;
-}
+const ResolvedTheme& ThemeController::active_resolved_theme() const { return impl_->active_theme; }
 
 const std::optional<cch::tui::TerminalColors>& ThemeController::reported_terminal_colors() const {
     return impl_->terminal_colors;
