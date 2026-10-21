@@ -223,7 +223,7 @@ void a_branch_reparents_later_messages(SessionStore& store, const Alternative&) 
     REQUIRE(store.append(user_message("third")).has_value());
     const auto third = store.get_entry(store.leaf_id());
     REQUIRE(third.has_value());
-    CHECK(third->parent_id == first);
+    CHECK(cch::harness::session::parent_entry_id(third->parent_id) == std::optional<std::string>{first});
 
     const auto branch = store.get_branch();
     REQUIRE(branch.size() == 2);

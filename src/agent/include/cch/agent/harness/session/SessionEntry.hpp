@@ -107,10 +107,62 @@ using SessionEntryValue = std::variant<std::monostate,
         BranchSummaryEntryValue,
         SessionInfoEntryValue>;
 
+/// The three shapes a session line's `parentId` can take. pi's field is
+/// `parentId: string | null` (`session-manager.ts:60`) and pi never infers a
+/// parent on read: an explicit `null` is a root, and an id that names no
+/// entry is an orphan root. The absent field is the third shape — a legacy
+/// flat file whose chain comes from the entry order — which pi meets only as
+/// an un-migrated v1 file it rewrites on open (`migrateV1ToV2`). C++ writes a
+/// value or an explicit `null`, so `Absent` survives only for hand-written
+/// and legacy files.
+enum class ParentIdKind {
+    /// The line carries no `parentId` field: the legacy flat-file shape,
+    /// whose parent comes from the entry order.
+    Absent,
+    /// The line carries an explicit `parentId: null`: a root.
+    Root,
+    /// The line carries a parent entry id.
+    Entry,
+};
+
+/// A session entry's `parentId` exactly as the wire spells it.
+struct ParentId {
+    ParentIdKind kind{ParentIdKind::Absent};
+    /// The parent entry id; read only when `kind == ParentIdKind::Entry`.
+    std::string entry_id;
+
+    friend bool operator==(const ParentId&, const ParentId&) = default;
+};
+
+/// The parent entry this `parentId` names, or nullopt when it names none: an
+/// absent field, an explicit root, or a value that is not a usable entry name
+/// (pi `getTree` treats all three as a root).
+[[nodiscard]] inline std::optional<std::string> parent_entry_id(const ParentId& parent) {
+    if (parent.kind != ParentIdKind::Entry || parent.entry_id.empty()) {
+        return std::nullopt;
+    }
+    return parent.entry_id;
+}
+
+/// The wire shape an append writes for an optional parent: nullopt is an
+/// explicit `null` root, which is exactly what pi writes when its leaf
+/// pointer is null (pi `appendMessage` writes `parentId: this.leafId`).
+[[nodiscard]] inline ParentId parent_id_from_optional(const std::optional<std::string>& parent_id) {
+    if (parent_id.has_value()) {
+        return ParentId{.kind = ParentIdKind::Entry, .entry_id = *parent_id};
+    }
+    return ParentId{.kind = ParentIdKind::Root};
+}
+
+/// The wire shape for a parent entry id.
+[[nodiscard]] inline ParentId parent_entry(std::string entry_id) {
+    return ParentId{.kind = ParentIdKind::Entry, .entry_id = std::move(entry_id)};
+}
+
 struct SessionEntry {
     SessionEntryKind kind{SessionEntryKind::Unknown};
     std::string entry_id;
-    std::optional<std::string> parent_id;
+    ParentId parent_id;
     ai::TimestampMs timestamp{};
     std::optional<ai::MessageVariant> message;
     SessionEntryValue value;

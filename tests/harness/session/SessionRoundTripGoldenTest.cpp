@@ -247,7 +247,7 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
 
     // Root entry: parentId is an explicit JSON null, not an absent field.
     REQUIRE(loaded->entries.size() > 1);
-    CHECK_FALSE(loaded->entries[1].parent_id.has_value());
+    CHECK_FALSE(cch::harness::session::parent_entry_id(loaded->entries[1].parent_id).has_value());
     CHECK(loaded->entries[1].raw_line.find(R"("parentId":null)") != std::string::npos);
 
     // compaction variants: full (retainedTail + usage + fromHook) and minimal
@@ -541,14 +541,14 @@ namespace {
     harness::session::SessionEntry model;
     model.kind = harness::session::SessionEntryKind::ModelChange;
     model.entry_id = "model001";
-    model.parent_id = "user0001";
+    model.parent_id = cch::harness::session::parent_entry("user0001");
     model.value = harness::session::ModelChangeValue{.provider = "openai", .model_id = "gpt-4.1"};
     loaded.entries.push_back(std::move(model));
 
     harness::session::SessionEntry assistant;
     assistant.kind = harness::session::SessionEntryKind::Message;
     assistant.entry_id = "msg0002";
-    assistant.parent_id = "model001";
+    assistant.parent_id = cch::harness::session::parent_entry("model001");
     assistant.timestamp = 1784678402000;
     auto assistant_message = ai::assistant_text_message("a");
     assistant_message.api = "anthropic-messages";
@@ -561,7 +561,7 @@ namespace {
     harness::session::SessionEntry thinking;
     thinking.kind = harness::session::SessionEntryKind::ThinkingLevelChange;
     thinking.entry_id = "think001";
-    thinking.parent_id = "msg0002";
+    thinking.parent_id = cch::harness::session::parent_entry("msg0002");
     thinking.value = harness::session::ThinkingLevelChangeValue{.thinking_level = "high"};
     loaded.entries.push_back(std::move(thinking));
 

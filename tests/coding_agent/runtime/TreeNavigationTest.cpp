@@ -725,8 +725,8 @@ TEST_CASE("persisted navigation then prompt appends to the navigated leaf",
         }
     }
     REQUIRE(branch_user != nullptr);
-    REQUIRE(branch_user->parent_id.has_value());
-    CHECK(*branch_user->parent_id == ids[1]);
+    REQUIRE(cch::harness::session::parent_entry_id(branch_user->parent_id).has_value());
+    CHECK(*cch::harness::session::parent_entry_id(branch_user->parent_id) == ids[1]);
     // The live context is the navigated path plus the branch turn.
     const auto live_users = live_user_texts(session);
     REQUIRE(live_users.size() == 2);

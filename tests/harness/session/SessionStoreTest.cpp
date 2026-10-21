@@ -1,5 +1,7 @@
 #include <cch/agent/harness/session/SessionStore.hpp>
 
+#include "support/Json.hpp"
+#include "support/SessionSeeding.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -500,7 +502,7 @@ TEST_CASE("a branch moves the live leaf and parents later messages", "[harness][
     REQUIRE(third_id != first_id);
     const auto third = store.get_entry(third_id);
     REQUIRE(third.has_value());
-    CHECK(third->parent_id == first_id);
+    CHECK(cch::harness::session::parent_entry_id(third->parent_id) == std::optional<std::string>{first_id});
 
     const auto branch = store.get_branch();
     REQUIRE(branch.size() == 2);
@@ -620,14 +622,14 @@ TEST_CASE("create_from_entries writes a re-chained branch file the loader reads 
     harness::session::SessionEntry first;
     first.kind = harness::session::SessionEntryKind::Message;
     first.entry_id = "entry-first";
-    first.parent_id = std::nullopt;
+    first.parent_id = cch::harness::session::parent_id_from_optional(std::nullopt);
     first.timestamp = 1;
     first.message = user_message("branched");
     entries.push_back(std::move(first));
     harness::session::SessionEntry second;
     second.kind = harness::session::SessionEntryKind::Message;
     second.entry_id = "entry-second";
-    second.parent_id = "entry-first";
+    second.parent_id = cch::harness::session::parent_entry("entry-first");
     second.timestamp = 2;
     second.message = user_message("chained");
     entries.push_back(std::move(second));
@@ -677,7 +679,7 @@ TEST_CASE("create_from_entries preserves a foreign entry line and refuses a nest
     harness::session::SessionEntry after;
     after.kind = harness::session::SessionEntryKind::Message;
     after.entry_id = "entry-after";
-    after.parent_id = "entry-before";
+    after.parent_id = cch::harness::session::parent_entry("entry-before");
     after.timestamp = 2;
     after.message = user_message("after");
     entries.push_back(std::move(after));
@@ -710,4 +712,188 @@ TEST_CASE("create_from_entries preserves a foreign entry line and refuses a nest
     // left at the target path.
     std::error_code missing_ec;
     CHECK_FALSE(std::filesystem::exists(workspace.path() / "nested-header.jsonl", missing_ec));
+}
+
+// ── pi wire shape: one root, a real parent chain, explicit null only at a
+// root (pi `appendMessage` writes `parentId: this.leafId` and `_appendEntry`
+// then sets `leafId = entry.id`; pi never infers a parent on read) ──
+
+namespace {
+
+/// Every non-header line's `parentId` field, in file order, as the wire
+/// spells it: `std::nullopt` for an absent field, otherwise the JSON text.
+[[nodiscard]] std::vector<std::optional<std::string>> wire_parent_ids(const std::string& contents) {
+    std::vector<std::optional<std::string>> parents;
+    std::size_t start = 0;
+    while (start < contents.size()) {
+        const auto end = contents.find('\n', start);
+        const auto line = contents.substr(start, end == std::string::npos ? std::string::npos : end - start);
+        start = end == std::string::npos ? contents.size() : end + 1;
+        if (line.empty()) {
+            continue;
+        }
+        auto parsed = support::read_json(line);
+        REQUIRE(parsed.has_value());
+        const auto* object = parsed->get_if<support::JsonValue::object_t>();
+        REQUIRE(object != nullptr);
+        if (auto type = object->find("type"); type != object->end() && type->second.get_if<std::string>() != nullptr &&
+                                              *type->second.get_if<std::string>() == "session") {
+            continue;
+        }
+        const auto found = object->find("parentId");
+        if (found == object->end()) {
+            parents.push_back(std::nullopt);
+        } else if (found->second.get_if<support::JsonValue::null_t>() != nullptr) {
+            parents.push_back(std::string{"null"});
+        } else {
+            const auto* text = found->second.get_if<std::string>();
+            REQUIRE(text != nullptr);
+            parents.push_back(*text);
+        }
+    }
+    return parents;
+}
+
+} // namespace
+
+TEST_CASE("a linear session writes one root and a real parent chain",
+        "[harness][session][store][issue1044][compat-pi][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "pi-chain.jsonl";
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(created.has_value());
+    auto store = std::move(*created);
+    REQUIRE(store.append(user_message("first")).has_value());
+    REQUIRE(store.append(user_message("second")).has_value());
+    REQUIRE(store.append(user_message("third")).has_value());
+
+    // The wire: exactly one explicit null (the root), then a real chain. pi
+    // writes this shape and reads it back as one branch; a null on every
+    // entry is the un-migrated v1 shape pi would rewrite.
+    std::ifstream file(path);
+    REQUIRE(file.good());
+    const std::string contents{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    const auto parents = wire_parent_ids(contents);
+    REQUIRE(parents.size() == 3);
+    CHECK(parents[0] == std::optional<std::string>{"null"});
+    CHECK(parents[1] == std::optional<std::string>{store.entries()[0].entry_id});
+    CHECK(parents[2] == std::optional<std::string>{store.entries()[1].entry_id});
+
+    // The reloaded tree agrees: one root, a 3-entry branch, no inference.
+    auto reopened = harness::session::SessionStore::open_existing(path);
+    REQUIRE(reopened.has_value());
+    const auto topology = reopened->tree_snapshot();
+    REQUIRE(topology.roots.size() == 1);
+    CHECK(topology.roots.front().children.size() == 1);
+    CHECK(reopened->get_branch().size() == 3);
+    CHECK_FALSE(reopened->effective_parent_id(reopened->entries().front().entry_id).has_value());
+    CHECK(reopened->effective_parent_id(reopened->entries()[1].entry_id) ==
+            std::optional<std::string>{reopened->entries()[0].entry_id});
+}
+
+TEST_CASE("a second root after reset_leaf is a root on the wire and on reload",
+        "[harness][session][store][issue1044][compat-pi][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "pi-second-root.jsonl";
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(created.has_value());
+    auto store = std::move(*created);
+    REQUIRE(store.append(user_message("first")).has_value());
+    store.reset_leaf();
+    REQUIRE(store.append(user_message("second root")).has_value());
+
+    // Two roots on the wire: both entries carry the explicit null pi writes
+    // for `resetLeaf`'s new root.
+    std::ifstream file(path);
+    REQUIRE(file.good());
+    const std::string contents{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    const auto parents = wire_parent_ids(contents);
+    REQUIRE(parents.size() == 2);
+    CHECK(parents[0] == std::optional<std::string>{"null"});
+    CHECK(parents[1] == std::optional<std::string>{"null"});
+
+    // And the reload reads them as two independent roots, not a chain: the
+    // reported defect. An explicit null is a root, so it never infers the
+    // preceding entry as its parent.
+    auto reopened = harness::session::SessionStore::open_existing(path);
+    REQUIRE(reopened.has_value());
+    const auto entries = reopened->entries();
+    REQUIRE(entries.size() == 2);
+    const auto second_root_id = entries.back().entry_id;
+    CHECK_FALSE(reopened->effective_parent_id(second_root_id).has_value());
+    CHECK(reopened->get_branch(second_root_id).size() == 1);
+    CHECK(reopened->tree_snapshot().roots.size() == 2);
+}
+
+TEST_CASE("a branch target is the next append's wire parent", "[harness][session][store][issue1044][compat-pi][spec]") {
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "pi-branch-parent.jsonl";
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
+    REQUIRE(created.has_value());
+    auto store = std::move(*created);
+    REQUIRE(store.append(user_message("first")).has_value());
+    REQUIRE(store.append(user_message("second")).has_value());
+    const auto first_id = store.entries().front().entry_id;
+    REQUIRE(store.branch(first_id).has_value());
+    REQUIRE(store.append(user_message("branched")).has_value());
+
+    std::ifstream file(path);
+    REQUIRE(file.good());
+    const std::string contents{std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>()};
+    const auto parents = wire_parent_ids(contents);
+    REQUIRE(parents.size() == 3);
+    CHECK(parents[0] == std::optional<std::string>{"null"});
+    CHECK(parents[1] == std::optional<std::string>{first_id});
+    // The branch target, not the file's previous entry (pi `appendMessage`).
+    CHECK(parents[2] == std::optional<std::string>{first_id});
+}
+
+TEST_CASE("an explicit parentId null is a root and an absent field still infers the chain",
+        "[harness][session][tree][issue1044][compat-pi][spec]") {
+    // The reader's two shapes, hand-written so the writer cannot decide the
+    // answer: a missing `parentId` is the legacy flat file whose chain comes
+    // from the entry order; an explicit null is pi's root.
+    tests::TempWorkspace workspace;
+    const auto path = workspace.path() / "reader-shapes.jsonl";
+    const auto header = tests::session_header_line(metadata_for(workspace));
+    workspace.write("reader-shapes.jsonl",
+            header + "\n" +
+                    R"({"type":"message","id":"legacy01","timestamp":"2026-06-10T00:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"legacy"}],"timestamp":1}})" +
+                    "\n" +
+                    R"({"type":"message","id":"legacy02","timestamp":"2026-06-10T00:00:02.000Z","message":{"role":"user","content":[{"type":"text","text":"legacy child"}],"timestamp":2}})" +
+                    "\n");
+    tests::make_session_file_private(path);
+
+    auto loaded = harness::session::SessionStore::open_existing(path);
+    REQUIRE(loaded.has_value());
+    // Missing parentId keeps the legacy linear-chain inference.
+    CHECK(loaded->effective_parent_id("legacy02") == std::optional<std::string>{"legacy01"});
+    CHECK(loaded->get_branch("legacy02").size() == 2);
+    CHECK(loaded->tree_snapshot().roots.size() == 1);
+
+    // An explicit null on a non-first entry is a root: no inference.
+    const auto null_path = workspace.path() / "reader-null.jsonl";
+    workspace.write("reader-null.jsonl",
+            header + "\n" +
+                    R"({"type":"message","id":"null0001","parentId":"missing1","timestamp":"2026-06-10T00:00:01.000Z","message":{"role":"user","content":[{"type":"text","text":"orphan"}],"timestamp":1}})" +
+                    "\n" +
+                    R"({"type":"message","id":"null0002","parentId":null,"timestamp":"2026-06-10T00:00:02.000Z","message":{"role":"user","content":[{"type":"text","text":"root"}],"timestamp":2}})" +
+                    "\n");
+    tests::make_session_file_private(null_path);
+
+    auto null_loaded = harness::session::SessionStore::open_existing(null_path);
+    REQUIRE(null_loaded.has_value());
+    // pi's orphan rule lives in the tree build, not in the parent lookup: an
+    // explicit id that names no entry is still the entry's recorded parent
+    // (pi's `entry.parentId`), and `getTree` makes the unresolvable node a
+    // root. Both entries here are roots for different reasons.
+    const auto orphan_topology = null_loaded->tree_snapshot();
+    REQUIRE(orphan_topology.roots.size() == 2);
+    // An explicit null is a root even though it follows another entry: no
+    // inference, and its branch is just itself.
+    CHECK_FALSE(null_loaded->effective_parent_id("null0002").has_value());
+    CHECK(null_loaded->get_branch("null0002").size() == 1);
+    // The orphan keeps pi's wire parent and its own single-entry branch.
+    CHECK(null_loaded->effective_parent_id("null0001") == std::optional<std::string>{"missing1"});
+    CHECK(null_loaded->get_branch("null0001").size() == 1);
 }

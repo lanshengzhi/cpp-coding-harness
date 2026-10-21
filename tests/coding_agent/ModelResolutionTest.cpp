@@ -212,7 +212,7 @@ constexpr std::string_view kFullThinkingProvider = R"({
     const auto* thinking = std::get_if<harness::session::ThinkingLevelChangeValue>(&entry.value);
     REQUIRE(thinking != nullptr);
     auto wire = harness::session::EntrySerializer{}.serialize_thinking_level_change(
-            entry.parent_id, thinking->thinking_level);
+            cch::harness::session::parent_entry_id(entry.parent_id), thinking->thinking_level);
     REQUIRE(wire.has_value());
     auto parsed = support::read_json(wire->line);
     REQUIRE(parsed.has_value());

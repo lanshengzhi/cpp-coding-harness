@@ -16,15 +16,12 @@ struct JsonlSessionStore::Impl {
     std::filesystem::path path;
     SessionMetadata metadata;
     SessionJournal journal;
-    /// The explicit wire parent for the next message append. Empty in the
-    /// linear case, where the flat-file shape leaves `parentId` null and the
-    /// reader infers the chain from the file order; set to the branch target
-    /// once the session branches off that chain (pi `appendMessage` hangs
-    /// the message under the current leaf).
+    /// The explicit wire parent for the next message append: nullopt at the
+    /// root position, otherwise the active leaf's id. pi `appendMessage`
+    /// writes `parentId: this.leafId` and `_appendEntry` then sets
+    /// `leafId = entry.id`, so a linear session is a real chain rooted at one
+    /// explicit null.
     std::optional<std::string> active_append_parent_id;
-    /// True once the session branched off the linear chain: from then on
-    /// every message append carries an explicit parent, exactly like pi.
-    bool explicit_parent_chain{false};
 
     /// Deferred first flush (ADR 0064): while the journal is deferred — a
     /// new session before its first user or assistant message, gated exactly
@@ -69,7 +66,8 @@ namespace {
 /// serializer built alongside the line: the owning SessionStore's live tree
 /// receives exactly what the wire carries (redacted content, generated id
 /// and timestamp) without re-reading the file or round-tripping the line
-/// back through the stricter reader.
+/// back through the stricter reader. pi `_appendEntry` advances the leaf to
+/// every appended entry, so the next append hangs off this one.
 [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_mirrored_line(
     JsonlSessionStore::Impl& impl,
     support::Expected<EntrySerializer::SerializationResult> serialized) {
@@ -79,6 +77,7 @@ namespace {
     if (auto appended = impl.buffer_line(std::move(serialized->line)); !appended) {
         return std::unexpected(appended.error());
     }
+    impl.active_append_parent_id = serialized->entry.entry_id;
     std::vector<SessionEntry> entries;
     entries.push_back(std::move(serialized->entry));
     return entries;
@@ -213,10 +212,11 @@ support::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::
 
 AppendResult JsonlSessionStore::append(const ai::MessageVariant& message) {
     EntrySerializer serializer;
-    // pi `appendMessage`: the message hangs under the current leaf. In the
-    // linear case the flat-file shape leaves `parentId` null (the reader
-    // infers the chain from the file order); after a branch the parent is
-    // the branch target, exactly like pi.
+    // pi `appendMessage`: the message hangs under the current leaf, which is
+    // null only at the root position (`resetLeaf`). Every other append writes
+    // the previous entry's id, so a linear session is a real chain with one
+    // `parentId: null` at its root — the shape pi writes and reads back as one
+    // branch.
     auto parent_id = impl_->active_append_parent_id;
     auto serialized = serializer.serialize_message_entry(message, std::move(parent_id));
     if (!serialized) {
@@ -245,11 +245,10 @@ AppendResult JsonlSessionStore::append(const ai::MessageVariant& message) {
     const auto message_entry_id = serialized->entry.entry_id;
     outcome.entries.push_back(std::move(serialized->entry));
 
-    if (impl_->explicit_parent_chain) {
-        // The message itself is already durable; the next append continues
-        // the same explicit-parent chain.
-        impl_->active_append_parent_id = message_entry_id;
-    }
+    // pi `_appendEntry`: every appended entry becomes the active leaf, so the
+    // next append hangs off the entry just written. The message is already
+    // durable at this point.
+    impl_->active_append_parent_id = message_entry_id;
     return outcome;
 }
 
@@ -258,12 +257,9 @@ void JsonlSessionStore::move_append_parent(std::optional<std::string> target_id)
     // so a branch move writes nothing. What it does change is where the
     // NEXT append hangs: pi `appendMessage` hangs the message under the
     // current leaf, so the next message after a branch carries an explicit
-    // `parentId` — the branch target — exactly like pi's wire.
+    // `parentId` — the branch target — exactly like pi's wire, and the next
+    // message after `resetLeaf` carries an explicit `null` root.
     impl_->active_append_parent_id = std::move(target_id);
-    // A branch off the linear chain ends the flat-file shape: from here on
-    // every message append carries its explicit parent, so the reader
-    // follows the wire instead of inferring the chain from the file order.
-    impl_->explicit_parent_chain = true;
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_model_change(

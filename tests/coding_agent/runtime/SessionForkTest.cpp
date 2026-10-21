@@ -388,8 +388,8 @@ TEST_CASE("fork re-chains parents past labels and re-creates retained labels",
                 ai::text_from_user_message(*user) == "user-1";
         });
     REQUIRE(user_1 != tree.entries().end());
-    REQUIRE(user_1->parent_id.has_value());
-    const auto* parent = tree.getEntry(*user_1->parent_id);
+    REQUIRE(cch::harness::session::parent_entry_id(user_1->parent_id).has_value());
+    const auto* parent = tree.getEntry(*cch::harness::session::parent_entry_id(user_1->parent_id));
     REQUIRE(parent != nullptr);
     const auto* parent_user = parent->message
         ? std::get_if<ai::UserMessage>(&*parent->message)

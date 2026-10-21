@@ -342,10 +342,7 @@ void TreeSelectorComponent::build_active_path() {
         active_path_ids_.insert(*current);
         const auto node = tree_index_.find(*current);
         if (node == tree_index_.end()) break;
-        const auto& parent = node->second->entry.parent_id;
-        current = parent && !parent->empty()
-            ? std::optional<std::string>{*parent}
-            : std::nullopt;
+        current = harness::session::parent_entry_id(node->second->entry.parent_id);
     }
 }
 
@@ -460,9 +457,8 @@ void TreeSelectorComponent::apply_filter() {
         std::unordered_set<std::string> skip_set;
         for (const auto& flat : flat_nodes_) {
             const auto& entry = flat.node->entry;
-            if (entry.parent_id.has_value() &&
-                (folded_nodes_.contains(*entry.parent_id) ||
-                 skip_set.contains(*entry.parent_id))) {
+            const auto parent_id = harness::session::parent_entry_id(entry.parent_id);
+            if (parent_id.has_value() && (folded_nodes_.contains(*parent_id) || skip_set.contains(*parent_id))) {
                 skip_set.insert(entry.entry_id);
             }
         }
@@ -511,17 +507,13 @@ void TreeSelectorComponent::recalculate_visual_structure() {
         std::optional<std::string> current;
         const auto entry = tree_index_.find(node_id);
         if (entry != tree_index_.end()) {
-            const auto& parent = entry->second->entry.parent_id;
-            if (parent && !parent->empty()) current = *parent;
+            current = harness::session::parent_entry_id(entry->second->entry.parent_id);
         }
         while (current) {
             if (visible_ids.contains(*current)) return current;
             const auto node = tree_index_.find(*current);
             if (node == tree_index_.end()) break;
-            const auto& parent = node->second->entry.parent_id;
-            current = parent && !parent->empty()
-                ? std::optional<std::string>{*parent}
-                : std::nullopt;
+            current = harness::session::parent_entry_id(node->second->entry.parent_id);
         }
         return std::nullopt;
     };
@@ -587,10 +579,7 @@ std::size_t TreeSelectorComponent::find_nearest_visible_index(
         if (visible != visible_index.end()) return visible->second;
         const auto node = tree_index_.find(*current);
         if (node == tree_index_.end()) break;
-        const auto& parent = node->second->entry.parent_id;
-        current = parent && !parent->empty()
-            ? std::optional<std::string>{*parent}
-            : std::nullopt;
+        current = harness::session::parent_entry_id(node->second->entry.parent_id);
     }
     return filtered_nodes_.size() - 1;
 }

@@ -89,7 +89,7 @@ namespace {
 using Node = harness::session::SessionTreeNode;
 
 [[nodiscard]] Node with_parent(Node node, std::string parent_id) {
-    node.entry.parent_id = std::move(parent_id);
+    node.entry.parent_id = harness::session::parent_entry(std::move(parent_id));
     return node;
 }
 
@@ -546,7 +546,7 @@ TEST_CASE("tree selector renders branch-summary and compaction entries from pi-c
     root.entry.message = ai::MessageVariant{ai::user_text_message("question")};
     Node summary;
     summary.entry.entry_id = "bs1";
-    summary.entry.parent_id = "u0";
+    summary.entry.parent_id = cch::harness::session::parent_entry("u0");
     summary.entry.kind = harness::session::SessionEntryKind::BranchSummary;
     summary.entry.value = harness::session::BranchSummaryEntryValue{
         .from_id = "old-leaf",
@@ -557,7 +557,7 @@ TEST_CASE("tree selector renders branch-summary and compaction entries from pi-c
     };
     Node compaction;
     compaction.entry.entry_id = "cp1";
-    compaction.entry.parent_id = "bs1";
+    compaction.entry.parent_id = cch::harness::session::parent_entry("bs1");
     compaction.entry.kind = harness::session::SessionEntryKind::Compaction;
     compaction.entry.value = harness::session::CompactionEntryValue{
         .summary = "compacted history",

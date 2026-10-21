@@ -424,14 +424,14 @@ TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][sess
     CHECK(loaded->entries[0].entry_id == "sess-v3");
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
     CHECK(loaded->entries[1].entry_id == "model001");
-    CHECK_FALSE(loaded->entries[1].parent_id.has_value());
+    CHECK_FALSE(cch::harness::session::parent_entry_id(loaded->entries[1].parent_id).has_value());
     REQUIRE(std::holds_alternative<harness::session::ModelChangeValue>(loaded->entries[1].value));
     const auto& model_value = std::get<harness::session::ModelChangeValue>(loaded->entries[1].value);
     CHECK(model_value.provider == "openai");
     CHECK(model_value.model_id == "gpt-4o");
     CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
-    REQUIRE(loaded->entries[2].parent_id.has_value());
-    CHECK(*loaded->entries[2].parent_id == "model001");
+    REQUIRE(cch::harness::session::parent_entry_id(loaded->entries[2].parent_id).has_value());
+    CHECK(*cch::harness::session::parent_entry_id(loaded->entries[2].parent_id) == "model001");
     REQUIRE(std::holds_alternative<harness::session::ThinkingLevelChangeValue>(loaded->entries[2].value));
     const auto& thinking_value = std::get<harness::session::ThinkingLevelChangeValue>(loaded->entries[2].value);
     CHECK(thinking_value.thinking_level == "high");
@@ -792,7 +792,7 @@ TEST_CASE("model_change entry round-trips", "[harness][session][u9][compat-pi]")
     REQUIRE(loaded->entries.size() == 3);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
     CHECK(is_hex8(loaded->entries[1].entry_id));
-    CHECK_FALSE(loaded->entries[1].parent_id.has_value());
+    CHECK_FALSE(cch::harness::session::parent_entry_id(loaded->entries[1].parent_id).has_value());
     const auto& value = require_entry_value<harness::session::ModelChangeValue>(loaded->entries[1]);
     CHECK(value.provider == "openai");
     CHECK(value.model_id == "gpt-4o");
@@ -820,8 +820,8 @@ TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9][com
     REQUIRE(loaded);
     REQUIRE(loaded->entries.size() == 3);
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
-    REQUIRE(loaded->entries[1].parent_id.has_value());
-    CHECK(*loaded->entries[1].parent_id == "parent01");
+    REQUIRE(cch::harness::session::parent_entry_id(loaded->entries[1].parent_id).has_value());
+    CHECK(*cch::harness::session::parent_entry_id(loaded->entries[1].parent_id) == "parent01");
     const auto& value = require_entry_value<harness::session::ThinkingLevelChangeValue>(loaded->entries[1]);
     CHECK(value.thinking_level == "high");
 }
@@ -888,8 +888,8 @@ TEST_CASE("custom_message entry round-trips", "[harness][session][u9][compat-pi]
     CHECK(value.display == true);
     REQUIRE(value.details.has_value());
     CHECK(value.details->get<support::JsonValue::object_t>().at("key").get<std::string>() == "val");
-    REQUIRE(loaded->entries[1].parent_id.has_value());
-    CHECK(*loaded->entries[1].parent_id == "parent99");
+    REQUIRE(cch::harness::session::parent_entry_id(loaded->entries[1].parent_id).has_value());
+    CHECK(*cch::harness::session::parent_entry_id(loaded->entries[1].parent_id) == "parent99");
     CHECK(read_all(path).find("\"content\":\"injected content\"") != std::string::npos);
 }
 
@@ -1082,8 +1082,8 @@ TEST_CASE("the store never writes a leaf entry and the active leaf stays runtime
         CHECK(entry.raw_line.find(R"("type":"leaf")") == std::string::npos);
     }
     // The next append hung under the branch target, exactly like pi's wire.
-    REQUIRE(loaded->entries[3].parent_id.has_value());
-    CHECK(*loaded->entries[3].parent_id == first_id);
+    REQUIRE(cch::harness::session::parent_entry_id(loaded->entries[3].parent_id).has_value());
+    CHECK(*cch::harness::session::parent_entry_id(loaded->entries[3].parent_id) == first_id);
 }
 
 TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][session][u9][compat-pi]") {
@@ -1174,7 +1174,7 @@ TEST_CASE("open_existing appends under the last file entry after a reopened sess
     REQUIRE(appended != nullptr);
     // The reopened session's flat-file shape leaves the parent null and the
     // reader infers the chain from the file order.
-    CHECK_FALSE(appended->parent_id.has_value());
+    CHECK_FALSE(cch::harness::session::parent_entry_id(appended->parent_id).has_value());
     CHECK(third_id != appended->entry_id);
 }
 

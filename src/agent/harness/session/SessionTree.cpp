@@ -42,17 +42,20 @@ void SessionTree::index_appended_entry(std::size_t index) {
         id_to_index_[entry.entry_id] = index;
     }
 
-    // Determine parent: use explicit parent_id if set, otherwise infer
-    // from the chain tail's ID (linear chain).
+    // Determine parent: an explicit id is the parent; an explicit null is a
+    // root (pi's root shape, and what every append with a null leaf writes);
+    // only an ABSENT field falls back to the entry-order chain, the legacy
+    // flat-file reading pi meets solely as an un-migrated v1 file.
     std::string effective_parent;
-    if (entry.parent_id.has_value() && !entry.parent_id->empty()) {
-        effective_parent = *entry.parent_id;
-    } else if (chain_tail_.has_value()) {
+    if (const auto named = parent_entry_id(entry.parent_id)) {
+        effective_parent = *named;
+    } else if (entry.parent_id.kind == ParentIdKind::Absent && chain_tail_.has_value()) {
         effective_parent = *chain_tail_;
         // Record the effective parent for leaf-to-root traversal.
         inferred_parent_[entry.entry_id] = effective_parent;
     } else {
-        // First entry with no explicit parent: root, no children entry.
+        // An explicit root, or the first entry with no parent: no children
+        // entry.
         chain_tail_ = entry.entry_id;
         return;
     }
@@ -92,8 +95,15 @@ const SessionEntry* SessionTree::getEntry(std::string_view entry_id) const {
 
 std::optional<std::string> SessionTree::effective_parent_id(std::string_view entry_id) const {
     const auto* entry = getEntry(entry_id);
-    if (entry != nullptr && entry->parent_id.has_value() && !entry->parent_id->empty()) {
-        return entry->parent_id;
+    if (entry != nullptr) {
+        if (const auto named = parent_entry_id(entry->parent_id)) {
+            return named;
+        }
+        // An explicit null is a root: never fall through to the inferred
+        // chain.
+        if (entry->parent_id.kind == ParentIdKind::Root) {
+            return std::nullopt;
+        }
     }
     auto it = inferred_parent_.find(std::string{entry_id});
     if (it != inferred_parent_.end()) {
@@ -198,14 +208,14 @@ std::vector<SessionTreeNode> SessionTree::get_tree() const {
     for (const auto& entry : entries_) {
         SessionTreeNode node;
         node.entry = entry;
-        // The display copy's parent is the effective parent; entries whose
-        // wire parent is null but chain onto a predecessor (the C++
-        // flat-file shape) get the inferred parent, so the tree selector
-        // walks one consistent topology.
-        if (!node.entry.parent_id.has_value() || node.entry.parent_id->empty()) {
+        // The display copy's parent is the effective parent; a legacy entry
+        // whose `parentId` field is absent but chains onto a predecessor gets
+        // the inferred parent, so the tree selector walks one consistent
+        // topology. An explicit null stays a root.
+        if (node.entry.parent_id.kind == ParentIdKind::Absent) {
             const auto inferred = inferred_parent_.find(entry.entry_id);
             if (inferred != inferred_parent_.end()) {
-                node.entry.parent_id = inferred->second;
+                node.entry.parent_id = ParentId{.kind = ParentIdKind::Entry, .entry_id = inferred->second};
             }
         }
         auto label = labels.find(entry.entry_id);
@@ -223,16 +233,15 @@ std::vector<SessionTreeNode> SessionTree::get_tree() const {
     for (std::size_t index = 0; index < nodes.size(); ++index) {
         const auto& entry = nodes[index].entry;
         // The copied entry now carries the effective parent (explicit wire
-        // parent, or the inferred linear-chain parent for the C++ flat-file
-        // shape, exactly like `getBranch`/`buildSessionContext`).
-        const bool is_root =
-            !entry.parent_id.has_value() ||
-            *entry.parent_id == entry.entry_id;
+        // parent, or the inferred linear-chain parent for the legacy
+        // flat-file shape, exactly like `getBranch`/`buildSessionContext`).
+        const auto parent_id = parent_entry_id(entry.parent_id);
+        const bool is_root = !parent_id.has_value() || *parent_id == entry.entry_id;
         if (is_root) {
             root_indexes.push_back(index);
             continue;
         }
-        const auto parent_node = node_by_id.find(*entry.parent_id);
+        const auto parent_node = node_by_id.find(*parent_id);
         if (parent_node == node_by_id.end()) {
             root_indexes.push_back(index);
         } else {
@@ -319,9 +328,8 @@ const SessionEntry* SessionTree::root() const {
     if (entries_.empty()) return nullptr;
 
     for (const auto& entry : entries_) {
-        bool has_parent = entry.parent_id.has_value() &&
-                          !entry.parent_id->empty() &&
-                          getEntry(*entry.parent_id) != nullptr;
+        const auto parent_id = parent_entry_id(entry.parent_id);
+        const bool has_parent = parent_id.has_value() && getEntry(*parent_id) != nullptr;
         if (!has_parent) {
             return &entry;
         }
@@ -648,7 +656,8 @@ support::ExpectedVoid SessionTree::branchWithSummary(
 
         SessionEntry summary_entry;
         summary_entry.kind = SessionEntryKind::BranchSummary;
-        summary_entry.parent_id = std::string{entry_id};
+        summary_entry.parent_id = harness::session::ParentId{
+                .kind = harness::session::ParentIdKind::Entry, .entry_id = std::string{entry_id}};
         summary_entry.value = BranchSummaryEntryValue{
                 .from_id = std::string{ctx.from_leaf_id},
                 .summary = data.summary,

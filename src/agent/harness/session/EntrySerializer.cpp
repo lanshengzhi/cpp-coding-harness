@@ -251,10 +251,11 @@ struct EntryBaseResult {
 };
 
 /// The stored entry identity re-emitted as wire header fields: the
-/// round-trip counterpart of the fresh append base.
+/// round-trip counterpart of the fresh append base. `parent_id` keeps the
+/// three wire shapes so a parsed absent field stays absent.
 struct RoundTripBase {
     std::string id;
-    detail::NullableString parent_id;
+    std::optional<detail::NullableString> parent_id;
     std::string timestamp;
 };
 
@@ -275,7 +276,7 @@ struct RoundTripBase {
     SessionEntry entry;
     entry.kind = kind;
     entry.entry_id = std::move(base.id);
-    entry.parent_id = std::move(base.parent_id);
+    entry.parent_id = parent_id_from_optional(base.parent_id);
     entry.timestamp = base.timestamp_ms;
     entry.value = std::move(value);
     return entry;
@@ -317,11 +318,48 @@ template <typename Dto>
     return detail::NullableString{std::monostate{}};
 }
 
-[[nodiscard]] std::optional<std::string> optional_from_nullable(const detail::NullableString& value) {
-    if (const auto* text = std::get_if<std::string>(&value)) {
-        return *text;
+/// The wire spelling of a parsed `parentId`: an absent field stays absent, an
+/// explicit null stays null, and a value stays the value, so the round-trip
+/// writer reproduces the line it read.
+[[nodiscard]] std::optional<detail::NullableString> nullable_string(const ParentId& value) {
+    switch (value.kind) {
+    case ParentIdKind::Absent:
+        return std::nullopt;
+    case ParentIdKind::Root:
+        return detail::NullableString{std::monostate{}};
+    case ParentIdKind::Entry:
+        return detail::NullableString{value.entry_id};
     }
     return std::nullopt;
+}
+
+/// A DTO's `parentId` as the three wire shapes. Glaze's `NullableString`
+/// cannot tell an absent field from an explicit null (both parse to
+/// monostate), so an absent field is only distinguishable where the raw line
+/// is inspected (`parent_id_field`); a DTO read therefore reports null as
+/// `Root`, which is the shape every writer that populates this DTO emits.
+[[nodiscard]] ParentId parent_id_from_nullable(const detail::NullableString& value) {
+    if (const auto* text = std::get_if<std::string>(&value)) {
+        return ParentId{.kind = ParentIdKind::Entry, .entry_id = *text};
+    }
+    return ParentId{.kind = ParentIdKind::Root};
+}
+
+/// A generic JSON object's `parentId` as the three wire shapes: a missing key
+/// is `Absent`, an explicit null is `Root`, a string is `Entry`, and any
+/// other type is `Absent` (an unreadable parent is no parent).
+[[nodiscard]] ParentId parent_id_field(const support::JsonValue::object_t& object) {
+    const auto found = object.find("parentId");
+    if (found == object.end()) {
+        return ParentId{.kind = ParentIdKind::Absent};
+    }
+    if (found->second.get_if<support::JsonValue::null_t>() != nullptr) {
+        return ParentId{.kind = ParentIdKind::Root};
+    }
+    if (const auto* text = found->second.get_if<std::string>()) {
+        return ParentId{.kind = ParentIdKind::Entry, .entry_id = *text};
+    }
+    return ParentId{.kind = ParentIdKind::Absent};
 }
 
 [[nodiscard]] std::optional<int> parse_fixed_int(std::string_view text, std::size_t offset, std::size_t count) {
@@ -504,14 +542,22 @@ void populate_tree_fields(SessionEntry& entry, const support::JsonValue& value) 
         if (auto id = optional_string_field(*object, "id")) {
             entry.entry_id = *id;
         }
-        entry.parent_id = optional_string_field(*object, "parentId");
+        entry.parent_id = parent_id_field(*object);
     }
 }
 
+/// The id/timestamp fields a typed DTO carries. `parentId` comes from the raw
+/// payload instead: Glaze's `NullableString` collapses an absent field and an
+/// explicit null to the same monostate, so only the parsed JSON distinguishes
+/// pi's root from the legacy flat-file shape.
 template <typename Dto>
-void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto) {
+void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto, const support::JsonValue& payload) {
     entry.entry_id = dto.id;
-    entry.parent_id = optional_from_nullable(dto.parentId);
+    if (const auto* object = payload.get_if<support::JsonValue::object_t>()) {
+        entry.parent_id = parent_id_field(*object);
+    } else {
+        entry.parent_id = parent_id_from_nullable(dto.parentId);
+    }
     if constexpr (requires { dto.timestamp; }) {
         using TimestampField = std::remove_cvref_t<decltype(dto.timestamp)>;
         if constexpr (std::is_same_v<TimestampField, std::optional<std::string>>) {
@@ -595,7 +641,9 @@ template <typename Dto> void attach_entry_header(const EntryBaseResult& base, Dt
 /// The round-trip base already carries wire-shaped fields.
 template <typename Dto> void attach_entry_header(const RoundTripBase& base, Dto& dto) {
     dto.id = std::move(base.id);
-    dto.parentId = std::move(base.parent_id);
+    if (base.parent_id.has_value()) {
+        dto.parentId = *base.parent_id;
+    }
     dto.timestamp = std::move(base.timestamp);
 }
 
@@ -685,7 +733,7 @@ template <typename Dto, typename Build>
     entry.kind = kind;
     entry.raw_line = line;
     entry.payload = std::move(payload);
-    populate_tree_fields_from_dto(entry, *dto);
+    populate_tree_fields_from_dto(entry, *dto, entry.payload);
     if (auto built = build(*dto, entry); !built) {
         return std::unexpected(built.error());
     }
@@ -707,13 +755,18 @@ template <typename Dto, typename Build>
     SessionEntry entry;
     entry.kind = SessionEntryKind::Message;
     entry.entry_id = dto->id;
-    entry.parent_id = optional_from_nullable(dto->parentId);
+    entry.parent_id = parent_id_from_nullable(dto->parentId);
     if (dto->timestamp.has_value()) {
         entry.timestamp = parse_iso_timestamp_ms(*dto->timestamp);
     }
     entry.message = *message;
     entry.payload = std::move(payload);
     entry.raw_line = line;
+    // The raw payload is authoritative for `parentId`: the DTO cannot tell an
+    // absent field from an explicit null (see `populate_tree_fields_from_dto`).
+    if (const auto* object = entry.payload.get_if<support::JsonValue::object_t>()) {
+        entry.parent_id = parent_id_field(*object);
+    }
     return entry;
 }
 
@@ -976,7 +1029,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     SessionEntry entry;
     entry.kind = SessionEntryKind::Message;
     entry.entry_id = std::move(base.id);
-    entry.parent_id = std::move(base.parent_id);
+    entry.parent_id = parent_id_from_optional(base.parent_id);
     entry.timestamp = base.timestamp_ms;
     entry.message = std::move(redacted);
     return SerializationResult{
@@ -1166,7 +1219,7 @@ SessionEntry EntrySerializer::new_message_entry(
     SessionEntry entry;
     entry.kind = SessionEntryKind::Message;
     entry.entry_id = generate_entry_id();
-    entry.parent_id = std::move(parent_id);
+    entry.parent_id = parent_id_from_optional(parent_id);
     entry.timestamp = ms_since_epoch();
     entry.message = message;
     return entry;

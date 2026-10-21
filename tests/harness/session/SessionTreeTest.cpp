@@ -586,7 +586,7 @@ TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[ha
     harness::session::SessionEntry custom;
     custom.kind = harness::session::SessionEntryKind::CustomMessage;
     custom.entry_id = "cust001";
-    custom.parent_id = "msg001";
+    custom.parent_id = cch::harness::session::parent_entry("msg001");
     custom.timestamp = 1783209601234;
     custom.value = harness::session::CustomMessageEntryValue{
         .custom_type = "ext",
@@ -599,7 +599,7 @@ TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[ha
     harness::session::SessionEntry branch;
     branch.kind = harness::session::SessionEntryKind::BranchSummary;
     branch.entry_id = "branch001";
-    branch.parent_id = "cust001";
+    branch.parent_id = cch::harness::session::parent_entry("cust001");
     branch.timestamp = 1783209602345;
     branch.value = harness::session::BranchSummaryEntryValue{
         .from_id = "oldleaf",
@@ -613,7 +613,7 @@ TEST_CASE("buildSessionContext uses typed timestamps for extended entries", "[ha
     harness::session::SessionEntry compaction;
     compaction.kind = harness::session::SessionEntryKind::Compaction;
     compaction.entry_id = "compact1";
-    compaction.parent_id = "branch001";
+    compaction.parent_id = cch::harness::session::parent_entry("branch001");
     compaction.timestamp = 1783209603456;
     compaction.value = harness::session::CompactionEntryValue{
         .summary = "compact summary",
@@ -661,7 +661,7 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
     harness::session::SessionEntry thinking;
     thinking.kind = harness::session::SessionEntryKind::ThinkingLevelChange;
     thinking.entry_id = "think001";
-    thinking.parent_id = "model001";
+    thinking.parent_id = cch::harness::session::parent_entry("model001");
     thinking.value = harness::session::ThinkingLevelChangeValue{.thinking_level = "typed-thinking"};
     thinking.payload = ignored_payload_marker("thinking");
     loaded.entries.push_back(std::move(thinking));
@@ -669,7 +669,7 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
     harness::session::SessionEntry custom;
     custom.kind = harness::session::SessionEntryKind::CustomMessage;
     custom.entry_id = "custom01";
-    custom.parent_id = "think001";
+    custom.parent_id = cch::harness::session::parent_entry("think001");
     custom.value = harness::session::CustomMessageEntryValue{
         .custom_type = "typed-ext",
         .content = "typed content",
@@ -682,7 +682,7 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
     harness::session::SessionEntry branch;
     branch.kind = harness::session::SessionEntryKind::BranchSummary;
     branch.entry_id = "branch01";
-    branch.parent_id = "custom01";
+    branch.parent_id = cch::harness::session::parent_entry("custom01");
     branch.value = harness::session::BranchSummaryEntryValue{
         .from_id = "typed-from",
         .summary = "typed branch",
@@ -696,7 +696,7 @@ TEST_CASE("buildSessionContext reads known entry meaning from typed values", "[h
     harness::session::SessionEntry compaction;
     compaction.kind = harness::session::SessionEntryKind::Compaction;
     compaction.entry_id = "compact1";
-    compaction.parent_id = "branch01";
+    compaction.parent_id = cch::harness::session::parent_entry("branch01");
     compaction.value = harness::session::CompactionEntryValue{
         .summary = "typed compact",
         .first_kept_entry_id = "custom01",
@@ -839,7 +839,7 @@ TEST_CASE("SessionTree restores the leaf from the last tracked entry", "[harness
     harness::session::SessionEntry second;
     second.kind = harness::session::SessionEntryKind::Message;
     second.entry_id = "second01";
-    second.parent_id = "first001";
+    second.parent_id = cch::harness::session::parent_entry("first001");
     second.message = user_msg("second");
     loaded.entries.push_back(std::move(second));
 
@@ -896,7 +896,7 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
 
     auto append_writer = [&](const harness::session::SessionEntry& entry) -> support::ExpectedVoid {
         const auto& summary = std::get<harness::session::BranchSummaryEntryValue>(entry.value);
-        if (auto saved = store->append_branch_summary(entry.parent_id,
+        if (auto saved = store->append_branch_summary(cch::harness::session::parent_entry_id(entry.parent_id),
                     summary.from_id,
                     summary.summary,
                     summary.details,
@@ -918,7 +918,7 @@ TEST_CASE("branchWithSummary generates summary and switches leaf", "[harness][se
     // A branch summary should have been appended
     REQUIRE(appended_entries.size() == 1);
     CHECK(appended_entries[0].kind == harness::session::SessionEntryKind::BranchSummary);
-    CHECK(appended_entries[0].parent_id == root_id);
+    CHECK(cch::harness::session::parent_entry_id(appended_entries[0].parent_id) == std::optional<std::string>{root_id});
     REQUIRE(std::holds_alternative<harness::session::BranchSummaryEntryValue>(appended_entries[0].value));
     const auto& value = std::get<harness::session::BranchSummaryEntryValue>(appended_entries[0].value);
     CHECK(value.from_id == leaf_before);

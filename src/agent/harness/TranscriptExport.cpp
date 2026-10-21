@@ -37,7 +37,7 @@ TranscriptExportHandler transcript_export_handler(cch::harness::session::Session
         std::optional<std::string> parent_id;
         for (const auto& entry : branch) {
             auto chained = entry;
-            chained.parent_id = parent_id;
+            chained.parent_id = session::parent_id_from_optional(parent_id);
             auto line = serializer.serialize_entry(chained);
             if (!line) return std::unexpected(line.error());
             // `serialize_entry` already terminates the wire line, so appending

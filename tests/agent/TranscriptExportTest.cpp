@@ -71,7 +71,9 @@ std::string expected_transcript(const harness::session::SessionStore& store) {
     std::optional<std::string> parent_id;
     for (const auto& entry : branch) {
         auto chained = entry;
-        chained.parent_id = parent_id;
+        // pi writes `parentId: this.leafId`, so the first line is an explicit
+        // `null` root and every later line names the entry written before it.
+        chained.parent_id = cch::harness::session::parent_id_from_optional(parent_id);
         auto line = serializer.serialize_entry(chained);
         REQUIRE(line.has_value());
         REQUIRE(line->ends_with('\n'));
@@ -289,11 +291,12 @@ TEST_CASE("transcript export round-trips through Session Store load", "[agent][h
     for (std::size_t index = 0; index < branch.size(); ++index) {
         const auto& reloaded_entry = reloaded->entries[index + 1];
         CHECK(reloaded_entry.entry_id == branch[branch.size() - 1 - index].entry_id);
-        CHECK(reloaded_entry.parent_id == expected_parent);
+        CHECK(cch::harness::session::parent_entry_id(reloaded_entry.parent_id) == expected_parent);
         expected_parent = reloaded_entry.entry_id;
     }
-    CHECK(reloaded->entries[1].parent_id == std::optional<std::string>{});
-    CHECK(reloaded->entries[2].parent_id == std::optional<std::string>{first_id});
+    CHECK(reloaded->entries[1].parent_id.kind == cch::harness::session::ParentIdKind::Root);
+    CHECK(cch::harness::session::parent_entry_id(reloaded->entries[2].parent_id) ==
+            std::optional<std::string>{first_id});
 
     // The branch order survives the round trip.
     REQUIRE(reloaded->messages.size() == 2);
@@ -351,10 +354,16 @@ TEST_CASE("transcript export rewrites the branch parent chain to start at null",
     REQUIRE(store.append(user_message("second")).has_value());
     REQUIRE(store.append(user_message("third")).has_value());
 
-    // The stored entries carry no wire parent at all (the C++ flat-file shape
-    // infers the chain), so the exported chain below is the handler's rewrite.
-    for (const auto& entry : store.entries()) {
-        REQUIRE_FALSE(entry.parent_id.has_value());
+    // The store now writes pi's real chain (`parentId: this.leafId`), so the
+    // first entry is an explicit null root and each later one names its
+    // predecessor. The export still rewrites the chain itself, which the
+    // assertions below pin.
+    const auto stored = store.entries();
+    REQUIRE(stored.size() == 3);
+    CHECK(stored[0].parent_id.kind == harness::session::ParentIdKind::Root);
+    for (std::size_t i = 1; i < stored.size(); ++i) {
+        CHECK(stored[i].parent_id.kind == harness::session::ParentIdKind::Entry);
+        CHECK(stored[i].parent_id.entry_id == stored[i - 1].entry_id);
     }
 
     REQUIRE(harness::transcript_export_handler(store, destination.string())({}).has_value());

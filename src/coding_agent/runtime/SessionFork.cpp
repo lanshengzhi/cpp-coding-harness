@@ -286,7 +286,7 @@ struct LabelFacts {
     std::optional<std::string> chain_parent;
     for (const auto* entry : retained) {
         auto rewritten = *entry;
-        rewritten.parent_id = chain_parent;
+        rewritten.parent_id = harness::session::parent_id_from_optional(chain_parent);
         branch_entries.push_back(std::move(rewritten));
         chain_parent = entry->entry_id;
     }
@@ -294,7 +294,7 @@ struct LabelFacts {
         harness::session::SessionEntry label_entry;
         label_entry.kind = harness::session::SessionEntryKind::Label;
         label_entry.entry_id = generate_entry_id();
-        label_entry.parent_id = chain_parent;
+        label_entry.parent_id = harness::session::parent_id_from_optional(chain_parent);
         label_entry.timestamp = facts.timestamp;
         label_entry.value = harness::session::LabelEntryValue{
                 .target_id = target_id,
