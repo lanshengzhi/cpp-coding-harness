@@ -156,6 +156,15 @@ public:
     [[nodiscard]] TerminalTheme terminal_theme() const;
     [[nodiscard]] const LiveTheme& live_theme() const;
 
+    /// pi `getResolvedThemeColors`/`getThemeExportColors` source for the
+    /// `/export` HTML lane: the committed active theme (the last
+    /// successfully applied resolution, or the dark fallback after a failed
+    /// apply — never an in-memory `preview`).
+    [[nodiscard]] const ResolvedTheme& active_resolved_theme() const;
+    /// The terminal-reported default colors (pi's `terminalColors`), used by
+    /// the export layer to resolve `""` (terminal-default) theme tokens.
+    [[nodiscard]] const std::optional<cch::tui::TerminalColors>& reported_terminal_colors() const;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

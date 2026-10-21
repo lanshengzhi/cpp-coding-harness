@@ -40,6 +40,18 @@ namespace cch::harness::session {
 /// the lock, so a concurrent append can never invalidate a result. Entry
 /// order across the two append paths is the caller's responsibility (the
 /// commitment channel drains before a mid-run typed append).
+/// pi wire-form session snapshot for the `/export` HTML lane
+/// (`SessionManager.getHeader`/`getEntries`/`getLeafId`): the header object
+/// and every tracked entry object, each as one JSON object without its line
+/// terminator, in store order.
+struct SessionWireSnapshot {
+    std::string header;
+    std::vector<std::string> entries;
+    /// pi `getLeafId`: the active leaf entry id; empty at the root position
+    /// (the caller maps that to JSON null).
+    std::string leaf_id;
+};
+
 class SessionStore final {
 public:
     /// Create a new JSONL session file (header written durably) with an
@@ -153,6 +165,12 @@ public:
     /// pi `getEntries`: every tracked entry in store order (excluding the
     /// session header), as snapshot copies.
     [[nodiscard]] std::vector<SessionEntry> entries() const;
+    /// The `/export` HTML lane's payload inputs, taken under one append
+    /// lock: the session header and every tracked entry as their pi wire
+    /// JSON objects, plus the active leaf id. The wire encoding stays
+    /// private to this package — like `create_from_entries`, this is a
+    /// typed export surface, not generic serialization machinery.
+    [[nodiscard]] support::Expected<SessionWireSnapshot> export_wire_snapshot() const;
     /// pi `getLabel`: the entry's latest label, nullopt when unset/cleared.
     [[nodiscard]] std::optional<std::string> get_label(
         std::string_view entry_id) const;

@@ -398,7 +398,11 @@ namespace {
         resolved_colors.emplace(color_name, std::move(*resolved));
     }
 
-    ResolvedTheme theme{.name = std::move(name), .export_colors = std::move(export_colors)};
+    ResolvedTheme theme{
+            .name = std::move(name),
+            .export_colors = std::move(export_colors),
+            .vars = std::move(variables),
+    };
     for (const auto token : kAllThemeTokens) {
         theme.colors[static_cast<std::size_t>(token)] =
             std::move(resolved_colors.at(std::string(theme_token_name(token))));

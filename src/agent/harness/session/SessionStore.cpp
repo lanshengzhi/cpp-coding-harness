@@ -272,6 +272,26 @@ std::vector<SessionEntry> SessionStore::entries() const {
     return impl_->tree.entries();
 }
 
+support::Expected<SessionWireSnapshot> SessionStore::export_wire_snapshot() const {
+    std::lock_guard lock(impl_->mutex);
+    const EntrySerializer serializer;
+    auto header = serializer.serialize_header(impl_->tree.metadata());
+    if (!header) return std::unexpected(header.error());
+    SessionWireSnapshot snapshot;
+    snapshot.header = std::move(*header);
+    snapshot.leaf_id = impl_->tree.leaf_id();
+    const auto tree_entries = impl_->tree.entries();
+    snapshot.entries.reserve(tree_entries.size());
+    for (const auto& entry : tree_entries) {
+        auto line = serializer.serialize_entry(entry);
+        if (!line) return std::unexpected(line.error());
+        // Both arms normalize to an unterminated wire line (`serialize_entry`
+        // terminates its line; `serialize_header` never does).
+        snapshot.entries.push_back(line->ends_with('\n') ? line->substr(0, line->size() - 1) : std::move(*line));
+    }
+    return snapshot;
+}
+
 std::optional<std::string> SessionStore::get_label(std::string_view entry_id) const {
     std::lock_guard lock(impl_->mutex);
     return impl_->tree.get_label(entry_id);

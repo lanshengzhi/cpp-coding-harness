@@ -1,6 +1,6 @@
 #include <cch/tui/ProgramStatus.hpp>
 
-#include "tui/Base64.hpp"
+#include <cch/tui/Base64.hpp>
 
 #include <cstddef>
 #include <exception>
@@ -192,7 +192,7 @@ std::string format_program_status(const ProgramStatus& status) {
             truncate_utf8(trim_ascii(sanitize_message(status.message.value_or(std::string{}))), kMaxMessageBytes);
     if (!message.empty()) {
         pairs += ":msg=";
-        pairs += detail::base64_encode(message);
+        pairs += base64_encode(message);
     }
     return "\x1b]7501;" + pairs + "\x1b\\";
 }

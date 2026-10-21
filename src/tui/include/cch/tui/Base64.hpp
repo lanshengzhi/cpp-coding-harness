@@ -5,12 +5,12 @@
 #include <string>
 #include <string_view>
 
-namespace cch::tui::detail {
+namespace cch::tui {
 
 /// Standard base64 with padding (pi `Buffer.toString("base64")`). One helper
 /// for the owning package: the program status message, the iTerm2 image
-/// filename parameter, and the clipboard selection payload all encode the same
-/// way.
+/// filename parameter, the clipboard selection payload, and the HTML export's
+/// session-data payload all encode the same way.
 [[nodiscard]] inline std::string base64_encode(std::string_view value) {
     constexpr std::string_view kAlphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     std::string result;
@@ -31,4 +31,4 @@ namespace cch::tui::detail {
     return result;
 }
 
-} // namespace cch::tui::detail
+} // namespace cch::tui

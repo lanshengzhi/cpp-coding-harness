@@ -1524,6 +1524,25 @@ runtime::McpSessionManager* detail::AgentSessionInteractiveAccess::mcp_manager(A
     return session.impl_->services_.mcp_manager.get();
 }
 
+std::vector<ai::Tool> detail::AgentSessionInteractiveAccess::active_tool_definitions(const AgentSession& session) {
+    if (!session.impl_ || !session.impl_->agent_) {
+        return {};
+    }
+    const auto& agent = *session.impl_->agent_;
+    const auto definitions = agent.tool_definitions();
+    const auto active = agent.active_tools();
+    std::vector<ai::Tool> tools;
+    tools.reserve(active.size());
+    for (const auto& name : active) {
+        const auto found = std::find_if(definitions.begin(), definitions.end(),
+                [&](const ai::Tool& tool) { return tool.name == name; });
+        if (found != definitions.end()) {
+            tools.push_back(*found);
+        }
+    }
+    return tools;
+}
+
 boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>>
 detail::AgentSessionInteractiveAccess::run_user_bash(AgentSession& session,
         std::string command,

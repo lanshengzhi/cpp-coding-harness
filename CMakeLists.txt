@@ -34,6 +34,7 @@ cch_runtime_install_rules(
     PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}"
     LICENSE_FILES ${CCH_RUNTIME_LICENSE_FILES}
     CODEMODE_GUEST "${CMAKE_CURRENT_SOURCE_DIR}/fixtures/codemode/quickjs/quickjs.wasm"
+    EXPORT_HTML_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pi-export-html"
     EXTERNAL_INCLUDE_ROOTS ${CCH_PARITY_EXTERNAL_INCLUDE_ROOTS}
 )
 

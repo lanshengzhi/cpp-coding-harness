@@ -62,6 +62,15 @@ function(cch_runtime_collect_licenses out_var)
         message(FATAL_ERROR "Vendored stb license not found: '${stb_license}'")
     endif()
     list(APPEND licenses "stb=${stb_license}")
+    # The HTML export template assets are vendored verbatim from pi
+    # (third_party/pi-export-html/README.md records the frozen revision), so
+    # the Runtime install carries pi's MIT notice like any other vendored
+    # third-party source.
+    set(pi_license "${CMAKE_CURRENT_SOURCE_DIR}/third_party/pi-export-html/LICENSE")
+    if(NOT EXISTS "${pi_license}")
+        message(FATAL_ERROR "Vendored pi export-html license not found: '${pi_license}'")
+    endif()
+    list(APPEND licenses "pi=${pi_license}")
     set(${out_var} "${licenses}" PARENT_SCOPE)
 endfunction()
 
@@ -71,6 +80,7 @@ endfunction()
 #     PROJECT_ROOT <path>
 #     LICENSE_FILES <name=path> [...]
 #     CODEMODE_GUEST <path>
+#     [EXPORT_HTML_DIR <path>]
 #     [EXTERNAL_INCLUDE_ROOTS <path> [...]]
 # )
 #
@@ -81,12 +91,16 @@ endfunction()
 # (`quickjs.wasm`) as share/<target>/codemode/quickjs.wasm. The guest ships
 # next to the installed executable because `default_codemode_guest_wasm_path`
 # resolves it there (pi's `getQuickJSWasmPath` shape), with no resolution
-# environment variable. MANIFEST, PROJECT_ROOT, and EXTERNAL_INCLUDE_ROOTS are
-# the same Parity Architecture Gate inputs the configure/build phases use; the
-# generated gate revalidates them at install time.
+# environment variable. EXPORT_HTML_DIR optionally stages the vendored pi
+# export-html template directory (template.html/css/js plus the marked and
+# highlight.js bundles) as share/<target>/export-html/, which the HTML export
+# resolves next to the installed executable the same way. MANIFEST,
+# PROJECT_ROOT, and EXTERNAL_INCLUDE_ROOTS are the same Parity Architecture
+# Gate inputs the configure/build phases use; the generated gate revalidates
+# them at install time.
 function(cch_runtime_install_rules)
     set(options "")
-    set(one_value_keywords TARGET MANIFEST PROJECT_ROOT CODEMODE_GUEST)
+    set(one_value_keywords TARGET MANIFEST PROJECT_ROOT CODEMODE_GUEST EXPORT_HTML_DIR)
     set(multi_value_keywords LICENSE_FILES EXTERNAL_INCLUDE_ROOTS)
     cmake_parse_arguments(arg "${options}" "${one_value_keywords}" "${multi_value_keywords}" ${ARGN})
 
@@ -169,4 +183,25 @@ function(cch_runtime_install_rules)
     install(FILES "${arg_CODEMODE_GUEST}"
         DESTINATION "share/${arg_TARGET}/codemode"
         RENAME "quickjs.wasm")
+
+    # The vendored pi export-html template assets ship with the installed
+    # Runtime so `/export` writes HTML without the source tree (pi bundles
+    # the same directory in its distribution); resolution is by path next to
+    # the executable, never an environment variable.
+    if(DEFINED arg_EXPORT_HTML_DIR AND NOT "${arg_EXPORT_HTML_DIR}" STREQUAL "")
+        foreach(asset IN ITEMS
+                template.html
+                template.css
+                template.js
+                vendor/marked.min.js
+                vendor/highlight.min.js)
+            if(NOT EXISTS "${arg_EXPORT_HTML_DIR}/${asset}")
+                message(FATAL_ERROR
+                    "cch_runtime_install_rules: export-html asset not found: '${arg_EXPORT_HTML_DIR}/${asset}'")
+            endif()
+            get_filename_component(asset_dir "${asset}" DIRECTORY)
+            install(FILES "${arg_EXPORT_HTML_DIR}/${asset}"
+                DESTINATION "share/${arg_TARGET}/export-html/${asset_dir}")
+        endforeach()
+    endif()
 endfunction()

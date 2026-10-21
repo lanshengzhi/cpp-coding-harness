@@ -23,10 +23,11 @@ struct BuiltinSlashCommand {
 /// as an extension command (`extensions/mcp/index.ts` `registerCommand`), and
 /// Pike's built-in manager merges it into the same palette (#884). The names
 /// with no surface are
-/// the Deferred slashes (`/export` `/import` `/share` `/changelog` `/clone`),
+/// the Deferred slashes (`/import` `/share` `/changelog` `/clone`),
 /// the hidden pi-only `/debug` developer entry, `/bug` (pi's own
 /// bug-reporting endpoint: not-applicable, issue #793), and the easter eggs;
-/// a typed absent name is submitted as an ordinary Agent Prompt: the router
+/// `/export` is wired for real (JSONL transcript + pi-faithful HTML default,
+/// #1044); a typed absent name is submitted as an ordinary Agent Prompt: the router
 /// passes every unrecognized token through, matching pi's fall-through (issue
 /// #792).
 /// The `/reload` description drops "extensions" (no extensions

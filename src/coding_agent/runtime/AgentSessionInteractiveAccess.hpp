@@ -1,6 +1,7 @@
 #pragma once
 
 #include "coding_agent/AgentSession.hpp"
+#include <cch/ai/Tool.hpp>
 #include <cch/support/Error.hpp>
 #include "coding_agent/runtime/McpSessionManager.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
@@ -9,6 +10,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace cch::coding_agent::detail {
 
@@ -27,6 +29,10 @@ public:
     /// Whether the session's project scope is trusted (pi
     /// `settingsManager.isProjectTrusted()`).
     [[nodiscard]] static bool is_project_trusted(const AgentSession& session);
+
+    /// pi `AgentState.tools` for `/export`'s HTML lane: the active tools'
+    /// definitions (name, description, parameters) in active-tool order.
+    [[nodiscard]] static std::vector<ai::Tool> active_tool_definitions(const AgentSession& session);
 
     [[nodiscard]] static boost::asio::awaitable<support::Expected<runtime::UserBashCompletion>>
     run_user_bash(

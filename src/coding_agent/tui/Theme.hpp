@@ -11,10 +11,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 
 namespace cch::coding_agent::tui {
@@ -78,6 +80,12 @@ struct ResolvedTheme {
     std::string name;
     std::array<ResolvedThemeColor, kThemeTokenCount> colors{};
     ThemeExportColors export_colors;
+    /// pi `themeJson.vars` retained raw (the same `string | xterm index`
+    /// spelling as `ThemeExportValueVariant`): the HTML export layer
+    /// resolves `export`-section variable references through it (pi
+    /// `getThemeExportColors` re-reads the theme JSON; retaining the map
+    /// avoids the second read).
+    std::map<std::string, ThemeExportValueVariant, std::less<>> vars{};
 
     bool operator==(const ResolvedTheme&) const = default;
 };

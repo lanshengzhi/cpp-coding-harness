@@ -8,9 +8,10 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
     // pi-verbatim strings; 17 of that catalog's 22 entries were ported, and
     // upstream has since added "thinking" — ported in #791 — and "bug" —
     // not-applicable, #793 — so f07218c4 carries 24 entries and this catalog
-    // 18). The names with no surface: "/export" "/import" "/share"
+    // 18). The names with no surface: "/import" "/share"
     // "/changelog" "/clone" (Deferred), the hidden "/debug" developer entry,
-    // "/bug", and the easter eggs.
+    // "/bug", and the easter eggs. "/export" is wired for real (JSONL
+    // transcript + pi-faithful HTML default, #1044).
     static const std::vector<BuiltinSlashCommand> kCommands{
             {"settings", "Open settings menu", {}},
             {"model", "Select model (opens selector UI)", "<provider/model>"},
@@ -38,7 +39,9 @@ const std::vector<BuiltinSlashCommand>& builtin_slash_commands() {
             {"mcp",
                     "Manage MCP servers: sign in, reconnect, enable or disable, and change exposure",
                     "[action] [server]"},
-            {"export", "Export session transcript", "<path>"},
+            // pi v1.3.0 "/export": HTML is the default lane; a ".jsonl"
+            // destination takes the transcript lane instead (#1044).
+            {"export", "Export session (HTML default, or specify path: .html/.jsonl)", "[path]"},
     };
     return kCommands;
 }

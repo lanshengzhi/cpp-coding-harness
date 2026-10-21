@@ -1,6 +1,6 @@
 #include <cch/tui/TerminalImage.hpp>
 
-#include "tui/Base64.hpp"
+#include <cch/tui/Base64.hpp>
 
 #include <cch/support/Error.hpp>
 #include <algorithm>
@@ -204,7 +204,7 @@ constexpr std::string_view kCellSizeResponsePrefix{"\x1b[6;"};
         --decoded_size;
     auto parameters =
             std::format("inline=1;width={};height={};size={}", image.region.columns, image.region.rows, decoded_size);
-    if (image.filename) parameters += ";name=" + detail::base64_encode(*image.filename);
+    if (image.filename) parameters += ";name=" + base64_encode(*image.filename);
     return std::format("\x1b]1337;File={}:{}\x07", parameters, image.encoded_data);
 }
 

@@ -53,6 +53,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ExternalEditorTest.cpp
         tests/coding_agent/tui/ImageTranscoderTest.cpp
         tests/coding_agent/tui/ChatContainerTest.cpp
+        tests/coding_agent/tui/HtmlExportTest.cpp
         tests/coding_agent/tui/TerminationSignalsTest.cpp
         tests/coding_agent/tui/tool_renderers/BashRendererTest.cpp
         tests/coding_agent/tui/tool_renderers/EditRendererTest.cpp
@@ -173,6 +174,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/FullscreenExitOutputTest.cpp
         tests/coding_agent/tui/FullscreenSettingsInteractiveTest.cpp
         tests/coding_agent/tui/FullscreenSettingsEvidenceTest.cpp
+        tests/coding_agent/tui/ExportSlashCommandInteractiveTest.cpp
         tests/coding_agent/tui/InteractiveBootE2ETest.cpp
         tests/coding_agent/tui/InteractiveModeTest.cpp
         tests/coding_agent/tui/InteractiveFrameTickerTest.cpp

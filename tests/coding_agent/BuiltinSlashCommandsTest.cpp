@@ -72,10 +72,12 @@ TEST_CASE(
     REQUIRE(quit != nullptr);
     CHECK(quit->description == "Quit pike");
 
+    // pi v1.3.0 "/export": HTML default, ".jsonl" destination switches
+    // lanes (#1044).
     const auto* export_command = by_name("export");
     REQUIRE(export_command != nullptr);
-    CHECK(export_command->description == "Export session transcript");
-    CHECK(export_command->argument_hint == "<path>");
+    CHECK(export_command->description == "Export session (HTML default, or specify path: .html/.jsonl)");
+    CHECK(export_command->argument_hint == "[path]");
 }
 
 TEST_CASE("unported and router-only commands are absent from the autocomplete catalog",

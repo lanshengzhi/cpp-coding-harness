@@ -5,8 +5,10 @@
 
 #include "InteractiveEngine.hpp"
 
+#include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/tui/ClipboardWrite.hpp"
 #include "coding_agent/tui/ErrorPresentation.hpp"
+#include "coding_agent/tui/HtmlExport.hpp"
 #include "coding_agent/tui/InteractiveView.hpp"
 #include "coding_agent/tui/McpManagerFlow.hpp"
 #include "coding_agent/tui/ModelFlowController.hpp"
@@ -348,10 +350,6 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
         if (session_ == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Session, "No active session for /export"));
         }
-        if (invocation.argument.empty()) {
-            return std::unexpected(
-                    support::make_error(support::ErrorCode::Validation, "/export requires a destination path"));
-        }
         const auto session_path = session_->session_path();
         if (!session_path) {
             return std::unexpected(
@@ -359,11 +357,39 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
         }
         auto store = harness::session::SessionStore::open_existing(*session_path);
         if (!store) return std::unexpected(store.error());
-        auto handler = harness::transcript_export_handler(*store, invocation.argument);
-        auto exported = handler({});
+        // pi `handleExportCommand`: a `.jsonl` destination takes the JSONL
+        // lane; every other spelling (including no destination at all)
+        // exports HTML, with pi's default output name filling the empty
+        // destination.
+        if (invocation.argument.ends_with(".jsonl")) {
+            auto handler = harness::transcript_export_handler(*store, invocation.argument);
+            auto exported = handler({});
+            if (!exported) return std::unexpected(exported.error());
+            if (view_ != nullptr) {
+                view_->append_status_message(std::format("Transcript exported to {}", *exported));
+            }
+            return {};
+        }
+        const auto appearance = theme_controller_ != nullptr &&
+                        theme_controller_->terminal_theme() == tui::TerminalTheme::Light
+                ? tui::TerminalAppearance::Light
+                : tui::TerminalAppearance::Dark;
+        auto theme = tui::make_html_export_theme(
+                theme_controller_ != nullptr ? theme_controller_->active_resolved_theme() : tui::builtin_dark_theme(),
+                theme_controller_ != nullptr ? theme_controller_->reported_terminal_colors() : std::nullopt,
+                appearance);
+        if (!theme) return std::unexpected(theme.error());
+        tui::HtmlExportExtras extras;
+        const auto system_prompt = session_->snapshot().agent_state.system_prompt;
+        if (!system_prompt.empty()) {
+            extras.system_prompt = system_prompt;
+        }
+        extras.tools = detail::AgentSessionInteractiveAccess::active_tool_definitions(*session_);
+        auto exported = tui::export_session_to_html(
+                *store, invocation.argument, *session_path, *theme, extras);
         if (!exported) return std::unexpected(exported.error());
         if (view_ != nullptr) {
-            view_->append_status_message(std::format("Transcript exported to {}", *exported));
+            view_->append_status_message(std::format("Session exported to: {}", *exported));
         }
         return {};
     }

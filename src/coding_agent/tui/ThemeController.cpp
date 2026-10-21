@@ -219,9 +219,11 @@ struct ThemeController::Impl {
         auto loaded = load_theme_by_name(name, custom_themes_dir, registered);
         std::optional<std::string> error;
         if (loaded) {
+            active_theme = *loaded;
             live.replace(std::move(*loaded), capability);
             active_name = std::string{name};
         } else {
+            active_theme = builtin_dark_theme();
             live.replace(builtin_dark_theme(), capability);
             active_name = "dark";
             error = combined_theme_error(loaded.error());
@@ -316,6 +318,10 @@ struct ThemeController::Impl {
     ThemeChangedSink on_changed;
     TerminalTheme terminal_theme{TerminalTheme::Dark};
     std::string active_name{"dark"};
+    /// The committed active theme, mirrored into `live` by
+    /// `apply_theme_name`; `/export`'s HTML lane reads it (and never an
+    /// in-memory `preview`).
+    ResolvedTheme active_theme{builtin_dark_theme()};
     std::shared_ptr<ReportDispatch<ThemeTerminalColorsSink>> color_dispatch{
             std::make_shared<ReportDispatch<ThemeTerminalColorsSink>>()};
     std::shared_ptr<ReportDispatch<ThemeTerminalColorSchemeSink>> scheme_dispatch{
@@ -519,6 +525,14 @@ TerminalTheme ThemeController::terminal_theme() const {
 
 const LiveTheme& ThemeController::live_theme() const {
     return impl_->live;
+}
+
+const ResolvedTheme& ThemeController::active_resolved_theme() const {
+    return impl_->active_theme;
+}
+
+const std::optional<cch::tui::TerminalColors>& ThemeController::reported_terminal_colors() const {
+    return impl_->terminal_colors;
 }
 
 ResolvedTheme init_boot_theme(

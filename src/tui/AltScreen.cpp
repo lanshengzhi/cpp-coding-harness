@@ -1,6 +1,6 @@
 #include <cch/tui/AltScreen.hpp>
 
-#include "tui/Base64.hpp"
+#include <cch/tui/Base64.hpp>
 #include "tui/Layout.hpp"
 #include "tui/LineCompositor.hpp"
 #include "tui/MouseRouting.hpp"
@@ -163,7 +163,7 @@ struct SelectionWordSegment {
 }
 
 [[nodiscard]] support::ExpectedVoid write_osc52(Terminal& terminal, std::string_view text) {
-    return terminal.write(std::format("\x1b]52;c;{}\x07", detail::base64_encode(text)));
+    return terminal.write(std::format("\x1b]52;c;{}\x07", base64_encode(text)));
 }
 
 void scroll_scrollbar_to_pointer(ScrollView& scroll_view,
