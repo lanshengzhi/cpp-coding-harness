@@ -1,7 +1,7 @@
 #include "CompletionsPipeline.hpp"
 
 #include "CompletionsEvents.hpp"
-#include "MessageConversion.hpp"
+#include "ai/api/CompletionsPayload.hpp"
 #include "support/CancellationBridge.hpp"
 #include "ai/Headers.hpp"
 #include "ai/SimpleOptions.hpp"
@@ -99,7 +99,7 @@ namespace {
 support::Expected<support::StreamRequest> build_stream_request(
         std::string_view base_url, const Model& model, const AiContext& context, const PreparedStreamOptions& options) {
     const auto& auth = options.auth;
-    auto payload = build_openai_completions_payload(model, context, options);
+    auto payload = build_completions_payload(model, context, options);
     if (!payload) {
         return std::unexpected(payload.error());
     }

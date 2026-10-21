@@ -34,7 +34,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/support/ScriptedProvider.cpp
         tests/ai/MessageContractTest.cpp
-        tests/ai/MessageConversionTest.cpp
+        tests/ai/CompletionsPayloadTest.cpp
         tests/ai/ModelTest.cpp
         tests/ai/ModelsTest.cpp
         tests/ai/ModelsGatewayTest.cpp

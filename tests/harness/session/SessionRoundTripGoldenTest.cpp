@@ -150,7 +150,7 @@ namespace {
 }
 
 /// pi `convertToLlm`-equivalent applied to C++ context messages — the exact
-/// per-role conversion the provider adapters run (MessageConversion.cpp uses
+/// per-role conversion the adapter runs (ai/api/MessageNormalization.cpp uses
 /// these same Message.hpp helpers), producing what the model sees.
 [[nodiscard]] std::vector<ai::MessageVariant> to_llm_messages(
     const std::vector<ai::MessageVariant>& messages) {
