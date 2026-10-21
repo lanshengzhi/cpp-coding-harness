@@ -7,8 +7,8 @@
   "platform": "linux-x86_64-glibc",
   "method": {
     "rule": "Every audit source row keeps its identity through sourceAliases; consolidated ids are owner-qualified; membership, implementation and verification stay separate; every included row states its remaining work; a row is upstream-captured only through a registered artifact.",
-    "sourceRowCount": 1460,
-    "consolidatedRowCount": 1460,
+    "sourceRowCount": 1464,
+    "consolidatedRowCount": 1464,
     "groups": [
       "group-tool-execution-duration",
       "group-native-extension-lifecycle",
@@ -67,7 +67,7 @@
       "report": "docs/research/pi-v1.3.0/1051-native-tui-consumers-and-residuals.md",
       "family": "audit-1051",
       "schema": "pike/pi-v1.3.0-audit-ledger/1",
-      "rows": 46
+      "rows": 50
     },
     {
       "ticket": "1052",
@@ -232,13 +232,13 @@
     }
   ],
   "counts": {
-    "rows": 1460,
+    "rows": 1464,
     "byLane": {
       "1047": 32,
       "1048": 30,
       "1049": 20,
       "1050": 954,
-      "1051": 46,
+      "1051": 50,
       "1052": 31,
       "1053": 68,
       "1054": 111,
@@ -251,7 +251,7 @@
       "cch_ai": 4,
       "cch_chord": 65,
       "cch_codemode": 51,
-      "cch_coding_agent": 155,
+      "cch_coding_agent": 159,
       "cch_durable": 212,
       "cch_mcp": 19,
       "cch_tui": 925
@@ -279,13 +279,13 @@
       },
       "cch_coding_agent": {
         "implemented": 73,
-        "missing": 21,
-        "not-applicable": 5,
-        "partial": 56
+        "missing": 22,
+        "not-applicable": 6,
+        "partial": 58
       },
       "cch_durable": {
-        "implemented": 3,
-        "missing": 120,
+        "implemented": 2,
+        "missing": 121,
         "not-applicable": 2,
         "partial": 87
       },
@@ -302,39 +302,35 @@
       }
     },
     "membership": {
-      "excluded": 26,
-      "no-decision": 2,
-      "supported": 1432
+      "excluded": 29,
+      "supported": 1435
     },
     "implementation": {
-      "implemented": 970,
-      "missing": 245,
-      "not-applicable": 17,
-      "partial": 228
+      "implemented": 969,
+      "missing": 247,
+      "not-applicable": 18,
+      "partial": 230
     },
     "verification": {
-      "not-applicable": 25,
-      "unverified": 1027,
+      "not-applicable": 28,
+      "unverified": 1028,
       "upstream-captured": 408
     },
     "evidenceRoute": {
       "captured": 408,
       "artifact-only": 0,
       "related-captured": 28,
-      "declared-comparison": 29,
-      "cpp-regression-only": 12,
+      "declared-comparison": 32,
+      "cpp-regression-only": 10,
       "unobserved": 58,
       "unobserved-static": 0,
       "historical-v1.0.4": 858,
       "not-audited": 42,
       "not-applicable": 0,
-      "excluded": 25
+      "excluded": 28
     },
-    "unobservedSupported": 1025,
-    "noDecision": [
-      "cch_coding_agent:Session:entry:leaf-marker",
-      "cch_durable:Session:storage:sqlite-alternative"
-    ],
+    "unobservedSupported": 1028,
+    "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
       "cch_ai:Thinking:cross-model-transformation",
@@ -347,12 +343,15 @@
       "cch_chord:excluded:rpc-links",
       "cch_codemode:codemode-cloudflare-durable-object",
       "cch_codemode:codemode-models-provider-execution",
+      "cch_coding_agent:Session:entry:leaf-marker",
       "cch_coding_agent:excluded-session-share",
+      "cch_coding_agent:excluded-session-share-command",
       "cch_coding_agent:excluded-third-party-ts-extensions",
       "cch_coding_agent:print-mode-json",
       "cch_coding_agent:settings-runtime-validation",
       "cch_coding_agent:thirdparty-plugins-excluded",
       "cch_durable:Interchange:history",
+      "cch_durable:Session:storage:sqlite-alternative",
       "cch_durable:Storage:sqlite:cloudflare",
       "cch_durable:cloudflare-excluded",
       "cch_durable:ssh-daemon-excluded",
@@ -363,7 +362,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1027,
+    "missingObservationRows": 1028,
     "scenarioCoverage": {
       "scenarios": 416,
       "scenarioNamed": 320,
@@ -1513,7 +1512,11 @@
       "residual-808-model-selector": "cch_coding_agent:residual-808-model-selector",
       "excluded-third-party-ts-extensions": "cch_coding_agent:excluded-third-party-ts-extensions",
       "excluded-ai-timing-thinking": "cch_ai:excluded-ai-timing-thinking",
-      "excluded-session-share": "cch_coding_agent:excluded-session-share"
+      "excluded-session-share": "cch_coding_agent:excluded-session-share",
+      "export-jsonl-branch": "cch_coding_agent:export-jsonl-branch",
+      "export-html": "cch_coding_agent:export-html",
+      "import-session": "cch_coding_agent:import-session",
+      "excluded-session-share-command": "cch_coding_agent:excluded-session-share-command"
     },
     "1052": {
       "mcp-client-lifecycle": "cch_mcp:mcp-client-lifecycle",
@@ -12482,35 +12485,31 @@
         "83114817:packages/agent/src/harness/types.ts:448-464"
       ],
       "frozenSymbols": [],
-      "membership": "no-decision",
-      "implementation": "implemented",
-      "verification": "unverified",
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
       "owner": "cch_coding_agent",
       "consumer": "C++ branch/tree navigation, resume topology",
       "consumerOwners": [
         "cch_coding_agent"
       ],
-      "boundary": "non-pi extension; pi has no leaf entry and opens with the last file entry as active leaf",
-      "implementation_ticket": "#1058-draft",
-      "scenario": "tests/harness/session/SessionStoreTest.cpp:a persisted leaf marker moves the live leaf and parents later messages",
+      "boundary": "non-pi extension: pi v1.3.0 has no leaf entry and keeps the active leaf in runtime state only, so the persisted leaf marker is not part of the selected pi capability; the C++ code is retired in a parallel lane",
+      "implementation_ticket": null,
+      "scenario": "excluded: the leaf marker is a non-pi extension with no pi v1.3.0 counterpart",
       "comparisonScenarios": [
-        "tests/harness/session/SessionStoreTest.cpp:a persisted leaf marker moves the live leaf and parents later messages",
-        "a persisted leaf marker moves the live leaf and parents later messages"
+        "excluded: the leaf marker is a non-pi extension with no pi v1.3.0 counterpart"
       ],
       "evidence": {
-        "route": "cpp-regression-only",
+        "route": "excluded",
         "artifact": null,
         "scenarioMatch": null,
         "capturedScenarios": [],
-        "result": "C++ test source only; pi behavior is last-entry leaf selection"
+        "result": "pi keeps the active leaf in runtime state only and opens with the last file entry as active leaf"
       },
-      "missingObservation": "no frozen comparison; existing C++ regression check only: C++ test source only; pi behavior is last-entry leaf selection",
-      "gaps": [
-        "leaf marker comes from pi-agent-core 0.83, not v1.3.0 coding-agent",
-        "pi v1.3.0 reopening a C++ file treats the marker as the active leaf"
-      ],
-      "remainingWork": "no frozen comparison; existing C++ regression check only: C++ test source only; pi behavior is last-entry leaf selection",
-      "notes": "C++: SessionLeaf.hpp, SessionTree.cpp; test cases leaf marker missing/targeting missing entry.",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "C++: SessionLeaf.hpp, SessionTree.cpp; test cases leaf marker missing/targeting missing entry. Excluded by the owner's #1059 ruling; the C++ code is retired in a parallel lane.",
       "lane": "1048",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -12518,9 +12517,9 @@
         {
           "ticket": "1048",
           "rowId": "cch_coding_agent:Session:entry:leaf-marker",
-          "membership": "no-decision",
-          "implementation": "implemented",
-          "verification": "unverified",
+          "membership": "excluded",
+          "implementation": "missing",
+          "verification": "not-applicable",
           "owner": "cch_coding_agent"
         }
       ]
@@ -14725,6 +14724,50 @@
       ]
     },
     {
+      "id": "cch_coding_agent:excluded-session-share-command",
+      "capability": "/share: publish the session as a Radius artifact or a GitHub gist",
+      "source": [
+        "packages/coding-agent/src/core/slash-commands.ts:share",
+        "packages/coding-agent/src/modes/interactive/session-share.ts:shareSession,exportSessionForShare",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleShareCommand"
+      ],
+      "frozenSymbols": [],
+      "membership": "excluded",
+      "implementation": "not-applicable",
+      "verification": "not-applicable",
+      "owner": "cch_coding_agent",
+      "consumer": "None; excluded by ADR 0075.",
+      "consumerOwners": [],
+      "boundary": "Application upload/share services and their `sessionShareDestination` setting are excluded (ADR 0075 explicit exclusions); do not expose commands, settings or prompt claims without the corresponding capability.",
+      "implementation_ticket": null,
+      "scenario": null,
+      "comparisonScenarios": [],
+      "evidence": {
+        "route": "excluded",
+        "artifact": null,
+        "scenarioMatch": null,
+        "capturedScenarios": [],
+        "result": null
+      },
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "This row records the /share command itself; the 1051 row `excluded-session-share` records the same exclusion from the settings side. The two are the same capability seen from two seams, so both stay. Recommendation: Keep the command and the setting absent. This exclusion does not exclude the local /export file write or the local /import file copy recorded in the rows above.",
+      "lane": "1051",
+      "frozenSymbolsSource": null,
+      "appliedCorrections": [],
+      "sourceRows": [
+        {
+          "ticket": "1051",
+          "rowId": "excluded-session-share-command",
+          "membership": "excluded",
+          "implementation": "not-applicable",
+          "verification": "not-applicable",
+          "owner": "cch_coding_agent"
+        }
+      ]
+    },
+    {
       "id": "cch_coding_agent:excluded-third-party-ts-extensions",
       "capability": "Third-party TS/JS extension execution",
       "source": [
@@ -14810,6 +14853,103 @@
           "rowId": "exit-restoration",
           "membership": "supported",
           "implementation": "partial",
+          "verification": "unverified",
+          "owner": "cch_coding_agent"
+        }
+      ]
+    },
+    {
+      "id": "cch_coding_agent:export-html",
+      "capability": "/export HTML: render the session as pi's self-contained HTML document",
+      "source": [
+        "packages/coding-agent/src/core/export-html/index.ts:exportSessionToHtml,generateHtml,preRenderCustomTools",
+        "packages/coding-agent/src/core/export-html/tool-renderer.ts:createToolHtmlRenderer",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleExportCommand"
+      ],
+      "frozenSymbols": [],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "InteractiveEngineHost /export dispatch -> cch::coding_agent::tui::export_session_to_html -> cch::harness::session::SessionStore; the Native TUI slash command is the caller.",
+      "consumerOwners": [
+        "cch_coding_agent"
+      ],
+      "boundary": "The HTML export is a local file write owned by the application; it is not a share/upload service and carries no outbound network behavior.",
+      "implementation_ticket": null,
+      "scenario": "the exported document has every pi template slot substituted and its SESSION_DATA payload decodes to pi's sessionData shape",
+      "comparisonScenarios": [
+        "the exported document has every pi template slot substituted and its SESSION_DATA payload decodes to pi's sessionData shape"
+      ],
+      "evidence": {
+        "route": "declared-comparison",
+        "artifact": null,
+        "scenarioMatch": null,
+        "capturedScenarios": [],
+        "result": null
+      },
+      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "gaps": [
+        "C++ emits no renderedTools member: pi's preRenderCustomTools renders custom tool calls and results through pi's TUI renderer pipeline into HTML, while the C++ harness tool renderers produce ANSI text only, so a custom tool's HTML presentation is missing. pi treats the member as optional and falls back to a tool-name header, so the document stays valid, but the rendering differs."
+      ],
+      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "notes": "The default output name follows pi's `${APP_NAME}-session-${basename}.html` with the C++ binary's own identity (`pike-session-...`). No registered artifact scenario names the HTML export output, so the row is unverified, not upstream-captured. Recommendation: Capture the frozen pi v1.3.0 HTML export for the same session and compare the emitted document byte-for-byte before this row can leave unverified. The missing pre-rendered custom-tool HTML recorded as a gap is a real remaining difference and is not covered by the C++ regression.",
+      "lane": "1051",
+      "frozenSymbolsSource": null,
+      "appliedCorrections": [],
+      "sourceRows": [
+        {
+          "ticket": "1051",
+          "rowId": "export-html",
+          "membership": "supported",
+          "implementation": "partial",
+          "verification": "unverified",
+          "owner": "cch_coding_agent"
+        }
+      ]
+    },
+    {
+      "id": "cch_coding_agent:export-jsonl-branch",
+      "capability": "/export JSONL: serialize the current session branch as a pi session file",
+      "source": [
+        "packages/coding-agent/src/core/session-export.ts:serializeSessionBranch,exportSessionToJsonl",
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleExportCommand"
+      ],
+      "frozenSymbols": [],
+      "membership": "supported",
+      "implementation": "implemented",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "InteractiveEngineHost /export dispatch -> cch::harness::transcript_export_handler -> cch::harness::session::SessionStore; the Native TUI slash command is the caller.",
+      "consumerOwners": [
+        "cch_coding_agent"
+      ],
+      "boundary": "The transcript export stays a local file write owned by the application; it is not a share/upload service (see the excluded /share row) and it does not migrate or reinterpret stored user data.",
+      "implementation_ticket": null,
+      "scenario": "the exported file is pi's session header followed by the current branch with a null-anchored parent chain",
+      "comparisonScenarios": [
+        "the exported file is pi's session header followed by the current branch with a null-anchored parent chain"
+      ],
+      "evidence": {
+        "route": "declared-comparison",
+        "artifact": null,
+        "scenarioMatch": null,
+        "capturedScenarios": [],
+        "result": null
+      },
+      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "gaps": [],
+      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "notes": "No registered artifact scenario names the export output: the audit bundles cover session persistence, toolkit behavior and the Native TUI product differentials, and none of them exercises serializeSessionBranch. The row is therefore unverified, not upstream-captured. Recommendation: Capture the frozen pi v1.3.0 export output for the same session tree and compare the header, the branch-only scope, the parent chain and the trailing newline byte-for-byte before this row can leave unverified. The C++ test proves the C++ contract, not pi parity.",
+      "lane": "1051",
+      "frozenSymbolsSource": null,
+      "appliedCorrections": [],
+      "sourceRows": [
+        {
+          "ticket": "1051",
+          "rowId": "export-jsonl-branch",
+          "membership": "supported",
+          "implementation": "implemented",
           "verification": "unverified",
           "owner": "cch_coding_agent"
         }
@@ -15109,6 +15249,57 @@
           "rowId": "getNativeClipboard",
           "membership": "supported",
           "implementation": "implemented",
+          "verification": "unverified",
+          "owner": "cch_coding_agent"
+        }
+      ]
+    },
+    {
+      "id": "cch_coding_agent:import-session",
+      "capability": "/import: copy a session JSONL file into the session directory and switch to it",
+      "source": [
+        "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleImportCommand,getPathCommandArgument",
+        "packages/coding-agent/src/core/agent-session-runtime.ts:importFromJsonl",
+        "packages/coding-agent/src/core/session-cwd.ts:MissingSessionCwdError,assertSessionCwdExists"
+      ],
+      "frozenSymbols": [],
+      "membership": "supported",
+      "implementation": "partial",
+      "verification": "unverified",
+      "owner": "cch_coding_agent",
+      "consumer": "InteractiveEngineHost /import dispatch -> SessionFlowController::open_import -> cch::coding_agent::tui::{import_path_argument,copy_imported_session} -> the asynchronous Session replacement (Session Assembly); the Native TUI slash command is the caller.",
+      "consumerOwners": [
+        "cch_coding_agent"
+      ],
+      "boundary": "The import copies one session file into the current session directory and switches the running session; it is not an import/migration/automatic upgrade/dual-read of historical Pike durable data, and no existing user data is deleted or reinterpreted.",
+      "implementation_ticket": null,
+      "scenario": "a confirmed import copies the file into the session directory and the imported session becomes the current session",
+      "comparisonScenarios": [
+        "a confirmed import copies the file into the session directory and the imported session becomes the current session"
+      ],
+      "evidence": {
+        "route": "declared-comparison",
+        "artifact": null,
+        "scenarioMatch": null,
+        "capturedScenarios": [],
+        "result": null
+      },
+      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "gaps": [
+        "The missing-cwd override path has no /import-specific regression: C++ implements pi's MissingSessionCwdError handling in SessionFlowControllerImport.cpp (the header cwd is read from the copied file, a vanished cwd prompts with pi's 'Session cwd not found' wording and the answer becomes the replacement request's cwd override), but only the /resume path is covered by an interactive test (tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp); the import variant of the same prompt is untested.",
+        "C++ has no session_before_switch extension hook: pi's importFromJsonl emits it before the copy and aborts on cancel, while the C++ import path has no such hook to fire."
+      ],
+      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "notes": "No registered artifact scenario names the import flow, so the row is unverified, not upstream-captured. The interactive properties pi owns — the confirmation prompt and the missing-cwd override — are the two places where a C++-only test can pass while pi parity does not hold. Recommendation: Capture the frozen pi v1.3.0 import flow for the same source file and compare the confirmation, the destination name, the replacement and the status lines before this row can leave unverified. The two recorded gaps are real and stay open.",
+      "lane": "1051",
+      "frozenSymbolsSource": null,
+      "appliedCorrections": [],
+      "sourceRows": [
+        {
+          "ticket": "1051",
+          "rowId": "import-session",
+          "membership": "supported",
+          "implementation": "partial",
           "verification": "unverified",
           "owner": "cch_coding_agent"
         }
@@ -20452,34 +20643,29 @@
         "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically"
       ],
       "frozenSymbols": [],
-      "membership": "no-decision",
-      "implementation": "implemented",
-      "verification": "unverified",
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
       "owner": "cch_durable",
       "consumer": "tests only; no production SessionStore caller",
       "consumerOwners": [],
-      "boundary": "legacy durable coupling; not a pi v1.3.0 coding-agent storage alternative",
-      "implementation_ticket": "#1058-draft",
-      "scenario": "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically",
+      "boundary": "excluded: the agent's SQLite session store had no production caller and no pi v1.3.0 coding-agent equivalent; its code was deleted in commit d0844505d, and ADR 0075's durable SQLite obligation belongs to cch_durable, not to the application agent core",
+      "implementation_ticket": null,
+      "scenario": "excluded: no production caller and no pi v1.3.0 coding-agent equivalent",
       "comparisonScenarios": [
-        "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically",
-        "SQLite factory atomic batch"
+        "excluded: no production caller and no pi v1.3.0 coding-agent equivalent"
       ],
       "evidence": {
-        "route": "cpp-regression-only",
+        "route": "excluded",
         "artifact": null,
         "scenarioMatch": null,
         "capturedScenarios": [],
-        "result": "C++ test source only; production uses JSONL/in-memory"
+        "result": "the SQLite SessionStore, Database and TaskStore were deleted in commit d0844505d; production uses JSONL/in-memory"
       },
-      "missingObservation": "no frozen comparison; existing C++ regression check only: C++ test source only; production uses JSONL/in-memory",
-      "gaps": [
-        "cch_agent_core links sqlite3 and owns SqliteSessionStore/SqliteDatabase/TaskStore",
-        "must be split from the application Session before ownership moves",
-        "SQLite and TaskStore have no pi coding-agent equivalent"
-      ],
-      "remainingWork": "no frozen comparison; existing C++ regression check only: C++ test source only; production uses JSONL/in-memory",
-      "notes": "This is the durable-to-coding-agent edge to avoid; durable owns its own storage implementation.",
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": null,
+      "notes": "This was the durable-to-coding-agent edge to avoid; durable owns its own storage implementation. Excluded by the owner's #1059 ruling; the code was deleted in commit d0844505d.",
       "lane": "1048",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -20487,9 +20673,9 @@
         {
           "ticket": "1048",
           "rowId": "cch_durable:Session:storage:sqlite-alternative",
-          "membership": "no-decision",
-          "implementation": "implemented",
-          "verification": "unverified",
+          "membership": "excluded",
+          "implementation": "missing",
+          "verification": "not-applicable",
           "owner": "cch_durable"
         }
       ]

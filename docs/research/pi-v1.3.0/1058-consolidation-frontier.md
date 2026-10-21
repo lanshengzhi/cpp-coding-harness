@@ -10,7 +10,7 @@ verified, and no historical artifact or observation payload is rewritten.
 Deliverables:
 
 - [1058-consolidated-capability-ledger.json](./1058-consolidated-capability-ledger.json) - the
-  stable ledger: 1460 consolidated rows, one alias per source row, evidence routes to real
+  stable ledger: 1464 consolidated rows, one alias per source row, evidence routes to real
   registered scenarios or an honest missing observation.
 - [1058-implementation-frontier.json](./1058-implementation-frontier.json) - the owner graph, the
   expand/migrate/contract/integrate-verify migration sequence, 32 implementation drafts and the
@@ -29,7 +29,7 @@ Deliverables:
 | 1048 | [1048-session-persistence.json](./1048-session-persistence.json) | [1048-session-persistence.md](./1048-session-persistence.md) | 30 | audit-1048 |
 | 1049 | [1049-ledger.json](./1049-ledger.json) | [1049-resources-configuration-extensions-print-mode.md](./1049-resources-configuration-extensions-print-mode.md) | 20 | audit-1049 |
 | 1050 | [1050-toolkit-capability-ledger.json](./1050-toolkit-capability-ledger.json) | [1050-toolkit-capability-inventory.md](./1050-toolkit-capability-inventory.md) | 954 | audit-1050 |
-| 1051 | [1051-native-tui-consumers-and-residuals.json](./1051-native-tui-consumers-and-residuals.json) | [1051-native-tui-consumers-and-residuals.md](./1051-native-tui-consumers-and-residuals.md) | 46 | audit-1051 |
+| 1051 | [1051-native-tui-consumers-and-residuals.json](./1051-native-tui-consumers-and-residuals.json) | [1051-native-tui-consumers-and-residuals.md](./1051-native-tui-consumers-and-residuals.md) | 50 | audit-1051 |
 | 1052 | [1052-mcp-audit-ledger.json](./1052-mcp-audit-ledger.json) | [1052-mcp-protocol-oauth-application.md](./1052-mcp-protocol-oauth-application.md) | 31 | audit-1052 |
 | 1053 | [1053-codemode-audit-ledger.json](./1053-codemode-audit-ledger.json) | [1053-codemode-audit.md](./1053-codemode-audit.md) | 68 | audit-1053 |
 | 1054 | [1054-durable-session-documents-storage.json](./1054-durable-session-documents-storage.json) | [1054-durable-session-documents-storage.md](./1054-durable-session-documents-storage.md) | 111 | audit-1054 |
@@ -37,7 +37,7 @@ Deliverables:
 | 1056 | [1056-durable-harness-workflows.json](./1056-durable-harness-workflows.json) | [1056-durable-harness-workflows.md](./1056-durable-harness-workflows.md) | 70 | audit-1056 |
 | 1057 | [1057-chord-durable-dependency-subset.json](./1057-chord-durable-dependency-subset.json) | [1057-chord-durable-dependency-subset.md](./1057-chord-durable-dependency-subset.md) | 58 | audit-1057 |
 
-Every one of the 1460 source rows keeps its identity: `sourceAliases` maps each `ticket:rowId` to
+Every one of the 1464 source rows keeps its identity: `sourceAliases` maps each `ticket:rowId` to
 exactly one consolidated, package-qualified id, and every consolidated row lists the source rows it
 absorbs. There is no catch-all row, no deferred bucket and no silent skip. The tool refuses to build
 if the alias map is not a bijection over all source rows. Every included row carries an owner, its
@@ -56,13 +56,13 @@ folded into membership.
 
 | Dimension | Counts |
 | --- | --- |
-| Rows | 1460 |
-| By lane | 1047:32, 1048:30, 1049:20, 1050:954, 1051:46, 1052:31, 1053:68, 1054:111, 1055:40, 1056:70, 1057:58 |
-| By owner | cch_tui:925, cch_durable:212, cch_coding_agent:155, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
-| Membership | supported:1432, excluded:26, no-decision:2 |
-| Implementation | implemented:970, partial:228, missing:245, not-applicable:17 |
-| Verification | unverified:1027, upstream-captured:408, not-applicable:25, verified:0 |
-| Evidence route | captured:408, related-captured:28, declared-comparison:29, cpp-regression-only:12, unobserved:58, historical-v1.0.4:858, not-audited:42, excluded:25 |
+| Rows | 1464 |
+| By lane | 1047:32, 1048:30, 1049:20, 1050:954, 1051:50, 1052:31, 1053:68, 1054:111, 1055:40, 1056:70, 1057:58 |
+| By owner | cch_tui:925, cch_durable:212, cch_coding_agent:159, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
+| Membership | supported:1435, excluded:29, no-decision:0 |
+| Implementation | implemented:969, partial:230, missing:247, not-applicable:18 |
+| Verification | unverified:1028, upstream-captured:408, not-applicable:28, verified:0 |
+| Evidence route | captured:408, related-captured:28, declared-comparison:32, cpp-regression-only:10, unobserved:58, historical-v1.0.4:858, not-audited:42, excluded:28 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a
 row with an upstream capture is not promoted because a similar row exists elsewhere: a declared
@@ -74,13 +74,25 @@ registered artifact, if an excluded row has no boundary, a placeholder boundary 
 if an included row has no `remainingWork`, or if a supported non-implemented row has no gap, missing
 observation or note.
 
-Two rows keep a `no-decision` membership and are visible in `counts.noDecision`:
-`cch_coding_agent:Session:entry:leaf-marker` and `cch_durable:Session:storage:sqlite-alternative`.
+No row keeps a `no-decision` membership: `counts.noDecision` is empty. The two rows that were
+`no-decision` are now `excluded` by the owner's #1059 ruling —
+`cch_coding_agent:Session:entry:leaf-marker` (a non-pi extension: pi v1.3.0 keeps the active leaf in
+runtime state only) and `cch_durable:Session:storage:sqlite-alternative` (the agent's SQLite session
+store had no production caller and no pi v1.3.0 equivalent; its code was deleted in commit
+`d0844505d`).
 The 18 rows that previously had no consumer string now name either the current application seam or
 an absent current consumer plus the proposed public caller; `consumerOwners` is no longer a
 self-owned default for those rows.
 They need an owner decision before their code is moved or retired; the frontier's P7 and P8 carry
-that decision rather than letting the rows disappear.
+that decision rather than letting the rows disappear. The owner's #1059 ruling has now supplied it,
+so both rows are excluded and the membership blocker is closed.
+
+The four rows added for the `/export`, `/import` and `/share` capabilities live in the 1051 lane
+(`cch_coding_agent:export-jsonl-branch`, `cch_coding_agent:export-html`,
+`cch_coding_agent:import-session` and `cch_coding_agent:excluded-session-share-command`). No
+registered artifact scenario names the export output, the HTML document or the import flow, so all
+three included rows are `unverified` with a `declared-comparison` evidence route: the C++ tests prove
+the C++ contract, not pi parity.
 
 ## 3. Evidence routes and bundled scenarios
 
@@ -159,7 +171,7 @@ contracts stay as separate rows with an explicit resolution:
 | Overlap | Resolution |
 | --- | --- |
 | `overlap-toolkit-product` | The 1050 toolkit export contract belongs to cch_tui; the seven product-entry rows (`tuiMode`, `--tui-mode`, `runInteractiveMode`, `fullscreenExitOutput`, `fullscreenCopyOnSelect`, `fullscreenWheelScrollLines`, `showHardwareCursor`) are cch_coding_agent product behavior and stay `not-audited`/`unverified`. #1051 holds three adjacent capability rows in the same product area: `mode-switch-renderer`, `exit-restoration` and `hardware-cursor`. Only two product rows name a counterpart, `fullscreenExitOutput` -> `exit-restoration` and `showHardwareCursor` -> `hardware-cursor`, and a counterpart is adjacent, not equal: neither 1051 row observes the 1050 setting, and neither is verified. The other five, including `runInteractiveMode` (the adjacent switch scenario observes a renderer switch, not that assembly), have no 1051 counterpart for their own operation and no v1.3.0 observation. Every row keeps its visible missing-observation statement. |
-| `overlap-session-storage` | The application Session transcript (JSONL session files, cch_coding_agent) and the durable Session (transactional document/entry storage, cch_durable) are different runtimes. The legacy in-core SQLite SessionStore is the third, no-decision row; it is not the durable contract. |
+| `overlap-session-storage` | The application Session transcript (JSONL session files, cch_coding_agent) and the durable Session (transactional document/entry storage, cch_durable) are different runtimes. The legacy in-core SQLite SessionStore is the third row and is now excluded: it is not the durable contract. |
 | `overlap-tasks-harness` | Both lanes drive the same `Harness.open` entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage. |
 | `overlap-codemode-chord` | The codemode rows name codemode execution and the chord rows name the durable-required Chord subset; the durable Harness consumes both, but neither is the other's contract. |
 | `overlap-extension-lifecycle` | The application extension lifecycle rows (1049/1051) and the durable Harness lifecycle rows (1056) are two owners of one selected native-hook contract; the historical ADR 0066 restriction on extension hooks is superseded by ADR 0075 and is not a retained exclusion. |
@@ -207,8 +219,8 @@ third-party row additionally records the package-management exclusion, the setti
 its captured observation and exclusion, and the two 1050 platform rows replace lowercase `none`
 with their recorded platform-exclusion reasons.
 
-The 26 excluded rows are the explicit no-claim boundaries and each carries its recorded boundary
-in the ledger; 25 route to `excluded`, while the settings row routes its registered captured
+The 29 excluded rows are the explicit no-claim boundaries and each carries its recorded boundary
+in the ledger; 28 route to `excluded`, while the settings row routes its registered captured
 observation to `captured` without changing its excluded membership: AI model-response timing,
 cross-model thinking
 transformation, final/partial tool-argument parsing, extra AI retry matching, classifier/
@@ -334,22 +346,23 @@ Open trackers are re-scoped to pi-v1.3.0 and reused, never duplicated:
 
 ## 11. Close-out
 
-- Implemented today: the eleven lane audits, their bundles/artifacts and the 970 C++
-  application/toolkit rows the ledgers record as implemented. That total includes 15 rows targeted
+- Implemented today: the eleven lane audits, their bundles/artifacts and the 969 C++
+  application/toolkit rows the ledgers record as implemented. That total includes 14 rows targeted
   at the new owners whose behavior currently lives under existing application owners: cch_durable
-  3, cch_mcp 5, cch_codemode 7, cch_chord 0. A further 128 target rows are partial under those
+  2, cch_mcp 5, cch_codemode 7, cch_chord 0. A further 128 target rows are partial under those
   existing owners (durable 87, mcp 11, codemode 12, chord 18) and are pending ownership migration,
   not specified-only.
-- Specified only: the four new Owner packages and manifest targets, the 194 missing target rows
-  (durable 120, mcp 2, codemode 30, chord 42), the durable runtime and storage contracts,
+- Specified only: the four new Owner packages and manifest targets, the 195 missing target rows
+  (durable 121, mcp 2, codemode 30, chord 42), the durable runtime and storage contracts,
   bidirectional interchange, native extension lifecycle, tool duration end-to-end, codemode
-  Inline/Remote and the MCP cancellation/transport changes. The 228 partial rows are partial with
+  Inline/Remote and the MCP cancellation/transport changes. The 230 partial rows are partial with
   recorded remaining work, not blanket specified-only. 0 rows are verified.
-- Retained boundaries: Magpie discovery/authentication/inference; XDG Pike state root; all 26
+- Retained boundaries: Magpie discovery/authentication/inference; XDG Pike state root; all 29
   excluded surfaces; no historical durable data migration, automatic upgrade, dual read or fallback.
-- Open blockers: umbrella #1044; the two no-decision membership rows; the honest missing
-  observations (999 declared/unobserved/historical/not-audited plus 28 related-captured rows); real
-  emulator/PTY evidence; and the SIGKILL-only crash model.
+- Open blockers: umbrella #1044; the honest missing
+  observations (1000 declared/unobserved/historical/not-audited plus 28 related-captured rows); real
+  emulator/PTY evidence; and the SIGKILL-only crash model. The two membership blockers are closed:
+  both former `no-decision` rows are excluded by the owner's #1059 ruling.
 
 ## 12. Validation
 

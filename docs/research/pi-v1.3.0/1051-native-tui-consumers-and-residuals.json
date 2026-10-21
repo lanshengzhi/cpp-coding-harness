@@ -1383,6 +1383,132 @@
    "recommendation": "Keep absent from the settings selector and prompt claims.",
    "blockers": [],
    "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects outputPad, OSC52 opt-in, settings/keybindings/theme schemas and the supported CLI/Interactive Session Run behavior. #1044 selects this product consumer boundary."
+  },
+  {
+   "id": "export-jsonl-branch",
+   "capability": "/export JSONL: serialize the current session branch as a pi session file",
+   "operation": "The /export command writes the session header first and then the current branch (getBranch(), root-to-leaf), rewriting every written line's parentId into a linear chain that starts at null, with one trailing newline. The .jsonl destination suffix selects this lane; every other spelling exports HTML.",
+   "consumer": "InteractiveEngineHost /export dispatch -> cch::harness::transcript_export_handler -> cch::harness::session::SessionStore; the Native TUI slash command is the caller.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/session-export.ts:serializeSessionBranch,exportSessionToJsonl",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleExportCommand"
+    ],
+    "scenarios": [
+     "the exported file is pi's session header followed by the current branch with a null-anchored parent chain"
+    ]
+   },
+   "cppSeam": "`src/agent/harness/TranscriptExport.cpp` (harness::transcript_export_handler); `src/coding_agent/tui/InteractiveEngineHost.cpp` selects the JSONL lane when the destination ends in `.jsonl`; `tests/agent/TranscriptExportTest.cpp` is the regression surface.",
+   "cppEvidence": "C++ implements pi's rule: the header line comes from EntrySerializer::serialize_header, the branch is store.get_branch() reversed to root-to-leaf, and every written line's parentId is the previous written entry's id starting at null. tests/agent/TranscriptExportTest.cpp covers the header, the branch-only scope of a branched tree, the null-anchored parent chain, the one-trailing-newline shape, and that SessionStore::load() accepts the result. These are C++ regression checks only: no frozen pi capture covers the export output, so no value comparison against pi exists.",
+   "status": {
+    "membership": "supported",
+    "implementation": "implemented",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "The transcript export stays a local file write owned by the application; it is not a share/upload service (see the excluded /share row) and it does not migrate or reinterpret stored user data.",
+   "implementationTicket": "#1044 (C++ implementation in commit d22a96adf)",
+   "recommendation": "Capture the frozen pi v1.3.0 export output for the same session tree and compare the header, the branch-only scope, the parent chain and the trailing newline byte-for-byte before this row can leave unverified. The C++ test proves the C++ contract, not pi parity.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects the supported CLI/Interactive Session Run behavior; #1044 selects this Native TUI consumer audit. The /export, /import and /share slash commands are pi v1.3.0 application Session capabilities routed by the Native TUI.",
+   "evidence": [],
+   "notes": "No registered artifact scenario names the export output: the audit bundles cover session persistence, toolkit behavior and the Native TUI product differentials, and none of them exercises serializeSessionBranch. The row is therefore unverified, not upstream-captured."
+  },
+  {
+   "id": "export-html",
+   "capability": "/export HTML: render the session as pi's self-contained HTML document",
+   "operation": "The /export command writes pi's HTML export by default (a destination not ending in .jsonl), substituting the vendored template.html/css/js and the marked/highlight vendor bundles, injecting the theme variables, and embedding the base64 SESSION_DATA payload in pi's sessionData shape ({header, entries, leafId, systemPrompt?, tools?, renderedTools?}).",
+   "consumer": "InteractiveEngineHost /export dispatch -> cch::coding_agent::tui::export_session_to_html -> cch::harness::session::SessionStore; the Native TUI slash command is the caller.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/export-html/index.ts:exportSessionToHtml,generateHtml,preRenderCustomTools",
+     "packages/coding-agent/src/core/export-html/tool-renderer.ts:createToolHtmlRenderer",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleExportCommand"
+    ],
+    "scenarios": [
+     "the exported document has every pi template slot substituted and its SESSION_DATA payload decodes to pi's sessionData shape"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/HtmlExport.{hpp,cpp}` (generate_session_html, export_session_to_html); the vendored pi template assets live in `third_party/pi-export-html/` (pi is MIT, Copyright 2025 Mario Zechner); `tests/coding_agent/tui/HtmlExportTest.cpp` is the regression surface.",
+   "cppEvidence": "C++ vendors pi's template assets byte-for-byte and performs pi's exact slot substitution, including JavaScript String.prototype.replace semantics (`$$` collapses to `$`) and the `{{HIGHLIGHT_JS}}` re-expansion artifact inside the vendored highlight.js bundle. tests/coding_agent/tui/HtmlExportTest.cpp proves every named slot is substituted, that the base64 SESSION_DATA payload decodes to pi's member set, and that the theme variables are injected. These are C++ regression checks only: no frozen pi capture covers the emitted document, so no byte comparison against pi's own output exists.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "The HTML export is a local file write owned by the application; it is not a share/upload service and carries no outbound network behavior.",
+   "implementationTicket": "#1044 (C++ implementation in commit 0cd5b963a)",
+   "recommendation": "Capture the frozen pi v1.3.0 HTML export for the same session and compare the emitted document byte-for-byte before this row can leave unverified. The missing pre-rendered custom-tool HTML recorded as a gap is a real remaining difference and is not covered by the C++ regression.",
+   "blockers": [
+    "C++ emits no renderedTools member: pi's preRenderCustomTools renders custom tool calls and results through pi's TUI renderer pipeline into HTML, while the C++ harness tool renderers produce ANSI text only, so a custom tool's HTML presentation is missing. pi treats the member as optional and falls back to a tool-name header, so the document stays valid, but the rendering differs."
+   ],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects the supported CLI/Interactive Session Run behavior; #1044 selects this Native TUI consumer audit. The /export, /import and /share slash commands are pi v1.3.0 application Session capabilities routed by the Native TUI.",
+   "evidence": [],
+   "notes": "The default output name follows pi's `${APP_NAME}-session-${basename}.html` with the C++ binary's own identity (`pike-session-...`). No registered artifact scenario names the HTML export output, so the row is unverified, not upstream-captured."
+  },
+  {
+   "id": "import-session",
+   "capability": "/import: copy a session JSONL file into the session directory and switch to it",
+   "operation": "The /import command takes one path argument, reports the usage error \"Usage: /import <path.jsonl>\" when it is absent, asks for a confirmation before any file operation, copies the file into the session directory with pi's -1/-2 collision suffix, opens the imported session, replaces the current session and reports \"Session imported from: <path>\".",
+   "consumer": "InteractiveEngineHost /import dispatch -> SessionFlowController::open_import -> cch::coding_agent::tui::{import_path_argument,copy_imported_session} -> the asynchronous Session replacement (Session Assembly); the Native TUI slash command is the caller.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleImportCommand,getPathCommandArgument",
+     "packages/coding-agent/src/core/agent-session-runtime.ts:importFromJsonl",
+     "packages/coding-agent/src/core/session-cwd.ts:MissingSessionCwdError,assertSessionCwdExists"
+    ],
+    "scenarios": [
+     "a confirmed import copies the file into the session directory and the imported session becomes the current session"
+    ]
+   },
+   "cppSeam": "`src/coding_agent/tui/SessionImport.{hpp,cpp}` (import_path_argument, import_destination_path, copy_imported_session); `src/coding_agent/tui/SessionFlowControllerImport.cpp` (the confirmation, the copy, the missing-cwd prompt and the session replacement); `src/coding_agent/tui/InteractiveEngineHost.cpp:492` (the dispatch); `tests/coding_agent/tui/SessionImportTest.cpp` and `tests/coding_agent/tui/ImportSlashCommandInteractiveTest.cpp` are the regression surfaces.",
+   "cppEvidence": "C++ implements pi's rule: the usage error is verbatim, the confirmation precedes every file operation, the destination is the session directory joined with the source base name (or the first free -1, -2, ... variant), the copy never overwrites, the imported session is opened through the ordinary session replacement and becomes the current session, and the status line is pi's wording. tests/coding_agent/tui/SessionImportTest.cpp covers the path-argument spellings, the collision suffix and the exclusive copy; tests/coding_agent/tui/ImportSlashCommandInteractiveTest.cpp drives the VirtualTerminal for the usage error, the accepted import, the declined import, the collision suffix and the missing file. These are C++ regression checks only: no frozen pi capture covers the import flow, so no value comparison against pi exists.",
+   "status": {
+    "membership": "supported",
+    "implementation": "partial",
+    "verification": "unverified"
+   },
+   "owner": "cch_coding_agent",
+   "boundary": "The import copies one session file into the current session directory and switches the running session; it is not an import/migration/automatic upgrade/dual-read of historical Pike durable data, and no existing user data is deleted or reinterpreted.",
+   "implementationTicket": "#1044 (C++ implementation in commits 93ec1ccfe and 4b3a01478)",
+   "recommendation": "Capture the frozen pi v1.3.0 import flow for the same source file and compare the confirmation, the destination name, the replacement and the status lines before this row can leave unverified. The two recorded gaps are real and stay open.",
+   "blockers": [
+    "The missing-cwd override path has no /import-specific regression: C++ implements pi's MissingSessionCwdError handling in SessionFlowControllerImport.cpp (the header cwd is read from the copied file, a vanished cwd prompts with pi's 'Session cwd not found' wording and the answer becomes the replacement request's cwd override), but only the /resume path is covered by an interactive test (tests/coding_agent/tui/SessionSelectorInteractiveTest.cpp); the import variant of the same prompt is untested.",
+    "C++ has no session_before_switch extension hook: pi's importFromJsonl emits it before the copy and aborts on cancel, while the C++ import path has no such hook to fire."
+   ],
+   "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 Application selects the supported CLI/Interactive Session Run behavior; #1044 selects this Native TUI consumer audit. The /export, /import and /share slash commands are pi v1.3.0 application Session capabilities routed by the Native TUI.",
+   "evidence": [],
+   "notes": "No registered artifact scenario names the import flow, so the row is unverified, not upstream-captured. The interactive properties pi owns \u2014 the confirmation prompt and the missing-cwd override \u2014 are the two places where a C++-only test can pass while pi parity does not hold."
+  },
+  {
+   "id": "excluded-session-share-command",
+   "capability": "/share: publish the session as a Radius artifact or a GitHub gist",
+   "operation": "The /share command exports the current branch with presentation metadata and publishes it through a Radius artifact or, as the fallback, a private GitHub gist, honoring the sessionShareDestination setting. It is an outbound network and artifact-sharing capability, not a local session capability.",
+   "consumer": "None; excluded by ADR 0075.",
+   "upstreamEvidence": {
+    "sources": [
+     "packages/coding-agent/src/core/slash-commands.ts:share",
+     "packages/coding-agent/src/modes/interactive/session-share.ts:shareSession,exportSessionForShare",
+     "packages/coding-agent/src/modes/interactive/interactive-mode.ts:handleShareCommand"
+    ],
+    "scenarios": []
+   },
+   "cppSeam": "No C++ implementation: there is no /share slash command, no sessionShareDestination setting and no Radius or gist client in cch_coding_agent.",
+   "cppEvidence": "C++ implements none of it. The C++ slash-command catalog names the pi commands with no surface (`/share`, `/changelog`, `/clone`) as unimplemented, and the settings selector exposes no sessionShareDestination row.",
+   "status": {
+    "membership": "excluded",
+    "implementation": "not-applicable",
+    "verification": "not-applicable"
+   },
+   "owner": "none",
+   "boundary": "Application upload/share services and their `sessionShareDestination` setting are excluded (ADR 0075 explicit exclusions); do not expose commands, settings or prompt claims without the corresponding capability.",
+   "implementationTicket": "ADR 0075",
+   "recommendation": "Keep the command and the setting absent. This exclusion does not exclude the local /export file write or the local /import file copy recorded in the rows above.",
+   "blockers": [],
+   "membershipAuthority": "ADR 0075 \u00a7Other confirmed exclusions excludes the previously excluded application upload/share services and their `sessionShareDestination` setting. #1044's Out of Scope section repeats it. The pi command exists upstream but the capability is excluded, so it is recorded excluded and not implemented.",
+   "evidence": [],
+   "notes": "This row records the /share command itself; the 1051 row `excluded-session-share` records the same exclusion from the settings side. The two are the same capability seen from two seams, so both stay."
   }
  ]
 }

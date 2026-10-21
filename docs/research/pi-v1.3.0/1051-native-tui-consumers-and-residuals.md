@@ -23,7 +23,7 @@ ADR 0075 exclusions remain out of scope.
 - Authority: ADR 0075 (`docs/adr/0075-align-selected-owner-packages-and-linux-capabilities-with-pi-v1-3-0.md`),
   #1044, #1051, and the corrected #1049 ledger/report.
 - Evidence family: `fixtures/pi-v1.3.0/audit-1051/` (manifest, three artifacts).
-- Ledger: `docs/research/pi-v1.3.0/1051-native-tui-consumers-and-residuals.json` (46 rows).
+- Ledger: `docs/research/pi-v1.3.0/1051-native-tui-consumers-and-residuals.json` (50 rows).
 - Private frozen checkout: `/tmp/cch-1051-pi-frozen` (clean at the revision above).
 - Historical identity retained: `fixtures/pi-coding-agent/differential/report.json` (pi v1.0.4 at
   `7c10bd4337495ee613f2224843ecdf349b80d1df`) and `docs/research/tui-v1.0.4-closeout.md`. Neither file was edited;
@@ -157,6 +157,10 @@ The machine ledger is authoritative for every operation, owner, consumer, scenar
 | Exit/restoration | `Terminal` exit sequence | partial / unverified | no OSC 7501 clear; no real PTY |
 | Images/Herdr | `AltScreen`, `TerminalImage` | partial / unverified | placement-span (#1035), no Herdr, no real emulator |
 | Wheel under overlay | `MouseRouting`/`AltScreen` | missing / unverified | v1.3.0 wheel behavior absent |
+| `/export` JSONL | `TranscriptExport.cpp`, `SessionStore` | implemented / unverified | no frozen pi capture of the export output |
+| `/export` HTML | `HtmlExport.cpp`, vendored pi template assets | partial / unverified | no `renderedTools` (pi's custom-tool HTML); no frozen pi capture |
+| `/import` | `SessionImport.cpp`, `SessionFlowControllerImport.cpp` | partial / unverified | the missing-cwd override has no `/import` regression; no `session_before_switch` hook; no frozen pi capture |
+| `/share` | none | excluded / n/a | ADR 0075 exclusion: an outbound Radius/gist sharing service, not a local session capability |
 
 ### Fresh C++ observations (same scenarios)
 
@@ -280,6 +284,17 @@ Missing C++ implementation is not treated as a completed comparison:
 - PTY/real terminal/emulator observations are unavailable in this lane for OSC 7501 bytes, dock-growth footer frames,
   image placement/WezTerm, full exit restoration, and hardware-cursor behavior. They remain unverified rather than
   inferred from virtual-terminal output.
+- The `/export` JSONL, `/export` HTML and `/import` rows have no frozen pi capture: the registered audit bundles do
+  not exercise `serializeSessionBranch`, `exportSessionToHtml` or `importFromJsonl`. The C++ tests for these
+  commands prove the C++ contract only, so the three rows stay `unverified` with a `declared-comparison` route.
+- `/export` HTML does not emit pi's optional `renderedTools` member: pi's `preRenderCustomTools` renders custom tool
+  calls and results through pi's TUI renderer pipeline into HTML, while the C++ harness tool renderers produce ANSI
+  text only. pi treats the member as optional and falls back to a tool-name header, so the document stays valid, but
+  the rendering differs.
+- `/import` implements pi's `MissingSessionCwdError` handling (the header cwd of the copied file, pi's "Session cwd
+  not found" prompt, and the answer as the replacement request's cwd override), but only the `/resume` variant of
+  that prompt has an interactive test; the `/import` variant is untested. C++ also has no `session_before_switch`
+  extension hook, so pi's pre-copy cancellation cannot fire.
 
 ## Validation performed
 

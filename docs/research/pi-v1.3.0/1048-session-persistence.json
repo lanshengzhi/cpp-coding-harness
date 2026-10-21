@@ -7,19 +7,19 @@
   "counts": {
     "membership": {
       "supported": 26,
-      "excluded": 2,
-      "no-decision": 2
+      "excluded": 4,
+      "no-decision": 0
     },
     "implementation": {
-      "implemented": 13,
+      "implemented": 11,
       "partial": 9,
-      "missing": 8
+      "missing": 10
     },
     "verification": {
       "verified": 0,
       "upstream-captured": 11,
-      "unverified": 17,
-      "not-applicable": 2
+      "unverified": 15,
+      "not-applicable": 4
     }
   },
   "rows": [
@@ -711,25 +711,21 @@
         "src/agent/harness/session/SessionStore.cpp:76-116",
         "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically"
       ],
-      "membership": "no-decision",
-      "implementation": "implemented",
-      "verification": "unverified",
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
       "owner": "cch_durable",
       "consumer": "tests only; no production SessionStore caller",
-      "boundary": "legacy durable coupling; not a pi v1.3.0 coding-agent storage alternative",
-      "implementation_ticket": "#1058-draft",
-      "scenario": "SQLite factory atomic batch",
+      "boundary": "excluded: the agent's SQLite session store had no production caller and no pi v1.3.0 coding-agent equivalent; its code was deleted in commit d0844505d, and ADR 0075's durable SQLite obligation belongs to cch_durable, not to the application agent core",
+      "implementation_ticket": null,
+      "scenario": null,
       "evidence": {
         "artifact": null,
-        "scenario": "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically",
-        "result": "C++ test source only; production uses JSONL/in-memory"
+        "scenario": "excluded: no production caller and no pi v1.3.0 coding-agent equivalent",
+        "result": "the SQLite SessionStore, Database and TaskStore were deleted in commit d0844505d; production uses JSONL/in-memory"
       },
-      "gaps": [
-        "cch_agent_core links sqlite3 and owns SqliteSessionStore/SqliteDatabase/TaskStore",
-        "must be split from the application Session before ownership moves",
-        "SQLite and TaskStore have no pi coding-agent equivalent"
-      ],
-      "notes": "This is the durable-to-coding-agent edge to avoid; durable owns its own storage implementation."
+      "gaps": [],
+      "notes": "This was the durable-to-coding-agent edge to avoid; durable owns its own storage implementation. Excluded by the owner's #1059 ruling; the code was deleted in commit d0844505d."
     },
     {
       "id": "cch_coding_agent:Session:entry:leaf-marker",
@@ -739,24 +735,21 @@
         "src/agent/harness/session/SessionStore.cpp:331-345",
         "83114817:packages/agent/src/harness/types.ts:448-464"
       ],
-      "membership": "no-decision",
-      "implementation": "implemented",
-      "verification": "unverified",
+      "membership": "excluded",
+      "implementation": "missing",
+      "verification": "not-applicable",
       "owner": "cch_coding_agent",
       "consumer": "C++ branch/tree navigation, resume topology",
-      "boundary": "non-pi extension; pi has no leaf entry and opens with the last file entry as active leaf",
-      "implementation_ticket": "#1058-draft",
-      "scenario": "a persisted leaf marker moves the live leaf and parents later messages",
+      "boundary": "non-pi extension: pi v1.3.0 has no leaf entry and keeps the active leaf in runtime state only, so the persisted leaf marker is not part of the selected pi capability; the C++ code is retired in a parallel lane",
+      "implementation_ticket": null,
+      "scenario": null,
       "evidence": {
         "artifact": null,
-        "scenario": "tests/harness/session/SessionStoreTest.cpp:a persisted leaf marker moves the live leaf and parents later messages",
-        "result": "C++ test source only; pi behavior is last-entry leaf selection"
+        "scenario": "excluded: the leaf marker is a non-pi extension with no pi v1.3.0 counterpart",
+        "result": "pi keeps the active leaf in runtime state only and opens with the last file entry as active leaf"
       },
-      "gaps": [
-        "leaf marker comes from pi-agent-core 0.83, not v1.3.0 coding-agent",
-        "pi v1.3.0 reopening a C++ file treats the marker as the active leaf"
-      ],
-      "notes": "C++: SessionLeaf.hpp, SessionTree.cpp; test cases leaf marker missing/targeting missing entry."
+      "gaps": [],
+      "notes": "C++: SessionLeaf.hpp, SessionTree.cpp; test cases leaf marker missing/targeting missing entry. Excluded by the owner's #1059 ruling; the C++ code is retired in a parallel lane."
     },
     {
       "id": "cch_ai:Thinking:cross-model-transformation",

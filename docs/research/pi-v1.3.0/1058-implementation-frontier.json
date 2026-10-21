@@ -706,9 +706,9 @@
           "failureCase": "A stand-in that keeps the sources but removes a test passes a file-existence check while the edge remains; the manifest/link-set check separates it."
         },
         {
-          "property": "The two no-decision rows receive a tangible decision instead of disappearing.",
-          "case": "The legacy SQLite SessionStore and leaf-marker rows are implemented under an owner or explicitly retained with a boundary and a tracker.",
-          "failureCase": "Deleting the sources silently closes the membership question; the ledger keeps both rows visible."
+          "property": "The two former no-decision rows receive a tangible decision instead of disappearing.",
+          "case": "The legacy SQLite SessionStore and leaf-marker rows are excluded with a recorded boundary under the owner's #1059 ruling: the leaf marker is a non-pi extension and the agent's SQLite session store had no production caller and no pi v1.3.0 equivalent.",
+          "failureCase": "Deleting the sources silently closes the membership question; the ledger keeps both rows visible as excluded rows with their boundaries."
         }
       ],
       "blockingEdges": [
@@ -733,7 +733,8 @@
         "#920"
       ],
       "boundaries": [
-        "The legacy store is not pi v1.3.0 coding-agent storage and is not migrated; existing user data is not deleted"
+        "The legacy store is not pi v1.3.0 coding-agent storage and is not migrated; existing user data is not deleted",
+        "The legacy store and the leaf marker are excluded (owner's #1059 ruling): the SQLite code was deleted in commit d0844505d and the leaf-marker code is retired in a parallel lane"
       ]
     },
     {
@@ -2297,15 +2298,15 @@
   "closeOut": {
     "implemented": [
       "The 11 audit ledgers, 12 registered bundles, 60 artifacts and 373 scenarios exist, verify through the shared verifier and were independently reproduced by their mergers.",
-      "The application runtime and toolkit currently implement the 970 rows the ledgers record as implemented, including 15 rows targeted at the new owners whose behavior today lives under existing application owners: cch_durable 3, cch_mcp 5, cch_codemode 7, cch_chord 0.",
+      "The application runtime and toolkit currently implement the 969 rows the ledgers record as implemented, including 14 rows targeted at the new owners whose behavior today lives under existing application owners: cch_durable 2, cch_mcp 5, cch_codemode 7, cch_chord 0.",
       "128 further rows targeted at the new owners are partial today under those existing owners and are pending ownership migration, not specified-only: cch_durable 87, cch_mcp 11, cch_codemode 12, cch_chord 18.",
       "The current configured Owner graph is the pre-migration graph: cch_ai, cch_agent_core, cch_tui, cch_coding_agent, cch_support; MCP and codemode live inside cch_coding_agent.",
       "The C++ toolkit has real rendering/input behavior and the listed focused test selections pass; the C++ [issue800] model-selector assertion is a known failure (#808)."
     ],
     "specifiedOnly": [
-      "No cch_durable, cch_mcp, cch_codemode or cch_chord Owner package or manifest target exists yet; their 15 implemented target rows are existing capability behavior under current application owners and await ownership migration.",
+      "No cch_durable, cch_mcp, cch_codemode or cch_chord Owner package or manifest target exists yet; their 14 implemented target rows are existing capability behavior under current application owners and await ownership migration.",
       "No C++ parity comparison exists for any audit row: 0 rows are verified and every upstream-captured row still needs one.",
-      "194 target rows are missing and are the specified work: cch_durable 120, cch_mcp 2, cch_codemode 30, cch_chord 42. The 228 partial rows are partial with recorded remaining work, not blanket specified-only.",
+      "195 target rows are missing and are the specified work: cch_durable 121, cch_mcp 2, cch_codemode 30, cch_chord 42. The 230 partial rows are partial with recorded remaining work, not blanket specified-only.",
       "Durable bidirectional JSONL/SQLite interchange, power-loss durability and cross-runtime continuation are specified and unproven.",
       "Native extension lifecycle/run triggering, tool duration end-to-end, OSC 7501 program status, codemode Inline/Remote, and the MCP cancellation/transport changes are specified with implementation gaps."
     ],
@@ -2318,8 +2319,8 @@
     ],
     "openBlockers": [
       "Umbrella #1044 remains open: implementation and final validation are not done; this consolidation is an audit acceptance gate only.",
-      "Membership blockers: two no-decision rows stay visible (legacy SQLite SessionStore alternative, application leaf-marker entry) and require an owner decision before their code is moved or retired.",
-      "Verification blockers: 999 rows carry an honest missing observation (29 declared-comparison, 12 cpp-regression-only, 58 unobserved, 858 historical-only, 42 not-audited) plus 28 related-captured rows that keep their own unverified status.",
+      "Membership blockers: none. The two former no-decision rows (legacy SQLite SessionStore alternative, application leaf-marker entry) are excluded by the owner's #1059 ruling and keep their boundaries.",
+      "Verification blockers: 1000 rows carry an honest missing observation (32 declared-comparison, 10 cpp-regression-only, 58 unobserved, 858 historical-only, 42 not-audited) plus 28 related-captured rows that keep their own unverified status.",
       "Terminal blockers: real emulator/PTY evidence is missing for image/footer/cursor/restoration rows; OSC7501 captures are terminal-contract calls, not raw protocol acceptance.",
       "Crash blockers: SIGKILL/reopen is recorded, but power-loss/fsync-failure/multi-process durability is not proven and must not be claimed."
     ],

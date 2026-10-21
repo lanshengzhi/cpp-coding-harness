@@ -436,26 +436,31 @@ The machine-readable ledger is the source for A14 consolidation. Counts in this 
 | Membership | Rows |
 | --- | --- |
 | supported | 26 |
-| excluded | 2 |
-| no-decision | 2 |
+| excluded | 4 |
+| no-decision | 0 |
 
 | Implementation | Rows |
 | --- | --- |
-| implemented | 13 |
+| implemented | 11 |
 | partial | 9 |
-| missing | 8 |
+| missing | 10 |
 
 | Verification | Rows |
 | --- | --- |
 | upstream-captured | 11 |
-| unverified | 17 |
+| unverified | 15 |
 | verified | 0 |
-| not-applicable | 2 |
+| not-applicable | 4 |
 
 The zero `verified` count is deliberate: the lane's own evidence is not C++ verification, and no C++
 comparison test was added in an audit-only ticket. `upstream-captured` applies to the tool-restore,
 compaction-boundary and tree/fork scenarios; every other supported row is `unverified` with C++ test
 sources listed as existing regression coverage, not parity proof.
+
+The two rows that were `no-decision` are now `excluded` by the owner's #1059 ruling: the leaf marker
+is a non-pi extension (pi v1.3.0 keeps the active leaf in runtime state only) and the agent's SQLite
+session store had no production caller and no pi v1.3.0 equivalent — its code was deleted in commit
+`d0844505d`. Both keep an explicit boundary instead of a membership question.
 
 ## Remaining gaps (ordered by migration risk)
 
