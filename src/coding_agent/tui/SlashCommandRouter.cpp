@@ -28,7 +28,7 @@ struct SlashCommandDefinition {
     bool immediate;
 };
 
-constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
+constexpr std::array<SlashCommandDefinition, 20> kCommandDefinitions{{
         {.command = SlashCommandId::Clear,
                 .canonical_name = "clear",
                 .argument_mode = SlashArgumentMode::None,
@@ -105,9 +105,13 @@ constexpr std::array<SlashCommandDefinition, 19> kCommandDefinitions{{
                 .canonical_name = "export",
                 .argument_mode = SlashArgumentMode::Optional,
                 .immediate = true},
+        {.command = SlashCommandId::Import,
+                .canonical_name = "import",
+                .argument_mode = SlashArgumentMode::Optional,
+                .immediate = false},
 }};
 
-constexpr std::array<SlashCommandSpelling, 24> kCommandSpellings{{
+constexpr std::array<SlashCommandSpelling, 25> kCommandSpellings{{
         {.spelling = "clear", .command = SlashCommandId::Clear},
         {.spelling = "new", .command = SlashCommandId::Clear},
         {.spelling = "quit", .command = SlashCommandId::Quit},
@@ -132,6 +136,7 @@ constexpr std::array<SlashCommandSpelling, 24> kCommandSpellings{{
         {.spelling = "trust", .command = SlashCommandId::Trust},
         {.spelling = "mcp", .command = SlashCommandId::Mcp},
         {.spelling = "export", .command = SlashCommandId::Export},
+        {.spelling = "import", .command = SlashCommandId::Import},
 }};
 
 [[nodiscard]] bool is_ascii_space(char value) noexcept {

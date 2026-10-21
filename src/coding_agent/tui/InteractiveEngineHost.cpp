@@ -14,6 +14,7 @@
 #include "coding_agent/tui/ModelFlowController.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/tui/SessionFlowController.hpp"
+#include "coding_agent/tui/SessionImport.hpp"
 #include "coding_agent/tui/SessionUiBinding.hpp"
 #include "coding_agent/tui/SettingsFlowController.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"

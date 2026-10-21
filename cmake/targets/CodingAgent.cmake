@@ -136,9 +136,11 @@ cch_parity_declare_target(
         src/coding_agent/tui/ReloadBox.cpp
         src/coding_agent/tui/ScopedModelsSelector.cpp
         src/coding_agent/tui/SessionFlowController.cpp
+        src/coding_agent/tui/SessionFlowControllerImport.cpp
         src/coding_agent/tui/SessionFlowControllerTrust.cpp
         src/coding_agent/tui/SessionSelector.cpp
         src/coding_agent/tui/SessionSelectorSearch.cpp
+        src/coding_agent/tui/SessionImport.cpp
         src/coding_agent/tui/SessionUiBinding.cpp
         src/coding_agent/tui/SettingsFlowController.cpp
         src/coding_agent/tui/SettingsSelector.cpp

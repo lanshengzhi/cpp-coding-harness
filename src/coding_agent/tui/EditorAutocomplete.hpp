@@ -44,10 +44,10 @@ namespace cch::coding_agent::tui {
 /// and the `mcp` command as a `SlashCommand` whose argument completion is
 /// pi's `getArgumentCompletions` (action names, then live server names for
 /// login/logout/reconnect) over the current manager snapshot. The names with
-/// no surface — the Deferred slashes (`/export` `/import` `/share`
-/// `/changelog` `/clone`), the hidden pi-only `/debug` developer entry,
+/// no surface — the Deferred slashes (`/share` `/changelog` `/clone`), the
+/// hidden pi-only `/debug` developer entry,
 /// `/bug` (pi's own bug-reporting endpoint), and the easter eggs — are
-/// absent (#793).
+/// absent (#793). `/export` and `/import` are wired for real (#1044).
 [[nodiscard]] std::vector<std::variant<cch::tui::SlashCommand, cch::tui::AutocompleteItem>>
 command_autocomplete_commands(std::span<const PromptTemplate> prompt_templates,
         std::span<const Skill> skills,
