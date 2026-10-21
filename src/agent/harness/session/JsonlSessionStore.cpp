@@ -253,6 +253,19 @@ AppendResult JsonlSessionStore::append(const ai::MessageVariant& message) {
     return outcome;
 }
 
+void JsonlSessionStore::move_append_parent(std::optional<std::string> target_id) {
+    // The active leaf is runtime-only state (pi keeps `leafId` in memory),
+    // so a branch move writes nothing. What it does change is where the
+    // NEXT append hangs: pi `appendMessage` hangs the message under the
+    // current leaf, so the next message after a branch carries an explicit
+    // `parentId` — the branch target — exactly like pi's wire.
+    impl_->active_append_parent_id = std::move(target_id);
+    // A branch off the linear chain ends the flat-file shape: from here on
+    // every message append carries its explicit parent, so the reader
+    // follows the wire instead of inferring the chain from the file order.
+    impl_->explicit_parent_chain = true;
+}
+
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_model_change(
     std::optional<std::string> parent_id,
     std::string provider,

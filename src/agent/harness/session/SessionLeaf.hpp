@@ -14,8 +14,7 @@ namespace cch::harness::session {
 /// pi keeps that position in memory only — it is never written to the file —
 /// so this selection is the load-time reconstruction of a runtime-only
 /// value, not a persisted marker.
-[[nodiscard]] inline std::optional<std::string> select_active_leaf_id(
-    const std::vector<SessionEntry>& entries) {
+[[nodiscard]] inline std::optional<std::string> select_active_leaf_id(const std::vector<SessionEntry>& entries) {
     std::optional<std::string> leaf_id;
     for (const auto& entry : entries) {
         if (entry.kind == SessionEntryKind::Header) {

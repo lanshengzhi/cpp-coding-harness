@@ -220,12 +220,30 @@ SessionContext SessionStore::build_context() const {
 
 support::ExpectedVoid SessionStore::branch(std::string_view target_id) {
     std::lock_guard lock(impl_->mutex);
-    return impl_->tree.branch(target_id);
+    auto branched = impl_->tree.branch(target_id);
+    if (!branched) {
+        return branched;
+    }
+    // The active leaf is runtime-only state (pi keeps `leafId` in memory),
+    // so the move writes nothing. The persistence side only learns where
+    // the NEXT append hangs: pi `appendMessage` hangs the message under the
+    // current leaf, so the next message after a branch carries an explicit
+    // `parentId` — the branch target — exactly like pi's wire.
+    if (auto& jsonl = impl_->persistence) {
+        jsonl->move_append_parent(std::string{target_id});
+    }
+    return {};
 }
 
 void SessionStore::reset_leaf() {
     std::lock_guard lock(impl_->mutex);
     impl_->tree.reset_leaf();
+    // pi `resetLeaf`: the next append hangs at the root position, so it
+    // starts a NEW root entry. The root position is runtime state, so the
+    // persistence side only learns where the next append hangs.
+    if (auto& jsonl = impl_->persistence) {
+        jsonl->move_append_parent(std::nullopt);
+    }
 }
 
 std::string SessionStore::leaf_id() const {

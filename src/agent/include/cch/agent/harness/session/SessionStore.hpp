@@ -137,11 +137,13 @@ public:
     [[nodiscard]] SessionContext build_context() const;
     /// pi `branch`: move the live tree's active leaf to an existing entry.
     /// The move is live-tree state only, exactly like pi: the active leaf
-    /// is runtime state and is never written to the session file.
+    /// is runtime state and is never written to the session file. The
+    /// persistence side only learns where the NEXT append hangs.
     [[nodiscard]] support::ExpectedVoid branch(std::string_view target_id);
     /// pi `resetLeaf`: move the live tree's active leaf to the root
     /// position (before any entries) and break the linear chain, so the next
-    /// append starts a new root. Runtime-only, like pi's leaf pointer.
+    /// append starts a new root. Runtime-only, like pi's leaf pointer; the
+    /// persistence side only learns where the next append hangs.
     void reset_leaf();
     /// pi `getLeafId`: the active leaf entry id; empty at the root position.
     /// Runtime-only state: pi keeps it in memory and never persists it.

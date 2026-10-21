@@ -390,8 +390,9 @@ TEST_CASE("transcript export over an opened branched session writes the active b
 
     // The production `/export` path opens the on-disk session
     // (InteractiveEngineHost.cpp:362), so this drives `open_existing` over a
-    // pi-captured branched file: entries carry real wire parents, a leaf marker
-    // moves the active leaf back, and three entries are off the active path.
+    // pi-captured branched file: entries carry real wire parents and three
+    // entries are off the active path. The active leaf is the last file
+    // entry (pi `_buildIndex`) — pi never writes a leaf record.
     const auto source = std::filesystem::path{std::string{CCH_SOURCE_DIR}} /
                         "fixtures/pi-agent-core/projection-branch-session.jsonl";
     const auto session_path = workspace.path() / "session.jsonl";
@@ -415,7 +416,7 @@ TEST_CASE("transcript export over an opened branched session writes the active b
     REQUIRE(branch[0].entry_id == "9be9baa6");
     REQUIRE(branch[1].entry_id == "d78bb056");
     REQUIRE(branch[2].entry_id == "c946c057");
-    REQUIRE(store.entries().size() == 6);
+    REQUIRE(store.entries().size() == 5);
 
     REQUIRE(harness::transcript_export_handler(store, destination.string())({}).has_value());
 
@@ -436,7 +437,7 @@ TEST_CASE("transcript export over an opened branched session writes the active b
     }
 
     // The three entries off the active path stay out of the export.
-    for (const auto& off_branch : {"24b6819f", "d451f610", "4c7eacf5"}) {
+    for (const auto& off_branch : {"24b6819f", "d451f610"}) {
         CHECK(written.find(off_branch) == std::string::npos);
     }
 }

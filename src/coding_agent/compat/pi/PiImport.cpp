@@ -46,7 +46,7 @@ struct ImportEntry {
 }
 
 [[nodiscard]] support::ExpectedVoid validate_pi_session_file(const std::filesystem::path& path) {
-    static constexpr std::array<std::string_view, 10> kEntryTypes{
+    static constexpr std::array<std::string_view, 9> kEntryTypes{
             "message",
             "model_change",
             "thinking_level_change",
@@ -56,7 +56,6 @@ struct ImportEntry {
             "compaction",
             "branch_summary",
             "session_info",
-            "leaf",
     };
 
     std::ifstream input(path, std::ios::binary);

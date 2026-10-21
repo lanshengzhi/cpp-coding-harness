@@ -139,9 +139,9 @@ TEST_CASE("in-memory Session Store maintains a live tree without a session file"
                   })
               .has_value());
 
-    // A root leaf marker moves the live leaf to the root position; the next
+    // `reset_leaf` moves the live leaf to the root position; the next
     // append starts a new root (pi `resetLeaf`).
-    REQUIRE(store.append_leaf(std::nullopt, std::nullopt).has_value());
+    store.reset_leaf();
     CHECK(store.leaf_id().empty());
     REQUIRE(store.append(user_message("after reset")).has_value());
     CHECK(store.tree().size() == 2);
@@ -277,7 +277,7 @@ TEST_CASE("JSONL Session Store writes typed entries and mirrors them into the li
 
     REQUIRE(store.append_label_change(std::nullopt, "missing", "labeled").has_value());
     CHECK(store.get_label(leaf) == std::nullopt);
-    REQUIRE(store.append_leaf(std::nullopt, std::nullopt).has_value());
+    store.reset_leaf();
     CHECK(store.leaf_id().empty());
 
     auto loaded = harness::session::SessionStore::load(path);
@@ -296,7 +296,6 @@ TEST_CASE("JSONL Session Store writes typed entries and mirrors them into the li
             harness::session::SessionEntryKind::ThinkingLevelChange,
             harness::session::SessionEntryKind::SessionInfo,
             harness::session::SessionEntryKind::Label,
-            harness::session::SessionEntryKind::Leaf,
         });
     REQUIRE(loaded->messages.size() == 1);
     CHECK(user_text(loaded->messages[0]) == "first");
@@ -450,29 +449,32 @@ TEST_CASE("branch and reset_leaf move the live leaf", "[harness][session][store]
     CHECK_FALSE(store.branch("missing-entry").has_value());
 
     // Root position: the context is empty until the next append (pi
-    // `resetLeaf`). In the C++ flat-file shape the chain break is carried
-    // by the persisted root leaf marker, exactly like the runtime's
-    // navigate-to-root flow.
+    // `resetLeaf`). The chain break is runtime-only state, exactly like
+    // pi's leaf pointer.
     store.reset_leaf();
     CHECK(store.leaf_id().empty());
     CHECK(store.build_context().messages.empty());
 
-    REQUIRE(store.append_leaf(std::nullopt, std::nullopt).has_value());
     REQUIRE(store.append(user_message("restarted")).has_value());
     CHECK(store.leaf_id() != second_leaf);
     const auto restarted = store.build_context();
     REQUIRE(restarted.messages.size() == 1);
     CHECK(user_text(restarted.messages[0]) == "restarted");
 
-    // The incrementally maintained tree equals a from-disk rebuild.
+    // The incrementally maintained tree and a from-disk rebuild agree on
+    // which entry is the active leaf: the append after `reset_leaf` is the
+    // last file entry, so pi's `_buildIndex` reconstructs the same pointer.
     auto reopened = harness::session::SessionStore::open_existing(path);
     REQUIRE(reopened.has_value());
     CHECK(reopened->leaf_id() == store.leaf_id());
-    CHECK(reopened->build_context().messages.size() == 1);
+    // STEP 1 scope: the reset-to-root POSITION is runtime-only, exactly like
+    // pi's in-memory `leafId` — nothing on disk records that the chain
+    // restarted. Restoring that position after a restart is the separate,
+    // later step (a pi-compatible mechanism, not a private marker), so this
+    // test deliberately asserts no context size for the reopened store.
 }
 
-TEST_CASE("a persisted leaf marker moves the live leaf and parents later messages",
-        "[harness][session][store][issue490][spec]") {
+TEST_CASE("a branch moves the live leaf and parents later messages", "[harness][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "marker.jsonl";
     auto created = harness::session::SessionStore::create_new(
@@ -486,11 +488,13 @@ TEST_CASE("a persisted leaf marker moves the live leaf and parents later message
     REQUIRE(entries.size() == 2);
     const auto first_id = entries.front().entry_id;
 
-    REQUIRE(store.append_leaf(std::nullopt, first_id).has_value());
+    // pi `branch`: the active leaf moves to an existing entry. The move is
+    // runtime-only state — the session file keeps only entries.
+    REQUIRE(store.branch(first_id).has_value());
     CHECK(store.leaf_id() == first_id);
 
-    // Marker discipline: the next message hangs under the marker target and
-    // becomes the leaf (pi `_appendEntry`).
+    // The branch decides where the next append hangs (pi `appendMessage`
+    // hangs the message under the current leaf).
     REQUIRE(store.append(user_message("third")).has_value());
     const auto third_id = store.leaf_id();
     REQUIRE(third_id != first_id);
@@ -509,30 +513,7 @@ TEST_CASE("a persisted leaf marker moves the live leaf and parents later message
     CHECK(user_text(context.messages[1]) == "third");
 }
 
-TEST_CASE("a leaf marker targeting a missing entry keeps the current live leaf",
-        "[harness][session][store][issue490][spec]") {
-    tests::TempWorkspace workspace;
-    const auto path = workspace.path() / "stale-marker.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
-    REQUIRE(created.has_value());
-    auto store = std::move(*created);
-
-    REQUIRE(store.append(user_message("first")).has_value());
-    const auto leaf = store.leaf_id();
-
-    // The marker persists (the wire shape is legal), but the live tree keeps
-    // the last navigable position, exactly like a fresh load's fallback
-    // (select_active_leaf_target).
-    REQUIRE(store.append_leaf(std::nullopt, "missing-entry").has_value());
-    CHECK(store.leaf_id() == leaf);
-
-    auto reopened = harness::session::SessionStore::open_existing(path);
-    REQUIRE(reopened.has_value());
-    CHECK(reopened->leaf_id() == leaf);
-}
-
-TEST_CASE("the live tree matches a fresh load after marker, typed, and message appends",
+TEST_CASE("the live tree matches a fresh load after a branch, typed, and message appends",
         "[harness][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "consistency.jsonl";
@@ -547,7 +528,7 @@ TEST_CASE("the live tree matches a fresh load after marker, typed, and message a
 
     // Navigate back, then interleave a typed append and a message append:
     // the incrementally maintained tree must equal a from-disk rebuild.
-    REQUIRE(store.append_leaf(std::nullopt, first_id).has_value());
+    REQUIRE(store.branch(first_id).has_value());
     REQUIRE(store.append_thinking_level_change(std::nullopt, "high").has_value());
     REQUIRE(store.append(user_message("third")).has_value());
     REQUIRE(store.append_model_change(std::nullopt, "fake", "fake-model-2").has_value());
@@ -580,7 +561,7 @@ TEST_CASE("open_existing builds the live tree from the persisted entries exactly
         "[harness][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "reopen.jsonl";
-    std::string marked_leaf;
+    std::string last_entry;
     {
         auto created = harness::session::SessionStore::create_new(
             path, metadata_for(workspace));
@@ -588,22 +569,25 @@ TEST_CASE("open_existing builds the live tree from the persisted entries exactly
         auto store = std::move(*created);
         REQUIRE(store.append(user_message("first")).has_value());
         REQUIRE(store.append(user_message("second")).has_value());
-        marked_leaf = store.entries().front().entry_id;
-        REQUIRE(store.append_leaf(std::nullopt, marked_leaf).has_value());
+        last_entry = store.leaf_id();
     }
 
     auto opened = harness::session::SessionStore::open_existing(path);
     REQUIRE(opened.has_value());
     auto store = std::move(*opened);
-    CHECK(store.leaf_id() == marked_leaf);
+    // pi `_buildIndex`: reopening restores the active leaf from the file's
+    // entry order (the last entry), because the leaf is runtime-only state
+    // and is never written to the session file.
+    CHECK(store.leaf_id() == last_entry);
 
     // The tree was built at open: later file removal does not affect it.
     std::error_code remove_ec;
     std::filesystem::remove(path, remove_ec);
     REQUIRE_FALSE(remove_ec);
     const auto context = store.build_context();
-    REQUIRE(context.messages.size() == 1);
+    REQUIRE(context.messages.size() == 2);
     CHECK(user_text(context.messages[0]) == "first");
+    CHECK(user_text(context.messages[1]) == "second");
 }
 
 TEST_CASE("moved Session Store keeps appending to the same session file", "[harness][session][store][issue464][spec]") {

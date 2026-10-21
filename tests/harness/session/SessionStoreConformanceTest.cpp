@@ -194,18 +194,14 @@ void reset_leaf_returns_to_the_root_position(SessionStore& store, const Alternat
     REQUIRE(store.append(user_message("first")).has_value());
     REQUIRE(store.append(user_message("second")).has_value());
 
-    // `reset_leaf` is live-tree state only (the C++ leaf-marker durability
-    // discipline): it moves the active leaf to the root position without
-    // writing anything.
+    // `reset_leaf` is runtime-only state (pi's leaf pointer): it moves the
+    // active leaf to the root position without writing anything.
     store.reset_leaf();
     CHECK(store.leaf_id().empty());
     CHECK(store.build_context().messages.empty());
 
-    // The chain break is persisted separately, by the root leaf marker. Only
-    // that marker makes the next append start a new root instead of extending
-    // the previous history — so a case that asserted "reset_leaf alone forks
-    // the chain" would be asserting a property the facade does not claim.
-    REQUIRE(store.append_leaf(std::nullopt, std::nullopt).has_value());
+    // The chain break is runtime state too: the next append starts a new
+    // root instead of extending the previous history (pi `resetLeaf`).
     REQUIRE(store.append(user_message("restarted")).has_value());
     CHECK(store.tree().size() == 2);
     const auto context = store.build_context();
@@ -213,16 +209,17 @@ void reset_leaf_returns_to_the_root_position(SessionStore& store, const Alternat
     CHECK(user_text(context.messages.front()) == "restarted");
 }
 
-void a_leaf_marker_reparents_later_messages(SessionStore& store, const Alternative&) {
+void a_branch_reparents_later_messages(SessionStore& store, const Alternative&) {
     REQUIRE(store.append(user_message("first")).has_value());
     REQUIRE(store.append(user_message("second")).has_value());
     const std::string first = store.entries().front().entry_id;
 
-    REQUIRE(store.append_leaf(std::nullopt, first).has_value());
+    REQUIRE(store.branch(first).has_value());
     CHECK(store.leaf_id() == first);
 
-    // The marker decides where the next append hangs, so the branch a caller
-    // navigated to is the branch the transcript continues on.
+    // The branch decides where the next append hangs, so the branch a caller
+    // navigated to is the branch the transcript continues on (pi
+    // `appendMessage` hangs the message under the current leaf).
     REQUIRE(store.append(user_message("third")).has_value());
     const auto third = store.get_entry(store.leaf_id());
     REQUIRE(third.has_value());
@@ -355,7 +352,7 @@ constexpr std::array<NamedCase, 15> kCases{
         NamedCase{"context rebuild walks the active leaf path", &context_rebuild_walks_the_active_leaf_path},
         NamedCase{"branching to a missing entry fails", &branching_to_a_missing_entry_fails},
         NamedCase{"reset_leaf returns to the root position", &reset_leaf_returns_to_the_root_position},
-        NamedCase{"a leaf marker reparents later messages", &a_leaf_marker_reparents_later_messages},
+        NamedCase{"a branch reparents later messages", &a_branch_reparents_later_messages},
         NamedCase{"labels attach only to the entry they name", &labels_attach_only_to_the_entry_they_name},
         NamedCase{"a label can be cleared", &a_label_can_be_cleared},
         NamedCase{"an empty retained tail is not engaged", &an_empty_retained_tail_is_not_engaged},

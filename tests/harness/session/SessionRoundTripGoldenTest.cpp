@@ -236,7 +236,6 @@ TEST_CASE("pi v3 session golden round-trips known entries and preserves retired 
             harness::session::SessionEntryKind::CustomMessage,
             harness::session::SessionEntryKind::Label,
             harness::session::SessionEntryKind::SessionInfo,
-            harness::session::SessionEntryKind::Leaf,
     };
     CHECK(kinds == expected_kinds);
 }
@@ -255,8 +254,6 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
     // (firstKeptEntryId absent).
     const harness::session::SessionEntry* compaction_full = nullptr;
     const harness::session::SessionEntry* compaction_minimal = nullptr;
-    // leaf variant with explicit null target (moveTo(null)).
-    const harness::session::SessionEntry* root_leaf = nullptr;
     for (const auto& entry : loaded->entries) {
         switch (entry.kind) {
         case harness::session::SessionEntryKind::Compaction:
@@ -266,13 +263,6 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
                 compaction_minimal = &entry;
             }
             break;
-        case harness::session::SessionEntryKind::Leaf: {
-            const auto& leaf = std::get<harness::session::LeafEntryValue>(entry.value);
-            if (!leaf.target_id.has_value()) {
-                root_leaf = &entry;
-            }
-            break;
-        }
         default:
             break;
         }
@@ -295,9 +285,6 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
     CHECK_FALSE(minimal.retained_tail.has_value());
     CHECK_FALSE(minimal.usage.has_value());
     CHECK(minimal.tokens_before == 1234);
-
-    REQUIRE(root_leaf != nullptr);
-    CHECK(root_leaf->raw_line.find(R"("targetId":null)") != std::string::npos);
 
     // Custom entry: absent data vs explicit null both round-trip (covered
     // byte-exactly above); spot-check the explicit-null line parses as an

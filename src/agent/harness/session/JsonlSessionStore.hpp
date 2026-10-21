@@ -61,10 +61,17 @@ public:
         const LoadedSession& loaded);
     [[nodiscard]] static support::Expected<LoadedSession> load(const std::filesystem::path& path);
 
-    /// Append one completed Session Entry message (pi `appendEntry`); the
-    /// append hangs under the in-process append parent and advances it, so
-    /// the next append continues the same chain.
+    /// pi `appendMessage`: the message hangs under the current leaf. The
+    /// explicit wire parent is the branch target once the session branched
+    /// off the linear chain (the flat-file shape leaves `parentId` null
+    /// otherwise, and the reader infers the chain from the file order).
     [[nodiscard]] AppendResult append(const ai::MessageVariant& message);
+
+    /// pi `branch`/`resetLeaf` on the persistence side: move the append
+    /// parent to the branch target, or back to the root position. The active
+    /// leaf is runtime-only state, so this moves where the NEXT append
+    /// hangs — it writes nothing to the session file.
+    void move_append_parent(std::optional<std::string> target_id);
 
     // --- v3 tree entry append methods ---
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_model_change(

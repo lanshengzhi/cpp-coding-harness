@@ -389,14 +389,16 @@ TEST_CASE("buildSessionContext derives thinkingLevel/model over every entry type
     assistant.timestamp = 1784678402000;
     REQUIRE(store->append(ai::MessageVariant{std::move(assistant)}).status);
 
-    // Point the leaf at the last message so the branch covers the whole chain.
+    // The active leaf is the last file entry (pi `_buildIndex`), so the
+    // branch covers the whole chain.
     auto pre = harness::session::JsonlSessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 11);
     const auto assistant_id = pre->entries.back().entry_id;
     auto leaf_store = harness::session::JsonlSessionStore::open_existing(path);
     REQUIRE(leaf_store);
-    REQUIRE(leaf_store->append_leaf(std::nullopt, assistant_id));
+    leaf_store->move_append_parent(assistant_id);
+    REQUIRE(leaf_store->append(user_msg("continuation")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
@@ -779,7 +781,7 @@ TEST_CASE("loading a session file returns a valid SessionTree", "[harness][sessi
     CHECK_FALSE(tree->leaf_id().empty());
 }
 
-TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][session][tree][spec]") {
+TEST_CASE("the active leaf is the last file entry after reopening", "[harness][session][tree][spec][issue1044]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-roundtrip.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -793,19 +795,16 @@ TEST_CASE("append_leaf round-trips and restores leaf position", "[harness][sessi
     REQUIRE(pre->entries.size() >= 3);
     std::string second_id = pre->entries[2].entry_id;
 
-    // Open existing and write a Leaf entry pointing to second message
-    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
-    REQUIRE(resumed);
-    REQUIRE(resumed->append_leaf(std::nullopt, second_id));
-
-    // Load as tree — leaf should be restored to second_id
+    // The active leaf is runtime-only state (pi `SessionManager.leafId`):
+    // it is reconstructed at load time from the file's entry order, so
+    // reopening restores the LAST entry as the leaf.
     auto tree = open_tree(path);
     REQUIRE(tree.has_value());
     CHECK(tree->leaf_id() == second_id);
 }
 
-TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last navigable entry",
-        "[harness][session][tree][spec]") {
+TEST_CASE("the active leaf is reconstructed from the file's entry order at load time",
+        "[harness][session][tree][spec][issue1044]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-stale-latest.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, test_metadata(workspace));
@@ -817,20 +816,16 @@ TEST_CASE("SessionTree ignores a stale latest leaf marker and falls back to last
     auto pre = harness::session::JsonlSessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 4);
-    const auto first_id = pre->entries[1].entry_id;
     const auto third_id = pre->entries[3].entry_id;
 
-    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
-    REQUIRE(resumed);
-    REQUIRE(resumed->append_leaf(std::nullopt, first_id));
-    REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
-
+    // pi `_buildIndex`: the leaf is the last file entry. There is no marker
+    // line to be stale — the leaf is never written.
     auto tree = open_tree(path);
     REQUIRE(tree.has_value());
     CHECK(tree->leaf_id() == third_id);
 }
 
-TEST_CASE("SessionTree restores leaf from typed leaf value", "[harness][session][tree][spec]") {
+TEST_CASE("SessionTree restores the leaf from the last tracked entry", "[harness][session][tree][spec][issue1044]") {
     tests::TempWorkspace workspace;
     harness::session::LoadedSession loaded;
     loaded.metadata = test_metadata(workspace);
@@ -848,15 +843,11 @@ TEST_CASE("SessionTree restores leaf from typed leaf value", "[harness][session]
     second.message = user_msg("second");
     loaded.entries.push_back(std::move(second));
 
-    harness::session::SessionEntry leaf;
-    leaf.kind = harness::session::SessionEntryKind::Leaf;
-    leaf.entry_id = "leaf0001";
-    leaf.value = harness::session::LeafEntryValue{.target_id = std::string{"first001"}};
-    leaf.payload = ignored_payload_marker("leaf");
-    loaded.entries.push_back(std::move(leaf));
-
+    // pi `_buildIndex`: `this.leafId = entry.id` for every tracked entry, so
+    // the leaf is the LAST one. The leaf is runtime state and is never
+    // written to the session file.
     harness::session::SessionTree tree(std::move(loaded));
-    CHECK(tree.leaf_id() == "first001");
+    CHECK(tree.leaf_id() == "second01");
 }
 
 TEST_CASE("loading a missing session file returns an error", "[harness][session][tree][spec]") {

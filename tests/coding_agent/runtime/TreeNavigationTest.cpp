@@ -113,24 +113,20 @@ void build_linear_session(
     return ids;
 }
 
-/// The newest leaf marker's target (pi wire: `targetId: null` at the root
-/// position).
-struct PersistedLeafMarker {
-    bool present{false};
-    std::optional<std::string> target;
-};
-
-[[nodiscard]] PersistedLeafMarker persisted_leaf_target(
-    const std::filesystem::path& path) {
+/// The leaf-marker lines in the session file. pi has no leaf entry kind: the
+/// active leaf is runtime state (`SessionManager.leafId`), so the count is
+/// always zero (issue #1044).
+[[nodiscard]] std::size_t leaf_marker_lines(const std::filesystem::path& path) {
     auto loaded = harness::session::SessionStore::load(path);
     REQUIRE(loaded.has_value());
-    for (auto it = loaded->entries.rbegin(); it != loaded->entries.rend(); ++it) {
-        if (it->kind == harness::session::SessionEntryKind::Leaf) {
-            const auto& value = std::get<harness::session::LeafEntryValue>(it->value);
-            return PersistedLeafMarker{.present = true, .target = value.target_id};
+    std::size_t markers = 0;
+    for (const auto& entry : loaded->entries) {
+        if (entry.kind == harness::session::SessionEntryKind::Unknown &&
+                entry.raw_line.find(R"("type":"leaf")") != std::string::npos) {
+            ++markers;
         }
     }
-    return PersistedLeafMarker{};
+    return markers;
 }
 
 /// A concrete scripted provider whose stream never runs in the pure
@@ -309,10 +305,12 @@ TEST_CASE("navigate_tree moves the leaf to a user message's parent and returns i
     CHECK(*result->editor_text == "user-0");
     CHECK(live_user_texts(*session).empty());
 
-    // The leaf marker persisted the root position (`targetId: null`).
-    const auto leaf_marker = persisted_leaf_target(fixture.session_file);
-    REQUIRE(leaf_marker.present);
-    CHECK_FALSE(leaf_marker.target.has_value());
+    // The leaf moved to the root position in memory; the session file keeps
+    // entries only — pi's leaf is runtime state and is never written.
+    const auto topology = session->session_tree();
+    REQUIRE(topology.has_value());
+    CHECK(topology->leaf_id.empty());
+    CHECK(leaf_marker_lines(fixture.session_file) == 0);
 }
 
 TEST_CASE("navigate_tree to a non-user message makes it the leaf with no editor text",
@@ -333,17 +331,18 @@ TEST_CASE("navigate_tree to a non-user message makes it the leaf with no editor 
     CHECK(users[0] == "user-0");
     CHECK(users[1] == "user-1");
 
-    const auto leaf_marker = persisted_leaf_target(fixture.session_file);
-    REQUIRE(leaf_marker.present);
-    REQUIRE(leaf_marker.target.has_value());
-    CHECK(*leaf_marker.target == ids[3]);
+    // The leaf moved to that entry in memory; the session file keeps entries
+    // only — pi's leaf is runtime state and is never written.
+    const auto topology = session->session_tree();
+    REQUIRE(topology.has_value());
+    CHECK(topology->leaf_id == ids[3]);
+    CHECK(leaf_marker_lines(fixture.session_file) == 0);
 }
 
 TEST_CASE("navigate_tree to the current leaf is a no-op", "[coding_agent][runtime][tree-navigation][issue410][spec]") {
     Fixture fixture;
     build_linear_session(fixture.session_file, fixture);
     auto session = open_session(fixture);
-    const auto before = persisted_leaf_target(fixture.session_file);
     // The resumed leaf is the last file entry (the restored thinking
     // entry), so the live leaf comes from the topology.
     auto topology = session->session_tree();
@@ -355,10 +354,11 @@ TEST_CASE("navigate_tree to the current leaf is a no-op", "[coding_agent][runtim
     CHECK_FALSE(result->cancelled);
     CHECK_FALSE(result->editor_text.has_value());
     CHECK(live_user_texts(*session).size() == 3);
-    // No new leaf marker was written.
-    const auto after = persisted_leaf_target(fixture.session_file);
-    CHECK(after.present == before.present);
-    CHECK(after.target == before.target);
+    // Nothing moved and nothing was written.
+    const auto after = session->session_tree();
+    REQUIRE(after.has_value());
+    CHECK(after->leaf_id == topology->leaf_id);
+    CHECK(leaf_marker_lines(fixture.session_file) == 0);
 }
 
 TEST_CASE("navigate_tree rejects an unknown entry with pi's verbatim error",

@@ -94,9 +94,9 @@ void write_resume_fixture(
         {"model", support::JsonValue{"gpt-test"}},
     }};
     support::JsonValue entry{support::JsonValue::object_t{
-        {"type", support::JsonValue{"message"}},
-        {"entryId", support::JsonValue{"msg00001"}},
-        {"message", std::move(assistant)},
+            {"type", support::JsonValue{"message"}},
+            {"id", support::JsonValue{"msg00001"}},
+            {"message", std::move(assistant)},
     }};
     auto header_json = support::write_json(header);
     auto entry_json = support::write_json(entry);
@@ -743,7 +743,6 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
         }));
     REQUIRE(store->append_branch_summary(std::nullopt, "from-entry", "branch summary", std::nullopt, false));
     REQUIRE(store->append_session_info(std::nullopt, "Session name"));
-    REQUIRE(store->append_leaf(std::nullopt, "leaf-target"));
     tests::flush_session_store(*store);
 
     const auto raw = read_all(path);
@@ -755,7 +754,6 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     CHECK(raw.find(R"("tokensBefore":123)") != std::string::npos);
     CHECK(raw.find(R"("fromId":"from-entry")") != std::string::npos);
     CHECK(raw.find(R"("name":"Session name")") != std::string::npos);
-    CHECK(raw.find(R"("targetId":"leaf-target")") != std::string::npos);
     // pi always writes the base fields with explicit null for a root parent.
     CHECK(raw.find(R"("parentId":null)") != std::string::npos);
 
@@ -1052,23 +1050,40 @@ TEST_CASE("session_info entry round-trips", "[harness][session][u9][compat-pi]")
     CHECK(*value.name == "Refactor auth module");
 }
 
-TEST_CASE("leaf entry round-trips as typed value", "[harness][session][u9][compat-pi]") {
+TEST_CASE("the store never writes a leaf entry and the active leaf stays runtime-only",
+        "[harness][session][u9][compat-pi][issue1044][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-entry.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    // The user message opens the deferred first flush (ADR 0064); the leaf
-    // marker then writes through on its own.
-    REQUIRE(store->append(user_message("flush")).status);
-    REQUIRE(store->append_leaf(std::nullopt, "leaf-target"));
+    // The user message opens the deferred first flush (ADR 0064).
+    REQUIRE(store->append(user_message("first")).status);
+    REQUIRE(store->append(user_message("second")).status);
+
+    auto pre = harness::session::JsonlSessionStore::load(path);
+    REQUIRE(pre);
+    const auto first_id = pre->entries[1].entry_id;
+
+    // pi has no leaf entry kind: the active leaf is runtime state
+    // (`SessionManager.leafId`), never a file record. Moving it changes
+    // where the NEXT append hangs, and writes nothing.
+    store->move_append_parent(first_id);
+    REQUIRE(store->append(user_message("third")).status);
+
+    const auto raw = read_all(path);
+    CHECK(raw.find(R"("type":"leaf")") == std::string::npos);
+    CHECK(raw.find(R"("leafId")") == std::string::npos);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
-    REQUIRE(loaded->entries.size() == 3);
-    CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::Leaf);
-    const auto& value = require_entry_value<harness::session::LeafEntryValue>(loaded->entries[2]);
-    REQUIRE(value.target_id.has_value());
-    CHECK(*value.target_id == "leaf-target");
+    // header + three messages: no marker line.
+    REQUIRE(loaded->entries.size() == 4);
+    for (const auto& entry : loaded->entries) {
+        CHECK(entry.raw_line.find(R"("type":"leaf")") == std::string::npos);
+    }
+    // The next append hung under the branch target, exactly like pi's wire.
+    REQUIRE(loaded->entries[3].parent_id.has_value());
+    CHECK(*loaded->entries[3].parent_id == first_id);
 }
 
 TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][session][u9][compat-pi]") {
@@ -1121,8 +1136,8 @@ TEST_CASE(
     CHECK(text_from_message(loaded->messages[1]) == "second message");
 }
 
-TEST_CASE("open_existing appends after stale latest leaf marker at last navigable entry",
-        "[harness][session][u9][compat-pi]") {
+TEST_CASE("open_existing appends under the last file entry after a reopened session",
+        "[harness][session][u9][compat-pi][issue1044][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "stale-leaf-append.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1134,41 +1149,33 @@ TEST_CASE("open_existing appends after stale latest leaf marker at last navigabl
     auto pre = harness::session::JsonlSessionStore::load(path);
     REQUIRE(pre);
     REQUIRE(pre->entries.size() >= 4);
-    const auto first_id = pre->entries[1].entry_id;
     const auto third_id = pre->entries[3].entry_id;
 
-    auto resumed = harness::session::JsonlSessionStore::open_existing(path);
-    REQUIRE(resumed);
-    REQUIRE(resumed->append_leaf(std::nullopt, first_id));
-    REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
-
+    // pi `_buildIndex`: reopening restores the active leaf from the file's
+    // entry order. A branch move is runtime state, so a reopened session
+    // starts at the last file entry again.
     auto reopened = harness::session::JsonlSessionStore::open_existing(path);
     REQUIRE(reopened);
-    REQUIRE(reopened->append(user_message("after stale leaf")).status);
+    REQUIRE(reopened->append(user_message("after reopen")).status);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
 
     const harness::session::SessionEntry* appended = nullptr;
-    const harness::session::SessionEntry* latest_leaf = nullptr;
     for (const auto& entry : loaded->entries) {
-        if (entry.kind == harness::session::SessionEntryKind::Message &&
-            entry.message.has_value() &&
-            text_from_message(*entry.message) == "after stale leaf") {
+        if (entry.kind == harness::session::SessionEntryKind::Message && entry.message.has_value() &&
+                text_from_message(*entry.message) == "after reopen") {
             appended = &entry;
         }
-        if (entry.kind == harness::session::SessionEntryKind::Leaf) {
-            latest_leaf = &entry;
-        }
+        // pi has no leaf entry kind: the file carries entries only.
+        CHECK(entry.raw_line.find(R"("type":"leaf")") == std::string::npos);
     }
 
     REQUIRE(appended != nullptr);
-    REQUIRE(appended->parent_id.has_value());
-    CHECK(*appended->parent_id == third_id);
-    REQUIRE(latest_leaf != nullptr);
-    const auto& leaf = require_entry_value<harness::session::LeafEntryValue>(*latest_leaf);
-    REQUIRE(leaf.target_id.has_value());
-    CHECK(*leaf.target_id == appended->entry_id);
+    // The reopened session's flat-file shape leaves the parent null and the
+    // reader infers the chain from the file order.
+    CHECK_FALSE(appended->parent_id.has_value());
+    CHECK(third_id != appended->entry_id);
 }
 
 TEST_CASE("extended message types survive session append and load", "[harness][session][extended][compat-pi]") {

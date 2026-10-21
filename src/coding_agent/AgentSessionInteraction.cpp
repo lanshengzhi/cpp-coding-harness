@@ -899,10 +899,19 @@ struct TreeLeafDecision {
     return TreeLeafDecision{.new_leaf_id = entry.entry_id, .editor_text = std::nullopt};
 }
 
-/// pi `setLeafId(null)` root leaf marker: `targetId: null` on the wire.
-[[nodiscard]] support::ExpectedVoid persist_leaf_marker(
+/// pi `navigateTree`: move the session's active leaf to the position the
+/// navigation decided. The leaf is runtime-only state (pi keeps it in
+/// memory), so the move writes nothing to the session file: a user or
+/// custom-message target moves the leaf to its effective parent (the root
+/// position when that parent is absent), any other target becomes the leaf.
+[[nodiscard]] support::ExpectedVoid move_active_leaf(
         harness::session::SessionStore& store, const std::optional<std::string>& new_leaf_id) {
-    return store.append_leaf(std::nullopt, new_leaf_id);
+    if (!new_leaf_id.has_value()) {
+        // pi `resetLeaf`: the root position.
+        store.reset_leaf();
+        return {};
+    }
+    return store.branch(*new_leaf_id);
 }
 
 } // namespace
@@ -975,15 +984,13 @@ support::Expected<TreeNavigationResult> AgentSession::Impl::navigate_tree(std::s
 
     const auto decision = tree_leaf_decision(store.effective_parent_id(target->entry_id), *target);
 
-    // Append the leaf marker; a successful marker append also moves the
-    // live tree's leaf to the same position, while a failure changes
-    // nothing — durable and live state never drift (Session Event
-    // Commitment ordering: the durable mutation precedes the live-state
-    // advance below). In-memory sessions mirror the same marker into the
-    // live tree without disk I/O; at the root position the marker also
-    // carries the linear-chain break (pi `resetLeaf`).
-    if (auto persisted = persist_leaf_marker(store, decision.new_leaf_id); !persisted) {
-        return std::unexpected(persisted.error());
+    // Move the live tree's active leaf to the decided position. The leaf is
+    // runtime-only state (pi keeps `leafId` in memory and never writes it),
+    // so the move persists nothing: the durable session file keeps only the
+    // entries. A failed move changes nothing — the live state keeps the
+    // position it had.
+    if (auto moved = move_active_leaf(store, decision.new_leaf_id); !moved) {
+        return std::unexpected(moved.error());
     }
 
     // Rebuild the live Agent context from the new path (pi

@@ -224,7 +224,8 @@ private:
     /// Linear-chain tail for parent inference (the index build's running
     /// `previous_id`): `reset_leaf` clears it so the next null-parent append
     /// starts a new root (pi `resetLeaf`).
-    std::optional<std::string> chain_tail_;};
+    std::optional<std::string> chain_tail_;
+};
 
 /// Reconstruct LLM context from a root-to-leaf entry path without a
 /// SessionTree (pi `buildSessionContext(pathEntries)` in

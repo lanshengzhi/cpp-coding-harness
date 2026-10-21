@@ -140,16 +140,25 @@ TEST_CASE("resumed session uses active leaf path", "[coding_agent][runtime][sess
 
     auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
-    REQUIRE(resumed->append_leaf(std::nullopt, first_id));
+    // pi `branch`: the active leaf moves to an existing entry. The leaf is
+    // runtime-only state (never written), so the file keeps entries only.
+    REQUIRE(resumed->branch(first_id).has_value());
+    CHECK(resumed->leaf_id() == first_id);
+
+    // The next append hangs under the branch target (pi `appendMessage`
+    // hangs the message under the current leaf), so the resumed session's
+    // durable history follows the branch.
+    REQUIRE(resumed->append(user_msg("branched")).has_value());
 
     auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Branched);
-    REQUIRE(opened->history.size() == 1);
+    REQUIRE(opened->history.size() == 2);
     CHECK(user_text_at(opened->history, 0) == "first");
+    CHECK(user_text_at(opened->history, 1) == "branched");
 }
 
-TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
+TEST_CASE("AgentSession prompt after a branch append becomes the next resume point",
         "[coding_agent][runtime][session][spec]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime_fixture;
@@ -167,7 +176,11 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
 
     auto resumed_store = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed_store);
-    REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
+    // pi `branch`: the active leaf moves to an existing entry, so the next
+    // append hangs under it (pi `appendMessage`). The leaf itself is
+    // runtime-only state and is never written to the session file.
+    REQUIRE(resumed_store->branch(first_id).has_value());
+    REQUIRE(resumed_store->append(user_msg("branched")).has_value());
 
     runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
@@ -191,16 +204,17 @@ TEST_CASE("AgentSession prompt after leaf resume becomes the next resume point",
     auto reopened = open_resumed_session(path, workspace);
     REQUIRE(reopened);
     CHECK(reopened->topology == harness::session::SessionTopology::Branched);
-    REQUIRE(reopened->history.size() == 3);
+    REQUIRE(reopened->history.size() == 4);
     CHECK(user_text_at(reopened->history, 0) == "first");
-    CHECK(user_text_at(reopened->history, 1) == "continue branch");
-    const auto* assistant = std::get_if<ai::AssistantMessage>(&reopened->history[2]);
+    CHECK(user_text_at(reopened->history, 1) == "branched");
+    CHECK(user_text_at(reopened->history, 2) == "continue branch");
+    const auto* assistant = std::get_if<ai::AssistantMessage>(&reopened->history[3]);
     REQUIRE(assistant != nullptr);
     CHECK(ai::text_from_assistant_content(assistant->content) == "fake: continue branch");
 }
 
-TEST_CASE("resumed AgentSession recovers when the message write succeeds but its leaf write fails",
-        "[coding_agent][runtime][session][persistence-failure][spec]") {
+TEST_CASE("resumed AgentSession recovers when the message write succeeds but the reply write fails",
+        "[coding_agent][runtime][session][persistence-failure][spec][issue1044]") {
     tests::TempWorkspace workspace;
     tests::RuntimeFixture runtime_fixture;
     auto path = workspace.path() / "leaf-partial-append.jsonl";
@@ -217,7 +231,12 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
 
     auto resumed_store = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed_store);
-    REQUIRE(resumed_store->append_leaf(std::nullopt, first_id));
+    // pi `branch`: the active leaf moves to an existing entry, so the next
+    // append hangs under it. The leaf itself is runtime-only state and is
+    // never written to the session file — the branch is durable through the
+    // next append's explicit `parentId`, exactly like pi's wire.
+    REQUIRE(resumed_store->branch(first_id).has_value());
+    REQUIRE(resumed_store->append(user_msg("branched")).has_value());
 
     runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
@@ -235,10 +254,10 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
     REQUIRE(session_result);
     auto& session = runtime_fixture.adopt_session(std::move(session_result->session));
 
-    // A resumed branch message append writes the message and then its active
-    // leaf marker. Fail only the second physical write: the user message
-    // lands but its leaf marker does not, so the append reports a persistence
-    // failure after the message was already admitted.
+    // A prompt writes the user message and then the assistant reply. Fail
+    // only the second physical write: the user message lands but the reply
+    // does not, so the append reports a persistence failure after the message
+    // was already admitted.
     harness::session::testing::fail_nth_append_for_test(path, 2);
     auto failed = run_prompt(runtime_fixture, session, "continue after partial write");
     REQUIRE_FALSE(failed);
@@ -247,19 +266,21 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
     CHECK(session.is_open());
     // No rollback theatre: the admitted user and assistant messages stay in
     // live Session state (admission is asynchronous; there is no mid-flight
-    // veto).
-    CHECK(session.message_count() == 3);
+    // veto). The resumed history is `first` + `branched`, plus this prompt's
+    // user and assistant messages.
+    CHECK(session.message_count() == 4);
 
-    // Reopening follows the durable message even though its leaf marker was
-    // the failed physical write. Whether the assistant reply settled before
-    // the failure latched is timing-dependent, so the durable history is the
-    // user message plus at most the assistant reply.
+    // Reopening follows the durable message. Whether the assistant reply
+    // settled before the failure latched is timing-dependent, so the durable
+    // history is the resumed branch plus the user message, plus at most the
+    // assistant reply.
     auto after_failure = open_resumed_session(path, workspace);
     REQUIRE(after_failure);
-    REQUIRE(after_failure->history.size() >= 2);
-    REQUIRE(after_failure->history.size() <= 3);
+    REQUIRE(after_failure->history.size() >= 3);
+    REQUIRE(after_failure->history.size() <= 4);
     CHECK(user_text_at(after_failure->history, 0) == "first");
-    CHECK(user_text_at(after_failure->history, 1) == "continue after partial write");
+    CHECK(user_text_at(after_failure->history, 1) == "branched");
+    CHECK(user_text_at(after_failure->history, 2) == "continue after partial write");
 
     // The recorded failure is session-scoped sticky state (ADR 0040): a later
     // prompt is rejected with the typed persistence failure instead of
@@ -270,11 +291,11 @@ TEST_CASE("resumed AgentSession recovers when the message write succeeds but its
     CHECK(
         recovered.error().message ==
         "session persistence failed; rejecting new prompt");
-    CHECK(session.message_count() == 3);
+    CHECK(session.message_count() == 4);
     session.close();
 }
 
-TEST_CASE("resumed session ignores invalid leaf target", "[coding_agent][runtime][session][spec]") {
+TEST_CASE("resumed session rejects a branch to a missing entry", "[coding_agent][runtime][session][spec][issue1044]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "invalid-leaf.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -284,7 +305,9 @@ TEST_CASE("resumed session ignores invalid leaf target", "[coding_agent][runtime
 
     auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
-    REQUIRE(resumed->append_leaf(std::nullopt, "missing-entry"));
+    // pi `branch` rejects an unknown target and keeps the current position.
+    CHECK_FALSE(resumed->branch("missing-entry").has_value());
+    CHECK_FALSE(resumed->leaf_id().empty());
 
     auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
@@ -294,7 +317,7 @@ TEST_CASE("resumed session ignores invalid leaf target", "[coding_agent][runtime
     CHECK(user_text_at(opened->history, 1) == "second");
 }
 
-TEST_CASE("resumed session topology follows active path only", "[coding_agent][runtime][session][spec]") {
+TEST_CASE("resumed session topology follows active path only", "[coding_agent][runtime][session][spec][issue1044]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "inactive-tree-data.jsonl";
     auto store = harness::session::SessionStore::create_new(path, test_metadata(workspace));
@@ -311,6 +334,8 @@ TEST_CASE("resumed session topology follows active path only", "[coding_agent][r
 
     auto resumed = harness::session::SessionStore::open_existing(path);
     REQUIRE(resumed);
+    // Two entries that hang off the first message and are therefore NOT on
+    // the active path.
     REQUIRE(resumed->append_branch_summary(first_id, third_id, "inactive branch", std::nullopt, std::nullopt));
     REQUIRE(resumed->append_compaction(
         first_id,
@@ -319,15 +344,22 @@ TEST_CASE("resumed session topology follows active path only", "[coding_agent][r
             .first_kept_entry_id = third_id,
             .tokens_before = 1000,
         }));
-    REQUIRE(resumed->append_leaf(std::nullopt, third_id));
+
+    // pi `branch`: navigate back to the third message and continue there, so
+    // the durable active path is first → second → third → fourth. The leaf
+    // move itself is runtime-only state and is never written; the branch is
+    // durable through the next append's explicit `parentId`.
+    REQUIRE(resumed->branch(third_id).has_value());
+    REQUIRE(resumed->append(user_msg("fourth")).has_value());
 
     auto opened = open_resumed_session(path, workspace);
     REQUIRE(opened);
     CHECK(opened->topology == harness::session::SessionTopology::Linear);
-    REQUIRE(opened->history.size() == 3);
+    REQUIRE(opened->history.size() == 4);
     CHECK(user_text_at(opened->history, 0) == "first");
     CHECK(user_text_at(opened->history, 1) == "second");
     CHECK(user_text_at(opened->history, 2) == "third");
+    CHECK(user_text_at(opened->history, 3) == "fourth");
 }
 
 TEST_CASE("resumed session carries effective model and thinking level", "[coding_agent][runtime][session][spec]") {
