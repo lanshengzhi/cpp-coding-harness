@@ -51,10 +51,8 @@ namespace {
 /// relative path resolves against the working directory, and the result is
 /// absolute.
 [[nodiscard]] std::filesystem::path resolve_import_path(
-    const std::string& value,
-    const std::filesystem::path& workspace) {
-    return session_paths::resolve_session_path_value(
-        value, workspace, coding_agent::home_directory());
+        const std::string& value, const std::filesystem::path& workspace) {
+    return session_paths::resolve_session_path_value(value, workspace, coding_agent::home_directory());
 }
 
 /// pi `sessionManager.getSessionDir()`: the directory the current session
@@ -65,8 +63,7 @@ namespace {
     if (const auto path = session.session_path()) {
         return path->parent_path();
     }
-    return coding_agent::sessions_root_path() /
-           coding_agent::session_paths::encode_workspace_key(session.workspace());
+    return coding_agent::sessions_root_path() / coding_agent::session_paths::encode_workspace_key(session.workspace());
 }
 
 } // namespace
@@ -76,15 +73,14 @@ void SessionFlowController::open_import(std::string path) {
     auto self = shared_from_this();
     post([self, path = std::move(path)]() mutable {
         self->spawn(
-            [self, path = std::move(path)]() mutable -> boost::asio::awaitable<void> {
-                co_await self->handle_import_session(std::move(path));
-            },
-            "Native TUI session import flow failed");
+                [self, path = std::move(path)]() mutable -> boost::asio::awaitable<void> {
+                    co_await self->handle_import_session(std::move(path));
+                },
+                "Native TUI session import flow failed");
     });
 }
 
-boost::asio::awaitable<bool> SessionFlowController::confirm_import_session(
-    std::string import_path) {
+boost::asio::awaitable<bool> SessionFlowController::confirm_import_session(std::string import_path) {
     if (!is_live() || hooks_.live_theme == nullptr || keybindings_ == nullptr) {
         co_return false;
     }
@@ -112,8 +108,7 @@ boost::asio::awaitable<bool> SessionFlowController::confirm_import_session(
     // pi `showExtensionConfirm("Import session", "Replace current session
     // with ${inputPath}?")`: the title and the message share one selector
     // body.
-    const auto title = std::format(
-            "Import session\nReplace current session with {}?", import_path);
+    const auto title = std::format("Import session\nReplace current session with {}?", import_path);
     auto selector = std::make_shared<SelectListPrompt>(title,
             generic_select_list_hint(*keybindings_->get()),
             hooks_.live_theme().foreground_hook(ThemeToken::Border),
@@ -121,8 +116,7 @@ boost::asio::awaitable<bool> SessionFlowController::confirm_import_session(
     presenter_->replace_prompt_slot(std::move(selector));
 
     boost::system::error_code error;
-    auto result = co_await slot->channel.async_receive(
-        boost::asio::redirect_error(boost::asio::use_awaitable, error));
+    auto result = co_await slot->channel.async_receive(boost::asio::redirect_error(boost::asio::use_awaitable, error));
     untrack_prompt_slot(slot);
     if (closed_) co_return false;
     presenter_->restore_prompt_slot();
@@ -130,8 +124,7 @@ boost::asio::awaitable<bool> SessionFlowController::confirm_import_session(
     co_return *result == "Yes";
 }
 
-boost::asio::awaitable<void> SessionFlowController::handle_import_session(
-    std::string import_path) {
+boost::asio::awaitable<void> SessionFlowController::handle_import_session(std::string import_path) {
     auto* session = current_session(); // borrowed; host retains retired sessions.
     if (session == nullptr) co_return;
     const auto captured_generation = action_generation();
@@ -154,9 +147,8 @@ boost::asio::awaitable<void> SessionFlowController::handle_import_session(
     std::error_code exists_ec;
     if (!std::filesystem::exists(resolved, exists_ec)) {
         // pi `SessionImportFileNotFoundError`: a non-fatal chat error.
-        presenter_->show_error(std::format(
-                "Failed to import session: {}",
-                session_import_file_not_found_error(resolved).message));
+        presenter_->show_error(
+                std::format("Failed to import session: {}", session_import_file_not_found_error(resolved).message));
         co_return;
     }
 
@@ -165,8 +157,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_import_session(
     const auto session_dir = import_session_directory(*session);
     auto copied = copy_imported_session(session_dir, resolved);
     if (!copied) {
-        presenter_->show_error(std::format(
-                "Failed to import session: {}", combined_error_text(copied.error())));
+        presenter_->show_error(std::format("Failed to import session: {}", combined_error_text(copied.error())));
         co_return;
     }
     const auto destination = *copied;
@@ -175,8 +166,7 @@ boost::asio::awaitable<void> SessionFlowController::handle_import_session(
     // longer exists prompts for the current cwd before the retry.
     std::optional<std::filesystem::path> cwd_override;
     std::optional<std::filesystem::path> header_cwd;
-    if (auto info = session_discovery::build_session_info(destination);
-        info && !info->cwd.empty()) {
+    if (auto info = session_discovery::build_session_info(destination); info && !info->cwd.empty()) {
         header_cwd = std::filesystem::path{info->cwd};
     }
     if (header_cwd) {
@@ -195,22 +185,19 @@ boost::asio::awaitable<void> SessionFlowController::handle_import_session(
     if (closed_ || captured_generation != action_generation()) co_return;
     session = current_session();
     if (session == nullptr) co_return;
-    auto request = make_session_request(
-        cwd_override ? *cwd_override : session->workspace(),
-        SessionTarget{ExplicitResumeSessionTarget{destination}});
+    auto request = make_session_request(cwd_override ? *cwd_override : session->workspace(),
+            SessionTarget{ExplicitResumeSessionTarget{destination}});
     request.resume_cwd_override = cwd_override;
     auto created = co_await request_session_replacement_async(std::move(request), captured_generation);
     if (!created) {
         release_session_replacement();
-        presenter_->show_error(std::format(
-                "Failed to import session: {}", combined_error_text(created.error())));
+        presenter_->show_error(std::format("Failed to import session: {}", combined_error_text(created.error())));
         co_return;
     }
     auto replaced = replace_session(std::move(created->session));
     release_session_replacement();
     if (!replaced) {
-        presenter_->show_error(std::format(
-                "Failed to import session: {}", combined_error_text(replaced.error())));
+        presenter_->show_error(std::format("Failed to import session: {}", combined_error_text(replaced.error())));
         co_return;
     }
     presenter_->show_status(std::format("Session imported from: {}", import_path));

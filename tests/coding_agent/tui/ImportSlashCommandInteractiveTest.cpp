@@ -100,21 +100,19 @@ struct Fixture {
     }
 
     /// Write a session file (header + messages) at `path`.
-    void write_session(
-        const std::filesystem::path& path,
-        std::vector<std::string> user_messages,
-        std::optional<std::string> header_cwd = std::nullopt,
-        std::string session_id = "imported-session") {
+    void write_session(const std::filesystem::path& path,
+            std::vector<std::string> user_messages,
+            std::optional<std::string> header_cwd = std::nullopt,
+            std::string session_id = "imported-session") {
         std::filesystem::create_directories(path.parent_path());
-        auto created = harness::session::SessionStore::create_new(
-            path,
-            {
-                .session_id = session_id,
-                .created_at = "2026-07-05T00:00:00Z",
-                .workspace = header_cwd.value_or(workspace.path().string()),
-                .provider = "fake",
-                .model = "fake-model",
-            });
+        auto created = harness::session::SessionStore::create_new(path,
+                {
+                        .session_id = session_id,
+                        .created_at = "2026-07-05T00:00:00Z",
+                        .workspace = header_cwd.value_or(workspace.path().string()),
+                        .provider = "fake",
+                        .model = "fake-model",
+                });
         REQUIRE(created.has_value());
         std::size_t index = 0;
         for (const auto& text : user_messages) {
@@ -122,13 +120,11 @@ struct Fixture {
             user.timestamp = 1'750'000'000'000 + static_cast<ai::TimestampMs>(index * 2);
             REQUIRE(created->append(ai::MessageVariant{user}).has_value());
             if (index + 1 < user_messages.size()) {
-                auto assistant = ai::assistant_text_message(
-                        "imported assistant reply " + std::to_string(index));
+                auto assistant = ai::assistant_text_message("imported assistant reply " + std::to_string(index));
                 assistant.api = "scripted-fake";
                 assistant.provider = "fake";
                 assistant.model = "fake-model";
-                assistant.timestamp =
-                        1'750'000'000'001 + static_cast<ai::TimestampMs>(index * 2);
+                assistant.timestamp = 1'750'000'000'001 + static_cast<ai::TimestampMs>(index * 2);
                 REQUIRE(created->append(ai::MessageVariant{assistant}).has_value());
             }
             ++index;
@@ -147,10 +143,9 @@ struct Running {
 /// Boot the interactive mode against the fixture session with the real
 /// session-factory replacement surface (pi `createRuntime`) routed through
 /// the asynchronous Session replacement test adapter.
-[[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(
-    Fixture& fixture,
-    Running& running,
-    const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions) {
+[[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(Fixture& fixture,
+        Running& running,
+        const std::shared_ptr<coding_agent::tui::testing::ActionSinkRecorder>& actions) {
     coding_agent::runtime::AgentSessionCreationRequest request;
     request.session_facts.no_skills = true;
     request.session_facts.no_prompt_templates = true;
@@ -158,17 +153,14 @@ struct Running {
     request.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{fixture.session_file};
     request.request_model = tests::scripted_request_model("fake", "fake-model");
 
-    auto runtime_io =
-            std::shared_ptr<boost::asio::io_context>(&running.io, [](boost::asio::io_context*) {});
+    auto runtime_io = std::shared_ptr<boost::asio::io_context>(&running.io, [](boost::asio::io_context*) {});
     auto runtime_root = std::make_shared<harness::RuntimeRoot>(std::move(runtime_io), harness::RuntimeLimits{});
     request.execution_runtime_target = runtime_root->make_target();
 
     std::optional<support::Expected<coding_agent::CreateAgentSessionResult>> booted;
     coding_agent::isolate_magpie_gateway(request);
-    boost::asio::co_spawn(
-            running.io,
-            support::detail::await_async_result(
-                    coding_agent::create_agent_session_async(std::move(request))),
+    boost::asio::co_spawn(running.io,
+            support::detail::await_async_result(coding_agent::create_agent_session_async(std::move(request))),
             [&](std::exception_ptr exception, support::Expected<coding_agent::CreateAgentSessionResult> created) {
                 CHECK(exception == nullptr);
                 booted.emplace(std::move(created));
@@ -199,8 +191,7 @@ struct Running {
                        .with_runtime_root(std::move(runtime_root))
                        .build();
 
-    boost::asio::co_spawn(
-            running.io,
+    boost::asio::co_spawn(running.io,
             coding_agent::tui::run_interactive_mode(running.terminal, std::move(run)),
             [&](std::exception_ptr exception, support::ExpectedVoid result) {
                 CHECK(exception == nullptr);
@@ -230,9 +221,8 @@ void wait_for_screen(Running& running, std::string_view text) {
 /// The pi confirmation prompt's Yes/No selector: "Yes" is the first row, so
 /// Enter confirms it and Down + Enter declines it.
 void confirm_import(Running& running, bool accept) {
-    REQUIRE(tests::pump_until(running.io, [&] {
-        return visible_screen(running.terminal).find("Import session") != std::string::npos;
-    }));
+    REQUIRE(tests::pump_until(
+            running.io, [&] { return visible_screen(running.terminal).find("Import session") != std::string::npos; }));
     tests::drain_ready(running.io);
     if (!accept) {
         REQUIRE(running.terminal.inject_input("\x1b[B"));
@@ -252,8 +242,7 @@ void finish_interactive(Running& running) {
 
 } // namespace
 
-TEST_CASE("/import without a path reports pi's usage error",
-        "[coding_agent][tui][import][e2e][issue1044][spec]") {
+TEST_CASE("/import without a path reports pi's usage error", "[coding_agent][tui][import][e2e][issue1044][spec]") {
     Fixture fixture;
     Running running;
     auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
@@ -296,8 +285,7 @@ TEST_CASE("/import replaces the current session with the imported one",
     finish_interactive(running);
 }
 
-TEST_CASE("a declined import confirmation changes nothing",
-        "[coding_agent][tui][import][e2e][issue1044][spec]") {
+TEST_CASE("a declined import confirmation changes nothing", "[coding_agent][tui][import][e2e][issue1044][spec]") {
     Fixture fixture;
     fixture.write_session(fixture.session_file, {"current session entry"});
     const auto import_source = fixture.workspace.path() / "incoming.jsonl";
@@ -342,8 +330,7 @@ TEST_CASE("an import that collides with a stored session file lands beside it",
     // stored file is not overwritten.
     CHECK(std::filesystem::exists(fixture.session_dir / "incoming-1.jsonl"));
     std::ifstream stored(fixture.session_dir / "incoming.jsonl", std::ios::binary);
-    const std::string stored_text{
-        std::istreambuf_iterator<char>(stored), std::istreambuf_iterator<char>()};
+    const std::string stored_text{std::istreambuf_iterator<char>(stored), std::istreambuf_iterator<char>()};
     CHECK(stored_text.find("stored session entry") != std::string::npos);
     CHECK(stored_text.find("imported session entry") == std::string::npos);
 

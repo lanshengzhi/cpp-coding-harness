@@ -164,8 +164,7 @@ public:
 private:
     [[nodiscard]] boost::asio::awaitable<void> handle_resume_session(
         std::string session_path);
-    [[nodiscard]] boost::asio::awaitable<void> handle_import_session(
-        std::string import_path);
+    [[nodiscard]] boost::asio::awaitable<void> handle_import_session(std::string import_path);
     [[nodiscard]] boost::asio::awaitable<void> handle_new_session();
     void show_user_message_selector();
     [[nodiscard]] boost::asio::awaitable<void> handle_fork_session(
@@ -177,8 +176,7 @@ private:
     /// pi `showExtensionConfirm`: the Yes/No confirmation the `/import` flow
     /// shows before it replaces the current session. True when the user
     /// confirmed.
-    [[nodiscard]] boost::asio::awaitable<bool> confirm_import_session(
-        std::string import_path);
+    [[nodiscard]] boost::asio::awaitable<bool> confirm_import_session(std::string import_path);
     void show_session_selector();
     void show_tree_selector();
     [[nodiscard]] boost::asio::awaitable<void> handle_tree_navigation(

@@ -27,17 +27,13 @@ namespace cch::coding_agent::tui {
 /// pi's spelling: `"/import"` alone carries no argument; `"/import \"a
 /// b.jsonl\""` carries `a b.jsonl`; `"/import john's/x.jsonl"` carries
 /// `john's/x.jsonl` unchanged.
-[[nodiscard]] std::optional<std::string> import_path_argument(
-    std::string_view argument);
+[[nodiscard]] std::optional<std::string> import_path_argument(std::string_view argument);
 
 /// pi `SessionImportFileNotFoundError`: the `/import` argument names no
 /// existing file. The message is pi's verbatim wording, so the command can
 /// report `Failed to import session: <message>` unchanged.
-[[nodiscard]] inline support::Error session_import_file_not_found_error(
-    const std::filesystem::path& resolved_path) {
-    return support::make_error(
-        support::ErrorCode::Session,
-        "File not found: " + resolved_path.string());
+[[nodiscard]] inline support::Error session_import_file_not_found_error(const std::filesystem::path& resolved_path) {
+    return support::make_error(support::ErrorCode::Session, "File not found: " + resolved_path.string());
 }
 
 /// The destination pi's `importFromJsonl` copies the source file to: the
@@ -50,8 +46,7 @@ namespace cch::coding_agent::tui {
 /// `-1`, `-2`, ... suffix is chosen; the suffix is appended to the name and
 /// the extension is preserved.
 [[nodiscard]] std::filesystem::path import_destination_path(
-    const std::filesystem::path& session_dir,
-    const std::filesystem::path& resolved_source);
+        const std::filesystem::path& session_dir, const std::filesystem::path& resolved_source);
 
 /// pi `importFromJsonl`'s copy step: copy the resolved source to its
 /// destination inside the session directory, creating the directory when it
@@ -61,7 +56,6 @@ namespace cch::coding_agent::tui {
 /// Returns the destination path. A source that is not already stored there
 /// is copied with pi's exclusive semantics: the destination must not exist.
 [[nodiscard]] support::Expected<std::filesystem::path> copy_imported_session(
-    const std::filesystem::path& session_dir,
-    const std::filesystem::path& resolved_source);
+        const std::filesystem::path& session_dir, const std::filesystem::path& resolved_source);
 
 } // namespace cch::coding_agent::tui

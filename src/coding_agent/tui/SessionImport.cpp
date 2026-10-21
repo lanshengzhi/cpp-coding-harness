@@ -20,17 +20,15 @@ struct ParsedName {
         return ParsedName{.name = base, .extension = {}};
     }
     return ParsedName{
-        .name = base.substr(0, dot),
-        .extension = base.substr(dot),
+            .name = base.substr(0, dot),
+            .extension = base.substr(dot),
     };
 }
 
 /// Whether two paths name the same file. pi compares the resolved paths
 /// (`resolve(destinationPath) === resolvedPath`), so the comparison is
 /// lexical-normalized rather than a filesystem identity check.
-[[nodiscard]] bool same_path(
-    const std::filesystem::path& left,
-    const std::filesystem::path& right) {
+[[nodiscard]] bool same_path(const std::filesystem::path& left, const std::filesystem::path& right) {
     std::error_code left_ec;
     std::error_code right_ec;
     const auto left_normal = std::filesystem::weakly_canonical(left, left_ec);
@@ -66,8 +64,7 @@ std::optional<std::string> import_path_argument(std::string_view argument) {
 }
 
 std::filesystem::path import_destination_path(
-    const std::filesystem::path& session_dir,
-    const std::filesystem::path& resolved_source) {
+        const std::filesystem::path& session_dir, const std::filesystem::path& resolved_source) {
     const auto base_name = resolved_source.filename();
     auto destination = session_dir / base_name;
     if (same_path(destination, resolved_source)) {
@@ -79,24 +76,21 @@ std::filesystem::path import_destination_path(
     std::size_t suffix = 1;
     std::error_code exists_ec;
     while (std::filesystem::exists(destination, exists_ec)) {
-        destination = session_dir /
-                      (parsed.name + "-" + std::to_string(suffix++) + parsed.extension);
+        destination = session_dir / (parsed.name + "-" + std::to_string(suffix++) + parsed.extension);
     }
     return destination;
 }
 
 support::Expected<std::filesystem::path> copy_imported_session(
-    const std::filesystem::path& session_dir,
-    const std::filesystem::path& resolved_source) {
+        const std::filesystem::path& session_dir, const std::filesystem::path& resolved_source) {
     std::error_code ec;
     if (!std::filesystem::exists(session_dir, ec)) {
         // pi `mkdirSync(sessionDir, { recursive: true })`.
         std::filesystem::create_directories(session_dir, ec);
         if (ec) {
-            return std::unexpected(support::make_error(
-                support::ErrorCode::Session,
-                "could not create the session directory",
-                session_dir.string() + ": " + ec.message()));
+            return std::unexpected(support::make_error(support::ErrorCode::Session,
+                    "could not create the session directory",
+                    session_dir.string() + ": " + ec.message()));
         }
     }
 
@@ -109,15 +103,11 @@ support::Expected<std::filesystem::path> copy_imported_session(
 
     // pi `copyFileSync(source, destination, COPYFILE_EXCL)`: the copy never
     // overwrites an existing file.
-    std::filesystem::copy_file(resolved_source,
-            destination,
-            std::filesystem::copy_options::none,
-            ec);
+    std::filesystem::copy_file(resolved_source, destination, std::filesystem::copy_options::none, ec);
     if (ec) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Session,
-            "could not copy the imported session file",
-            resolved_source.string() + " -> " + destination.string() + ": " + ec.message()));
+        return std::unexpected(support::make_error(support::ErrorCode::Session,
+                "could not copy the imported session file",
+                resolved_source.string() + " -> " + destination.string() + ": " + ec.message()));
     }
     return destination;
 }
