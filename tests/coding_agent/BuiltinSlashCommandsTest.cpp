@@ -35,6 +35,7 @@ TEST_CASE(
             "quit",
             "mcp",
             "export",
+            "import",
     };
     REQUIRE(commands.size() == expected_names.size());
     for (std::size_t index = 0; index < expected_names.size(); ++index) {
@@ -78,6 +79,11 @@ TEST_CASE(
     REQUIRE(export_command != nullptr);
     CHECK(export_command->description == "Export session (HTML default, or specify path: .html/.jsonl)");
     CHECK(export_command->argument_hint == "[path]");
+
+    // pi v1.3.0 "/import" (slash-commands.ts:26), verbatim.
+    const auto* import_command = by_name("import");
+    REQUIRE(import_command != nullptr);
+    CHECK(import_command->description == "Import and resume a session from a JSONL file");
 }
 
 TEST_CASE("unported and router-only commands are absent from the autocomplete catalog",
@@ -85,7 +91,6 @@ TEST_CASE("unported and router-only commands are absent from the autocomplete ca
     const auto& commands = coding_agent::prompt::builtin_slash_commands();
     for (const auto& command : commands) {
         const std::string_view name = command.name;
-        CHECK(name != "import");
         CHECK(name != "share");
         // pi added `bug` to its catalog after the 83114817 baseline; it is
         // not-applicable rather than Deferred (it reports to Pi's tracker).

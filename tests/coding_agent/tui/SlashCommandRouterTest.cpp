@@ -54,6 +54,8 @@ TEST_CASE("Slash command parsing trims input and resolves aliases", "[coding_age
             {.text = "/mcp   reconnect echo  ", .command = Mcp, .argument = "reconnect echo"},
             {.text = "/export", .command = Export, .argument = {}},
             {.text = "/export  /tmp/transcript.jsonl  ", .command = Export, .argument = "/tmp/transcript.jsonl"},
+            {.text = "/import", .command = Import, .argument = {}},
+            {.text = "/import  /tmp/session.jsonl  ", .command = Import, .argument = "/tmp/session.jsonl"},
     };
 
     for (const auto& test : cases) {
@@ -164,6 +166,10 @@ TEST_CASE("Slash command routing returns structured modal requests with argument
             {.text = "/mcp", .command = Mcp, .argument = {}},
             {.text = "/mcp logout", .command = Mcp, .argument = "logout"},
             {.text = "/mcp login alpha", .command = Mcp, .argument = "login alpha"},
+            // pi `handleImportCommand` is awaited in the submit handler, but
+            // the C++ route is the modal one: the confirmation prompt
+            // suspends and the session replacement is asynchronous.
+            {.text = "/import /tmp/session.jsonl", .command = Import, .argument = "/tmp/session.jsonl"},
     };
 
     for (const auto& test : cases) {

@@ -126,6 +126,28 @@ TEST_CASE("Native TUI command palette omits the retired model login and logout c
     CHECK(found_mcp);
 }
 
+TEST_CASE("Native TUI command palette offers pi's wired /import entry",
+        "[coding_agent][tui][autocomplete][issue1044][spec]") {
+    const auto commands = cch::coding_agent::tui::command_autocomplete_commands({}, {}, nullptr, nullptr, false);
+
+    // pi v1.3.0's palette offers every `BUILTIN_SLASH_COMMANDS` entry, so the
+    // wired `/import` is offered with pi's verbatim description.
+    bool found_import = false;
+    for (const auto& item : commands) {
+        if (const auto* command = std::get_if<cch::tui::SlashCommand>(&item); command != nullptr) {
+            if (command->name != "import") continue;
+            found_import = true;
+            CHECK(command->description == "Import and resume a session from a JSONL file");
+            continue;
+        }
+        const auto& entry = std::get<cch::tui::AutocompleteItem>(item);
+        if (entry.value != "import") continue;
+        found_import = true;
+        CHECK(entry.description.find("Import and resume a session from a JSONL file") != std::string::npos);
+    }
+    CHECK(found_import);
+}
+
 TEST_CASE("Executor-composed autocomplete delivery lands provider results on the serialized executor",
         "[coding_agent][tui][autocomplete][issue609][spec]") {
     boost::asio::io_context io;

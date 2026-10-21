@@ -405,6 +405,11 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
     case SlashCommandId::Compact:
     case SlashCommandId::Trust:
     case SlashCommandId::Mcp:
+    // pi `handleImportCommand` is awaited inside the submit handler, but the
+    // C++ route is the modal one: the confirmation prompt suspends and the
+    // session replacement is asynchronous, so it cannot run in the router's
+    // synchronous immediate seam (the same shape as `/resume` and `/fork`).
+    case SlashCommandId::Import:
         return std::unexpected(
                 support::make_error(support::ErrorCode::Validation, "Command is not an immediate slash command"));
     }
@@ -475,6 +480,20 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
         // prints the status report); `login|logout|reconnect [server]` run
         // the subcommand flows with pi's pick and output strings.
         mcp_flows_->handle_command(std::move(invocation.argument));
+        return;
+    case SlashCommandId::Import:
+        // pi `handleImportCommand`: the path argument is parsed by pi's
+        // `getPathCommandArgument` (a quoted path keeps its inner text; an
+        // unterminated quote carries no path at all). A submission with no
+        // path reports pi's usage error and asks nothing.
+        {
+            const auto path = import_path_argument(invocation.argument);
+            if (!path) {
+                show_error("Usage: /import <path.jsonl>");
+                return;
+            }
+            session_flows_->open_import(*path);
+        }
         return;
     case SlashCommandId::Clear:
     case SlashCommandId::Quit:
