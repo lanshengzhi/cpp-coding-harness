@@ -1172,9 +1172,13 @@ TEST_CASE("open_existing appends under the last file entry after a reopened sess
     }
 
     REQUIRE(appended != nullptr);
-    // The reopened session's flat-file shape leaves the parent null and the
-    // reader infers the chain from the file order.
-    CHECK_FALSE(cch::harness::session::parent_entry_id(appended->parent_id).has_value());
+    // pi `_buildIndex` restores the leaf from the last file entry, and
+    // `appendMessage` then writes `parentId: this.leafId`. The append after a
+    // reopen therefore hangs under the third message instead of starting a
+    // second root - the shape pi reads back as one branch.
+    const auto parent = cch::harness::session::parent_entry_id(appended->parent_id);
+    REQUIRE(parent.has_value());
+    CHECK(*parent == third_id);
     CHECK(third_id != appended->entry_id);
 }
 

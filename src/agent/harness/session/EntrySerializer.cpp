@@ -342,7 +342,7 @@ template <typename Dto>
     if (const auto* text = std::get_if<std::string>(&value)) {
         return ParentId{.kind = ParentIdKind::Entry, .entry_id = *text};
     }
-    return ParentId{.kind = ParentIdKind::Root};
+    return ParentId{.kind = ParentIdKind::Root, .entry_id = {}};
 }
 
 /// A generic JSON object's `parentId` as the three wire shapes: a missing key
@@ -351,15 +351,15 @@ template <typename Dto>
 [[nodiscard]] ParentId parent_id_field(const support::JsonValue::object_t& object) {
     const auto found = object.find("parentId");
     if (found == object.end()) {
-        return ParentId{.kind = ParentIdKind::Absent};
+        return ParentId{.kind = ParentIdKind::Absent, .entry_id = {}};
     }
     if (found->second.get_if<support::JsonValue::null_t>() != nullptr) {
-        return ParentId{.kind = ParentIdKind::Root};
+        return ParentId{.kind = ParentIdKind::Root, .entry_id = {}};
     }
     if (const auto* text = found->second.get_if<std::string>()) {
         return ParentId{.kind = ParentIdKind::Entry, .entry_id = *text};
     }
-    return ParentId{.kind = ParentIdKind::Absent};
+    return ParentId{.kind = ParentIdKind::Absent, .entry_id = {}};
 }
 
 [[nodiscard]] std::optional<int> parse_fixed_int(std::string_view text, std::size_t offset, std::size_t count) {

@@ -151,7 +151,7 @@ struct ParentId {
     if (parent_id.has_value()) {
         return ParentId{.kind = ParentIdKind::Entry, .entry_id = *parent_id};
     }
-    return ParentId{.kind = ParentIdKind::Root};
+    return ParentId{.kind = ParentIdKind::Root, .entry_id = {}};
 }
 
 /// The wire shape for a parent entry id.

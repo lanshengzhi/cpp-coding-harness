@@ -36,6 +36,16 @@ struct SessionStore::Impl {
 
     /// The live tree's current leaf as an explicit append parent (nullopt at
     /// the root position) — pi `appendMessage` hangs the message under it.
+    /// pi's typed appenders take no parent argument: they each write
+    /// `parentId: this.leafId` (session-manager.ts:1208-1275). An in-memory
+    /// append therefore hangs off the live leaf unless the caller names one.
+    [[nodiscard]] std::optional<std::string> typed_parent(std::optional<std::string> parent_id) const {
+        if (parent_id.has_value()) {
+            return parent_id;
+        }
+        return leaf_parent();
+    }
+
     [[nodiscard]] std::optional<std::string> leaf_parent() const {
         const auto& leaf = tree.leaf_id();
         return leaf.empty() ? std::nullopt : std::optional<std::string>{leaf};
@@ -123,8 +133,8 @@ support::ExpectedVoid SessionStore::append_model_change(
         return impl_->record_persisted(
                 jsonl->append_model_change(std::move(parent_id), std::move(provider), std::move(model_id)));
     }
-    impl_->record(
-            EntrySerializer::new_model_change_entry(std::move(parent_id), std::move(provider), std::move(model_id)));
+    impl_->record(EntrySerializer::new_model_change_entry(
+            impl_->typed_parent(std::move(parent_id)), std::move(provider), std::move(model_id)));
     return {};
 }
 
@@ -136,7 +146,8 @@ support::ExpectedVoid SessionStore::append_thinking_level_change(
         return impl_->record_persisted(
                 jsonl->append_thinking_level_change(std::move(parent_id), std::move(thinking_level)));
     }
-    impl_->record(EntrySerializer::new_thinking_level_change_entry(std::move(parent_id), std::move(thinking_level)));
+    impl_->record(EntrySerializer::new_thinking_level_change_entry(
+            impl_->typed_parent(std::move(parent_id)), std::move(thinking_level)));
     return {};
 }
 
@@ -149,8 +160,8 @@ support::ExpectedVoid SessionStore::append_label_change(
         return impl_->record_persisted(
                 jsonl->append_label_change(std::move(parent_id), std::move(target_id), std::move(label)));
     }
-    impl_->record(
-            EntrySerializer::new_label_change_entry(std::move(parent_id), std::move(target_id), std::move(label)));
+    impl_->record(EntrySerializer::new_label_change_entry(
+            impl_->typed_parent(std::move(parent_id)), std::move(target_id), std::move(label)));
     return {};
 }
 
@@ -161,7 +172,7 @@ support::ExpectedVoid SessionStore::append_compaction(
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_compaction(std::move(parent_id), std::move(value)));
     }
-    impl_->record(EntrySerializer::new_compaction_entry(std::move(parent_id), std::move(value)));
+    impl_->record(EntrySerializer::new_compaction_entry(impl_->typed_parent(std::move(parent_id)), std::move(value)));
     return {};
 }
 
@@ -180,7 +191,7 @@ support::ExpectedVoid SessionStore::append_branch_summary(std::optional<std::str
                 from_hook,
                 std::move(usage)));
     }
-    impl_->record(EntrySerializer::new_branch_summary_entry(std::move(parent_id),
+    impl_->record(EntrySerializer::new_branch_summary_entry(impl_->typed_parent(std::move(parent_id)),
             std::move(from_id),
             std::move(summary),
             std::move(details),
@@ -196,7 +207,7 @@ support::ExpectedVoid SessionStore::append_session_info(
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_session_info(std::move(parent_id), std::move(name)));
     }
-    impl_->record(EntrySerializer::new_session_info_entry(std::move(parent_id), std::move(name)));
+    impl_->record(EntrySerializer::new_session_info_entry(impl_->typed_parent(std::move(parent_id)), std::move(name)));
     return {};
 }
 

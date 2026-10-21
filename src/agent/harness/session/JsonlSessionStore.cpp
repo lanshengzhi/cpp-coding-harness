@@ -192,6 +192,11 @@ support::Expected<JsonlSessionStore> JsonlSessionStore::open_loaded(
     store.impl_->path = path;
     store.impl_->metadata = loaded.metadata;
     store.impl_->journal = std::move(*journal);
+    // pi `_buildIndex` sets `leafId` to the last entry it reads, so a reopened
+    // session resumes appending under that leaf rather than starting a new
+    // root. Without this the first append after a resume writes
+    // `parentId: null` and the continued conversation becomes a second root.
+    store.impl_->active_append_parent_id = select_active_leaf_id(loaded.entries);
     return store;
 }
 
@@ -262,21 +267,41 @@ void JsonlSessionStore::move_append_parent(std::optional<std::string> target_id)
     impl_->active_append_parent_id = std::move(target_id);
 }
 
+namespace {
+
+/// Resolve the parent a typed append hangs off. pi's typed appenders take no
+/// parent argument at all: `appendModelChange`, `appendThinkingLevelChange`,
+/// `appendSessionInfo`, `appendLabelChange` and `appendCompaction` each write
+/// `parentId: this.leafId` (session-manager.ts:1208-1275). A caller that
+/// passes an explicit parent keeps it; a caller that passes `std::nullopt`
+/// gets the active leaf, which is null only after `resetLeaf`.
+[[nodiscard]] std::optional<std::string> typed_append_parent(
+        const JsonlSessionStore::Impl& impl, std::optional<std::string> parent_id) {
+    if (parent_id.has_value()) {
+        return parent_id;
+    }
+    return impl.active_append_parent_id;
+}
+
+} // namespace
+
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_model_change(
     std::optional<std::string> parent_id,
     std::string provider,
     std::string model_id) {
     EntrySerializer serializer;
-    return append_mirrored_line(*impl_, serializer.serialize_model_change(
-        std::move(parent_id), std::move(provider), std::move(model_id)));
+    return append_mirrored_line(*impl_,
+            serializer.serialize_model_change(
+                    typed_append_parent(*impl_, std::move(parent_id)), std::move(provider), std::move(model_id)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_thinking_level_change(
     std::optional<std::string> parent_id,
     std::string thinking_level) {
     EntrySerializer serializer;
-    return append_mirrored_line(*impl_, serializer.serialize_thinking_level_change(
-        std::move(parent_id), std::move(thinking_level)));
+    return append_mirrored_line(*impl_,
+            serializer.serialize_thinking_level_change(
+                    typed_append_parent(*impl_, std::move(parent_id)), std::move(thinking_level)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_entry(
@@ -284,8 +309,9 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_en
     std::string custom_type,
     support::JsonValue data) {
     EntrySerializer serializer;
-    return append_mirrored_line(*impl_, serializer.serialize_custom_entry(
-        std::move(parent_id), std::move(custom_type), std::move(data)));
+    return append_mirrored_line(*impl_,
+            serializer.serialize_custom_entry(
+                    typed_append_parent(*impl_, std::move(parent_id)), std::move(custom_type), std::move(data)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_message_entry(
@@ -295,12 +321,12 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_me
     bool display,
     std::optional<support::JsonValue> details) {
     EntrySerializer serializer;
-    return append_mirrored_line(*impl_, serializer.serialize_custom_message_entry(
-        std::move(parent_id),
-        std::move(custom_type),
-        std::move(content),
-        display,
-        std::move(details)));
+    return append_mirrored_line(*impl_,
+            serializer.serialize_custom_message_entry(typed_append_parent(*impl_, std::move(parent_id)),
+                    std::move(custom_type),
+                    std::move(content),
+                    display,
+                    std::move(details)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_label_change(
@@ -308,16 +334,17 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_label_cha
     std::string target_id,
     std::optional<std::string> label) {
     EntrySerializer serializer;
-    return append_mirrored_line(*impl_, serializer.serialize_label_change(
-        std::move(parent_id), std::move(target_id), std::move(label)));
+    return append_mirrored_line(*impl_,
+            serializer.serialize_label_change(
+                    typed_append_parent(*impl_, std::move(parent_id)), std::move(target_id), std::move(label)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_compaction(
     std::optional<std::string> parent_id,
     CompactionEntryValue value) {
     EntrySerializer serializer;
-    return append_mirrored_line(*impl_, serializer.serialize_compaction(
-        std::move(parent_id), std::move(value)));
+    return append_mirrored_line(*impl_,
+            serializer.serialize_compaction(typed_append_parent(*impl_, std::move(parent_id)), std::move(value)));
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_branch_summary(
@@ -329,7 +356,7 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_branch_su
         std::optional<ai::Usage> usage) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
-            serializer.serialize_branch_summary(std::move(parent_id),
+            serializer.serialize_branch_summary(typed_append_parent(*impl_, std::move(parent_id)),
                     std::move(from_id),
                     std::move(summary),
                     std::move(details),
@@ -341,8 +368,8 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_session_i
     std::optional<std::string> parent_id,
     std::string name) {
     EntrySerializer serializer;
-    return append_mirrored_line(*impl_, serializer.serialize_session_info(
-        std::move(parent_id), std::move(name)));
+    return append_mirrored_line(*impl_,
+            serializer.serialize_session_info(typed_append_parent(*impl_, std::move(parent_id)), std::move(name)));
 }
 
 } // namespace cch::harness::session
