@@ -34,7 +34,6 @@ enum class SessionEntryKind {
     Compaction,
     BranchSummary,
     SessionInfo,
-    Leaf,
     Unknown,
 };
 
@@ -98,10 +97,6 @@ struct SessionInfoEntryValue {
     std::optional<std::string> name;
 };
 
-struct LeafEntryValue {
-    std::optional<std::string> target_id;
-};
-
 using SessionEntryValue = std::variant<std::monostate,
         ModelChangeValue,
         ThinkingLevelChangeValue,
@@ -110,14 +105,12 @@ using SessionEntryValue = std::variant<std::monostate,
         LabelEntryValue,
         CompactionEntryValue,
         BranchSummaryEntryValue,
-        SessionInfoEntryValue,
-        LeafEntryValue>;
+        SessionInfoEntryValue>;
 
 struct SessionEntry {
     SessionEntryKind kind{SessionEntryKind::Unknown};
     std::string entry_id;
     std::optional<std::string> parent_id;
-    std::optional<std::string> leaf_id;
     ai::TimestampMs timestamp{};
     std::optional<ai::MessageVariant> message;
     SessionEntryValue value;

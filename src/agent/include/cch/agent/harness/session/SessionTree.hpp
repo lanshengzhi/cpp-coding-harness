@@ -78,10 +78,9 @@ public:
 
     /// Append one entry exactly as it was accepted by the store (pi
     /// `_appendEntry`): index it, chain it onto the previous entry when it
-    /// carries no explicit wire parent, and advance the active leaf — a
-    /// Leaf marker moves the leaf to its target (a root marker clears it),
-    /// and any other navigable entry becomes the leaf. Header and Unknown
-    /// entries are ignored exactly like the construction-time filter.
+    /// carries no explicit wire parent, and advance the active leaf — every
+    /// navigable entry becomes the leaf. Header and Unknown entries are
+    /// ignored exactly like the construction-time filter.
     void append_entry(SessionEntry entry);
 
     // ── Basic queries ──
@@ -107,6 +106,8 @@ public:
     // ── Leaf navigation ──
 
     /// Current active leaf entry ID. Empty string if tree is empty.
+    /// pi `SessionManager.leafId`: runtime-only state, never written to the
+    /// session file.
     [[nodiscard]] const std::string& leaf_id() const { return leaf_id_; }
 
     /// Current active leaf entry. Returns nullptr if tree is empty.
@@ -119,7 +120,7 @@ public:
 
     /// pi `resetLeaf`: move the active leaf to null (before any entries); the
     /// next append creates a new root entry. Used when navigating to re-edit
-    /// the first user message.
+    /// the first user message. Runtime-only, like pi's leaf pointer.
     void reset_leaf();
 
     /// pi `getTree`: root nodes with children sorted by timestamp (oldest
@@ -221,10 +222,9 @@ private:
     /// Inferred parent relationships for entries without explicit parent_id.
     std::unordered_map<std::string, std::string> inferred_parent_;
     /// Linear-chain tail for parent inference (the index build's running
-    /// `previous_id`): a root leaf marker resets it so the next null-parent
-    /// append starts a new root (pi `resetLeaf`).
-    std::optional<std::string> chain_tail_;
-};
+    /// `previous_id`): `reset_leaf` clears it so the next null-parent append
+    /// starts a new root (pi `resetLeaf`).
+    std::optional<std::string> chain_tail_;};
 
 /// Reconstruct LLM context from a root-to-leaf entry path without a
 /// SessionTree (pi `buildSessionContext(pathEntries)` in

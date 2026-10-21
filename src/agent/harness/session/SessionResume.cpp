@@ -23,7 +23,6 @@ namespace {
     case SessionEntryKind::Header:
     case SessionEntryKind::Label:
     case SessionEntryKind::SessionInfo:
-    case SessionEntryKind::Leaf:
     case SessionEntryKind::Unknown:
         return false;
     }

@@ -122,12 +122,6 @@ public:
     [[nodiscard]] support::ExpectedVoid append_session_info(
         std::optional<std::string> parent_id,
         std::string name);
-    /// Write a Leaf entry to persist the current active leaf position
-    /// (`target_id` nullopt writes the root leaf, pi `setLeafId(null)`) and
-    /// move the live tree's leaf with it.
-    [[nodiscard]] support::ExpectedVoid append_leaf(
-        std::optional<std::string> parent_id,
-        std::optional<std::string> target_id);
 
     // --- Live tree queries (snapshots taken under the append lock) ---
 
@@ -142,13 +136,15 @@ public:
     /// active leaf path.
     [[nodiscard]] SessionContext build_context() const;
     /// pi `branch`: move the live tree's active leaf to an existing entry.
-    /// The move is live-tree state only — persist the position with
-    /// append_leaf (the C++ leaf-marker durability discipline).
+    /// The move is live-tree state only, exactly like pi: the active leaf
+    /// is runtime state and is never written to the session file.
     [[nodiscard]] support::ExpectedVoid branch(std::string_view target_id);
     /// pi `resetLeaf`: move the live tree's active leaf to the root
-    /// position (before any entries).
+    /// position (before any entries) and break the linear chain, so the next
+    /// append starts a new root. Runtime-only, like pi's leaf pointer.
     void reset_leaf();
     /// pi `getLeafId`: the active leaf entry id; empty at the root position.
+    /// Runtime-only state: pi keeps it in memory and never persists it.
     [[nodiscard]] std::string leaf_id() const;
     /// pi `getEntry`: a snapshot copy of one entry, nullopt when absent.
     [[nodiscard]] std::optional<SessionEntry> get_entry(

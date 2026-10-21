@@ -14,8 +14,9 @@ namespace cch::harness::session {
 
 /// The entries one append durably accepted, in wire order, plus the append's
 /// own outcome. `entries` can be non-empty when `status` is an error: the
-/// message append persists the message before its leaf marker, and a marker
-/// failure must not hide the durable message from the live tree mirror.
+/// message append persists the message before the append's own bookkeeping,
+/// and a failure must not hide the durable message from the live tree
+/// mirror.
 struct AppendResult {
     std::vector<SessionEntry> entries;
     support::ExpectedVoid status;
@@ -23,10 +24,14 @@ struct AppendResult {
 
 /// Private JSONL persistence engine behind the SessionStore facade: owns the
 /// session file journal, the wire encoding (through EntrySerializer), and
-/// the in-process append-parent/leaf-marker discipline. Append operations
-/// report the entries they durably wrote (parsed back from the exact wire
-/// line) so the owning SessionStore can mirror them into its live
-/// SessionTree without re-reading or re-parsing the session file.
+/// the in-process append-parent discipline. Append operations report the
+/// entries they durably wrote (parsed back from the exact wire line) so the
+/// owning SessionStore can mirror them into its live SessionTree without
+/// re-reading or re-parsing the session file.
+///
+/// The active leaf is runtime state, never a file record: pi keeps the leaf
+/// in memory (`SessionManager.leafId`) and derives it at load time from the
+/// last file entry, so this store never writes a leaf marker.
 class JsonlSessionStore final {
 public:
     struct Impl;
@@ -56,9 +61,9 @@ public:
         const LoadedSession& loaded);
     [[nodiscard]] static support::Expected<LoadedSession> load(const std::filesystem::path& path);
 
-    /// Append one completed Session Entry message (pi `appendEntry`); when
-    /// leaf-marker discipline is active the durable leaf marker follows in
-    /// the same AppendResult.
+    /// Append one completed Session Entry message (pi `appendEntry`); the
+    /// append hangs under the in-process append parent and advances it, so
+    /// the next append continues the same chain.
     [[nodiscard]] AppendResult append(const ai::MessageVariant& message);
 
     // --- v3 tree entry append methods ---
@@ -95,14 +100,6 @@ public:
     [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_session_info(
         std::optional<std::string> parent_id,
         std::string name);
-
-    /// Write a Leaf entry to persist the current active leaf position.
-    /// The target_id is the entry ID that becomes the new leaf; nullopt
-    /// writes the root leaf (pi `setLeafId(null)`, used after navigating
-    /// back before the first entry).
-    [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_leaf(
-        std::optional<std::string> parent_id,
-        std::optional<std::string> target_id);
 
     [[nodiscard]] std::optional<std::filesystem::path> path() const;
     [[nodiscard]] const SessionMetadata& metadata() const;

@@ -16,8 +16,15 @@ struct JsonlSessionStore::Impl {
     std::filesystem::path path;
     SessionMetadata metadata;
     SessionJournal journal;
+    /// The explicit wire parent for the next message append. Empty in the
+    /// linear case, where the flat-file shape leaves `parentId` null and the
+    /// reader infers the chain from the file order; set to the branch target
+    /// once the session branches off that chain (pi `appendMessage` hangs
+    /// the message under the current leaf).
     std::optional<std::string> active_append_parent_id;
-    bool persist_leaf_after_message_append{false};
+    /// True once the session branched off the linear chain: from then on
+    /// every message append carries an explicit parent, exactly like pi.
+    bool explicit_parent_chain{false};
 
     /// Deferred first flush (ADR 0064): while the journal is deferred — a
     /// new session before its first user or assistant message, gated exactly
@@ -186,11 +193,6 @@ support::Expected<JsonlSessionStore> JsonlSessionStore::open_loaded(
     store.impl_->path = path;
     store.impl_->metadata = loaded.metadata;
     store.impl_->journal = std::move(*journal);
-    auto active_leaf = select_active_leaf_target(loaded.entries);
-    if (active_leaf.saw_leaf_marker) {
-        store.impl_->active_append_parent_id = active_leaf.target_id;
-        store.impl_->persist_leaf_after_message_append = true;
-    }
     return store;
 }
 
@@ -211,9 +213,11 @@ support::Expected<LoadedSession> JsonlSessionStore::load(const std::filesystem::
 
 AppendResult JsonlSessionStore::append(const ai::MessageVariant& message) {
     EntrySerializer serializer;
-    auto parent_id = impl_->persist_leaf_after_message_append
-        ? impl_->active_append_parent_id
-        : std::nullopt;
+    // pi `appendMessage`: the message hangs under the current leaf. In the
+    // linear case the flat-file shape leaves `parentId` null (the reader
+    // infers the chain from the file order); after a branch the parent is
+    // the branch target, exactly like pi.
+    auto parent_id = impl_->active_append_parent_id;
     auto serialized = serializer.serialize_message_entry(message, std::move(parent_id));
     if (!serialized) {
         return AppendResult{
@@ -241,22 +245,10 @@ AppendResult JsonlSessionStore::append(const ai::MessageVariant& message) {
     const auto message_entry_id = serialized->entry.entry_id;
     outcome.entries.push_back(std::move(serialized->entry));
 
-    if (impl_->persist_leaf_after_message_append) {
-        // The message itself is already durable. Advance the in-process append
-        // parent before writing the leaf marker so a marker failure does not
-        // poison or roll back later appends.
+    if (impl_->explicit_parent_chain) {
+        // The message itself is already durable; the next append continues
+        // the same explicit-parent chain.
         impl_->active_append_parent_id = message_entry_id;
-
-        auto leaf = serializer.serialize_leaf(std::nullopt, message_entry_id);
-        if (!leaf) {
-            outcome.status = std::unexpected(leaf.error());
-            return outcome;
-        }
-        if (auto leaf_result = impl_->buffer_line(std::move(leaf->line)); !leaf_result) {
-            outcome.status = std::unexpected(leaf_result.error());
-            return outcome;
-        }
-        outcome.entries.push_back(std::move(leaf->entry));
     }
     return outcome;
 }
@@ -342,28 +334,6 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_session_i
     EntrySerializer serializer;
     return append_mirrored_line(*impl_, serializer.serialize_session_info(
         std::move(parent_id), std::move(name)));
-}
-
-support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_leaf(
-    std::optional<std::string> parent_id,
-    std::optional<std::string> target_id) {
-    // The marker target is also the new in-process append parent: copy it
-    // before the serializer consumes the optional (a moved-from optional
-    // holds a moved-from string, never nullopt).
-    const auto marker_target = target_id;
-    EntrySerializer serializer;
-    auto entries = append_mirrored_line(*impl_, serializer.serialize_leaf(
-        std::move(parent_id), std::move(target_id)));
-    if (!entries) {
-        return entries;
-    }
-    // A durable leaf marker IS the new active position: the in-process
-    // append parent follows it (pi: the next append becomes a child of the
-    // new leaf, or a root at the null position), and marker discipline
-    // engages exactly like a resumed marker-bearing file.
-    impl_->active_append_parent_id = marker_target;
-    impl_->persist_leaf_after_message_append = true;
-    return entries;
 }
 
 } // namespace cch::harness::session

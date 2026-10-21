@@ -59,18 +59,6 @@ void SessionTree::index_appended_entry(std::size_t index) {
 
     children_[effective_parent].push_back(index);
 
-    // A root leaf marker (`targetId: null`, written when the active
-    // leaf moves back before the first entry) ends the linear chain: the
-    // next null-parent append starts a NEW root (pi `resetLeaf`), not a
-    // continuation of the previous history.
-    if (entry.kind == SessionEntryKind::Leaf) {
-        if (const auto* value = std::get_if<LeafEntryValue>(&entry.value);
-            value != nullptr && !value->target_id.has_value()) {
-            chain_tail_.reset();
-            return;
-        }
-    }
-
     chain_tail_ = entry.entry_id;
 }
 
@@ -82,33 +70,16 @@ void SessionTree::append_entry(SessionEntry entry) {
         return;
     }
 
-    // Read the leaf-relevant facts before moving the entry into the store
-    // vector: a Leaf marker moves the active leaf to its target (a root
-    // marker clears it, pi `setLeafId(null)`); every other navigable append
-    // becomes the new leaf (pi `_appendEntry` `this.leafId = entry.id`).
-    std::optional<std::string> marker_target;
-    const bool is_marker = entry.kind == SessionEntryKind::Leaf;
-    if (is_marker) {
-        if (const auto* value = std::get_if<LeafEntryValue>(&entry.value)) {
-            marker_target = value->target_id;
-        }
-    }
+    // pi `_appendEntry`: every appended entry becomes the active leaf, and
+    // the leaf is runtime-only state (pi keeps it in memory; it is never
+    // written to the file).
     const bool navigable = is_navigable_leaf_target(entry);
     const std::string appended_id = entry.entry_id;
 
     entries_.push_back(std::move(entry));
     index_appended_entry(entries_.size() - 1);
 
-    if (is_marker) {
-        // Mirror the load-time selection (select_active_leaf_target): a
-        // marker whose target never materialized keeps the current position
-        // (the last navigable entry) instead of pointing at a missing id.
-        if (!marker_target.has_value()) {
-            leaf_id_.clear();
-        } else if (id_to_index_.contains(*marker_target)) {
-            leaf_id_ = *marker_target;
-        }
-    } else if (navigable) {
+    if (navigable) {
         leaf_id_ = appended_id;
     }
 }
@@ -145,8 +116,11 @@ std::vector<const SessionEntry*> SessionTree::getChildren(std::string_view paren
 // ── Leaf navigation ──
 
 void SessionTree::restore_leaf_position() {
-    auto active_leaf = select_active_leaf_target(entries_);
-    leaf_id_ = active_leaf.target_id.value_or("");
+    // pi `_buildIndex`: the active leaf is the last file entry, reconstructed
+    // at load time from the file's entry order. It is runtime state, never
+    // a persisted marker.
+    const auto active_leaf = select_active_leaf_id(entries_);
+    leaf_id_ = active_leaf.value_or("");
 }
 
 const SessionEntry* SessionTree::leaf_entry() const {
@@ -165,7 +139,13 @@ support::ExpectedVoid SessionTree::branch(std::string_view entry_id) {
 }
 
 void SessionTree::reset_leaf() {
+    // pi `resetLeaf`: the active leaf moves to the root position (before
+    // any entries) and the next append starts a NEW root. The leaf is
+    // runtime-only state, so the chain break lives here too: the flat-file
+    // shape infers the chain from the entry order, and a cleared chain tail
+    // is what makes the next null-parent append a root.
     leaf_id_.clear();
+    chain_tail_.reset();
 }
 
 std::vector<SessionTreeNode> SessionTree::get_tree() const {

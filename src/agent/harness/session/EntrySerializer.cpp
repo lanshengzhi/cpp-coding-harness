@@ -62,9 +62,6 @@ struct MessageEntryDto {
     std::optional<std::string> timestamp;
     std::string type{"message"};
     MessageDto message;
-    // Legacy read tolerance: pre-pi C++ files carried `entryId`/`leafId`.
-    std::optional<std::string> entryId;
-    std::optional<std::string> leafId;
 };
 
 struct ModelChangeDto {
@@ -149,14 +146,6 @@ struct SessionInfoDto {
     std::string timestamp;
     std::string type{"session_info"};
     std::optional<std::string> name;
-};
-
-struct LeafDto {
-    std::string id;
-    NullableString parentId;
-    std::string timestamp;
-    std::string type{"leaf"};
-    NullableString targetId;
 };
 
 } // namespace detail
@@ -494,7 +483,6 @@ template <typename Dto>
     if (type == "compaction") return SessionEntryKind::Compaction;
     if (type == "branch_summary") return SessionEntryKind::BranchSummary;
     if (type == "session_info") return SessionEntryKind::SessionInfo;
-    if (type == "leaf") return SessionEntryKind::Leaf;
     return SessionEntryKind::Unknown;
 }
 
@@ -513,13 +501,10 @@ template <typename Dto>
 
 void populate_tree_fields(SessionEntry& entry, const support::JsonValue& value) {
     if (const auto* object = value.get_if<support::JsonValue::object_t>()) {
-        if (auto id = optional_string_field(*object, "entryId")) {
-            entry.entry_id = *id;
-        } else if (auto id = optional_string_field(*object, "id")) {
+        if (auto id = optional_string_field(*object, "id")) {
             entry.entry_id = *id;
         }
         entry.parent_id = optional_string_field(*object, "parentId");
-        entry.leaf_id = optional_string_field(*object, "leafId");
     }
 }
 
@@ -707,8 +692,8 @@ template <typename Dto, typename Build>
     return entry;
 }
 
-/// The message entry's own id fallback (`id` or legacy `entryId`) and
-/// `leafId` mirror make it the one arm that cannot share the typed template.
+/// The message entry's own parse arm: it shares the typed template's
+/// sequence and differs only in the message value it carries.
 [[nodiscard]] support::Expected<SessionEntry> parse_message_entry(
         std::string_view line, std::size_t line_number, support::JsonValue payload) {
     auto dto = entry_from_line<detail::MessageEntryDto>(line, line_number);
@@ -721,9 +706,8 @@ template <typename Dto, typename Build>
     }
     SessionEntry entry;
     entry.kind = SessionEntryKind::Message;
-    entry.entry_id = !dto->id.empty() ? dto->id : dto->entryId.value_or("");
+    entry.entry_id = dto->id;
     entry.parent_id = optional_from_nullable(dto->parentId);
-    entry.leaf_id = dto->leafId;
     if (dto->timestamp.has_value()) {
         entry.timestamp = parse_iso_timestamp_ms(*dto->timestamp);
     }
@@ -960,15 +944,6 @@ support::Expected<SessionEntry> EntrySerializer::parse_entry(
                     entry.value = SessionInfoEntryValue{.name = std::move(dto.name)};
                     return {};
                 });
-    case SessionEntryKind::Leaf:
-        return parse_typed_entry<detail::LeafDto>(line,
-                line_number,
-                kind,
-                std::move(payload),
-                [](detail::LeafDto& dto, SessionEntry& entry) -> support::ExpectedVoid {
-                    entry.value = LeafEntryValue{.target_id = optional_from_nullable(dto.targetId)};
-                    return {};
-                });
     case SessionEntryKind::Header:
     case SessionEntryKind::Message:
     case SessionEntryKind::Unknown:
@@ -1184,17 +1159,6 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
             std::move(base), SessionEntryKind::SessionInfo, dto, SessionInfoEntryValue{.name = std::move(name)});
 }
 
-support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_leaf(
-    std::optional<std::string> parent_id,
-    std::optional<std::string> target_id) const {
-    auto base = fresh_entry_base(parent_id);
-    detail::LeafDto dto;
-    attach_entry_header(base, dto);
-    dto.targetId = nullable_string(target_id);
-    return finish_fresh_entry(
-            std::move(base), SessionEntryKind::Leaf, dto, LeafEntryValue{.target_id = std::move(target_id)});
-}
-
 SessionEntry EntrySerializer::new_message_entry(
         const ai::MessageVariant& message, std::optional<std::string> parent_id) {
     // No redaction and no wire DTO round trip: the in-memory store keeps the
@@ -1254,13 +1218,6 @@ SessionEntry EntrySerializer::new_session_info_entry(std::optional<std::string> 
     return make_entry(fresh_entry_base(std::move(parent_id)),
             SessionEntryKind::SessionInfo,
             SessionInfoEntryValue{.name = std::move(name)});
-}
-
-SessionEntry EntrySerializer::new_leaf_entry(
-        std::optional<std::string> parent_id, std::optional<std::string> target_id) {
-    return make_entry(fresh_entry_base(std::move(parent_id)),
-            SessionEntryKind::Leaf,
-            LeafEntryValue{.target_id = std::move(target_id)});
 }
 
 support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEntry& entry) const {
@@ -1370,13 +1327,6 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
         detail::SessionInfoDto dto;
         attach_entry_header(base, dto);
         dto.name = value.name;
-        return serialize_tree_entry(dto);
-    }
-    case SessionEntryKind::Leaf: {
-        const auto& value = std::get<LeafEntryValue>(entry.value);
-        detail::LeafDto dto;
-        attach_entry_header(base, dto);
-        dto.targetId = nullable_string(value.target_id);
         return serialize_tree_entry(dto);
     }
     case SessionEntryKind::Header:

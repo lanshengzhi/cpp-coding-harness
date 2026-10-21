@@ -101,8 +101,6 @@ SessionStore::~SessionStore() = default;
 support::ExpectedVoid SessionStore::append(const ai::MessageVariant& message) {
     std::lock_guard lock(impl_->mutex);
     if (auto& jsonl = impl_->persistence) {
-        // The message is durable before its leaf marker, so a marker failure
-        // must not leave the live tree behind the file.
         auto outcome = jsonl->append(message);
         for (auto& entry : outcome.entries) {
             impl_->record(std::move(entry));
@@ -202,16 +200,6 @@ support::ExpectedVoid SessionStore::append_session_info(
     return {};
 }
 
-support::ExpectedVoid SessionStore::append_leaf(
-    std::optional<std::string> parent_id,
-    std::optional<std::string> target_id) {
-    std::lock_guard lock(impl_->mutex);
-    if (auto& jsonl = impl_->persistence) {
-        return impl_->record_persisted(jsonl->append_leaf(std::move(parent_id), std::move(target_id)));
-    }
-    impl_->record(EntrySerializer::new_leaf_entry(std::move(parent_id), std::move(target_id)));
-    return {};
-}
 
 // --- Live tree queries (snapshots taken under the append lock) ---
 

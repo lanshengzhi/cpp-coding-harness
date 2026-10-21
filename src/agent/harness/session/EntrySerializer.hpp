@@ -52,8 +52,6 @@ public:
             std::optional<bool> from_hook,
             std::optional<ai::Usage> usage = std::nullopt);
     [[nodiscard]] static SessionEntry new_session_info_entry(std::optional<std::string> parent_id, std::string name);
-    [[nodiscard]] static SessionEntry new_leaf_entry(
-            std::optional<std::string> parent_id, std::optional<std::string> target_id);
 
     [[nodiscard]] support::Expected<std::string> serialize_header(const SessionMetadata& metadata) const;
 
@@ -111,10 +109,6 @@ public:
     [[nodiscard]] support::Expected<SerializationResult> serialize_session_info(
         std::optional<std::string> parent_id,
         std::optional<std::string> name) const;
-
-    [[nodiscard]] support::Expected<SerializationResult> serialize_leaf(
-        std::optional<std::string> parent_id,
-        std::optional<std::string> target_id) const;
 
     /// Round-trip writer: re-emit a parsed `SessionEntry` as its pi wire line
     /// (byte-identical to the source line for pi-captured files) using the
