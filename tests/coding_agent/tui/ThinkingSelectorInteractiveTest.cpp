@@ -28,11 +28,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include "support/AgentRootFixture.hpp"
 
 using namespace cch;
@@ -104,6 +106,11 @@ struct Running {
         text.push_back('\n');
     }
     return text;
+}
+
+[[nodiscard]] std::size_t status_rows_containing(const tui::VirtualTerminal& terminal, std::string_view text) {
+    return static_cast<std::size_t>(std::ranges::count_if(
+            terminal.screen(), [text](const std::string& row) { return row.find(text) != std::string::npos; }));
 }
 
 [[nodiscard]] std::unique_ptr<coding_agent::AgentSession> boot(
@@ -199,6 +206,67 @@ TEST_CASE("/thinking applies a level session-only and saves the default through 
     CHECK(screen.find("Thinking level: medium") != std::string::npos);
     CHECK(session->snapshot().agent_state.thinking_level == "medium");
     CHECK(settings_default_thinking_level(fixture.read_settings()) == std::optional<std::string>{"high"});
+
+    REQUIRE(running.terminal.inject_input("\x04"));
+    drain_ready(running.io);
+    REQUIRE(running.run_result);
+    CHECK(*running.run_result);
+}
+
+TEST_CASE("/thinking selector applies the confirmed highlight once and preserves canceled highlights",
+        "[coding_agent][tui][thinking-selector][e2e][issue810][spec]") {
+    constexpr std::string_view matchedFiveLevelModel = R"({
+      "providers": {
+        "alpha": {
+          "baseUrl": "https://alpha.example/v1",
+          "api": "openai-responses",
+          "apiKey": "dummy-alpha-key",
+          "models": [{"id": "alpha-1", "name": "Alpha Reasoning", "reasoning": true}]
+        }
+      }
+    })";
+    Fixture fixture;
+    fixture.write_models(matchedFiveLevelModel);
+    Running running;
+    auto session = boot(fixture, running);
+    REQUIRE(session->snapshot().agent_state.thinking_level == "medium");
+
+    REQUIRE(running.terminal.inject_input("/thinking\r"));
+    drain_ready(running.io);
+    auto screen = visible_screen(running.terminal);
+    CHECK(screen.find("→ ✓ medium") != std::string::npos);
+    CHECK(screen.find("Moderate reasoning (~8k tokens) · default") != std::string::npos);
+
+    // Moving the highlight and canceling must not apply the pending choice.
+    REQUIRE(running.terminal.inject_input("\x1b[B"));
+    drain_ready(running.io);
+    screen = visible_screen(running.terminal);
+    CHECK(screen.find("→   high") != std::string::npos);
+    CHECK(session->snapshot().agent_state.thinking_level == "medium");
+    REQUIRE(running.terminal.inject_input("\x1b"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input(""));
+    drain_ready(running.io);
+    CHECK(session->snapshot().agent_state.thinking_level == "medium");
+    CHECK(status_rows_containing(running.terminal, "Thinking level:") == 0);
+
+    // Reopen and confirm that same highlighted level. The settled status is
+    // emitted exactly once and survives an ordinary terminal refresh.
+    REQUIRE(running.terminal.inject_input("/thinking\r"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\x1b[B"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\r"));
+    drain_ready(running.io);
+    CHECK(session->snapshot().agent_state.thinking_level == "high");
+    CHECK(status_rows_containing(running.terminal, "Thinking level: high") == 1);
+    CHECK(status_rows_containing(running.terminal, "Thinking level:") == 1);
+
+    REQUIRE(running.terminal.inject_resize({.columns = 101, .rows = 40}));
+    drain_ready(running.io);
+    CHECK(session->snapshot().agent_state.thinking_level == "high");
+    CHECK(status_rows_containing(running.terminal, "Thinking level: high") == 1);
+    CHECK(status_rows_containing(running.terminal, "Thinking level:") == 1);
 
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);

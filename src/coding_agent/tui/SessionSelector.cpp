@@ -962,8 +962,8 @@ support::Expected<cch::tui::RenderResult> SessionSelectorComponent::render(
         }
         // The component owns the search empty state because its wording
         // depends on the current scope and name filter.
-        if (!select_list_.selected_item() && lines.size() >= select_begin + 2) {
-            lines[select_begin + 1] = empty_state_row(width);
+        if (!select_list_.selected_item() && lines.size() >= select_begin + 3) {
+            lines[select_begin + 2] = empty_state_row(width);
         }
     } else if (!select_rendered->lines.empty()) {
         lines.push_back(std::move(select_rendered->lines.front()));
