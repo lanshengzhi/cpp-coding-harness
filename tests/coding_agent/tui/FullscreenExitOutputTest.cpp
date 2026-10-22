@@ -591,6 +591,63 @@ TEST_CASE("Native TUI format_resume_command characterizes the frozen resume comm
 
 // ── 3. Fullscreen Exit Output Policy at Native TUI Consumers ──────────────────
 
+TEST_CASE("Native TUI product fullscreenExitOutput changes the public run exit presentation",
+        "[coding_agent][tui][exit][fullscreen][issue1125][spec]") {
+    const auto run_exit = [](std::string_view exit_output, std::string_view prompt) {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+        temp.write("settings.json",
+                std::string{"{\"tuiMode\":\"fullscreen\",\"fullscreenExitOutput\":\""} + std::string{exit_output} +
+                        "\"}");
+        tests::RuntimeFixture runtime;
+        auto options = session_options(temp, tests::make_scripted_fake_provider());
+        options.session_target = coding_agent::DefaultPersistedSessionTarget{};
+        auto created = runtime.run(create_session_async(runtime, std::move(options)));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        REQUIRE(terminal.seed_shell_content({"original shell line"}, {.column = 0, .row = 1}));
+        boost::asio::io_context io;
+        std::ostringstream output;
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(io,
+                coding_agent::tui::run_interactive_mode(terminal,
+                        coding_agent::tui::InteractiveSessionRunBuilder{}
+                                .with_session(*created->session)
+                                .with_agent_config_directory(temp.path())
+                                .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                                .with_output_stream(&output)
+                                .with_stdout_is_tty(true)
+                                .build()),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(terminal.modes().alternate_screen);
+        REQUIRE(terminal.inject_input(std::string{prompt} + "\r"));
+        REQUIRE(pump_until(io,
+                [&] { return visible_screen(terminal).find("fake: " + std::string{prompt}) != std::string::npos; }));
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        REQUIRE(*run_result);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+        return std::pair{visible_screen(terminal), output.str()};
+    };
+
+    const auto [transcript_screen, transcript_notice] = run_exit("transcript", "transcript-only-prompt");
+    CHECK(transcript_screen.find("transcript-only-prompt") != std::string::npos);
+    CHECK(transcript_notice.find(coding_agent::tui::kResumeNoticePrefix) != std::string::npos);
+
+    const auto [hint_screen, hint_notice] = run_exit("resume-hint", "resume-hint-only-prompt");
+    CHECK(hint_screen.find("original shell line") != std::string::npos);
+    CHECK(hint_screen.find("resume-hint-only-prompt") == std::string::npos);
+    CHECK(hint_notice.find(coding_agent::tui::kResumeNoticePrefix) != std::string::npos);
+}
+
 TEST_CASE("Native TUI fullscreen exit output policy switches to regular and renders transcript to main buffer",
         "[coding_agent][tui][exit][fullscreen][issue1019][spec]") {
     tests::TempWorkspace temp;

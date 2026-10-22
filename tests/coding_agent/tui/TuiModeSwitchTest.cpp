@@ -2328,8 +2328,8 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
     }
 }
 
-TEST_CASE("Native TUI settings hardware cursor row toggles live preference and persists setting",
-        "[coding_agent][tui][cursor][settings-selector][issue1037][spec]") {
+TEST_CASE("Native TUI product showHardwareCursor setting controls cursor visibility at the run entry",
+        "[coding_agent][tui][cursor][settings-selector][issue1125][spec]") {
     tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
     env_guard.unset();
 
