@@ -569,3 +569,86 @@ TEST_CASE("VirtualTerminal emits the cell-size query only for image-capable term
     CHECK(plain.output().empty());
     REQUIRE(plain.stop());
 }
+
+TEST_CASE("Herdr detection follows the frozen terminal-capability matrix",
+        "[tui][image][terminal-image][issue1124][compat-pi]") {
+    // Frozen pi-v1.3.0 observation: fixtures/pi-v1.3.0/audit-1050/terminal-capabilities.json,
+    // scenarios herdr-detected-before-outer-terminal, herdr-with-leaked-kitty-variable,
+    // herdr-hyperlink-override-disabled, kitty-control and unknown-terminal-control
+    // (revision 71023aec1546). Frozen `detectCapabilitiesFromEnvironment` checks
+    // `TERM_PROGRAM=herdr` before outer-terminal detection because variables such
+    // as KITTY_WINDOW_ID leak into Herdr panes, and it reports Kitty images with
+    // OSC 8 hyperlinks while taking true colour from the COLORTERM/TERM hint.
+    struct CapabilityCase {
+        std::string_view name{};
+        std::string_view term_program{};
+        std::string_view term{};
+        std::string_view color_term{};
+        std::string_view kitty_window_id{};
+        std::string_view pi_hyperlinks{};
+        cch::tui::DetectedImageCapabilities expected{};
+    };
+    const CapabilityCase cases[]{
+            {.name = "herdr-detected-before-outer-terminal",
+                    .term_program = "herdr",
+                    .term = "xterm-256color",
+                    .color_term = "truecolor",
+                    .expected = {.images = cch::tui::InlineImageProtocol::Kitty,
+                            .hyperlinks = true,
+                            .color = cch::tui::TerminalColorCapability::TrueColor}},
+            {.name = "herdr-with-leaked-kitty-variable",
+                    .term_program = "herdr",
+                    .term = "xterm-256color",
+                    .color_term = "truecolor",
+                    .kitty_window_id = "1",
+                    .expected = {.images = cch::tui::InlineImageProtocol::Kitty,
+                            .hyperlinks = true,
+                            .color = cch::tui::TerminalColorCapability::TrueColor}},
+            {.name = "herdr-hyperlink-override-disabled",
+                    .term_program = "herdr",
+                    .term = "xterm-256color",
+                    .pi_hyperlinks = "0",
+                    .expected = {.images = cch::tui::InlineImageProtocol::Kitty,
+                            .hyperlinks = false,
+                            .color = cch::tui::TerminalColorCapability::Xterm256}},
+            {.name = "kitty-control",
+                    .term_program = "kitty",
+                    .term = "xterm-256color",
+                    .kitty_window_id = "1",
+                    .expected = {.images = cch::tui::InlineImageProtocol::Kitty,
+                            .hyperlinks = true,
+                            .color = cch::tui::TerminalColorCapability::TrueColor}},
+            {.name = "unknown-terminal-control",
+                    .term = "xterm-256color",
+                    .color_term = "truecolor",
+                    .expected = {.images = cch::tui::InlineImageProtocol::None,
+                            .hyperlinks = false,
+                            .color = cch::tui::TerminalColorCapability::TrueColor}},
+    };
+    for (const auto& test : cases) {
+        INFO(std::string(test.name));
+        ImageEnvironmentGuard environment;
+        environment.set("TERM_PROGRAM", std::string(test.term_program));
+        environment.set("TERM", std::string(test.term));
+        if (!test.color_term.empty()) environment.set("COLORTERM", std::string(test.color_term));
+        if (!test.kitty_window_id.empty()) environment.set("KITTY_WINDOW_ID", std::string(test.kitty_window_id));
+        if (!test.pi_hyperlinks.empty()) environment.set("PI_HYPERLINKS", std::string(test.pi_hyperlinks));
+        const auto detected = cch::tui::detect_image_capabilities();
+        CHECK(detected.images == test.expected.images);
+        CHECK(detected.hyperlinks == test.expected.hyperlinks);
+        CHECK(detected.color == test.expected.color);
+    }
+
+    // The ordering discriminator the matrix's first two scenarios leave implicit:
+    // a leaked KITTY_WINDOW_ID inside a Herdr pane without a COLORTERM hint keeps
+    // the hint-derived 256-colour result. Reaching the Kitty branch instead would
+    // force true colour and read the right images value through the wrong rule.
+    ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "herdr");
+    environment.set("TERM", "xterm-256color");
+    environment.set("KITTY_WINDOW_ID", "1");
+    const auto leaked = cch::tui::detect_image_capabilities();
+    CHECK(leaked.images == cch::tui::InlineImageProtocol::Kitty);
+    CHECK(leaked.hyperlinks);
+    CHECK(leaked.color == cch::tui::TerminalColorCapability::Xterm256);
+}

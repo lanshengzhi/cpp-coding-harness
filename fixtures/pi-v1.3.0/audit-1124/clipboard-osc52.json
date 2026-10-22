@@ -1,0 +1,223 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-22T14:19:39.006Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/utils/clipboard.ts:copyToClipboard,isRemoteSession,emitOsc52",
+    "packages/coding-agent/test/clipboard.test.ts:PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful %s copy"
+  ],
+  "scenarios": [
+    {
+      "name": "osc52-opt-in-writes-the-sequence-for-a-desktop-session",
+      "inputs": {
+        "env": {
+          "DISPLAY": ":0",
+          "PI_CLIPBOARD_OSC52": "1"
+        },
+        "text": "hello",
+        "path": "empty"
+      },
+      "expected": {
+        "outcome": {
+          "resolved": true,
+          "error": null
+        },
+        "osc52": {
+          "count": 1,
+          "encodedLengths": [
+            8
+          ],
+          "sequences": [
+            "\u001b]52;c;aGVsbG8=\u0007"
+          ],
+          "sequenceHeads": [
+            "\u001b]52;c;aGVsb"
+          ],
+          "sequenceTails": [
+            "\u0007"
+          ]
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/clipboard.test.ts",
+        "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
+      }
+    },
+    {
+      "name": "osc52-opt-in-absent-reports-the-x11-failure",
+      "inputs": {
+        "env": {
+          "DISPLAY": ":0"
+        },
+        "text": "hello",
+        "path": "empty"
+      },
+      "expected": {
+        "outcome": {
+          "resolved": false,
+          "error": "Clipboard unavailable: install `xclip` or `xsel`, or check X11 access"
+        },
+        "osc52": {
+          "count": 0,
+          "encodedLengths": [],
+          "sequences": [],
+          "sequenceHeads": [],
+          "sequenceTails": []
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/clipboard.test.ts",
+        "case": "local Linux failure does not report an unverified OSC 52 write as success"
+      }
+    },
+    {
+      "name": "osc52-opt-in-zero-is-not-an-opt-in",
+      "inputs": {
+        "env": {
+          "DISPLAY": ":0",
+          "PI_CLIPBOARD_OSC52": "0"
+        },
+        "text": "hello",
+        "path": "empty"
+      },
+      "expected": {
+        "outcome": {
+          "resolved": false,
+          "error": "Clipboard unavailable: install `xclip` or `xsel`, or check X11 access"
+        },
+        "osc52": {
+          "count": 0,
+          "encodedLengths": [],
+          "sequences": [],
+          "sequenceHeads": [],
+          "sequenceTails": []
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/clipboard.test.ts",
+        "case": "local Linux failure does not report an unverified OSC 52 write as success"
+      }
+    },
+    {
+      "name": "osc52-opt-in-writes-the-largest-allowed-payload-in-full",
+      "inputs": {
+        "env": {
+          "DISPLAY": ":0",
+          "PI_CLIPBOARD_OSC52": "1"
+        },
+        "textBytes": 75000,
+        "path": "empty"
+      },
+      "expected": {
+        "outcome": {
+          "resolved": true,
+          "error": null
+        },
+        "osc52": {
+          "count": 1,
+          "encodedLengths": [
+            100000
+          ],
+          "sequences": [
+            null
+          ],
+          "sequenceHeads": [
+            "\u001b]52;c;YWFhY"
+          ],
+          "sequenceTails": [
+            "\u0007"
+          ]
+        }
+      },
+      "normalizations": [
+        "the 75000-byte payload's sequence is recorded by encodedLengths plus its exact heads/tails, not in full"
+      ],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/clipboard.test.ts",
+        "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
+      }
+    },
+    {
+      "name": "osc52-opt-in-rejects-one-byte-over-the-size-bound",
+      "inputs": {
+        "env": {
+          "DISPLAY": ":0",
+          "PI_CLIPBOARD_OSC52": "1"
+        },
+        "textBytes": 75001,
+        "path": "empty"
+      },
+      "expected": {
+        "outcome": {
+          "resolved": false,
+          "error": "Clipboard unavailable: text exceeds the OSC 52 size limit"
+        },
+        "osc52": {
+          "count": 0,
+          "encodedLengths": [],
+          "sequences": [],
+          "sequenceHeads": [],
+          "sequenceTails": []
+        }
+      },
+      "normalizations": [
+        "the 75001-byte payload is refused, so the observation is the failure message"
+      ],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/clipboard.test.ts",
+        "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
+      }
+    },
+    {
+      "name": "wsl-windows-terminal-prefers-osc52-before-the-remote-branch",
+      "inputs": {
+        "env": {
+          "DISPLAY": ":0",
+          "WSL_DISTRO_NAME": "Ubuntu",
+          "WT_SESSION": "terminal-session",
+          "PI_CLIPBOARD_OSC52": "1"
+        },
+        "text": "hello",
+        "path": "empty"
+      },
+      "expected": {
+        "outcome": {
+          "resolved": true,
+          "error": null
+        },
+        "osc52": {
+          "count": 1,
+          "encodedLengths": [
+            8
+          ],
+          "sequences": [
+            "\u001b]52;c;aGVsbG8=\u0007"
+          ],
+          "sequenceHeads": [
+            "\u001b]52;c;aGVsb"
+          ],
+          "sequenceTails": [
+            "\u0007"
+          ]
+        }
+      },
+      "normalizations": [],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/clipboard.test.ts",
+        "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
+      }
+    }
+  ]
+}

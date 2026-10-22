@@ -1,5 +1,6 @@
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "support/ImageCapabilitiesGuard.hpp"
 
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -498,6 +499,10 @@ TEST_CASE("Theme styling selects safe built-ins and maps color capability", "[co
 }
 
 TEST_CASE("Theme adapters resolve the current palette at callback time", "[coding_agent][theme][issue55][spec]") {
+    // The link assertions read the `label (url)` fallback, which only renders
+    // without OSC 8 support: pin the capability rather than inheriting the
+    // runner's terminal (a Herdr pane reports hyperlinks, #1124).
+    const tests::ImageCapabilitiesGuard capabilities({.images = tui::InlineImageProtocol::None, .hyperlinks = false});
     coding_agent::tui::LiveTheme live(
         coding_agent::tui::builtin_dark_theme(),
         tui::TerminalColorCapability::TrueColor);

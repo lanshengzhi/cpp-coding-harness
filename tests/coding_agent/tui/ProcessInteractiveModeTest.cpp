@@ -1,6 +1,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "ai/ModelStreamBridge.hpp"
+#include "support/ImageEnvironmentGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PseudoTerminal.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -177,6 +178,11 @@ private:
 
 TEST_CASE("Process Terminal runs the private Native TUI composition and restores the PTY",
         "[coding_agent][tui][terminal][issue58][issue530][spec]") {
+    // The PTY stands in for a terminal that cannot render inline images, so the
+    // image part must arrive as pi's text fallback. Pin that by scrubbing the
+    // capability variables: a real Herdr pane in the runner's environment
+    // reports Kitty images (#1124) and would paint graphics instead.
+    cch::tests::ImageEnvironmentGuard environment;
     auto pty = cch::tests::open_pseudo_terminal(60, 12);
     REQUIRE(pty);
     termios original{};

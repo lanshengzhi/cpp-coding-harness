@@ -215,6 +215,10 @@ TEST_CASE("Markdown renders common response constructs in semantic order", "[tui
 
 TEST_CASE("Markdown styles link labels and visible URL fallbacks independently",
         "[tui][markdown][theme][issue55][spec]") {
+    // The `label (url)` fallback is the no-hyperlink branch, so pin it instead
+    // of reading the runner's own terminal capabilities (a Herdr pane reports
+    // OSC 8 support and would take the link branch, #1124).
+    const tests::ImageCapabilitiesGuard capabilities({.images = tui::InlineImageProtocol::None, .hyperlinks = false});
     tui::MarkdownStyleConfig style;
     style.link_text = [](std::string text) { return "\x1b[31m" + text + "\x1b[39m"; };
     style.link_url = [](std::string text) { return "\x1b[2m" + text + "\x1b[22m"; };
