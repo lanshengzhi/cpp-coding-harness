@@ -393,7 +393,7 @@ constexpr std::chrono::milliseconds kClipboardPollInterval{1};
 
 bool clipboard_is_remote_session(const ClipboardEnvironment& environment) {
     return !environment.ssh_connection.empty() || !environment.ssh_client.empty() ||
-           !environment.mosh_connection.empty();
+           !environment.mosh_connection.empty() || environment.pi_clipboard_osc52 == "1";
 }
 
 bool clipboard_is_headless(const ClipboardEnvironment& environment) {
@@ -414,6 +414,7 @@ ClipboardEnvironment clipboard_environment_from_process() {
     environment.ssh_connection = environment_value("SSH_CONNECTION");
     environment.ssh_client = environment_value("SSH_CLIENT");
     environment.mosh_connection = environment_value("MOSH_CONNECTION");
+    environment.pi_clipboard_osc52 = environment_value("PI_CLIPBOARD_OSC52");
     environment.wt_session = environment_value("WT_SESSION");
     environment.is_wsl = detect_wsl_environment();
     environment.search_path = environment_value("PATH");

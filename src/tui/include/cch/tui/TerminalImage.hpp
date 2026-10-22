@@ -112,9 +112,11 @@ struct KittyImageHeader {
 
 /// Per-emulator env-rule capability detection exactly as pi's
 /// `detectCapabilities`: tmux and screen disable inline images (tmux probes
-/// OSC 8 forwarding), Kitty/Ghostty/WezTerm/Warp report the Kitty protocol,
-/// iTerm2 reports the iTerm2 protocol, and every other emulator stays
-/// conservative with no inline images.
+/// OSC 8 forwarding), Herdr reports the Kitty protocol and hyperlinks after
+/// the tmux/screen checks, before the Kitty rules because variables such as
+/// `KITTY_WINDOW_ID` leak into its panes, Kitty/Ghostty/WezTerm/Warp report the
+/// Kitty protocol, iTerm2 reports the iTerm2 protocol, and every other emulator
+/// stays conservative with no inline images.
 [[nodiscard]] DetectedImageCapabilities detect_image_capabilities(
     TmuxHyperlinkProbe tmux_forwards_hyperlink = detail::probe_tmux_hyperlinks);
 

@@ -1,6 +1,8 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "ai/ModelStreamBridge.hpp"
+#include "support/ImageCapabilitiesGuard.hpp"
+#include "support/ImageEnvironmentGuard.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/PseudoTerminal.hpp"
 #include "support/RuntimeFixture.hpp"
@@ -177,6 +179,15 @@ private:
 
 TEST_CASE("Process Terminal runs the private Native TUI composition and restores the PTY",
         "[coding_agent][tui][terminal][issue58][issue530][spec]") {
+    // The PTY stands in for a terminal that cannot render inline images, so the
+    // ProcessTerminal::initialize() reads the scrubbed environment directly,
+    // and the user-image render defers protocol selection; its filename-less
+    // fallback does not consult the cached capability. Keep the cache guard
+    // for isolation: its destructor clears any cache left for tests that run
+    // after this case; ImageEnvironmentGuard pins the direct detection here.
+    cch::tests::ImageEnvironmentGuard environment;
+    const cch::tests::ImageCapabilitiesGuard capabilities(
+            {.images = cch::tui::InlineImageProtocol::None, .hyperlinks = false});
     auto pty = cch::tests::open_pseudo_terminal(60, 12);
     REQUIRE(pty);
     termios original{};

@@ -21,6 +21,7 @@
 #include <stop_token>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace cch::coding_agent::tui {
 namespace {
@@ -334,6 +335,37 @@ TEST_CASE("Clipboard temporary tokens are unique UUID-shaped names", "[coding_ag
         }
     }
     CHECK(first.find('/') == std::string::npos);
+}
+
+TEST_CASE("PI_CLIPBOARD_OSC52 opts a local session into the remote OSC 52 route",
+        "[coding_agent][tui][clipboard][issue1124][compat-pi]") {
+    // Frozen pi-v1.3.0 `isRemoteSession` (packages/coding-agent/src/utils/clipboard.ts:16-18)
+    // counts `PI_CLIPBOARD_OSC52 === "1"` as a remote session, so a client that
+    // leaves no SSH markers — a multiplexer attach or an IDE daemon — still
+    // receives the copy on its own clipboard. The environment is observed from
+    // the process exactly as the CLI assembly does.
+    tests::EnvVarGuard ssh_connection{"SSH_CONNECTION", std::nullopt};
+    tests::EnvVarGuard ssh_client{"SSH_CLIENT", std::nullopt};
+    tests::EnvVarGuard mosh{"MOSH_CONNECTION", std::nullopt};
+
+    {
+        // The opt-in is the variable's exact `"1"` spelling; anything else
+        // (including `"0"`) leaves a local session local.
+        for (const auto& value : std::vector<std::optional<std::string>>{{"1"}, std::nullopt}) {
+            tests::EnvVarGuard opt_in{"PI_CLIPBOARD_OSC52", value};
+            CHECK(clipboard_is_remote_session(clipboard_environment_from_process()) == value.has_value());
+        }
+    }
+    {
+        tests::EnvVarGuard opt_in{"PI_CLIPBOARD_OSC52", std::string{"0"}};
+        CHECK_FALSE(clipboard_is_remote_session(clipboard_environment_from_process()));
+    }
+    {
+        // An SSH marker alone keeps its own meaning; the opt-in is additive.
+        tests::EnvVarGuard opt_in{"PI_CLIPBOARD_OSC52", std::nullopt};
+        tests::EnvVarGuard ssh{"SSH_CONNECTION", std::string{"10.0.0.1 5555 10.0.0.2 22"}};
+        CHECK(clipboard_is_remote_session(clipboard_environment_from_process()));
+    }
 }
 
 } // namespace

@@ -53,6 +53,9 @@ struct ClipboardEnvironment {
     std::string ssh_connection{};
     std::string ssh_client{};
     std::string mosh_connection{};
+    /// pi `PI_CLIPBOARD_OSC52`: `"1"` opts a session that leaves no SSH marker
+    /// into the remote OSC 52 route (multiplexer attaches, IDE daemons).
+    std::string pi_clipboard_osc52{};
     /// pi `WT_SESSION`: Windows Terminal supports OSC 52, so a WSL session
     /// prefers it over the PowerShell round trip.
     std::string wt_session{};
@@ -65,7 +68,8 @@ struct ClipboardEnvironment {
 };
 
 /// pi `isRemoteSession`: the clipboard that matters lives on the client side of
-/// the terminal connection, so OSC 52 is the only route that reaches it.
+/// the terminal connection, so OSC 52 is the only route that reaches it. A
+/// session opts in without SSH markers through `PI_CLIPBOARD_OSC52=1`.
 [[nodiscard]] bool clipboard_is_remote_session(const ClipboardEnvironment& environment);
 
 /// pi's headless Linux condition (no display, no Wayland, no Termux): the

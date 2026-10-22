@@ -1,8 +1,10 @@
 #include "coding_agent/tui/AssistantMessageComponent.hpp"
 #include "coding_agent/tui/Theme.hpp"
+#include "support/ImageEnvironmentGuard.hpp"
 #include "support/RenderedScreen.hpp"
 
 #include <cch/ai/Message.hpp>
+#include <cch/tui/TerminalImage.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -273,4 +275,50 @@ TEST_CASE("AssistantMessageComponent append processing stays bounded across a hu
     one_shot_message.stop_reason = ai::AssistantStopReason::Stop;
     one_shot.update_content(one_shot_message);
     CHECK(tests::rendered_screen(component) == tests::rendered_screen(one_shot));
+}
+
+TEST_CASE("Assistant markdown links emit OSC 8 bytes inside a Herdr pane",
+        "[coding_agent][tui][markdown][issue1124][compat-pi]") {
+    // Frozen pi-v1.3.0: `detectCapabilitiesFromEnvironment` reports
+    // `hyperlinks: true` for `TERM_PROGRAM=herdr`
+    // (fixtures/pi-v1.3.0/audit-1050/terminal-capabilities.json, scenario
+    // herdr-detected-before-outer-terminal, revision 71023aec1546) and the
+    // frozen Markdown component emits `hyperlink(...)` when
+    // `getCapabilities().hyperlinks` holds
+    // (packages/tui/src/components/markdown.ts:702-705). This drives the
+    // highest public caller for the link half: the assistant message's own
+    // Markdown render.
+    tests::ImageEnvironmentGuard environment;
+    environment.set("TERM_PROGRAM", "herdr");
+    environment.set("TERM", "xterm-256color");
+    cch::tui::reset_image_capabilities_cache();
+
+    const auto render_link = [](const coding_agent::tui::LiveTheme& theme) {
+        coding_agent::tui::AssistantMessageComponent component(theme);
+        ai::AssistantMessage message;
+        message.content.push_back(ai::TextContent{.text = "see [the notes](https://example.com/notes)"});
+        message.stop_reason = ai::AssistantStopReason::Stop;
+        component.update_content(message);
+        const auto rendered = component.render(80);
+        REQUIRE(rendered);
+        std::string lines;
+        for (const auto& line : rendered->lines)
+            lines += line;
+        return lines;
+    };
+
+    auto theme = test_theme();
+    const auto herdr = render_link(theme);
+    CHECK(herdr.find("\x1b]8;;https://example.com/notes\x1b\\") != std::string::npos);
+    // The destination is carried by the OSC 8 sequence, not printed inline.
+    CHECK(herdr.find("(https://example.com/notes)") == std::string::npos);
+
+    // The control: the same message in a terminal with no hyperlink marker
+    // keeps pi's `label (url)` fallback and emits no OSC 8 sequence.
+    environment.set("TERM_PROGRAM", "");
+    cch::tui::reset_image_capabilities_cache();
+    const auto plain = render_link(theme);
+    CHECK(plain.find("\x1b]8;;") == std::string::npos);
+    CHECK(plain.find("(https://example.com/notes)") != std::string::npos);
+    cch::tui::reset_image_capabilities_cache();
 }
