@@ -54,6 +54,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ImageTranscoderTest.cpp
         tests/coding_agent/tui/ChatContainerTest.cpp
         tests/coding_agent/tui/OutputPadEvidenceTest.cpp
+        tests/coding_agent/tui/TerminalSessionCaptureEvidenceTest.cpp
         tests/coding_agent/tui/HtmlExportTest.cpp
         tests/coding_agent/tui/TerminationSignalsTest.cpp
         tests/coding_agent/tui/tool_renderers/BashRendererTest.cpp

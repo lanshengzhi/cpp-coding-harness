@@ -79,6 +79,7 @@ tests/tui/KeysKittyTextTest.cpp
         tests/tui/StackLayoutEvidenceTest.cpp
         tests/tui/TerminalColorsTest.cpp
         tests/tui/TerminalImageTest.cpp
+        tests/tui/TerminalCursorPtyEvidenceTest.cpp
         tests/tui/TerminalStreamDecoderTest.cpp
         tests/tui/StdinBufferTest.cpp
         tests/tui/TextBufferTest.cpp
