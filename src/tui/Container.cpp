@@ -163,6 +163,11 @@ void Box::clear() {
 
 void Box::set_background_hook(BackgroundHook background_hook) { background_hook_ = std::move(background_hook); }
 
+void Box::set_padding_x(std::size_t padding_x) {
+    padding_x_ = padding_x;
+    clear_cache();
+}
+
 support::Expected<RenderResult> Box::render(std::size_t width) {
     last_render_tokenize_calls_ = 0;
     rendered_child_rows_.clear();

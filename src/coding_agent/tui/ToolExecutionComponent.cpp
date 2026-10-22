@@ -19,10 +19,11 @@
 namespace cch::coding_agent::tui {
 namespace {
 
-/// The tool block's box padding (`Box(1, 1, ...)`). A renderer that folds to
-/// the frame measures the *content* width, so the same constant drives both
-/// the box and the width the renderers are told about.
-constexpr std::size_t kBoxPaddingX = 1;
+/// The tool block's box padding default (`Box(1, 1, ...)`). A renderer that
+/// folds to the frame measures the *content* width, so the same value drives
+/// both the box and the width the renderers are told about. pi's default
+/// `outputPad` setting is 1, and the host replaces it with the live setting.
+constexpr std::size_t kDefaultOutputPad = 1;
 
 /// pi's default terminal width, the value a rebuild before the first render
 /// publishes (`ToolRenderContext::width`).
@@ -69,7 +70,7 @@ ToolExecutionComponent::ToolExecutionComponent(const LiveTheme& theme,
     : theme_(theme), keybindings_(std::move(keybindings)), tool_name_(std::move(tool_name)),
       tool_call_id_(std::move(tool_call_id)), arguments_json_(safe_text(std::move(arguments_json))),
       cwd_(std::move(cwd)), registry_(std::move(registry)),
-      box_(kBoxPaddingX, 1, theme.background_hook(ThemeToken::ToolPendingBg)) {
+      box_(kDefaultOutputPad, 1, theme.background_hook(ThemeToken::ToolPendingBg)) {
     rebuild();
 }
 
@@ -91,6 +92,13 @@ void ToolExecutionComponent::update_result(
 
 void ToolExecutionComponent::set_expanded(bool expanded) {
     expanded_ = expanded;
+    rebuild();
+}
+
+void ToolExecutionComponent::set_output_pad(std::size_t output_pad) {
+    if (output_pad_ == output_pad) return;
+    output_pad_ = output_pad;
+    box_.set_padding_x(output_pad);
     rebuild();
 }
 
@@ -142,7 +150,7 @@ void ToolExecutionComponent::rebuild() {
 
     const auto args = parsed_arguments();
     const auto terminal_width = last_rendered_width_.value_or(kDefaultTerminalWidth);
-    const auto content_width = terminal_width > 2 * kBoxPaddingX ? terminal_width - 2 * kBoxPaddingX : terminal_width;
+    const auto content_width = terminal_width > 2 * output_pad_ ? terminal_width - 2 * output_pad_ : terminal_width;
     const ToolRenderContext context{
             .args = args,
             .tool_name = tool_name_,
@@ -159,6 +167,7 @@ void ToolExecutionComponent::rebuild() {
             .expanded = expanded_,
             .started_at_ms = started_at_ms_,
             .ended_at_ms = ended_at_ms_,
+            .output_pad = output_pad_,
     };
 
     auto& renderer = registry_.lookup(tool_name_);

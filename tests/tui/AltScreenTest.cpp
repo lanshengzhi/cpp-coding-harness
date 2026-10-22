@@ -630,6 +630,93 @@ TEST_CASE("AltScreen multi-click selection cycles word, line, and character gran
     REQUIRE(tui.stop());
 }
 
+// The frozen pi-v1.3.0 observation lives in
+// fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json, scenarios
+// `selection-reset-drops-selection-and-multiclick-history` and
+// `third-consecutive-click-selects-line-control` (revision 71023aec1546).
+//
+// pi's `TuiAltScreen.resetTextSelection()` clears the visible selection *and*
+// the multi-click history (`lastClick = undefined`), so the next press is a
+// character click again. Clearing only the highlight is not enough: the
+// retained history makes the next press count up to the third click, which
+// selects the whole line instead of the dragged characters.
+TEST_CASE("AltScreen selection reset drops the visible selection and the multi-click history",
+        "[tui][alt-screen][selection][issue1121][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.copy_on_select = false});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("alpha beta gamma", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto click = [&](std::ptrdiff_t x) {
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+    };
+
+    // A double click selects the word under the pointer.
+    now += std::chrono::milliseconds{600};
+    click(7);
+    now += std::chrono::milliseconds{150};
+    click(7);
+    REQUIRE(tui.render());
+    const auto word_selection = tui.selection_text_trace().value_or("<no selection>");
+    INFO("double-click selection: [" << word_selection << "]");
+    CHECK(word_selection == "beta");
+
+    // The reset drops the visible highlight ...
+    tui.reset_text_selection();
+    REQUIRE(tui.render());
+    CHECK_FALSE(tui.has_active_selection());
+    CHECK_FALSE(tui.selection_text_trace().has_value());
+
+    // ... and the multi-click history: the next press is a character click
+    // again, so the drag selects the dragged characters ("bet"), not the
+    // whole line the retained third click would have selected.
+    now += std::chrono::milliseconds{150};
+    REQUIRE(terminal.inject_input("\x1b[<0;7;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;9;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;9;1m"));
+    REQUIRE(tui.render());
+    const auto dragged = tui.selection_text_trace().value_or("<no selection>");
+    INFO("dragged selection: [" << dragged << "]");
+    CHECK(dragged == "bet");
+    REQUIRE(tui.stop());
+}
+
+// The frozen control case from the same artifact: without the reset, the
+// third consecutive press on the same word selects the whole line. It proves
+// the reset is what changed the outcome above.
+TEST_CASE("AltScreen third consecutive click selects the whole line without a reset",
+        "[tui][alt-screen][selection][issue1121][spec]") {
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 4});
+    cch::tui::AltScreen tui(terminal, cch::tui::AltScreenOptions{.copy_on_select = false});
+    std::chrono::milliseconds now{0};
+    tui.set_selection_click_clock([&now] { return now; });
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>("alpha beta gamma", 0, 0)));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto click = [&](std::ptrdiff_t x) {
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1M"));
+        REQUIRE(terminal.inject_input("\x1b[<0;" + std::to_string(x) + ";1m"));
+    };
+
+    now += std::chrono::milliseconds{600};
+    click(7);
+    now += std::chrono::milliseconds{150};
+    click(7);
+    now += std::chrono::milliseconds{150};
+    // The third press on the same word counts up to the line granularity.
+    REQUIRE(terminal.inject_input("\x1b[<0;7;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<32;9;1M"));
+    REQUIRE(terminal.inject_input("\x1b[<0;9;1m"));
+    REQUIRE(tui.render());
+    const auto line_selection = tui.selection_text_trace().value_or("<no selection>");
+    INFO("third-click selection: [" << line_selection << "]");
+    CHECK(line_selection == "alpha beta gamma");
+    REQUIRE(tui.stop());
+}
+
 TEST_CASE("AltScreen word selection chains joiner-adjacent segments and stops at boundary ends",
         "[tui][alt-screen][selection][issue1007][spec]") {
     cch::tui::VirtualTerminal terminal({.columns = 24, .rows = 4});

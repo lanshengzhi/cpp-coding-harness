@@ -76,6 +76,12 @@ struct ToolRenderContext {
     /// not happened yet.
     std::optional<std::int64_t> started_at_ms{std::nullopt};
     std::optional<std::int64_t> ended_at_ms{std::nullopt};
+    /// pi `ToolRenderContext.outputPad`
+    /// (`core/extensions/types.ts:498`): the horizontal padding the
+    /// `outputPad` setting configures. A renderer whose shell is `"self"`
+    /// applies it to its own component, the way pi's `edit` renderer does
+    /// (`core/tools/renderers/edit.ts:139,249`).
+    std::size_t output_pad{1};
 };
 
 } // namespace cch::coding_agent::tui
