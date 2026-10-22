@@ -43,7 +43,8 @@ cch::tests::IoContextRunner& test_io() {
     const auto time = std::chrono::system_clock::to_time_t(now);
     std::tm utc{};
     if (::gmtime_r(&time, &utc) == nullptr) return "unknown";
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+    const auto milliseconds =
+            std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
     return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
             utc.tm_year + 1900,
             utc.tm_mon + 1,
@@ -130,6 +131,7 @@ TEST_CASE("real PTY records hardware cursor positioning and visibility restorati
         capture << "restoration_bytes_hex=" << hex_bytes(restoration_bytes) << '\n';
         capture << "fullscreen_session_bytes_hex=" << hex_bytes(fullscreen_session_bytes) << '\n';
         capture << "fullscreen_restoration_bytes_hex=" << hex_bytes(fullscreen_restoration_bytes) << '\n';
-        capture << "limitation=PTY records cursor control bytes and mode restoration; it does not visually emulate a terminal\n";
+        capture << "limitation=PTY records cursor control bytes and mode restoration; it does not visually emulate a "
+                   "terminal\n";
     }
 }

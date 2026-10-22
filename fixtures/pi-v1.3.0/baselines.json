@@ -83,7 +83,7 @@
         },
         "audit-1121": {
           "manifest": "audit-1121/manifest.json",
-          "manifestSha256": "1296b94be196ac3a4c7757a820b4276f578eba65b75a23119eb008a7a0fa4608"
+          "manifestSha256": "97c76eaec8d13f8b5a1978508a6d82445c3c1f5ff3c2bf6219d68eb3eabb4e21"
         },
         "audit-1123": {
           "manifest": "audit-1123/manifest.json",

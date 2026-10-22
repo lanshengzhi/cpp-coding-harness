@@ -58,7 +58,8 @@ namespace {
     const auto time = std::chrono::system_clock::to_time_t(now);
     std::tm utc{};
     if (::gmtime_r(&time, &utc) == nullptr) return "unknown";
-    const auto milliseconds = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
+    const auto milliseconds =
+            std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 1000;
     return std::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
             utc.tm_year + 1900,
             utc.tm_mon + 1,
@@ -115,10 +116,11 @@ TEST_CASE("real PTY records Herdr markdown and OSC 52 terminal bytes",
     std::vector<std::string> opted_in_sequences;
     cch::coding_agent::tui::ClipboardWriteOptions opted_in{
             .environment = std::move(clipboard_environment),
-            .write_osc52 = [&terminal, &opted_in_sequences](std::string_view sequence) {
-                opted_in_sequences.emplace_back(sequence);
-                (void)terminal.write(sequence);
-            },
+            .write_osc52 =
+                    [&terminal, &opted_in_sequences](std::string_view sequence) {
+                        opted_in_sequences.emplace_back(sequence);
+                        (void)terminal.write(sequence);
+                    },
     };
     const auto opted_in_result = cch::coding_agent::tui::write_clipboard_text("pty clipboard evidence", opted_in);
     const auto opted_in_bytes = collect_pty_output(*pty);
@@ -132,10 +134,11 @@ TEST_CASE("real PTY records Herdr markdown and OSC 52 terminal bytes",
     std::vector<std::string> local_sequences;
     cch::coding_agent::tui::ClipboardWriteOptions local{
             .environment = std::move(local_environment),
-            .write_osc52 = [&terminal, &local_sequences](std::string_view sequence) {
-                local_sequences.emplace_back(sequence);
-                (void)terminal.write(sequence);
-            },
+            .write_osc52 =
+                    [&terminal, &local_sequences](std::string_view sequence) {
+                        local_sequences.emplace_back(sequence);
+                        (void)terminal.write(sequence);
+                    },
     };
     const auto local_result = cch::coding_agent::tui::write_clipboard_text("pty clipboard evidence", local);
     const auto local_bytes = collect_pty_output(*pty);
@@ -172,8 +175,10 @@ TEST_CASE("real PTY records Herdr markdown and OSC 52 terminal bytes",
         capture << "osc52_sequence_hex=" << (opted_in_sequences.empty() ? "" : hex_bytes(opted_in_sequences.front()))
                 << '\n';
         capture << "osc52_without_opt_in_sequence_count=" << local_sequences.size() << '\n';
-        capture << "limitation=PTY records emitted bytes; no observation verifies hyperlink rendering or clipboard write\n";
-        capture << "pty_capture_scope=the PTY run validates this environment's capability branch; the PTY itself is not the Herdr host emulator\n";
+        capture << "limitation=PTY records emitted bytes; no observation verifies hyperlink rendering or clipboard "
+                   "write\n";
+        capture << "pty_capture_scope=the PTY run validates this environment's capability branch; the PTY itself is "
+                   "not the Herdr host emulator\n";
     }
 
     REQUIRE(screen.stop());
