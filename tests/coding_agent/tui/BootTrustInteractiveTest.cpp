@@ -512,6 +512,14 @@ TEST_CASE("boot session creation failure prints pi-style and stops the TUI",
     CHECK_FALSE(recorder.boot_creation_failure[0].error.message.empty());
     REQUIRE(run_result);
     CHECK_FALSE(*run_result);
+    // A startup error exits through `fail_start`'s ordinary stop, not the
+    // fullscreen preserveScreen frame: frozen's crash path calls
+    // `this.ui.stop()` with no options (interactive-mode.ts:4382), and leaving
+    // the terminal in the alternate screen after a failed boot would be a bug.
+    CHECK_FALSE(terminal.modes().started);
+    CHECK_FALSE(terminal.modes().raw_input);
+    CHECK_FALSE(terminal.modes().bracketed_paste);
+    CHECK(terminal.modes().cursor_visible);
 }
 
 TEST_CASE("boot registers discovered themes and the settings Theme submenu commits one",

@@ -1,0 +1,74 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-22T17:12:47.261Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/ai/src/models.ts:getSupportedThinkingLevels",
+    "packages/coding-agent/src/modes/interactive/components/thinking-selector.ts:ThinkingSelector",
+    "packages/coding-agent/test/suite/harness.ts:createHarness",
+    "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+  ],
+  "scenarios": [
+    {
+      "name": "thinking selector with the absent thinkingLevelMap at 100 columns",
+      "inputs": {
+        "model": {
+          "id": "faux-1",
+          "reasoning": true,
+          "thinkingLevelMap": "absent"
+        },
+        "width": 100,
+        "keystrokes": [
+          "/thinking",
+          "\\r",
+          "\\r"
+        ]
+      },
+      "expected": {
+        "thinkingLevelMap": {
+          "present": false
+        },
+        "supportedThinkingLevels": [
+          "off",
+          "minimal",
+          "low",
+          "medium",
+          "high"
+        ],
+        "viewportRows": [
+          ">                                                                                                   ",
+          "",
+          "→ ✓ off       No reasoning",
+          "    minimal   Very brief reasoning (~1k tokens)",
+          "    low       Light reasoning (~2k tokens)",
+          "    medium    Moderate reasoning (~8k tokens) · default",
+          "    high      Deep reasoning (~16k tokens)"
+        ],
+        "levelRows": [
+          "→ ✓ off       No reasoning",
+          "    minimal   Very brief reasoning (~1k tokens)",
+          "    low       Light reasoning (~2k tokens)",
+          "    medium    Moderate reasoning (~8k tokens) · default",
+          "    high      Deep reasoning (~16k tokens)"
+        ],
+        "defaultLevel": "medium"
+      },
+      "normalizations": [
+        "the private capture root is replaced with <deterministic-workspace>"
+      ],
+      "upstreamTest": {
+        "path": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+        "scenario": "thinking-selector"
+      }
+    }
+  ]
+}

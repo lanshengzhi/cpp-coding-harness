@@ -71,18 +71,21 @@ public:
         auto list = list_.render(width);
         if (!list) return std::unexpected(list.error());
         cch::tui::RenderResult result;
-        result.lines.reserve(input->lines.size() + list->lines.size());
+        const auto search_line_count = input->lines.size();
+        result.lines.reserve(search_line_count + list->lines.size() + 1);
         for (auto& line : input->lines)
             result.lines.push_back(std::move(line));
+        // pi places a shared blank row between the search prompt and selector results.
+        result.lines.emplace_back();
         for (auto& line : list->lines)
             result.lines.push_back(std::move(line));
-        if (filtered_items_.empty() && result.lines.size() > 1) {
+        if (filtered_items_.empty() && result.lines.size() > search_line_count + 1) {
             const auto text = no_match_message_.value_or("  No matching commands");
             auto message = cch::tui::truncate_text(text, width, "");
             if (!message) return std::unexpected(message.error());
             auto styled = apply_no_match_style(std::move(*message));
             if (!styled) return std::unexpected(styled.error());
-            result.lines[1] = std::move(*styled);
+            result.lines[search_line_count + 1] = std::move(*styled);
         }
         return result;
     }

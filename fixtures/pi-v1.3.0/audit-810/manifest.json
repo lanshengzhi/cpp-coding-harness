@@ -1,0 +1,103 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "810",
+  "family": "audit-810",
+  "capturedAt": "2026-10-22T17:12:47.261Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-810/capture-810-thinking-selector.mts",
+    "sha256": "219fa5857645ff2ef7f0fcb52e4857103d39a3f258e1d53bdc094cfa968f1f00",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-810/capture-810-thinking-selector.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-810/capture-810-thinking-selector.mts",
+        "sha256": "219fa5857645ff2ef7f0fcb52e4857103d39a3f258e1d53bdc094cfa968f1f00"
+      },
+      {
+        "path": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+        "sha256": "f0376baf941b30be09fdf10879c985a8d11b6017bd83a4a38719c012c7d80960"
+      },
+      {
+        "path": "fixtures/pi-coding-agent/capture/grok-mermaid-stub.mts",
+        "sha256": "b954a27253513d284dc90903a7ea73df567581cef7cfc28b038b81bedc329904"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "thinking-selector.json",
+      "family": "audit-810",
+      "bytes": 2339,
+      "sha256": "2e1d7f5e12404f01c44e4b63bca3b4a480be3ae179cceadd922defbb520aaa74",
+      "sourceEndpoints": [
+        "packages/ai/src/models.ts:getSupportedThinkingLevels",
+        "packages/coding-agent/src/modes/interactive/components/thinking-selector.ts:ThinkingSelector",
+        "packages/coding-agent/test/suite/harness.ts:createHarness",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+      ],
+      "scenarios": [
+        {
+          "name": "thinking selector with the absent thinkingLevelMap at 100 columns",
+          "inputs": {
+            "model": {
+              "id": "faux-1",
+              "reasoning": true,
+              "thinkingLevelMap": "absent"
+            },
+            "width": 100,
+            "keystrokes": [
+              "/thinking",
+              "\\r",
+              "\\r"
+            ]
+          },
+          "expected": {
+            "thinkingLevelMap": {
+              "present": false
+            },
+            "supportedThinkingLevels": [
+              "off",
+              "minimal",
+              "low",
+              "medium",
+              "high"
+            ],
+            "viewportRows": [
+              ">                                                                                                   ",
+              "",
+              "→ ✓ off       No reasoning",
+              "    minimal   Very brief reasoning (~1k tokens)",
+              "    low       Light reasoning (~2k tokens)",
+              "    medium    Moderate reasoning (~8k tokens) · default",
+              "    high      Deep reasoning (~16k tokens)"
+            ],
+            "levelRows": [
+              "→ ✓ off       No reasoning",
+              "    minimal   Very brief reasoning (~1k tokens)",
+              "    low       Light reasoning (~2k tokens)",
+              "    medium    Moderate reasoning (~8k tokens) · default",
+              "    high      Deep reasoning (~16k tokens)"
+            ],
+            "defaultLevel": "medium"
+          },
+          "normalizations": [
+            "the private capture root is replaced with <deterministic-workspace>"
+          ],
+          "upstreamTest": {
+            "path": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
+            "scenario": "thinking-selector"
+          }
+        }
+      ]
+    }
+  ]
+}

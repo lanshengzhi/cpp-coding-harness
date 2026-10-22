@@ -259,7 +259,8 @@ void write_capture(const std::filesystem::path& path,
 }
 
 [[nodiscard]] std::vector<ai::Model> differential_catalog() {
-    auto reasoning = tests::make_full_thinking_model("faux-1");
+    auto reasoning = tests::make_model("faux-1", "faux", "faux");
+    reasoning.reasoning = true;
     reasoning.provider = "faux";
     reasoning.api = "faux";
     reasoning.name = "Faux Reasoning";
@@ -547,8 +548,33 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Model:"); }));
             if (scenario == "thinking-selector" && input_index == 0)
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Set thinking level"); }));
-            if (scenario == "thinking-selector" && input_index == 1)
+            if (scenario == "thinking-selector" && input_index == 1) {
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "No reasoning"); }));
+                const auto rows = terminal.screen();
+                const std::vector<std::string> levels = {
+                        "No reasoning",
+                        "Very brief reasoning (~1k tokens)",
+                        "Light reasoning (~2k tokens)",
+                        "Moderate reasoning (~8k tokens) · default",
+                        "Deep reasoning (~16k tokens)",
+                };
+                for (const auto& level : levels) {
+                    INFO("level " << level);
+                    CHECK(std::ranges::count_if(rows, [&level](const std::string& row) {
+                        return row.find(level) != std::string::npos;
+                    }) == 1);
+                }
+                CHECK(std::ranges::none_of(rows, [](const std::string& row) {
+                    return row.find("xhigh") != std::string::npos || row.find("max       ") != std::string::npos;
+                }));
+                const auto search =
+                        std::ranges::find_if(rows, [](const std::string& row) { return row.starts_with("> "); });
+                REQUIRE(search != rows.end());
+                const auto search_index = static_cast<std::size_t>(search - rows.begin());
+                REQUIRE(search_index + 2 < rows.size());
+                CHECK(rows[search_index + 1].find_first_not_of(' ') == std::string::npos);
+                CHECK(rows[search_index + 2].find("→ ✓ off") != std::string::npos);
+            }
             if (scenario == "thinking-selector" && input_index == 2)
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Thinking level:"); }));
             if (scenario == "settings-selector" && input_index == 0)

@@ -17,6 +17,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/PiTuiEvidence.hpp"
 #include "support/PumpUntil.hpp"
+#include "support/GatedChatProvider.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/ScriptedProvider.hpp"
@@ -589,6 +590,63 @@ TEST_CASE("Native TUI format_resume_command characterizes the frozen resume comm
 }
 
 // ── 3. Fullscreen Exit Output Policy at Native TUI Consumers ──────────────────
+
+TEST_CASE("Native TUI product fullscreenExitOutput changes the public run exit presentation",
+        "[coding_agent][tui][exit][fullscreen][issue1125][spec]") {
+    const auto run_exit = [](std::string_view exit_output, std::string_view prompt) {
+        tests::TempWorkspace temp;
+        tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+        temp.write("settings.json",
+                std::string{"{\"tuiMode\":\"fullscreen\",\"fullscreenExitOutput\":\""} + std::string{exit_output} +
+                        "\"}");
+        tests::RuntimeFixture runtime;
+        auto options = session_options(temp, tests::make_scripted_fake_provider());
+        options.session_target = coding_agent::DefaultPersistedSessionTarget{};
+        auto created = runtime.run(create_session_async(runtime, std::move(options)));
+        REQUIRE(created);
+        tests::RuntimeLoopDriver runtime_driver(runtime);
+
+        tui::VirtualTerminal terminal({.columns = 80, .rows = 24});
+        REQUIRE(terminal.seed_shell_content({"original shell line"}, {.column = 0, .row = 1}));
+        boost::asio::io_context io;
+        std::ostringstream output;
+        std::optional<support::ExpectedVoid> run_result;
+        boost::asio::co_spawn(io,
+                coding_agent::tui::run_interactive_mode(terminal,
+                        coding_agent::tui::InteractiveSessionRunBuilder{}
+                                .with_session(*created->session)
+                                .with_agent_config_directory(temp.path())
+                                .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                                .with_output_stream(&output)
+                                .with_stdout_is_tty(true)
+                                .build()),
+                [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                    CHECK(exception == nullptr);
+                    run_result.emplace(std::move(result));
+                });
+        drain_ready(io);
+        const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+        REQUIRE(terminal.modes().alternate_screen);
+        REQUIRE(terminal.inject_input(std::string{prompt} + "\r"));
+        REQUIRE(pump_until(io,
+                [&] { return visible_screen(terminal).find("fake: " + std::string{prompt}) != std::string::npos; }));
+        REQUIRE(terminal.inject_input("\x04"));
+        REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+        REQUIRE(run_result);
+        REQUIRE(*run_result);
+        CHECK_FALSE(terminal.modes().alternate_screen);
+        return std::pair{visible_screen(terminal), output.str()};
+    };
+
+    const auto [transcript_screen, transcript_notice] = run_exit("transcript", "transcript-only-prompt");
+    CHECK(transcript_screen.find("transcript-only-prompt") != std::string::npos);
+    CHECK(transcript_notice.find(coding_agent::tui::kResumeNoticePrefix) != std::string::npos);
+
+    const auto [hint_screen, hint_notice] = run_exit("resume-hint", "resume-hint-only-prompt");
+    CHECK(hint_screen.find("original shell line") != std::string::npos);
+    CHECK(hint_screen.find("resume-hint-only-prompt") == std::string::npos);
+    CHECK(hint_notice.find(coding_agent::tui::kResumeNoticePrefix) != std::string::npos);
+}
 
 TEST_CASE("Native TUI fullscreen exit output policy switches to regular and renders transcript to main buffer",
         "[coding_agent][tui][exit][fullscreen][issue1019][spec]") {
@@ -2120,21 +2178,123 @@ TEST_CASE("Native TUI mid-stream Close persists exactly the user and aborted par
     CHECK(partial_text->text == "partial assistant output");
 }
 
+TEST_CASE("Native TUI ProcessTerminal PTY exit restores state after Ctrl-C cancels active work",
+        "[coding_agent][tui][exit][pty][issue1125][spec]") {
+    tests::TempWorkspace temp;
+    tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
+    tests::EnvVarGuard program_status_guard{"PI_PROGRAM_STATUS", std::string{"1"}};
+    temp.write("keybindings.json", R"({"app.interrupt":"ctrl+c","app.clear":"f7"})");
+    temp.write("settings.json", R"({"fullscreenExitOutput":"transcript","terminal":{"showTerminalProgress":true}})");
+    tests::RuntimeFixture runtime;
+    auto client = std::make_shared<tests::GatedChatProvider>();
+    auto* gated = client.get();
+    auto created = runtime.run(create_session_async(runtime, session_options(temp, std::move(client))));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+    auto pty = tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+    termios initial_termios{};
+    REQUIRE(tcgetattr(pty->slave.get(), &initial_termios) == 0);
+    boost::asio::io_context io;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = io.get_executor()});
+    auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
+                       .with_session(*created->session)
+                       .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
+                       .with_stdout_is_tty(true)
+                       .build();
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal, std::move(run)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    std::string bytes;
+    REQUIRE(pump_until(io, [&] {
+        bytes += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+        return terminal.modes().alternate_screen;
+    }));
+    constexpr std::string_view prompt = "cancel PTY turn\r";
+    REQUIRE(::write(pty->master.get(), prompt.data(), prompt.size()) == static_cast<ssize_t>(prompt.size()));
+    REQUIRE(pump_until(
+            io,
+            [&] {
+                bytes += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+                return !gated->requests.empty();
+            },
+            std::chrono::seconds(5)));
+    CHECK(created->session->is_busy());
+    REQUIRE(pump_until(
+            io,
+            [&] {
+                bytes += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+                return bytes.find("\x1b]9;4;3\x07") != std::string::npos &&
+                       bytes.find("\x1b]7501;state=working") != std::string::npos;
+            },
+            std::chrono::seconds(5)));
+    const char ctrl_c = '\x03';
+    REQUIRE(::write(pty->master.get(), &ctrl_c, 1) == 1);
+    gated->release();
+    REQUIRE(pump_until(
+            io,
+            [&] {
+                bytes += cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+                return !created->session->is_busy();
+            },
+            std::chrono::seconds(5)));
+    CHECK_FALSE(run_result.has_value());
+    CHECK(terminal.modes().started);
+    const char ctrl_d = '\x04';
+    REQUIRE(::write(pty->master.get(), &ctrl_d, 1) == 1);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    bytes += cch::tests::read_available(pty->master.get());
+    const auto progress_clear = bytes.find("\x1b]9;4;0\x07");
+    const auto status_clear = bytes.find("\x1b]7501;state=clear\x1b\\");
+    const auto paste_off = bytes.find("\x1b[?2004l");
+    const auto kitty_pop = bytes.find("\x1b[<u");
+    const auto alternate_restore = bytes.rfind("\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l");
+    REQUIRE(progress_clear != std::string::npos);
+    REQUIRE(status_clear != std::string::npos);
+    REQUIRE(paste_off != std::string::npos);
+    REQUIRE(kitty_pop != std::string::npos);
+    REQUIRE(alternate_restore != std::string::npos);
+    CHECK(bytes.substr(alternate_restore).find("cancel PTY turn") != std::string::npos);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+    CHECK_FALSE(terminal.modes().raw_input);
+    CHECK_FALSE(terminal.modes().bracketed_paste);
+    CHECK(terminal.modes().cursor_visible);
+    termios restored_termios{};
+    REQUIRE(tcgetattr(pty->slave.get(), &restored_termios) == 0);
+    CHECK(cch::tests::same_terminal_state(restored_termios, initial_termios));
+}
+
 TEST_CASE("Native TUI deferred boot creation failure writes no output and renders no final presentation",
         "[coding_agent][tui][exit][boot][issue1019][spec]") {
     tests::TempWorkspace temp;
     tests::EnvVarGuard agent_dir_guard{"PIKE_AGENT_DIR", temp.path().string()};
-
+    tests::EnvVarGuard program_status_guard{"PI_PROGRAM_STATUS", std::string{"1"}};
+    temp.write("settings.json", R"({"terminal":{"showTerminalProgress":true}})");
     tests::RuntimeFixture runtime;
     tests::RuntimeLoopDriver runtime_driver(runtime);
-    CallCountingTerminal terminal({.columns = 120, .rows = 30});
+    auto pty = tests::open_pseudo_terminal(120, 30);
+    REQUIRE(pty);
+    termios initial_termios{};
+    REQUIRE(tcgetattr(pty->slave.get(), &initial_termios) == 0);
     boost::asio::io_context io;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = io.get_executor()});
 
     coding_agent::runtime::AgentSessionCreationRequest request;
     // A workspace that does not exist fails deferred boot session creation.
     request.workspace = temp.path() / "missing-workspace";
     request.session_target = coding_agent::InMemorySessionTarget{};
     request.session_facts.no_prompt_templates = true;
+    request.session_facts.project_trust_override = true;
 
     coding_agent::tui::testing::ActionSinkRecorder recorder;
     recorder.replace_session_async =
@@ -2151,6 +2311,7 @@ TEST_CASE("Native TUI deferred boot creation failure writes no output and render
     std::ostringstream out_stream;
     auto run = coding_agent::tui::InteractiveSessionRunBuilder{}
                        .with_agent_config_directory(temp.path())
+                       .with_tui_mode(coding_agent::TuiMode::Fullscreen)
                        .with_action_sink(recorder.make_sink())
                        .with_async_session_replacement_sink(recorder.make_async_session_replacement_sink())
                        .with_defer_boot(std::move(request))
@@ -2171,15 +2332,32 @@ TEST_CASE("Native TUI deferred boot creation failure writes no output and render
     CHECK_FALSE(recorder.boot_creation_failure[0].error.message.empty());
     REQUIRE(run_result.has_value());
     CHECK_FALSE(run_result->has_value());
+    CHECK(run_result->error().message == "Native TUI startup failed");
+    CHECK(run_result->error().detail.find(recorder.boot_creation_failure[0].error.message) != std::string::npos);
 
-    // Failed startup restores the terminal without a final presentation or a
-    // resume notice: the output stream and output-only render stay untouched.
+    // Failed boot uses the ordinary stop path, matching pi's pre-initialization crash cleanup.
     CHECK(out_stream.str().empty());
-    CHECK(terminal.enter_output_only_calls == 0);
     CHECK_FALSE(terminal.modes().started);
     CHECK_FALSE(terminal.modes().raw_input);
     CHECK_FALSE(terminal.modes().bracketed_paste);
     CHECK(terminal.modes().cursor_visible);
+    termios restored_termios{};
+    REQUIRE(tcgetattr(pty->slave.get(), &restored_termios) == 0);
+    CHECK(cch::tests::same_terminal_state(restored_termios, initial_termios));
+    const auto pty_bytes = cch::tests::read_available(pty->master.get());
+    CHECK(pty_bytes.find("\x1b]9;4;0\x07") != std::string::npos);
+    CHECK(pty_bytes.find("\x1b]7501;state=clear\x1b\\") != std::string::npos);
+    const auto paste_off = pty_bytes.find("\x1b[?2004l");
+    const auto kitty_pop = pty_bytes.find("\x1b[<u");
+    const auto alternate_exit = pty_bytes.find("\x1b[?1049l");
+    REQUIRE(paste_off != std::string::npos);
+    REQUIRE(kitty_pop != std::string::npos);
+    REQUIRE(alternate_exit != std::string::npos);
+    CHECK(pty_bytes.find("\x1b[?25h") < alternate_exit);
+    CHECK(pty_bytes.find("\x1b[?7h") < alternate_exit);
+    CHECK(alternate_exit < pty_bytes.find("\x1b]7501;state=clear\x1b\\"));
+    CHECK(pty_bytes.find("\x1b]7501;state=clear\x1b\\") < paste_off);
+    CHECK(paste_off < kitty_pop);
 }
 
 // ── 5. Exact Phase Boundary Protocol & Artifact Consumers ────────────────────
@@ -3381,6 +3559,67 @@ TEST_CASE("Native TUI engine failed exit drain is aggregated, still stops, and s
 
     // Zero notice: a failed exit must not claim a resumable session.
     CHECK(out_stream.str().empty());
+}
+
+TEST_CASE("ProcessTerminal PTY final alternate restore follows frozen pi stop byte order",
+        "[coding_agent][tui][exit][pty][issue1125][spec]") {
+    tests::EnvVarGuard program_status_guard{"PI_PROGRAM_STATUS", std::string{"1"}};
+    auto pty = tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+    termios original_termios{};
+    REQUIRE(tcgetattr(pty->slave.get(), &original_termios) == 0);
+
+    boost::asio::io_context io;
+    cch::tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = io.get_executor()});
+    REQUIRE(terminal.start([](std::string) -> support::ExpectedVoid { return {}; },
+            [](cch::tui::TerminalDimensions) -> support::ExpectedVoid { return {}; }));
+    std::jthread io_thread([&io] { io.run(); });
+    (void)cch::tests::read_available(pty->master.get());
+
+    constexpr std::string_view device_attributes = "\x1b[?1;2c";
+    REQUIRE(::write(pty->master.get(), device_attributes.data(), device_attributes.size()) ==
+            static_cast<ssize_t>(device_attributes.size()));
+    REQUIRE(cch::tests::wait_until(
+            [&] { return terminal.capabilities().keyboard_protocol == cch::tui::KeyboardProtocol::ModifyOtherKeys; }));
+    (void)cch::tests::read_available(pty->master.get());
+
+    REQUIRE(terminal.set_progress(true));
+    REQUIRE(terminal.set_program_status(
+            cch::tui::ProgramStatus{.state = cch::tui::ProgramStatus::State::Working, .app = std::string{"pike"}}));
+    REQUIRE(terminal.set_alternate_screen(true));
+    REQUIRE(terminal.set_autowrap(false));
+    REQUIRE(terminal.set_cursor_visible(false));
+    REQUIRE(terminal.stop(cch::tui::TerminalStopOptions{.final_alternate_restore = true}));
+    io.stop();
+    io_thread.join();
+    const auto bytes = cch::tests::read_available(pty->master.get());
+
+    const auto progress_clear = bytes.find("\x1b]9;4;0\x07");
+    const auto status_clear = bytes.find("\x1b]7501;state=clear\x1b\\");
+    const auto paste_off = bytes.find("\x1b[?2004l");
+    const auto kitty_pop = bytes.find("\x1b[<u");
+    const auto modify_other_keys_off = bytes.find("\x1b[>4;0m");
+    const auto alternate_restore = bytes.find("\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l");
+    REQUIRE(progress_clear != std::string::npos);
+    REQUIRE(status_clear != std::string::npos);
+    REQUIRE(paste_off != std::string::npos);
+    REQUIRE(kitty_pop != std::string::npos);
+    REQUIRE(modify_other_keys_off != std::string::npos);
+    REQUIRE(alternate_restore != std::string::npos);
+    CHECK(progress_clear < status_clear);
+    CHECK(status_clear < paste_off);
+    CHECK(paste_off < kitty_pop);
+    CHECK(kitty_pop < modify_other_keys_off);
+    CHECK(modify_other_keys_off < alternate_restore);
+    CHECK(bytes.find("\x1b[?7h") < progress_clear);
+
+    termios restored_termios{};
+    REQUIRE(tcgetattr(pty->slave.get(), &restored_termios) == 0);
+    CHECK(cch::tests::same_terminal_state(restored_termios, original_termios));
+    CHECK_FALSE(terminal.modes().started);
+    CHECK_FALSE(terminal.modes().raw_input);
+    CHECK_FALSE(terminal.modes().alternate_screen);
 }
 
 TEST_CASE("Native TUI engine ProcessTerminal PTY exit characterizes persistent sessions and failure pair",
