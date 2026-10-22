@@ -165,16 +165,16 @@
     "memberRows": 757,
     "changeCapabilityRows": 7,
     "linuxUsableRows": 949,
-    "gappedRows": 949,
-    "unimplementedRows": 44,
+    "gappedRows": 938,
+    "unimplementedRows": 31,
     "membership": {
       "excluded": 5,
       "supported": 949
     },
     "implementation": {
-      "missing": 19,
-      "implemented": 905,
-      "partial": 30
+      "missing": 11,
+      "implemented": 918,
+      "partial": 25
     },
     "verification": {
       "not-applicable": 5,
@@ -2238,7 +2238,9 @@
       "cpp": {
         "interface": "Color values, parseColor, styleText*, mixColors",
         "consumer": "theme/style consumers",
-        "tests": []
+        "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp"
+        ]
       },
       "comparisonCase": "E17 color parse/style"
     },
@@ -27426,7 +27428,9 @@
         "interface": "Keys parse/match/printable helpers with per-terminal state",
         "consumer": "Input/Editor/TreeSelector typed dispatch",
         "tests": [
-          "tests/tui/KeysKittyTextTest.cpp"
+          "tests/tui/KeysKittyTextTest.cpp",
+          "tests/tui/KeysTest.cpp",
+          "tests/tui/TerminalStreamDecoderTest.cpp"
         ]
       },
       "comparisonCase": "E02 Kitty text vs shortcut identity; legacy/modifyOtherKeys/dup"
@@ -28363,13 +28367,13 @@
         "packages/tui/src/program-status.ts:formatProgramStatus"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none (C++ Terminal has no set_program_status; application reporter owned by #1051)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "format-program-status-encodes-fields-and-limits",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-format.json",
@@ -28378,11 +28382,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ has no OSC 7501 formatter",
-        "C++ Terminal/ProcessTerminal have no program-status report path",
-        "no v1.3.0 C++ comparison recorded"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 addition; absent from the v1.0.4 index.",
       "kind": "function",
       "export": "formatProgramStatus",
@@ -28394,9 +28394,11 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "none (no C++ OSC 7501 formatter)",
-        "consumer": "none (C++ Terminal has no set_program_status; application reporter owned by #1051)",
-        "tests": []
+        "interface": "cch_tui::format_program_status",
+        "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
+        "tests": [
+          "tests/tui/ProgramStatusTest.cpp"
+        ]
       },
       "defaults": "no report until setProgramStatus(); clear removes it",
       "comparisonCase": "format-program-status-encodes-fields-and-limits"
@@ -28408,13 +28410,13 @@
         "packages/tui/src/program-status.ts:ProgramStatus"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none (no C++ program-status type)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "format-program-status-encodes-fields-and-limits",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-format.json",
@@ -28423,9 +28425,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ has no ProgramStatus equivalent"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 addition; absent from the v1.0.4 index.",
       "kind": "type",
       "export": "ProgramStatus",
@@ -28437,9 +28437,11 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "none (no C++ program-status type)",
-        "consumer": "none (no C++ program-status type)",
-        "tests": []
+        "interface": "cch_tui::ProgramStatus",
+        "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
+        "tests": [
+          "tests/tui/ProgramStatusTest.cpp"
+        ]
       },
       "comparisonCase": "format-program-status-encodes-fields-and-limits"
     },
@@ -29360,32 +29362,24 @@
         "packages/tui/src/terminal.ts:ProcessTerminal"
       ],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": "cch_tui",
       "consumer": "TuiMainScreen/TuiAltScreen/ProcessTerminal consumers",
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
         "scenario": "default-reply-before-device-attributes",
-        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() has no program-status query",
+        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() does the same (#1123)",
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
       "gaps": [
         "no v1.3.0 C++ comparison recorded",
         "export name appears in changed source hunks; not individually re-audited against v1.3.0",
-        "C++ ProcessTerminal has no program-status query, override or deferred report",
-        "C++ ProcessTerminal has no program-status state or write",
-        "C++ ProcessTerminal query path is missing",
-        "C++ has no pending-status write",
-        "C++ has no v1.3.0 comparison for program-status negotiation",
-        "C++ input edge has no program-status reply interception",
-        "C++ negotiation handling has no program-status pending sentinel",
-        "C++ stop() has no program-status clear",
         "member name appears in changed source hunks; not individually re-audited against v1.3.0",
         "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
       ],
@@ -29924,25 +29918,22 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.start"
       ],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": "cch_tui",
-      "consumer": "cch_coding_agent terminal host (program-status reporter, #1051 product identity)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
         "scenario": "default-reply-before-device-attributes",
-        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() has no program-status query",
+        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() does the same (#1123)",
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ ProcessTerminal has no program-status query, override or deferred report",
-        "C++ has no v1.3.0 comparison for program-status negotiation"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 behavior change applied from the curated change map.",
       "kind": "method/field",
       "export": "ProcessTerminal",
@@ -29959,9 +29950,9 @@
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
         "interface": "cch_tui::ProcessTerminal::start",
-        "consumer": "cch_coding_agent terminal host (program-status reporter, #1051 product identity)",
+        "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
         "tests": [
-          "tests/tui/ProcessTerminalTest.cpp"
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
         ]
       },
       "comparisonCase": "default-reply-before-device-attributes"
@@ -30025,13 +30016,13 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.handleKeyboardProtocolNegotiationSequence"
       ],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": "cch_tui",
-      "consumer": "cch_tui ProcessTerminal",
+      "consumer": "cch_tui::ProcessTerminal",
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-device-attributes-before-reply",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -30040,9 +30031,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ negotiation handling has no program-status pending sentinel"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 behavior change applied from the curated change map.",
       "kind": "method/field",
       "export": "ProcessTerminal",
@@ -30059,11 +30048,9 @@
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
         "interface": "cch_tui::ProcessTerminal keyboard-protocol negotiation",
-        "consumer": "cch_tui ProcessTerminal",
+        "consumer": "cch_tui::ProcessTerminal",
         "tests": [
-          "tests/architecture/PublicHeaderBoundaryTest.cpp",
-          "tests/cli/CliSmokeTest.cpp",
-          "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
         ]
       },
       "comparisonCase": "default-device-attributes-before-reply"
@@ -30543,13 +30530,13 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.stop"
       ],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": "cch_tui",
-      "consumer": "cch_coding_agent terminal host",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -30558,9 +30545,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ stop() has no program-status clear"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 behavior change applied from the curated change map.",
       "kind": "method/field",
       "export": "ProcessTerminal",
@@ -30577,11 +30562,9 @@
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
         "interface": "cch_tui::ProcessTerminal::stop",
-        "consumer": "cch_coding_agent terminal host",
+        "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
         "tests": [
-          "tests/architecture/PublicHeaderBoundaryTest.cpp",
-          "tests/cli/CliSmokeTest.cpp",
-          "tests/coding_agent/tui/FullscreenExitOutputTest.cpp"
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
         ]
       },
       "comparisonCase": "default-reply-before-device-attributes"
@@ -31210,13 +31193,13 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.setProgramStatus"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none (C++ ProcessTerminal has no program-status report)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -31225,9 +31208,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ ProcessTerminal has no program-status state or write"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "kind": "method/field",
       "export": "ProcessTerminal",
@@ -31239,9 +31220,11 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "cch_tui::ProcessTerminal (no set_program_status)",
-        "consumer": "none (C++ ProcessTerminal has no program-status report)",
-        "tests": []
+        "interface": "cch_tui::ProcessTerminal::set_program_status",
+        "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
+        "tests": [
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
+        ]
       },
       "comparisonCase": "default-reply-before-device-attributes"
     },
@@ -31252,13 +31235,13 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.queryAndEnableKittyProtocol"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none (no C++ program-status query)",
+      "consumer": "cch_tui::ProcessTerminal",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -31267,9 +31250,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ ProcessTerminal query path is missing"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "kind": "method/field",
       "export": "ProcessTerminal",
@@ -31281,9 +31262,10 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "cch_tui::ProcessTerminal (no OSC 7501 query)",
-        "consumer": "none (no C++ program-status query)",
+        "interface": "cch_tui::ProcessTerminal (OSC 7501 query, #1123)",
+        "consumer": "cch_tui::ProcessTerminal",
         "tests": [
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp",
           "tests/tui/ProcessTerminalTest.cpp"
         ]
       },
@@ -31297,13 +31279,13 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.setupStdinBuffer"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none",
+      "consumer": "cch_tui::ProcessTerminal",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -31312,9 +31294,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ input edge has no program-status reply interception"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "kind": "method/field",
       "export": "ProcessTerminal",
@@ -31326,9 +31306,11 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "cch_tui::ProcessTerminal input edge (no reply interception)",
-        "consumer": "none",
-        "tests": []
+        "interface": "cch_tui::ProcessTerminal input edge (reply interception, #1123)",
+        "consumer": "cch_tui::ProcessTerminal",
+        "tests": [
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
+        ]
       },
       "comparisonCase": "default-reply-before-device-attributes"
     },
@@ -31339,13 +31321,13 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.writeProgramStatus"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none",
+      "consumer": "cch_tui::ProcessTerminal (internal re-send on terminal support confirmation and after a restart)",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "override-enabled",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -31354,9 +31336,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ has no pending-status write"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "kind": "method/field",
       "export": "ProcessTerminal",
@@ -31368,9 +31348,11 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "none (no pending program-status write)",
-        "consumer": "none",
-        "tests": []
+        "interface": "cch_tui::ProcessTerminal (pending program-status re-send, #1123)",
+        "consumer": "cch_tui::ProcessTerminal (internal re-send on terminal support confirmation and after a restart)",
+        "tests": [
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
+        ]
       },
       "comparisonCase": "override-enabled"
     },
@@ -31381,13 +31363,13 @@
         "packages/tui/src/terminal.ts:Terminal"
       ],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": "cch_tui",
       "consumer": "TuiMainScreen/TuiAltScreen/ProcessTerminal consumers",
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -31399,7 +31381,6 @@
       "gaps": [
         "no v1.3.0 C++ comparison recorded",
         "export name appears in changed source hunks; not individually re-audited against v1.3.0",
-        "C++ Terminal has no set_program_status capability",
         "member name appears in changed source hunks; not individually re-audited against v1.3.0",
         "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
       ],
@@ -32051,13 +32032,13 @@
         "packages/tui/src/terminal.ts:Terminal.setProgramStatus"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none (C++ Terminal interface has no program-status method)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status; cch_tui::ProcessTerminal and cch_tui::VirtualTerminal implement it",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -32066,9 +32047,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ Terminal has no set_program_status capability"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "kind": "method/field",
       "export": "Terminal",
@@ -32080,9 +32059,11 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "cch_tui::Terminal (no set_program_status)",
-        "consumer": "none (C++ Terminal interface has no program-status method)",
-        "tests": []
+        "interface": "cch_tui::Terminal::set_program_status",
+        "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status; cch_tui::ProcessTerminal and cch_tui::VirtualTerminal implement it",
+        "tests": [
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
+        ]
       },
       "comparisonCase": "default-reply-before-device-attributes"
     },
@@ -32183,9 +32164,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/ColorUtilsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -32233,9 +32214,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/ColorUtilsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -32283,9 +32264,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/ColorUtilsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -32333,9 +32314,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/ColorUtilsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -32437,9 +32418,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/TerminalColorsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -32487,9 +32468,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/TerminalColorsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -32537,9 +32518,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/TerminalColorsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -32587,9 +32568,9 @@
         "interface": "parseTerminalColorSchemeReport + TerminalColors values",
         "consumer": "theme pairing / live scheme",
         "tests": [
+          "tests/coding_agent/tui/HtmlExportTest.cpp",
           "tests/coding_agent/tui/ThemeControllerTest.cpp",
-          "tests/tui/AltScreenTest.cpp",
-          "tests/tui/TerminalColorsTest.cpp"
+          "tests/tui/AltScreenTest.cpp"
         ]
       },
       "comparisonCase": "E17 terminal color queries"
@@ -49584,13 +49565,13 @@
         "packages/tui/src/terminal.ts:ProcessTerminal.queryAndEnableKittyProtocol,setProgramStatus,stop"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "sourceOwner": null,
-      "consumer": "none (cch_coding_agent program-status reporter is a #1051 product consumer)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1050/program-status-detection.json",
@@ -49599,10 +49580,7 @@
         "baseline": "pi-v1.3.0",
         "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0"
       },
-      "gaps": [
-        "C++ has no OSC 7501 query, override, pending-status write or stop clear",
-        "no v1.3.0 C++ comparison recorded"
-      ],
+      "gaps": [],
       "notes": "v1.3.0 change row without a v1.0.4 export/member identity.",
       "kind": "capability",
       "export": null,
@@ -49614,9 +49592,11 @@
       "sourceChangedSinceV1.0.4": true,
       "comparisonRoute": "v1.3.0-observation",
       "cpp": {
-        "interface": "none (C++ Terminal/ProcessTerminal have no OSC 7501 path)",
-        "consumer": "none (cch_coding_agent program-status reporter is a #1051 product consumer)",
-        "tests": []
+        "interface": "cch_tui::Terminal::set_program_status / cch_tui::ProcessTerminal (OSC 7501 path, #1123)",
+        "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
+        "tests": [
+          "tests/tui/ProcessTerminalProgramStatusTest.cpp"
+        ]
       },
       "defaults": "query sent when PI_PROGRAM_STATUS is unset; reports only after a supporting reply",
       "comparisonCase": "default-reply-before-device-attributes"

@@ -4,9 +4,9 @@
 
 Frozen pi **v1.3.0** (`71023aec1546d6d677a65669c5665c0927ce0dd0`, Linux x86-64/glibc) was captured through the real
 `InteractiveMode` and native differential harness. The refreshed observations reproduce most historical residuals and
-expose new v1.3.0 work: the settings selector now has 33 rows and changed wording, program status is absent from C++,
-`outputPad` is only partially propagated, tool duration is not carried through results, and the native extension
-lifecycle is only partially present.
+expose new v1.3.0 work: the settings selector now has 33 rows and changed wording, program status was absent from C++
+at capture time and was implemented by `#1123` (see the corrected seam below), `outputPad` is only partially propagated,
+tool duration is not carried through results, and the native extension lifecycle is only partially present.
 
 This is an audit. It does **not** implement production fixes, modify or close any issue, or claim full alignment.
 Missing C++ behavior is recorded as an implementation gap. Observations that require a PTY or a real terminal/emulator
@@ -115,9 +115,13 @@ With a recording terminal (the stock `VirtualTerminal.setProgramStatus` is a no-
 6. `{state:"working", app:"pi"}` for the error prompt
 7. `{state:"error", message:"deterministic failure", app:"pi"}` after the error response
 
-The C++ tree has no OSC 7501 protocol, no `Terminal::set_program_status`, and no reporter. This is an explicit missing
-capability, not an unverified presentation difference. The capture records the product's terminal-contract calls, not
-raw OSC bytes; a real terminal/PTY is still required to accept the wire format.
+The C++ tree now has the OSC 7501 protocol, `Terminal::set_program_status` and a reporter, implemented
+by `#1123`: `cch_tui::ProgramStatus` with `format_program_status`, `is_program_status_reply` and
+`kProgramStatusQuery`, the virtual `cch_tui::Terminal::set_program_status` with its `ProcessTerminal`
+and `VirtualTerminal` implementations, and `src/coding_agent/tui/ProgramStatusReporter.{hpp,cpp}` as
+the product caller. The capture records the product's terminal-contract calls, not raw OSC bytes;
+a real terminal/PTY is still required to accept the wire format, and
+`tests/tui/ProcessTerminalProgramStatusTest.cpp` provides that PTY evidence on the C++ side.
 
 ## Workflow inventory and consumer status
 
@@ -148,8 +152,8 @@ The machine ledger is authoritative for every operation, owner, consumer, scenar
 | Hardware/fake cursor | `RenderPipeline`, `AltScreen`, `EditorLayout` | partial / unverified | fake cursor still drawn in hardware mode; stale help |
 | OSC52 opt-in | `ClipboardWrite`, `ClipboardProcess` | partial / unverified | no `PI_CLIPBOARD_OSC52` |
 | Clipboard paste | `ClipboardPaste`, `LinuxClipboard` | implemented / unverified | no Termux/PTY cell |
-| Program-status protocol | none in `cch_tui` | missing / captured | no OSC 7501 |
-| Program-status reporter | none in `cch_coding_agent` | missing / captured | no reporter/event wiring |
+| Program-status protocol | `cch_tui::Terminal::set_program_status`, `ProcessTerminal` | implemented / captured | OSC 7501 protocol present since #1123; PTY evidence in `ProcessTerminalProgramStatusTest.cpp` |
+| Program-status reporter | `cch_coding_agent::ProgramStatusReporter` | implemented / captured | reporter and event wiring present since #1123 |
 | Terminal progress | `Terminal::set_progress` | implemented / unverified | no byte-level PTY cell |
 | Mode switch | `InteractiveEngine`, `TuiModeSwitchTest` | implemented / unverified | no fresh PTY switch |
 | Transcript/scrollback | `ChatContainer`, `ChatViewport`, `AltScreen` | partial / captured | pi 12 vs C++ 9 retained rows |
@@ -238,8 +242,9 @@ exclusions. Historical close-out allowances do not survive.
 The consumer boundary is not just a static render tree. The rows that need an asynchronous/accounting check are:
 
 - **Program status:** `ProgramStatusReporter` deduplicates event-derived status against dialog-derived blocked state;
-  the observed order is idle -> blocked -> idle -> working -> done -> working -> error. The C++ consumer has neither the
-  reporter state machine nor the terminal protocol, so no C++ ordering can be accepted yet.
+  the observed order is idle -> blocked -> idle -> working -> done -> working -> error. Since `#1123` the C++ consumer has
+  the reporter state machine and the terminal protocol, and
+  `tests/coding_agent/tui/ProgramStatusReporterTest.cpp` and `ProgramStatusEvidenceTest.cpp` assert that order.
 - **Extension editor:** install/restore is synchronous through `setCustomEditorComponent`, but session replacement,
   deferred boot, `/reload`, in-flight submission and close are asynchronous lifecycle paths. The pi observation keeps
   text/focus/callback transitions across restore/reinstall; C++ `ExtensionUiHostTest` covers replacement/reload/close.
@@ -251,7 +256,8 @@ The consumer boundary is not just a static render tree. The rows that need an as
 - **Transcript rebuild:** a selection/multi-click reset is a state transition before the next frame, not a rendering
   afterthought; C++ has `clear_text_selection` but no rebuild reset or multi-click-history reset.
 - **Exit restoration:** the terminal must clear progress/program status, restore cursor/alternate screen/bracketed paste
-  and emit the supported final transcript. C++ clears OSC 9;4 but has no OSC 7501 state to clear.
+  and emit the supported final transcript. C++ clears OSC 9;4 and, since #1123, also clears the OSC 7501
+  program status during `stop()`.
 
 ## Product versus toolkit responsibility
 
@@ -270,7 +276,8 @@ The consumer boundary is not just a static render tree. The rows that need an as
 
 Missing C++ implementation is not treated as a completed comparison:
 
-- No OSC 7501 program-status protocol or reporter (highest-severity new v1.3.0 gap).
+- The OSC 7501 program-status protocol and reporter were the highest-severity new v1.3.0 gap; `#1123`
+  implemented them, and the ledger rows were corrected accordingly.
 - No `PI_CLIPBOARD_OSC52` opt-in.
 - No generated system theme (#1032).
 - No `durationMs` through results/events/persistence/resume; Bash uses a system clock.

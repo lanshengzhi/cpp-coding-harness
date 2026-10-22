@@ -130,7 +130,15 @@ Detection and override:
 - `PI_PROGRAM_STATUS=1` writes statuses without the query; `PI_PROGRAM_STATUS=0` suppresses both query and writes.
 - `isProgramStatusReply`/`PROGRAM_STATUS_QUERY` are the public recognition/query pieces.
 
-C++ has no program-status type, formatter, terminal method, query, pending-status state, or stop clear. `Terminal` exposes `set_title` and `set_progress` but no `set_program_status` (`src/tui/include/cch/tui/Terminal.hpp:209,225`). The upstream application consumer is `ProgramStatusReporter` in `packages/coding-agent/src/modes/interactive/interactive-mode.ts`; the native reporter belongs to the #1051 product rows.
+C++ now has the program-status type, formatter, terminal method, query, pending-status state and stop
+clear, implemented by `#1123`: `cch_tui::ProgramStatus` with `format_program_status`,
+`is_program_status_reply` and `kProgramStatusQuery` (`src/tui/include/cch/tui/ProgramStatus.hpp`),
+the virtual `cch_tui::Terminal::set_program_status` (`src/tui/include/cch/tui/Terminal.hpp:232`)
+with its `ProcessTerminal` and `VirtualTerminal` implementations, and the pending-status re-send and
+`stop()` clear in `src/tui/ProcessTerminal.cpp`. The upstream application consumer is
+`ProgramStatusReporter` in `packages/coding-agent/src/modes/interactive/interactive-mode.ts`; the
+native reporter is `src/coding_agent/tui/ProgramStatusReporter.{hpp,cpp}` and belongs to the #1051
+product rows.
 
 ### Herdr
 
@@ -232,7 +240,7 @@ Terminal query/clipboard/image rows are implemented at the reusable layer: cell-
 
 - The evidence checker accepts the manifest: `python3 scripts/evidence/audit_evidence.py check --manifest fixtures/pi-v1.3.0/audit-1050/manifest.json` exits 0 and prints the registry record above. The serial merger applied this record and `verify` now covers the family; the capability rows themselves remain `upstream-captured`/`unverified` until a C++ comparison exists.
 - Row verification: **49 upstream-captured, 900 unverified, 0 verified, 5 not-applicable**. The 900 unverified rows are honest: 858 have a historical comparison route and 42 have a `not-audited` gap. No C++ differential capture was run for this audit, and no real terminal-emulator evidence exists for the C++ side: every native status is source/test inventory, not an emulator observation. That remains a visible verification gap, not an unconditional pass or skip.
-- Functional status: **905 implemented, 30 partial, 14 missing** among supported rows (19 missing including the 5 exclusions), 44 supported rows with a functional gap.
+- Functional status: **918 implemented, 25 partial, 6 missing** among supported rows (11 missing including the 5 exclusions), 31 supported rows with a functional gap. The fourteen program-status rows moved from `missing`/`partial` to `implemented` when `#1123` landed; see the corrected seam above.
 - Frozen upstream suites were run against the same checkout to corroborate the captured behavior: 20 files, **873 tests passed** (`editor`, `input`, `keys`, `stdin-buffer`, `terminal`, `terminal-image`, `program-status`, `tui-render`, `tui-alt-screen`, `overlay-options`, `native-clipboard-linux`, `markdown`, `latex`, `layout`, `wheel-scroll`, `visible-width`, `truncate-to-width`, `wrap-ansi`, `colors`, `mouse-components`). The checkout remained clean at `71023aec…`.
 - Ledger validator: `python3 fixtures/pi-v1.3.0/audit-1050/validate-ledger.py --pi-checkout /tmp/cch-1050-pi-frozen --ledger docs/research/pi-v1.3.0/1050-toolkit-capability-ledger.json` passes (954 rows, 176 index exports, 5 exclusions, 18 additions, 10 artifacts; every v1.3.0 evidence scenario exists).
 
@@ -245,9 +253,13 @@ Terminal query/clipboard/image rows are implemented at the reusable layer: cell-
 
 ## Residual gaps
 
-The 44 supported rows with a functional gap group as follows (full details in the ledger):
+The 31 supported rows with a functional gap group as follows (full details in the ledger):
 
-- **Program status (missing, 8 rows):** `ProgramStatus`, `formatProgramStatus`, `Terminal.setProgramStatus`, `ProcessTerminal.setProgramStatus`, `queryAndEnableKittyProtocol`, `setupStdinBuffer`, `writeProgramStatus`, plus the detection/override capability row; `ProcessTerminal.start/stop/handleKeyboardProtocolNegotiationSequence` are partial.
+- **Program status (implemented by #1123):** `ProgramStatus`, `formatProgramStatus`, `Terminal.setProgramStatus`,
+  `ProcessTerminal.setProgramStatus`, `ProcessTerminal.writeProgramStatus`,
+  `ProcessTerminal.queryAndEnableKittyProtocol`, `ProcessTerminal.setupStdinBuffer`, `ProcessTerminal.start`,
+  `ProcessTerminal.stop`, `ProcessTerminal.handleKeyboardProtocolNegotiationSequence` and the
+  `cch_tui:program-status:detection-override` capability are no longer gaps.
 - **Fake cursor markers (missing/partial, 6 rows):** `renderFakeCursor`, marker constants, `resolveFakeCursors`, `Editor.render`, `Input.render`, `CURSOR_MARKER`; `TuiMainScreen.doRender`, `TuiAltScreen.render`, `TUI.showOverlay` and `extractSegments` are partial.
 - **Dynamic padding (1 row):** `Box.setPaddingX` missing; `Box` export partial. `Text.setPaddingX` is implemented but unconsumed.
 - **Selection reset (3 rows):** `resetTextSelection` missing; `clearTextSelection` and `lastClick` partial.

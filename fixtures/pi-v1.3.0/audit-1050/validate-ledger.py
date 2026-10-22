@@ -238,13 +238,13 @@ def main() -> int:
 
     required = {
         "renderFakeCursor": ("missing", "upstream-captured"),
-        "formatProgramStatus": ("missing", "upstream-captured"),
-        "ProgramStatus": ("missing", "upstream-captured"),
+        "formatProgramStatus": ("implemented", "upstream-captured"),
+        "ProgramStatus": ("implemented", "upstream-captured"),
         "Box.setPaddingX": ("missing", "upstream-captured"),
         "Text.setPaddingX": ("implemented", "upstream-captured"),
         "TuiAltScreen.resetTextSelection": ("missing", "upstream-captured"),
-        "Terminal.setProgramStatus": ("missing", "upstream-captured"),
-        "ProcessTerminal.setProgramStatus": ("missing", "upstream-captured"),
+        "Terminal.setProgramStatus": ("implemented", "upstream-captured"),
+        "ProcessTerminal.setProgramStatus": ("implemented", "upstream-captured"),
         "detectCapabilities": ("partial", "upstream-captured"),
         "parseKey": ("partial", "upstream-captured"),
         "matchesKey": ("partial", "upstream-captured"),
@@ -254,7 +254,7 @@ def main() -> int:
         "Editor.render": ("partial", "upstream-captured"),
         "Input.render": ("partial", "upstream-captured"),
         "CURSOR_MARKER": ("partial", "upstream-captured"),
-        "cch_tui:program-status:detection-override": ("missing", "upstream-captured"),
+        "cch_tui:program-status:detection-override": ("implemented", "upstream-captured"),
     }
     for row_id, (implementation, verification) in required.items():
         row = by_id.get(row_id)

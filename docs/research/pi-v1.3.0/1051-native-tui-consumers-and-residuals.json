@@ -776,17 +776,17 @@
      "program status reports idle, blocked, working, done and error through the terminal contract"
     ]
    },
-   "cppSeam": "No C++ reporter. `InteractiveEngine` has working/status indicators but no OSC 7501 report path.",
-   "cppEvidence": "The pi capture proves the transitions and error message; C++ has no reporter call or terminal contract. The blocked dialog path is also the extension-prompt/busy UI gap.",
+   "cppSeam": "`src/coding_agent/tui/ProgramStatusReporter.{hpp,cpp}` reports working, blocked, done, error and idle to `cch_tui::Terminal::set_program_status`, deduplicating identical statuses; `InteractiveEngine` routes the agent/session events, compaction boundaries and dialog open/close into it.",
+   "cppEvidence": "The C++ reporter is a port of pi's `program-status-reporter.ts` state machine: the same agent_start/message_end/compaction_start/compaction_end/agent_settled transitions, the same blocked-map 'most recent dialog wins' rule, the same `firstLine` error text with its 'Error' fallback, and the same dedup on the reported status. `tests/coding_agent/tui/ProgramStatusReporterTest.cpp` and `tests/coding_agent/tui/ProgramStatusEvidenceTest.cpp` replay the frozen `fixtures/pi-v1.3.0/audit-1051/program-status.json` states (idle, blocked, idle, working, done, working, error) as literal OSC 7501 wire bytes on a real pseudo-terminal.",
    "status": {
     "membership": "supported",
-    "implementation": "missing",
+    "implementation": "implemented",
     "verification": "upstream-captured"
    },
    "owner": "cch_coding_agent",
    "boundary": "InteractiveSessionRun -> ProgramStatusReporter -> Terminal",
-   "implementationTicket": "new dependency candidate (v1.3.0 OSC 7501)",
-   "recommendation": "Implement after the toolkit protocol; reuse the event/settlement ordering and preserve the blocked dialog source semantics.",
+   "implementationTicket": "#1123",
+   "recommendation": "Implemented by #1123. The reporter is wired into `InteractiveSessionRun`; the remaining work is the ledger's own accepted C++ comparison, which the consolidation pipeline does not write.",
    "blockers": [],
    "membershipAuthority": "ADR 0075 \u00a7Selected capability additions \u2014 TUI and consumers advances the complete Linux TUI target to v1.3.0, including OSC 7501, cursor behavior, dynamic padding, selection reset, Herdr and overlay/wheel/shifted-key fixes. #1044 selects this Native TUI consumer audit.",
    "evidence": [

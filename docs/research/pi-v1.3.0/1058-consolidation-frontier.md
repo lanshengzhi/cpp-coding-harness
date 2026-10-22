@@ -60,7 +60,7 @@ folded into membership.
 | By lane | 1047:32, 1048:30, 1049:20, 1050:954, 1051:50, 1052:31, 1053:68, 1054:111, 1055:40, 1056:70, 1057:58 |
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:159, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1435, excluded:29, no-decision:0 |
-| Implementation | implemented:969, partial:230, missing:247, not-applicable:18 |
+| Implementation | implemented:983, partial:225, missing:238, not-applicable:18 |
 | Verification | unverified:1028, upstream-captured:408, not-applicable:28, verified:0 |
 | Evidence route | captured:408, related-captured:28, declared-comparison:32, cpp-regression-only:10, unobserved:58, historical-v1.0.4:858, not-audited:42, excluded:28 |
 
@@ -178,7 +178,7 @@ contracts stay as separate rows with an explicit resolution:
 | `overlap-mcp-application` | The reusable MCP protocol/client/transport rows (1052) stay in cch_mcp; the application config, management, resource and session-tool rows belong to cch_coding_agent. |
 
 The eight capability groups (`capabilityGroups`) are disjoint and each member is a real row; the
-six overlap resolutions and the 49 orphan scenarios are validated for known ids, non-empty
+six overlap resolutions and the 65 orphan scenarios are validated for known ids, non-empty
 resolutions and registered scenario names. The toolkit/product resolution additionally requires
 every named counterpart to be a real `1051` row that is not verified, every routed product row to
 stay `not-audited`/`unverified` with a missing-observation statement, and at least one product row
@@ -235,6 +235,59 @@ Cloudflare deployment; MCP prompts/sampling; and the unconsumable toolkit helper
 Separately, `closeOut.retainedBoundaries` keeps the boundaries that are not rows: Magpie-only model
 discovery/authentication/inference, the XDG Pike state root, the installer/updater/Nix/npm and
 installed-SDK claims, the API stability promise, and the no-historical-data-migration policy.
+
+### 6.1 Corrected source seams after the #1123 merge
+
+The source ledgers recorded the OSC 7501 program-status capabilities as absent from C++ while
+`#1123` had already implemented them. Fourteen consolidated rows carried a factually false
+`cppSeam`/`cpp` seam, a `missing` or `partial` implementation status and a `none` consumer:
+
+| Row | Was | Now |
+| --- | --- | --- |
+| `cch_tui:ProgramStatus` | `missing`, "no C++ program-status type" | `implemented` |
+| `cch_tui:formatProgramStatus` | `missing`, "no OSC 7501 formatter" | `implemented` |
+| `cch_tui:Terminal.setProgramStatus` | `missing`, "no set_program_status capability" | `implemented` |
+| `cch_tui:ProcessTerminal.setProgramStatus` | `missing`, "no program-status state or write" | `implemented` |
+| `cch_tui:ProcessTerminal.writeProgramStatus` | `missing`, "no pending-status write" | `implemented` |
+| `cch_tui:ProcessTerminal.queryAndEnableKittyProtocol` | `missing`, "query path is missing" | `implemented` |
+| `cch_tui:ProcessTerminal.setupStdinBuffer` | `missing`, "no reply interception" | `implemented` |
+| `cch_tui:ProcessTerminal.start` | `partial`, "no program-status query" | `implemented` |
+| `cch_tui:ProcessTerminal.stop` | `partial`, "no program-status clear" | `implemented` |
+| `cch_tui:ProcessTerminal.handleKeyboardProtocolNegotiationSequence` | `partial`, "no pending sentinel" | `implemented` |
+| `cch_tui:program-status:detection-override` | `missing`, "no OSC 7501 path" | `implemented` |
+| `cch_tui:Terminal` (export) | `partial` | `implemented` |
+| `cch_tui:ProcessTerminal` (export) | `partial` | `implemented` |
+| `cch_coding_agent:program-status-reporting` | `missing`, "No C++ reporter" | `implemented` |
+
+The two export rows are aggregates of their members, so they follow automatically once every
+`Terminal` and `ProcessTerminal` member is `implemented`. The source of the correction is the
+`#1050` ledger generator, `fixtures/pi-v1.3.0/audit-1050/build-ledger.py`; the generator and its
+`validate-ledger.py` expectations were updated together, and the ledger was regenerated rather
+than hand-edited.
+
+The corrected seams are `cch_tui::ProgramStatus` with `format_program_status`,
+`is_program_status_reply` and `kProgramStatusQuery`; the virtual
+`cch_tui::Terminal::set_program_status` with its `ProcessTerminal` and `VirtualTerminal`
+implementations; and `src/coding_agent/tui/ProgramStatusReporter.{hpp,cpp}` as the product caller.
+`ProcessTerminal` re-sends the cached status when OSC 7501 support is confirmed and after a
+restart, and writes the clear status during `stop()`, which is pi's private
+`ProcessTerminal.writeProgramStatus` (`packages/tui/src/terminal.ts:581`, called from `:243` and
+`:299`). The reporter is a port of pi's `program-status-reporter.ts` state machine: the same event
+transitions, the same blocked-map "most recent dialog wins" rule, the same `firstLine` error text
+and the same dedup.
+
+The comparison against the frozen captures is recorded in the C++ tests, not in this pipeline:
+`tests/tui/ProgramStatusTest.cpp` asserts the captured `program-status-format.json` wire bytes
+verbatim, `tests/tui/ProcessTerminalProgramStatusTest.cpp` replays the
+`program-status-detection.json` startup order, DA sentinel, both `PI_PROGRAM_STATUS` overrides and
+the `stop()` clear on a real pseudo-terminal, and
+`tests/coding_agent/tui/ProgramStatusReporterTest.cpp` and
+`ProgramStatusEvidenceTest.cpp` replay the `audit-1051/program-status.json` state sequence.
+
+The fourteen rows stay `upstream-captured`, not `verified`: this consolidation refuses to write
+`verified` for any row (see the checker rule above), so the accepted C++ comparison is recorded by
+the tests and the ticket, and the ledger keeps the honest verification value. Only the
+`implementation` status and the factual seam and consumer text changed.
 
 ## 7. Target owner graph
 

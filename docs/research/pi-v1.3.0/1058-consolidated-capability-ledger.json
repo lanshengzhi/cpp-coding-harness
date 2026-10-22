@@ -278,8 +278,8 @@
         "partial": 12
       },
       "cch_coding_agent": {
-        "implemented": 73,
-        "missing": 22,
+        "implemented": 74,
+        "missing": 21,
         "not-applicable": 6,
         "partial": 58
       },
@@ -296,9 +296,9 @@
         "partial": 11
       },
       "cch_tui": {
-        "implemented": 869,
-        "missing": 22,
-        "partial": 34
+        "implemented": 882,
+        "missing": 14,
+        "partial": 29
       }
     },
     "membership": {
@@ -306,10 +306,10 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 969,
-      "missing": 247,
+      "implemented": 983,
+      "missing": 238,
       "not-applicable": 18,
-      "partial": 230
+      "partial": 225
     },
     "verification": {
       "not-applicable": 28,
@@ -16924,7 +16924,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "InteractiveSessionRun events/dialogs -> ProgramStatusReporter -> Terminal.setProgramStatus.",
@@ -16949,7 +16949,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Implement after the toolkit protocol; reuse the event/settlement ordering and preserve the blocked dialog source semantics.",
+      "notes": "Recommendation: Implemented by #1123. The reporter is wired into `InteractiveSessionRun`; the remaining work is the ledger's own accepted C++ comparison, which the consolidation pipeline does not write.",
       "lane": "1051",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -16958,7 +16958,7 @@
           "ticket": "1051",
           "rowId": "program-status-reporting",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
@@ -49364,7 +49364,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "consumer": "TuiMainScreen/TuiAltScreen/ProcessTerminal consumers",
@@ -49372,7 +49372,7 @@
         "cch_tui"
       ],
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -49384,20 +49384,12 @@
         "capturedScenarios": [
           "default-reply-before-device-attributes"
         ],
-        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() has no program-status query"
+        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() does the same (#1123)"
       },
       "missingObservation": null,
       "gaps": [
         "no v1.3.0 C++ comparison recorded",
         "export name appears in changed source hunks; not individually re-audited against v1.3.0",
-        "C++ ProcessTerminal has no program-status query, override or deferred report",
-        "C++ ProcessTerminal has no program-status state or write",
-        "C++ ProcessTerminal query path is missing",
-        "C++ has no pending-status write",
-        "C++ has no v1.3.0 comparison for program-status negotiation",
-        "C++ input edge has no program-status reply interception",
-        "C++ negotiation handling has no program-status pending sentinel",
-        "C++ stop() has no program-status clear",
         "member name appears in changed source hunks; not individually re-audited against v1.3.0",
         "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
       ],
@@ -49411,7 +49403,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -50013,15 +50005,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "cch_tui ProcessTerminal",
+      "consumer": "cch_tui::ProcessTerminal",
       "consumerOwners": [
         "cch_tui"
       ],
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-device-attributes-before-reply",
       "comparisonScenarios": [
         "default-device-attributes-before-reply"
@@ -50036,9 +50028,7 @@
         "result": "frozen owns the DA sentinel counter so a DA reply ends the program-status query and a late reply is swallowed"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ negotiation handling has no program-status pending sentinel"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 behavior change applied from the curated change map.",
       "lane": "1050",
@@ -50049,7 +50039,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal.handleKeyboardProtocolNegotiationSequence",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -50406,16 +50396,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none (no C++ program-status query)",
+      "consumer": "cch_tui::ProcessTerminal",
       "consumerOwners": [
-        "cch_tui",
-        "cch_coding_agent"
+        "cch_tui"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -50430,9 +50419,7 @@
         "result": "frozen sends the OSC 7501 query before DA1 unless PI_PROGRAM_STATUS=1|0"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ ProcessTerminal query path is missing"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "lane": "1050",
@@ -50443,7 +50430,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal.queryAndEnableKittyProtocol",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -50702,16 +50689,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none (C++ ProcessTerminal has no program-status report)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
       "consumerOwners": [
         "cch_tui",
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -50726,9 +50713,7 @@
         "result": "frozen setProgramStatus stores the latest status and writes it only when support is confirmed"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ ProcessTerminal has no program-status state or write"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "lane": "1050",
@@ -50739,7 +50724,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal.setProgramStatus",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -50851,15 +50836,15 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none",
+      "consumer": "cch_tui::ProcessTerminal",
       "consumerOwners": [
         "cch_tui"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -50874,9 +50859,7 @@
         "result": "frozen consumes an OSC 7501 reply before key decoding and writes the pending status once"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ input edge has no program-status reply interception"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "lane": "1050",
@@ -50887,7 +50870,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal.setupStdinBuffer",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -50950,16 +50933,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "cch_coding_agent terminal host (program-status reporter, #1051 product identity)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
       "consumerOwners": [
         "cch_coding_agent",
         "cch_tui"
       ],
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -50971,13 +50954,10 @@
         "capturedScenarios": [
           "default-reply-before-device-attributes"
         ],
-        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() has no program-status query"
+        "result": "frozen start() queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0 and re-sends a pending status once support is confirmed; C++ start() does the same (#1123)"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ ProcessTerminal has no program-status query, override or deferred report",
-        "C++ has no v1.3.0 comparison for program-status negotiation"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 behavior change applied from the curated change map.",
       "lane": "1050",
@@ -50988,7 +50968,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal.start",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -51100,16 +51080,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "cch_coding_agent terminal host",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::ProcessTerminal::set_program_status",
       "consumerOwners": [
         "cch_coding_agent",
         "cch_tui"
       ],
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -51124,9 +51104,7 @@
         "result": "frozen stop() clears a supported program status before disabling bracketed paste"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ stop() has no program-status clear"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 behavior change applied from the curated change map.",
       "lane": "1050",
@@ -51137,7 +51115,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal.stop",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -51249,13 +51227,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none",
-      "consumerOwners": [],
+      "consumer": "cch_tui::ProcessTerminal (internal re-send on terminal support confirmation and after a restart)",
+      "consumerOwners": [
+        "cch_tui",
+        "cch_coding_agent"
+      ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "override-enabled",
       "comparisonScenarios": [
         "override-enabled"
@@ -51270,9 +51251,7 @@
         "result": "frozen re-sends the pending status when support is confirmed or after restart"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ has no pending-status write"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "lane": "1050",
@@ -51283,7 +51262,7 @@
           "ticket": "1050",
           "rowId": "ProcessTerminal.writeProgramStatus",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -51297,13 +51276,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none (no C++ program-status type)",
-      "consumerOwners": [],
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
+      "consumerOwners": [
+        "cch_tui",
+        "cch_coding_agent"
+      ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "format-program-status-encodes-fields-and-limits",
       "comparisonScenarios": [
         "format-program-status-encodes-fields-and-limits"
@@ -51318,9 +51300,7 @@
         "result": "frozen ProgramStatus is {state: idle|working|blocked|done|error|clear, app?, kind?, message?}"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ has no ProgramStatus equivalent"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 addition; absent from the v1.0.4 index.",
       "lane": "1050",
@@ -51331,7 +51311,7 @@
           "ticket": "1050",
           "rowId": "ProgramStatus",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -61128,7 +61108,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
       "consumer": "TuiMainScreen/TuiAltScreen/ProcessTerminal consumers",
@@ -61136,7 +61116,7 @@
         "cch_tui"
       ],
       "boundary": "Terminal interface + ProcessTerminal",
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": null,
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -61154,7 +61134,6 @@
       "gaps": [
         "no v1.3.0 C++ comparison recorded",
         "export name appears in changed source hunks; not individually re-audited against v1.3.0",
-        "C++ Terminal has no set_program_status capability",
         "member name appears in changed source hunks; not individually re-audited against v1.3.0",
         "no dedicated v1.3.0 observation; comparison route is the frozen diff, which does not touch this member"
       ],
@@ -61168,7 +61147,7 @@
           "ticket": "1050",
           "rowId": "Terminal",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -61476,16 +61455,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none (C++ Terminal interface has no program-status method)",
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status; cch_tui::ProcessTerminal and cch_tui::VirtualTerminal implement it",
       "consumerOwners": [
         "cch_tui",
         "cch_coding_agent"
       ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -61500,9 +61479,7 @@
         "result": "frozen Terminal implementations must provide setProgramStatus(status) (no-op without OSC 7501)"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ Terminal has no set_program_status capability"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 addition; absent from the v1.0.4 ledger.",
       "lane": "1050",
@@ -61513,7 +61490,7 @@
           "ticket": "1050",
           "rowId": "Terminal.setProgramStatus",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -73286,13 +73263,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none (C++ Terminal has no set_program_status; application reporter owned by #1051)",
-      "consumerOwners": [],
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
+      "consumerOwners": [
+        "cch_tui",
+        "cch_coding_agent"
+      ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "format-program-status-encodes-fields-and-limits",
       "comparisonScenarios": [
         "format-program-status-encodes-fields-and-limits"
@@ -73307,11 +73287,7 @@
         "result": "frozen formatProgramStatus encodes state/app/kind/base64 message; control characters become spaces and the message is truncated at a UTF-8 boundary to 2048 bytes"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ has no OSC 7501 formatter",
-        "C++ Terminal/ProcessTerminal have no program-status report path",
-        "no v1.3.0 C++ comparison recorded"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 addition; absent from the v1.0.4 index.",
       "lane": "1050",
@@ -73322,7 +73298,7 @@
           "ticket": "1050",
           "rowId": "formatProgramStatus",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
@@ -75173,13 +75149,16 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_tui",
-      "consumer": "none (cch_coding_agent program-status reporter is a #1051 product consumer)",
-      "consumerOwners": [],
+      "consumer": "cch_coding_agent::ProgramStatusReporter -> cch_tui::Terminal::set_program_status",
+      "consumerOwners": [
+        "cch_tui",
+        "cch_coding_agent"
+      ],
       "boundary": null,
-      "implementation_ticket": "#1058-draft",
+      "implementation_ticket": "#1123",
       "scenario": "default-reply-before-device-attributes",
       "comparisonScenarios": [
         "default-reply-before-device-attributes"
@@ -75194,10 +75173,7 @@
         "result": "frozen queries OSC 7501 before DA1, honors PI_PROGRAM_STATUS=1|0, swallows late replies and clears on stop"
       },
       "missingObservation": null,
-      "gaps": [
-        "C++ has no OSC 7501 query, override, pending-status write or stop clear",
-        "no v1.3.0 C++ comparison recorded"
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "v1.3.0 change row without a v1.0.4 export/member identity.",
       "lane": "1050",
@@ -75208,7 +75184,7 @@
           "ticket": "1050",
           "rowId": "cch_tui:program-status:detection-override",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_tui"
         }
