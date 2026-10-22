@@ -348,6 +348,13 @@ DetectedImageCapabilities detect_image_capabilities(TmuxHyperlinkProbe tmux_forw
         if (term.starts_with("screen")) {
             return {.images = InlineImageProtocol::None, .hyperlinks = false, .color = color};
         }
+        // Herdr forwards OSC 8 hyperlinks and supports the Kitty graphics
+        // protocol. Check it before outer-terminal detection because variables
+        // such as KITTY_WINDOW_ID leak into its panes; true colour stays the
+        // COLORTERM/TERM hint rather than a forced value.
+        if (term_program == "herdr") {
+            return {.images = InlineImageProtocol::Kitty, .hyperlinks = true, .color = color};
+        }
         if (environment_present("KITTY_WINDOW_ID") || term_program == "kitty") {
             return {.images = InlineImageProtocol::Kitty,
                     .hyperlinks = true,

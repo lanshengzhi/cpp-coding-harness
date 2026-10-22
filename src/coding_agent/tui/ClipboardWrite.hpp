@@ -48,10 +48,11 @@ struct ClipboardCopyResult {
 /// wins. WSL then reaches the Windows clipboard, preferring OSC 52 under
 /// `WT_SESSION` and otherwise reading the text from a UTF-8 temp file through
 /// PowerShell. OSC 52 is emitted through the terminal when the session is
-/// remote (`SSH_CONNECTION`/`SSH_CLIENT`/`MOSH_CONNECTION`) or when a headless
-/// Linux session has no other clipboard route; a desktop Linux session with a
-/// display and failing helpers reports failure instead, because OSC 52 cannot be
-/// verified (#9618). A copy whose OSC 52 payload exceeds
+/// remote (`SSH_CONNECTION`/`SSH_CLIENT`/`MOSH_CONNECTION`, or
+/// `PI_CLIPBOARD_OSC52=1` for a remote client that leaves no SSH marker) or
+/// when a headless Linux session has no other clipboard route; a desktop Linux
+/// session with a display and failing helpers reports failure instead, because
+/// OSC 52 cannot be verified (#9618). A copy whose OSC 52 payload exceeds
 /// `kMaxOsc52EncodedLength` reports the size-limit failure.
 ///
 /// The WSL round trip and the helper commands are bounded by their pi timeouts,
