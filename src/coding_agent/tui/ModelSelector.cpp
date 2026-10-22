@@ -414,6 +414,7 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
     // every pane narrower than the composed string. ThinkingSelector already
     // composes this row as a `Text`, which wraps.
     if (on_select_as_default_) {
+        result.lines.emplace_back(" ");
         cch::tui::Text save_hint(
                 theme_.foreground(ThemeToken::Dim,
                         "  " + format_key_text(keybindings_->key_text("tui.select.confirm"), true) + " to select · " +
@@ -423,10 +424,6 @@ support::Expected<cch::tui::RenderResult> ModelSelectorComponent::render(std::si
                 0,
                 0);
         if (auto appended = append(save_hint); !appended) return std::unexpected(appended.error());
-    }
-    {
-        cch::tui::Text spacer("", 1, 0);
-        if (auto appended = append(spacer); !appended) return std::unexpected(appended.error());
     }
     DynamicBorder bottom_border(theme_.foreground_hook(ThemeToken::Border));
     if (auto appended = append(bottom_border); !appended) return std::unexpected(appended.error());

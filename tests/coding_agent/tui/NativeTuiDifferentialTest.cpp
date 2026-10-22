@@ -386,6 +386,48 @@ void add_scripted_responses(tests::ScriptedRuntimeFixture& scripted, std::string
     return std::nullopt;
 }
 
+void check_model_selector_status(const tui::VirtualTerminal& terminal) {
+    const auto rows = terminal.screen();
+    const auto status_row = row_containing(rows, "Model: faux-1");
+    REQUIRE(status_row.has_value());
+    const auto first_content = rows[*status_row].find_first_not_of(' ');
+    REQUIRE(first_content != std::string::npos);
+    const auto last_content = rows[*status_row].find_last_not_of(' ');
+    CHECK(first_content == 1);
+    CHECK(std::string_view{rows[*status_row]}.substr(first_content, last_content - first_content + 1) ==
+            "Model: faux-1");
+    CHECK(*status_row == 3);
+    CHECK(std::ranges::count_if(
+                  rows, [](const std::string& row) { return row.find("Model: faux-1") != std::string::npos; }) == 1);
+}
+
+void check_model_selector_layout(const tui::VirtualTerminal& terminal) {
+    const auto rows = terminal.screen();
+    const auto search_row = row_containing(rows, "> ");
+    const auto model_row = row_containing(rows, "→ ✓ faux-1 [faux]");
+    const auto save_hint_row = row_containing(rows, "Enter to select");
+
+    REQUIRE(search_row.has_value());
+    REQUIRE(model_row.has_value());
+    REQUIRE(save_hint_row.has_value());
+    REQUIRE(*search_row + 2 < rows.size());
+    REQUIRE(*save_hint_row > 0);
+
+    // Frozen pi audit-1051 model-selector snapshot at 100 columns: list rows
+    // start two rows after the search prompt, and the blank row before the save
+    // hint is followed immediately by the lower border.
+    CHECK(*model_row == *search_row + 2);
+    CHECK(rows[*search_row + 1].find_first_not_of(' ') == std::string::npos);
+    REQUIRE(*save_hint_row >= 2);
+    CHECK(rows[*save_hint_row - 2].find("Model catalogs refreshed.") != std::string::npos);
+    CHECK((rows[*save_hint_row - 1].empty() || rows[*save_hint_row - 1].find_first_not_of(' ') == std::string::npos));
+    const auto bottom_border = std::ranges::find_if(rows.begin() + static_cast<std::ptrdiff_t>(*save_hint_row + 1),
+            rows.end(),
+            [](const std::string& row) { return row.find("─") != std::string::npos; });
+    REQUIRE(bottom_border != rows.end());
+    CHECK(static_cast<std::size_t>(bottom_border - rows.begin()) == *save_hint_row + 1);
+}
+
 void check_editor_workspace_footer_composition(
         const tui::VirtualTerminal& terminal, std::string_view scenario, const std::vector<std::string>& inputs) {
     const auto rows = terminal.screen();
@@ -542,10 +584,22 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
             REQUIRE(tests::pump_until(io, [&] { return !screen_contains(terminal, "Type to search"); }));
         } else {
             REQUIRE(tests::pump_until(io, [&] { return output_size(terminal) > input_offset; }));
-            if (scenario == "model-selector" && input_index == 0)
-                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Only showing models"); }));
-            if (scenario == "model-selector" && input_index == 1)
-                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Model:"); }));
+            if (scenario == "model-selector" && input_index == 0) {
+                REQUIRE(tests::pump_until(io, [&] {
+                    return screen_contains(terminal, "Only showing models") &&
+                           screen_contains(terminal, "Model catalogs refreshed.");
+                }));
+                check_model_selector_layout(terminal);
+            }
+            if (scenario == "model-selector" && input_index == 1) {
+                REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Model: faux-1"); }));
+                check_model_selector_status(terminal);
+                const auto repaint_offset = output_size(terminal);
+                REQUIRE(terminal.inject_resize({.columns = width, .rows = 24}));
+                REQUIRE(tests::pump_until(io, [&] { return output_size(terminal) > repaint_offset; }));
+                drain_ready(io, std::chrono::milliseconds{20});
+                check_model_selector_status(terminal);
+            }
             if (scenario == "thinking-selector" && input_index == 0)
                 REQUIRE(tests::pump_until(io, [&] { return screen_contains(terminal, "Set thinking level"); }));
             if (scenario == "thinking-selector" && input_index == 1) {

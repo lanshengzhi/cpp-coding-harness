@@ -1,0 +1,9 @@
+run_started_at = 2026-10-22T18:47:10Z (final confirmed PTY capture; preliminary harness attempts preceded it)
+run_source_revision = 020034fba836d14d19ee517ddac54e4ebdfb9e83
+checkout_state_at_run_start = modified ticket source and existing model-switch C++ golden regeneration; the artifacts output directory was empty before capture
+build_source_state = unknown; gateway = isolated deterministic local faux catalog/inference at 127.0.0.1:34325 redirected from product default by LD_PRELOAD; no external API/network request
+binary_path = /home/lansy/.cache/cch-1044/wt/laneA/build/dev-fast/pike
+binary_version = 0.1.0
+binary_sha256 = 88aba67999f13e38b96d035a29ab7a8f0f64f63a7bc225c6a37a665340501bfb (the final clean PTY run used this binary hash; SHA-256 of final-capture raw.ansi is 05c8d4f4bce765afce2f1888a9610b233c4190b6ea35b49b11416b5077c2ce50)
+commands = helper spawn confirmed at 100x24 with isolated HOME/XDG_CONFIG_HOME and LD_PRELOAD port redirect to deterministic local gateway fixture; send ctrl-c to clear initial `>7u` TUI startup residue; send ctrl-l; screen open frame; send enter; expect `Model: faux-1`; screen post-Enter frame; copy helper raw.ansi; fixture files are /tmp/cch-1044/evidence/magpie-fixture.py (SHA-256 e4338614f6e8adc8aa0c72d9c13b19919e4867d86390ff9ad06774ffe03f9c9d) and /tmp/cch-1044/evidence/redirect_magpie_port2.c/.so (SHA-256 8816e26f9d596fb5952f596072ac277f9ccd7134777a0e2f6600d98d343303d5 / ad2c81577e3d8164a01a7fe1894c7e49a4f8ac8eec5707e065a844b0969a3b1a); local-only fixture, no external request
+evidence = artifacts/verify-pike/20261022T183349Z-model-selector/pty-model-selector-open.txt, artifacts/verify-pike/20261022T183349Z-model-selector/pty-model-selector-post-enter.txt, artifacts/verify-pike/20261022T183349Z-model-selector/raw.ansi (SHA-256 05c8d4f4bce765afce2f1888a9610b233c4190b6ea35b49b11416b5077c2ce50)
