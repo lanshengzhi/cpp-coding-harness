@@ -2,6 +2,13 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+// The fake-cursor markers a cursor-bearing component emits (pi `tui.ts`
+// `FAKE_CURSOR_START`/`FAKE_CURSOR_END`). The component level carries the
+// zero-width markers; the reverse-video bytes appear only after the
+// resolution stage (pi `resolveFakeCursors`).
+constexpr std::string_view kFakeCursorStart = "\x1b_pi:fc\x07";
+constexpr std::string_view kFakeCursorEnd = "\x1b_pi:/fc\x07";
+
 using namespace cch;
 using tui::AutocompleteItem;
 using tui::EditorTheme;
@@ -70,7 +77,7 @@ TEST_CASE("EditorLayout computes empty document with fake cursor and padding",
     const auto layout = EditorLayout::compute(std::move(options));
     REQUIRE(layout);
     REQUIRE(layout->lines.size() == 1);
-    CHECK(layout->lines[0] == "\x1b[7m \x1b[27m       ");
+    CHECK(layout->lines[0] == std::string{kFakeCursorStart} + " " + std::string{kFakeCursorEnd} + "       ");
     CHECK(layout->scroll_offset == 0);
 }
 
@@ -101,7 +108,7 @@ TEST_CASE("EditorLayout computes scroll offset and scroll borders",
     CHECK(layout->lines[0] == "─── ↑ 1 more ───");
     // Visible lines are B and C (with fake cursor on C)
     CHECK(layout->lines[1] == "B               ");
-    CHECK(layout->lines[2] == "\x1b[7mC\x1b[27m               ");
+    CHECK(layout->lines[2] == std::string{kFakeCursorStart} + "C" + std::string{kFakeCursorEnd} + "               ");
     // Bottom border shows ↓ 2 more
     CHECK(layout->lines[3] == "─── ↓ 2 more ───");
 }
@@ -329,7 +336,7 @@ TEST_CASE("EditorLayout places wrapped line-end cursor after a wrap-boundary tra
     // The draft resolves to six wrapped rows and the cursor row is the last
     // visible wrapped row; the column is the discriminating assertion.
     REQUIRE(layout->lines.size() == 6);
-    CHECK(layout->lines[5] == "word word\x1b[7m \x1b[27m ");
+    CHECK(layout->lines[5] == "word word" + std::string{kFakeCursorStart} + " " + std::string{kFakeCursorEnd} + " ");
     REQUIRE(layout->cursor_position.has_value());
     CHECK(layout->cursor_position->row == 5);
     // Frozen: the cursor column counts the trailing space the wrap boundary
@@ -373,7 +380,8 @@ TEST_CASE("EditorLayout keeps wrapped cursor columns for drafts without a line-e
     });
     REQUIRE(end_layout);
     REQUIRE(end_layout->lines.size() == 6);
-    CHECK(end_layout->lines[5] == "word word\x1b[7m \x1b[27m ");
+    CHECK(end_layout->lines[5] ==
+            "word word" + std::string{kFakeCursorStart} + " " + std::string{kFakeCursorEnd} + " ");
     REQUIRE(end_layout->cursor_position.has_value());
     CHECK(end_layout->cursor_position->row == 5);
     CHECK(end_layout->cursor_position->column == 9);

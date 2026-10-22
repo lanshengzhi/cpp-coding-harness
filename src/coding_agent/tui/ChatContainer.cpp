@@ -123,8 +123,16 @@ public:
             std::string label,
             std::vector<ai::Content> content,
             bool expanded)
+        : BoxedMessageComponent(theme, keybindings, std::move(label), std::move(content), expanded, 1) {}
+
+    BoxedMessageComponent(const LiveTheme& theme,
+            std::shared_ptr<const SharedKeybindings> keybindings,
+            std::string label,
+            std::vector<ai::Content> content,
+            bool expanded,
+            std::size_t output_pad)
         : theme_(theme), keybindings_(std::move(keybindings)), label_(std::move(label)), content_(std::move(content)),
-          expanded_(expanded) {
+          expanded_(expanded), output_pad_(output_pad) {
         for (const auto& block : content_) {
             const auto* image = std::get_if<ai::ImageContent>(&block);
             if (image == nullptr) continue;
@@ -161,8 +169,12 @@ public:
 
     void set_expanded(bool expanded) { expanded_ = expanded; }
 
+    /// pi `outputPad` render setting: the box's horizontal padding (pi
+    /// `custom-message.ts:48-51,90`, the box's `setPaddingX`).
+    void set_output_pad(std::size_t output_pad) { output_pad_ = output_pad; }
+
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override {
-        cch::tui::Box box(1, 1, theme_.background_hook(ThemeToken::CustomMessageBg));
+        cch::tui::Box box(output_pad_, 1, theme_.background_hook(ThemeToken::CustomMessageBg));
         const auto label =
                 theme_.foreground_hook(ThemeToken::CustomMessageLabel)(std::format("\x1b[1m[{}]\x1b[22m", label_));
         auto label_text = std::make_unique<cch::tui::Text>(label, 0, 0);
@@ -222,6 +234,9 @@ protected:
     std::string label_;
     std::vector<ai::Content> content_;
     bool expanded_{false};
+    /// pi `outputPad`: the box's horizontal padding. The default is pi's
+    /// `outputPad` setting default of 1.
+    std::size_t output_pad_{1};
     // In content order so multi-image messages render in source order.
     std::vector<std::unique_ptr<ImageSlot>> image_slots_;
 };
@@ -234,8 +249,9 @@ public:
             std::shared_ptr<const SharedKeybindings> keybindings,
             std::string custom_type,
             std::vector<ai::Content> content,
-            bool expanded)
-        : BoxedMessageComponent(theme, keybindings, std::move(custom_type), std::move(content), expanded) {}
+            bool expanded,
+            std::size_t output_pad = 1)
+        : BoxedMessageComponent(theme, keybindings, std::move(custom_type), std::move(content), expanded, output_pad) {}
 };
 
 /// Formats an integer like pi's `toLocaleString()` (en-US thousands
@@ -262,8 +278,9 @@ public:
             std::shared_ptr<const SharedKeybindings> keybindings,
             std::string summary,
             std::int64_t tokens_before,
-            bool expanded)
-        : BoxedMessageComponent(theme, keybindings, "compaction", {}, expanded),
+            bool expanded,
+            std::size_t output_pad = 1)
+        : BoxedMessageComponent(theme, keybindings, "compaction", {}, expanded, output_pad),
           summary_(safe_text(std::move(summary))), tokens_before_(tokens_before) {}
 
 protected:
@@ -288,8 +305,10 @@ public:
     BranchSummaryComponent(const LiveTheme& theme,
             std::shared_ptr<const SharedKeybindings> keybindings,
             std::string summary,
-            bool expanded)
-        : BoxedMessageComponent(theme, keybindings, "branch", {}, expanded), summary_(safe_text(std::move(summary))) {}
+            bool expanded,
+            std::size_t output_pad = 1)
+        : BoxedMessageComponent(theme, keybindings, "branch", {}, expanded, output_pad),
+          summary_(safe_text(std::move(summary))) {}
 
 protected:
     [[nodiscard]] std::string collapsed_body() const override { return "Branch summary"; }
@@ -356,6 +375,13 @@ struct ChatContainer::Impl {
         /// Renders as a pi boot warning (`Warning: <text>`, warning token)
         /// instead of the error diagnostic shape.
         bool warning{false};
+        /// The `outputPad` setting in force when the line was emitted. pi
+        /// creates the error as `new ThemedText(..., this.outputPad, 0)`
+        /// (`interactive-mode.ts:4639`), and `onOutputPadChange` only reaches
+        /// children exposing `setOutputPad` — a plain `ThemedText` does not
+        /// (`components/themed-text.ts:11-32`) — so an already-emitted error
+        /// keeps its original pad.
+        std::size_t output_pad{1};
     };
 
     /// pi `showStatus`: one dim status line. A new status replaces the
@@ -530,8 +556,10 @@ struct ChatContainer::Impl {
             return;
         }
         if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
+            // pi `addMessageToChat` seeds the block with the live pad at
+            // creation (`new BashExecutionComponent(..., this.outputPad)`).
             auto component = std::make_unique<BashExecutionComponent>(
-                    theme, keybindings, bounded_presentation(bash->command), bash->exclude_from_context);
+                    theme, keybindings, bounded_presentation(bash->command), bash->exclude_from_context, output_pad);
             component->append_output(bounded_presentation(bash->output));
             component->set_complete(bash->exit_code, bash->cancelled, bash->truncated, bash->full_output_path);
             component->set_expanded(tools_expanded);
@@ -541,20 +569,20 @@ struct ChatContainer::Impl {
         if (const auto* custom = std::get_if<ai::CustomMessage>(&message)) {
             if (custom->display) {
                 item.component = std::make_unique<CustomMessageComponent>(
-                        theme, keybindings, custom->custom_type, custom->content, tools_expanded);
+                        theme, keybindings, custom->custom_type, custom->content, tools_expanded, output_pad);
             } else {
                 item.component.reset();
             }
             return;
         }
         if (const auto* branch = std::get_if<ai::BranchSummaryMessage>(&message)) {
-            item.component =
-                    std::make_unique<BranchSummaryComponent>(theme, keybindings, branch->summary, tools_expanded);
+            item.component = std::make_unique<BranchSummaryComponent>(
+                    theme, keybindings, branch->summary, tools_expanded, output_pad);
             return;
         }
         if (const auto* compaction = std::get_if<ai::CompactionSummaryMessage>(&message)) {
             item.component = std::make_unique<CompactionSummaryComponent>(
-                    theme, keybindings, compaction->summary, compaction->tokens_before, tools_expanded);
+                    theme, keybindings, compaction->summary, compaction->tokens_before, tools_expanded, output_pad);
             return;
         }
         // System messages are not rendered in pi's chat.
@@ -730,6 +758,7 @@ struct ChatContainer::Impl {
                         std::make_unique<ToolExecutionComponent>(theme, keybindings, name, call_id, arguments, cwd),
         });
         tool->component->set_expanded(tools_expanded);
+        tool->component->set_output_pad(output_pad);
         auto* tool_pointer = tool.get();
         item.tools.push_back(tool_pointer);
         owned_tools.insert_or_assign(call_id, std::move(tool));
@@ -770,14 +799,36 @@ struct ChatContainer::Impl {
             }
         }
     }
+    /// pi `onOutputPadChange` (`interactive-mode.ts:5097-5105`) walks both
+    /// `chatContainer` and `pendingMessagesContainer` and hands the setting to
+    /// every child that exposes `setOutputPad`. This walks every block kind the
+    /// C++ chat renders: user, assistant, bash, tool, custom, compaction and
+    /// branch. pi's `skill-invocation-message.ts` and `custom-entry.ts` blocks
+    /// also expose `setOutputPad` but have no C++ counterpart, so their pad
+    /// contract is carried by the missing components, not by this fan-out.
+    /// The user message is rebuilt (its pad is a constructor argument, as in
+    /// pi); every other block updates in place.
     void apply_output_pad_to_components() {
         for (auto& item : items) {
             auto* message = std::get_if<MessageItem>(&item);
-            if (message == nullptr || message->component == nullptr) continue;
-            if (std::holds_alternative<ai::UserMessage>(message->message) ||
-                    std::holds_alternative<ai::AssistantMessage>(message->message)) {
-                rebuild_message(*message);
+            if (message == nullptr) continue;
+            if (message->component != nullptr) {
+                if (std::holds_alternative<ai::UserMessage>(message->message)) {
+                    rebuild_message(*message);
+                } else if (auto* assistant = dynamic_cast<AssistantMessageComponent*>(message->component.get());
+                        assistant != nullptr) {
+                    // pi `assistant-message.ts:73-76` updates in place.
+                    assistant->set_output_pad(output_pad);
+                } else if (auto* bash = dynamic_cast<BashExecutionComponent*>(message->component.get());
+                        bash != nullptr) {
+                    bash->set_output_pad(output_pad);
+                } else if (auto* boxed = dynamic_cast<BoxedMessageComponent*>(message->component.get());
+                        boxed != nullptr) {
+                    boxed->set_output_pad(output_pad);
+                }
             }
+            for (auto* tool : message->tools)
+                tool->component->set_output_pad(output_pad);
         }
     }
     /// Whether the item corresponds to a pi chat-container child. pi only
@@ -847,9 +898,10 @@ struct ChatContainer::Impl {
             // pi showWarning: Text(warning, 1, 0).
             return render_plain(theme, "Warning: " + diagnostic.text, width, ThemeToken::Warning, 1, !diagnostic.raw);
         }
-        // pi showError: Text(error, outputPad, 0) — the chat error lines
-        // honor the output pad.
-        return render_plain(theme, "Error: " + diagnostic.text, width, ThemeToken::Error, output_pad, !diagnostic.raw);
+        // pi showError: Text(error, outputPad, 0) — the pad frozen when the
+        // error line was emitted.
+        return render_plain(
+                theme, "Error: " + diagnostic.text, width, ThemeToken::Error, diagnostic.output_pad, !diagnostic.raw);
     }
 
     const LiveTheme& theme; // must outlive this presentation reducer.
@@ -1117,7 +1169,10 @@ void ChatContainer::append_frontend_message(std::string text) {
 }
 
 void ChatContainer::append_diagnostic(std::string text) {
-    impl_->items.emplace_back(Impl::DiagnosticItem{safe_text(std::move(text))});
+    impl_->items.emplace_back(Impl::DiagnosticItem{
+            .text = safe_text(std::move(text)),
+            .output_pad = impl_->output_pad,
+    });
 }
 
 void ChatContainer::append_warning(std::string text) {
@@ -1149,6 +1204,7 @@ void ChatContainer::append_user_bash_diagnostic(std::string text) {
     impl_->items.emplace_back(Impl::DiagnosticItem{
             .text = bounded_presentation(text),
             .raw = true,
+            .output_pad = impl_->output_pad,
     });
 }
 

@@ -774,7 +774,10 @@ TEST_CASE("SearchableSelectList composes placeholder styling with select list ro
     auto rendered = selector.render(30);
     REQUIRE(rendered);
     REQUIRE(!rendered->lines.empty());
-    // Search row reverses 'F' in "Filter items..." and applies custom placeholder styling
-    CHECK(rendered->lines[0].starts_with("> \x1b[7m\x1b[2mF\x1b[22m\x1b[27m\x1b[2milter items...\x1b[22m"));
+    // The search row marks 'F' in "Filter items..." with the zero-width
+    // fake-cursor markers and applies the custom placeholder styling (pi
+    // `input.ts` `render`: the markers, not raw reverse-video bytes).
+    CHECK(rendered->lines[0].starts_with(
+            "> \x1b_pi:c\x07\x1b_pi:fc\x07\x1b[2mF\x1b[22m\x1b_pi:/fc\x07\x1b[2milter items...\x1b[22m"));
     CHECK(selector.cursor_location() == cch::tui::CursorPosition{.column = 2, .row = 0});
 }

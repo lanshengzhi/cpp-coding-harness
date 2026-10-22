@@ -79,8 +79,14 @@ public:
     /// Splice every visible overlay (z ascending) into the composed buffer:
     /// viewport layout, ANSI-preserving line splicing, and image intersection
     /// clipping against overlaid regions.
-    [[nodiscard]] support::ExpectedVoid composite(
-            TerminalDimensions dimensions, const TerminalCapabilities& capabilities, RenderResult& output);
+    ///
+    /// `show_hardware_cursor` is threaded to the fake-cursor resolution each
+    /// overlay's own rendered lines pass through before the splice (pi
+    /// `tui.ts` `compositeOverlays`: `resolveFakeCursors(component.render(width))`).
+    [[nodiscard]] support::ExpectedVoid composite(TerminalDimensions dimensions,
+            const TerminalCapabilities& capabilities,
+            RenderResult& output,
+            bool show_hardware_cursor);
 
     /// Whether any overlay is visible at these dimensions. Rows are only
     /// reusable while this is false: compositing splices overlays into

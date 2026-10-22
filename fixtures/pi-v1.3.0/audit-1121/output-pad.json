@@ -1,0 +1,149 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "recordKind": "component-probe",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "capturedAt": "2026-10-22T14:05:44.805Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/coding-agent/src/modes/interactive/components/tool-execution.ts:ToolExecutionComponent.setOutputPad,updateDisplay",
+    "packages/coding-agent/src/modes/interactive/components/bash-execution.ts:BashExecutionComponent.setOutputPad,updateDisplay",
+    "packages/coding-agent/src/modes/interactive/components/custom-message.ts:CustomMessageComponent.setOutputPad,rebuild",
+    "packages/tui/src/components/box.ts:Box.setPaddingX,render",
+    "packages/tui/src/components/text.ts:Text.setPaddingX,render"
+  ],
+  "probe": "the frozen tool-execution, bash-execution and custom-message components are constructed directly with outputPad 1 and 0 and rendered at 60 columns; the observed rows are the frozen pi geometry, with the SGR styling stripped so the comparison is the leading pad",
+  "scenarios": [
+    {
+      "name": "output-pad-reaches-the-tool-block-box",
+      "inputs": {
+        "component": "ToolExecutionComponent",
+        "tool": "audit-tool",
+        "toolCallId": "call-audit-1121",
+        "arguments": {
+          "command": "echo audit"
+        },
+        "outputPad": [
+          1,
+          0
+        ],
+        "width": 60
+      },
+      "expected": {
+        "atOne": [
+          "",
+          "                                                            ",
+          " audit-tool                                                 ",
+          "                                                            ",
+          " {                                                          ",
+          "   \"command\": \"echo audit\"                                  ",
+          " }                                                          ",
+          "                                                            "
+        ],
+        "atZero": [
+          "",
+          "                                                            ",
+          "audit-tool                                                  ",
+          "                                                            ",
+          "{                                                           ",
+          "  \"command\": \"echo audit\"                                   ",
+          "}                                                           ",
+          "                                                            "
+        ],
+        "contentRowAtOne": " audit-tool                                                 ",
+        "contentRowAtZero": "audit-tool                                                  ",
+        "contentRowAtOneLeadingSpaces": 1,
+        "contentRowAtZeroLeadingSpaces": 0
+      },
+      "normalizations": [
+        "SGR styling is stripped; the compared bytes are the visible cell text"
+      ]
+    },
+    {
+      "name": "output-pad-reaches-the-bash-block-text",
+      "inputs": {
+        "component": "BashExecutionComponent",
+        "command": "echo audit",
+        "output": "audit output",
+        "exitCode": 0,
+        "outputPad": [
+          1,
+          0
+        ],
+        "width": 60
+      },
+      "expected": {
+        "atOne": [
+          "",
+          "────────────────────────────────────────────────────────────",
+          " $ echo audit                                               ",
+          "                                                            ",
+          " audit output                                               ",
+          "                                                            ",
+          "────────────────────────────────────────────────────────────"
+        ],
+        "atZero": [
+          "",
+          "────────────────────────────────────────────────────────────",
+          "$ echo audit                                                ",
+          "                                                            ",
+          "audit output                                                ",
+          "                                                            ",
+          "────────────────────────────────────────────────────────────"
+        ],
+        "headerRowAtOne": " $ echo audit                                               ",
+        "headerRowAtZero": "$ echo audit                                                ",
+        "headerRowAtOneLeadingSpaces": 1,
+        "headerRowAtZeroLeadingSpaces": 0
+      },
+      "normalizations": [
+        "SGR styling is stripped; the compared bytes are the visible cell text"
+      ]
+    },
+    {
+      "name": "output-pad-reaches-the-custom-block-box",
+      "inputs": {
+        "component": "CustomMessageComponent",
+        "customType": "audit",
+        "content": "audit body",
+        "outputPad": [
+          1,
+          0
+        ],
+        "width": 60
+      },
+      "expected": {
+        "atOne": [
+          "",
+          "                                                            ",
+          " [audit]                                                    ",
+          "                                                            ",
+          " audit body                                                 ",
+          "                                                            "
+        ],
+        "atZero": [
+          "",
+          "                                                            ",
+          "[audit]                                                     ",
+          "                                                            ",
+          "audit body                                                  ",
+          "                                                            "
+        ],
+        "labelRowAtOne": " [audit]                                                    ",
+        "labelRowAtZero": "[audit]                                                     ",
+        "labelRowAtOneLeadingSpaces": 1,
+        "labelRowAtZeroLeadingSpaces": 0
+      },
+      "normalizations": [
+        "SGR styling is stripped; the compared bytes are the visible cell text"
+      ]
+    }
+  ]
+}

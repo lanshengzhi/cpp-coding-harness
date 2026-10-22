@@ -24,12 +24,14 @@ class LiveTheme;
 class BashExecutionComponent final : public cch::tui::Component {
 public:
     /// The theme must outlive this component; keybindings resolve through
-    /// the shared slot (ADR 0035, #418).
-    BashExecutionComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings,
-        std::string command,
-        bool exclude_from_context);
+    /// the shared slot (ADR 0035, #418). `output_pad` is the `outputPad`
+    /// setting the block is created with (pi's `new BashExecutionComponent(command,
+    /// this.ui, excludeFromContext, this.outputPad)`, `interactive-mode.ts:7027`).
+    BashExecutionComponent(const LiveTheme& theme,
+            std::shared_ptr<const SharedKeybindings> keybindings,
+            std::string command,
+            bool exclude_from_context,
+            std::size_t output_pad = 1);
     ~BashExecutionComponent() override;
 
     BashExecutionComponent(const BashExecutionComponent&) = delete;
@@ -45,6 +47,9 @@ public:
         bool truncated,
         std::optional<std::string> full_output_path);
     void set_expanded(bool expanded);
+    /// pi `outputPad` render setting: the horizontal padding of the block's
+    /// header, body and status text (pi `bash-execution.ts:73-77,141,149,205`).
+    void set_output_pad(std::size_t output_pad);
     /// Starts the running loader; the request_render sink drives the owning
     /// view's invalidation. Ignored once the outcome is set.
     void start_loader(cch::tui::RenderRequestSink request_render);
@@ -66,6 +71,9 @@ private:
     bool truncated_{false};
     std::optional<std::string> full_output_path_;
     bool expanded_{false};
+    /// pi `outputPad`: the block's horizontal padding. The default is pi's
+    /// `outputPad` setting default of 1.
+    std::size_t output_pad_{1};
     std::unique_ptr<cch::tui::Loader> loader_;
 };
 

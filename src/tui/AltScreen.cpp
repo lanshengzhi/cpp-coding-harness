@@ -11,6 +11,7 @@
 #include "tui/WordNavigation.hpp"
 
 #include <cch/support/Error.hpp>
+#include <cch/tui/CursorMarkers.hpp>
 #include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
@@ -1055,6 +1056,11 @@ support::ExpectedVoid AltScreen::render_frame() {
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
     std::vector<InlineImageRenderRegion> images = std::move(cached_frame_->images);
+    // The fake-cursor markers resolve before the search highlighting and the
+    // overlay compositing, because both track SGR codes rather than the
+    // zero-width marker bytes (pi `tui-alt-screen.ts` `resolveFakeCursors`
+    // runs before `applySearchHighlights` and `compositeOverlays`).
+    lines = resolve_fake_cursors(lines, show_hardware_cursor_);
     lines = apply_search_highlights(lines, *cached_frame_);
     auto display_lines = strip_osc133_zone_prefixes(lines);
     if (auto indicator = composite_scroll_to_end_indicator(display_lines); !indicator) return indicator;
@@ -1063,13 +1069,20 @@ support::ExpectedVoid AltScreen::render_frame() {
         RenderResult output{.lines = std::move(display_lines), .images = std::move(images)};
         auto materialized = detail::OverlayCompositor::materialize_images(
                 std::move(output), terminal_.capabilities(), dimensions.columns, dimensions.rows);
-        if (auto overlaid = compositor_->composite(dimensions, terminal_.capabilities(), materialized); !overlaid)
+        if (auto overlaid = compositor_->composite(
+                    dimensions, terminal_.capabilities(), materialized, show_hardware_cursor_);
+                !overlaid)
             return overlaid;
         display_lines = std::move(materialized.lines);
         images = std::move(materialized.images);
         if (materialized.cursor) cursor = materialized.cursor;
     }
     if (auto flashed = composite_flashes(display_lines, dimensions.columns, dimensions.rows); !flashed) return flashed;
+    // The cursor position the marker carried is the terminal cursor position
+    // (pi `extractCursorPosition`), measured on the text before the marker
+    // and removed from the emitted line.
+    const auto marker_cursor = extract_cursor_position(display_lines, dimensions.rows);
+    if (marker_cursor) cursor = marker_cursor;
     return render_viewport(std::move(display_lines), cursor, dimensions, std::move(images));
 }
 
@@ -1211,6 +1224,13 @@ void AltScreen::clear_text_selection() noexcept {
     selection_focus_.reset();
     selection_granularity_ = SelectionGranularity::Character;
     selection_initial_range_.reset();
+}
+
+void AltScreen::reset_text_selection() noexcept {
+    clear_text_selection();
+    // pi `resetTextSelection` also drops `lastClick`, so the next press is a
+    // character click again instead of continuing the word/line cycle.
+    clear_selection_click_history();
 }
 
 std::optional<std::string_view> AltScreen::selection_source_line_at(const SelectionPoint& point) const {

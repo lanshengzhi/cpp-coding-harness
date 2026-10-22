@@ -159,6 +159,12 @@ public:
     [[nodiscard]] bool is_following_output() const;
     /// Whether the last rendered viewport contains a non-empty mouse selection.
     [[nodiscard]] bool has_active_selection() const;
+    /// Drop the text selection *and* the multi-click history (pi
+    /// `TuiAltScreen.resetTextSelection`): the next press is a character click
+    /// again instead of continuing the word/line cycle. A host that replaces
+    /// the transcript calls this before the rebuild, because the selection
+    /// coordinates point into the replaced rows.
+    void reset_text_selection() noexcept;
     /// Copy the current selection. An empty selection returns false without
     /// invoking the configured sink; sink errors are returned unchanged.
     [[nodiscard]] support::Expected<bool> copy_active_selection_to_clipboard();

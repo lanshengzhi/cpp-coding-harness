@@ -20,6 +20,26 @@
 
 namespace {
 
+/// The fake-cursor markers a cursor-bearing component emits (pi `tui.ts`
+/// `FAKE_CURSOR_START`/`FAKE_CURSOR_END`). The component level carries the
+/// zero-width markers; the reverse-video bytes appear only after the
+/// resolution stage (pi `resolveFakeCursors`).
+constexpr std::string_view kCursorMarker = "\x1b_pi:c\x07";
+constexpr std::string_view kFakeCursorStart = "\x1b_pi:fc\x07";
+constexpr std::string_view kFakeCursorEnd = "\x1b_pi:/fc\x07";
+
+/// The cursor cell as the component renders it: the fake-cursor markers
+/// around the drawn grapheme.
+[[nodiscard]] std::string fake_cursor_cell(std::string_view cell) {
+    return std::string{kFakeCursorStart} + std::string{cell} + std::string{kFakeCursorEnd};
+}
+
+/// The cursor cell of a focused component: the cursor-position marker
+/// precedes the fake-cursor markers (pi `editor.ts` `render`).
+[[nodiscard]] std::string focused_fake_cursor_cell(std::string_view cell) {
+    return std::string{kCursorMarker} + fake_cursor_cell(cell);
+}
+
 void key(cch::tui::Editor& editor, std::string name, bool ctrl = false, bool shift = false, bool alt = false) {
     static_cast<void>(editor.handle_input(cch::tui::KeyEvent{
             .key = std::move(name),
@@ -2182,7 +2202,7 @@ TEST_CASE("Editor renders pi's top and bottom borders when a border hook is set"
     REQUIRE(rendered->lines.size() == 3);
     const auto rule = std::string{"\x1b[35m"} + "────────" + "\x1b[39m";
     CHECK(rendered->lines[0] == rule);
-    CHECK(rendered->lines[1] == "hello\x1b[7m \x1b[27m  ");
+    CHECK(rendered->lines[1] == "hello" + fake_cursor_cell(" ") + "  ");
     CHECK(rendered->lines[2] == rule);
 }
 
@@ -2320,23 +2340,25 @@ TEST_CASE("Editor border does not render without a border hook", "[tui][editor][
     const auto rendered = editor.render(8);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "hello\x1b[7m \x1b[27m  ");
+    CHECK(rendered->lines[0] == "hello" + fake_cursor_cell(" ") + "  ");
 }
 
-TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "[tui][editor][cursor][spec]") {
-    // pi's editor.ts renders the cursor as reverse video on the grapheme at the
-    // cursor (or a highlighted space at end of line); the C++ port must match.
+TEST_CASE("Editor renders a marked fake cursor at the cursor position", "[tui][editor][cursor][spec]") {
+    // pi's editor.ts renders the cursor as the grapheme at the cursor (or a
+    // space at end of line) wrapped in the zero-width fake-cursor markers;
+    // the reverse-video bytes appear only after the resolution stage
+    // (pi `resolveFakeCursors`), so the C++ port must match.
     cch::tui::Editor editor;
     editor.set_text("hello");
 
-    // Cursor at end of line: a highlighted space occupies the cell after it
+    // Cursor at end of line: a marked space occupies the cell after it
     // (replacing one padding cell so the line stays within the width bound).
     auto rendered = editor.render(8);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "hello\x1b[7m \x1b[27m  ");
+    CHECK(rendered->lines[0] == "hello" + fake_cursor_cell(" ") + "  ");
 
-    // Cursor on a character: that grapheme is wrapped in reverse video.
+    // Cursor on a character: that grapheme is wrapped in the markers.
     editor.set_text("hello");
     key(editor, "home");
     key(editor, "right");
@@ -2344,7 +2366,7 @@ TEST_CASE("Editor renders a reverse-video fake cursor at the cursor position", "
     rendered = editor.render(8);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "he\x1b[7ml\x1b[27mlo   ");
+    CHECK(rendered->lines[0] == "he" + fake_cursor_cell("l") + "lo   ");
 
     // The rendered line never exceeds the component width.
     for (const auto& line : rendered->lines) {
@@ -2442,7 +2464,7 @@ TEST_CASE("Editor uses the shared break opportunities at formal terminal widths"
                 CHECK(visible.starts_with((*expected)[index]));
                 CHECK(cch::tui::visible_width(rendered->lines[index]) <= width);
             }
-            CHECK(rendered->lines.back().find("\x1b[7m") != std::string::npos);
+            CHECK(rendered->lines.back().find(kFakeCursorStart) != std::string::npos);
         }
     }
 }
@@ -2729,8 +2751,9 @@ TEST_CASE("Editor renders empty content with fake cursor padding and tracks focu
     auto rendered = editor.render(10);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    // Fake cursor occupies the first cell (reverse video space) followed by 9 padding spaces.
-    CHECK(rendered->lines[0] == "\x1b[7m \x1b[27m         ");
+    // The fake cursor occupies the first cell (a marked space) followed by 9
+    // padding spaces.
+    CHECK(rendered->lines[0] == fake_cursor_cell(" ") + "         ");
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 10);
     CHECK(editor.cursor_location() == std::nullopt);
 
@@ -2750,7 +2773,7 @@ TEST_CASE("Editor renders empty content with fake cursor padding and tracks focu
     REQUIRE(bordered);
     REQUIRE(bordered->lines.size() == 3);
     CHECK(bordered->lines[0] == "──────");
-    CHECK(bordered->lines[1] == "\x1b[7m \x1b[27m     ");
+    CHECK(bordered->lines[1] == focused_fake_cursor_cell(" ") + "     ");
     CHECK(bordered->lines[2] == "──────");
 
     // Only the top border (1 row) sits above the content; the cursor row
@@ -2783,7 +2806,7 @@ TEST_CASE("Editor wraps multi-cell Unicode graphemes and computes exact visual c
     key(editor, "home");
     rendered = editor.render(5);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "\x1b[7m你\x1b[27m好 ");
+    CHECK(rendered->lines[0] == focused_fake_cursor_cell("你") + "好 ");
     auto loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->column == 0);
@@ -2793,7 +2816,7 @@ TEST_CASE("Editor wraps multi-cell Unicode graphemes and computes exact visual c
     key(editor, "right");
     rendered = editor.render(5);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "你\x1b[7m好\x1b[27m ");
+    CHECK(rendered->lines[0] == "你" + focused_fake_cursor_cell("好") + " ");
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->column == 2);
@@ -2803,7 +2826,7 @@ TEST_CASE("Editor wraps multi-cell Unicode graphemes and computes exact visual c
     key(editor, "right");
     rendered = editor.render(5);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "你好\x1b[7m \x1b[27m");
+    CHECK(rendered->lines[0] == "你好" + focused_fake_cursor_cell(" "));
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->column == 4);
@@ -2813,7 +2836,7 @@ TEST_CASE("Editor wraps multi-cell Unicode graphemes and computes exact visual c
     key(editor, "right");
     rendered = editor.render(5);
     REQUIRE(rendered);
-    CHECK(rendered->lines[1] == "世\x1b[7m界\x1b[27m ");
+    CHECK(rendered->lines[1] == "世" + focused_fake_cursor_cell("界") + " ");
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->column == 2);
@@ -2823,7 +2846,7 @@ TEST_CASE("Editor wraps multi-cell Unicode graphemes and computes exact visual c
     key(editor, "right");
     rendered = editor.render(5);
     REQUIRE(rendered);
-    CHECK(rendered->lines[1] == "世界\x1b[7m \x1b[27m");
+    CHECK(rendered->lines[1] == "世界" + focused_fake_cursor_cell(" "));
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->column == 4);
@@ -2843,7 +2866,7 @@ TEST_CASE("Editor scrolls viewport across content lines without borders",
     auto rendered = editor.render(10);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 2);
-    CHECK(rendered->lines[0] == "L0\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[0] == "L0" + focused_fake_cursor_cell(" ") + "       ");
     CHECK(rendered->lines[1] == "L1        ");
     auto loc = editor.cursor_location();
     REQUIRE(loc.has_value());
@@ -2856,7 +2879,7 @@ TEST_CASE("Editor scrolls viewport across content lines without borders",
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 2);
     CHECK(rendered->lines[0] == "L0        ");
-    CHECK(rendered->lines[1] == "L1\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[1] == "L1" + focused_fake_cursor_cell(" ") + "       ");
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->row == 1);
@@ -2868,7 +2891,7 @@ TEST_CASE("Editor scrolls viewport across content lines without borders",
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 2);
     CHECK(rendered->lines[0] == "L1        ");
-    CHECK(rendered->lines[1] == "L2\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[1] == "L2" + focused_fake_cursor_cell(" ") + "       ");
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->row == 1);
@@ -2880,7 +2903,7 @@ TEST_CASE("Editor scrolls viewport across content lines without borders",
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 2);
     CHECK(rendered->lines[0] == "L2        ");
-    CHECK(rendered->lines[1] == "L3\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[1] == "L3" + focused_fake_cursor_cell(" ") + "       ");
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
     CHECK(loc->row == 1);
@@ -2891,7 +2914,7 @@ TEST_CASE("Editor scrolls viewport across content lines without borders",
     rendered = editor.render(10);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 2);
-    CHECK(rendered->lines[0] == "L2\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[0] == "L2" + focused_fake_cursor_cell(" ") + "       ");
     CHECK(rendered->lines[1] == "L3        ");
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
@@ -2903,7 +2926,7 @@ TEST_CASE("Editor scrolls viewport across content lines without borders",
     rendered = editor.render(10);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 2);
-    CHECK(rendered->lines[0] == "L1\x1b[7m \x1b[27m       ");
+    CHECK(rendered->lines[0] == "L1" + focused_fake_cursor_cell(" ") + "       ");
     CHECK(rendered->lines[1] == "L2        ");
     loc = editor.cursor_location();
     REQUIRE(loc.has_value());
@@ -2929,7 +2952,7 @@ TEST_CASE("Editor displays top and bottom scroll indicator borders while partial
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 4);
     CHECK(rendered->lines[0] == "────────────────");
-    CHECK(rendered->lines[1] == "\x1b[7mA\x1b[27m               ");
+    CHECK(rendered->lines[1] == fake_cursor_cell("A") + "               ");
     CHECK(rendered->lines[2] == "B               ");
     CHECK(rendered->lines[3] == "─── ↓ 3 more ───");
 
@@ -2941,7 +2964,7 @@ TEST_CASE("Editor displays top and bottom scroll indicator borders while partial
     REQUIRE(rendered->lines.size() == 4);
     CHECK(rendered->lines[0] == "─── ↑ 1 more ───");
     CHECK(rendered->lines[1] == "B               ");
-    CHECK(rendered->lines[2] == "\x1b[7mC\x1b[27m               ");
+    CHECK(rendered->lines[2] == fake_cursor_cell("C") + "               ");
     CHECK(rendered->lines[3] == "─── ↓ 2 more ───");
 
     // Move down to line E (bottom): 3 lines above (A, B, C), no lines below
@@ -2952,7 +2975,7 @@ TEST_CASE("Editor displays top and bottom scroll indicator borders while partial
     REQUIRE(rendered->lines.size() == 4);
     CHECK(rendered->lines[0] == "─── ↑ 3 more ───");
     CHECK(rendered->lines[1] == "D               ");
-    CHECK(rendered->lines[2] == "\x1b[7mE\x1b[27m               ");
+    CHECK(rendered->lines[2] == fake_cursor_cell("E") + "               ");
     CHECK(rendered->lines[3] == "────────────────");
 }
 
@@ -2984,7 +3007,7 @@ TEST_CASE("Editor truncates scroll indicator border on narrow widths with ellips
     CHECK(rendered->lines[0] == "───...");
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 6);
     CHECK(rendered->lines[1] == "4444  ");
-    CHECK(rendered->lines[2] == "5555\x1b[7m \x1b[27m ");
+    CHECK(rendered->lines[2] == "5555" + fake_cursor_cell(" ") + " ");
     CHECK(cch::tui::visible_width(rendered->lines[2]) == 6);
     CHECK(rendered->lines[3] == "──────");
     CHECK(cch::tui::visible_width(rendered->lines[3]) == 6);

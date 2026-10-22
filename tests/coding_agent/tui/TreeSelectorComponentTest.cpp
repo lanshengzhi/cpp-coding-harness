@@ -14,6 +14,7 @@
 
 #include <cch/tui/Keybindings.hpp>
 #include <cch/tui/Keys.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <chrono>
 #include <iterator>
@@ -60,20 +61,9 @@ namespace {
         tui::TerminalColorCapability::TrueColor);
 }
 
-/// Strip ANSI escapes for text assertions.
-[[nodiscard]] std::string strip_ansi(std::string text) {
-    std::string result;
-    std::size_t index = 0;
-    while (index < text.size()) {
-        if (text[index] == '\x1b') {
-            while (index < text.size() && text[index] != 'm') ++index;
-            ++index;
-            continue;
-        }
-        result.push_back(text[index++]);
-    }
-    return result;
-}
+/// Strip ANSI escapes for text assertions. The fake-cursor markers are
+/// zero-width APC sequences, so they are stripped with the SGR codes.
+[[nodiscard]] std::string strip_ansi(std::string text) { return cch::tui::strip_terminal_sequences(text); }
 
 [[nodiscard]] std::string render_text(coding_agent::tui::TreeSelectorComponent& component) {
     auto rendered = component.render(100);

@@ -1,5 +1,6 @@
 #include <cch/tui/Input.hpp>
 
+#include <cch/tui/CursorMarkers.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include "tui/InteractionUtils.hpp"
@@ -223,6 +224,10 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
     }
     const auto available = width - prompt_w;
 
+    // The zero-width cursor-position marker a focused input emits with its
+    // fake cursor (pi `input.ts` `render`).
+    const std::string marker = impl_->focused ? std::string{kCursorMarker} : std::string{};
+
     if (impl_->value().empty() && impl_->options.placeholder && !impl_->options.placeholder->empty()) {
         auto placeholder_str = truncate_text(*impl_->options.placeholder, available, "");
         if (!placeholder_str) return std::unexpected(placeholder_str.error());
@@ -235,8 +240,8 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
         const auto styled_after =
                 impl_->options.placeholder_style ? impl_->options.placeholder_style(after_cursor) : after_cursor;
 
-        const std::string cursor_char = "\x1b[7m" + styled_at_cursor + "\x1b[27m";
-        const std::string text_with_cursor = cursor_char + styled_after;
+        const std::string cursor_char = render_fake_cursor(styled_at_cursor);
+        const std::string text_with_cursor = marker + cursor_char + styled_after;
         const auto visual_length = visible_width(text_with_cursor);
         const auto padding = available > visual_length ? available - visual_length : 0;
         std::string line = prompt + text_with_cursor + std::string(padding, ' ');
@@ -247,18 +252,18 @@ support::Expected<RenderResult> Input::render(std::size_t width) {
     if (!window) return std::unexpected(window.error());
     impl_->rendered_start_column = window->start_column;
 
-    // Fake cursor (pi input.ts render): reverse video on the grapheme at the
-    // cursor, or a highlighted space at end of line. ESC[27m (reverse off)
-    // restores normal rendering for the rest of the line without resetting any
-    // caller-applied style.
+    // Fake cursor (pi input.ts render): the grapheme at the cursor, or a
+    // space at end of line, wrapped in the zero-width fake-cursor markers. A
+    // focused input prefixes the cursor-position marker, so the drawn cursor
+    // stays strippable and the terminal cursor position stays recoverable.
     const auto before = window->text.substr(0, window->cursor_offset);
     const auto after = window->text.substr(window->cursor_offset);
     const auto graphemes = detail::split_graphemes(after);
     const auto at_cursor = graphemes.empty() ? std::string(" ") : graphemes.front();
     const auto after_cursor = graphemes.empty() ? std::string{} : after.substr(at_cursor.size());
 
-    const std::string cursor_char = "\x1b[7m" + at_cursor + "\x1b[27m";
-    const std::string text_with_cursor = before + cursor_char + after_cursor;
+    const std::string cursor_char = render_fake_cursor(at_cursor);
+    const std::string text_with_cursor = before + marker + cursor_char + after_cursor;
     const auto visual_length = visible_width(text_with_cursor);
     const auto padding = available > visual_length ? available - visual_length : 0;
     std::string line = prompt + text_with_cursor + std::string(padding, ' ');
