@@ -348,6 +348,44 @@ struct ChildReapGuard {
 
 } // namespace
 
+[[nodiscard]] std::string run_cli_tui_on_pty(const std::filesystem::path& workspace,
+        const std::filesystem::path& home,
+        const std::vector<std::string>& extra_args) {
+    auto pty = cch::tests::open_pseudo_terminal(100, 40);
+    REQUIRE(pty);
+    const auto pid = ::fork();
+    REQUIRE(pid >= 0);
+    if (pid == 0) {
+        (void)::dup2(pty->slave.get(), STDIN_FILENO);
+        (void)::dup2(pty->slave.get(), STDOUT_FILENO);
+        (void)::dup2(pty->slave.get(), STDERR_FILENO);
+        (void)::setenv("HOME", home.string().c_str(), 1);
+        (void)::setenv("XDG_CONFIG_HOME", (home / ".config").string().c_str(), 1);
+        (void)::chdir(workspace.string().c_str());
+        std::vector<char*> child_argv{const_cast<char*>("pike")};
+        for (const auto& arg : extra_args)
+            child_argv.push_back(const_cast<char*>(arg.c_str()));
+        child_argv.push_back(nullptr);
+        ::execv(PIKE_EXECUTABLE, child_argv.data());
+        ::_exit(127);
+    }
+
+    const ChildReapGuard reap_child{pid};
+    std::string output;
+    REQUIRE(drain_pty_until_all(pty->master.get(), output, {workspace.string()}));
+    REQUIRE(::write(pty->master.get(), "\x04", 1) == 1);
+    int status = 0;
+    REQUIRE(cch::tests::wait_until(
+            [&] {
+                output.append(cch::tests::read_available(pty->master.get(), std::chrono::milliseconds(20)));
+                return ::waitpid(pid, &status, WNOHANG) == pid;
+            },
+            std::chrono::seconds(10)));
+    REQUIRE(WIFEXITED(status));
+    CHECK(WEXITSTATUS(status) == 0);
+    return output;
+}
+
 TEST_CASE("CLI initial image arguments persist text before image with or without positional text",
         "[cli][smoke][issue63][spec]") {
     cch::tests::TempWorkspace workspace;
@@ -831,6 +869,38 @@ TEST_CASE("CLI --tui-mode launches the requested Native TUI root and the no-opti
         REQUIRE(enter_alternate != std::string::npos);
         CHECK(enter_alternate < output.find(workspace.path().string()));
     }
+}
+
+TEST_CASE("CLI stored tuiMode selects the product root through startup settings on a real PTY",
+        "[cli][tui-mode][settings][issue1125][spec]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    const auto settings_path = home.path() / ".config/pike/agent/settings.json";
+    std::filesystem::create_directories(settings_path.parent_path());
+
+    std::ofstream(settings_path) << R"({"tuiMode":"regular"})";
+    const auto regular_output = run_cli_tui_on_pty(workspace.path(), home.path(), {});
+    CHECK(regular_output.find("\x1b[?1049h") == std::string::npos);
+
+    std::ofstream(settings_path) << R"({"tuiMode":"fullscreen"})";
+    const auto fullscreen_output = run_cli_tui_on_pty(workspace.path(), home.path(), {});
+    CHECK(fullscreen_output.find("\x1b[?1049h") != std::string::npos);
+}
+
+TEST_CASE("CLI --tui-mode overrides an opposing stored mode through product startup on a real PTY",
+        "[cli][tui-mode][precedence][issue1125][spec]") {
+    cch::tests::TempWorkspace workspace;
+    cch::tests::TempWorkspace home;
+    const auto settings_path = home.path() / ".config/pike/agent/settings.json";
+    std::filesystem::create_directories(settings_path.parent_path());
+
+    std::ofstream(settings_path) << R"({"tuiMode":"regular"})";
+    const auto flag_fullscreen = run_cli_tui_on_pty(workspace.path(), home.path(), {"--tui-mode", "fullscreen"});
+    CHECK(flag_fullscreen.find("\x1b[?1049h") != std::string::npos);
+
+    std::ofstream(settings_path) << R"({"tuiMode":"fullscreen"})";
+    const auto flag_regular = run_cli_tui_on_pty(workspace.path(), home.path(), {"--tui-mode", "regular"});
+    CHECK(flag_regular.find("\x1b[?1049h") == std::string::npos);
 }
 
 TEST_CASE("CLI --resume opens the startup-TUI picker on a real terminal",

@@ -461,6 +461,7 @@ public:
                 std::move(resize_sink));
     }
     [[nodiscard]] support::ExpectedVoid stop() override { return inner_.stop(); }
+    [[nodiscard]] support::ExpectedVoid stop(tui::TerminalStopOptions options) override { return inner_.stop(options); }
     [[nodiscard]] tui::TerminalDimensions dimensions() const override { return inner_.dimensions(); }
     [[nodiscard]] tui::TerminalCapabilities capabilities() const override { return {.synchronized_output = true}; }
     [[nodiscard]] tui::TerminalModeState modes() const override { return inner_.modes(); }
@@ -3006,6 +3007,61 @@ TEST_CASE("Native TUI reports both post-acquisition startup and restoration fail
     CHECK(run_result->error().detail.find("sk-restoration-secret") == std::string::npos);
     CHECK(run_result->error().detail.find("[REDACTED]") != std::string::npos);
     CHECK_FALSE(created->session->is_open());
+}
+
+TEST_CASE("Native TUI product run entry starts, renders, and restores its selected root",
+        "[coding_agent][tui][run-entry][issue1125][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    auto options = session_options(workspace, tests::make_scripted_fake_provider());
+    options.session_target = coding_agent::DefaultPersistedSessionTarget{};
+    auto created = runtime.run(create_session_async(runtime, std::move(options)));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    RecordingTerminal terminal;
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    std::ostringstream output;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal,
+                    coding_agent::tui::InteractiveSessionRunBuilder{}
+                            .with_session(*created->session)
+                            .with_agent_config_directory(config.path())
+                            .with_stdout_is_tty(true)
+                            .with_output_stream(&output)
+                            .with_tui_mode(coding_agent::TuiMode::Regular)
+                            .build()),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    REQUIRE(terminal.modes().started);
+    // The run entry drives the product root: the composed frame carries the
+    // prompt row. The regular root is used here because this harness records
+    // through a virtual terminal, which does not model the fullscreen host's
+    // alternate-screen switch; the fullscreen run entry is covered by the
+    // fullscreenExitOutput case below.
+    REQUIRE(terminal.inject_input("run-entry prompt\r"));
+    REQUIRE(pump_until(
+            io, [&] { return visible_screen(terminal).find("fake: run-entry prompt") != std::string::npos; }));
+    CHECK(created->session->snapshot().agent_state.messages.size() == 2);
+
+    REQUIRE(terminal.inject_input("\x04"));
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    if (!*run_result) {
+        INFO(run_result->error().message + ": " + run_result->error().detail);
+        CHECK(false);
+    }
+    CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+    CHECK(visible_screen(terminal).find("fake: run-entry prompt") != std::string::npos);
 }
 
 TEST_CASE("Native TUI paints typing, submit, and interrupt through complete renderer frames",

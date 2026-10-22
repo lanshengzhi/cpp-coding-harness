@@ -394,6 +394,20 @@ void settle_session(FullscreenRun& run) {
 
 } // namespace
 
+TEST_CASE("Native TUI product fullscreenCopyOnSelect disables the real mouse release copy action",
+        "[coding_agent][tui][fullscreen][copy-on-select][issue1125][spec]") {
+    FullscreenRun run(R"({"tuiMode": "fullscreen", "fullscreenCopyOnSelect": false})");
+    run.start();
+    submit_turns(run.terminal, run.io, 1);
+    CHECK(run.actions->write_clipboard.empty());
+
+    select_cells(run.terminal, run.io, "fake", 4);
+    CHECK(run.actions->write_clipboard.empty());
+    CHECK(read_text_file(run.config.path() / "settings.json").find("\"fullscreenCopyOnSelect\": false") !=
+            std::string::npos);
+    close_run(run);
+}
+
 TEST_CASE("Native TUI fullscreen scrollbar row applies the resolved mode to the live transcript",
         "[coding_agent][tui][fullscreen][settings-selector][issue1020][spec]") {
     FullscreenRun run(R"({"tuiMode": "fullscreen"})");
@@ -462,6 +476,23 @@ TEST_CASE("Native TUI fullscreen copy-on-select row drives the real copy callbac
     REQUIRE(pump_until(run.io, [&] { return run.actions->write_clipboard.size() == 3; }));
     CHECK(run.actions->write_clipboard.back().text == "fake: 2");
 
+    close_run(run);
+}
+
+TEST_CASE("Native TUI product fullscreenWheelScrollLines changes the live one-notch scroll distance",
+        "[coding_agent][tui][fullscreen][wheel-lines][issue1125][spec]") {
+    FullscreenRun run(R"({"tuiMode": "fullscreen", "fullscreenWheelScrollLines": 2})");
+    run.start();
+    submit_turns(run.terminal, run.io, 12);
+
+    const auto turn = topmost_fake_turn(content_rows(run.terminal));
+    const auto before = fake_turn_row(content_rows(run.terminal), turn);
+    REQUIRE(before.has_value());
+    wheel_notch(run.terminal, "fake: " + std::to_string(turn));
+    REQUIRE(pump_until(run.io, [&] { return wheel_shift(content_rows(run.terminal), turn, *before).has_value(); }));
+    CHECK(wheel_shift(content_rows(run.terminal), turn, *before) == 2);
+    CHECK(read_text_file(run.config.path() / "settings.json").find("\"fullscreenWheelScrollLines\": 2") !=
+            std::string::npos);
     close_run(run);
 }
 

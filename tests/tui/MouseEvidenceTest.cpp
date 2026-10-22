@@ -8,11 +8,14 @@
 #include <cch/tui/Input.hpp>
 #include <cch/tui/Mouse.hpp>
 #include <cch/tui/MouseRegion.hpp>
+#include <cch/tui/Overlay.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
+#include "support/FullscreenKeybindings.hpp"
 #include "support/PiTuiEvidence.hpp"
+#include "support/RenderedScreen.hpp"
 #include "tui/Layout.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -75,6 +78,45 @@ using cch::tui::MouseEventType;
 [[nodiscard]] cch::support::Expected<JsonValue> named_bundle() {
     return cch::tests::read_pi_tui_evidence("mouse.json");
 }
+
+[[nodiscard]] cch::support::Expected<JsonValue> overlay_routing_bundle() {
+    return cch::tests::read_pi_v130_audit_evidence("audit-1050", "overlay-routing.json");
+}
+
+class OverlayWheelProbe final : public cch::tui::Component,
+                                public cch::tui::Focusable,
+                                public cch::tui::InputHandler,
+                                public cch::tui::MouseHandler {
+public:
+    explicit OverlayWheelProbe(bool consume_wheel) : consume_wheel_(consume_wheel) {}
+
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {"overlay"}};
+    }
+
+    void invalidate() override {}
+    void set_focused(bool focused) override { focused_ = focused; }
+    [[nodiscard]] bool focused() const override { return focused_; }
+
+    cch::tui::InputAdmissionOutcome handle_input(const cch::tui::InputEventVariant& input) override {
+        if (const auto* key = std::get_if<cch::tui::KeyEvent>(&input)) keys.push_back(key->key);
+        return cch::tui::InputAdmissionOutcome::Consumed;
+    }
+
+    [[nodiscard]] std::optional<cch::tui::MouseEventResult> handle_mouse(const MouseEvent& event) override {
+        if (event.type != MouseEventType::Wheel) return std::nullopt;
+        ++wheel_events;
+        if (consume_wheel_) return cch::tui::MouseEventResult{.handled = true};
+        return std::nullopt;
+    }
+
+    std::size_t wheel_events{0};
+    std::vector<std::string> keys;
+
+private:
+    bool consume_wheel_;
+    bool focused_{false};
+};
 
 [[nodiscard]] const JsonValue& scenario_of(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
@@ -483,6 +525,78 @@ TEST_CASE("a captured gesture follows the pointer outside its component and keep
     CHECK(frozen.at("hostFocus").at("focused").get_string() == "host");
     CHECK(inputs.at("host").at("hostHandlesInput").get_boolean());
     REQUIRE(host_tui.stop());
+}
+
+TEST_CASE("focused overlay wheel routing matches the frozen pi-v1.3.0 observation",
+        "[tui][mouse][overlay][issue1125][compat-pi]") {
+    const auto bundle = overlay_routing_bundle();
+    REQUIRE(bundle);
+    const auto& scenario = scenario_of(*bundle, "overlay-unhandled-wheel-scrolls-transcript");
+    const auto& frozen = scenario.at("expected");
+    const auto& viewport = frozen.at("viewportTop");
+
+    cch::tui::VirtualTerminal terminal({.columns = 20, .rows = 6});
+    cch::tui::AltScreen tui(terminal);
+    REQUIRE(tui.add_child(std::make_unique<cch::tui::Text>(numbered_text(12), 0, 0)));
+    tui.set_keybinding_context(std::make_shared<cch::tui::KeybindingsContext>(cch::tests::fullscreen_registry()));
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    CHECK(tui.viewport_top() == static_cast<std::size_t>(int_of(viewport.at("before"))));
+
+    auto overlay = std::make_unique<cch::tui::Overlay>();
+    auto* overlay_pointer = overlay.get();
+    overlay_pointer->set_options(cch::tui::OverlayOptions{
+            .width = cch::tui::SizeValue::absolute(10), .anchor = cch::tui::OverlayAnchor::TopLeft});
+    auto probe = std::make_unique<OverlayWheelProbe>(false);
+    auto* probe_pointer = probe.get();
+    REQUIRE(overlay_pointer->add_child(std::move(probe)));
+    REQUIRE(overlay_pointer->focus_first());
+    auto shown = tui.show_overlay(std::move(overlay));
+    REQUIRE(shown);
+    auto overlay_handle = std::move(*shown);
+    REQUIRE(tui.render());
+    CHECK(overlay_handle.is_focused() == frozen.at("overlayFocused").get_boolean());
+    CHECK(tui.viewport_top() == static_cast<std::size_t>(int_of(viewport.at("afterOverlay"))));
+
+    REQUIRE(terminal.inject_input("\x1b[<64;3;1M"));
+    REQUIRE(tui.render());
+    CHECK(probe_pointer->wheel_events == 1);
+    CHECK(tui.viewport_top() == static_cast<std::size_t>(int_of(viewport.at("afterWheel"))));
+    auto expected_screen = string_lines(frozen.at("screenAfterWheel"));
+    for (auto& row : expected_screen)
+        row = cch::tests::strip_ansi(row);
+    CHECK(terminal.screen() == expected_screen);
+
+    REQUIRE(terminal.inject_input("\x1b[6~"));
+    REQUIRE(tui.render());
+    CHECK(probe_pointer->keys == std::vector<std::string>{"pageDown"});
+    CHECK(tui.viewport_top() == static_cast<std::size_t>(int_of(viewport.at("afterPageDown"))));
+    CHECK(tui.stop());
+
+    cch::tui::VirtualTerminal consumed_terminal({.columns = 20, .rows = 6});
+    cch::tui::AltScreen consumed_tui(consumed_terminal);
+    REQUIRE(consumed_tui.add_child(std::make_unique<cch::tui::Text>(numbered_text(12), 0, 0)));
+    REQUIRE(consumed_tui.start());
+    REQUIRE(consumed_tui.render());
+    const auto consumed_top = consumed_tui.viewport_top();
+    auto consumed_overlay = std::make_unique<cch::tui::Overlay>(cch::tui::OverlayOptions{
+            .width = cch::tui::SizeValue::absolute(10), .anchor = cch::tui::OverlayAnchor::TopLeft});
+    auto consumed_probe = std::make_unique<OverlayWheelProbe>(true);
+    auto* consumed_probe_pointer = consumed_probe.get();
+    REQUIRE(consumed_overlay->add_child(std::move(consumed_probe)));
+    REQUIRE(consumed_overlay->focus_first());
+    auto consumed_handle = consumed_tui.show_overlay(std::move(consumed_overlay));
+    REQUIRE(consumed_handle);
+    REQUIRE(consumed_tui.render());
+    REQUIRE(consumed_handle->get_bounds());
+    CHECK(consumed_handle->get_bounds()->row == 0);
+    CHECK(consumed_handle->get_bounds()->col == 0);
+    CHECK(consumed_handle->get_bounds()->width == 10);
+    REQUIRE(consumed_terminal.inject_input("\x1b[<64;3;1M"));
+    REQUIRE(consumed_tui.render());
+    CHECK(consumed_probe_pointer->wheel_events == 1);
+    CHECK(consumed_tui.viewport_top() == consumed_top);
+    CHECK(consumed_tui.stop());
 }
 
 TEST_CASE("a consumed wheel report keeps the viewport and an unconsumed one scrolls it",

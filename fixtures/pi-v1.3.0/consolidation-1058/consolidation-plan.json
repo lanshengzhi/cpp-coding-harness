@@ -1196,6 +1196,109 @@
         "cch_durable:Session:subscribeClose"
       ],
       "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1121",
+      "artifact": "output-pad.json",
+      "scenario": "output-pad-reaches-the-tool-block-box",
+      "reason": "Captured by #1121 after the #1058 ledger was committed; no 1052 ledger row routes to the output-pad artifact, and linking it would silently upgrade cch_coding_agent:output-pad's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:output-pad",
+        "cch_tui:Box.setPaddingX"
+      ],
+      "disposition": "the dynamic-padding slice consumes this observation when it advances cch_coding_agent:output-pad, cch_tui:Box.setPaddingX and cch_tui:Text.setPaddingX beyond upstream-captured."
+    },
+    {
+      "family": "audit-1121",
+      "artifact": "output-pad.json",
+      "scenario": "output-pad-reaches-the-bash-block-text",
+      "reason": "Captured by #1121 after the #1058 ledger was committed; no 1052 ledger row routes to the output-pad artifact, and linking it would silently upgrade cch_coding_agent:output-pad's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:output-pad",
+        "cch_tui:Box.setPaddingX"
+      ],
+      "disposition": "the dynamic-padding slice consumes this observation when it advances cch_coding_agent:output-pad, cch_tui:Box.setPaddingX and cch_tui:Text.setPaddingX beyond upstream-captured."
+    },
+    {
+      "family": "audit-1121",
+      "artifact": "output-pad.json",
+      "scenario": "output-pad-reaches-the-custom-block-box",
+      "reason": "Captured by #1121 after the #1058 ledger was committed; no 1052 ledger row routes to the output-pad artifact, and linking it would silently upgrade cch_coding_agent:output-pad's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:output-pad",
+        "cch_tui:Box.setPaddingX"
+      ],
+      "disposition": "the dynamic-padding slice consumes this observation when it advances cch_coding_agent:output-pad, cch_tui:Box.setPaddingX and cch_tui:Text.setPaddingX beyond upstream-captured."
+    },
+    {
+      "family": "audit-1124",
+      "artifact": "clipboard-osc52.json",
+      "scenario": "osc52-opt-in-writes-the-sequence-for-a-desktop-session",
+      "reason": "Captured by #1124 after the #1058 ledger was committed; no 1051 ledger row routes to the clipboard artifact, and linking it would silently upgrade cch_coding_agent:osc52-opt-in's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:osc52-opt-in"
+      ],
+      "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-1124",
+      "artifact": "clipboard-osc52.json",
+      "scenario": "osc52-opt-in-writes-the-sequence-after-a-successful-copy",
+      "reason": "Captured by #1124 after the #1058 ledger was committed; no 1051 ledger row routes to the clipboard artifact, and linking it would silently upgrade cch_coding_agent:osc52-opt-in's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:osc52-opt-in"
+      ],
+      "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-1124",
+      "artifact": "clipboard-osc52.json",
+      "scenario": "osc52-opt-in-absent-reports-the-x11-failure",
+      "reason": "Captured by #1124 after the #1058 ledger was committed; no 1051 ledger row routes to the clipboard artifact, and linking it would silently upgrade cch_coding_agent:osc52-opt-in's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:osc52-opt-in"
+      ],
+      "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-1124",
+      "artifact": "clipboard-osc52.json",
+      "scenario": "osc52-opt-in-zero-is-not-an-opt-in",
+      "reason": "Captured by #1124 after the #1058 ledger was committed; no 1051 ledger row routes to the clipboard artifact, and linking it would silently upgrade cch_coding_agent:osc52-opt-in's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:osc52-opt-in"
+      ],
+      "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-1124",
+      "artifact": "clipboard-osc52.json",
+      "scenario": "osc52-opt-in-writes-the-largest-allowed-payload-in-full",
+      "reason": "Captured by #1124 after the #1058 ledger was committed; no 1051 ledger row routes to the clipboard artifact, and linking it would silently upgrade cch_coding_agent:osc52-opt-in's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:osc52-opt-in"
+      ],
+      "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-1124",
+      "artifact": "clipboard-osc52.json",
+      "scenario": "osc52-opt-in-rejects-one-byte-over-the-size-bound",
+      "reason": "Captured by #1124 after the #1058 ledger was committed; no 1051 ledger row routes to the clipboard artifact, and linking it would silently upgrade cch_coding_agent:osc52-opt-in's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:osc52-opt-in"
+      ],
+      "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-1124",
+      "artifact": "clipboard-osc52.json",
+      "scenario": "wsl-windows-terminal-prefers-osc52-before-the-remote-branch",
+      "reason": "Captured by #1124 after the #1058 ledger was committed; no 1051 ledger row routes to the clipboard artifact, and linking it would silently upgrade cch_coding_agent:osc52-opt-in's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:osc52-opt-in"
+      ],
+      "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
     }
   ],
   "groups": [

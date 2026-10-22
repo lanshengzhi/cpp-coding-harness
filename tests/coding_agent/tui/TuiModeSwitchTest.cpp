@@ -19,6 +19,7 @@
 #include "support/ModelsFixture.hpp"
 #include "support/PiTuiEvidence.hpp"
 #include "support/ProtocolRecordingTerminal.hpp"
+#include "support/PseudoTerminal.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
@@ -29,6 +30,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/ProcessTerminal.hpp>
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
@@ -350,6 +352,90 @@ TEST_CASE("Native TUI settings TUI mode row swaps the renderer and persists the 
     REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
     REQUIRE(run_result);
     CHECK(*run_result);
+    CHECK_FALSE(terminal.modes().started);
+    CHECK_FALSE(terminal.modes().alternate_screen);
+}
+
+TEST_CASE("Native TUI regular/fullscreen mode round trip refuses an overlay on a real PTY",
+        "[coding_agent][tui][fullscreen][overlays][pty][issue1125][spec]") {
+    tests::RuntimeFixture runtime;
+    tests::TempWorkspace workspace;
+    tests::TempWorkspace config;
+    config.write("settings.json", R"({"tuiMode": "regular"})");
+    auto created = runtime.run(
+            create_session_async(runtime, session_options(workspace, tests::make_scripted_fake_provider())));
+    REQUIRE(created);
+    tests::RuntimeLoopDriver runtime_driver(runtime);
+
+    auto pty = tests::open_pseudo_terminal(80, 24);
+    REQUIRE(pty);
+    boost::asio::io_context io;
+    tui::ProcessTerminal terminal(
+            {.input_fd = pty->slave.get(), .output_fd = pty->slave.get(), .executor = io.get_executor()});
+    auto engine = std::make_shared<coding_agent::tui::InteractiveEngine>(
+            terminal, io.get_executor(), coding_agent::TuiMode::Regular);
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            drive_engine(engine, make_run(*created->session, config.path(), coding_agent::TuiMode::Regular)),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    const tests::RunJoinGuard join_run{io, [&] { return run_result.has_value(); }};
+
+    std::string bytes;
+    REQUIRE(pump_until(io, [&] {
+        drain_ready(io);
+        bytes += tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+        return terminal.modes().started;
+    }));
+    REQUIRE_FALSE(terminal.modes().alternate_screen);
+    constexpr std::string_view prompt = "pty mode transcript\r";
+    REQUIRE(::write(pty->master.get(), prompt.data(), prompt.size()) == static_cast<ssize_t>(prompt.size()));
+    REQUIRE(pump_until(io, [&] {
+        drain_ready(io);
+        bytes += tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+        return bytes.find("fake: pty mode transcript") != std::string::npos;
+    }));
+    auto switched_fullscreen = engine->switch_tui_mode(coding_agent::TuiMode::Fullscreen);
+    REQUIRE(switched_fullscreen);
+    REQUIRE(*switched_fullscreen);
+    REQUIRE(pump_until(io, [&] {
+        drain_ready(io);
+        bytes += tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+        return terminal.modes().alternate_screen;
+    }));
+
+    auto& presenter = static_cast<coding_agent::tui::ModalPresenter&>(*engine);
+    auto overlay = std::make_unique<tui::Overlay>(tui::OverlayOptions{.non_capturing = true});
+    presenter.show_overlay(std::move(overlay));
+    drain_ready(io);
+    auto refused = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(refused);
+    CHECK_FALSE(*refused);
+    CHECK(terminal.modes().alternate_screen);
+    CHECK(terminal.modes().started);
+    presenter.close_overlay();
+    drain_ready(io);
+
+    auto switched_regular = engine->switch_tui_mode(coding_agent::TuiMode::Regular);
+    REQUIRE(switched_regular);
+    REQUIRE(*switched_regular);
+    REQUIRE(pump_until(io, [&] {
+        drain_ready(io);
+        bytes += tests::read_available(pty->master.get(), std::chrono::milliseconds(10));
+        return !terminal.modes().alternate_screen;
+    }));
+    CHECK(terminal.modes().started);
+    CHECK(bytes.find("pty mode transcript") != std::string::npos);
+
+    const char ctrl_d = '\x04';
+    REQUIRE(::write(pty->master.get(), &ctrl_d, 1) == 1);
+    REQUIRE(pump_until(io, [&] { return run_result.has_value(); }));
+    REQUIRE(run_result);
+    CHECK(*run_result);
+    bytes += tests::read_available(pty->master.get());
+    CHECK(bytes.find("pty mode transcript") != std::string::npos);
     CHECK_FALSE(terminal.modes().started);
     CHECK_FALSE(terminal.modes().alternate_screen);
 }
@@ -2242,8 +2328,8 @@ TEST_CASE("Native TUI TUI mode switch preserves live hardware cursor preference 
     }
 }
 
-TEST_CASE("Native TUI settings hardware cursor row toggles live preference and persists setting",
-        "[coding_agent][tui][cursor][settings-selector][issue1037][spec]") {
+TEST_CASE("Native TUI product showHardwareCursor setting controls cursor visibility at the run entry",
+        "[coding_agent][tui][cursor][settings-selector][issue1125][spec]") {
     tests::EnvVarGuard env_guard{"PI_HARDWARE_CURSOR"};
     env_guard.unset();
 
