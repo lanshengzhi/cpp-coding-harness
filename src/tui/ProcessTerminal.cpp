@@ -1668,21 +1668,37 @@ support::ExpectedVoid ProcessTerminal::stop(TerminalStopOptions options) {
             retain_error(result, flush_synchronized_update_locked(*impl_));
         }
 
-        // 1. Paste off
-        bool bracketed_paste_enqueued = false;
-        if (impl_->modes.bracketed_paste) {
-            if (auto res = enqueue_output(*impl_, kBracketedPasteDisable); res) {
-                bracketed_paste_enqueued = true;
+        // 1. Restore autowrap before the terminal stop sequence.
+        bool autowrap_enqueued = false;
+        if (!impl_->modes.autowrap) {
+            if (auto res = enqueue_output(*impl_, kEnableAutowrap); res) {
+                autowrap_enqueued = true;
             } else {
                 retain_error(result, std::move(res));
             }
         }
 
-        // 2. Keyboard disables
-        bool modify_other_keys_enqueued = false;
-        if (impl_->modify_other_keys_active) {
-            if (auto res = enqueue_output(*impl_, kModifyOtherKeysDisable); res) {
-                modify_other_keys_enqueued = true;
+        // 2. Clear terminal progress and program status before disabling input modes.
+        bool progress_enqueued = false;
+        if (impl_->progress_active) {
+            if (auto res = enqueue_output(*impl_, kProgressClearSequence); res) {
+                progress_enqueued = true;
+            } else {
+                retain_error(result, std::move(res));
+            }
+        }
+        if (impl_->program_status_supported && impl_->program_status) {
+            retain_error(result,
+                    enqueue_output(*impl_, format_program_status(ProgramStatus{.state = ProgramStatus::State::Clear})));
+        }
+        impl_->program_status_supported = false;
+        impl_->program_status_query_pending = false;
+
+        // 3. Disable paste, then pop Kitty and disable modifyOtherKeys.
+        bool bracketed_paste_enqueued = false;
+        if (impl_->modes.bracketed_paste) {
+            if (auto res = enqueue_output(*impl_, kBracketedPasteDisable); res) {
+                bracketed_paste_enqueued = true;
             } else {
                 retain_error(result, std::move(res));
             }
@@ -1695,8 +1711,16 @@ support::ExpectedVoid ProcessTerminal::stop(TerminalStopOptions options) {
                 retain_error(result, std::move(res));
             }
         }
+        bool modify_other_keys_enqueued = false;
+        if (impl_->modify_other_keys_active) {
+            if (auto res = enqueue_output(*impl_, kModifyOtherKeysDisable); res) {
+                modify_other_keys_enqueued = true;
+            } else {
+                retain_error(result, std::move(res));
+            }
+        }
 
-        // 3. Input raw restore (before final sync altExit) using TCSANOW.
+        // 4. Restore raw input with TCSANOW before the final synchronized altExit.
         // TCSANOW ensures we do not block waiting for saturated output buffers to drain.
         if (impl_->has_original_termios) {
             if (::tcsetattr(impl_->options.input_fd, TCSANOW, &impl_->original_termios) == 0) {
@@ -1713,39 +1737,6 @@ support::ExpectedVoid ProcessTerminal::stop(TerminalStopOptions options) {
             }
         }
 
-        // 4. Autowrap restore if disabled directly via API
-        bool autowrap_enqueued = false;
-        if (!impl_->modes.autowrap) {
-            if (auto res = enqueue_output(*impl_, kEnableAutowrap); res) {
-                autowrap_enqueued = true;
-            } else {
-                retain_error(result, std::move(res));
-            }
-        }
-
-        // 5. Final SYNC altExit / show
-        constexpr std::string_view kFinalAlternateRestoreFrame = "\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l";
-        bool alt_restore_enqueued = false;
-        if (auto res = enqueue_output(*impl_, kFinalAlternateRestoreFrame); res) {
-            alt_restore_enqueued = true;
-        } else {
-            retain_error(result, std::move(res));
-        }
-
-        bool progress_enqueued = false;
-        if (impl_->progress_active) {
-            if (auto res = enqueue_output(*impl_, kProgressClearSequence); res) {
-                progress_enqueued = true;
-            } else {
-                retain_error(result, std::move(res));
-            }
-        }
-        if (impl_->program_status_supported && impl_->program_status) {
-            retain_error(result,
-                    enqueue_output(*impl_, format_program_status(ProgramStatus{.state = ProgramStatus::State::Clear})));
-        }
-        impl_->program_status_supported = false;
-        impl_->program_status_query_pending = false;
         bool margins_enqueued = false;
         if (impl_->margins_active) {
             if (auto res = enqueue_output(*impl_, "\x1b[r"); res) {
@@ -1753,6 +1744,15 @@ support::ExpectedVoid ProcessTerminal::stop(TerminalStopOptions options) {
             } else {
                 retain_error(result, std::move(res));
             }
+        }
+
+        // 5. Final SYNC altExit / show, after terminal modes and buffers are restored.
+        constexpr std::string_view kFinalAlternateRestoreFrame = "\x1b[?2026h\x1b[?1049l\x1b[?25h\x1b[?2026l";
+        bool alt_restore_enqueued = false;
+        if (auto res = enqueue_output(*impl_, kFinalAlternateRestoreFrame); res) {
+            alt_restore_enqueued = true;
+        } else {
+            retain_error(result, std::move(res));
         }
 
         // 6. Drain output BEFORE restoring descriptor flags.

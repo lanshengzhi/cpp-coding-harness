@@ -1979,7 +1979,6 @@ bool AltScreen::handle_wheel_report(const detail::MousePacket& packet) {
         if (apply_mouse_dispatch_result(event, *result)) request_render();
         return true;
     }
-    if (should_defer_viewport_input_to_overlay()) return false;
     route_wheel(event, delta);
     return true;
 }
