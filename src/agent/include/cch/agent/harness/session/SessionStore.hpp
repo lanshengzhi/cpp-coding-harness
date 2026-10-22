@@ -44,12 +44,18 @@ namespace cch::harness::session {
 /// (`SessionManager.getHeader`/`getEntries`/`getLeafId`): the header object
 /// and every tracked entry object, each as one JSON object without its line
 /// terminator, in store order.
+/// The wire snapshot is a typed value contract, not an unstructured JSON
+/// fact: every member is a standard-library type, and the JSON text is the
+/// product of a private serializer that `cch_agent_core` does not expose
+/// (ADR 0039 keeps serialization DTOs private). The caller needs the exact
+/// bytes, not a JSON tree, because pi's `JSON.stringify` observes JavaScript
+/// member order and `support::JsonValue` stores objects in a `std::map`.
 struct SessionWireSnapshot {
-    std::string header;
-    std::vector<std::string> entries;
+    std::string header{};
+    std::vector<std::string> entries{};
     /// pi `getLeafId`: the active leaf entry id; empty at the root position
     /// (the caller maps that to JSON null).
-    std::string leaf_id;
+    std::string leaf_id{};
 };
 
 class SessionStore final {
