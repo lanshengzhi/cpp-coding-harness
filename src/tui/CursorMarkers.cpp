@@ -49,24 +49,37 @@ std::vector<std::string> resolve_fake_cursors(const std::vector<std::string>& li
         // wrappers; the cell's text itself stays (pi's `FOCUSED_FAKE_CURSOR`
         // replacement keeps the captured cell text). A fake cursor of an
         // unfocused component carries no marker and stays visible.
+        //
+        // The search is for the first `kCursorMarker` that is IMMEDIATELY
+        // followed by `kFakeCursorStart`, not for the first marker in the
+        // line: pi's `FOCUSED_FAKE_CURSOR` regex is
+        // `(CURSOR_MARKER)FAKE_CURSOR_START(.*?)(?:FAKE_CURSOR_END|$)`, so an
+        // unpaired marker earlier in the line must not hide a paired fake
+        // cursor later in it.
         if (show_hardware_cursor) {
-            const auto marker = working.find(kCursorMarker);
+            auto marker = working.find(kCursorMarker);
+            while (marker != std::string::npos &&
+                    working.compare(marker + kCursorMarker.size(), kFakeCursorStart.size(), kFakeCursorStart) != 0) {
+                marker = working.find(kCursorMarker, marker + kCursorMarker.size());
+            }
             if (marker != std::string::npos) {
                 const auto start = marker + kCursorMarker.size();
-                if (working.compare(start, kFakeCursorStart.size(), kFakeCursorStart) == 0) {
-                    const auto cell_start = start + kFakeCursorStart.size();
-                    const auto end = working.find(kFakeCursorEnd, cell_start);
-                    // A truncated line keeps the opening marker only; the
-                    // closing marker is then absent and the rest of the line
-                    // is the cursor cell.
-                    //
-                    // Remove the closing marker, then the opening marker; the
-                    // cell text between them stays.
-                    if (end != std::string::npos) {
-                        working.erase(end, kFakeCursorEnd.size());
-                    }
-                    working.erase(start, kFakeCursorStart.size());
+                const auto cell_start = start + kFakeCursorStart.size();
+                const auto end = working.find(kFakeCursorEnd, cell_start);
+                // The frozen replacement consumes the closing marker with the
+                // match: for `"abc" + M + S + "d" + E + "ef"`,
+                // `line.replace(FOCUSED_FAKE_CURSOR, "$1$2")` yields
+                // `abc` + M + `def`, so no `E` survives and no `\x1b[27m` is
+                // emitted. Erasing it here is the same result. A truncated
+                // line has no closing marker and the rest of the line is the
+                // cursor cell.
+                //
+                // Remove the closing marker, then the opening marker; the
+                // cell text between them stays.
+                if (end != std::string::npos) {
+                    working.erase(end, kFakeCursorEnd.size());
                 }
+                working.erase(start, kFakeCursorStart.size());
             }
         }
 

@@ -209,8 +209,11 @@ namespace {
         // cursor-marker APC (`ESC _ pi:...`) is a zero-width marker the
         // fake/hardware cursor layer emits (pi `CURSOR_MARKER`,
         // `FAKE_CURSOR_START`, `FAKE_CURSOR_END`). Both are accepted as
-        // zero-width control tokens.
-        if (position + 2 >= text.size() || (text[position + 2] != 'G' && text[position + 2] != 'p')) {
+        // zero-width control tokens; any other APC payload stays unsupported
+        // rather than silently becoming zero-width.
+        const auto is_kitty_graphics = position + 2 < text.size() && text[position + 2] == 'G';
+        const auto is_cursor_marker = text.compare(position + 2, 3, "pi:") == 0;
+        if (!is_kitty_graphics && !is_cursor_marker) {
             return std::unexpected(invalid_terminal_text("Unsupported ANSI escape sequence"));
         }
         std::size_t cursor = position + 3;

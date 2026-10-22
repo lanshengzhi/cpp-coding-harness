@@ -57,8 +57,9 @@ inline constexpr std::string_view kFakeCursorEnd{"\x1b_pi:/fc\x07"};
 /// Resolve the fake-cursor markers of `lines` into the drawn cursor (pi
 /// `resolveFakeCursors`).
 ///
-/// With `show_hardware_cursor`, the focused fake cursor — the one whose cell
-/// immediately follows `kCursorMarker` — loses its reverse-video wrappers,
+/// With `show_hardware_cursor`, the focused fake cursor — the first
+/// `kCursorMarker` immediately followed by `kFakeCursorStart`, as pi's
+/// `FOCUSED_FAKE_CURSOR` regex matches it — loses its reverse-video wrappers,
 /// because the terminal cursor is drawn at that position. Every other fake
 /// cursor resolves to the reverse-video SGR pair. The cursor marker itself is
 /// left in place: the extraction stage reads it after the overlay
@@ -70,6 +71,12 @@ inline constexpr std::string_view kFakeCursorEnd{"\x1b_pi:/fc\x07"};
 /// the lines (pi `extractCursorPosition`). Only the visible viewport is
 /// scanned, from its bottom row upwards. The lines are modified in place:
 /// the marker never reaches the terminal.
+///
+/// The one C++ extension over frozen pi: when no line carries a marker, the
+/// renderer falls back to the compositor's overlay cursor and then to the
+/// focused component's `cursor_location()`. Frozen's main screen has no
+/// out-of-band cursor source, so those two are only reachable on a frame that
+/// carries no marker at all.
 [[nodiscard]] std::optional<CursorPosition> extract_cursor_position(
         std::vector<std::string>& lines, std::size_t viewport_height);
 

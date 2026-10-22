@@ -604,17 +604,19 @@ support::ExpectedVoid MainScreen::render_frame() {
     // bounded by the viewport, only by the composed buffer itself.
     auto materialized = detail::OverlayCompositor::materialize_images(
             std::move(*rendered), capabilities, dimensions.columns, std::numeric_limits<std::size_t>::max());
-    if (auto overlay_result = compositor_->composite(dimensions, capabilities, materialized); !overlay_result) {
+    if (auto overlay_result = compositor_->composite(dimensions, capabilities, materialized, show_hardware_cursor());
+            !overlay_result) {
         return std::unexpected(overlay_result.error());
     }
     // The cursor position the marker carried is the terminal cursor position
     // (pi `extractCursorPosition`): the marker is measured on the text before
-    // it, and the marker itself is removed from the emitted line. The
-    // out-of-band component position stays the fallback for a frame that
-    // carries no marker.
+    // it, and the marker itself is removed from the emitted line. Frozen pi's
+    // main screen has no out-of-band cursor source at all, so the marker wins
+    // over the compositor's overlay cursor; both are C++ fallbacks for a frame
+    // that carries no marker.
     const auto marker_cursor = extract_cursor_position(materialized.lines, dimensions.rows);
     const auto cursor_location =
-            materialized.cursor ? materialized.cursor : (marker_cursor ? marker_cursor : resolve_cursor_location());
+            marker_cursor ? marker_cursor : (materialized.cursor ? materialized.cursor : resolve_cursor_location());
     materialized.cursor.reset();
     auto result = render_pipeline_->render(std::move(materialized),
             dimensions,

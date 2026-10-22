@@ -3,8 +3,9 @@
 // fixtures/pi-v1.3.0/audit-1050/cursor-composition.json (revision
 // 71023aec1546): `standalone-editor-fake-cursor-is-strippable`,
 // `main-screen-focused-hardware-cursor-omits-fake-cursor`,
-// `main-screen-unfocused-fake-cursor-stays-visible` and
-// `truncated-line-drops-unterminated-fake-cursor`.
+// `main-screen-unfocused-fake-cursor-stays-visible`,
+// `truncated-line-drops-unterminated-fake-cursor` and the two
+// `overlay-left-of-cursor-keeps-cursor-*` composition scenarios.
 //
 // The public caller is the real `Editor`/`Input` component rendered through
 // `MainScreen` into a recording terminal: the marker bytes, the stripped text
@@ -15,9 +16,11 @@
 // because a terminal that honours the marker as zero-width never sees them.
 
 #include <cch/tui/Component.hpp>
+#include <cch/tui/CursorMarkers.hpp>
 #include <cch/tui/Editor.hpp>
 #include <cch/tui/ITui.hpp>
 #include <cch/tui/Input.hpp>
+#include <cch/tui/Overlay.hpp>
 #include <cch/tui/Tui.hpp>
 #include <cch/tui/Utils.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -27,9 +30,6 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <cstddef>
-#include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <memory>
 #include <optional>
 #include <string>
@@ -40,40 +40,14 @@ namespace {
 
 using cch::support::JsonValue;
 
-/// The frozen marker bytes (pi `tui.ts` at the registered revision).
-constexpr std::string_view kCursorMarker = "\x1b_pi:c\x07";
-constexpr std::string_view kFakeCursorStart = "\x1b_pi:fc\x07";
-constexpr std::string_view kFakeCursorEnd = "\x1b_pi:/fc\x07";
+/// The frozen pi-v1.3.0 revision the registered audit evidence was captured at.
+constexpr std::string_view kFrozenRevision{"71023aec1546d6d677a65669c5665c0927ce0dd0"};
+constexpr std::string_view kFrozenSchema{"pike/pi-v1.3.0-audit-evidence/1"};
 
 /// The reverse-video rendering the marker layer resolves to (pi
 /// `resolveFakeCursors`).
 constexpr std::string_view kReverseVideoOn = "\x1b[7m";
 constexpr std::string_view kReverseVideoOff = "\x1b[27m";
-
-/// Read the registered frozen artifact through the named evidence chain, so a
-/// tampered or unregistered artifact cannot become the expectation.
-[[nodiscard]] cch::support::Expected<JsonValue> read_cursor_composition() {
-    const auto runner = std::filesystem::path{CCH_SOURCE_DIR} / "scripts/evidence/audit_evidence.py";
-    const std::string command =
-            "python3 " + runner.string() + " read --family audit-1050 --artifact cursor-composition.json";
-    std::FILE* pipe = ::popen(command.c_str(), "r");
-    if (pipe == nullptr) {
-        return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Unknown, "Failed to start the audit evidence reader"));
-    }
-    std::string payload;
-    std::vector<char> buffer(4096);
-    while (std::size_t count = ::fread(buffer.data(), 1, buffer.size(), pipe)) {
-        payload.append(buffer.data(), count);
-    }
-    const bool read_failed = std::ferror(pipe) != 0;
-    const int status = ::pclose(pipe);
-    if (read_failed || status != 0) {
-        return std::unexpected(cch::support::make_error(
-                cch::support::ErrorCode::Unknown, "Named pi-v1.3.0 cursor evidence verification failed"));
-    }
-    return cch::support::read_json(payload);
-}
 
 [[nodiscard]] const JsonValue& find_scenario(const JsonValue& bundle, std::string_view name) {
     for (const auto& scenario : bundle.at("scenarios").get_array()) {
@@ -81,6 +55,13 @@ constexpr std::string_view kReverseVideoOff = "\x1b[27m";
     }
     FAIL("frozen scenario not found: " << std::string{name});
     return bundle;
+}
+
+[[nodiscard]] std::vector<std::string> strings_of(const JsonValue& value) {
+    std::vector<std::string> strings;
+    for (const auto& entry : value.get_array())
+        strings.emplace_back(entry.get_string());
+    return strings;
 }
 
 [[nodiscard]] std::size_t count_occurrences(std::string_view haystack, std::string_view needle) {
@@ -98,12 +79,122 @@ constexpr std::string_view kReverseVideoOff = "\x1b[27m";
     return haystack.find(needle) != std::string_view::npos;
 }
 
-/// Every byte the terminal received, concatenated in write order.
+/// Every byte the terminal received, concatenated in write order. pi records a
+/// frame as a list of writes; the C++ pipeline may split the same bytes at
+/// different boundaries, so the comparison is over the concatenation.
 [[nodiscard]] std::string all_output(const cch::tui::VirtualTerminal& terminal) {
     std::string joined;
     for (const auto& write : terminal.output())
         joined += write;
     return joined;
+}
+
+[[nodiscard]] std::string join(const std::vector<std::string>& writes) {
+    std::string joined;
+    for (const auto& write : writes)
+        joined += write;
+    return joined;
+}
+
+/// `text` with every escape sequence removed. The general
+/// `strip_terminal_sequences` only knows the finals it tracks; a frame also
+/// carries the synchronized-output marker (`CSI ?2026h`), whose `h` final it
+/// does not, so the frame comparison needs the general form.
+[[nodiscard]] std::string without_sequences(std::string_view text) {
+    std::string result;
+    std::size_t position = 0;
+    while (position < text.size()) {
+        if (text[position] != '\x1b') {
+            result += text[position];
+            ++position;
+            continue;
+        }
+        if (position + 1 >= text.size()) break;
+        const auto kind = text[position + 1];
+        if (kind == '[') {
+            std::size_t cursor = position + 2;
+            while (cursor < text.size() && (static_cast<unsigned char>(text[cursor]) < 0x40 ||
+                                                   static_cast<unsigned char>(text[cursor]) > 0x7E)) {
+                ++cursor;
+            }
+            position = cursor < text.size() ? cursor + 1 : text.size();
+            continue;
+        }
+        std::size_t cursor = position + 2;
+        std::size_t terminator = 0;
+        while (cursor < text.size()) {
+            if (text[cursor] == '\x07') {
+                terminator = 1;
+                break;
+            }
+            if (text[cursor] == '\x1b' && cursor + 1 < text.size() && text[cursor + 1] == '\\') {
+                terminator = 2;
+                break;
+            }
+            ++cursor;
+        }
+        position = terminator == 0 ? text.size() : cursor + terminator;
+    }
+    return result;
+}
+
+/// The drawn cells of each row of `frame`, right-trimmed.
+[[nodiscard]] std::vector<std::string> drawn_rows(std::string_view frame) {
+    std::vector<std::string> rows;
+    std::size_t start = 0;
+    while (start <= frame.size()) {
+        const auto end = frame.find('\n', start);
+        auto row = without_sequences(
+                frame.substr(start, end == std::string_view::npos ? std::string_view::npos : end - start));
+        while (!row.empty() && (row.back() == ' ' || row.back() == '\r'))
+            row.pop_back();
+        rows.push_back(std::move(row));
+        if (end == std::string_view::npos) break;
+        start = end + 1;
+    }
+    return rows;
+}
+
+/// Every reverse-video SGR byte `frame` draws, in order. This is the fake
+/// cursor itself, so it is compared exactly.
+[[nodiscard]] std::string reverse_video_bytes(std::string_view frame) {
+    std::string bytes;
+    for (std::size_t position = frame.find(kReverseVideoOn); position != std::string_view::npos;
+            position = frame.find(kReverseVideoOn, position + kReverseVideoOn.size())) {
+        bytes.append(kReverseVideoOn);
+    }
+    for (std::size_t position = frame.find(kReverseVideoOff); position != std::string_view::npos;
+            position = frame.find(kReverseVideoOff, position + kReverseVideoOff.size())) {
+        bytes.append(kReverseVideoOff);
+    }
+    return bytes;
+}
+
+/// The hardware-cursor positioning `frame` ends with (`CSI n G`), or nothing
+/// when it does not reposition the cursor.
+[[nodiscard]] std::string cursor_suffix(std::string_view frame) {
+    const auto end = frame.rfind('G');
+    if (end == std::string_view::npos) return {};
+    const auto start = frame.rfind("\x1b[", end);
+    if (start == std::string_view::npos) return {};
+    return std::string{frame.substr(start, end - start + 1)};
+}
+
+/// Compare `output` against the artifact's recorded `writes`.
+///
+/// The compared properties are the ones this ticket owns: the drawn cells, the
+/// reverse-video bytes (the fake cursor) and the hardware-cursor positioning.
+/// Two pre-existing frame-writing conventions are not compared, because the C++
+/// pipeline already differed from frozen there before the marker layer: it pads
+/// every composed row to the terminal width at the frame boundary while frozen
+/// pads inside the component, and it closes a spliced region with one
+/// `SEGMENT_RESET` where frozen opens and closes the region with one each.
+void check_frame_matches_frozen(std::string_view output, const std::vector<std::string>& frozen_writes) {
+    const auto frozen = join(frozen_writes);
+    INFO("FROZEN: " << frozen);
+    CHECK(drawn_rows(output) == drawn_rows(frozen));
+    CHECK(reverse_video_bytes(output) == reverse_video_bytes(frozen));
+    CHECK(cursor_suffix(output) == cursor_suffix(frozen));
 }
 
 /// A component whose rendered line is frozen text, used to replay the
@@ -132,7 +223,7 @@ private:
 class ConflictingCursorChild final : public cch::tui::Component, public cch::tui::Focusable {
 public:
     [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
-        return cch::tui::RenderResult{.lines = {std::string{"abc"} + std::string{kCursorMarker}}};
+        return cch::tui::RenderResult{.lines = {std::string{"abc"} + std::string{cch::tui::kCursorMarker}}};
     }
 
     [[nodiscard]] std::optional<cch::tui::CursorPosition> cursor_location() const override {
@@ -152,8 +243,11 @@ private:
 
 TEST_CASE("the standalone editor draws a strippable fake cursor marker",
         "[tui][cursor-marker][issue1120][compat-pi][spec]") {
-    const auto bundle = read_cursor_composition();
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
     REQUIRE(bundle.has_value());
+    CHECK(bundle->at("schema").get_string() == kFrozenSchema);
+    CHECK(bundle->at("revision").get_string() == kFrozenRevision);
+
     const auto& scenario = find_scenario(*bundle, "standalone-editor-fake-cursor-is-strippable");
     const auto& expected = scenario.at("expected");
     const auto& frozen_lines = expected.at("rawLines").get_array();
@@ -180,7 +274,7 @@ TEST_CASE("the standalone editor draws a strippable fake cursor marker",
         // The frozen artifact is the expectation; the C++ line must carry the
         // same marker bytes in the same order.
         CHECK(line == frozen_lines[index].get_string());
-        marker_count += count_occurrences(line, kFakeCursorStart);
+        marker_count += count_occurrences(line, cch::tui::kFakeCursorStart);
         // The marker pair is strippable: removing the zero-width APC sequences
         // leaves exactly the frozen visible text.
         CHECK(cch::tui::strip_terminal_sequences(line) == frozen_stripped[index].get_string());
@@ -200,9 +294,9 @@ TEST_CASE("the standalone editor fake cursor marker pair is strippable and order
 
     const auto& content = rendered->lines[1];
     // The marker pair brackets exactly one grapheme and appears once.
-    CHECK(count_occurrences(content, kFakeCursorStart) == 1);
-    CHECK(count_occurrences(content, kFakeCursorEnd) == 1);
-    CHECK(content.find(kFakeCursorStart) < content.find(kFakeCursorEnd));
+    CHECK(count_occurrences(content, cch::tui::kFakeCursorStart) == 1);
+    CHECK(count_occurrences(content, cch::tui::kFakeCursorEnd) == 1);
+    CHECK(content.find(cch::tui::kFakeCursorStart) < content.find(cch::tui::kFakeCursorEnd));
 
     // Stripping the markers leaves the frozen visible text; the reverse-video
     // bytes are not part of the standalone contract.
@@ -213,7 +307,7 @@ TEST_CASE("the standalone editor fake cursor marker pair is strippable and order
 
 TEST_CASE("hardware cursor mode omits the focused fake cursor while the unfocused one stays visible",
         "[tui][cursor-marker][issue1120][compat-pi][spec]") {
-    const auto bundle = read_cursor_composition();
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
     REQUIRE(bundle.has_value());
 
     const auto render_input = [](bool show_hardware_cursor, bool focus) {
@@ -238,6 +332,7 @@ TEST_CASE("hardware cursor mode omits the focused fake cursor while the unfocuse
     SECTION("the focused fake cursor is omitted when the hardware cursor is shown") {
         const auto& scenario = find_scenario(*bundle, "main-screen-focused-hardware-cursor-omits-fake-cursor");
         const auto& expected = scenario.at("expected");
+        const auto expected_writes = strings_of(expected.at("writes"));
         const auto expected_fake_cursor_visible = expected.at("fakeCursorVisible").get_boolean();
         const auto expected_hardware_positioned = expected.at("hardwareCursorPositioned").get_boolean();
 
@@ -247,52 +342,63 @@ TEST_CASE("hardware cursor mode omits the focused fake cursor while the unfocuse
         // ABSENT. A cursor that is strippable but still drawn fails here.
         CHECK_FALSE(contains(output, kReverseVideoOn));
         CHECK_FALSE(contains(output, kReverseVideoOff));
-        CHECK_FALSE(contains(output, kFakeCursorStart));
-        CHECK_FALSE(contains(output, kFakeCursorEnd));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorStart));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorEnd));
         // The marker is consumed too: it never reaches the terminal.
-        CHECK_FALSE(contains(output, kCursorMarker));
-        // The visible text is unchanged.
-        CHECK(contains(output, "> abc"));
+        CHECK_FALSE(contains(output, cch::tui::kCursorMarker));
         CHECK(expected_fake_cursor_visible == false);
         CHECK(expected_hardware_positioned == true);
+
+        // The recorded frame bytes are the expectation, not a hand-written
+        // substring of them.
+        REQUIRE_FALSE(expected_writes.empty());
+        check_frame_matches_frozen(output, expected_writes);
     }
 
     SECTION("the focused fake cursor is drawn when the hardware cursor is hidden") {
         const auto& scenario = find_scenario(*bundle, "main-screen-focused-fake-cursor-drawn");
         const auto& expected = scenario.at("expected");
+        const auto expected_writes = strings_of(expected.at("writes"));
         const auto expected_fake_cursor_visible = expected.at("fakeCursorVisible").get_boolean();
 
         const auto output = render_input(false, true);
 
         CHECK(contains(output, "\x1b[7ma\x1b[27m"));
-        CHECK_FALSE(contains(output, kFakeCursorStart));
-        CHECK_FALSE(contains(output, kCursorMarker));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorStart));
+        CHECK_FALSE(contains(output, cch::tui::kCursorMarker));
         CHECK(expected_fake_cursor_visible == true);
+
+        REQUIRE_FALSE(expected_writes.empty());
+        check_frame_matches_frozen(output, expected_writes);
     }
 
     SECTION("an unfocused fake cursor stays visible in hardware cursor mode") {
         const auto& scenario = find_scenario(*bundle, "main-screen-unfocused-fake-cursor-stays-visible");
         const auto& expected = scenario.at("expected");
+        const auto expected_writes = strings_of(expected.at("writes"));
         const auto expected_fake_cursor_visible = expected.at("fakeCursorVisible").get_boolean();
         const auto expected_hardware_positioned = expected.at("hardwareCursorPositioned").get_boolean();
 
         const auto output = render_input(true, false);
 
-        INFO("OUTPUT: " << output);
         CHECK(contains(output, "\x1b[7ma\x1b[27m"));
-        CHECK_FALSE(contains(output, kFakeCursorStart));
-        CHECK_FALSE(contains(output, kCursorMarker));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorStart));
+        CHECK_FALSE(contains(output, cch::tui::kCursorMarker));
         CHECK(expected_fake_cursor_visible == true);
         CHECK(expected_hardware_positioned == false);
+
+        REQUIRE_FALSE(expected_writes.empty());
+        check_frame_matches_frozen(output, expected_writes);
     }
 }
 
 TEST_CASE("a truncated line drops the unterminated fake cursor marker",
         "[tui][cursor-marker][issue1120][compat-pi][spec]") {
-    const auto bundle = read_cursor_composition();
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
     REQUIRE(bundle.has_value());
     const auto& scenario = find_scenario(*bundle, "truncated-line-drops-unterminated-fake-cursor");
     const auto& expected = scenario.at("expected");
+    const auto expected_writes = strings_of(expected.at("writes"));
     const auto expected_fake_cursor_visible = expected.at("fakeCursorVisible").get_boolean();
 
     // The frozen line is truncated right after the cursor cell, which drops the
@@ -319,8 +425,127 @@ TEST_CASE("a truncated line drops the unterminated fake cursor marker",
     CHECK_FALSE(contains(output, kReverseVideoOn));
     CHECK_FALSE(contains(output, kReverseVideoOff));
     // The visible text before the truncation survives.
-    CHECK(contains(output, "ab"));
+    CHECK(contains(output, "abc"));
     CHECK(expected_fake_cursor_visible == false);
+
+    REQUIRE_FALSE(expected_writes.empty());
+    check_frame_matches_frozen(output, expected_writes);
+}
+
+TEST_CASE("an overlay's focused fake cursor resolves before it is spliced",
+        "[tui][cursor-marker][issue1120][compat-pi][spec]") {
+    // Frozen pi resolves an overlay's own rendered lines before splicing them
+    // (pi `tui.ts` `compositeOverlays`: `this.resolveFakeCursors(component.render(width))`).
+    // Without that stage the overlay's marker bytes reach the terminal and its
+    // drawn cursor loses its reverse video.
+    const auto bundle = cch::tests::read_pi_v130_audit_evidence("audit-1050", "cursor-composition.json");
+    REQUIRE(bundle.has_value());
+
+    const auto render_overlay = [](bool show_hardware_cursor) {
+        cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{.columns = 20, .rows = 5});
+        cch::tui::MainScreen main_screen{terminal, show_hardware_cursor};
+        REQUIRE(main_screen.add_child(std::make_unique<FrozenLineChild>("abc" + std::string{cch::tui::kCursorMarker} +
+                                                                        std::string{cch::tui::kFakeCursorStart} + "d" +
+                                                                        std::string{cch::tui::kFakeCursorEnd} + "ef")));
+        cch::tui::OverlayOptions options;
+        options.row = 0.0;
+        options.col = 0.0;
+        options.width = 3.0;
+        auto overlay = std::make_unique<cch::tui::Overlay>(options);
+        REQUIRE(overlay->add_child(std::make_unique<FrozenLineChild>("XXX")));
+        REQUIRE(main_screen.add_overlay(std::move(overlay)));
+        REQUIRE(main_screen.start());
+        REQUIRE(main_screen.render());
+        return all_output(terminal);
+    };
+
+    SECTION("the fake cursor is drawn when the hardware cursor is hidden") {
+        const auto& scenario = find_scenario(*bundle, "overlay-left-of-cursor-keeps-cursor-fake");
+        const auto& expected = scenario.at("expected");
+        const auto expected_writes = strings_of(expected.at("writes"));
+
+        const auto output = render_overlay(false);
+
+        INFO("OUTPUT: " << output);
+        CHECK(contains(output, "XXX"));
+        // The overlay content must not leak the raw marker bytes: they are
+        // resolved to the drawn reverse-video cursor.
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorStart));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorEnd));
+        CHECK(contains(output, "\x1b[7md\x1b[27m"));
+        CHECK(expected.at("fakeCursorVisible").get_boolean() == true);
+        CHECK(expected.at("hardwareCursorPositioned").get_boolean() == true);
+
+        REQUIRE_FALSE(expected_writes.empty());
+        check_frame_matches_frozen(output, expected_writes);
+    }
+
+    SECTION("the fake cursor is omitted when the hardware cursor is shown") {
+        const auto& scenario = find_scenario(*bundle, "overlay-left-of-cursor-keeps-cursor-hardware");
+        const auto& expected = scenario.at("expected");
+        const auto expected_writes = strings_of(expected.at("writes"));
+
+        const auto output = render_overlay(true);
+
+        INFO("OUTPUT: " << output);
+        CHECK(contains(output, "XXX"));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorStart));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorEnd));
+        CHECK_FALSE(contains(output, kReverseVideoOn));
+        CHECK(expected.at("fakeCursorVisible").get_boolean() == false);
+        CHECK(expected.at("hardwareCursorPositioned").get_boolean() == true);
+
+        REQUIRE_FALSE(expected_writes.empty());
+        check_frame_matches_frozen(output, expected_writes);
+    }
+}
+
+TEST_CASE("an overlay's own focused child resolves its fake cursor before the splice",
+        "[tui][cursor-marker][issue1120][compat-pi][spec]") {
+    // Frozen pi resolves the OVERLAY's own rendered lines before splicing them
+    // (pi `tui.ts` `compositeOverlays`:
+    // `let overlayLines = this.resolveFakeCursors(component.render(width));`).
+    // The registered `overlay-left-of-cursor-*` scenarios cover a base-line
+    // marker surviving the splice; this case covers the overlay's own content,
+    // where an unresolved marker ships its APC bytes to the terminal and the
+    // overlay's drawn cursor loses the reverse video.
+    const auto render_focused_overlay = [](bool show_hardware_cursor) {
+        cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{.columns = 20, .rows = 5});
+        cch::tui::MainScreen main_screen{terminal, show_hardware_cursor};
+        REQUIRE(main_screen.add_child(std::make_unique<FrozenLineChild>("base")));
+        cch::tui::OverlayOptions options;
+        options.row = 0.0;
+        options.col = 0.0;
+        options.width = 5.0;
+        auto overlay = std::make_unique<cch::tui::Overlay>(options);
+        // The overlay's focused child draws its cursor cell in the overlay.
+        REQUIRE(overlay->add_child(std::make_unique<FrozenLineChild>("X" + std::string{cch::tui::kCursorMarker} +
+                                                                     std::string{cch::tui::kFakeCursorStart} + "d" +
+                                                                     std::string{cch::tui::kFakeCursorEnd} + "Y")));
+        REQUIRE(overlay->focus_first());
+        REQUIRE(main_screen.add_overlay(std::move(overlay)));
+        REQUIRE(main_screen.start());
+        REQUIRE(main_screen.render());
+        return all_output(terminal);
+    };
+
+    SECTION("the overlay's fake cursor is drawn when the hardware cursor is hidden") {
+        const auto output = render_focused_overlay(false);
+        INFO("OUTPUT: " << output);
+        // The overlay's marker bytes are resolved, not forwarded.
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorStart));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorEnd));
+        CHECK(contains(output, "X\x1b[7md\x1b[27mY"));
+    }
+
+    SECTION("the overlay's focused fake cursor is omitted in hardware-cursor mode") {
+        const auto output = render_focused_overlay(true);
+        INFO("OUTPUT: " << output);
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorStart));
+        CHECK_FALSE(contains(output, cch::tui::kFakeCursorEnd));
+        CHECK_FALSE(contains(output, kReverseVideoOn));
+        CHECK(contains(output, "XdY"));
+    }
 }
 
 TEST_CASE("the marker cursor wins over the out-of-band component cursor",
@@ -342,6 +567,59 @@ TEST_CASE("the marker cursor wins over the out-of-band component cursor",
     // The marker sits after three visible cells, so the terminal cursor is
     // in column 3; the out-of-band position claims column 0.
     CHECK(terminal.cursor().row == 0);
+    CHECK(terminal.cursor().column == 3);
+}
+
+TEST_CASE("a fake cursor after an unpaired first marker is still suppressed",
+        "[tui][cursor-marker][issue1120][compat-pi][spec]") {
+    // Frozen pi scans for the first `CURSOR_MARKER` that is IMMEDIATELY
+    // FOLLOWED by `FAKE_CURSOR_START` (pi `FOCUSED_FAKE_CURSOR`,
+    // `tui.ts:202`), not for the first marker anywhere in the line. A line
+    // whose first marker is unpaired must therefore still lose the reverse
+    // video of the later, paired fake cursor.
+    const std::string line = std::string{cch::tui::kCursorMarker} + "x" + std::string{cch::tui::kCursorMarker} +
+                             std::string{cch::tui::kFakeCursorStart} + "a" + std::string{cch::tui::kFakeCursorEnd};
+
+    cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{.columns = 20, .rows = 5});
+    cch::tui::MainScreen main_screen{terminal, true};
+    auto child = std::make_unique<FrozenLineChild>(line);
+    auto* child_pointer = child.get();
+    REQUIRE(main_screen.add_child(std::move(child)));
+    REQUIRE(main_screen.start());
+    REQUIRE(main_screen.set_focus(child_pointer));
+    REQUIRE(main_screen.render());
+
+    const auto output = all_output(terminal);
+    INFO("OUTPUT: " << output);
+    // The paired fake cursor is drawn as the hardware cursor there, so its
+    // reverse-video wrappers must not reach the terminal.
+    CHECK_FALSE(contains(output, kReverseVideoOn));
+    CHECK_FALSE(contains(output, kReverseVideoOff));
+}
+
+TEST_CASE("an overlay's marker cursor wins over its out-of-band component cursor",
+        "[tui][cursor-marker][issue1120][compat-pi][spec]") {
+    // The same precedence holds for a focused overlay: the overlay reports its
+    // focused child's `cursor_location()` out of band, but the marker the child
+    // rendered is the authority (pi `extractCursorPosition` runs on the
+    // composited lines and has no out-of-band alternative).
+    cch::tui::VirtualTerminal terminal(cch::tui::VirtualTerminalOptions{.columns = 20, .rows = 5});
+    cch::tui::MainScreen main_screen{terminal, true};
+    REQUIRE(main_screen.add_child(std::make_unique<FrozenLineChild>("base")));
+    cch::tui::OverlayOptions options;
+    options.row = 0.0;
+    options.col = 0.0;
+    options.width = 3.0;
+    auto overlay = std::make_unique<cch::tui::Overlay>(options);
+    REQUIRE(overlay->add_child(std::make_unique<ConflictingCursorChild>()));
+    REQUIRE(overlay->focus_first());
+    REQUIRE(main_screen.add_overlay(std::move(overlay)));
+    REQUIRE(main_screen.start());
+    REQUIRE(main_screen.render());
+
+    // The overlay's child renders "abc" + marker at column 0, so the marker
+    // places the terminal cursor in column 3; its out-of-band position claims
+    // column 0.
     CHECK(terminal.cursor().column == 3);
 }
 
@@ -368,7 +646,7 @@ TEST_CASE("the cursor marker is stripped before the column is measured",
     const auto output = all_output(terminal);
     INFO("OUTPUT: " << output);
     // The marker never reaches the terminal: it is consumed by the extraction.
-    CHECK_FALSE(contains(output, kCursorMarker));
+    CHECK_FALSE(contains(output, cch::tui::kCursorMarker));
     // The prompt is followed by the value, with no marker between them.
     CHECK(contains(output, "> abc"));
 }

@@ -2,6 +2,7 @@
 
 #include "tui/LineCompositor.hpp"
 
+#include <cch/tui/CursorMarkers.hpp>
 #include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
@@ -124,7 +125,14 @@ void append_trailing_columns(ComposedRow& row, const std::vector<TerminalToken>&
         if (token.kind != TerminalTokenKind::Grapheme) {
             if (token.kind == TerminalTokenKind::Newline) row.spans_rows = true;
             style.process_ansi(token.text);
-            if (suffix_started) row.append_code(token.text);
+            // A zero-width APC at the region boundary is carried into the
+            // trailing segment even before its first grapheme: the cursor
+            // marker is not tracked styling, so pi's `extractSegments` keeps
+            // it at the boundary (`tui.ts`, `ansi.code.startsWith("\x1b_")`).
+            // Without this an overlay ending exactly at the cursor column drops
+            // the marker, and the hardware cursor with it.
+            const auto boundary_marker = visible_column >= cut && token.text.starts_with("\x1b_");
+            if (suffix_started || boundary_marker) row.append_code(token.text);
             continue;
         }
 
@@ -383,8 +391,10 @@ RenderResult OverlayCompositor::materialize_images(
     return output;
 }
 
-support::ExpectedVoid OverlayCompositor::composite(
-        TerminalDimensions dimensions, const TerminalCapabilities& capabilities, RenderResult& output) {
+support::ExpectedVoid OverlayCompositor::composite(TerminalDimensions dimensions,
+        const TerminalCapabilities& capabilities,
+        RenderResult& output,
+        bool show_hardware_cursor) {
     struct RenderedOverlay {
         RenderResult content;
         OverlayLayout layout;
@@ -406,6 +416,13 @@ support::ExpectedVoid OverlayCompositor::composite(
                 capabilities,
                 initial_layout.width,
                 initial_layout.max_height.value_or(dimensions.rows));
+        // The overlay's own rendered lines resolve before the max-height slice
+        // and the final layout, as frozen pi does in `compositeOverlays`
+        // (pi `tui.ts`: `this.resolveFakeCursors(component.render(width))`).
+        // Without this stage the overlay's focused child would ship its raw
+        // marker APCs to the terminal and its drawn cursor would lose the
+        // reverse video.
+        materialized.lines = resolve_fake_cursors(materialized.lines, show_hardware_cursor);
         const auto layout = overlay->resolve_layout(dimensions, materialized.lines.size());
         if (layout.max_height && materialized.lines.size() > *layout.max_height) {
             materialized.lines.resize(*layout.max_height);

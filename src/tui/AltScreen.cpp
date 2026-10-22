@@ -1069,7 +1069,9 @@ support::ExpectedVoid AltScreen::render_frame() {
         RenderResult output{.lines = std::move(display_lines), .images = std::move(images)};
         auto materialized = detail::OverlayCompositor::materialize_images(
                 std::move(output), terminal_.capabilities(), dimensions.columns, dimensions.rows);
-        if (auto overlaid = compositor_->composite(dimensions, terminal_.capabilities(), materialized); !overlaid)
+        if (auto overlaid = compositor_->composite(
+                    dimensions, terminal_.capabilities(), materialized, show_hardware_cursor_);
+                !overlaid)
             return overlaid;
         display_lines = std::move(materialized.lines);
         images = std::move(materialized.images);
