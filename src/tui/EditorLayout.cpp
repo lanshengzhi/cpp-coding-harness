@@ -1,5 +1,6 @@
 #include "EditorLayout.hpp"
 
+#include <cch/tui/CursorMarkers.hpp>
 #include <cch/tui/TruncatedText.hpp>
 #include <cch/tui/Utils.hpp>
 #include "tui/CompletionContext.hpp"
@@ -44,10 +45,16 @@ constexpr std::size_t kMinDescriptionWidth = 10;
     return indicator + horizontal_rule(width - indicator_width);
 }
 
+/// Draw the fake cursor at the cursor cell (pi `editor.ts` `render`). The cell
+/// is wrapped in the zero-width fake-cursor markers, and the focused editor
+/// prefixes the cursor-position marker, so the drawn cursor stays strippable
+/// and the terminal cursor position stays recoverable from the line.
 void insert_fake_cursor(const EditorVisualLine& visual_line,
         const BufferDocument& doc,
         std::size_t cursor_column,
+        bool focused,
         std::string& line) {
+    const std::string marker = focused ? std::string{kCursorMarker} : std::string{};
     if (cursor_column < visual_line.end) {
         std::size_t byte_offset = 0;
         for (std::size_t index = visual_line.start; index < cursor_column; ++index) {
@@ -56,11 +63,12 @@ void insert_fake_cursor(const EditorVisualLine& visual_line,
         const auto& segment_text = doc[visual_line.logical_line][cursor_column].text;
         const auto graphemes = split_graphemes(segment_text);
         const auto& at_cursor = graphemes.front();
-        line.insert(byte_offset, "\x1b[7m");
-        line.insert(byte_offset + 4 + at_cursor.size(), "\x1b[27m");
+        line.insert(byte_offset, marker + std::string{kFakeCursorStart});
+        line.insert(
+                byte_offset + marker.size() + kFakeCursorStart.size() + at_cursor.size(), std::string{kFakeCursorEnd});
         return;
     }
-    line += "\x1b[7m \x1b[27m";
+    line += marker + render_fake_cursor(" ");
 }
 
 [[nodiscard]] std::string single_line(std::string_view text) {
@@ -395,7 +403,7 @@ support::Expected<EditorLayoutResult> EditorLayout::compute(EditorLayoutOptions 
     for (std::size_t index = scroll_offset; index < end; ++index) {
         auto content_line = visual[index].text;
         if (index == cursor_line) {
-            insert_fake_cursor(visual[index], doc, options.cursor.column, content_line);
+            insert_fake_cursor(visual[index], doc, options.cursor.column, options.focused, content_line);
         }
         const auto content_line_width = visible_width(content_line);
         if (content_line_width < widths.content) content_line.append(widths.content - content_line_width, ' ');

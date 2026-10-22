@@ -1,3 +1,4 @@
+#include <cch/tui/CursorMarkers.hpp>
 #include <cch/tui/Tui.hpp>
 
 #include "tui/InputDecoder.hpp"
@@ -593,15 +594,29 @@ support::ExpectedVoid MainScreen::render_frame() {
     render_pipeline_->begin_frame();
     auto rendered = render_children(dimensions, compose_overlays);
     if (!rendered) return std::unexpected(rendered.error());
+    // The fake-cursor markers resolve before the overlay compositing, because
+    // the compositor splices into rows that track SGR codes rather than the
+    // zero-width marker bytes (pi `tui-main-screen.ts` `resolveFakeCursors`
+    // runs before `compositeOverlays`).
+    rendered->lines = resolve_fake_cursors(rendered->lines, show_hardware_cursor());
     // Main-screen images are buffer-absolute and follow content into the
     // terminal's scrollback (fork-B image-follows-content): they are not
     // bounded by the viewport, only by the composed buffer itself.
     auto materialized = detail::OverlayCompositor::materialize_images(
             std::move(*rendered), capabilities, dimensions.columns, std::numeric_limits<std::size_t>::max());
-    if (auto overlay_result = compositor_->composite(dimensions, capabilities, materialized); !overlay_result) {
+    if (auto overlay_result = compositor_->composite(dimensions, capabilities, materialized, show_hardware_cursor());
+            !overlay_result) {
         return std::unexpected(overlay_result.error());
     }
-    const auto cursor_location = materialized.cursor ? materialized.cursor : resolve_cursor_location();
+    // The cursor position the marker carried is the terminal cursor position
+    // (pi `extractCursorPosition`): the marker is measured on the text before
+    // it, and the marker itself is removed from the emitted line. Frozen pi's
+    // main screen has no out-of-band cursor source at all, so the marker wins
+    // over the compositor's overlay cursor; both are C++ fallbacks for a frame
+    // that carries no marker.
+    const auto marker_cursor = extract_cursor_position(materialized.lines, dimensions.rows);
+    const auto cursor_location =
+            marker_cursor ? marker_cursor : (materialized.cursor ? materialized.cursor : resolve_cursor_location());
     materialized.cursor.reset();
     auto result = render_pipeline_->render(std::move(materialized),
             dimensions,

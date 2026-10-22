@@ -168,7 +168,7 @@ TEST_CASE("OverlayCompositor splices overlay content at its viewport position", 
     REQUIRE(compositor.add_overlay(std::move(offscreen)));
 
     tui::RenderResult output{.lines = std::vector<std::string>(4, "aaaaaaaaaa")};
-    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
+    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output, false));
 
     CHECK(output.lines[0] == "aaaaaaaa\x1b[0mYY");
     CHECK(output.lines[1] == "aaaa\x1b[0mXXaaaa");
@@ -189,7 +189,7 @@ TEST_CASE("OverlayCompositor pads to terminal height and masks declared width fo
     REQUIRE(compositor.add_overlay(std::move(overlay)));
 
     tui::RenderResult output{.lines = {"..........", "base text"}};
-    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
+    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output, false));
 
     REQUIRE(output.lines.size() == 5);
     CHECK(tui::visible_width(output.lines[1]) == 10);
@@ -215,7 +215,7 @@ TEST_CASE("OverlayCompositor offsets nested cursor and image through viewport pa
     REQUIRE(compositor.add_overlay(std::move(overlay)));
 
     tui::RenderResult output{.lines = std::vector<std::string>(6, "----------")};
-    REQUIRE(compositor.composite(dimensions, capabilities, output));
+    REQUIRE(compositor.composite(dimensions, capabilities, output, false));
 
     REQUIRE(output.lines.size() == 6);
     REQUIRE(output.cursor.has_value());
@@ -242,7 +242,7 @@ TEST_CASE("OverlayCompositor draws higher z-index overlays on top", "[tui][overl
     REQUIRE(compositor.add_overlay(std::move(high)));
 
     tui::RenderResult output{.lines = std::vector<std::string>{"----------"}};
-    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
+    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output, false));
     CHECK(output.lines[0] == "bbaa------");
 }
 
@@ -257,7 +257,7 @@ TEST_CASE("OverlayCompositor preserves ANSI styles when splicing line regions", 
     REQUIRE(compositor.add_overlay(std::move(overlay)));
 
     tui::RenderResult output{.lines = std::vector<std::string>{"\x1b[31mRED!"}};
-    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
+    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output, false));
 
     // The prefix keeps its style and closes it before the splice reset; the
     // suffix replays the active red style before "D!" and leaves it for the
@@ -284,7 +284,7 @@ TEST_CASE("OverlayCompositor closes an open hyperlink once when the splice is sh
     // open and emits a second, spurious close at the end of the row.
     tui::RenderResult output{.lines = std::vector<std::string>{"\x1b[4m\x1b]8;;u\x07"
                                                                "abc"}};
-    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output));
+    REQUIRE(compositor.composite(dimensions, tui::TerminalCapabilities{}, output, false));
 
     CHECK(output.lines[0] == "\x1b[4m\x1b]8;;u\x07"
                              "abc\x1b[24m\x1b]8;;\x07"
@@ -311,7 +311,7 @@ TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "
     REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"X"})));
     REQUIRE(compositor.add_overlay(std::move(overlay)));
 
-    REQUIRE(compositor.composite(dimensions, capabilities, output));
+    REQUIRE(compositor.composite(dimensions, capabilities, output, false));
 
     CHECK(output.lines[0].starts_with("X"));
     REQUIRE(output.images.size() == 1);
@@ -363,7 +363,7 @@ TEST_CASE("OverlayCompositor offsets overlay images into the composed buffer", "
     REQUIRE(compositor.add_overlay(std::move(overlay)));
 
     tui::RenderResult output{.lines = std::vector<std::string>(4, "aaaaaaaaaa")};
-    REQUIRE(compositor.composite(dimensions, capabilities, output));
+    REQUIRE(compositor.composite(dimensions, capabilities, output, false));
 
     // The image's backing line is spliced as blank real estate and the image
     // region is offset by the overlay's viewport position.
@@ -389,7 +389,7 @@ TEST_CASE("OverlayCompositor substitutes fallback text for clipped overlay image
     REQUIRE(compositor.add_overlay(std::move(overlay)));
 
     tui::RenderResult output{.lines = std::vector<std::string>(4, "aaaaaaaaaa")};
-    REQUIRE(compositor.composite(dimensions, capabilities, output));
+    REQUIRE(compositor.composite(dimensions, capabilities, output, false));
 
     CHECK(output.lines[0] == "aaaaaaaaa\x1b[0mF");
     CHECK(output.images.empty());

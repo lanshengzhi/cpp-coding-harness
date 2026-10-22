@@ -220,6 +220,25 @@ TEST_CASE("normalize_terminal_output rejects unsafe terminal controls", "[tui][i
                                           "b"));
 }
 
+TEST_CASE("only the cursor-marker and kitty APCs are accepted as zero-width", "[tui][issue46][unicode][spec]") {
+    // The cursor markers are `ESC _ pi:<body> BEL` APCs (pi `CURSOR_MARKER`,
+    // `FAKE_CURSOR_START`, `FAKE_CURSOR_END`) and the kitty graphics APC is
+    // `ESC _ G ...`. Any other APC payload stays an unsupported sequence
+    // rather than silently becoming zero-width.
+    CHECK(normalize_terminal_output("a\x1b_pi:c\x07"
+                                    "b"));
+    CHECK(normalize_terminal_output("a\x1b_pi:fc\x07"
+                                    "b"));
+    CHECK(normalize_terminal_output("a\x1b_pi:/fc\x07"
+                                    "b"));
+    CHECK(normalize_terminal_output("a\x1b_Gi=31;AAAA\x1b\\"
+                                    "b"));
+    CHECK_FALSE(normalize_terminal_output("a\x1b_panything\x07"
+                                          "b"));
+    CHECK_FALSE(normalize_terminal_output("a\x1b_p\x07"
+                                          "b"));
+}
+
 TEST_CASE("normalize_terminal_output accepts only fully tracked SGR forms", "[tui][issue46][unicode][spec]") {
     CHECK(normalize_terminal_output("\x1b[1;31mA\x1b[22;39m"));
     CHECK(normalize_terminal_output("\x1b[38;5;240mA\x1b[39m"));
@@ -348,7 +367,9 @@ TEST_CASE("narrow Text wrap and Input cursor follow corrected Indic widths", "[t
     const auto rendered = input.render(6);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "> \x1b[7mका\x1b[27mक्ष");
+    // The focused input emits the cursor-position marker before the
+    // fake-cursor markers around the drawn grapheme (pi `input.ts` `render`).
+    CHECK(rendered->lines[0] == "> \x1b_pi:c\x07\x1b_pi:fc\x07का\x1b_pi:/fc\x07क्ष");
     REQUIRE(input.cursor_location().has_value());
     CHECK((*input.cursor_location() == cch::tui::CursorPosition{.column = 2, .row = 0}));
 }

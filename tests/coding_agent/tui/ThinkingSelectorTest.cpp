@@ -8,6 +8,7 @@
 #include "coding_agent/tui/Theme.hpp"
 
 #include <cch/tui/Keybindings.hpp>
+#include <cch/tui/Utils.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -51,22 +52,9 @@ namespace {
             coding_agent::tui::builtin_dark_theme(), tui::TerminalColorCapability::TrueColor);
 }
 
-[[nodiscard]] std::string strip_ansi(std::string_view text) {
-    std::string stripped;
-    stripped.reserve(text.size());
-    for (std::size_t index = 0; index < text.size();) {
-        if (text[index] == '\x1b' && index + 1 < text.size() && text[index + 1] == '[') {
-            index += 2;
-            while (index < text.size() && !(text[index] >= '@' && text[index] <= '~'))
-                ++index;
-            if (index < text.size()) ++index;
-            continue;
-        }
-        stripped.push_back(text[index]);
-        ++index;
-    }
-    return stripped;
-}
+/// Strip the terminal sequences for text assertions. The fake-cursor markers
+/// are zero-width APC sequences, so they are stripped with the SGR codes.
+[[nodiscard]] std::string strip_ansi(std::string_view text) { return cch::tui::strip_terminal_sequences(text); }
 
 /// One rendered row with its styling removed and its trailing padding
 /// dropped, so a row compares by its content (pi's `Spacer` rows are empty
