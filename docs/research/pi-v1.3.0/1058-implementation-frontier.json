@@ -420,14 +420,16 @@
           "fixtures/pi-v1.3.0/audit-1057/json-output-support.json: UTF-8 byte length and character-end boundaries match the frozen output helpers"
         ],
         "comparison": "Run the same scenarios against the new public caller and compare values, cancellation outcomes and output bytes with the frozen artifacts.",
-        "missing": "No C++ comparison exists today; the C++ rows are missing/partial per the consolidated ledger."
+        "missing": "Delivered by #1060 in commit 4f92d811f. The public cch_chord::Context value surface, the strict JSON copy/validation and the bounded UTF-8 output helpers are implemented and merged, and tests/chord/ContextTest.cpp, StrictJsonTest.cpp and OutputTest.cpp compare the child/sibling/parent cancellation, the WithoutAbortSignal detachment, the character-boundary cut and the strict-JSON rejection against the frozen captures."
       },
       "coverage": [
         "cch_chord:context",
         "cch_chord:json",
         "cch_chord:output"
       ],
-      "relatedIssues": [],
+      "relatedIssues": [
+        "#1060"
+      ],
       "boundaries": [
         "Not the whole upstream Chord product: plugin host, links/RPC, cluster, cells/schema and Node host stay excluded"
       ]
@@ -578,7 +580,7 @@
           "fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.json: code mode runs a script that calls a real nested tool and keeps its store across turns"
         ],
         "comparison": "The moved behavior is compared through the existing application selection; the new owner caller is added for standalone use.",
-        "missing": "The current sandbox always passes empty globals/store and the prelude is generated from pi v1.0.4; the behavior slices F10-F12 regenerate it."
+        "missing": "Delivered by #1064 in commit 1c72b76a9. cch_codemode is an independently callable owner target that depends only on cch_ai and cch_support; a standalone program executes a script against an injected nested tool through the published API."
       },
       "coverage": [
         "cch_codemode:codemode-source",
@@ -588,7 +590,8 @@
         "cch_codemode:codemode-portable"
       ],
       "relatedIssues": [
-        "#882"
+        "#882",
+        "#1064"
       ],
       "boundaries": [
         "Cloudflare deployment remains excluded; generic Remote stays in scope"
@@ -1879,7 +1882,7 @@
           "fixtures/pi-v1.3.0/audit-1051/extension-editor.json: extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
         ],
         "comparison": "Native product differential cells plus dated real-emulator/PTY evidence where the property needs a terminal; terminal-contract calls are not raw protocol acceptance.",
-        "missing": "OSC7501 was observed as terminal-contract calls, not raw protocol bytes; real emulator evidence is missing for image/footer/cursor/restoration."
+        "missing": "OSC 7501 program status is implemented by #1123 and has its own pseudo-terminal evidence: the frozen startup order, the DA sentinel, both PI_PROGRAM_STATUS overrides and the stop() clear are replayed on a real PTY with dated raw bytes. Real emulator evidence is still missing for image/footer/cursor/restoration."
       },
       "coverage": [
         "cch_coding_agent:program-status",
@@ -1893,7 +1896,8 @@
       "relatedIssues": [
         "#1035",
         "#831",
-        "#1043"
+        "#1043",
+        "#1123"
       ],
       "boundaries": [
         "Session share/upload services and sessionShareDestination stay excluded",
@@ -2304,11 +2308,11 @@
       "The C++ toolkit has real rendering/input behavior and the listed focused test selections pass; the C++ [issue800] model-selector assertion is a known failure (#808)."
     ],
     "specifiedOnly": [
-      "No cch_durable, cch_mcp, cch_codemode or cch_chord Owner package or manifest target exists yet; their 14 implemented target rows are existing capability behavior under current application owners and await ownership migration.",
+      "The cch_chord, cch_codemode and cch_mcp Owner packages now exist as manifest targets (cmake/targets/Chord.cmake, Codemode.cmake, Mcp.cmake) and their slices have been implemented and merged: #1060 delivered the cch_chord value surface, #1064 the independently callable cch_codemode owner, and #1065 the reusable MCP protocol, transport and OAuth owner. cch_durable does not exist yet and its rows remain the specified work.",
       "No C++ parity comparison exists for any audit row: 0 rows are verified and every upstream-captured row still needs one.",
       "195 target rows are missing and are the specified work: cch_durable 121, cch_mcp 2, cch_codemode 30, cch_chord 42. The 230 partial rows are partial with recorded remaining work, not blanket specified-only.",
       "Durable bidirectional JSONL/SQLite interchange, power-loss durability and cross-runtime continuation are specified and unproven.",
-      "Native extension lifecycle/run triggering, tool duration end-to-end, OSC 7501 program status, codemode Inline/Remote, and the MCP cancellation/transport changes are specified with implementation gaps."
+      "Native extension lifecycle/run triggering, tool duration end-to-end, codemode Inline/Remote, and the MCP cancellation/transport changes are specified with implementation gaps. OSC 7501 program status is implemented by #1123 and its ledger rows are corrected."
     ],
     "retainedBoundaries": [
       "Magpie-only model discovery/authentication/inference; no overall cch_ai baseline advance (cch_ai rows).",
@@ -2321,7 +2325,7 @@
       "Umbrella #1044 remains open: implementation and final validation are not done; this consolidation is an audit acceptance gate only.",
       "Membership blockers: none. The two former no-decision rows (legacy SQLite SessionStore alternative, application leaf-marker entry) are excluded by the owner's #1059 ruling and keep their boundaries.",
       "Verification blockers: 1000 rows carry an honest missing observation (32 declared-comparison, 10 cpp-regression-only, 58 unobserved, 858 historical-only, 42 not-audited) plus 28 related-captured rows that keep their own unverified status.",
-      "Terminal blockers: real emulator/PTY evidence is missing for image/footer/cursor/restoration rows; OSC7501 captures are terminal-contract calls, not raw protocol acceptance.",
+      "Terminal blockers: real emulator/PTY evidence is missing for image/footer/cursor/restoration rows. OSC 7501 program status now has PTY evidence of its own: #1123 replays the frozen startup order, the DA sentinel, both PI_PROGRAM_STATUS overrides and the stop() clear on a real pseudo-terminal, with dated raw bytes.",
       "Crash blockers: SIGKILL/reopen is recorded, but power-loss/fsync-failure/multi-process durability is not proven and must not be claimed."
     ],
     "umbrellaStatus": "#1044 stays open until every included row is implemented and verified; #1058 does not close it or publish draft issues."

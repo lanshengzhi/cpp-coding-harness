@@ -338,11 +338,11 @@ over real rows and an acyclic blocking-edge graph:
 
 | Id | Owner | Kind | Title | Blocked by |
 | --- | --- | --- | --- | --- |
-| P1 | cch_chord | prefactor | Create the cch_chord value surface durable needs | - |
+| P1 | cch_chord | prefactor | Create the cch_chord value surface durable needs (#1060, delivered) | - |
 | P2 | cch_chord | prefactor | Add cch_chord document, delta and replicated-state tracking | P1 |
 | P3 | cch_durable | prefactor | Create cch_durable with Storage, memory backend and Session commit | P1 |
-| P4 | cch_codemode | prefactor | Extract cch_codemode from coding-agent | - |
-| P5 | cch_mcp | prefactor | Extract cch_mcp from coding-agent | - |
+| P4 | cch_codemode | prefactor | Extract cch_codemode from coding-agent (#1064, delivered) | - |
+| P5 | cch_mcp | prefactor | Extract cch_mcp from coding-agent (#1065, delivered) | - |
 | P6 | cch_coding_agent | prefactor | Move application session, history and compaction into cch_coding_agent | - |
 | P7 | cch_durable | prefactor | Split the legacy SQLite/TaskStore coupling out of cch_agent_core | P3, P6 |
 | P8 | cch_coding_agent | prefactor | Remove the application's second SessionStore writers | P6 |
@@ -374,8 +374,10 @@ over real rows and an acyclic blocking-edge graph:
 The frontier preserves the specific corrections and limits from the lane merges: the 1051
 thinking-map configuration mismatch (F24 compares with a matched fixture), the failing #808
 model-selector assertion (F24 requires the post-Enter assertion to pass in a real PTY run), the
-missing real emulator/PTY evidence (F20/F24 require dated emulator captures; OSC 7501 terminal
-contract calls are not raw protocol acceptance), the supported resource/`file:` schema and queue
+missing real emulator/PTY evidence (F20/F24 require dated emulator captures; OSC 7501 now has its own
+pseudo-terminal evidence from #1123 — the frozen startup order, the DA sentinel, both `PI_PROGRAM_STATUS`
+overrides and the `stop()` clear — while real emulator evidence is still missing for
+image/footer/cursor/restoration), the supported resource/`file:` schema and queue
 rules (F21/F22), the Magpie/XDG boundary (retained, not migrated), the Cloudflare/SSH/AI-provider/
 third-party-JS exclusions (unchanged), the absent models capability gate (retained), the codemode
 catalogue factory stub (F14 must add the Session/Interactive comparison), the bidirectional
