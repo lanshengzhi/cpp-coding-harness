@@ -27,7 +27,7 @@ namespace cch::coding_agent::tui {
 /// pi's spelling: `"/import"` alone carries no argument; `"/import \"a
 /// b.jsonl\""` carries `a b.jsonl`; `"/import john's/x.jsonl"` carries
 /// `john's/x.jsonl` unchanged.
-[[nodiscard]] std::optional<std::string> import_path_argument(std::string_view argument);
+[[nodiscard]] std::optional<std::string> path_command_argument(std::string_view argument);
 
 /// pi `SessionImportFileNotFoundError`: the `/import` argument names no
 /// existing file. The message is pi's verbatim wording, so the command can

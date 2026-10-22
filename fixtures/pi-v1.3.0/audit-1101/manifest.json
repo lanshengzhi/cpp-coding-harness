@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1101",
   "family": "audit-1101",
-  "capturedAt": "2026-10-20T10:20:22.922Z",
+  "capturedAt": "2026-10-22T04:04:11.913Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -15,12 +15,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1101/capture-structured-content.mts",
-    "sha256": "b29ff89705ad7fcb5d8a096bf2d712a37b0f926fa4c1b26b8f09e2690be1ef13",
+    "sha256": "e1160e4480fa3ae8053c5308622ac260ea364d461899f3eb9b46e40ab3724163",
     "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1101/capture-structured-content.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1101/capture-structured-content.mts",
-        "sha256": "b29ff89705ad7fcb5d8a096bf2d712a37b0f926fa4c1b26b8f09e2690be1ef13"
+        "sha256": "e1160e4480fa3ae8053c5308622ac260ea364d461899f3eb9b46e40ab3724163"
       },
       {
         "path": "fixtures/pi-v1.3.0/audit-1101/pi.mts",
@@ -32,8 +32,8 @@
     {
       "path": "structured-content.json",
       "family": "audit-1101",
-      "bytes": 10688,
-      "sha256": "7f06bde8bd171f9abd0be6e18f18751828a5ef11133e017bae47b937c837050c",
+      "bytes": 12680,
+      "sha256": "ab966608762cb73f1d25082d4a3e2414c5247cf32509461ec0d491055b7cc917",
       "sourceEndpoints": [
         "packages/mcp/src/client.ts:McpClient.callTool,validateCallToolResult",
         "packages/mcp/src/protocol/content.ts:CallToolResult,toLlmContent",
@@ -94,7 +94,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -144,7 +145,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -176,7 +178,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -208,7 +211,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -240,7 +244,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -272,7 +277,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -304,7 +310,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -336,7 +343,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -359,7 +367,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -379,7 +388,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -399,7 +409,8 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         },
         {
@@ -417,7 +428,457 @@
           },
           "normalizations": [
             "ephemeral loopback ports and local paths are omitted",
-            "elapsed times and errors are reported as bounded values or names"
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        }
+      ]
+    },
+    {
+      "path": "structured-content-order.json",
+      "family": "audit-1101",
+      "bytes": 13481,
+      "sha256": "cc41501d1ae9156c801529245829286055a12cb0c58a45e769d5986625a39541",
+      "sourceEndpoints": [
+        "packages/mcp/src/client.ts:McpClient.callTool,validateCallToolResult",
+        "packages/mcp/src/protocol/content.ts:CallToolResult,toLlmContent",
+        "packages/coding-agent/src/extensions/mcp/tools.ts:convertMcpResult,createMcpResultSchema"
+      ],
+      "scenarios": [
+        {
+          "name": "client and conversion preserve the wire order of a reverse object structuredContent",
+          "inputs": {
+            "tool": "object-wire",
+            "result": {
+              "structuredContent": {
+                "ok": true,
+                "nested": [
+                  true,
+                  null,
+                  "x"
+                ]
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [],
+              "structuredContent": {
+                "ok": true,
+                "nested": [
+                  true,
+                  null,
+                  "x"
+                ]
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\n  \"ok\": true,\n  \"nested\": [\n    true,\n    null,\n    \"x\"\n  ]\n}"
+                }
+              ],
+              "structuredContent": {
+                "structuredContent": {
+                  "ok": true,
+                  "nested": [
+                    true,
+                    null,
+                    "x"
+                  ]
+                },
+                "content": []
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion preserve insertion order for three reverse-sorted object members",
+          "inputs": {
+            "tool": "object-reverse",
+            "result": {
+              "structuredContent": {
+                "z": "last",
+                "a": "first",
+                "m": "middle"
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [],
+              "structuredContent": {
+                "z": "last",
+                "a": "first",
+                "m": "middle"
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\n  \"z\": \"last\",\n  \"a\": \"first\",\n  \"m\": \"middle\"\n}"
+                }
+              ],
+              "structuredContent": {
+                "structuredContent": {
+                  "z": "last",
+                  "a": "first",
+                  "m": "middle"
+                },
+                "content": []
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion preserve order in nested objects and their parent",
+          "inputs": {
+            "tool": "object-nested",
+            "result": {
+              "structuredContent": {
+                "outer": {
+                  "z": 1,
+                  "a": 2
+                },
+                "first": true
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [],
+              "structuredContent": {
+                "outer": {
+                  "z": 1,
+                  "a": 2
+                },
+                "first": true
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\n  \"outer\": {\n    \"z\": 1,\n    \"a\": 2\n  },\n  \"first\": true\n}"
+                }
+              ],
+              "structuredContent": {
+                "structuredContent": {
+                  "outer": {
+                    "z": 1,
+                    "a": 2
+                  },
+                  "first": true
+                },
+                "content": []
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion preserve JavaScript integer-like key ordering",
+          "inputs": {
+            "tool": "object-integer-keys",
+            "result": {
+              "structuredContent": {
+                "2": "two",
+                "10": "ten",
+                "b": true,
+                "a": false
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [],
+              "structuredContent": {
+                "2": "two",
+                "10": "ten",
+                "b": true,
+                "a": false
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\n  \"2\": \"two\",\n  \"10\": \"ten\",\n  \"b\": true,\n  \"a\": false\n}"
+                }
+              ],
+              "structuredContent": {
+                "structuredContent": {
+                  "2": "two",
+                  "10": "ten",
+                  "b": true,
+                  "a": false
+                },
+                "content": []
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion render numbers with JavaScript JSON.stringify notation",
+          "inputs": {
+            "tool": "object-numbers",
+            "result": {
+              "structuredContent": {
+                "integer": 42,
+                "negative": -7,
+                "float": 1.5,
+                "large": 9007199254740992,
+                "exponent": 1e+21
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [],
+              "structuredContent": {
+                "integer": 42,
+                "negative": -7,
+                "float": 1.5,
+                "large": 9007199254740992,
+                "exponent": 1e+21
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\n  \"integer\": 42,\n  \"negative\": -7,\n  \"float\": 1.5,\n  \"large\": 9007199254740992,\n  \"exponent\": 1e+21\n}"
+                }
+              ],
+              "structuredContent": {
+                "structuredContent": {
+                  "integer": 42,
+                  "negative": -7,
+                  "float": 1.5,
+                  "large": 9007199254740992,
+                  "exponent": 1e+21
+                },
+                "content": []
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion render every JSON number shape with JavaScript JSON.stringify notation",
+          "inputs": {
+            "tool": "object-number-shapes",
+            "result": {
+              "structuredContent": {
+                "zero": 0,
+                "negativeZero": 0,
+                "small": 0.000001,
+                "smaller": 1e-7,
+                "large": 100000000000000000000,
+                "exponent": 1e+21,
+                "fraction": 123.45,
+                "precise": 1.2345678901234567e+30
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [],
+              "structuredContent": {
+                "zero": 0,
+                "negativeZero": 0,
+                "small": 0.000001,
+                "smaller": 1e-7,
+                "large": 100000000000000000000,
+                "exponent": 1e+21,
+                "fraction": 123.45,
+                "precise": 1.2345678901234567e+30
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\n  \"zero\": 0,\n  \"negativeZero\": 0,\n  \"small\": 0.000001,\n  \"smaller\": 1e-7,\n  \"large\": 100000000000000000000,\n  \"exponent\": 1e+21,\n  \"fraction\": 123.45,\n  \"precise\": 1.2345678901234567e+30\n}"
+                }
+              ],
+              "structuredContent": {
+                "structuredContent": {
+                  "zero": 0,
+                  "negativeZero": 0,
+                  "small": 0.000001,
+                  "smaller": 1e-7,
+                  "large": 100000000000000000000,
+                  "exponent": 1e+21,
+                  "fraction": 123.45,
+                  "precise": 1.2345678901234567e+30
+                },
+                "content": []
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion keep non-empty content blocks and structuredContent separate",
+          "inputs": {
+            "tool": "content-text-structured",
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ],
+              "structuredContent": {
+                "ok": true
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ],
+              "structuredContent": {
+                "ok": true
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "alpha"
+                }
+              ],
+              "structuredContent": {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "alpha"
+                  }
+                ],
+                "structuredContent": {
+                  "ok": true
+                }
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion fall back to structuredContent for an empty content list",
+          "inputs": {
+            "tool": "empty-content-structured",
+            "result": {
+              "content": [],
+              "structuredContent": {
+                "ok": true
+              }
+            }
+          },
+          "expected": {
+            "client": {
+              "content": [],
+              "structuredContent": {
+                "ok": true
+              }
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\n  \"ok\": true\n}"
+                }
+              ],
+              "structuredContent": {
+                "content": [],
+                "structuredContent": {
+                  "ok": true
+                }
+              },
+              "isError": null
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
+          ]
+        },
+        {
+          "name": "client and conversion add pi's error text when missing content isError has no model text",
+          "inputs": {
+            "tool": "missing-content-isError",
+            "result": {
+              "isError": true
+            }
+          },
+          "expected": {
+            "client": {
+              "content": []
+            },
+            "converted": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "MCP tool structured/structured returned an error"
+                }
+              ],
+              "structuredContent": {
+                "isError": true,
+                "content": []
+              },
+              "isError": true
+            }
+          },
+          "normalizations": [
+            "ephemeral loopback ports and local paths are omitted",
+            "elapsed times and errors are reported as bounded values or names",
+            "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
           ]
         }
       ]

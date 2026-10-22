@@ -141,7 +141,7 @@ function observedClientResult(result: Record<string, unknown>): Record<string, u
 }
 
 function observedConversion(result: Record<string, unknown>): Promise<Record<string, unknown>> {
-    return convertMcpResult("fixture", "structured", result as never).then((converted) => ({
+    return convertMcpResult("structured", "structured", result as never).then((converted) => ({
         content: converted.content,
         structuredContent: converted.structuredContent,
         isError: converted.isError ?? null,
@@ -201,7 +201,7 @@ async function rejectedScenario(
     }
 }
 
-const scenarios: Scenario[] = [
+const presenceScenarios: Scenario[] = [
     await preservedScenario(
         "client and conversion preserve an object structuredContent when content is absent",
         "object",
@@ -263,6 +263,76 @@ const scenarios: Scenario[] = [
         [],
     ),
 ];
+// Wire-order matrix (#1101 review): the presence matrix above answers whether
+// `structuredContent` survives at all; these answer what its JSON TEXT looks
+// like, which is the defect #1101 actually fixed - C++ used std::map and
+// sorted members, so the rendered text disagreed with pi's insertion order.
+const orderScenarios: Scenario[] = [
+    await preservedScenario(
+        "client and conversion preserve the wire order of a reverse object structuredContent",
+        "object-wire",
+        { structuredContent: { ok: true, nested: [true, null, "x"] } },
+    ),
+    await preservedScenario(
+        "client and conversion preserve insertion order for three reverse-sorted object members",
+        "object-reverse",
+        { structuredContent: { z: "last", a: "first", m: "middle" } },
+    ),
+    await preservedScenario(
+        "client and conversion preserve order in nested objects and their parent",
+        "object-nested",
+        { structuredContent: { outer: { z: 1, a: 2 }, first: true } },
+    ),
+    await preservedScenario(
+        "client and conversion preserve JavaScript integer-like key ordering",
+        "object-integer-keys",
+        { structuredContent: { "10": "ten", "2": "two", b: true, a: false } },
+    ),
+    await preservedScenario(
+        "client and conversion render numbers with JavaScript JSON.stringify notation",
+        "object-numbers",
+        {
+            structuredContent: {
+                integer: 42,
+                negative: -7,
+                float: 1.5,
+                large: 9007199254740993,
+                exponent: 1e21,
+            },
+        },
+    ),
+    await preservedScenario(
+        "client and conversion render every JSON number shape with JavaScript JSON.stringify notation",
+        "object-number-shapes",
+        {
+            structuredContent: {
+                zero: 0,
+                negativeZero: -0,
+                small: 0.000001,
+                smaller: 1e-7,
+                large: 1e20,
+                exponent: 1e21,
+                fraction: 123.45,
+                precise: 1.2345678901234567e30,
+            },
+        },
+    ),
+    await preservedScenario(
+        "client and conversion keep non-empty content blocks and structuredContent separate",
+        "content-text-structured",
+        { content: [{ type: "text", text: "alpha" }], structuredContent: { ok: true } },
+    ),
+    await preservedScenario(
+        "client and conversion fall back to structuredContent for an empty content list",
+        "empty-content-structured",
+        { content: [], structuredContent: { ok: true } },
+    ),
+    await preservedScenario(
+        "client and conversion add pi's error text when missing content isError has no model text",
+        "missing-content-isError",
+        { isError: true },
+    ),
+];
 
 const capturedAt = new Date().toISOString();
 const sourceEndpoints = [
@@ -277,6 +347,12 @@ const sourceEndpoints = [
 const normalizations = [
     "ephemeral loopback ports and local paths are omitted",
     "elapsed times and errors are reported as bounded values or names",
+    "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order",
+];
+const orderSourceEndpoints = [
+    "packages/mcp/src/client.ts:McpClient.callTool,validateCallToolResult",
+    "packages/mcp/src/protocol/content.ts:CallToolResult,toLlmContent",
+    "packages/coding-agent/src/extensions/mcp/tools.ts:convertMcpResult,createMcpResultSchema",
 ];
 const environment = {
     platform: process.platform,
@@ -286,25 +362,34 @@ const environment = {
     node: process.version,
     tsx: tsxVersion,
 };
-const artifact = {
-    schema: "pike/pi-v1.3.0-audit-evidence/1",
-    baseline: BASELINE,
-    revision,
-    ticket: TICKET,
-    family: FAMILY,
-    capturedAt,
-    environment,
-    sourceEndpoints,
-    scenarios: scenarios.map((scenario) => ({
-        name: scenario.name,
-        inputs: scenario.inputs,
-        expected: scenario.expected,
-        normalizations,
-    })),
-};
-const artifactName = "structured-content.json";
-const artifactContent = `${JSON.stringify(artifact, null, 2)}\n`;
-writeFileSync(join(artifactDirectory, artifactName), artifactContent);
+function buildArtifact(scenarios: Scenario[], endpoints: string[]) {
+    return {
+        schema: "pike/pi-v1.3.0-audit-evidence/1",
+        baseline: BASELINE,
+        revision,
+        ticket: TICKET,
+        family: FAMILY,
+        capturedAt,
+        environment,
+        sourceEndpoints: endpoints,
+        scenarios: scenarios.map((scenario) => ({
+            name: scenario.name,
+            inputs: scenario.inputs,
+            expected: scenario.expected,
+            normalizations,
+        })),
+    };
+}
+
+const presenceArtifact = buildArtifact(presenceScenarios, sourceEndpoints);
+const presenceName = "structured-content.json";
+const presenceContent = `${JSON.stringify(presenceArtifact, null, 2)}\n`;
+writeFileSync(join(artifactDirectory, presenceName), presenceContent);
+
+const orderArtifact = buildArtifact(orderScenarios, orderSourceEndpoints);
+const orderName = "structured-content-order.json";
+const orderContent = `${JSON.stringify(orderArtifact, null, 2)}\n`;
+writeFileSync(join(artifactDirectory, orderName), orderContent);
 
 const pinnedSources = [SCRIPT, join(artifactDirectory, "pi.mts")].map((path) => ({
     path: relative(REPO, path),
@@ -327,17 +412,28 @@ const manifest = {
     },
     artifacts: [
         {
-            path: artifactName,
+            path: presenceName,
             family: FAMILY,
-            bytes: Buffer.byteLength(artifactContent),
-            sha256: sha256(artifactContent),
+            bytes: Buffer.byteLength(presenceContent),
+            sha256: sha256(presenceContent),
             sourceEndpoints,
-            scenarios: artifact.scenarios,
+            scenarios: presenceArtifact.scenarios,
+        },
+        {
+            path: orderName,
+            family: FAMILY,
+            bytes: Buffer.byteLength(orderContent),
+            sha256: sha256(orderContent),
+            sourceEndpoints: orderSourceEndpoints,
+            scenarios: orderArtifact.scenarios,
         },
     ],
 };
 const manifestContent = `${JSON.stringify(manifest, null, 2)}\n`;
 writeFileSync(join(artifactDirectory, "manifest.json"), manifestContent);
-console.log(`captured ${artifactName} (${scenarios.length} scenarios)`);
+console.log(
+    `captured ${presenceName} (${presenceArtifact.scenarios.length} scenarios) and ` +
+        `${orderName} (${orderArtifact.scenarios.length} scenarios)`,
+);
 console.log(`wrote ${relative(REPO, join(artifactDirectory, "manifest.json"))}`);
 console.log(`manifest sha256 ${sha256(manifestContent)}`);

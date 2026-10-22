@@ -155,6 +155,47 @@ TEST_CASE("/export with no destination writes pi's default HTML next to the sess
     finish_interactive(running);
 }
 
+TEST_CASE("/export reads its destination through pi's getPathCommandArgument",
+        "[coding_agent][tui][export][e2e][issue1044][spec]") {
+    Fixture fixture;
+    fixture.create_session();
+    Running running;
+    start_interactive(fixture, running);
+
+    REQUIRE(running.terminal.inject_input("export quoted\r"));
+    REQUIRE(wait_for_text(running, "fake: export quoted"));
+
+    // pi `handleExportCommand` runs the argument through
+    // `getPathCommandArgument`, which strips one layer of quotes and takes the
+    // first whitespace-delimited token. Without it the quoted destination would
+    // be treated as a literal filename with embedded quote characters, and a
+    // trailing token would become part of the path.
+    const std::string destination = "export-quoted-destination-test.jsonl";
+    REQUIRE(running.terminal.inject_input("/export \"" + destination + "\"\r"));
+    REQUIRE(wait_for_text(running, "Session exported to: " + destination));
+
+    CHECK(std::filesystem::exists(destination));
+    CHECK_FALSE(std::filesystem::exists("\"" + destination + "\""));
+    std::error_code error;
+    std::filesystem::remove(destination, error);
+    REQUIRE_FALSE(error);
+
+    // A trailing token is ignored, exactly as pi's first-token rule does. The
+    // first run's status line is still on screen, so wait on a fresh one: a
+    // second destination makes the new status line distinguishable.
+    const std::string second = "export-trailing-token-test.jsonl";
+    REQUIRE(running.terminal.inject_input("/export " + second + " ignored-token\r"));
+    REQUIRE(wait_for_text(running, "Session exported to: " + second));
+    CHECK(std::filesystem::exists(second));
+    CHECK_FALSE(std::filesystem::exists(second + " ignored-token"));
+    std::filesystem::remove(second, error);
+    REQUIRE_FALSE(error);
+    std::filesystem::remove(destination, error);
+    REQUIRE_FALSE(error);
+
+    finish_interactive(running);
+}
+
 TEST_CASE("/export with a .jsonl destination keeps the transcript lane",
         "[coding_agent][tui][export][e2e][issue1044][spec]") {
     Fixture fixture;

@@ -41,7 +41,7 @@ struct ParsedName {
 
 } // namespace
 
-std::optional<std::string> import_path_argument(std::string_view argument) {
+std::optional<std::string> path_command_argument(std::string_view argument) {
     // pi `getPathCommandArgument`: the argument text after the command
     // token, with the leading whitespace already trimmed by the router.
     const auto trimmed = argument;

@@ -364,7 +364,7 @@
     ],
     "missingObservationRows": 1028,
     "scenarioCoverage": {
-      "scenarios": 416,
+      "scenarios": 432,
       "scenarioNamed": 320,
       "artifactCovered": 47,
       "orphaned": [
@@ -416,7 +416,23 @@
         "audit-1101/structured-content.json:client rejects JSON null content instead of treating it as absent",
         "audit-1101/structured-content.json:client rejects non-array content instead of treating it as absent",
         "audit-1101/structured-content.json:client rejects a non-object tools/call result",
-        "audit-1123/named-session-program-status.json:named-session-reports-working-and-done-message"
+        "audit-1123/named-session-program-status.json:named-session-reports-working-and-done-message",
+        "audit-1101/structured-content-order.json:client and conversion preserve the wire order of a reverse object structuredContent",
+        "audit-1101/structured-content-order.json:client and conversion preserve insertion order for three reverse-sorted object members",
+        "audit-1101/structured-content-order.json:client and conversion preserve order in nested objects and their parent",
+        "audit-1101/structured-content-order.json:client and conversion preserve JavaScript integer-like key ordering",
+        "audit-1101/structured-content-order.json:client and conversion render numbers with JavaScript JSON.stringify notation",
+        "audit-1101/structured-content-order.json:client and conversion render every JSON number shape with JavaScript JSON.stringify notation",
+        "audit-1101/structured-content-order.json:client and conversion keep non-empty content blocks and structuredContent separate",
+        "audit-1101/structured-content-order.json:client and conversion fall back to structuredContent for an empty content list",
+        "audit-1101/structured-content-order.json:client and conversion add pi's error text when missing content isError has no model text",
+        "audit-1063/session-transactions.json:a table read after the first table write is rejected and the transaction still commits its document",
+        "audit-1063/session-transactions.json:a close rejects every later session operation and closes the storage backend",
+        "audit-1063/session-transactions.json:a failed commit leaves the storage sequence unchanged and the session reopens from what was committed",
+        "audit-1063/session-transactions.json:a commit callback that fails after staging writes publishes nothing and leaves the session usable",
+        "audit-1063/session-transactions.json:the same public operation yields the same session and transaction records on a reopen over memory storage",
+        "audit-1063/session-transactions.json:a watch acquired at an older revision replays every op-bearing committed frame to the current revision",
+        "audit-1063/session-transactions.json:a document watch acquired before start buffers committed frames and delivers them in commit order"
       ],
       "uncovered": []
     }
@@ -3033,6 +3049,187 @@
         "cch_tui:program-status-protocol"
       ],
       "disposition": "the program-status slices must consume this observation when they implement the named-session working and done message"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve the wire order of a reverse object structuredContent",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve insertion order for three reverse-sorted object members",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve order in nested objects and their parent",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve JavaScript integer-like key ordering",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion render numbers with JavaScript JSON.stringify notation",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion render every JSON number shape with JavaScript JSON.stringify notation",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion keep non-empty content blocks and structuredContent separate",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion fall back to structuredContent for an empty content list",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion add pi's error text when missing content isError has no model text",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a table read after the first table write is rejected and the transaction still commits its document",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a close rejects every later session operation and closes the storage backend",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a failed commit leaves the storage sequence unchanged and the session reopens from what was committed",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a commit callback that fails after staging writes publishes nothing and leaves the session usable",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "the same public operation yields the same session and transaction records on a reopen over memory storage",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a watch acquired at an older revision replays every op-bearing committed frame to the current revision",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a document watch acquired before start buffers committed frames and delivers them in commit order",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
     }
   ],
   "correctionsIndex": [

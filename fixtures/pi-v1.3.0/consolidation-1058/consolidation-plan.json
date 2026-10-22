@@ -273,19 +273,47 @@
     },
     "overrides": {
       "1047": {
-        "agent-core:ToolResult:duration-field": ["cch_agent_core", "cch_ai", "cch_coding_agent"],
-        "coding-agent:AgentSession:tool-telemetry": ["cch_coding_agent"],
-        "coding-agent:TUI:tool-duration": ["cch_coding_agent"],
-        "coding-agent:AgentSession:queue-admission": ["cch_coding_agent"],
-        "agent-core:Agent:default-state": ["cch_coding_agent"],
-        "agent-core:Agent:provider-error": ["cch_coding_agent"],
-        "agent-core:InputQueue:follow-up": ["cch_coding_agent"],
-        "agent-core:InputQueue:peek-clear": ["cch_coding_agent"],
-        "agent-core:InputQueue:steering-all": ["cch_coding_agent"],
-        "agent-core:InputQueue:steering-one-at-a-time": ["cch_coding_agent"],
-        "agent-core:NestedToolCalls:duration": ["cch_coding_agent"],
-        "agent-core:NestedToolCalls:parent-ids": ["cch_coding_agent"],
-        "agent-core:ToolCallExecutor:truncation": ["cch_coding_agent"],
+        "agent-core:ToolResult:duration-field": [
+          "cch_agent_core",
+          "cch_ai",
+          "cch_coding_agent"
+        ],
+        "coding-agent:AgentSession:tool-telemetry": [
+          "cch_coding_agent"
+        ],
+        "coding-agent:TUI:tool-duration": [
+          "cch_coding_agent"
+        ],
+        "coding-agent:AgentSession:queue-admission": [
+          "cch_coding_agent"
+        ],
+        "agent-core:Agent:default-state": [
+          "cch_coding_agent"
+        ],
+        "agent-core:Agent:provider-error": [
+          "cch_coding_agent"
+        ],
+        "agent-core:InputQueue:follow-up": [
+          "cch_coding_agent"
+        ],
+        "agent-core:InputQueue:peek-clear": [
+          "cch_coding_agent"
+        ],
+        "agent-core:InputQueue:steering-all": [
+          "cch_coding_agent"
+        ],
+        "agent-core:InputQueue:steering-one-at-a-time": [
+          "cch_coding_agent"
+        ],
+        "agent-core:NestedToolCalls:duration": [
+          "cch_coding_agent"
+        ],
+        "agent-core:NestedToolCalls:parent-ids": [
+          "cch_coding_agent"
+        ],
+        "agent-core:ToolCallExecutor:truncation": [
+          "cch_coding_agent"
+        ],
         "agent-core:Agent:finish-turn-hook": [],
         "agent-core:Agent:prepare-request-hook": [],
         "agent-core:Agent:reset": [],
@@ -296,39 +324,105 @@
         "agent-core:ToolCallExecutor:run-tool-call": []
       },
       "1050": {
-        "Editor.render": ["cch_coding_agent", "cch_tui"],
-        "Input.render": ["cch_coding_agent", "cch_tui"],
-        "ProcessTerminal.start": ["cch_coding_agent", "cch_tui"],
-        "ProcessTerminal.stop": ["cch_coding_agent", "cch_tui"],
-        "TUI.getShowHardwareCursor": ["cch_coding_agent", "cch_tui"],
-        "TUI.setShowHardwareCursor": ["cch_coding_agent", "cch_tui"],
-        "TUI.showOverlay": ["cch_coding_agent", "cch_tui"],
-        "TuiAltScreen.render": ["cch_coding_agent", "cch_tui"],
-        "TuiAltScreen.handleViewportInput": ["cch_coding_agent", "cch_tui"],
-        "TuiAltScreen.clearTextSelection": ["cch_coding_agent", "cch_tui"],
-        "TuiAltScreen.applySelection": ["cch_coding_agent", "cch_tui"],
-        "cch_tui:keys:shifted-symbol-matching": ["cch_coding_agent", "cch_tui"]
+        "Editor.render": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "Input.render": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "ProcessTerminal.start": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "ProcessTerminal.stop": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "TUI.getShowHardwareCursor": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "TUI.setShowHardwareCursor": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "TUI.showOverlay": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "TuiAltScreen.render": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "TuiAltScreen.handleViewportInput": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "TuiAltScreen.clearTextSelection": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "TuiAltScreen.applySelection": [
+          "cch_coding_agent",
+          "cch_tui"
+        ],
+        "cch_tui:keys:shifted-symbol-matching": [
+          "cch_coding_agent",
+          "cch_tui"
+        ]
       },
       "1051": {
-        "excluded-ai-timing-thinking": ["cch_ai"]
+        "excluded-ai-timing-thinking": [
+          "cch_ai"
+        ]
       },
       "1054": {
-        "cch_durable:Session:create": ["cch_durable"],
-        "cch_durable:Session:commit": ["cch_durable"],
-        "cch_durable:Tx:createTask": ["cch_durable"],
-        "cch_durable:Tx:read:task": ["cch_durable"],
-        "cch_durable:Storage:task": ["cch_durable"],
-        "cch_durable:Storage:submissionByRequest": ["cch_durable"],
-        "cch_durable:Chord:context": ["cch_durable"],
-        "cch_durable:Chord:draft": ["cch_durable"],
-        "cch_durable:Chord:delta": ["cch_durable"],
-        "cch_durable:Chord:state": ["cch_durable"],
-        "cch_durable:Chord:json": ["cch_durable"]
+        "cch_durable:Session:create": [
+          "cch_durable"
+        ],
+        "cch_durable:Session:commit": [
+          "cch_durable"
+        ],
+        "cch_durable:Tx:createTask": [
+          "cch_durable"
+        ],
+        "cch_durable:Tx:read:task": [
+          "cch_durable"
+        ],
+        "cch_durable:Storage:task": [
+          "cch_durable"
+        ],
+        "cch_durable:Storage:submissionByRequest": [
+          "cch_durable"
+        ],
+        "cch_durable:Chord:context": [
+          "cch_durable"
+        ],
+        "cch_durable:Chord:draft": [
+          "cch_durable"
+        ],
+        "cch_durable:Chord:delta": [
+          "cch_durable"
+        ],
+        "cch_durable:Chord:state": [
+          "cch_durable"
+        ],
+        "cch_durable:Chord:json": [
+          "cch_durable"
+        ]
       },
       "1056": {
-        "chord-documents": ["cch_durable"],
-        "chord-delta": ["cch_durable"],
-        "tool-task-cancellation": ["cch_durable"]
+        "chord-documents": [
+          "cch_durable"
+        ],
+        "chord-delta": [
+          "cch_durable"
+        ],
+        "tool-task-cancellation": [
+          "cch_durable"
+        ]
       },
       "1057": {
         "cch_chord:excluded:plugin-host": [],
@@ -360,7 +454,13 @@
         "agent-core:ToolCallExecutor:run-tool-call": "None currently: runToolCall is internal to ToolCallExecutor/NestedToolCalls and has no application caller; proposed public caller: cch_agent_core ToolCallExecutor API."
       }
     },
-    "noneMarkers": ["none", "unconsumable", "no production", "tests only", "no c++ caller"],
+    "noneMarkers": [
+      "none",
+      "unconsumable",
+      "no production",
+      "tests only",
+      "no c++ caller"
+    ],
     "productKeywords": [
       "native tui",
       "frontend_tui",
@@ -395,25 +495,33 @@
     {
       "ticket": "1047",
       "scenario": "tool duration survives the public session record round trip",
-      "rows": ["agent-core:ToolResult:duration-field"],
+      "rows": [
+        "agent-core:ToolResult:duration-field"
+      ],
       "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
     },
     {
       "ticket": "1047",
       "scenario": "the default thinking level remains off for a reasoning-capable model",
-      "rows": ["agent-core:Agent:default-state"],
+      "rows": [
+        "agent-core:Agent:default-state"
+      ],
       "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
     },
     {
       "ticket": "1047",
       "scenario": "abort while streaming produces one aborted assistant terminal and is idempotent",
-      "rows": ["agent-core:Agent:abort"],
+      "rows": [
+        "agent-core:Agent:abort"
+      ],
       "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
     },
     {
       "ticket": "1047",
       "scenario": "abort and waitForIdle are no-ops while the Agent is idle",
-      "rows": ["agent-core:Agent:wait-for-idle"],
+      "rows": [
+        "agent-core:Agent:wait-for-idle"
+      ],
       "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
     }
   ],
@@ -423,7 +531,9 @@
       "artifact": "input-standalone.json",
       "scenario": "input-placeholder-reversal-and-custom-styling",
       "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
-      "rows": ["cch_tui:Input.placeholderStyle"],
+      "rows": [
+        "cch_tui:Input.placeholderStyle"
+      ],
       "disposition": "input behavior slices must consume this observation when they touch placeholder styling"
     },
     {
@@ -431,7 +541,9 @@
       "artifact": "input-standalone.json",
       "scenario": "input-raw-lf-submission-and-rebound-submit",
       "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact.",
-      "rows": ["cch_tui:Input.onSubmit"],
+      "rows": [
+        "cch_tui:Input.onSubmit"
+      ],
       "disposition": "input behavior slices must consume this observation when they touch submission handling"
     },
     {
@@ -439,7 +551,9 @@
       "artifact": "input-standalone.json",
       "scenario": "input-narrow-unicode-scroll-and-cursor",
       "reason": "Captured and verified by #1050, but no 1050 ledger row routes to the input-standalone artifact.",
-      "rows": ["cch_tui:Input.render"],
+      "rows": [
+        "cch_tui:Input.render"
+      ],
       "disposition": "input behavior slices must consume this observation when they touch narrow/Unicode cursor scrolling"
     },
     {
@@ -447,7 +561,9 @@
       "artifact": "prepare-replace.json",
       "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
-      "rows": ["cch_chord:delta:prepare-replace"],
+      "rows": [
+        "cch_chord:delta:prepare-replace"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement prepared whole-root replacement"
     },
     {
@@ -455,7 +571,9 @@
       "artifact": "prepare-replace.json",
       "scenario": "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": ["cch_chord:delta:prepare-replace"],
+      "rows": [
+        "cch_chord:delta:prepare-replace"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement the no-op whole-root replacement"
     },
     {
@@ -463,7 +581,9 @@
       "artifact": "prepare-replace.json",
       "scenario": "an aborted whole-root preparation cannot be adopted",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": ["cch_chord:delta:prepare-replace"],
+      "rows": [
+        "cch_chord:delta:prepare-replace"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement preparation abort"
     },
     {
@@ -471,7 +591,9 @@
       "artifact": "draft-array-holes.json",
       "scenario": "deleting an array element from a draft rejects the hole and leaves the prepared revision empty",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the draft-array-holes artifact.",
-      "rows": ["cch_chord:delta:path-validation"],
+      "rows": [
+        "cch_chord:delta:path-validation"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement draft array-hole rejection"
     },
     {
@@ -479,7 +601,9 @@
       "artifact": "review-fixes.json",
       "scenario": "a later traversal failure keeps the preceding mutable write",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
-      "rows": ["cch_chord:delta:mutable-application"],
+      "rows": [
+        "cch_chord:delta:mutable-application"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement partial mutable application"
     },
     {
@@ -487,7 +611,9 @@
       "artifact": "review-fixes.json",
       "scenario": "draft reads distinguish absent leaves from null and from absent receiver paths",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
-      "rows": ["cch_chord:json:json-value"],
+      "rows": [
+        "cch_chord:json:json-value"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement draft read semantics"
     },
     {
@@ -495,7 +621,9 @@
       "artifact": "review-fixes.json",
       "scenario": "adoption immediately revokes competing open drafts while prepared competitors retain normal prepared abort and stale states",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
-      "rows": ["cch_chord:delta:draft-abort"],
+      "rows": [
+        "cch_chord:delta:draft-abort"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement adoption-time draft revocation"
     },
     {
@@ -503,7 +631,9 @@
       "artifact": "review-fixes.json",
       "scenario": "adding a key and erasing it again normalizes to an empty batch over the unchanged base",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
-      "rows": ["cch_chord:delta:mutable-application"],
+      "rows": [
+        "cch_chord:delta:mutable-application"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement operation normalization"
     },
     {
@@ -511,7 +641,9 @@
       "artifact": "review-fixes.json",
       "scenario": "an existing nested key keeps explicit delete and readd order",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-fixes artifact.",
-      "rows": ["cch_chord:delta:mutable-application"],
+      "rows": [
+        "cch_chord:delta:mutable-application"
+      ],
       "disposition": "the Chord delta slices must consume this observation when they implement nested key delete and readd"
     },
     {
@@ -519,7 +651,9 @@
       "artifact": "ordered-frames.json",
       "scenario": "an attached state restores the latest committed revision when subscribing after existing commits",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": ["cch_chord:state:attached-hydration"],
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement late attachment"
     },
     {
@@ -527,7 +661,9 @@
       "artifact": "ordered-frames.json",
       "scenario": "attachment captures the snapshot before activation and drains buffered frames in commit order",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": ["cch_chord:state:attached-hydration"],
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement attachment activation order"
     },
     {
@@ -535,7 +671,9 @@
       "artifact": "ordered-frames.json",
       "scenario": "exact source values are published without applying or re-diffing the frame operations",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": ["cch_chord:Chord:state"],
+      "rows": [
+        "cch_chord:Chord:state"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement frame publication"
     },
     {
@@ -543,7 +681,9 @@
       "artifact": "ordered-frames.json",
       "scenario": "a repeated cursor is reported once as a gap and keeps the last good value",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": ["cch_chord:state:cursor-gap"],
+      "rows": [
+        "cch_chord:state:cursor-gap"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement repeated-cursor gap reporting"
     },
     {
@@ -551,7 +691,9 @@
       "artifact": "ordered-frames.json",
       "scenario": "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": ["cch_chord:state:delivery-order"],
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement reentrant commit buffering"
     },
     {
@@ -559,7 +701,9 @@
       "artifact": "ordered-frames.json",
       "scenario": "one subscription serializes reentrant hydration and update callbacks in publication order",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": ["cch_chord:state:delivery-order"],
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement per-subscription serialization"
     },
     {
@@ -567,7 +711,9 @@
       "artifact": "ordered-frames.json",
       "scenario": "independent attachments converge separately and dispose idempotently without affecting each other",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": ["cch_chord:state:dispose"],
+      "rows": [
+        "cch_chord:state:dispose"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement independent attachment disposal"
     },
     {
@@ -575,7 +721,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:pending-bound"],
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
     },
     {
@@ -583,7 +731,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:pending-bound"],
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
     },
     {
@@ -591,7 +741,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:pending-bound"],
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
     },
     {
@@ -599,7 +751,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "a held listener serializes its own updates while another subscription converges independently",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:delivery-order"],
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement held-listener serialization"
     },
     {
@@ -607,7 +761,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:pending-bound"],
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement pending-delivery overflow"
     },
     {
@@ -615,7 +771,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "a failing listener is reported through onError in isolation and keeps receiving later deliveries",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:listener-error"],
+      "rows": [
+        "cch_chord:state:listener-error"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement listener failure isolation"
     },
     {
@@ -623,7 +781,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "a synchronous hydration failure is reported without removing the subscription",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:listener-error"],
+      "rows": [
+        "cch_chord:state:listener-error"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement hydration failure reporting"
     },
     {
@@ -631,7 +791,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "unsubscribe discards queued deliveries without aborting or joining the running callback",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:dispose"],
+      "rows": [
+        "cch_chord:state:dispose"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement unsubscribe semantics"
     },
     {
@@ -639,7 +801,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "a callback rejection that settles after unsubscribe is still reported",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:listener-error"],
+      "rows": [
+        "cch_chord:state:listener-error"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement late callback settlement"
     },
     {
@@ -647,7 +811,9 @@
       "artifact": "observer-delivery.json",
       "scenario": "two subscriptions of the same listener are delivered independently",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": ["cch_chord:state:delivery-order"],
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement independent subscriptions"
     },
     {
@@ -655,7 +821,9 @@
       "artifact": "review-edges.json",
       "scenario": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": ["cch_chord:state:delivery-order"],
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement subscriber registration order"
     },
     {
@@ -663,7 +831,9 @@
       "artifact": "review-edges.json",
       "scenario": "a retained value reference keeps the revision it was read at across a later commit",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": ["cch_chord:Chord:state"],
+      "rows": [
+        "cch_chord:Chord:state"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement retained-value revision stability"
     },
     {
@@ -671,7 +841,9 @@
       "artifact": "review-edges.json",
       "scenario": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": ["cch_chord:state:listener-error"],
+      "rows": [
+        "cch_chord:state:listener-error"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement source contract failure reporting"
     },
     {
@@ -679,7 +851,9 @@
       "artifact": "review-edges.json",
       "scenario": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": ["cch_chord:state:dispose"],
+      "rows": [
+        "cch_chord:state:dispose"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement cursor range validation"
     },
     {
@@ -687,7 +861,9 @@
       "artifact": "review-edges.json",
       "scenario": "negative safe integer cursors are accepted for the snapshot and later frames",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": ["cch_chord:state:attached-hydration"],
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement negative cursor acceptance"
     },
     {
@@ -695,7 +871,9 @@
       "artifact": "review-edges.json",
       "scenario": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": ["cch_chord:state:cursor-gap"],
+      "rows": [
+        "cch_chord:state:cursor-gap"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement frame cursor range validation"
     },
     {
@@ -703,7 +881,9 @@
       "artifact": "review-edges.json",
       "scenario": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
       "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": ["cch_chord:state:cursor-gap"],
+      "rows": [
+        "cch_chord:state:cursor-gap"
+      ],
       "disposition": "the Chord state slices must consume this observation when they implement buffered-activation gap handling"
     },
     {
@@ -711,7 +891,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve an object structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement object structured content"
     },
     {
@@ -719,7 +901,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve a non-empty array structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement array structured content"
     },
     {
@@ -727,7 +911,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve an empty-array structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement empty-array structured content"
     },
     {
@@ -735,7 +921,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve a string structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement string structured content"
     },
     {
@@ -743,7 +931,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve an empty-string structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement empty-string structured content"
     },
     {
@@ -751,7 +941,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve a false structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement boolean structured content"
     },
     {
@@ -759,7 +951,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve a number-zero structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement numeric structured content"
     },
     {
@@ -767,7 +961,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve a null structuredContent when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement null structured content"
     },
     {
@@ -775,7 +971,9 @@
       "artifact": "structured-content.json",
       "scenario": "client and conversion distinguish missing structuredContent from JSON null when content is absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_coding_agent:mcp-tool-result-conversion"],
+      "rows": [
+        "cch_coding_agent:mcp-tool-result-conversion"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement missing-versus-null content"
     },
     {
@@ -783,7 +981,9 @@
       "artifact": "structured-content.json",
       "scenario": "client rejects JSON null content instead of treating it as absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement content validation"
     },
     {
@@ -791,7 +991,9 @@
       "artifact": "structured-content.json",
       "scenario": "client rejects non-array content instead of treating it as absent",
       "reason": "Captured by #1101 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement content validation"
     },
     {
@@ -799,7 +1001,9 @@
       "artifact": "structured-content.json",
       "scenario": "client rejects a non-object tools/call result",
       "reason": "Captured by #1101 after the #1058 ledger committed, but no 1052 ledger row routes to the structured-content artifact.",
-      "rows": ["cch_mcp:mcp-tools-call-structured"],
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
       "disposition": "the MCP structured-content slices must consume this observation when they implement result validation"
     },
     {
@@ -807,8 +1011,191 @@
       "artifact": "named-session-program-status.json",
       "scenario": "named-session-reports-working-and-done-message",
       "reason": "Captured by #1123 after the #1058 ledger was committed, but no 1050 or 1051 ledger row routes to the named-session-program-status artifact.",
-      "rows": ["cch_tui:program-status-protocol"],
+      "rows": [
+        "cch_tui:program-status-protocol"
+      ],
       "disposition": "the program-status slices must consume this observation when they implement the named-session working and done message"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve the wire order of a reverse object structuredContent",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve insertion order for three reverse-sorted object members",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve order in nested objects and their parent",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion preserve JavaScript integer-like key ordering",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion render numbers with JavaScript JSON.stringify notation",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion render every JSON number shape with JavaScript JSON.stringify notation",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion keep non-empty content blocks and structuredContent separate",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion fall back to structuredContent for an empty content list",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1101",
+      "artifact": "structured-content-order.json",
+      "scenario": "client and conversion add pi's error text when missing content isError has no model text",
+      "reason": "Captured by #1101's review against frozen pi v1.3.0 after the #1058 ledger was committed, but no 1052 ledger row routes to the structured-content-order artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "the MCP structured-content slices must consume this observation when they implement the wire member order of a structured-content result"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a table read after the first table write is rejected and the transaction still commits its document",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a close rejects every later session operation and closes the storage backend",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a failed commit leaves the storage sequence unchanged and the session reopens from what was committed",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a commit callback that fails after staging writes publishes nothing and leaves the session usable",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "the same public operation yields the same session and transaction records on a reopen over memory storage",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a watch acquired at an older revision replays every op-bearing committed frame to the current revision",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
+    },
+    {
+      "family": "audit-1063",
+      "artifact": "session-transactions.json",
+      "scenario": "a document watch acquired before start buffers committed frames and delivers them in commit order",
+      "reason": "Captured by #1063 against frozen pi v1.3.0 after the #1058 ledger was committed, but no ledger row routes to the session-transactions artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_durable:Session:commit",
+        "cch_durable:Session:commit:callback-rollback",
+        "cch_durable:Session:close",
+        "cch_durable:Session:subscribeClose"
+      ],
+      "disposition": "the durable session-storage slices must consume this observation when they implement session transactions"
     }
   ],
   "groups": [
@@ -928,7 +1315,10 @@
   "overlaps": [
     {
       "id": "overlap-toolkit-product",
-      "lanes": ["1050", "1051"],
+      "lanes": [
+        "1050",
+        "1051"
+      ],
       "kind": "adjacent-contracts-distinct-owner",
       "resolution": "The toolkit export contract is cch_tui; the Native TUI product behavior is cch_coding_agent's frontend_tui implementation target. The seven 1050 product-entry rows stay not-audited/unverified for v1.3.0 and are not counted as verified by any 1051 capture. #1051 holds three adjacent capability rows in the same product area (mode-switch-renderer, exit-restoration, hardware-cursor); only two product rows name a counterpart, and a counterpart is adjacent, not equal: neither 1051 row observes the 1050 setting and neither is verified. The other five rows have no 1051 row at all. Every row keeps its own visible missing-observation statement.",
       "adjacentRows": [
@@ -954,7 +1344,9 @@
         },
         {
           "row": "cch_coding_agent:product.fullscreenExitOutput",
-          "adjacent": ["cch_coding_agent:exit-restoration"],
+          "adjacent": [
+            "cch_coding_agent:exit-restoration"
+          ],
           "observation": "adjacent counterpart only: #1051 exit-restoration observes exit output and terminal restoration, stays unverified and does not observe the fullscreenExitOutput setting; this row has no observation of its own operation"
         },
         {
@@ -969,7 +1361,9 @@
         },
         {
           "row": "cch_coding_agent:product.showHardwareCursor",
-          "adjacent": ["cch_tui:hardware-cursor"],
+          "adjacent": [
+            "cch_tui:hardware-cursor"
+          ],
           "observation": "adjacent counterpart only: #1051 hardware-cursor observes the toolkit cursor switch, stays unverified and does not observe the showHardwareCursor product setting; this row has no observation of its own operation"
         }
       ],
@@ -985,7 +1379,11 @@
     },
     {
       "id": "overlap-session-storage",
-      "lanes": ["1048", "1054", "1057"],
+      "lanes": [
+        "1048",
+        "1054",
+        "1057"
+      ],
       "kind": "distinct-runtime-distinct-storage",
       "resolution": "Application Session transcript (JSONL session files, coding-agent owner) and durable Session (transactional document/entry/storage contract, durable owner) are different runtimes. The legacy SQLite SessionStore row stays no-decision and is the coupling to split; it is not durable's storage and not the application's final transcript format.",
       "rows": [
@@ -996,7 +1394,10 @@
     },
     {
       "id": "overlap-tasks-harness",
-      "lanes": ["1055", "1056"],
+      "lanes": [
+        "1055",
+        "1056"
+      ],
       "kind": "same-contract-different-lane",
       "resolution": "Both lanes drive the same Harness.open entrypoint with different scenario slices: 1055 exercises task/submission scheduling, versioning, ownership and crash recovery, while 1056 exercises the workflow, registry, compaction, hooks and inspect/observability slices. Same owner (cch_durable); rows stay separate and cross-referenced, with no duplicate merge and no hidden coverage.",
       "rows": [
@@ -1010,7 +1411,11 @@
     },
     {
       "id": "overlap-codemode-chord",
-      "lanes": ["1053", "1054", "1057"],
+      "lanes": [
+        "1053",
+        "1054",
+        "1057"
+      ],
       "kind": "similar-names-different-contract",
       "resolution": "Chord Context/documents/delta are document-tracking semantics owned by cch_chord and consumed only by cch_durable. Codemode context/globals/store are script-VM semantics owned by cch_codemode (with application and durable integrations). Similar names do not merge: the true contract identity is the owner plus the frozen source family.",
       "rows": [
@@ -1022,7 +1427,11 @@
     },
     {
       "id": "overlap-extension-lifecycle",
-      "lanes": ["1049", "1051", "1056"],
+      "lanes": [
+        "1049",
+        "1051",
+        "1056"
+      ],
       "kind": "same-membership-different-consumer",
       "resolution": "Native extension registration/hooks/run triggering is one selected membership with an application Session consumer (1049/1051) and a durable Harness consumer (1056). The historical ADR 0066 #865 tool-source clause does not reopen this; direct third-party TS/JS execution stays excluded.",
       "rows": [
@@ -1033,7 +1442,10 @@
     },
     {
       "id": "overlap-mcp-application",
-      "lanes": ["1052", "1053"],
+      "lanes": [
+        "1052",
+        "1053"
+      ],
       "kind": "generic-owner-application-integration",
       "resolution": "Generic MCP client/transports/OAuth stay in cch_mcp; application config, persistence, exposure, management UI, session-tool binding and codemode's MCP refresh stay in cch_coding_agent. The codemode-mcp-refresh row is an application integration, not an MCP protocol contract.",
       "rows": [
@@ -1098,7 +1510,9 @@
       "kind": "replace",
       "recorded": "extensions/mcp/cli.ts:registerMcpCommands",
       "actual": "packages/coding-agent/src/extensions/mcp/cli.ts:runMcpCommand",
-      "appliesTo": ["cch_coding_agent:mcp-management-ui"],
+      "appliesTo": [
+        "cch_coding_agent:mcp-management-ui"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
       "rationale": "The command entry point is runMcpCommand (cli.ts:185); registerMcpCommands does not exist. Only the row that records the shorthand carries the correction."
     },
@@ -1108,7 +1522,10 @@
       "kind": "replace",
       "recorded": "extensions/mcp/index.ts:MCP_EXPOSURE_ALIASES",
       "actual": "packages/coding-agent/src/core/mcp-servers.ts:MCP_EXPOSURE_ALIASES",
-      "appliesTo": ["cch_coding_agent:mcp-exposure", "cch_coding_agent:mcp-deferred-tool-search"],
+      "appliesTo": [
+        "cch_coding_agent:mcp-exposure",
+        "cch_coding_agent:mcp-deferred-tool-search"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
       "rationale": "The alias constant lives in core/mcp-servers.ts:57. Both rows that record the shorthand carry the correction."
     },
@@ -1118,7 +1535,9 @@
       "kind": "replace",
       "recorded": "transports/stdio.ts:stderrTail",
       "actual": "packages/mcp/src/transports/stdio.ts:get stderr",
-      "appliesTo": ["cch_mcp:mcp-stdio-stderr-tail"],
+      "appliesTo": [
+        "cch_mcp:mcp-stdio-stderr-tail"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
       "rationale": "The stderr tail is exposed by the get stderr accessor (stdio.ts:86). Only the row that records the shorthand carries the correction."
     },
@@ -1128,7 +1547,9 @@
       "kind": "replace",
       "recorded": "mcp/README.md:supported operations",
       "actual": "packages/mcp/README.md:Supported protocol surface",
-      "appliesTo": ["cch_mcp:mcp-prompts-sampling"],
+      "appliesTo": [
+        "cch_mcp:mcp-prompts-sampling"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
       "rationale": "The heading is 'Supported protocol surface' (README.md:116). Only the row that records the shorthand carries the correction."
     },
@@ -1138,7 +1559,11 @@
       "kind": "replace",
       "recorded": "mcp-extension.test.ts:McpExtension",
       "actual": "packages/coding-agent/test/mcp-extension.test.ts:MCP connections",
-      "appliesTo": ["cch_mcp:mcp-client-lifecycle", "cch_coding_agent:mcp-application-resource-init", "cch_coding_agent:mcp-reconnect-tools-changed"],
+      "appliesTo": [
+        "cch_mcp:mcp-client-lifecycle",
+        "cch_coding_agent:mcp-application-resource-init",
+        "cch_coding_agent:mcp-reconnect-tools-changed"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
       "rationale": "Test-file shorthand: the suite is 'MCP connections' with named cases such as 'closes a connection that is still initializing before close returns'. The three rows that record the shorthand carry the correction."
     },
@@ -1148,7 +1573,9 @@
       "kind": "replace",
       "recorded": "client.test.ts:cancellation",
       "actual": "packages/mcp/test/client.test.ts:cancels aborted and timed-out requests",
-      "appliesTo": ["cch_mcp:mcp-request-cancellation"],
+      "appliesTo": [
+        "cch_mcp:mcp-request-cancellation"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
       "rationale": "Cancellation shorthand: the exact case is 'cancels aborted and timed-out requests' (client.test.ts:210). Only the row that records the shorthand carries the correction."
     },
@@ -1158,7 +1585,9 @@
       "kind": "replace",
       "recorded": "packages/mcp/src/oauth/flow.ts:authorizeMcp,validateIssuer",
       "actual": "packages/mcp/src/oauth/flow.ts:authorizeMcp,runFlow",
-      "appliesTo": ["cch_mcp:mcp-oauth-issuer"],
+      "appliesTo": [
+        "cch_mcp:mcp-oauth-issuer"
+      ],
       "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[3]",
       "rationale": "There is no validateIssuer symbol: the authorization-response issuer check is inline in runFlow (flow.ts:388) and throws OAuthIssuerMismatchError from oauth/errors.ts, so the pointer names the function that performs the check."
     },
@@ -1198,7 +1627,9 @@
       "kind": "replace",
       "recorded": "packages/durable/test/session-tables.test.ts:typed entry read",
       "actual": "packages/durable/test/session-tables.test.ts:Session transaction tables",
-      "appliesTo": ["cch_durable:Tx:read:entry"],
+      "appliesTo": [
+        "cch_durable:Tx:read:entry"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[0]",
       "rationale": "Suite title is 'Session transaction tables'."
     },
@@ -1208,7 +1639,9 @@
       "kind": "replace",
       "recorded": "packages/durable/test/session-tables.test.ts:scan limits and cursors",
       "actual": "packages/durable/test/session-tables.test.ts:passes caller-selected limits and cursors through table scans",
-      "appliesTo": ["cch_durable:Tx:read:scanEntries"],
+      "appliesTo": [
+        "cch_durable:Tx:read:scanEntries"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[1]",
       "rationale": "Exact case title."
     },
@@ -1218,7 +1651,9 @@
       "kind": "replace",
       "recorded": "packages/durable/src/storage/sqlite/schema.ts:submissionsByRequest index",
       "actual": "packages/durable/src/storage/sqlite/schema.ts:INDEX_NAMES.submissionsByRequest",
-      "appliesTo": ["cch_durable:Tx:read:submissionByRequest"],
+      "appliesTo": [
+        "cch_durable:Tx:read:submissionByRequest"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[2]",
       "rationale": "The index is declared through INDEX_NAMES.submissionsByRequest / SQL index submissions_by_request."
     },
@@ -1228,7 +1663,10 @@
       "kind": "replace",
       "recorded": "packages/durable/src/session/forks.ts:copyConversationDocuments",
       "actual": "packages/durable/src/session/forks.ts:prepareForkDocumentCopies",
-      "appliesTo": ["cch_durable:Tx:forkConversation", "cch_durable:Document:fork-copy"],
+      "appliesTo": [
+        "cch_durable:Tx:forkConversation",
+        "cch_durable:Document:fork-copy"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[3],[6]",
       "rationale": "Actual symbol is prepareForkDocumentCopies."
     },
@@ -1238,7 +1676,9 @@
       "kind": "replace",
       "recorded": "packages/durable/test/session-tables.test.ts:typed append",
       "actual": "packages/durable/test/session-tables.test.ts:Session transaction tables",
-      "appliesTo": ["cch_durable:Entry:append-typed"],
+      "appliesTo": [
+        "cch_durable:Entry:append-typed"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[4]",
       "rationale": "Suite title is 'Session transaction tables'."
     },
@@ -1248,7 +1688,9 @@
       "kind": "replace",
       "recorded": "packages/durable/test/session-checkpoints-migrations.test.ts:Session document checkpoints and migrations",
       "actual": "packages/durable/test/session-checkpoints-migrations.test.ts:Session document checkpoints / Session document migrations",
-      "appliesTo": ["cch_durable:Document:version-migrate"],
+      "appliesTo": [
+        "cch_durable:Document:version-migrate"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[5]",
       "rationale": "Two suite titles in the same file."
     },
@@ -1258,7 +1700,9 @@
       "kind": "replace",
       "recorded": "packages/durable/src/testing/storage-conformance.ts:registerStorageConformance",
       "actual": "packages/durable/src/testing/runner.ts:registerStorageConformance",
-      "appliesTo": ["cch_durable:Storage:commit"],
+      "appliesTo": [
+        "cch_durable:Storage:commit"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[7]",
       "rationale": "registerStorageConformance is declared in testing/runner.ts and re-exported from testing/index.ts."
     },
@@ -1268,7 +1712,9 @@
       "kind": "replace",
       "recorded": "packages/durable/test/jsonl-storage.test.ts:declares corruption",
       "actual": "packages/durable/test/jsonl-storage.test.ts:fails open when confirmed sidecar data is missing",
-      "appliesTo": ["cch_durable:Storage:jsonl:corruption"],
+      "appliesTo": [
+        "cch_durable:Storage:jsonl:corruption"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[8]",
       "rationale": "Exact case title in suite 'Pico JsonlStorage publication and recovery'."
     },
@@ -1278,7 +1724,9 @@
       "kind": "record-only",
       "recorded": "packages/durable/test/jsonl-storage.test.ts:poisons after failure",
       "actual": "packages/durable/test/jsonl-storage.test.ts:poisons after failure",
-      "appliesTo": ["cch_durable:Storage:jsonl:poison"],
+      "appliesTo": [
+        "cch_durable:Storage:jsonl:poison"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[9]",
       "rationale": "Parameterised 'poisons after ${mode} failure' cases; the abbreviated label resolves."
     },
@@ -1288,7 +1736,9 @@
       "kind": "replace",
       "recorded": "packages/durable/src/storage/sqlite/schema.ts:CURRENT_SQLITE_SCHEMA_VERSION",
       "actual": "packages/durable/src/storage/sqlite/migrations.ts:CURRENT_SQLITE_SCHEMA_VERSION",
-      "appliesTo": ["cch_durable:Storage:sqlite:schema-version"],
+      "appliesTo": [
+        "cch_durable:Storage:sqlite:schema-version"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[10]",
       "rationale": "The constant is declared in migrations.ts."
     },
@@ -1298,7 +1748,9 @@
       "kind": "replace",
       "recorded": "packages/durable/test/sqlite-migrations.test.ts:Durable SQLite migrations",
       "actual": "packages/durable/test/sqlite-migrations.test.ts:durable SQLite migrations",
-      "appliesTo": ["cch_durable:Storage:sqlite:schema-version"],
+      "appliesTo": [
+        "cch_durable:Storage:sqlite:schema-version"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[11]",
       "rationale": "Case title is lowercase."
     },
@@ -1308,7 +1760,9 @@
       "kind": "replace",
       "recorded": "packages/durable/src/storage/sqlite/cloudflare.ts:SqliteCloudflareStorage",
       "actual": "packages/durable/src/storage/sqlite/cloudflare.ts:openDurableObjectSqliteStorage,DurableObjectSqliteStorage",
-      "appliesTo": ["cch_durable:Storage:sqlite:cloudflare"],
+      "appliesTo": [
+        "cch_durable:Storage:sqlite:cloudflare"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[12]",
       "rationale": "Actual exports in the excluded adapter."
     },
@@ -1318,7 +1772,9 @@
       "kind": "replace",
       "recorded": "packages/durable/test/sqlite-storage.test.ts:SqliteStorage conformance across reopen",
       "actual": "packages/durable/test/sqlite-storage.test.ts:SqliteStorage across reopen",
-      "appliesTo": ["cch_durable:Interchange:sqlite-pi-create"],
+      "appliesTo": [
+        "cch_durable:Interchange:sqlite-pi-create"
+      ],
       "authority": "/tmp/cch-1044-context/1054-merged.json provenance_normalizations.ledger_source_labels[13]",
       "rationale": "Exact case title."
     },
@@ -1328,7 +1784,10 @@
       "kind": "replace",
       "recorded": "packages/durable/src/harness/scheduler.ts:#reserve,#runPhases",
       "actual": "packages/durable/src/harness/scheduler.ts:#reserve,#step",
-      "appliesTo": ["cch_durable:task-definition-registry", "cch_durable:definition-replacement"],
+      "appliesTo": [
+        "cch_durable:task-definition-registry",
+        "cch_durable:definition-replacement"
+      ],
       "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[0]",
       "rationale": "#runPhases does not exist; #run loops over #step, which commits each phase decision (scheduler.ts:1325-1332). Both rows that record this pointer carry the correction."
     },
@@ -1338,7 +1797,9 @@
       "kind": "replace",
       "recorded": "packages/durable/src/harness/scheduler.ts:#blockedReason,#terminate",
       "actual": "packages/durable/src/harness/scheduler.ts:#resolve,#terminate",
-      "appliesTo": ["cch_durable:blocked-definition-orphaned"],
+      "appliesTo": [
+        "cch_durable:blocked-definition-orphaned"
+      ],
       "authority": "/tmp/cch-1044-context/1055-merged.json normalizationItemsRecorded[1]",
       "rationale": "#blockedReason does not exist; blocked resolution is #resolve/#fit (scheduler.ts:1210-1278)."
     },
@@ -1418,7 +1879,9 @@
       "kind": "record-only",
       "recorded": "Glaze JSONL session redacts sensitive message fields at persistence",
       "actual": "Glaze JSONL session redacts sensitive message fields at persistence boundary",
-      "appliesTo": ["cch_coding_agent:Session:wire:redaction"],
+      "appliesTo": [
+        "cch_coding_agent:Session:wire:redaction"
+      ],
       "authority": "/tmp/cch-1044-context/1048-merged.json reviewFindings[4]",
       "rationale": "Cosmetic quotation fix for tests/harness/session/JsonlSessionStoreTest.cpp:131."
     }

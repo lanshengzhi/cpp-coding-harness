@@ -4,7 +4,7 @@
 // stand-in for the value observed on the wire. Positive expected values come
 // from the frozen pi v1.3.0 audit scenarios in
 // `fixtures/pi-v1.3.0/audit-1101/structured-content.json` and the review-order
-// artifact `fixtures/pi-v1.3.0/review-1101/audit-1101/structured-content-order.json`;
+// artifact `fixtures/pi-v1.3.0/audit-1101/structured-content-order.json`;
 // the rejection assertions are C++-side controls for the explicit
 // `ErrorCode::Process` / `-32600` mapping, not frozen client observations.
 
@@ -109,7 +109,7 @@ TEST_CASE("an MCP tools/call object structuredContent survives conversion with c
 TEST_CASE(
         "the frozen review artifact matches every actual fixture observation", "[coding_agent][mcp][issue1101][spec]") {
     const std::string artifact_path =
-            std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/review-1101/audit-1101/structured-content-order.json";
+            std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1101/structured-content-order.json";
     std::ifstream input(artifact_path, std::ios::binary);
     REQUIRE(input);
     const std::string artifact_text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};

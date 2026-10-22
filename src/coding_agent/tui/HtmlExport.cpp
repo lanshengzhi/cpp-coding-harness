@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <charconv>
 #include <cstdint>
 #include <filesystem>
 #include <format>
@@ -37,6 +38,7 @@ namespace {
 [[nodiscard]] bool is_background_slot(ThemeToken token) {
     switch (token) {
     case ThemeToken::SelectedBg:
+    case ThemeToken::SearchMatchBg:
     case ThemeToken::UserMessageBg:
     case ThemeToken::CustomMessageBg:
     case ThemeToken::ToolPendingBg:
@@ -64,27 +66,28 @@ struct CssRgb {
 /// <digits>, <digits>)` — the only shapes `deriveExportColors` can receive
 /// from `colorToHex`-produced theme colors.
 [[nodiscard]] std::optional<CssRgb> parse_export_color(std::string_view value) {
+    // CODING_STANDARDS 9.3: number parsing is `std::from_chars`.
     const auto decimal_channel = [](std::string_view text) -> std::optional<int> {
-        if (text.empty() || text.size() > 3) return std::nullopt;
-        int channel = 0;
+        // pi's `parseColor` matches `rgb\s*\(\s*(\d+)\s*,...`: digits only,
+        // so a sign is not part of the shape even though `from_chars` would
+        // accept one.
+        if (text.empty()) return std::nullopt;
         for (const char character : text) {
             if (character < '0' || character > '9') return std::nullopt;
-            channel = channel * 10 + (character - '0');
         }
+        int channel = 0;
+        const char* const end = text.data() + text.size();
+        const auto parsed = std::from_chars(text.data(), end, channel);
+        if (parsed.ec != std::errc{} || parsed.ptr != end) return std::nullopt;
         return channel;
     };
     if (value.size() == 7 && value.front() == '#') {
         const auto hex_channel = [&](std::size_t offset) -> std::optional<int> {
-            const auto digit = [](char character) -> std::optional<int> {
-                if (character >= '0' && character <= '9') return character - '0';
-                if (character >= 'a' && character <= 'f') return character - 'a' + 10;
-                if (character >= 'A' && character <= 'F') return character - 'A' + 10;
-                return std::nullopt;
-            };
-            const auto first = digit(value[1 + offset]);
-            const auto second = digit(value[2 + offset]);
-            if (!first || !second) return std::nullopt;
-            return *first * 16 + *second;
+            int channel = 0;
+            const char* const end = value.data() + 3 + offset;
+            const auto parsed = std::from_chars(value.data() + 1 + offset, end, channel, 16);
+            if (parsed.ec != std::errc{} || parsed.ptr != end) return std::nullopt;
+            return channel;
         };
         const auto red = hex_channel(0);
         const auto green = hex_channel(2);

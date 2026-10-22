@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1101",
   "family": "audit-1101",
-  "capturedAt": "2026-10-20T10:20:22.922Z",
+  "capturedAt": "2026-10-22T04:04:11.913Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -73,7 +73,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -123,7 +124,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -155,7 +157,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -187,7 +190,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -219,7 +223,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -251,7 +256,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -283,7 +289,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -315,7 +322,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -338,7 +346,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -358,7 +367,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -378,7 +388,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     },
     {
@@ -396,7 +407,8 @@
       },
       "normalizations": [
         "ephemeral loopback ports and local paths are omitted",
-        "elapsed times and errors are reported as bounded values or names"
+        "elapsed times and errors are reported as bounded values or names",
+        "object member order is captured from the JavaScript value as JSON.stringify observes it; integer-like keys sort ascending, other keys keep insertion order"
       ]
     }
   ]

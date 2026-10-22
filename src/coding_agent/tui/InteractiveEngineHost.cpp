@@ -358,12 +358,15 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
         }
         auto store = harness::session::SessionStore::open_existing(*session_path);
         if (!store) return std::unexpected(store.error());
-        // pi `handleExportCommand`: a `.jsonl` destination takes the JSONL
+        // pi `handleExportCommand` reads the destination through
+        // `getPathCommandArgument`, so a quoted path keeps its spaces and
+        // trailing tokens are ignored. A `.jsonl` destination takes the JSONL
         // lane; every other spelling (including no destination at all)
         // exports HTML, with pi's default output name filling the empty
         // destination.
-        if (invocation.argument.ends_with(".jsonl")) {
-            auto handler = harness::transcript_export_handler(*store, invocation.argument);
+        const auto destination = path_command_argument(invocation.argument);
+        if (destination.has_value() && destination->ends_with(".jsonl")) {
+            auto handler = harness::transcript_export_handler(*store, *destination);
             auto exported = handler({});
             if (!exported) return std::unexpected(exported.error());
             if (view_ != nullptr) {
@@ -388,7 +391,8 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
             extras.system_prompt = system_prompt;
         }
         extras.tools = detail::AgentSessionInteractiveAccess::active_tool_definitions(*session_);
-        auto exported = tui::export_session_to_html(*store, invocation.argument, *session_path, *theme, extras);
+        auto exported =
+                tui::export_session_to_html(*store, destination.value_or(std::string{}), *session_path, *theme, extras);
         if (!exported) return std::unexpected(exported.error());
         if (view_ != nullptr) {
             view_->append_status_message(std::format("Session exported to: {}", *exported));
@@ -487,7 +491,7 @@ void InteractiveEngine::dispatch_modal_slash_command(SlashCommandInvocation invo
         // unterminated quote carries no path at all). A submission with no
         // path reports pi's usage error and asks nothing.
         {
-            const auto path = import_path_argument(invocation.argument);
+            const auto path = path_command_argument(invocation.argument);
             if (!path) {
                 show_error("Usage: /import <path.jsonl>");
                 return;

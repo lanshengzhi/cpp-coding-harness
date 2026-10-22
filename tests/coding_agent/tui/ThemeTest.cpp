@@ -137,8 +137,12 @@ TEST_CASE("Built-in themes match baseline fixtures and resolve every semantic to
     CHECK(*dark_fixture == coding_agent::tui::builtin_dark_theme());
     CHECK(*light_fixture == coding_agent::tui::builtin_light_theme());
     CHECK(coding_agent::tui::all_theme_tokens().size() == coding_agent::tui::kThemeTokenCount);
+    // pi v1.3.0's theme schema requires 51 colors and declares 56 in total
+    // (the three optional ones are scrollbarTrack, searchMatchBg and
+    // searchMatchText); the pinned v0.99.2 fixture omits the optional three
+    // and still loads through pi's fallback rule.
     CHECK(coding_agent::tui::kRequiredThemeTokenCount == 51);
-    CHECK(coding_agent::tui::kThemeTokenCount == 53);
+    CHECK(coding_agent::tui::kThemeTokenCount == 56);
     for (const auto token : coding_agent::tui::all_theme_tokens()) {
         CHECK_FALSE(coding_agent::tui::theme_token_name(token).empty());
     }

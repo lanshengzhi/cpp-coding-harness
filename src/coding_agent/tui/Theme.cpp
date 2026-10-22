@@ -33,19 +33,28 @@ using RawColorValue = std::variant<std::string, int>;
 using RawColorMap = std::map<std::string, RawColorValue, std::less<>>;
 
 constexpr std::array<ThemeToken, kThemeTokenCount> kAllThemeTokens{
-#define CCH_THEME_TOKEN(enum_name, wire_name, required) ThemeToken::enum_name,
+#define CCH_THEME_TOKEN(enum_name, wire_name, required, fallback) ThemeToken::enum_name,
 #include "ThemeTokens.inc"
 #undef CCH_THEME_TOKEN
 };
 
 constexpr std::array<std::string_view, kThemeTokenCount> kThemeTokenNames{
-#define CCH_THEME_TOKEN(enum_name, wire_name, required) wire_name,
+#define CCH_THEME_TOKEN(enum_name, wire_name, required, fallback) wire_name,
 #include "ThemeTokens.inc"
 #undef CCH_THEME_TOKEN
 };
 
 constexpr std::array<bool, kThemeTokenCount> kThemeTokenRequired{
-#define CCH_THEME_TOKEN(enum_name, wire_name, required) required != 0,
+#define CCH_THEME_TOKEN(enum_name, wire_name, required, fallback) required != 0,
+#include "ThemeTokens.inc"
+#undef CCH_THEME_TOKEN
+};
+
+/// pi `theme-tokens.ts`: an optional token that declares a `fallback` inherits
+/// the fallback token's resolved color when the theme omits it. An empty name
+/// means the token has no fallback.
+constexpr std::array<std::string_view, kThemeTokenCount> kThemeTokenFallbacks{
+#define CCH_THEME_TOKEN(enum_name, wire_name, required, fallback) fallback,
 #include "ThemeTokens.inc"
 #undef CCH_THEME_TOKEN
 };
@@ -403,9 +412,28 @@ namespace {
             .export_colors = std::move(export_colors),
             .vars = std::move(variables),
     };
+    // pi `withThemeTokenFallbacks`: a token the theme omits inherits the
+    // resolved color of its declared fallback. A token with no fallback must
+    // be present, so the lookup is a hard error there.
     for (const auto token : kAllThemeTokens) {
-        theme.colors[static_cast<std::size_t>(token)] =
-            std::move(resolved_colors.at(std::string(theme_token_name(token))));
+        const auto index = static_cast<std::size_t>(token);
+        const auto name = std::string{theme_token_name(token)};
+        const auto found = resolved_colors.find(name);
+        if (found != resolved_colors.end()) {
+            theme.colors[index] = found->second;
+            continue;
+        }
+        const auto fallback = kThemeTokenFallbacks[index];
+        if (fallback.empty()) {
+            return std::unexpected(verbatim_validation_error(
+                    support::ErrorCode::Validation, std::format("Theme token {} has no resolved color", name)));
+        }
+        const auto fallback_found = resolved_colors.find(std::string{fallback});
+        if (fallback_found == resolved_colors.end()) {
+            return std::unexpected(verbatim_validation_error(support::ErrorCode::Validation,
+                    std::format("Theme token {} has unresolved fallback {}", name, fallback)));
+        }
+        theme.colors[index] = fallback_found->second;
     }
     return theme;
 }

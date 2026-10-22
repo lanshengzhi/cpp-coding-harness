@@ -40,22 +40,22 @@ void write_file(const std::filesystem::path& path, std::string_view content) {
 TEST_CASE("the import path argument follows pi's quoted and unquoted spellings",
         "[coding_agent][tui][import][issue1044][spec]") {
     // pi `getPathCommandArgument`: a quoted argument keeps its inner text.
-    CHECK(coding_agent::tui::import_path_argument("\"path/to/session.jsonl\"") ==
+    CHECK(coding_agent::tui::path_command_argument("\"path/to/session.jsonl\"") ==
             std::optional<std::string>{"path/to/session.jsonl"});
-    CHECK(coding_agent::tui::import_path_argument("\"path with spaces/session.jsonl\"") ==
+    CHECK(coding_agent::tui::path_command_argument("\"path with spaces/session.jsonl\"") ==
             std::optional<std::string>{"path with spaces/session.jsonl"});
 
     // pi keeps an apostrophe inside an unquoted argument.
-    CHECK(coding_agent::tui::import_path_argument("john's/session.jsonl") ==
+    CHECK(coding_agent::tui::path_command_argument("john's/session.jsonl") ==
             std::optional<std::string>{"john's/session.jsonl"});
 
     // pi stops an unquoted argument at the first whitespace.
-    CHECK(coding_agent::tui::import_path_argument("session.jsonl extra") ==
+    CHECK(coding_agent::tui::path_command_argument("session.jsonl extra") ==
             std::optional<std::string>{"session.jsonl"});
 
     // pi returns no argument for an empty or unterminated-quote argument.
-    CHECK_FALSE(coding_agent::tui::import_path_argument("").has_value());
-    CHECK_FALSE(coding_agent::tui::import_path_argument("\"unterminated").has_value());
+    CHECK_FALSE(coding_agent::tui::path_command_argument("").has_value());
+    CHECK_FALSE(coding_agent::tui::path_command_argument("\"unterminated").has_value());
 }
 
 TEST_CASE("the import destination keeps pi's collision suffix rule", "[coding_agent][tui][import][issue1044][spec]") {

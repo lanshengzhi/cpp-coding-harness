@@ -22,20 +22,20 @@
 namespace cch::coding_agent::tui {
 
 inline constexpr std::size_t kRequiredThemeTokenCount{
-#define CCH_THEME_TOKEN(enum_name, wire_name, required) +required
-    0
+#define CCH_THEME_TOKEN(enum_name, wire_name, required, fallback) +required
+        0
 #include "ThemeTokens.inc"
 #undef CCH_THEME_TOKEN
 };
 inline constexpr std::size_t kThemeTokenCount{
-#define CCH_THEME_TOKEN(enum_name, wire_name, required) +1
-    0
+#define CCH_THEME_TOKEN(enum_name, wire_name, required, fallback) +1
+        0
 #include "ThemeTokens.inc"
 #undef CCH_THEME_TOKEN
 };
 
 enum class ThemeToken {
-#define CCH_THEME_TOKEN(enum_name, wire_name, required) enum_name,
+#define CCH_THEME_TOKEN(enum_name, wire_name, required, fallback) enum_name,
 #include "ThemeTokens.inc"
 #undef CCH_THEME_TOKEN
 };
