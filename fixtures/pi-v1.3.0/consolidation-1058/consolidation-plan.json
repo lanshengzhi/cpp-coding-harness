@@ -1299,6 +1299,16 @@
         "cch_coding_agent:osc52-opt-in"
       ],
       "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-810",
+      "artifact": "thinking-selector.json",
+      "scenario": "thinking selector with the absent thinkingLevelMap at 100 columns",
+      "reason": "Captured by #810 after the #1058 ledger was committed; the earlier audit-1051 thinking-selector capture used an unmatched thinking-level map (the C++ differential fixture declared seven explicit levels while the frozen fixture declared none), so no 1051 row can route to this observation without changing what it claimed.",
+      "rows": [
+        "cch_coding_agent:thinking-selector"
+      ],
+      "disposition": "the thinking-selector slice consumes this observation when it advances cch_coding_agent:thinking-selector beyond upstream-captured."
     }
   ],
   "groups": [

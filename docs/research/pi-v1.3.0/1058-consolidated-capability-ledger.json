@@ -364,7 +364,7 @@
     ],
     "missingObservationRows": 1028,
     "scenarioCoverage": {
-      "scenarios": 442,
+      "scenarios": 443,
       "scenarioNamed": 320,
       "artifactCovered": 47,
       "orphaned": [
@@ -442,7 +442,8 @@
         "audit-1124/clipboard-osc52.json:osc52-opt-in-zero-is-not-an-opt-in",
         "audit-1124/clipboard-osc52.json:osc52-opt-in-writes-the-largest-allowed-payload-in-full",
         "audit-1124/clipboard-osc52.json:osc52-opt-in-rejects-one-byte-over-the-size-bound",
-        "audit-1124/clipboard-osc52.json:wsl-windows-terminal-prefers-osc52-before-the-remote-branch"
+        "audit-1124/clipboard-osc52.json:wsl-windows-terminal-prefers-osc52-before-the-remote-branch",
+        "audit-810/thinking-selector.json:thinking selector with the absent thinkingLevelMap at 100 columns"
       ],
       "uncovered": []
     }
@@ -3343,6 +3344,16 @@
         "cch_coding_agent:osc52-opt-in"
       ],
       "disposition": "the THerdr clipboard slice consumes this observation when it advances cch_coding_agent:osc52-opt-in beyond upstream-captured."
+    },
+    {
+      "family": "audit-810",
+      "artifact": "thinking-selector.json",
+      "scenario": "thinking selector with the absent thinkingLevelMap at 100 columns",
+      "reason": "Captured by #810 after the #1058 ledger was committed; the earlier audit-1051 thinking-selector capture used an unmatched thinking-level map (the C++ differential fixture declared seven explicit levels while the frozen fixture declared none), so no 1051 row can route to this observation without changing what it claimed.",
+      "rows": [
+        "cch_coding_agent:thinking-selector"
+      ],
+      "disposition": "the thinking-selector slice consumes this observation when it advances cch_coding_agent:thinking-selector beyond upstream-captured."
     }
   ],
   "correctionsIndex": [
