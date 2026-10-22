@@ -383,6 +383,7 @@ TEST_CASE("PI_CLIPBOARD_OSC52 makes a local display session write the OSC 52 seq
     // Replays the unregistered observation bundle
     // fixtures/pi-v1.3.0/audit-1124/clipboard-osc52.json (revision 71023aec1546),
     // scenarios osc52-opt-in-writes-the-sequence-for-a-desktop-session,
+    // osc52-opt-in-writes-the-sequence-after-a-successful-copy,
     // osc52-opt-in-absent-reports-the-x11-failure,
     // osc52-opt-in-zero-is-not-an-opt-in and
     // osc52-opt-in-rejects-one-byte-over-the-size-bound.
@@ -403,6 +404,24 @@ TEST_CASE("PI_CLIPBOARD_OSC52 makes a local display session write the OSC 52 seq
         // The local helpers still run first; OSC 52 is additional.
         CHECK(bin.invocations() ==
                 std::vector<std::string>{"xclip -selection clipboard hello", "xsel --clipboard --input hello"});
+        REQUIRE(terminal.sequences().size() == 1);
+        CHECK(terminal.sequences()[0] == std::string{"\x1b]52;c;aGVsbG8=\x07"});
+    }
+
+    SECTION("the opt-in adds OSC 52 to a copy a local helper already completed") {
+        // Frozen's own regression case for the opt-in runs with the local
+        // helpers succeeding (clipboard.test.ts:158-172): the sequence is
+        // emitted *in addition to* a successful xclip copy, so the remote
+        // branch cannot be guarded on the copy having failed.
+        bin.install({.name = "xclip", .reads_stdin = true});
+        auto environment = linux_environment(bin);
+        environment.display = ":0";
+        environment.pi_clipboard_osc52 = "1";
+
+        const auto result = terminal.copy("hello", environment);
+        CHECK(result.copied);
+        CHECK(result.error.empty());
+        CHECK(bin.invocations() == std::vector<std::string>{"xclip -selection clipboard hello"});
         REQUIRE(terminal.sequences().size() == 1);
         CHECK(terminal.sequences()[0] == std::string{"\x1b]52;c;aGVsbG8=\x07"});
     }

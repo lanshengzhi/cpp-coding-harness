@@ -20,7 +20,7 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -97,13 +97,26 @@ const clipboard = await import(
 );
 const sourceEndpoints = [
     "packages/coding-agent/src/utils/clipboard.ts:copyToClipboard,isRemoteSession,emitOsc52",
-    "packages/coding-agent/test/clipboard.test.ts:PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful %s copy",
+    "packages/coding-agent/test/clipboard.test.ts:PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy",
 ];
 const upstreamTest = (testCase: string) => ({ path: "packages/coding-agent/test/clipboard.test.ts", case: testCase });
 
 // An empty `PATH` directory makes every frozen helper launch fail the way a host without
 // `xclip`/`xsel`/`wl-copy` fails: `spawn` errors and `runClipboardCommand` resolves `undefined`.
 const emptyPath = mkdtempSync(path.join(tmpdir(), "pi-1124-empty-path-"));
+// The opposite shape: a `PATH` whose `xclip` exits 0, so `copied` is true before the OSC 52
+// branch is reached. That is the frozen regression case for the opt-in
+// (clipboard.test.ts:158-172, `mocks.command` resolving), where the sequence is additional to
+// a successful copy rather than a substitute for a failed one.
+const helperPath = mkdtempSync(path.join(tmpdir(), "pi-1124-helper-path-"));
+// The helper logs each run so the scenario can prove `copied` was already true when the OSC 52
+// branch was reached, which is the whole difference between this shape and the failed-helper one.
+const helperLog = path.join(tmpdir(), `pi-1124-helper-log-${process.pid}.txt`);
+writeFileSync(
+    path.join(helperPath, "xclip"),
+    `#!/bin/sh\ncat > /dev/null\nprintf 'xclip\\n' >> '${helperLog}'\nexit 0\n`,
+    { mode: 0o755 },
+);
 const stubbed = [
     "SSH_CONNECTION",
     "SSH_CLIENT",
@@ -122,9 +135,10 @@ const originalEnv = { ...process.env };
  * Run one frozen copy with a controlled environment and record the OSC 52 writes it produces.
  * The stdout interceptor is what a real terminal would receive; nothing here claims it copied.
  */
-async function observe(env: Record<string, string | undefined>, text: string) {
+async function observe(env: Record<string, string | undefined>, text: string, path = emptyPath) {
     for (const name of stubbed) delete process.env[name];
-    process.env.PATH = emptyPath;
+    process.env.PATH = path;
+    rmSync(helperLog, { force: true });
     for (const [name, value] of Object.entries(env)) {
         if (value !== undefined) process.env[name] = value;
     }
@@ -152,8 +166,12 @@ async function observe(env: Record<string, string | undefined>, text: string) {
     // A sequence longer than 96 characters (the 100 000-character bound case) is recorded by
     // its length and its exact head/tail instead of its full payload; the scenario declares
     // that normalization. Every ordinary sequence is recorded in full.
+    // `helpers` records the local writer runs the copy actually performed, so an observation of
+    // "one sequence" cannot be satisfied by a failed helper reaching the OSC 52 fallback.
+    const helperRuns = existsSync(helperLog) ? readFileSync(helperLog, "utf8").split("\n").filter(Boolean) : [];
     return {
         outcome,
+        helpers: { runs: helperRuns },
         osc52: {
             count: writes.length,
             encodedLengths: writes.map((sequence) => sequence.length - 8),
@@ -165,27 +183,45 @@ async function observe(env: Record<string, string | undefined>, text: string) {
 }
 
 const desktop = { DISPLAY: ":0" };
+// The failed-helper scenarios share the shape of frozen's #9618 case (clipboard.test.ts:197-207):
+// a local Linux session with a display whose helpers all fail. With PI_CLIPBOARD_OSC52=1 the opt-in
+// turns that failure into a written sequence; without it the failure is reported, as frozen does.
+const failedHelperTest = "local Linux failure does not report an unverified OSC 52 write as success";
+// The successful-copy scenarios mirror frozen's own opt-in regression case (clipboard.test.ts:158-172),
+// where the helper resolves and the sequence is written *in addition to* a completed copy.
+const optInTest = "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy";
 const scenarios = [
     {
         name: "osc52-opt-in-writes-the-sequence-for-a-desktop-session",
         inputs: { env: { ...desktop, PI_CLIPBOARD_OSC52: "1" }, text: "hello", path: "empty" },
         expected: await observe({ ...desktop, PI_CLIPBOARD_OSC52: "1" }, "hello"),
-        normalizations: [],
-        upstreamTest: upstreamTest("PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"),
+        normalizations: [
+            "frozen's #9618 case covers the same failed-helper session without the opt-in; this scenario adds PI_CLIPBOARD_OSC52=1, which is what turns the failure into a written sequence",
+        ],
+        upstreamTest: upstreamTest(failedHelperTest),
+    },
+    {
+        name: "osc52-opt-in-writes-the-sequence-after-a-successful-copy",
+        inputs: { env: { ...desktop, PI_CLIPBOARD_OSC52: "1" }, text: "hello", path: "helper" },
+        expected: await observe({ ...desktop, PI_CLIPBOARD_OSC52: "1" }, "hello", helperPath),
+        normalizations: [
+            "the frozen case mocks the helper through vi.mock; this scenario provides a real `xclip` on PATH that exits 0, so `copied` is true when the OSC 52 branch is reached",
+        ],
+        upstreamTest: upstreamTest(optInTest),
     },
     {
         name: "osc52-opt-in-absent-reports-the-x11-failure",
         inputs: { env: desktop, text: "hello", path: "empty" },
         expected: await observe(desktop, "hello"),
         normalizations: [],
-        upstreamTest: upstreamTest("local Linux failure does not report an unverified OSC 52 write as success"),
+        upstreamTest: upstreamTest(failedHelperTest),
     },
     {
         name: "osc52-opt-in-zero-is-not-an-opt-in",
         inputs: { env: { ...desktop, PI_CLIPBOARD_OSC52: "0" }, text: "hello", path: "empty" },
         expected: await observe({ ...desktop, PI_CLIPBOARD_OSC52: "0" }, "hello"),
         normalizations: [],
-        upstreamTest: upstreamTest("local Linux failure does not report an unverified OSC 52 write as success"),
+        upstreamTest: upstreamTest(failedHelperTest),
     },
     {
         name: "osc52-opt-in-writes-the-largest-allowed-payload-in-full",
@@ -193,28 +229,39 @@ const scenarios = [
         expected: await observe({ ...desktop, PI_CLIPBOARD_OSC52: "1" }, "a".repeat(75000)),
         normalizations: [
             "the 75000-byte payload's sequence is recorded by encodedLengths plus its exact heads/tails, not in full",
+            "frozen has no at-the-bound case; its only size case is the over-bound rejection (clipboard.test.ts:317), so this scenario has no upstreamTest and asserts the largest accepted payload against MAX_OSC52_ENCODED_LENGTH",
         ],
-        upstreamTest: upstreamTest("PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"),
     },
     {
         name: "osc52-opt-in-rejects-one-byte-over-the-size-bound",
         inputs: { env: { ...desktop, PI_CLIPBOARD_OSC52: "1" }, textBytes: 75001, path: "empty" },
         expected: await observe({ ...desktop, PI_CLIPBOARD_OSC52: "1" }, "a".repeat(75001)),
-        normalizations: ["the 75001-byte payload is refused, so the observation is the failure message"],
-        upstreamTest: upstreamTest("PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"),
+        normalizations: [
+            "the 75001-byte payload is refused, so the observation is the failure message",
+            "frozen's case uses an 80000-byte payload in an SSH remote session; this scenario stays one byte over the bound and reaches it through the opt-in instead",
+        ],
+        upstreamTest: upstreamTest("does not emit oversized OSC 52 payloads"),
     },
     {
         name: "wsl-windows-terminal-prefers-osc52-before-the-remote-branch",
-        inputs: { env: { ...desktop, WSL_DISTRO_NAME: "Ubuntu", WT_SESSION: "terminal-session", PI_CLIPBOARD_OSC52: "1" }, text: "hello", path: "empty" },
+        inputs: {
+            env: { ...desktop, WSL_DISTRO_NAME: "Ubuntu", WT_SESSION: "terminal-session", PI_CLIPBOARD_OSC52: "1" },
+            text: "hello",
+            path: "empty",
+        },
         expected: await observe(
             { ...desktop, WSL_DISTRO_NAME: "Ubuntu", WT_SESSION: "terminal-session", PI_CLIPBOARD_OSC52: "1" },
             "hello",
         ),
-        normalizations: [],
-        upstreamTest: upstreamTest("PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"),
+        normalizations: [
+            "frozen's case covers the WSL/Windows-Terminal preference without the opt-in or DISPLAY; this scenario adds DISPLAY=:0 with a failing xclip, then PI_CLIPBOARD_OSC52=1, to observe that the later remote branch does not write a second sequence",
+        ],
+        upstreamTest: upstreamTest("WSL in Windows Terminal prefers OSC 52 over PowerShell"),
     },
 ];
 rmSync(emptyPath, { recursive: true, force: true });
+rmSync(helperPath, { recursive: true, force: true });
+rmSync(helperLog, { force: true });
 
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const artifactName = "clipboard-osc52.json";

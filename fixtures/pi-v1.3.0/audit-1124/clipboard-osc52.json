@@ -2,7 +2,7 @@
   "schema": "pike/pi-v1.3.0-audit-evidence/1",
   "baseline": "pi-v1.3.0",
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "capturedAt": "2026-10-22T14:19:39.006Z",
+  "capturedAt": "2026-10-22T16:13:35.103Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -13,7 +13,7 @@
   },
   "sourceEndpoints": [
     "packages/coding-agent/src/utils/clipboard.ts:copyToClipboard,isRemoteSession,emitOsc52",
-    "packages/coding-agent/test/clipboard.test.ts:PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful %s copy"
+    "packages/coding-agent/test/clipboard.test.ts:PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
   ],
   "scenarios": [
     {
@@ -31,6 +31,9 @@
           "resolved": true,
           "error": null
         },
+        "helpers": {
+          "runs": []
+        },
         "osc52": {
           "count": 1,
           "encodedLengths": [
@@ -47,7 +50,53 @@
           ]
         }
       },
-      "normalizations": [],
+      "normalizations": [
+        "frozen's #9618 case covers the same failed-helper session without the opt-in; this scenario adds PI_CLIPBOARD_OSC52=1, which is what turns the failure into a written sequence"
+      ],
+      "upstreamTest": {
+        "path": "packages/coding-agent/test/clipboard.test.ts",
+        "case": "local Linux failure does not report an unverified OSC 52 write as success"
+      }
+    },
+    {
+      "name": "osc52-opt-in-writes-the-sequence-after-a-successful-copy",
+      "inputs": {
+        "env": {
+          "DISPLAY": ":0",
+          "PI_CLIPBOARD_OSC52": "1"
+        },
+        "text": "hello",
+        "path": "helper"
+      },
+      "expected": {
+        "outcome": {
+          "resolved": true,
+          "error": null
+        },
+        "helpers": {
+          "runs": [
+            "xclip"
+          ]
+        },
+        "osc52": {
+          "count": 1,
+          "encodedLengths": [
+            8
+          ],
+          "sequences": [
+            "\u001b]52;c;aGVsbG8=\u0007"
+          ],
+          "sequenceHeads": [
+            "\u001b]52;c;aGVsb"
+          ],
+          "sequenceTails": [
+            "\u0007"
+          ]
+        }
+      },
+      "normalizations": [
+        "the frozen case mocks the helper through vi.mock; this scenario provides a real `xclip` on PATH that exits 0, so `copied` is true when the OSC 52 branch is reached"
+      ],
       "upstreamTest": {
         "path": "packages/coding-agent/test/clipboard.test.ts",
         "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
@@ -66,6 +115,9 @@
         "outcome": {
           "resolved": false,
           "error": "Clipboard unavailable: install `xclip` or `xsel`, or check X11 access"
+        },
+        "helpers": {
+          "runs": []
         },
         "osc52": {
           "count": 0,
@@ -96,6 +148,9 @@
           "resolved": false,
           "error": "Clipboard unavailable: install `xclip` or `xsel`, or check X11 access"
         },
+        "helpers": {
+          "runs": []
+        },
         "osc52": {
           "count": 0,
           "encodedLengths": [],
@@ -125,6 +180,9 @@
           "resolved": true,
           "error": null
         },
+        "helpers": {
+          "runs": []
+        },
         "osc52": {
           "count": 1,
           "encodedLengths": [
@@ -142,12 +200,9 @@
         }
       },
       "normalizations": [
-        "the 75000-byte payload's sequence is recorded by encodedLengths plus its exact heads/tails, not in full"
-      ],
-      "upstreamTest": {
-        "path": "packages/coding-agent/test/clipboard.test.ts",
-        "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
-      }
+        "the 75000-byte payload's sequence is recorded by encodedLengths plus its exact heads/tails, not in full",
+        "frozen has no at-the-bound case; its only size case is the over-bound rejection (clipboard.test.ts:317), so this scenario has no upstreamTest and asserts the largest accepted payload against MAX_OSC52_ENCODED_LENGTH"
+      ]
     },
     {
       "name": "osc52-opt-in-rejects-one-byte-over-the-size-bound",
@@ -164,6 +219,9 @@
           "resolved": false,
           "error": "Clipboard unavailable: text exceeds the OSC 52 size limit"
         },
+        "helpers": {
+          "runs": []
+        },
         "osc52": {
           "count": 0,
           "encodedLengths": [],
@@ -173,11 +231,12 @@
         }
       },
       "normalizations": [
-        "the 75001-byte payload is refused, so the observation is the failure message"
+        "the 75001-byte payload is refused, so the observation is the failure message",
+        "frozen's case uses an 80000-byte payload in an SSH remote session; this scenario stays one byte over the bound and reaches it through the opt-in instead"
       ],
       "upstreamTest": {
         "path": "packages/coding-agent/test/clipboard.test.ts",
-        "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
+        "case": "does not emit oversized OSC 52 payloads"
       }
     },
     {
@@ -197,6 +256,9 @@
           "resolved": true,
           "error": null
         },
+        "helpers": {
+          "runs": []
+        },
         "osc52": {
           "count": 1,
           "encodedLengths": [
@@ -213,10 +275,12 @@
           ]
         }
       },
-      "normalizations": [],
+      "normalizations": [
+        "frozen's case covers the WSL/Windows-Terminal preference without the opt-in or DISPLAY; this scenario adds DISPLAY=:0 with a failing xclip, then PI_CLIPBOARD_OSC52=1, to observe that the later remote branch does not write a second sequence"
+      ],
       "upstreamTest": {
         "path": "packages/coding-agent/test/clipboard.test.ts",
-        "case": "PI_CLIPBOARD_OSC52=1 emits OSC 52 after a successful linux copy"
+        "case": "WSL in Windows Terminal prefers OSC 52 over PowerShell"
       }
     }
   ]
