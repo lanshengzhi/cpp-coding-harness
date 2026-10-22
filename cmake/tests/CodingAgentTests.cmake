@@ -211,6 +211,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/SessionReplacementTest.cpp
         tests/coding_agent/tui/SelectionResetProductTest.cpp
         tests/coding_agent/tui/SettingsSelectorTest.cpp
+        tests/coding_agent/tui/SystemThemeTest.cpp
         tests/coding_agent/tui/ThemeControllerTest.cpp
         tests/coding_agent/tui/ThemeTest.cpp
         tests/coding_agent/tui/ThinkingSelectorInteractiveTest.cpp
