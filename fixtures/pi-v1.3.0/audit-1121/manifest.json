@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1121",
   "family": "audit-1121",
-  "capturedAt": "2026-10-22T14:05:44.805Z",
+  "capturedAt": "2026-10-22T17:52:20.917Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -15,12 +15,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1121/capture-1121-output-pad.mts",
-    "sha256": "6d0822812d8a21dfa4fcfaf38ffe4c1f7eca064017fbd6598853a2686cc7cc9c",
+    "sha256": "d649d821111e6809126348e32be86149b51ac4536f82e5d95682ced957718d43",
     "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1121/capture-1121-output-pad.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1121/capture-1121-output-pad.mts",
-        "sha256": "6d0822812d8a21dfa4fcfaf38ffe4c1f7eca064017fbd6598853a2686cc7cc9c"
+        "sha256": "d649d821111e6809126348e32be86149b51ac4536f82e5d95682ced957718d43"
       }
     ]
   },
@@ -28,8 +28,8 @@
     {
       "path": "output-pad.json",
       "family": "audit-1121",
-      "bytes": 6810,
-      "sha256": "148784d4e2b7193837fdb0563ae4bcd000a0a991a70e0386f0924046af288230",
+      "bytes": 21075,
+      "sha256": "a2c06d909a36cb282ef98991fc905a8fcc363b7c908dec47913b50cc045e6f30",
       "sourceEndpoints": [
         "packages/coding-agent/src/modes/interactive/components/tool-execution.ts:ToolExecutionComponent.setOutputPad,updateDisplay",
         "packages/coding-agent/src/modes/interactive/components/bash-execution.ts:BashExecutionComponent.setOutputPad,updateDisplay",
@@ -45,39 +45,118 @@
             "tool": "audit-tool",
             "toolCallId": "call-audit-1121",
             "arguments": {
-              "command": "echo audit"
+              "command": "echo wrap-tool audit payload with enough words to continue onto another terminal row and test width-dependent wrapping"
             },
             "outputPad": [
               1,
               0
             ],
-            "width": 60
+            "widths": [
+              32,
+              60,
+              100
+            ]
           },
           "expected": {
-            "atOne": [
-              "",
-              "                                                            ",
-              " audit-tool                                                 ",
-              "                                                            ",
-              " {                                                          ",
-              "   \"command\": \"echo audit\"                                  ",
-              " }                                                          ",
-              "                                                            "
-            ],
-            "atZero": [
-              "",
-              "                                                            ",
-              "audit-tool                                                  ",
-              "                                                            ",
-              "{                                                           ",
-              "  \"command\": \"echo audit\"                                   ",
-              "}                                                           ",
-              "                                                            "
-            ],
+            "atWidths": {
+              "32": {
+                "atOne": [
+                  "",
+                  "                                ",
+                  " audit-tool                     ",
+                  "                                ",
+                  " {                              ",
+                  "   \"command\": \"echo wrap-tool   ",
+                  " audit payload with enough      ",
+                  " words to continue onto another ",
+                  " terminal row and test          ",
+                  " width-dependent wrapping\"      ",
+                  " }                              ",
+                  "                                "
+                ],
+                "atZero": [
+                  "",
+                  "                                ",
+                  "audit-tool                      ",
+                  "                                ",
+                  "{                               ",
+                  "  \"command\": \"echo wrap-tool    ",
+                  "audit payload with enough words ",
+                  "to continue onto another        ",
+                  "terminal row and test           ",
+                  "width-dependent wrapping\"       ",
+                  "}                               ",
+                  "                                "
+                ],
+                "lineCountAtOne": 12,
+                "lineCountAtZero": 12
+              },
+              "60": {
+                "atOne": [
+                  "",
+                  "                                                            ",
+                  " audit-tool                                                 ",
+                  "                                                            ",
+                  " {                                                          ",
+                  "   \"command\": \"echo wrap-tool audit payload with enough     ",
+                  " words to continue onto another terminal row and test       ",
+                  " width-dependent wrapping\"                                  ",
+                  " }                                                          ",
+                  "                                                            "
+                ],
+                "atZero": [
+                  "",
+                  "                                                            ",
+                  "audit-tool                                                  ",
+                  "                                                            ",
+                  "{                                                           ",
+                  "  \"command\": \"echo wrap-tool audit payload with enough words",
+                  "to continue onto another terminal row and test              ",
+                  "width-dependent wrapping\"                                   ",
+                  "}                                                           ",
+                  "                                                            "
+                ],
+                "lineCountAtOne": 10,
+                "lineCountAtZero": 10
+              },
+              "100": {
+                "atOne": [
+                  "",
+                  "                                                                                                    ",
+                  " audit-tool                                                                                         ",
+                  "                                                                                                    ",
+                  " {                                                                                                  ",
+                  "   \"command\": \"echo wrap-tool audit payload with enough words to continue onto another terminal row ",
+                  " and test width-dependent wrapping\"                                                                 ",
+                  " }                                                                                                  ",
+                  "                                                                                                    "
+                ],
+                "atZero": [
+                  "",
+                  "                                                                                                    ",
+                  "audit-tool                                                                                          ",
+                  "                                                                                                    ",
+                  "{                                                                                                   ",
+                  "  \"command\": \"echo wrap-tool audit payload with enough words to continue onto another terminal row  ",
+                  "and test width-dependent wrapping\"                                                                  ",
+                  "}                                                                                                   ",
+                  "                                                                                                    "
+                ],
+                "lineCountAtOne": 9,
+                "lineCountAtZero": 9
+              }
+            },
             "contentRowAtOne": " audit-tool                                                 ",
             "contentRowAtZero": "audit-tool                                                  ",
             "contentRowAtOneLeadingSpaces": 1,
-            "contentRowAtZeroLeadingSpaces": 0
+            "contentRowAtZeroLeadingSpaces": 0,
+            "wrappedCommandRowsAtNarrowWidth": [
+              "   \"command\": \"echo wrap-tool   ",
+              " audit payload with enough      ",
+              " words to continue onto another ",
+              " terminal row and test          ",
+              " width-dependent wrapping\"      "
+            ]
           },
           "normalizations": [
             "SGR styling is stripped; the compared bytes are the visible cell text"
@@ -87,38 +166,124 @@
           "name": "output-pad-reaches-the-bash-block-text",
           "inputs": {
             "component": "BashExecutionComponent",
-            "command": "echo audit",
-            "output": "audit output",
+            "command": "echo wrap-bash audit command with enough words to continue onto another terminal row and test width-dependent wrapping",
+            "output": "wrap-bash output carries additional words so the body wraps at the narrow width and keeps measuring differently at every tested terminal width",
             "exitCode": 0,
             "outputPad": [
               1,
               0
             ],
-            "width": 60
+            "widths": [
+              32,
+              60,
+              100
+            ]
           },
           "expected": {
-            "atOne": [
-              "",
-              "────────────────────────────────────────────────────────────",
-              " $ echo audit                                               ",
-              "                                                            ",
-              " audit output                                               ",
-              "                                                            ",
-              "────────────────────────────────────────────────────────────"
-            ],
-            "atZero": [
-              "",
-              "────────────────────────────────────────────────────────────",
-              "$ echo audit                                                ",
-              "                                                            ",
-              "audit output                                                ",
-              "                                                            ",
-              "────────────────────────────────────────────────────────────"
-            ],
-            "headerRowAtOne": " $ echo audit                                               ",
-            "headerRowAtZero": "$ echo audit                                                ",
+            "atWidths": {
+              "32": {
+                "atOne": [
+                  "",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+                  " $ echo wrap-bash audit command ",
+                  " with enough words to continue  ",
+                  " onto another terminal row and  ",
+                  " test width-dependent wrapping  ",
+                  "                                ",
+                  " wrap-bash output carries       ",
+                  " additional words so the body   ",
+                  " wraps at the narrow width and  ",
+                  " keeps measuring differently at ",
+                  " every tested terminal width    ",
+                  "                                ",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                ],
+                "atZero": [
+                  "",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+                  "$ echo wrap-bash audit command  ",
+                  "with enough words to continue   ",
+                  "onto another terminal row and   ",
+                  "test width-dependent wrapping   ",
+                  "                                ",
+                  "wrap-bash output carries        ",
+                  "additional words so the body    ",
+                  "wraps at the narrow width and   ",
+                  "keeps measuring differently at  ",
+                  "every tested terminal width     ",
+                  "                                ",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                ],
+                "lineCountAtOne": 14,
+                "lineCountAtZero": 14
+              },
+              "60": {
+                "atOne": [
+                  "",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+                  " $ echo wrap-bash audit command with enough words to        ",
+                  " continue onto another terminal row and test                ",
+                  " width-dependent wrapping                                   ",
+                  "                                                            ",
+                  " wrap-bash output carries additional words so the body      ",
+                  " wraps at the narrow width and keeps measuring differently  ",
+                  " at every tested terminal width                             ",
+                  "                                                            ",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                ],
+                "atZero": [
+                  "",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+                  "$ echo wrap-bash audit command with enough words to continue",
+                  "onto another terminal row and test width-dependent wrapping ",
+                  "                                                            ",
+                  "wrap-bash output carries additional words so the body wraps ",
+                  "at the narrow width and keeps measuring differently at every",
+                  "tested terminal width                                       ",
+                  "                                                            ",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                ],
+                "lineCountAtOne": 11,
+                "lineCountAtZero": 10
+              },
+              "100": {
+                "atOne": [
+                  "",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+                  " $ echo wrap-bash audit command with enough words to continue onto another terminal row and test    ",
+                  " width-dependent wrapping                                                                           ",
+                  "                                                                                                    ",
+                  " wrap-bash output carries additional words so the body wraps at the narrow width and keeps          ",
+                  " measuring differently at every tested terminal width                                               ",
+                  "                                                                                                    ",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                ],
+                "atZero": [
+                  "",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500",
+                  "$ echo wrap-bash audit command with enough words to continue onto another terminal row and test     ",
+                  "width-dependent wrapping                                                                            ",
+                  "                                                                                                    ",
+                  "wrap-bash output carries additional words so the body wraps at the narrow width and keeps measuring ",
+                  "differently at every tested terminal width                                                          ",
+                  "                                                                                                    ",
+                  "\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500"
+                ],
+                "lineCountAtOne": 9,
+                "lineCountAtZero": 9
+              }
+            },
+            "headerRowAtOne": " $ echo wrap-bash audit command with enough words to        ",
+            "headerRowAtZero": "$ echo wrap-bash audit command with enough words to continue",
             "headerRowAtOneLeadingSpaces": 1,
-            "headerRowAtZeroLeadingSpaces": 0
+            "headerRowAtZeroLeadingSpaces": 0,
+            "wrappedOutputRowsAtNarrowWidth": [
+              " wrap-bash output carries       ",
+              " additional words so the body   ",
+              " wraps at the narrow width and  ",
+              " keeps measuring differently at ",
+              " every tested terminal width    "
+            ]
           },
           "normalizations": [
             "SGR styling is stripped; the compared bytes are the visible cell text"
@@ -129,34 +294,108 @@
           "inputs": {
             "component": "CustomMessageComponent",
             "customType": "audit",
-            "content": "audit body",
+            "content": "wrap-custom content carries additional words so this custom message wraps at the narrow width and keeps measuring differently at every tested terminal width",
             "outputPad": [
               1,
               0
             ],
-            "width": 60
+            "widths": [
+              32,
+              60,
+              100
+            ]
           },
           "expected": {
-            "atOne": [
-              "",
-              "                                                            ",
-              " [audit]                                                    ",
-              "                                                            ",
-              " audit body                                                 ",
-              "                                                            "
-            ],
-            "atZero": [
-              "",
-              "                                                            ",
-              "[audit]                                                     ",
-              "                                                            ",
-              "audit body                                                  ",
-              "                                                            "
-            ],
+            "atWidths": {
+              "32": {
+                "atOne": [
+                  "",
+                  "                                ",
+                  " [audit]                        ",
+                  "                                ",
+                  " wrap-custom content carries    ",
+                  " additional words so this       ",
+                  " custom message wraps at the    ",
+                  " narrow width and keeps         ",
+                  " measuring differently at every ",
+                  " tested terminal width          ",
+                  "                                "
+                ],
+                "atZero": [
+                  "",
+                  "                                ",
+                  "[audit]                         ",
+                  "                                ",
+                  "wrap-custom content carries     ",
+                  "additional words so this custom ",
+                  "message wraps at the narrow     ",
+                  "width and keeps measuring       ",
+                  "differently at every tested     ",
+                  "terminal width                  ",
+                  "                                "
+                ],
+                "lineCountAtOne": 11,
+                "lineCountAtZero": 11
+              },
+              "60": {
+                "atOne": [
+                  "",
+                  "                                                            ",
+                  " [audit]                                                    ",
+                  "                                                            ",
+                  " wrap-custom content carries additional words so this       ",
+                  " custom message wraps at the narrow width and keeps         ",
+                  " measuring differently at every tested terminal width       ",
+                  "                                                            "
+                ],
+                "atZero": [
+                  "",
+                  "                                                            ",
+                  "[audit]                                                     ",
+                  "                                                            ",
+                  "wrap-custom content carries additional words so this custom ",
+                  "message wraps at the narrow width and keeps measuring       ",
+                  "differently at every tested terminal width                  ",
+                  "                                                            "
+                ],
+                "lineCountAtOne": 8,
+                "lineCountAtZero": 8
+              },
+              "100": {
+                "atOne": [
+                  "",
+                  "                                                                                                    ",
+                  " [audit]                                                                                            ",
+                  "                                                                                                    ",
+                  " wrap-custom content carries additional words so this custom message wraps at the narrow width and  ",
+                  " keeps measuring differently at every tested terminal width                                         ",
+                  "                                                                                                    "
+                ],
+                "atZero": [
+                  "",
+                  "                                                                                                    ",
+                  "[audit]                                                                                             ",
+                  "                                                                                                    ",
+                  "wrap-custom content carries additional words so this custom message wraps at the narrow width and   ",
+                  "keeps measuring differently at every tested terminal width                                          ",
+                  "                                                                                                    "
+                ],
+                "lineCountAtOne": 7,
+                "lineCountAtZero": 7
+              }
+            },
             "labelRowAtOne": " [audit]                                                    ",
             "labelRowAtZero": "[audit]                                                     ",
             "labelRowAtOneLeadingSpaces": 1,
-            "labelRowAtZeroLeadingSpaces": 0
+            "labelRowAtZeroLeadingSpaces": 0,
+            "wrappedContentRowsAtNarrowWidth": [
+              " wrap-custom content carries    ",
+              " additional words so this       ",
+              " custom message wraps at the    ",
+              " narrow width and keeps         ",
+              " measuring differently at every ",
+              " tested terminal width          "
+            ]
           },
           "normalizations": [
             "SGR styling is stripped; the compared bytes are the visible cell text"
