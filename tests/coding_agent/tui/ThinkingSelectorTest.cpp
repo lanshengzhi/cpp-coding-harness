@@ -230,6 +230,50 @@ TEST_CASE("ThinkingSelector renders pi's blank rows between the selector chrome 
     CHECK(rows[command_index + 1] == *top_border);
 }
 
+TEST_CASE("ThinkingSelector separates search from the five supported levels and marks medium as default",
+        "[coding_agent][tui][thinking-selector][issue810][spec]") {
+    auto theme = test_theme();
+    auto selector = std::make_shared<coding_agent::tui::ThinkingSelectorComponent>(
+            theme,
+            test_keybindings(),
+            "off",
+            std::vector<std::string>{"off", "minimal", "low", "medium", "high"},
+            [](std::string) {},
+            [] {},
+            [](std::string) {},
+            std::optional<std::string>{"medium"});
+
+    const auto rendered = selector->render(100);
+    REQUIRE(rendered);
+    const auto rows = row_texts(rendered->lines);
+    const auto search = std::ranges::find(rows, ">");
+    REQUIRE(search != rows.end());
+    const auto first_level =
+            std::ranges::find_if(rows, [](const std::string& row) { return row.find("→ ✓ off") != std::string::npos; });
+    REQUIRE(first_level != rows.end());
+    const auto search_index = static_cast<std::size_t>(search - rows.begin());
+    const auto first_level_index = static_cast<std::size_t>(first_level - rows.begin());
+    CHECK(search_index + 1 < rows.size());
+    CHECK(rows[search_index + 1].empty());
+    CHECK(first_level_index == search_index + 2);
+
+    const std::vector<std::string> levels = {
+            "No reasoning",
+            "Very brief reasoning (~1k tokens)",
+            "Light reasoning (~2k tokens)",
+            "Moderate reasoning (~8k tokens) · default",
+            "Deep reasoning (~16k tokens)",
+    };
+    for (const auto& level : levels) {
+        INFO("level " << level);
+        CHECK(std::ranges::count_if(
+                      rows, [&level](const std::string& row) { return row.find(level) != std::string::npos; }) == 1);
+    }
+    CHECK(std::ranges::none_of(rows, [](const std::string& row) {
+        return row.find("xhigh") != std::string::npos || row.find("max       ") != std::string::npos;
+    }));
+}
+
 TEST_CASE("ThinkingSelector renders pi's level rows at pi's thinking select list label column",
         "[coding_agent][tui][thinking-selector][issue810][spec]") {
     auto theme = test_theme();
