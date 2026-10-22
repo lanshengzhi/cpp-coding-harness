@@ -37,6 +37,10 @@ struct EditorLayoutOptions {
     EditorTheme* theme{nullptr};
     const EditorCompletionMenuPresentation* autocomplete_menu{nullptr};
     bool include_autocomplete{true};
+    /// Whether the editor holds the focus. A focused editor emits the
+    /// zero-width cursor-position marker with its fake cursor (pi
+    /// `editor.ts` `render`).
+    bool focused{false};
     /// App-layer top border replacement (pi `CustomEditor.renderTopBorder`):
     /// borrowed from the owning Editor's options; must outlive the compute
     /// call. nullopt results keep the default border line.

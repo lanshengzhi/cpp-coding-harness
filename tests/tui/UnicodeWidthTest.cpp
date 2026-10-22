@@ -348,7 +348,9 @@ TEST_CASE("narrow Text wrap and Input cursor follow corrected Indic widths", "[t
     const auto rendered = input.render(6);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "> \x1b[7mका\x1b[27mक्ष");
+    // The focused input emits the cursor-position marker before the
+    // fake-cursor markers around the drawn grapheme (pi `input.ts` `render`).
+    CHECK(rendered->lines[0] == "> \x1b_pi:c\x07\x1b_pi:fc\x07का\x1b_pi:/fc\x07क्ष");
     REQUIRE(input.cursor_location().has_value());
     CHECK((*input.cursor_location() == cch::tui::CursorPosition{.column = 2, .row = 0}));
 }

@@ -11,6 +11,7 @@
 #include "tui/WordNavigation.hpp"
 
 #include <cch/support/Error.hpp>
+#include <cch/tui/CursorMarkers.hpp>
 #include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
@@ -1055,6 +1056,11 @@ support::ExpectedVoid AltScreen::render_frame() {
     lines = std::move(cached_frame_->lines);
     cursor = cached_frame_->cursor;
     std::vector<InlineImageRenderRegion> images = std::move(cached_frame_->images);
+    // The fake-cursor markers resolve before the search highlighting and the
+    // overlay compositing, because both track SGR codes rather than the
+    // zero-width marker bytes (pi `tui-alt-screen.ts` `resolveFakeCursors`
+    // runs before `applySearchHighlights` and `compositeOverlays`).
+    lines = resolve_fake_cursors(lines, show_hardware_cursor_);
     lines = apply_search_highlights(lines, *cached_frame_);
     auto display_lines = strip_osc133_zone_prefixes(lines);
     if (auto indicator = composite_scroll_to_end_indicator(display_lines); !indicator) return indicator;
@@ -1070,6 +1076,11 @@ support::ExpectedVoid AltScreen::render_frame() {
         if (materialized.cursor) cursor = materialized.cursor;
     }
     if (auto flashed = composite_flashes(display_lines, dimensions.columns, dimensions.rows); !flashed) return flashed;
+    // The cursor position the marker carried is the terminal cursor position
+    // (pi `extractCursorPosition`), measured on the text before the marker
+    // and removed from the emitted line.
+    const auto marker_cursor = extract_cursor_position(display_lines, dimensions.rows);
+    if (marker_cursor) cursor = marker_cursor;
     return render_viewport(std::move(display_lines), cursor, dimensions, std::move(images));
 }
 

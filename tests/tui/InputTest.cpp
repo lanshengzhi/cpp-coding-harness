@@ -15,6 +15,20 @@
 
 namespace {
 
+/// The fake-cursor markers a cursor-bearing component emits (pi `tui.ts`
+/// `FAKE_CURSOR_START`/`FAKE_CURSOR_END`). The component level carries the
+/// zero-width markers; the reverse-video bytes appear only after the
+/// resolution stage (pi `resolveFakeCursors`).
+constexpr std::string_view kCursorMarker = "\x1b_pi:c\x07";
+constexpr std::string_view kFakeCursorStart = "\x1b_pi:fc\x07";
+constexpr std::string_view kFakeCursorEnd = "\x1b_pi:/fc\x07";
+
+/// The cursor cell as the component renders it: the fake-cursor markers
+/// around the drawn grapheme.
+[[nodiscard]] std::string fake_cursor_cell(std::string_view cell) {
+    return std::string{kFakeCursorStart} + std::string{cell} + std::string{kFakeCursorEnd};
+}
+
 void key(cch::tui::Input& input, std::string name, bool ctrl = false, bool shift = false, bool alt = false) {
     static_cast<void>(input.handle_input(cch::tui::KeyEvent{
             .key = std::move(name),
@@ -260,56 +274,58 @@ TEST_CASE("Input renders with horizontal scrolling around the cursor", "[tui][in
     auto rendered = input.render(10);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "> jklmnop\x1b[7m \x1b[27m");
+    CHECK(rendered->lines[0] == "> jklmnop" + fake_cursor_cell(" "));
 
     // Cursor in the middle: the window centers on the cursor.
     for (int index = 0; index < 8; ++index) key(input, "left");
     rendered = input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> efgh\x1b[7mi\x1b[27mjkl");
+    CHECK(rendered->lines[0] == "> efgh" + fake_cursor_cell("i") + "jkl");
 
     // Cursor near the start: the window shows the head.
     key(input, "home");
     rendered = input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> \x1b[7ma\x1b[27mbcdefgh");
+    CHECK(rendered->lines[0] == "> " + fake_cursor_cell("a") + "bcdefgh");
 
     // A short value fits with the cursor at the end.
     cch::tui::Input short_input;
     type(short_input, "abc");
     rendered = short_input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> abc\x1b[7m \x1b[27m    ");
+    CHECK(rendered->lines[0] == "> abc" + fake_cursor_cell(" ") + "    ");
 
     // A value exactly filling the width scrolls one column for the cursor.
     cch::tui::Input exact;
     type(exact, "abcdefgh");
     rendered = exact.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> bcdefgh\x1b[7m \x1b[27m");
+    CHECK(rendered->lines[0] == "> bcdefgh" + fake_cursor_cell(" "));
 }
 
-TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[tui][input][cursor][spec]") {
-    // pi's input.ts renders the cursor as reverse video on the grapheme at the
-    // cursor (or a highlighted space at end of line); the C++ port must match.
+TEST_CASE("Input renders a marked fake cursor at the cursor position", "[tui][input][cursor][spec]") {
+    // pi's input.ts renders the cursor as the grapheme at the cursor (or a
+    // space at end of line) wrapped in the zero-width fake-cursor markers;
+    // the reverse-video bytes appear only after the resolution stage
+    // (pi `resolveFakeCursors`), so the C++ port must match.
     cch::tui::Input input;
     type(input, "hi");
 
-    // Cursor at end of line: a highlighted space occupies the cell after it.
+    // Cursor at end of line: a marked space occupies the cell after it.
     auto rendered = input.render(10);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "> hi\x1b[7m \x1b[27m     ");
+    CHECK(rendered->lines[0] == "> hi" + fake_cursor_cell(" ") + "     ");
 
     key(input, "home");
     rendered = input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> \x1b[7mh\x1b[27mi      ");
+    CHECK(rendered->lines[0] == "> " + fake_cursor_cell("h") + "i      ");
 
     key(input, "right");
     rendered = input.render(10);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> h\x1b[7mi\x1b[27m      ");
+    CHECK(rendered->lines[0] == "> h" + fake_cursor_cell("i") + "      ");
 
     // The rendered line never exceeds the component width.
     for (const auto& line : rendered->lines) {
@@ -319,14 +335,14 @@ TEST_CASE("Input renders a reverse-video fake cursor at the cursor position", "[
 
 TEST_CASE("Input renders a placeholder reversing the first character only while the value is empty",
         "[tui][input][issue586][issue962][spec]") {
-    // Empty value: reverses the first grapheme of the placeholder, followed by the rest,
-    // padded to the component width.
+    // Empty value: marks the first grapheme of the placeholder, followed by the
+    // rest, padded to the component width.
     cch::tui::Input input({.placeholder = "Type here"});
 
     auto rendered = input.render(20);
     REQUIRE(rendered);
     REQUIRE(rendered->lines.size() == 1);
-    CHECK(rendered->lines[0] == "> \x1b[7mT\x1b[27mype here         ");
+    CHECK(rendered->lines[0] == "> " + fake_cursor_cell("T") + "ype here         ");
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 20);
 
     // Styled placeholder: custom styling applies to each character run.
@@ -336,31 +352,35 @@ TEST_CASE("Input renders a placeholder reversing the first character only while 
     });
     rendered = styled.render(20);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> \x1b[7m\x1b[2mT\x1b[22m\x1b[27m\x1b[2mype here\x1b[22m         ");
+    CHECK(rendered->lines[0] == "> " + fake_cursor_cell("\x1b[2mT\x1b[22m") + "\x1b[2mype here\x1b[22m         ");
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 20);
 
     // A non-empty value hides the placeholder entirely.
     type(input, "a");
     rendered = input.render(20);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> a\x1b[7m \x1b[27m                ");
+    CHECK(rendered->lines[0] == "> a" + fake_cursor_cell(" ") + "                ");
 
     // The placeholder truncates to the columns left after prompt
     cch::tui::Input narrow({.placeholder = "Type here"});
     rendered = narrow.render(7);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> \x1b[7mT\x1b[27mype \x1b[0m");
+    CHECK(rendered->lines[0] == "> " + fake_cursor_cell("T") + "ype \x1b[0m");
     CHECK(cch::tui::visible_width(rendered->lines[0]) == 7);
 
     // No placeholder keeps the historical empty-value rendering.
     cch::tui::Input plain;
     rendered = plain.render(20);
     REQUIRE(rendered);
-    CHECK(rendered->lines[0] == "> \x1b[7m \x1b[27m                 ");
+    CHECK(rendered->lines[0] == "> " + fake_cursor_cell(" ") + "                 ");
 }
 
 TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with frozen pi", "[tui][input][issue962]") {
-    const auto fixture = cch::tests::read_pi_tui_evidence("input.json");
+    // The cursor-marker contract landed in pi-v1.3.0, so the frozen
+    // observations come from the registered pi-v1.3.0 audit family rather
+    // than the pi-v1.0.4 bundle, whose components drew the fake cursor as
+    // raw reverse-video bytes.
+    const auto fixture = cch::tests::read_pi_v130_audit_evidence("audit-1050", "input-standalone.json");
     REQUIRE(fixture);
 
     const auto find_scenario = [&](std::string_view name) -> const cch::support::JsonValue* {
@@ -368,6 +388,17 @@ TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with f
             if (scenario.at("name").get_string() == name) return &scenario;
         }
         return nullptr;
+    };
+
+    // The capture records the rendered line with the cursor-position marker
+    // removed (the marker is observed separately as the cursor column), so
+    // the C++ line is compared with the same marker stripped.
+    const auto without_cursor_marker = [](std::string_view line) {
+        const auto marker = line.find(kCursorMarker);
+        if (marker == std::string_view::npos) return std::string(line);
+        std::string stripped{line};
+        stripped.erase(marker, kCursorMarker.size());
+        return stripped;
     };
 
     // Scenario 1: input-placeholder-reversal-and-custom-styling
@@ -383,7 +414,7 @@ TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with f
         input1a.set_focused(true);
         auto rendered1a = input1a.render(16);
         REQUIRE(rendered1a);
-        CHECK(rendered1a->lines[0] == expected.at("defaultEmpty").at("line").get_string());
+        CHECK(without_cursor_marker(rendered1a->lines[0]) == expected.at("defaultEmpty").at("line").get_string());
         CHECK(cch::tui::visible_width(rendered1a->lines[0]) ==
                 static_cast<std::size_t>(expected.at("defaultEmpty").at("visibleWidth").get_number()));
         CHECK(input1a.cursor_location() ==
@@ -400,7 +431,7 @@ TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with f
         input1b.set_focused(true);
         auto rendered1b = input1b.render(20);
         REQUIRE(rendered1b);
-        CHECK(rendered1b->lines[0] == expected.at("styledEmpty").at("line").get_string());
+        CHECK(without_cursor_marker(rendered1b->lines[0]) == expected.at("styledEmpty").at("line").get_string());
         CHECK(cch::tui::visible_width(rendered1b->lines[0]) ==
                 static_cast<std::size_t>(expected.at("styledEmpty").at("visibleWidth").get_number()));
         CHECK(input1b.cursor_location() ==
@@ -417,7 +448,7 @@ TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with f
         type(input1c, "abc");
         auto rendered1c = input1c.render(16);
         REQUIRE(rendered1c);
-        CHECK(rendered1c->lines[0] == expected.at("populated").at("line").get_string());
+        CHECK(without_cursor_marker(rendered1c->lines[0]) == expected.at("populated").at("line").get_string());
         CHECK(cch::tui::visible_width(rendered1c->lines[0]) ==
                 static_cast<std::size_t>(expected.at("populated").at("visibleWidth").get_number()));
         CHECK(input1c.cursor_location() ==
@@ -498,7 +529,7 @@ TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with f
         key(input3, "home");
         auto render_home = input3.render(12);
         REQUIRE(render_home);
-        CHECK(render_home->lines[0] == expected.at("stepHome").at("line").get_string());
+        CHECK(without_cursor_marker(render_home->lines[0]) == expected.at("stepHome").at("line").get_string());
         CHECK(input3.cursor_location() ==
                 cch::tui::CursorPosition{
                         .column = static_cast<std::size_t>(expected.at("stepHome").at("cursorColumn").get_number()),
@@ -510,7 +541,7 @@ TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with f
             key(input3, "right");
         auto render_right6 = input3.render(12);
         REQUIRE(render_right6);
-        CHECK(render_right6->lines[0] == expected.at("stepRight6").at("line").get_string());
+        CHECK(without_cursor_marker(render_right6->lines[0]) == expected.at("stepRight6").at("line").get_string());
         CHECK(input3.cursor_location() ==
                 cch::tui::CursorPosition{
                         .column = static_cast<std::size_t>(expected.at("stepRight6").at("cursorColumn").get_number()),
@@ -521,7 +552,7 @@ TEST_CASE("Input aligns placeholder styling, LF submission, and scrolling with f
         key(input3, "end");
         auto render_end = input3.render(12);
         REQUIRE(render_end);
-        CHECK(render_end->lines[0] == expected.at("stepEnd").at("line").get_string());
+        CHECK(without_cursor_marker(render_end->lines[0]) == expected.at("stepEnd").at("line").get_string());
         CHECK(input3.cursor_location() ==
                 cch::tui::CursorPosition{
                         .column = static_cast<std::size_t>(expected.at("stepEnd").at("cursorColumn").get_number()),

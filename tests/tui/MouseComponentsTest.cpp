@@ -89,10 +89,12 @@ using cch::tui::MouseEventType;
     return lines;
 }
 
-/// The cell column of the reverse-video cursor cell the toolkit paints into its
-/// own row (pi `\x1b[7m<grapheme>\x1b[27m`, `input.ts:480-485`).
+/// The cell column of the fake-cursor cell the toolkit paints into its own
+/// row (pi `FAKE_CURSOR_START` + `<grapheme>` + `FAKE_CURSOR_END`,
+/// `input.ts:480-485`). The component level carries the zero-width markers;
+/// the reverse-video bytes appear only after the resolution stage.
 [[nodiscard]] std::size_t cursor_column_of(std::string_view row) {
-    const auto marker = row.find("\x1b[7m");
+    const auto marker = row.find("\x1b_pi:fc\x07");
     REQUIRE(marker != std::string_view::npos);
     return cch::tui::visible_width(row.substr(0, marker));
 }

@@ -959,6 +959,7 @@ support::Expected<RenderResult> Editor::render(std::size_t width) {
             .theme = &impl.theme,
             .autocomplete_menu = &impl.autocomplete_menu,
             .include_autocomplete = true,
+            .focused = impl.focused,
             .top_border_override = impl.options.top_border_override ? &impl.options.top_border_override : nullptr,
     });
     if (!layout_res) {

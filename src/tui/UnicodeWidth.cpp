@@ -205,7 +205,12 @@ namespace {
     }
 
     if (kind == '_') {
-        if (position + 2 >= text.size() || text[position + 2] != 'G') {
+        // The Kitty graphics APC (`ESC _ G ...`) carries image data; the
+        // cursor-marker APC (`ESC _ pi:...`) is a zero-width marker the
+        // fake/hardware cursor layer emits (pi `CURSOR_MARKER`,
+        // `FAKE_CURSOR_START`, `FAKE_CURSOR_END`). Both are accepted as
+        // zero-width control tokens.
+        if (position + 2 >= text.size() || (text[position + 2] != 'G' && text[position + 2] != 'p')) {
             return std::unexpected(invalid_terminal_text("Unsupported ANSI escape sequence"));
         }
         std::size_t cursor = position + 3;
