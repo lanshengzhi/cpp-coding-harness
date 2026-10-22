@@ -211,7 +211,74 @@ TEST_CASE("Box rejects null child", "[tui][issue46][container][spec]") {
     REQUIRE_FALSE(result);
 }
 
-TEST_CASE("Box keeps full padding and clamps narrow content to one column like frozen pi",
+// Dynamic horizontal padding on `Box` and `Text` (B63 / TPadding, #1121).
+// The frozen pi-v1.3.0 observation lives in
+// fixtures/pi-v1.3.0/audit-1050/padding-and-selection-reset.json, scenarios
+// `box-set-padding-x-rerenders-dynamic-width` and
+// `text-set-padding-x-rerenders-dynamic-width` (revision 71023aec1546).
+//
+// The expected values below are the frozen pi rows, not a recomputation of the
+// C++ clamp: pi's `Box.setPaddingX` invalidates the cache and re-renders at
+// the same width, and pi's `Text.setPaddingX` re-wraps the content at the new
+// content width instead of only re-clamping the visible padding.
+TEST_CASE("Box re-renders at a new horizontal padding like frozen pi", "[tui][box][padding][issue1121][spec]") {
+    cch::tui::Box box(2, 0);
+    REQUIRE(box.add_child(std::make_unique<cch::tui::Text>("hey", 0, 0)));
+
+    const auto at_two = box.render(10);
+    REQUIRE(at_two);
+    CHECK(at_two->lines == std::vector<std::string>{"  hey     "});
+
+    box.set_padding_x(3);
+    const auto at_three = box.render(10);
+    REQUIRE(at_three);
+    CHECK(at_three->lines == std::vector<std::string>{"   hey    "});
+
+    box.set_padding_x(0);
+    const auto at_zero = box.render(10);
+    REQUIRE(at_zero);
+    CHECK(at_zero->lines == std::vector<std::string>{"hey       "});
+}
+
+TEST_CASE("Text re-wraps at a new horizontal padding like frozen pi", "[tui][text][padding][issue1121][spec]") {
+    cch::tui::Text text("hello", 1, 0);
+
+    const auto at_one = text.render(10);
+    REQUIRE(at_one);
+    CHECK(at_one->lines == std::vector<std::string>{" hello    "});
+
+    // A larger pad narrows the content width, so the text re-wraps instead of
+    // keeping the previous single line.
+    text.set_padding_x(3);
+    const auto at_three = text.render(10);
+    REQUIRE(at_three);
+    CHECK(at_three->lines == std::vector<std::string>{"   hell   ", "   o      "});
+
+    text.set_padding_x(0);
+    const auto at_zero = text.render(10);
+    REQUIRE(at_zero);
+    CHECK(at_zero->lines == std::vector<std::string>{"hello     "});
+}
+
+// pi's `Box.setPaddingX` invalidates the render cache, so a child whose
+// rendered lines do not depend on the width still re-renders with the new
+// padding. Without the invalidation the cached composition (the old padding)
+// is returned, because the child's own lines are unchanged.
+TEST_CASE("Box padding change invalidates the render cache", "[tui][box][padding][issue1121][spec]") {
+    cch::tui::Box box(2, 0);
+    REQUIRE(box.add_child(std::make_unique<RawLineComponent>("hey")));
+
+    const auto at_two = box.render(10);
+    REQUIRE(at_two);
+    CHECK(at_two->lines == std::vector<std::string>{"  hey     "});
+
+    box.set_padding_x(3);
+    const auto at_three = box.render(10);
+    REQUIRE(at_three);
+    CHECK(at_three->lines == std::vector<std::string>{"   hey    "});
+}
+
+TEST_CASE("Box cache keeps full padding and clamps narrow content to one column like frozen pi",
         "[tui][container][issue966][spec]") {
     cch::tui::Box box(2, 1);
     REQUIRE(box.add_child(std::make_unique<cch::tui::Text>("hi", 0, 0)));

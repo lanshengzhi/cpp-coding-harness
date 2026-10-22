@@ -86,15 +86,13 @@ void append_lines(std::vector<std::string>& destination, std::vector<std::string
 
 } // namespace
 
-BashExecutionComponent::BashExecutionComponent(
-    const LiveTheme& theme,
-    std::shared_ptr<const SharedKeybindings> keybindings,
-    std::string command,
-    bool exclude_from_context)
-    : theme_(theme),
-      keybindings_(std::move(keybindings)),
-      command_(std::move(command)),
-      exclude_from_context_(exclude_from_context) {}
+BashExecutionComponent::BashExecutionComponent(const LiveTheme& theme,
+        std::shared_ptr<const SharedKeybindings> keybindings,
+        std::string command,
+        bool exclude_from_context,
+        std::size_t output_pad)
+    : theme_(theme), keybindings_(std::move(keybindings)), command_(std::move(command)),
+      exclude_from_context_(exclude_from_context), output_pad_(output_pad) {}
 
 BashExecutionComponent::~BashExecutionComponent() = default;
 
@@ -127,6 +125,8 @@ void BashExecutionComponent::set_expanded(bool expanded) {
     expanded_ = expanded;
 }
 
+void BashExecutionComponent::set_output_pad(std::size_t output_pad) { output_pad_ = output_pad; }
+
 void BashExecutionComponent::start_loader(cch::tui::RenderRequestSink request_render) {
     if (!running_) return;
     if (loader_ && loader_->running()) return;
@@ -153,11 +153,9 @@ support::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::si
     lines.push_back(theme_.foreground(inclusion_token, horizontal_border(width)));
 
     auto header = cch::tui::Text(
-        theme_.foreground(
-            inclusion_token,
-            std::format("\x1b[1m$ {}\x1b[22m", bounded_presentation(command_))),
-        1,
-        0);
+            theme_.foreground(inclusion_token, std::format("\x1b[1m$ {}\x1b[22m", bounded_presentation(command_))),
+            output_pad_,
+            0);
     auto rendered_header = header.render(width);
     if (!rendered_header) return std::unexpected(rendered_header.error());
     append_lines(lines, std::move(rendered_header->lines));
@@ -172,10 +170,8 @@ support::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::si
         if (expanded_) {
             // pi bash-execution.ts: the leading blank line is part of the
             // preview text, so the 20-visual-line window includes it.
-            auto body = cch::tui::Text(
-                theme_.foreground(ThemeToken::Muted, std::format("\n{}", output)),
-                1,
-                0);
+            auto body =
+                    cch::tui::Text(theme_.foreground(ThemeToken::Muted, std::format("\n{}", output)), output_pad_, 0);
             auto rendered_body = body.render(width);
             if (!rendered_body) return std::unexpected(rendered_body.error());
             append_lines(lines, std::move(rendered_body->lines));
@@ -189,7 +185,7 @@ support::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::si
             // 20, width, 1): the leading blank rides inside the window, and
             // the shared helper keeps the same last 20 visual lines this
             // component has always shown.
-            auto folded = fold_tail_visual_lines(std::format("\n{}", preview), kPreviewVisualLines, width, 1);
+            auto folded = fold_tail_visual_lines(std::format("\n{}", preview), kPreviewVisualLines, width, output_pad_);
             if (!folded) return std::unexpected(folded.error());
             auto visual = std::move(folded->lines);
             for (auto& line : visual) {
@@ -233,7 +229,7 @@ support::Expected<cch::tui::RenderResult> BashExecutionComponent::render(std::si
         }
         if (!status.empty()) {
             lines.emplace_back();
-            cch::tui::Text component(std::move(status), 1, 0);
+            cch::tui::Text component(std::move(status), output_pad_, 0);
             auto rendered = component.render(width);
             if (!rendered) return std::unexpected(rendered.error());
             append_lines(lines, std::move(rendered->lines));

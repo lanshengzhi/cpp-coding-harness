@@ -50,6 +50,11 @@ public:
     /// Settle the tool with its execution outcome (pi `updateResult`).
     void update_result(ai::ToolResultMessage result, bool is_partial = false);
     void set_expanded(bool expanded);
+    /// pi `outputPad` render setting: the tool block's own horizontal padding
+    /// (pi `tool-execution.ts:207,283`, the box's `setPaddingX`). The value
+    /// also drives the content width the renderers measure, because the block
+    /// pads by the same amount on both sides.
+    void set_output_pad(std::size_t output_pad);
     /// pi `markExecutionStarted`: the agent began running the tool. Stamps the
     /// execution clock once, so a renderer can measure how long the tool ran.
     void mark_execution_started();
@@ -83,6 +88,9 @@ private:
     bool is_partial_{true};
     bool expanded_{false};
     bool args_complete_{false};
+    /// pi `outputPad`: the tool block's horizontal padding. The default is pi's
+    /// `outputPad` setting default of 1.
+    std::size_t output_pad_{1};
     /// The execution-start and result-settlement instants pi keeps in the
     /// renderer state; nullopt until the transition happens.
     std::optional<ai::TimestampMs> started_at_ms_{std::nullopt};

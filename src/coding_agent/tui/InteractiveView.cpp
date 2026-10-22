@@ -57,6 +57,7 @@ InteractiveView::InteractiveView(InteractiveViewOptions options)
               make_editor_submit_sink()) {
     chat_.set_hide_thinking_block(options.hide_thinking_block);
     chat_.set_output_pad(options.output_pad);
+    output_pad_ = options.output_pad;
     autocomplete_provider_factory_ = std::move(options.autocomplete_provider_factory);
     editor_.set_autocomplete_provider(std::move(options.autocomplete_provider));
     fullscreen_ = options.fullscreen;
@@ -69,6 +70,11 @@ void InteractiveView::reconcile_snapshot(const AgentSessionSnapshot& snapshot) {
 void InteractiveView::apply_render_settings(bool hide_thinking_block, std::size_t output_pad) {
     chat_.set_hide_thinking_block(hide_thinking_block);
     chat_.set_output_pad(output_pad);
+    // pi `onOutputPadChange` (`interactive-mode.ts:5099-5105`) fans the setting
+    // out over `pendingMessagesContainer` as well as `chatContainer`, so the
+    // live pending User Bash block follows the setting too.
+    output_pad_ = output_pad;
+    if (pending_bash_) pending_bash_->set_output_pad(output_pad);
 }
 
 void InteractiveView::set_autocomplete_provider(std::unique_ptr<cch::tui::AutocompleteProvider> provider) {
@@ -349,10 +355,7 @@ void InteractiveView::set_pending_input(const agent::AgentInputQueues& queues) {
 void InteractiveView::set_user_bash_progress(runtime::UserBashProgress progress) {
     if (!pending_bash_) {
         pending_bash_ = std::make_unique<BashExecutionComponent>(
-            *theme_,
-            keybindings_,
-            progress.command,
-            progress.exclude_from_context);
+                *theme_, keybindings_, progress.command, progress.exclude_from_context, output_pad_);
         pending_bash_->start_loader([this]() -> support::ExpectedVoid {
             if (!on_invalidate_) return {};
             on_invalidate_();

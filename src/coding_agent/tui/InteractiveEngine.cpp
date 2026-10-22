@@ -1295,6 +1295,10 @@ void InteractiveEngine::close_overlay() {
 
 void InteractiveEngine::rebuild_chat() {
     if (view_ == nullptr) return;
+    // pi `renderSessionEntries` (`interactive-mode.ts:4110`): the selection
+    // coordinates point into the transcript this rebuild replaces, so the
+    // selection *and* the multi-click history are dropped before it happens.
+    if (alt_screen_host_ != nullptr) alt_screen_host_->alt_screen().reset_text_selection();
     view_->apply_render_settings(hide_thinking_block_, output_pad_);
     const auto snapshot = session_->snapshot();
     view_->initialize(snapshot);

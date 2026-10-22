@@ -68,9 +68,10 @@ public:
     /// every rendered assistant message in place (pi
     /// `AssistantMessageComponent.setHideThinkingBlock`).
     void set_hide_thinking_block(bool hide);
-    /// pi `outputPad` render setting: update the padding and rebuild the
-    /// user/assistant message components so the new padding applies (pi
-    /// `setOutputPad` + `rebuildChatFromMessages`).
+    /// pi `outputPad` render setting: update the padding and hand it to every
+    /// block pi's `onOutputPadChange` reaches. The user message is rebuilt (its
+    /// pad is a constructor argument); the assistant, bash, boxed and tool
+    /// blocks update in place.
     void set_output_pad(std::size_t output_pad);
 
     [[nodiscard]] support::Expected<cch::tui::RenderResult> render(std::size_t width) override;

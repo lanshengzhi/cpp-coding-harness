@@ -1213,6 +1213,13 @@ void AltScreen::clear_text_selection() noexcept {
     selection_initial_range_.reset();
 }
 
+void AltScreen::reset_text_selection() noexcept {
+    clear_text_selection();
+    // pi `resetTextSelection` also drops `lastClick`, so the next press is a
+    // character click again instead of continuing the word/line cycle.
+    clear_selection_click_history();
+}
+
 std::optional<std::string_view> AltScreen::selection_source_line_at(const SelectionPoint& point) const {
     if (point.scroll_view != nullptr && cached_frame_ != nullptr) {
         const auto* box = detail::get_scroll_view_box(*cached_frame_, point.scroll_view);

@@ -73,6 +73,9 @@ public:
     /// Replace the background hook (pi `Box.setBgFn`); used by tool
     /// execution to transition pending/success/error backgrounds.
     void set_background_hook(BackgroundHook background_hook);
+    /// Replace the horizontal padding (pi `Box.setPaddingX`): the next render
+    /// measures the content at the new width and pads every line with it.
+    void set_padding_x(std::size_t padding_x);
 
     [[nodiscard]] support::Expected<RenderResult> render(std::size_t width) override;
     void invalidate() override;
