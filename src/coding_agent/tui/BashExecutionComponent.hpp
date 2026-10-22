@@ -24,12 +24,14 @@ class LiveTheme;
 class BashExecutionComponent final : public cch::tui::Component {
 public:
     /// The theme must outlive this component; keybindings resolve through
-    /// the shared slot (ADR 0035, #418).
-    BashExecutionComponent(
-        const LiveTheme& theme,
-        std::shared_ptr<const SharedKeybindings> keybindings,
-        std::string command,
-        bool exclude_from_context);
+    /// the shared slot (ADR 0035, #418). `output_pad` is the `outputPad`
+    /// setting the block is created with (pi's `new BashExecutionComponent(command,
+    /// this.ui, excludeFromContext, this.outputPad)`, `interactive-mode.ts:7027`).
+    BashExecutionComponent(const LiveTheme& theme,
+            std::shared_ptr<const SharedKeybindings> keybindings,
+            std::string command,
+            bool exclude_from_context,
+            std::size_t output_pad = 1);
     ~BashExecutionComponent() override;
 
     BashExecutionComponent(const BashExecutionComponent&) = delete;

@@ -375,6 +375,13 @@ struct ChatContainer::Impl {
         /// Renders as a pi boot warning (`Warning: <text>`, warning token)
         /// instead of the error diagnostic shape.
         bool warning{false};
+        /// The `outputPad` setting in force when the line was emitted. pi
+        /// creates the error as `new ThemedText(..., this.outputPad, 0)`
+        /// (`interactive-mode.ts:4639`), and `onOutputPadChange` only reaches
+        /// children exposing `setOutputPad` — a plain `ThemedText` does not
+        /// (`components/themed-text.ts:11-32`) — so an already-emitted error
+        /// keeps its original pad.
+        std::size_t output_pad{1};
     };
 
     /// pi `showStatus`: one dim status line. A new status replaces the
@@ -549,12 +556,13 @@ struct ChatContainer::Impl {
             return;
         }
         if (const auto* bash = std::get_if<ai::BashExecutionMessage>(&message)) {
+            // pi `addMessageToChat` seeds the block with the live pad at
+            // creation (`new BashExecutionComponent(..., this.outputPad)`).
             auto component = std::make_unique<BashExecutionComponent>(
-                    theme, keybindings, bounded_presentation(bash->command), bash->exclude_from_context);
+                    theme, keybindings, bounded_presentation(bash->command), bash->exclude_from_context, output_pad);
             component->append_output(bounded_presentation(bash->output));
             component->set_complete(bash->exit_code, bash->cancelled, bash->truncated, bash->full_output_path);
             component->set_expanded(tools_expanded);
-            component->set_output_pad(output_pad);
             item.component = std::move(component);
             return;
         }
@@ -791,19 +799,26 @@ struct ChatContainer::Impl {
             }
         }
     }
-    /// pi `onOutputPadChange` (`interactive-mode.ts:5097-5105`): every chat
-    /// child that knows the `outputPad` setting takes the new value. The
-    /// user/assistant messages are rebuilt (they carry the pad in their
-    /// constructor), while the tool, bash and boxed blocks take it through
-    /// their own setter.
+    /// pi `onOutputPadChange` (`interactive-mode.ts:5097-5105`) walks both
+    /// `chatContainer` and `pendingMessagesContainer` and hands the setting to
+    /// every child that exposes `setOutputPad`. This walks every block kind the
+    /// C++ chat renders: user, assistant, bash, tool, custom, compaction and
+    /// branch. pi's `skill-invocation-message.ts` and `custom-entry.ts` blocks
+    /// also expose `setOutputPad` but have no C++ counterpart, so their pad
+    /// contract is carried by the missing components, not by this fan-out.
+    /// The user message is rebuilt (its pad is a constructor argument, as in
+    /// pi); every other block updates in place.
     void apply_output_pad_to_components() {
         for (auto& item : items) {
             auto* message = std::get_if<MessageItem>(&item);
             if (message == nullptr) continue;
             if (message->component != nullptr) {
-                if (std::holds_alternative<ai::UserMessage>(message->message) ||
-                        std::holds_alternative<ai::AssistantMessage>(message->message)) {
+                if (std::holds_alternative<ai::UserMessage>(message->message)) {
                     rebuild_message(*message);
+                } else if (auto* assistant = dynamic_cast<AssistantMessageComponent*>(message->component.get());
+                        assistant != nullptr) {
+                    // pi `assistant-message.ts:73-76` updates in place.
+                    assistant->set_output_pad(output_pad);
                 } else if (auto* bash = dynamic_cast<BashExecutionComponent*>(message->component.get());
                         bash != nullptr) {
                     bash->set_output_pad(output_pad);
@@ -883,9 +898,10 @@ struct ChatContainer::Impl {
             // pi showWarning: Text(warning, 1, 0).
             return render_plain(theme, "Warning: " + diagnostic.text, width, ThemeToken::Warning, 1, !diagnostic.raw);
         }
-        // pi showError: Text(error, outputPad, 0) — the chat error lines
-        // honor the output pad.
-        return render_plain(theme, "Error: " + diagnostic.text, width, ThemeToken::Error, output_pad, !diagnostic.raw);
+        // pi showError: Text(error, outputPad, 0) — the pad frozen when the
+        // error line was emitted.
+        return render_plain(
+                theme, "Error: " + diagnostic.text, width, ThemeToken::Error, diagnostic.output_pad, !diagnostic.raw);
     }
 
     const LiveTheme& theme; // must outlive this presentation reducer.
@@ -1153,7 +1169,10 @@ void ChatContainer::append_frontend_message(std::string text) {
 }
 
 void ChatContainer::append_diagnostic(std::string text) {
-    impl_->items.emplace_back(Impl::DiagnosticItem{safe_text(std::move(text))});
+    impl_->items.emplace_back(Impl::DiagnosticItem{
+            .text = safe_text(std::move(text)),
+            .output_pad = impl_->output_pad,
+    });
 }
 
 void ChatContainer::append_warning(std::string text) {
@@ -1185,6 +1204,7 @@ void ChatContainer::append_user_bash_diagnostic(std::string text) {
     impl_->items.emplace_back(Impl::DiagnosticItem{
             .text = bounded_presentation(text),
             .raw = true,
+            .output_pad = impl_->output_pad,
     });
 }
 

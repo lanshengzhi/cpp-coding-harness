@@ -148,7 +148,8 @@ struct ViewFixture {
 
     explicit ViewFixture(bool user_bash_available = false,
             std::unique_ptr<cch::tui::AutocompleteProvider> provider = nullptr,
-            std::vector<tui::KeybindingOverride> extra_overrides = {})
+            std::vector<tui::KeybindingOverride> extra_overrides = {},
+            std::size_t output_pad = 0)
         : keybindings(test_keybinding_slot(std::move(extra_overrides))), theme(test_theme()) {
         coding_agent::tui::InteractiveViewOptions options;
         options.keybindings = keybindings;
@@ -170,7 +171,7 @@ struct ViewFixture {
             return data;
         };
         options.hide_thinking_block = false;
-        options.output_pad = 0;
+        options.output_pad = output_pad;
         options.user_bash_available = user_bash_available;
         options.autocomplete_provider = std::move(provider);
         options.theme = &theme;
@@ -194,6 +195,19 @@ struct ViewFixture {
         if (cch::tui::strip_terminal_sequences(line).starts_with("→ help")) return true;
     }
     return false;
+}
+
+/// The leading spaces of the first rendered row that carries `needle`.
+[[nodiscard]] std::size_t leading_spaces(const cch::tui::RenderResult& rendered, std::string_view needle) {
+    for (const auto& line : rendered.lines) {
+        const auto visible = cch::tui::strip_terminal_sequences(line);
+        if (visible.find(needle) == std::string::npos) continue;
+        const auto first = visible.find_first_not_of(' ');
+        if (first == std::string::npos) continue;
+        return first;
+    }
+    FAIL("no rendered row carries " << std::string{needle});
+    return 0;
 }
 
 } // namespace
@@ -579,4 +593,34 @@ TEST_CASE("an interrupt key overlapping cancellation and insertion keeps applica
     CHECK(second_outcome == cch::tui::InputAdmissionOutcome::Consumed);
     REQUIRE(fixture.actions.size() == 2);
     CHECK(std::holds_alternative<coding_agent::tui::InterruptAction>(fixture.actions[1]));
+}
+
+TEST_CASE("the live pending User Bash block follows the output pad setting", "[coding_agent][tui][issue1121][spec]") {
+    // pi's `onOutputPadChange` (`interactive-mode.ts:5097-5105`) walks
+    // `pendingMessagesContainer` as well as `chatContainer`, and the pending
+    // block is constructed with the live setting
+    // (`new BashExecutionComponent(command, this.ui, excludeFromContext,
+    // this.outputPad)`, `interactive-mode.ts:7027`). The view's pending block
+    // is that component, so its header must honor the pad at creation and on
+    // every later change.
+    ViewFixture fixture{/*user_bash_available=*/true, nullptr, {}, /*output_pad=*/0};
+    auto& view = *fixture.view;
+
+    coding_agent::runtime::UserBashProgress progress;
+    progress.command = "echo audit";
+    progress.output = "audit output\n";
+    progress.awaiting_commitment = true;
+    progress.exit_code = 0;
+    view.set_user_bash_progress(std::move(progress));
+
+    const auto at_zero = view.render(80);
+    REQUIRE(at_zero);
+    CHECK(leading_spaces(*at_zero, "$ echo audit") == 0);
+
+    // The setting changes while the block is pending: the fan-out re-applies
+    // the new pad to the live block, not only to the committed transcript.
+    view.apply_render_settings(false, 1);
+    const auto at_one = view.render(80);
+    REQUIRE(at_one);
+    CHECK(leading_spaces(*at_one, "$ echo audit") == 1);
 }

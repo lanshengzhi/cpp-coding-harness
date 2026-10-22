@@ -86,15 +86,13 @@ void append_lines(std::vector<std::string>& destination, std::vector<std::string
 
 } // namespace
 
-BashExecutionComponent::BashExecutionComponent(
-    const LiveTheme& theme,
-    std::shared_ptr<const SharedKeybindings> keybindings,
-    std::string command,
-    bool exclude_from_context)
-    : theme_(theme),
-      keybindings_(std::move(keybindings)),
-      command_(std::move(command)),
-      exclude_from_context_(exclude_from_context) {}
+BashExecutionComponent::BashExecutionComponent(const LiveTheme& theme,
+        std::shared_ptr<const SharedKeybindings> keybindings,
+        std::string command,
+        bool exclude_from_context,
+        std::size_t output_pad)
+    : theme_(theme), keybindings_(std::move(keybindings)), command_(std::move(command)),
+      exclude_from_context_(exclude_from_context), output_pad_(output_pad) {}
 
 BashExecutionComponent::~BashExecutionComponent() = default;
 

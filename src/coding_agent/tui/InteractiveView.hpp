@@ -508,6 +508,10 @@ private:
     std::vector<std::string> pending_follow_up_;
     // The live pending User Bash block (pi's pendingMessagesContainer).
     std::unique_ptr<BashExecutionComponent> pending_bash_;
+    /// pi `this.outputPad`: the live `outputPad` setting. The pending block is
+    /// created with it and re-takes it on change, the way pi's
+    /// `pendingMessagesContainer` fan-out does.
+    std::size_t output_pad_{1};
     // The login presentation's editor-slot occupant (pi's editorContainer
     // swap); null renders the ordinary editor.
     std::shared_ptr<cch::tui::Component> editor_replacement_;

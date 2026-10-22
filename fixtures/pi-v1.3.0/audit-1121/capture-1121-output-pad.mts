@@ -1,6 +1,6 @@
 #!/usr/bin/env tsx
 /**
- * Capture the `audit-1051` output-pad family against the frozen `pi-v1.3.0` baseline (#1121, B63).
+ * Capture the `audit-1121` output-pad family against the frozen `pi-v1.3.0` baseline (#1121, B63).
  *
  * HONEST SCOPE: this is a COMPONENT-LEVEL capture of pi's three output-pad-owning chat blocks.
  * The frozen `ToolExecutionComponent`, `BashExecutionComponent` and `CustomMessageComponent` are
@@ -18,7 +18,7 @@
  *
  * Usage (from the repository root):
  *   NODE_OPTIONS=--conditions=source PI_CHECKOUT=<private frozen checkout> PI_BASELINE=pi-v1.3.0 \
- *     <checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1051/capture-1051-output-pad.mts
+ *     <checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1121/capture-1121-output-pad.mts
  */
 
 import { spawnSync } from "node:child_process";
@@ -31,7 +31,7 @@ const scriptPath = fileURLToPath(import.meta.url);
 const familyDir = path.dirname(scriptPath);
 const auditRoot = path.resolve(familyDir, "..");
 const repositoryRoot = path.resolve(auditRoot, "../..");
-const family = "audit-1051";
+const family = "audit-1121";
 const artifactName = "output-pad.json";
 const piCheckout = path.resolve(process.env.PI_CHECKOUT ?? path.resolve(repositoryRoot, "../pi"));
 const baselineName = process.env.PI_BASELINE ?? "pi-v1.3.0";
@@ -103,7 +103,7 @@ function visibleRows(lines: string[]): string[] {
 function renderTool(outputPad: number): string[] {
     const component = new ToolExecutionComponent(
         "audit-tool",
-        "call-audit-1051",
+        "call-audit-1121",
         { command: "echo audit" },
         { outputPad },
         undefined,
@@ -180,7 +180,7 @@ const artifact = {
             inputs: {
                 component: "ToolExecutionComponent",
                 tool: "audit-tool",
-                toolCallId: "call-audit-1051",
+                toolCallId: "call-audit-1121",
                 arguments: { command: "echo audit" },
                 outputPad: [1, 0],
                 width,

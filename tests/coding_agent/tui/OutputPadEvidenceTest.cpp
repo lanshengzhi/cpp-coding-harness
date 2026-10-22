@@ -1,12 +1,12 @@
 // The product `outputPad` fan-out (B63 / TPadding, #1121).
 //
-// pi's `outputPad` render setting reaches every chat block, not only the
-// user/assistant messages: the tool block's box padding
+// pi's `outputPad` render setting reaches every chat block pi renders, not
+// only the user/assistant messages: the tool block's box padding
 // (`tool-execution.ts:207,283`), the bash block's header/body/status text
 // padding (`bash-execution.ts:73-77,141,149,205`) and the custom/boxed
 // block's box padding (`custom-message.ts:48-51,90`). The frozen pi-v1.3.0
-// observation is the NEW capture in
-// fixtures/pi-v1.3.0/audit-1051/output-pad.json, scenarios
+// observation is the `audit-1121` capture in
+// fixtures/pi-v1.3.0/audit-1121/output-pad.json, scenarios
 // `output-pad-reaches-the-tool-block-box`,
 // `output-pad-reaches-the-bash-block-text` and
 // `output-pad-reaches-the-custom-block-box` (revision 71023aec1546).
@@ -14,6 +14,11 @@
 // The DISCRIMINATING case is the tool block: a user-message-only
 // implementation (the previous `apply_output_pad_to_components`) passes the
 // user/assistant control and fails the tool, bash and custom blocks.
+//
+// pi's `onOutputPadChange` also reaches `skill-invocation-message.ts` and
+// `custom-entry.ts`; the C++ tree has no counterpart for either, so those two
+// blocks do not render here and their `setOutputPad` contract is carried by
+// the missing components, not by this fan-out.
 //
 // The artifact stays UNREGISTERED (the serial merger applies the registry
 // patch), so the expected values are read from the committed capture bytes
@@ -65,7 +70,7 @@ namespace {
 /// committed capture; the C++ side never derives them.
 [[nodiscard]] const support::JsonValue& output_pad_artifact() {
     static const auto artifact = [] {
-        const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1051/output-pad.json";
+        const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1121/output-pad.json";
         std::ifstream input(path, std::ios::binary);
         REQUIRE(input);
         const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
@@ -207,4 +212,25 @@ TEST_CASE("ChatContainer output pad still reaches the user and assistant message
     const auto at_zero = rendered_lines(chat, 60);
     CHECK(leading_spaces(at_zero, "audit prompt") == 0);
     CHECK(leading_spaces(at_zero, "audit reply") == 0);
+}
+
+TEST_CASE("a chat diagnostic keeps the output pad it was emitted with", "[coding_agent][tui][issue1121][spec]") {
+    // pi `showError` creates the error line with the live pad at emission time
+    // (`new ThemedText(() => theme.fg("error", `Error: ${errorMessage}`),
+    // this.outputPad, 0)`, `interactive-mode.ts:4639`). `onOutputPadChange`
+    // only reaches children that expose `setOutputPad`, and a plain
+    // `ThemedText` does not (`components/themed-text.ts:11-32`), so an
+    // already-emitted error keeps its original pad after the setting changes.
+    auto theme = test_theme();
+    coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+    chat.append_diagnostic("emitted at pad one");
+    chat.set_output_pad(0);
+
+    const auto lines = rendered_lines(chat, 60);
+    CHECK(leading_spaces(lines, "Error: emitted at pad one") == 1);
+
+    // A diagnostic emitted after the change takes the new pad.
+    chat.append_diagnostic("emitted at pad zero");
+    const auto later = rendered_lines(chat, 60);
+    CHECK(leading_spaces(later, "Error: emitted at pad zero") == 0);
 }

@@ -167,7 +167,6 @@ void ToolExecutionComponent::rebuild() {
             .expanded = expanded_,
             .started_at_ms = started_at_ms_,
             .ended_at_ms = ended_at_ms_,
-            .output_pad = output_pad_,
     };
 
     auto& renderer = registry_.lookup(tool_name_);

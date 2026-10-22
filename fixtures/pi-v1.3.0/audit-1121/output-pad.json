@@ -3,7 +3,7 @@
   "recordKind": "component-probe",
   "baseline": "pi-v1.3.0",
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "capturedAt": "2026-10-22T11:57:56.112Z",
+  "capturedAt": "2026-10-22T14:05:44.805Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -26,7 +26,7 @@
       "inputs": {
         "component": "ToolExecutionComponent",
         "tool": "audit-tool",
-        "toolCallId": "call-audit-1051",
+        "toolCallId": "call-audit-1121",
         "arguments": {
           "command": "echo audit"
         },
