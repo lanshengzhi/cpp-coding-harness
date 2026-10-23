@@ -168,6 +168,7 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/ChatContainerStatusTest.cpp
         tests/coding_agent/tui/ChatViewportEvidenceTest.cpp
         tests/coding_agent/tui/ChatViewportTest.cpp
+        tests/coding_agent/tui/DockFooterFrameTest.cpp
         tests/coding_agent/tui/ClipboardInteractiveTest.cpp
         tests/coding_agent/tui/ClipboardProcessTest.cpp
         tests/coding_agent/tui/ClipboardWriteTest.cpp

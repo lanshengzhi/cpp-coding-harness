@@ -216,6 +216,32 @@ TEST_CASE("ChatViewport keeps the dock fixed while the transcript scrolls indepe
     CHECK(dock == fixed);
 }
 
+TEST_CASE("ChatViewport keeps both footer rows when the dock is over budget",
+        "[coding_agent][tui][fullscreen][viewport][issue831][spec]") {
+    // Dock intrinsic height 29 (pending 6 + status 1 + editor 20 + footer 2)
+    // over a 10-row frame. The shrink exceeds the pending and status capacity,
+    // so a footer entry without its own floor is offered shrink twice and is
+    // allocated zero rows while the editor keeps eight; the floor pins both
+    // footer rows (#831).
+    std::vector<std::string> editor;
+    for (int index = 1; index <= 20; ++index)
+        editor.push_back(std::format("editor-{}", index));
+    InstalledViewport viewport(40,
+            10,
+            Regions{
+                    .document = {"doc-1", "doc-2", "doc-3", "doc-4", "doc-5"},
+                    .pending = "pending-1\npending-2\npending-3\npending-4\npending-5\npending-6",
+                    .status = "status-1",
+                    .editor = joined(std::move(editor)),
+                    .footer = {"footer-1", "footer-2"},
+            });
+    viewport.render();
+    const auto rows = viewport.rows();
+    REQUIRE(rows.size() == 10);
+    CHECK(rows[rows.size() - 2] == "footer-1");
+    CHECK(rows[rows.size() - 1] == "footer-2");
+}
+
 TEST_CASE("ChatViewport editor can leave and re-enter its retained dock without losing scroll state",
         "[coding_agent][tui][fullscreen][viewport][issue1018][spec]") {
     InstalledViewport viewport(20,

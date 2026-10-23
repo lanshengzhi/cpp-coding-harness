@@ -1,0 +1,42 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "831",
+  "family": "audit-831",
+  "capturedAt": "2026-10-23T01:16:01.297Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-831/capture-831.mts",
+    "sha256": "ea78e777e540b307773a5ba7490f9375e4f8e529a700c0e9fe0f313742caf5f0",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-831/capture-831.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-831/capture-831.mts",
+        "sha256": "ea78e777e540b307773a5ba7490f9375e4f8e529a700c0e9fe0f313742caf5f0"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "dock-footer.json",
+      "family": "audit-831",
+      "bytes": 22345,
+      "sha256": "f70912731b0c7884abbbb667480489b257bcc7c190680082da264b01088891a3",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+        "packages/tui/src/components/stack.ts:VStack,distribute",
+        "packages/tui/src/layout.ts:layoutComponent,updateClips",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+      ],
+      "scenarioCount": 2
+    }
+  ]
+}
