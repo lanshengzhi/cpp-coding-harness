@@ -25,7 +25,12 @@ G6 record, #394), so these screens are the committed byte-level gate.
   additionally asserts the styled cells (the `toolTitle` bold title, the
   `toolOutput` bodies, the `muted` fold-hint clauses, and the two distinct
   `toolDiffRemoved`/`toolDiffAdded` rows) — the wrong rendering this golden
-  cannot express is a wrong colour on an otherwise identical screen.
+  cannot express is a wrong colour on an otherwise identical screen. The
+  `bash` result carries pi's recorded `durationMs`, so the block's settled
+  `Took 12.3s` row is drawn from the transcript record rather than a clock
+  (#812); `InteractiveRenderingGoldenTest` additionally asserts that row on a
+  resumed session, which never saw the execution and therefore cannot
+  measure it.
 - `model-switch.txt` — a key flow at 72×24: Ctrl+L opens the model selector,
   Down+Enter switches the session model to `beta-1`, with the `Model: beta-1`
   status and the footer's `(beta) beta-1` model.
