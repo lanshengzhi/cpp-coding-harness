@@ -881,6 +881,13 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::
         const auto cached = fullscreen_image_placements_.find(image.resource_id);
         const auto handle = cached != fullscreen_image_placements_.end() ? cached->second.handle : allocate_image_id();
         std::string anchor;
+        // A revision change means new pixels: the anchor carries a fresh
+        // transmission below, and the cache moves to the new revision when it
+        // is prepared. The frame MUST emit those bytes — otherwise the
+        // terminal keeps showing the old revision while the cache claims the
+        // new one — so a revision change is a redraw trigger on its own, even
+        // when the position and the a=p reuse command are unchanged.
+        bool revision_changed = false;
         if (cached != fullscreen_image_placements_.end() && cached->second.revision == image.revision) {
             anchor = detail::encode_kitty_image_placement(term_img, handle);
         } else {
@@ -892,6 +899,7 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::
             placement.transmission_bytes = encoded->size();
             placement.decoded_bytes = image.pixel_width * image.pixel_height * 4;
             anchor = std::move(*encoded);
+            revision_changed = true;
         }
 
         auto& placement = fullscreen_image_placements_[image.resource_id];
@@ -901,7 +909,7 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::
         // cache state, not a content change (#1035).
         const auto next_reuse = detail::encode_kitty_image_placement(term_img, handle);
         const bool moved = placement.row != image.region.row || placement.column != image.region.column;
-        if (!placement.anchored || moved || placement.reuse != next_reuse) need_redraw = true;
+        if (!placement.anchored || moved || placement.reuse != next_reuse || revision_changed) need_redraw = true;
         placement.reuse = next_reuse;
         placement.row = image.region.row;
         placement.column = image.region.column;

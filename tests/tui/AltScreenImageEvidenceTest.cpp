@@ -662,9 +662,8 @@ TEST_CASE("a fullscreen image revision change retransmits the image under the sa
     // moves the cache to the new revision when it prepares the transmission;
     // a frame that then emits no image bytes leaves the terminal showing the
     // old revision while the cache claims the new one.
-    cch::tui::VirtualTerminal terminal({.columns = 20,
-            .rows = 4,
-            .capabilities = {.inline_images = cch::tui::InlineImageProtocol::Kitty}});
+    cch::tui::VirtualTerminal terminal(
+            {.columns = 20, .rows = 4, .capabilities = {.inline_images = cch::tui::InlineImageProtocol::Kitty}});
     cch::tui::AltScreen tui(terminal);
     auto root = std::make_unique<RevisionChild>();
     auto* root_ptr = root.get();
@@ -673,24 +672,26 @@ TEST_CASE("a fullscreen image revision change retransmits the image under the sa
     REQUIRE(tui.start());
     REQUIRE(tui.render());
     const auto initial = observed_commands(terminal, 0);
-    const auto initial_transmissions = static_cast<std::size_t>(std::ranges::count_if(initial,
-            [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; }));
-    REQUIRE(initial_transmissions == 1);
+    const auto initial_transmission = std::ranges::find_if(
+            initial, [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; });
+    REQUIRE(initial_transmission != initial.end());
+    // The Kitty image id is the session handle; the revision frame must reuse
+    // it so the terminal replaces the frame in place.
+    const auto id_at = initial_transmission->text.find("i=");
+    REQUIRE(id_at != std::string::npos);
+    const auto id_end = initial_transmission->text.find_first_not_of("0123456789", id_at + 2);
+    const std::string image_id = initial_transmission->text.substr(id_at, id_end - id_at);
 
     const auto marker = terminal.output().size();
     root_ptr->bump_revision();
     REQUIRE(tui.render());
     const auto revision_frame = observed_commands(terminal, marker);
-    const auto retransmissions = static_cast<std::size_t>(std::ranges::count_if(revision_frame,
-            [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; }));
-    CHECK(retransmissions == 1);
-    if (retransmissions == 1) {
-        const auto transmission = std::ranges::find_if(revision_frame,
-                [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; });
-        // Same placement command as the initial frame: same image id and cell
-        // geometry, only the revision moved.
-        CHECK(transmission->text.find("i=7301") != std::string::npos);
-        CHECK(transmission->text.find("c=2,r=3") != std::string::npos);
-    }
+    const auto retransmission = std::ranges::find_if(revision_frame,
+            [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; });
+    REQUIRE(retransmission != revision_frame.end());
+    // Same placement command as the initial frame: same image id and cell
+    // geometry, only the revision moved.
+    CHECK(retransmission->text.find(image_id) != std::string::npos);
+    CHECK(retransmission->text.find("c=2,r=3") != std::string::npos);
     REQUIRE(tui.stop());
 }
