@@ -44,6 +44,10 @@ struct ToolExecutionSnapshot {
     bool output_truncated{false};
     std::optional<std::string> artifact_reference{std::nullopt};
     std::optional<std::string> error{std::nullopt};
+    /// pi `ToolResultMessage.durationMs` reduced into the read model: the
+    /// recorded execution duration a resumed observer renders the settled
+    /// block with, absent while the call is running or never recorded (#812).
+    std::optional<std::int64_t> duration_ms{std::nullopt};
 };
 
 /// Coarse phase of the current prompt/run. Terminal is retained after the

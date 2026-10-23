@@ -717,6 +717,86 @@ TEST_CASE("Projection patches converge with the Core snapshot for a streaming to
     session.close();
 }
 
+TEST_CASE("Projection tool facts carry the same recorded duration as the transcript result",
+        "[coding_agent][projection][issue812][spec]") {
+    // #812: a resumed session rebuilds the settled tool block from the
+    // projection read model, so the ToolFinishedPatch must carry the same
+    // recorded duration the transcript message persists — the live and
+    // resumed blocks render one value.
+    tests::TempWorkspace workspace;
+    tests::RuntimeFixture runtime;
+    auto partial_count = std::make_shared<std::size_t>(0);
+
+    auto tool_use = ai::assistant_text_message("Streaming a tool now.");
+    tool_use.stop_reason = ai::AssistantStopReason::ToolUse;
+    tool_use.content.emplace_back(ai::ToolCallContent{
+            .id = "call_812",
+            .name = "streamy",
+            .arguments = support::JsonValue{support::JsonValue::object_t{}},
+            .raw_arguments = {},
+            .thought_signature = std::nullopt,
+            .arguments_valid = true,
+            .argument_error = std::nullopt,
+    });
+
+    auto round_provider = std::make_shared<ToolRoundProvider>();
+    round_provider->set_tool_round(std::move(tool_use));
+    round_provider->set_chunk_count(2);
+
+    tests::ModelsSessionOptions options;
+    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.workspace = workspace.path();
+    options.request_model = tests::scripted_request_model("fake", "fake-model");
+    std::vector<agent::Tool> tools;
+    tools.push_back(make_streaming_tool(partial_count));
+    options.custom_tools = std::move(tools);
+    auto models = tests::models_from_provider(std::move(round_provider));
+    coding_agent::runtime::AgentSessionCreationRequest request = std::move(options);
+    request.execution_runtime_target = runtime.make_target();
+    auto created = runtime.run(coding_agent::create_agent_session_async(
+            std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
+    REQUIRE(created.has_value());
+    auto& session = *created->session;
+
+    auto records = make_recorder();
+    auto subscription = session.attach_projection([records](const ProjectionStreamMessageVariant& message) {
+        records->push_back(RecordedMessage{
+                .is_base = std::holds_alternative<ProjectionStreamBase>(message),
+                .version = std::visit([](const auto& value) { return value.version; }, message),
+                .value = message,
+        });
+    });
+    REQUIRE(subscription.drain() == 1);
+
+    REQUIRE(tests::run_awaitable(runtime, session.prompt("run the streaming tool")).has_value());
+    CHECK(subscription.drain() >= 1);
+
+    // The finished read-model fact carries the recorded duration...
+    std::optional<std::int64_t> finished_duration;
+    for (const auto& record : *records) {
+        if (const auto* batch = std::get_if<ProjectionStreamPatchMsg>(&record.value)) {
+            for (const auto& patch : batch->patches) {
+                if (const auto* finished = std::get_if<coding_agent::ToolFinishedPatch>(&patch)) {
+                    finished_duration = finished->execution.duration_ms;
+                }
+            }
+        }
+    }
+    REQUIRE(finished_duration.has_value());
+
+    // ...exactly the value the transcript persists for the same call.
+    const ai::ToolResultMessage* transcript_result = nullptr;
+    for (const auto& message : session.snapshot().agent_state.messages) {
+        if (const auto* result = std::get_if<ai::ToolResultMessage>(&message)) {
+            transcript_result = result;
+        }
+    }
+    REQUIRE(transcript_result != nullptr);
+    REQUIRE(transcript_result->duration_ms.has_value());
+    CHECK(*finished_duration == *transcript_result->duration_ms);
+    session.close();
+}
+
 TEST_CASE("Projection observers converge on tool and run state after a stalled mailbox resync",
         "[coding_agent][projection][issue622][spec]") {
     tests::TempWorkspace workspace;

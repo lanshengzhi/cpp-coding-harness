@@ -111,6 +111,9 @@ void merge_projection_tool_execution(
     if (!execution.artifact_reference) {
         execution.artifact_reference = prior.artifact_reference;
     }
+    if (!execution.duration_ms) {
+        execution.duration_ms = prior.duration_ms;
+    }
     if (preserve_error && !execution.error) {
         execution.error = prior.error;
     }
@@ -122,11 +125,13 @@ void merge_projection_tool_execution(
         ToolExecutionStatus status,
         const support::JsonValue* arguments,
         const agent::AsyncToolExecutionResult* result,
-        bool is_error) {
+        bool is_error,
+        std::optional<std::int64_t> duration_ms = std::nullopt) {
     ToolExecutionSnapshot execution;
     execution.tool_call_id = std::move(tool_call_id);
     execution.tool_name = std::move(tool_name);
     execution.status = status;
+    execution.duration_ms = duration_ms;
     if (arguments != nullptr) {
         execution.arguments_json = serialize_projection_tool_arguments(*arguments);
     }
@@ -1318,7 +1323,8 @@ void AgentSession::Impl::update_projection(const agent::AgentLifecycleEvent& eve
                                                                 : ToolExecutionStatus::Succeeded,
                 nullptr,
                 &finished->result,
-                finished->is_error);
+                finished->is_error,
+                finished->duration_ms);
         if (const auto* prior = previous_tool(finished->tool_call_id); prior != nullptr) {
             merge_projection_tool_execution(execution, *prior, true);
         }
