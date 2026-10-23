@@ -17,6 +17,14 @@
       "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
       "platform": "linux-x86_64-glibc",
       "bundles": {
+        "audit-1032": {
+          "manifest": "audit-1032/manifest.json",
+          "manifestSha256": "9d874e3d861998ca4ed515d6836e60695e2059bff2f9dbb95e56037230849aa3"
+        },
+        "audit-1035": {
+          "manifest": "audit-1035/manifest.json",
+          "manifestSha256": "911c201132cfe02d7ce904a522b215ad3c97d43e8d1d5fdd5530aa8eea433ffc"
+        },
         "audit-1046": {
           "manifest": "audit-1046/manifest.json",
           "manifestSha256": "db14038aff4315eb84f12a46af3fcee63b80214b456d5870ef1d956dc285daea"
@@ -96,6 +104,10 @@
         "audit-810": {
           "manifest": "audit-810/manifest.json",
           "manifestSha256": "1912896e60f3c1208f288db3b88a73749b01b32f1c1d729ccb688fed9653e8ce"
+        },
+        "audit-831": {
+          "manifest": "audit-831/manifest.json",
+          "manifestSha256": "75305f6d248e7ed73246d49c331d0bb2b462914b8e3a4e5cbb3d91b34c60cd25"
         }
       }
     }

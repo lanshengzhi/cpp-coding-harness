@@ -364,7 +364,7 @@
     ],
     "missingObservationRows": 1028,
     "scenarioCoverage": {
-      "scenarios": 443,
+      "scenarios": 458,
       "scenarioNamed": 320,
       "artifactCovered": 47,
       "orphaned": [
@@ -443,7 +443,22 @@
         "audit-1124/clipboard-osc52.json:osc52-opt-in-writes-the-largest-allowed-payload-in-full",
         "audit-1124/clipboard-osc52.json:osc52-opt-in-rejects-one-byte-over-the-size-bound",
         "audit-1124/clipboard-osc52.json:wsl-windows-terminal-prefers-osc52-before-the-remote-branch",
-        "audit-810/thinking-selector.json:thinking selector with the absent thinkingLevelMap at 100 columns"
+        "audit-810/thinking-selector.json:thinking selector with the absent thinkingLevelMap at 100 columns",
+        "audit-1032/system-theme-capture.json:dark terminal full palette anchors hues to the reported colors",
+        "audit-1032/system-theme-capture.json:light terminal full palette anchors hues to the reported colors",
+        "audit-1032/system-theme-capture.json:pending state renders grayscale at zero saturation",
+        "audit-1032/system-theme-capture.json:mid gray terminal crosses the frozen relaxation boundary",
+        "audit-1032/system-theme-capture.json:dark terminal without palette uses family hues",
+        "audit-1032/system-theme-capture.json:light terminal without palette uses family hues",
+        "audit-1032/system-theme-capture.json:no report pending renders indexed grayscale with faint neutrals",
+        "audit-1032/system-theme-capture.json:no report settled renders indexed palette slots",
+        "audit-1032/system-theme-capture.json:no report pending light hint renders indexed grayscale",
+        "audit-1032/system-theme-capture.json:no report settled light hint renders indexed palette slots",
+        "audit-1035/placement-span.json:wezterm-placement-span-repaint",
+        "audit-1035/placement-span.json:plain-terminal-placement-span-control",
+        "audit-1035/placement-span.json:wezterm-overlay-inside-placement-span",
+        "audit-831/dock-footer.json:dock-fits-autocomplete-and-multiline",
+        "audit-831/dock-footer.json:dock-over-budget-editor-growth"
       ],
       "uncovered": []
     }
@@ -3354,6 +3369,169 @@
         "cch_coding_agent:thinking-selector"
       ],
       "disposition": "the thinking-selector slice consumes this observation when it advances cch_coding_agent:thinking-selector beyond upstream-captured."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "dark terminal full palette anchors hues to the reported colors",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "light terminal full palette anchors hues to the reported colors",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "pending state renders grayscale at zero saturation",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "mid gray terminal crosses the frozen relaxation boundary",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "dark terminal without palette uses family hues",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "light terminal without palette uses family hues",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "no report pending renders indexed grayscale with faint neutrals",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "no report settled renders indexed palette slots",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "no report pending light hint renders indexed grayscale",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1032",
+      "artifact": "system-theme-capture.json",
+      "scenario": "no report settled light hint renders indexed palette slots",
+      "reason": "Captured by #1032 after the #1058 ledger was committed; no 1050 or 1051 ledger row routes to the system-theme capture, and linking it would silently upgrade cch_coding_agent:system-theme's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_coding_agent:system-theme",
+        "cch_coding_agent:residual-1032-system-theme"
+      ],
+      "disposition": "the system-theme slice consumes this observation when it advances cch_coding_agent:system-theme beyond unverified."
+    },
+    {
+      "family": "audit-1035",
+      "artifact": "placement-span.json",
+      "scenario": "wezterm-placement-span-repaint",
+      "reason": "Captured by #1035 after the #1058 ledger was committed; no 1051 ledger row routes to the placement-span capture, and linking it would silently upgrade cch_tui:residual-1035-image-placement's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_tui:residual-1035-image-placement",
+        "cch_tui:images-placement-herdr"
+      ],
+      "disposition": "the image-placement slice consumes this observation when it advances cch_tui:residual-1035-image-placement and cch_tui:images-placement-herdr beyond upstream-captured."
+    },
+    {
+      "family": "audit-1035",
+      "artifact": "placement-span.json",
+      "scenario": "plain-terminal-placement-span-control",
+      "reason": "Captured by #1035 after the #1058 ledger was committed; no 1051 ledger row routes to the placement-span capture, and linking it would silently upgrade cch_tui:residual-1035-image-placement's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_tui:residual-1035-image-placement",
+        "cch_tui:images-placement-herdr"
+      ],
+      "disposition": "the image-placement slice consumes this observation when it advances cch_tui:residual-1035-image-placement and cch_tui:images-placement-herdr beyond upstream-captured."
+    },
+    {
+      "family": "audit-1035",
+      "artifact": "placement-span.json",
+      "scenario": "wezterm-overlay-inside-placement-span",
+      "reason": "Captured by #1035 after the #1058 ledger was committed; no 1051 ledger row routes to the placement-span capture, and linking it would silently upgrade cch_tui:residual-1035-image-placement's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_tui:residual-1035-image-placement",
+        "cch_tui:images-placement-herdr"
+      ],
+      "disposition": "the image-placement slice consumes this observation when it advances cch_tui:residual-1035-image-placement and cch_tui:images-placement-herdr beyond upstream-captured."
+    },
+    {
+      "family": "audit-831",
+      "artifact": "dock-footer.json",
+      "scenario": "dock-fits-autocomplete-and-multiline",
+      "reason": "Captured by #831 after the #1058 ledger was committed; no 1051 ledger row routes to the dock-footer capture, and linking it would silently upgrade cch_tui:residual-831-dock-growth-footer's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_tui:residual-831-dock-growth-footer"
+      ],
+      "disposition": "the dock-growth slice consumes this observation when it advances cch_tui:residual-831-dock-growth-footer beyond upstream-captured."
+    },
+    {
+      "family": "audit-831",
+      "artifact": "dock-footer.json",
+      "scenario": "dock-over-budget-editor-growth",
+      "reason": "Captured by #831 after the #1058 ledger was committed; no 1051 ledger row routes to the dock-footer capture, and linking it would silently upgrade cch_tui:residual-831-dock-growth-footer's recorded verification, so the observation stays explicit here.",
+      "rows": [
+        "cch_tui:residual-831-dock-growth-footer"
+      ],
+      "disposition": "the dock-growth slice consumes this observation when it advances cch_tui:residual-831-dock-growth-footer beyond upstream-captured."
     }
   ],
   "correctionsIndex": [
