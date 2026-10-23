@@ -173,6 +173,49 @@ TEST_CASE("the public codemode source parser keeps only a first-line options com
     CHECK(codemode::kCodemodeSourceGrammar == member(exported, "grammar").get_string());
 }
 
+TEST_CASE("the public codemode source parser rejects a misplaced options line with its line number",
+        "[codemode][source][issue1100][spec]") {
+    // Frozen pi v1.3.0 (`source-options.json`, "a misplaced options line is
+    // rejected with its line number"): a `// @options:` line anywhere past line
+    // 1 is a typed error naming the line — including after a valid options line.
+    const auto artifact = read_artifact("source-options.json");
+    const auto* scenario = find_scenario(artifact, "a misplaced options line is rejected with its line number");
+    REQUIRE(scenario != nullptr);
+    const auto& inputs = member(member(*scenario, "inputs"), "inputs").get_array();
+    const auto& expected = member(*scenario, "expected").get_array();
+    REQUIRE(inputs.size() == expected.size());
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+        INFO("input[" << i << "]: " << inputs[i].get_string());
+        auto parsed = codemode::parse_codemode_source(inputs[i].get_string());
+        CHECK_FALSE(parsed.has_value());
+        if (parsed) continue;
+        CHECK(parsed.error().code == support::ErrorCode::Validation);
+        CHECK(parsed.error().message == member(expected[i], "message").get_string());
+    }
+}
+
+TEST_CASE("the public codemode source parser rejects invalid options and empty input with typed errors",
+        "[codemode][source][issue1100][spec]") {
+    // Frozen pi v1.3.0 (`source-options.json`, "invalid options and empty
+    // input are rejected with typed errors"): every case is a Validation error
+    // with the captured message — never a silent fallback to "no options".
+    const auto artifact = read_artifact("source-options.json");
+    const auto* scenario = find_scenario(artifact, "invalid options and empty input are rejected with typed errors");
+    REQUIRE(scenario != nullptr);
+    const auto& inputs = member(member(*scenario, "inputs"), "inputs").get_array();
+    const auto& expected = member(*scenario, "expected").get_array();
+    REQUIRE(inputs.size() == expected.size());
+    for (std::size_t i = 0; i < inputs.size(); ++i) {
+        const auto& input = member(expected[i], "input").get_string();
+        INFO("input[" << i << "]: " << input);
+        auto parsed = codemode::parse_codemode_source(input);
+        CHECK_FALSE(parsed.has_value());
+        if (parsed) continue;
+        CHECK(parsed.error().code == support::ErrorCode::Validation);
+        CHECK(parsed.error().message == member(member(expected[i], "error"), "message").get_string());
+    }
+}
+
 TEST_CASE("the public codemode declaration preserves the relocated tool identifiers",
         "[codemode][declarations][issue1064][spec]") {
     const auto artifact = read_artifact("declarations.json");
@@ -184,18 +227,9 @@ TEST_CASE("the public codemode declaration preserves the relocated tool identifi
     const auto& expected = member(*scenario, "expected").get_array();
     REQUIRE(names.size() == expected.size());
     // The frozen identifier capture's last case (`naïve`) exercises a
-    // multi-byte character. The current byte-wise normalization produces
-    // `na__ve`; the frozen observation expects `na_ve`. Assert both so the
-    // remaining parity gap is recorded instead of silently skipped or claimed
-    // fixed by the move.
-    const std::string naive_name = "na\xc3\xaf"
-                                   "ve";
+    // multi-byte character: one invalid code point becomes one `_`.
     for (std::size_t i = 0; i < names.size(); ++i) {
-        if (names[i].get_string() == naive_name) {
-            CHECK(codemode::to_codemode_identifier(names[i].get_string()) == "na__ve");
-            CHECK(expected[i].get_string() == "na_ve");
-            continue;
-        }
+        INFO("name: " << names[i].get_string());
         CHECK(codemode::to_codemode_identifier(names[i].get_string()) == expected[i].get_string());
     }
 }
@@ -212,6 +246,160 @@ TEST_CASE("the public codemode declaration renders frozen schema types", "[codem
     for (std::size_t i = 0; i < schemas.size(); ++i) {
         CHECK(codemode::schema_to_type(schemas[i], 16'000) == expected[i].get_string());
     }
+}
+
+TEST_CASE("the public codemode declaration covers the frozen schema renderings",
+        "[codemode][declarations][issue1100][spec]") {
+    // Every frozen declarations scenario rendered through schema_to_type: one-
+    // line property sorting and quoting, doc comments, constraint tags,
+    // optional-null branches, draft-04 exclusive bounds, escaped terminators,
+    // tag dropping under the character budget, and $ref resolution.
+    const auto artifact = read_artifact("declarations.json");
+    const auto schemas_scenario = [&](std::string_view name) -> const support::JsonValue* {
+        return find_scenario(artifact, name);
+    };
+
+    for (const auto name : {
+                 "object properties are sorted on one line with quoted non-identifier keys",
+         }) {
+        const auto* scenario = schemas_scenario(name);
+        REQUIRE(scenario != nullptr);
+        INFO("scenario: " + std::string{name});
+        const auto& schemas = member(member(*scenario, "inputs"), "schemas").get_array();
+        const auto& expected = member(*scenario, "expected").get_array();
+        REQUIRE(schemas.size() == expected.size());
+        for (std::size_t i = 0; i < schemas.size(); ++i) {
+            CHECK(codemode::schema_to_type(schemas[i], codemode::kDefaultInputSchemaMaxChars) ==
+                    expected[i].get_string());
+        }
+    }
+
+    // Single-schema scenarios whose expected value is the rendered object.
+    for (const auto name : {
+                 "property descriptions become comment lines",
+                 "constraint tags render integer bounds, defaults, patterns and deprecated markers",
+                 "optional non-null branches keep their constraint tags",
+                 "draft-04 boolean exclusive bounds become exclusive tags",
+         }) {
+        const auto* scenario = schemas_scenario(name);
+        REQUIRE(scenario != nullptr);
+        INFO("scenario: " + std::string{name});
+        const auto& schema = member(member(*scenario, "inputs"), "schema");
+        CHECK(codemode::schema_to_type(schema, codemode::kDefaultInputSchemaMaxChars) ==
+                member(*scenario, "expected").get_string());
+    }
+
+    {
+        const auto* scenario = schemas_scenario(
+                "long tags are dropped, line terminators are escaped, and line breaks stay in comments");
+        REQUIRE(scenario != nullptr);
+        const auto& schemas = member(member(*scenario, "inputs"), "schemas").get_array();
+        const auto& expected = member(*scenario, "expected").get_array();
+        REQUIRE(schemas.size() == expected.size());
+        for (std::size_t i = 0; i < schemas.size(); ++i) {
+            CHECK(codemode::schema_to_type(schemas[i], codemode::kDefaultInputSchemaMaxChars) ==
+                    expected[i].get_string());
+        }
+    }
+
+    {
+        const auto* scenario = schemas_scenario("types over the character budget drop tags, then become unknown");
+        REQUIRE(scenario != nullptr);
+        const auto& schema = member(member(*scenario, "inputs"), "schema");
+        const auto& budgets = member(member(*scenario, "inputs"), "budgets").get_array();
+        const auto& expected = member(*scenario, "expected").get_array();
+        REQUIRE(budgets.size() == expected.size());
+        for (std::size_t i = 0; i < budgets.size(); ++i) {
+            const std::size_t budget = budgets[i].holds<support::JsonValue::null_t>()
+                                               ? std::size_t{0}
+                                               : static_cast<std::size_t>(budgets[i].get_number());
+            CHECK(codemode::schema_to_type(schema, budget) == expected[i].get_string());
+        }
+    }
+
+    {
+        const auto* scenario =
+                schemas_scenario("local references resolve and recursive or remote references render unknown");
+        REQUIRE(scenario != nullptr);
+        const auto& schema = member(member(*scenario, "inputs"), "schema");
+        CHECK(codemode::schema_to_type(schema, codemode::kDefaultInputSchemaMaxChars) ==
+                member(*scenario, "expected").get_string());
+    }
+}
+
+TEST_CASE("the public codemode declaration renders frozen tool signatures samples and blocks",
+        "[codemode][declarations][issue1100][spec]") {
+    const auto artifact = read_artifact("declarations.json");
+    const auto* scenario =
+            find_scenario(artifact, "tool signatures and samples use the output schema and input budget");
+    REQUIRE(scenario != nullptr);
+    const auto& captured = member(*scenario, "inputs");
+    ai::Tool tool;
+    tool.name = member(member(captured, "tool"), "name").get_string();
+    tool.description = member(member(captured, "tool"), "description").get_string();
+    tool.parameters = member(member(captured, "tool"), "inputSchema");
+    tool.output_schema = member(member(captured, "tool"), "outputSchema");
+    const auto& expected = member(*scenario, "expected");
+
+    CHECK(codemode::render_tool_declaration(tool) == member(expected, "signature").get_string());
+    CHECK(codemode::render_tool_sample(tool) == member(expected, "sample").get_string());
+    CHECK(codemode::render_tool_declaration(tool, 10) == member(expected, "budgeted").get_string());
+
+    // A tool without an output schema promises `unknown`.
+    auto unknown = tool;
+    unknown.output_schema.reset();
+    const std::string unknown_declaration = codemode::render_tool_declaration(unknown);
+    CHECK(unknown_declaration.ends_with(": Promise<unknown>;"));
+    CHECK(member(expected, "unknownOutput").get_string() == "unknown");
+    // `output` is the output schema's own rendering.
+    CHECK(codemode::schema_to_type(*tool.output_schema, codemode::kDefaultInputSchemaMaxChars) ==
+            "{ results: Array<string>; }");
+    CHECK(codemode::schema_to_type(support::JsonValue{support::JsonValue::object_t{{"type", "object"}}},
+                  codemode::kDefaultInputSchemaMaxChars) == member(expected, "output").get_string());
+}
+
+TEST_CASE("the public codemode declaration groups tools globals and namespaces with doc comments",
+        "[codemode][declarations][issue1100][spec]") {
+    const auto artifact = read_artifact("declarations.json");
+    const auto* scenario =
+            find_scenario(artifact, "renderDeclarations groups tools, globals and namespaces with doc comments");
+    REQUIRE(scenario != nullptr);
+    const auto& captured = member(*scenario, "inputs");
+    std::vector<ai::Tool> tools;
+    for (const auto& entry : member(captured, "tools").get_array()) {
+        ai::Tool tool;
+        tool.name = member(entry, "name").get_string();
+        tool.description = member(entry, "description").get_string();
+        tool.parameters = member(entry, "inputSchema");
+        tool.output_schema = member(entry, "outputSchema");
+        tools.push_back(std::move(tool));
+    }
+    std::vector<codemode::CodemodeGlobalDeclaration> globals;
+    for (const auto& entry : member(captured, "globals").get_array()) {
+        codemode::CodemodeGlobalDeclaration global;
+        global.name = member(entry, "name").get_string();
+        if (const auto found = entry.get_object().find("description"); found != entry.get_object().end()) {
+            global.description = found->second.get_string();
+        }
+        global.signature = member(entry, "signature").get_string();
+        globals.push_back(std::move(global));
+    }
+    CHECK(codemode::render_declarations(tools, globals) == member(*scenario, "expected").get_string());
+}
+
+TEST_CASE("the public codemode limits are the frozen public constants", "[codemode][limits][issue1100][spec]") {
+    const auto artifact = read_artifact("declarations.json");
+    const auto* scenario = find_scenario(artifact, "default and stored limits are public constants");
+    REQUIRE(scenario != nullptr);
+    const auto& expected = member(*scenario, "expected");
+    CHECK(codemode::kDefaultInputSchemaMaxChars ==
+            static_cast<std::size_t>(member(expected, "inputSchemaMaxChars").get_number()));
+    CHECK(codemode::kMaxOutputChars == static_cast<std::size_t>(member(expected, "outputChars").get_number()));
+    CHECK(codemode::kMaxOutputItems == static_cast<std::size_t>(member(expected, "outputItems").get_number()));
+    CHECK(codemode::kMaxStoreTotalChars == static_cast<std::size_t>(member(expected, "storeTotalChars").get_number()));
+    CHECK(codemode::kMaxStoreValueChars == static_cast<std::size_t>(member(expected, "storeValueChars").get_number()));
+    CHECK(codemode::kDefaultInterruptBudget ==
+            static_cast<std::size_t>(member(expected, "interruptBudget").get_number()));
 }
 
 TEST_CASE("a public codemode caller executes a script against an injected nested tool",

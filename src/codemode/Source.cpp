@@ -38,6 +38,12 @@ constexpr double kMaxSafeInteger = 9'007'199'254'740'991.0;
 
 [[nodiscard]] std::string_view trim(std::string_view text) { return trim_end(trim_start(text)); }
 
+/// pi's OPTIONS_LINE per line: leading spaces/tabs, then the options prefix.
+[[nodiscard]] bool is_options_line(std::string_view line) {
+    const auto first = line.find_first_not_of(" \t");
+    return first != std::string_view::npos && line.substr(first).starts_with(kCodemodeOptionsPrefix);
+}
+
 /// pi `Number.isSafeInteger`: a finite, integral value within the exactly
 /// representable integer range. JSON numbers arrive as `double`.
 [[nodiscard]] bool is_safe_integer(double value) {
@@ -95,6 +101,27 @@ support::Expected<CodemodeSource> parse_codemode_source(std::string_view input) 
                              "line `// @options: {\"max_output_tokens\": 1000}`."));
     }
     const auto newline = input.find('\n');
+    // Only the first line may carry options. A `// @options:` line anywhere
+    // later is a typed placement error naming its 1-based line (frozen pi
+    // rejects it rather than treating it as ordinary source).
+    if (newline != std::string_view::npos) {
+        std::size_t line_number = 1;
+        std::string_view rest = input.substr(newline + 1);
+        while (!rest.empty()) {
+            ++line_number;
+            const auto end = rest.find('\n');
+            std::string_view line = end == std::string_view::npos ? rest : rest.substr(0, end);
+            if (!line.empty() && line.back() == '\r') line.remove_suffix(1);
+            if (is_options_line(line)) {
+                return std::unexpected(source_error(
+                        std::format("The {} line must be the first line of the input; found one on line {}",
+                                kCodemodeOptionsPrefix,
+                                line_number)));
+            }
+            if (end == std::string_view::npos) break;
+            rest = rest.substr(end + 1);
+        }
+    }
     std::string_view first_line = newline == std::string_view::npos ? input : input.substr(0, newline);
     if (!first_line.empty() && first_line.back() == '\r') {
         first_line.remove_suffix(1);

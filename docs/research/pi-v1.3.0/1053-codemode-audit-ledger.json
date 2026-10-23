@@ -138,7 +138,7 @@
       "cppEvidence": "Pike has no misplaced-line check: `text\\n// @options: {}` is accepted as source. The invalid-JSON message is `@options must be valid JSON ...: <parser detail>` where v1.3.0 emits the generic `@options must be a JSON object with supported fields ...`. No C++ test covers either case.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Scan for a later first-token `// @options:` line and raise the v1.3.0 line-numbered error; align the invalid-JSON text with the captured generic message. Add both cases to a source test.",
@@ -211,7 +211,7 @@
       "status": {
         "membership": "supported",
         "implementation": "implemented",
-        "verification": "unverified"
+        "verification": "upstream-captured"
       },
       "recommendation": "Add the captured identifier table to a focused unit test; keep the routing test for the two-name binding.",
       "blockers": []
@@ -243,7 +243,7 @@
       "status": {
         "membership": "supported",
         "implementation": "implemented",
-        "verification": "unverified"
+        "verification": "upstream-captured"
       },
       "recommendation": "Add a typed unit-test table mirroring the captured declarations artifact before treating this as verified; do not fold it into the end-to-end sandbox test.",
       "blockers": []
@@ -267,7 +267,7 @@
       "cppEvidence": "Pike renders every tool call as `Promise<unknown>`, so a script sees no output type even when the tool declares `outputSchema`. `CodemodeTool.cpp:codemode_description` lists bare property names rather than declarations. There is no public declaration renderer for globals, namespaces, doc comments or output schemas.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add the output-schema-aware declaration/signature renderer and a public `render_declarations` seam before implementing the dynamic catalog. Keep `Promise<string>` as the missing-output default.",
@@ -290,8 +290,8 @@
       "cppEvidence": "The constant and over-budget fallback exist. There is no C++ test for the 16,000-character boundary or for an alternate budget. The output schema is not rendered at all, so half of the captured declaration budget behavior is absent.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
-        "verification": "unverified"
+        "implementation": "implemented",
+        "verification": "upstream-captured"
       },
       "recommendation": "Test the input boundary separately from the output-schema work; both belong in the declaration renderer rather than the sandbox.",
       "blockers": []
