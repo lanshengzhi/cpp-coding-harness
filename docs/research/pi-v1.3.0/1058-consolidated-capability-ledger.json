@@ -279,10 +279,10 @@
         "partial": 5
       },
       "cch_coding_agent": {
-        "implemented": 74,
+        "implemented": 75,
         "missing": 21,
         "not-applicable": 6,
-        "partial": 58
+        "partial": 57
       },
       "cch_durable": {
         "implemented": 2,
@@ -307,30 +307,30 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1005,
+      "implemented": 1006,
       "missing": 224,
       "not-applicable": 18,
-      "partial": 217
+      "partial": 216
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1020,
-      "upstream-captured": 416
+      "unverified": 1019,
+      "upstream-captured": 417
     },
     "evidenceRoute": {
-      "captured": 416,
+      "captured": 417,
       "artifact-only": 0,
       "related-captured": 22,
       "declared-comparison": 32,
       "cpp-regression-only": 10,
-      "unobserved": 56,
+      "unobserved": 55,
       "unobserved-static": 0,
       "historical-v1.0.4": 858,
       "not-audited": 42,
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1020,
+    "unobservedSupported": 1019,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -363,7 +363,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1020,
+    "missingObservationRows": 1019,
     "scenarioCoverage": {
       "scenarios": 465,
       "scenarioNamed": 346,
@@ -15795,12 +15795,13 @@
       "source": [
         "packages/coding-agent/src/extensions/mcp/index.ts:ensureDiscoveryActive",
         "packages/coding-agent/src/extensions/tool-search/tool.ts:TOOL_SEARCH_TOOL_NAME,createToolSearchTool",
-        "packages/coding-agent/src/core/mcp-servers.ts:MCP_EXPOSURE_ALIASES"
+        "packages/coding-agent/src/core/mcp-servers.ts:MCP_EXPOSURE_ALIASES",
+        "packages/durable/test/tool-search.test.ts:deferred tools and tool_search"
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "MCP exposure policy, `tool_search`, the `mcp_servers` section and the model tool set.",
       "consumerOwners": [
@@ -15808,19 +15809,24 @@
       ],
       "boundary": null,
       "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
+      "scenario": "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+      "comparisonScenarios": [
+        "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+        "an unrelated tool_search query loads nothing and leaves the offered set unchanged"
+      ],
       "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.json",
+        "scenarioMatch": "direct-global",
+        "capturedScenarios": [
+          "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it"
+        ],
         "result": null
       },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
-      "notes": "Recommendation: Either add the `tool_search` owner surface or record deferred as unreachable in the membership ledger. Do not silently treat deferred as direct or codemode.",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "C++ covers the two captured scenarios, the frozen two-search ordering case and the durable loadout. `ExtensionToolRegistry::convert_extension_tool` now copies the extension execute per model call, so a registered `tool_search`, `codemode` or MCP tool stays callable for the whole session (it previously consumed the move-only operation on the first call). Recommendation: Keep deferred tools undeclared until `tool_search` loads them, keep the loadout in the session transcript so forks and resumes replay their own set, and keep an extension tool's execute copyable per call because a model searches and calls tools more than once.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [
@@ -15831,8 +15837,8 @@
           "ticket": "1052",
           "rowId": "mcp-deferred-tool-search",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
       ]

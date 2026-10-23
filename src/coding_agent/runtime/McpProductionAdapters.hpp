@@ -12,6 +12,8 @@
 #include "coding_agent/runtime/McpSessionManager.hpp"
 
 #include <cch/agent/Agent.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/ai/Timestamps.hpp>
 #include <cch/mcp/Client.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/JsonValue.hpp>
@@ -179,25 +181,34 @@ public:
     /// the assembly registered before the manager existed (built-ins,
     /// codemode, programmatic servers): the Agent has no registered-tool
     /// listing, and the discovery-activation check must see codemode.
-    explicit AgentMcpToolSurface(agent::Agent& agent, std::vector<std::string> registered_names);
+    using LoadoutCommitter = std::move_only_function<support::ExpectedVoid(ai::SystemMessage)>;
+    explicit AgentMcpToolSurface(
+            agent::Agent& agent, std::vector<std::string> registered_names, LoadoutCommitter loadout_committer);
 
     void register_tool(McpRegisteredTool tool) override;
     void register_resource_tools(
             mcp::McpExposure exposure, std::vector<std::shared_ptr<mcp::McpResourceServer>> servers) override;
     void set_active_tools(std::vector<std::string> names) override;
     [[nodiscard]] std::vector<std::string> active_tools() const override;
+    [[nodiscard]] support::ExpectedVoid activate_tools(std::vector<std::string> names) override;
+    void restore_loaded_tools(std::vector<std::string> names) override;
     [[nodiscard]] std::vector<McpSurfaceTool> all_tools() const override;
 
 private:
     /// pi `_isActivatedOnRegistration`: a direct tool enters the declared set;
     /// a non-direct re-registration of a declared tool leaves it.
     void apply_exposure(const std::string& name, mcp::McpExposure exposure);
+    /// Whether `name` is a tool `tool_search` may load: pi `isSearchable`
+    /// accepts the `codemode` and `deferred` exposures only.
+    [[nodiscard]] bool is_searchable(const std::string& name) const;
     void refresh_codemode_description();
 
     agent::Agent& agent_;
+    LoadoutCommitter loadout_committer_;
     /// Every tool name known on the surface: the assembly-time registrations
     /// plus everything registered through this surface.
     std::set<std::string> known_names_;
+    std::vector<std::string> loaded_tool_names_;
     /// pi `definitions`: the last exposure under each registered name.
     std::map<std::string, mcp::McpExposure, std::less<>> exposures_;
     std::map<std::string, std::string, std::less<>> descriptions_;

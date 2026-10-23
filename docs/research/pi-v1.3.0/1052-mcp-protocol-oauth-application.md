@@ -225,8 +225,8 @@ The machine ledger has 31 rows. Counts by status:
 
 | Status | Count | Rows |
 |---|---:|---|
-| implemented | 10 | tools listing, resource tools, progress, request cancellation, issuer, persistence, HTTP session/GET, management, session-tool binding, reconnect (some are implementation-complete but unverified) |
-| partial | 16 | client lifecycle, structured results, conversion, resources, roots, refresh cancellation, close, discovery, sign-in, refresh, config, HTTP transport, request auth, exposure, resource init, deferred |
+| implemented | 11 | tools listing, resource tools, progress, request cancellation, issuer, persistence, HTTP session/GET, management, session-tool binding, reconnect, deferred tool_search (some are implementation-complete but unverified) |
+| partial | 15 | client lifecycle, structured results, conversion, resources, roots, refresh cancellation, close, discovery, sign-in, refresh, config, HTTP transport, request auth, exposure, resource init |
 | missing | 4 | application startup wait/background connect, OAuth flow cancellation, external sign-in pickup, stdio stderr tail |
 | excluded | 1 | prompts/sampling/client-side request surfaces (not exposed by v1.3.0 `McpClient`) |
 
@@ -250,9 +250,7 @@ v1.3.0 differential has run. The important gaps are:
    converter rejects missing content and puts the whole CallToolResult into one `details` value.
 7. **Roots/ping and stdio diagnostics are incomplete.** HTTP hardcodes the cwd root; stdio has no
    `roots/list`/`ping` handler and drains stderr to `/dev/null`.
-8. **Deferred exposure is unreachable.** Pike has no `tool_search`; the manager renders the
-   `(tool_search)` section but cannot activate or declare deferred tools.
-9. **External sign-in pickup is absent.** Only Pike's own `/mcp` sign-in triggers reconnect.
+8. **External sign-in pickup is absent.** Only Pike's own `/mcp` sign-in triggers reconnect.
 
 ## 7. Former Pike restrictions to remove, and what to keep
 
@@ -323,7 +321,8 @@ Own `mcp.json` loading/writing, URL validation, exposure activation, `mcp_server
 `/mcp` panel/CLI. Dependencies: Slice C + Slice D + codemode/tool_search. Distinguishing cases:
 `http`/`https`/`ftp` URL policy; codemode vs direct vs deferred activation; status while connecting;
 resource-tool exposure; and `/mcp` actions while a connection is still pending. Deferred exposure
-needs a separate `tool_search` membership decision; do not fold it into this extraction.
+and `tool_search` landed with #1095: activation, repeated searches in one run, the persisted loadout
+and fork/reopen replay.
 
 ## 9. Validation and handoff
 

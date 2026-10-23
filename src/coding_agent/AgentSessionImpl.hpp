@@ -69,6 +69,8 @@ struct RetrySettings {
 struct AgentSession::Impl final : std::enable_shared_from_this<AgentSession::Impl> {
     explicit Impl(runtime::AgentSessionAssembly assembly);
     [[nodiscard]] boost::asio::awaitable<support::ExpectedVoid> persist_initial_system_message();
+    [[nodiscard]] support::ExpectedVoid queue_tool_loadout(ai::SystemMessage message);
+    void replay_loaded_tools();
     Impl(const Impl&) = delete;
     Impl& operator=(const Impl&) = delete;
     Impl(Impl&&) = delete;

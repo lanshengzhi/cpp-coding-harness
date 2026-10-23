@@ -38,8 +38,8 @@ public:
     [[nodiscard]] bool empty() const { return tools_.empty(); }
 
     /// Remove and return every registered Tool in name order. The runner
-    /// consumes the registry this way so the move-only execute operations
-    /// transfer exactly once; the registry is empty afterwards.
+    /// consumes the registry this way so each Tool transfers exactly once; the
+    /// registry is empty afterwards.
     [[nodiscard]] std::vector<ExtensionTool> take_tools();
 
     /// The names registered with pi `defaultActive: false` (registration

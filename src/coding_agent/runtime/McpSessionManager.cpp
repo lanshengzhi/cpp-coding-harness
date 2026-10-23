@@ -230,13 +230,14 @@ std::vector<extensions::ToolSearchCandidate> McpSessionManager::search_tools(
     return extensions::rank_tool_search_candidates(std::move(candidates), query, limit);
 }
 
-void McpSessionManager::activate_tools(std::vector<std::string> names) {
+support::ExpectedVoid McpSessionManager::activate_tools(std::vector<std::string> names) {
+    if (!dependencies_.tools || names.empty()) return {};
+    return dependencies_.tools->activate_tools(std::move(names));
+}
+
+void McpSessionManager::restore_loaded_tools(std::vector<std::string> names) {
     if (!dependencies_.tools || names.empty()) return;
-    auto active = dependencies_.tools->active_tools();
-    for (auto& name : names) {
-        if (std::ranges::find(active, name) == active.end()) active.push_back(std::move(name));
-    }
-    dependencies_.tools->set_active_tools(std::move(active));
+    dependencies_.tools->restore_loaded_tools(std::move(names));
 }
 
 void McpSessionManager::set_notify_warning_sink(std::function<void(std::string_view message)> sink) {

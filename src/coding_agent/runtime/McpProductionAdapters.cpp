@@ -434,8 +434,9 @@ support::AsyncResult<bool> McpOAuthFlowSignInDriver::sign_out(const mcp::McpConf
 
 // ── AgentMcpToolSurface ─────────────────────────────────────────────────────
 
-AgentMcpToolSurface::AgentMcpToolSurface(agent::Agent& agent, std::vector<std::string> registered_names)
-    : agent_(agent) {
+AgentMcpToolSurface::AgentMcpToolSurface(
+        agent::Agent& agent, std::vector<std::string> registered_names, LoadoutCommitter loadout_committer)
+    : agent_(agent), loadout_committer_(std::move(loadout_committer)) {
     known_names_.insert(
             std::make_move_iterator(registered_names.begin()), std::make_move_iterator(registered_names.end()));
 }
@@ -521,6 +522,64 @@ void AgentMcpToolSurface::set_active_tools(std::vector<std::string> names) {
 }
 
 std::vector<std::string> AgentMcpToolSurface::active_tools() const { return agent_.active_tools(); }
+
+support::ExpectedVoid AgentMcpToolSurface::activate_tools(std::vector<std::string> names) {
+    const auto definitions = agent_.tool_definitions();
+    std::vector<ai::Tool> newly_loaded;
+    std::vector<std::string> accepted_names;
+    for (const auto& name : names) {
+        if (!is_searchable(name)) continue;
+        const auto definition = std::ranges::find(definitions, name, &ai::Tool::name);
+        if (definition == definitions.end()) continue;
+        accepted_names.push_back(name);
+        if (std::ranges::find(loaded_tool_names_, name) == loaded_tool_names_.end()) {
+            newly_loaded.push_back(*definition);
+        }
+    }
+    if (!newly_loaded.empty()) {
+        ai::SystemMessage record;
+        record.timestamp = ai::current_timestamp_ms();
+        record.tools_added = std::move(newly_loaded);
+        if (!loadout_committer_) {
+            return std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "deferred tool activation requires a session loadout committer"));
+        }
+        if (auto persisted = loadout_committer_(std::move(record)); !persisted) return persisted;
+    }
+    auto active = agent_.active_tools();
+    for (const auto& name : accepted_names) {
+        if (std::ranges::find(active, name) == active.end()) active.push_back(name);
+    }
+    if (auto activated = agent_.set_active_tools(std::move(active)); !activated) return activated;
+    for (const auto& name : accepted_names) {
+        if (std::ranges::find(loaded_tool_names_, name) == loaded_tool_names_.end()) {
+            loaded_tool_names_.push_back(name);
+        }
+    }
+    return {};
+}
+
+void AgentMcpToolSurface::restore_loaded_tools(std::vector<std::string> names) {
+    std::vector<std::string> accepted_names;
+    for (auto& name : names) {
+        if (!is_searchable(name)) continue;
+        if (std::ranges::find(loaded_tool_names_, name) == loaded_tool_names_.end()) {
+            loaded_tool_names_.push_back(name);
+        }
+        accepted_names.push_back(std::move(name));
+    }
+    auto active = agent_.active_tools();
+    for (const auto& name : accepted_names) {
+        if (std::ranges::find(active, name) == active.end()) active.push_back(name);
+    }
+    static_cast<void>(agent_.set_active_tools(std::move(active)));
+}
+
+bool AgentMcpToolSurface::is_searchable(const std::string& name) const {
+    const auto exposure = exposures_.find(name);
+    return exposure != exposures_.end() &&
+           (exposure->second == mcp::McpExposure::Deferred || exposure->second == mcp::McpExposure::Codemode);
+}
 
 std::vector<McpSurfaceTool> AgentMcpToolSurface::all_tools() const {
     std::vector<McpSurfaceTool> tools;
