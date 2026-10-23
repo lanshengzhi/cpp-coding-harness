@@ -375,6 +375,87 @@ TEST_CASE("wrapped and truncated lines keep the frozen cells, styles and links a
     CHECK(truncated_cells[0][0].style.hyperlink == "https://x");
 }
 
+TEST_CASE("wrap_text keeps separators within narrow footer widths", "[tui][issue426][wrap][spec]") {
+    constexpr std::string_view kFooter{"  enter toggle · ctrl+a all · ctrl+x clear · ctrl+p provider · "
+                                       "alt+up/alt+down reorder · ctrl+s save · all enabled"};
+    for (const std::size_t width : {8, 10}) {
+        INFO("width " << width);
+        const auto wrapped = tui::wrap_text(kFooter, width);
+        REQUIRE(wrapped);
+        std::string diagnostics;
+        for (const auto& line : *wrapped) {
+            diagnostics +=
+                    std::to_string(tui::visible_width(line)) + " |" + tui::strip_terminal_sequences(line) + "|\n";
+        }
+        INFO("wrapped rows (visible width | text):\n" << diagnostics);
+        for (const auto& line : *wrapped) {
+            CHECK(tui::visible_width(line) <= width);
+        }
+    }
+}
+
+TEST_CASE("wrap_text starts the second startup-help row with the separator at 72 columns",
+        "[tui][issue1127][wrap][spec]") {
+    // Refreshed dual-runtime capture provenance (issue #1127): both captures
+    // ran through fixtures/pi-coding-agent/capture/native-tui-differential.mts
+    // against frozen pi v1.3.0 at the full SHA
+    // 71023aec1546d6d677a65669c5665c0927ce0dd0, with the Pike capture from this
+    // worktree (temporary reports /tmp/cpp-harness-pike-v1.3.0-boot72.json and
+    // /tmp/cpp-harness-pike-v1.3.0-boot41.json; the checked-in report.json
+    // stays the historical pi-v1.0.4 evidence and is not relabelled). After
+    // the deterministic profile projection, the frozen boot-72 hint rows are
+    // " escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash" and
+    // "  · ctrl+o more". The header Text component reserves one column on
+    // each side, so the wrap seam width is 70 and the rendered row indent
+    // accounts for the projected leading space. Frozen keeps `! bash`
+    // together and starts the next row with the separator; a wrap that leaves
+    // the separator at the end of the first row ("…! bash ·" + "ctrl+o more",
+    // Pike's pre-fix behavior) fails this row comparison.
+    constexpr std::string_view kStartupHelp{
+            "escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more"};
+    const auto wrapped = tui::wrap_text(kStartupHelp, 70);
+    REQUIRE(wrapped);
+    const std::vector<std::string> expected{
+            "escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash",
+            " · ctrl+o more",
+    };
+    CHECK(*wrapped == expected);
+}
+
+TEST_CASE("wrap_text keeps the frozen 41-column startup-help rows", "[tui][issue1127][wrap][spec]") {
+    // Same refreshed capture provenance: the frozen v1.3.0 boot-41 projection
+    // matches Pike's rendered rows exactly (" escape interrupt ·
+    // ctrl+c/ctrl+d", " clear/exit · / commands · ! bash ·", " ctrl+o more"),
+    // i.e. seam width 39 with the render indent. The wrap boundary at this
+    // width must not move when the 72-column separator case above is fixed.
+    constexpr std::string_view kStartupHelp{
+            "escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more"};
+    const auto wrapped = tui::wrap_text(kStartupHelp, 39);
+    REQUIRE(wrapped);
+    const std::vector<std::string> expected{
+            "escape interrupt · ctrl+c/ctrl+d",
+            "clear/exit · / commands · ! bash ·",
+            "ctrl+o more",
+    };
+    CHECK(*wrapped == expected);
+}
+
+TEST_CASE("wrap_text keeps the startup help on one row at the wider boot widths", "[tui][issue1127][wrap][spec]") {
+    // Regression guard for the widths #806 aligned and #1127 names: the formal
+    // #806 list is 41/72/100/120 while #1127 names 80/100/120, so every
+    // runnable width both issues touch is covered (39/70 above, 80/100/120
+    // here). The assembled help is exactly 80 cells; at each of these widths
+    // it must stay a single unbroken row.
+    constexpr std::string_view kStartupHelp{
+            "escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash · ctrl+o more"};
+    for (const std::size_t width : {80, 100, 120}) {
+        INFO("width " << width);
+        const auto wrapped = tui::wrap_text(kStartupHelp, width);
+        REQUIRE(wrapped);
+        CHECK(*wrapped == std::vector<std::string>{std::string{kStartupHelp}});
+    }
+}
+
 TEST_CASE("strip_terminal_sequences removes the OSC 8 and OSC title bytes pi removes", "[tui][issue957][ansi][spec]") {
     CHECK(tui::strip_terminal_sequences("\x1b]8;;https://x\x07link\x1b]8;;\x07") == "link");
     CHECK(tui::strip_terminal_sequences("\x1b]8;;https://x\x1b\\link\x1b]8;;\x1b\\") == "link");

@@ -345,6 +345,16 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
 
     std::vector<std::string> lines;
     std::vector<detail::TerminalToken> pending_separator;
+    // A pending separator run carries its introducing grapheme: the startup
+    // help's `·` is staged with the whitespace around it so a wrap break
+    // keeps it with the row it introduces, not at the end of the filled row.
+    const auto pending_has_separator = [&]() {
+        return std::ranges::any_of(pending_separator, [&](const detail::TerminalToken& pending) {
+            if (pending.kind != detail::TerminalTokenKind::Grapheme) return false;
+            const auto [codepoint, bytes] = detail::decode_utf8(pending.text, 0);
+            return bytes != 0 && !is_whitespace_codepoint(codepoint);
+        });
+    };
     detail::AnsiStyleState style;
     std::string line;
     std::size_t line_width = 0;
@@ -525,19 +535,57 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
             }
         }
 
+        // A separator grapheme (pi's CJK break set, e.g. the startup help's
+        // `·`) that sits between staged whitespace and the whitespace that
+        // follows it belongs to the separator run, not to the upcoming word:
+        // staging it here lets the break below keep the whole separator with
+        // the row it introduces.
+        if (is_cjk_break_token(token) && pending_width != 0 && styled_space_end == index) {
+            bool followed_by_whitespace = index + 1 >= tokens->size();
+            if (!followed_by_whitespace) {
+                const auto& next = (*tokens)[index + 1];
+                followed_by_whitespace = next.kind == detail::TerminalTokenKind::Newline || is_whitespace(next);
+            }
+            if (followed_by_whitespace) {
+                pending_separator.push_back(token);
+                pending_width += token.width;
+                ++index;
+                continue;
+            }
+        }
+
         if (word_width <= width) {
             if (line_width + pending_width + word_width > width) {
-                // pi breaks here only when the line already carries visible
-                // content (`currentVisibleLength > 0`), and the whitespace it
-                // has already appended counts toward that, so a deferred
-                // whitespace-only prefix still pushes a row.
-                if (line_width != 0 || pending_width != 0) {
-                    replay_pending_prefix();
-                    // pi trims the line it breaks at, then appends the reset.
+                if (pending_has_separator() && line_width != 0 &&
+                        (!input_line_wrapped || line_width + pending_width > width)) {
+                    // The first wrap break of an input line moves its staged
+                    // separator to the row it introduces, matching pi's startup
+                    // help. On a later row, move it only when it cannot fit at
+                    // the end of the current row; if it fits, keep the greedy
+                    // end-of-row separator behavior.
                     trim_end_whitespace(line);
                     push_wrapped_line();
+                    replay_pending(true);
+                    // A separator plus the next token can exceed a very narrow
+                    // width even though each fits on its own. Keep the line
+                    // bound before appending that token.
+                    if (line_width + word_width > width) {
+                        trim_end_whitespace(line);
+                        push_wrapped_line();
+                    }
+                } else {
+                    // pi breaks here only when the line already carries visible
+                    // content (`currentVisibleLength > 0`), and the whitespace it
+                    // has already appended counts toward that, so a deferred
+                    // whitespace-only prefix still pushes a row.
+                    if (line_width != 0 || pending_width != 0) {
+                        replay_pending_prefix();
+                        // pi trims the line it breaks at, then appends the reset.
+                        trim_end_whitespace(line);
+                        push_wrapped_line();
+                    }
+                    replay_pending(false);
                 }
-                replay_pending(false);
             } else {
                 replay_pending(true);
             }
@@ -559,12 +607,25 @@ support::Expected<std::vector<std::string>> wrap_text(std::string_view text, std
         // "\x1b[31mABCD", …]); the rows render identically. Upgrade when a
         // composed surface observes a control's position within a row.
         if (line_width != 0 || !pending_separator.empty()) {
-            replay_pending_prefix();
-            // A pure whitespace separator may itself exceed the width. pi
-            // drops its overflowing whitespace before the long-word push;
-            // trim before the reset, which otherwise protects those spaces.
-            if (line_width > width) trim_end_whitespace(line);
-            push_wrapped_line();
+            if (pending_has_separator() && line_width != 0 &&
+                    (!input_line_wrapped || line_width + pending_width > width)) {
+                // Long-word wrapping cannot absorb the separator and the full
+                // token together. Move a separator that cannot fit at the end
+                // of this row, then finish its own bounded row before chunking
+                // the token.
+                trim_end_whitespace(line);
+                push_wrapped_line();
+                replay_pending(true);
+                trim_end_whitespace(line);
+                if (line_width != 0) push_wrapped_line();
+            } else {
+                replay_pending_prefix();
+                // A pure whitespace separator may itself exceed the width. pi
+                // drops its overflowing whitespace before the long-word push;
+                // trim before the reset, which otherwise protects those spaces.
+                if (line_width > width) trim_end_whitespace(line);
+                push_wrapped_line();
+            }
         }
         replay_pending(false);
 
