@@ -447,7 +447,7 @@ TEST_CASE("focused User Bash commits included and excluded results through the p
     // before the provider conversion: the excluded message is still present
     // here, and the conversion is the rule's one application point. The
     // provider-visible drop is asserted on the adapter payload in
-    // `tests/ai/MessageConversionTest.cpp`.
+    // `tests/ai/CompletionsPayloadTest.cpp`.
     CHECK(has_bash_command(provider_messages, "echo excluded"));
     // The fixed #331 tool set (read/write/edit/bash) is declared; pi's
     // `defaultActive: false` keeps the registered codemode tool out of the

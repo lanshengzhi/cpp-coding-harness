@@ -1,7 +1,7 @@
 #include <cch/ai/Models.hpp>
 
 #include "ai/Headers.hpp"
-#include "ai/api/MessageConversion.hpp"
+#include "ai/api/CompletionsPayload.hpp"
 #include "support/AiScenarioKit.hpp"
 #include "support/Json.hpp"
 #include "support/ModelFixture.hpp"
@@ -206,14 +206,14 @@ TEST_CASE("an off thinking request states the gateway's explicit none", "[ai][ap
     // thinking level, and an explicit Off clamp states the same thing.
     ai::api::PreparedStreamOptions omitted;
     omitted.max_tokens = 64;
-    const auto omitted_payload = ai::api::build_openai_completions_payload(model, no_context, omitted);
+    const auto omitted_payload = ai::api::build_completions_payload(model, no_context, omitted);
     REQUIRE(omitted_payload);
     CHECK(omitted_payload->at("reasoning_effort").get_string() == "none");
 
     ai::api::PreparedStreamOptions explicit_off;
     explicit_off.max_tokens = 64;
     explicit_off.reasoning = ai::ModelThinkingLevel::Off;
-    const auto off_payload = ai::api::build_openai_completions_payload(model, no_context, explicit_off);
+    const auto off_payload = ai::api::build_completions_payload(model, no_context, explicit_off);
     REQUIRE(off_payload);
     CHECK(off_payload->at("reasoning_effort").get_string() == "none");
 
@@ -221,13 +221,13 @@ TEST_CASE("an off thinking request states the gateway's explicit none", "[ai][ap
     ai::api::PreparedStreamOptions unmapped;
     unmapped.max_tokens = 64;
     unmapped.reasoning = ai::ModelThinkingLevel::Low;
-    const auto unmapped_payload = ai::api::build_openai_completions_payload(model, no_context, unmapped);
+    const auto unmapped_payload = ai::api::build_completions_payload(model, no_context, unmapped);
     REQUIRE(unmapped_payload);
     CHECK(unmapped_payload->at("reasoning_effort").get_string() == "low");
 
     // A model without reasoning never states an effort at all.
     const auto plain = tests::make_model("plain", "magpie", "openai-completions");
-    const auto plain_payload = ai::api::build_openai_completions_payload(plain, no_context, explicit_off);
+    const auto plain_payload = ai::api::build_completions_payload(plain, no_context, explicit_off);
     REQUIRE(plain_payload);
     CHECK_FALSE(plain_payload->get_object().contains("reasoning_effort"));
 }
@@ -595,7 +595,7 @@ TEST_CASE("Kimi Coding maps every vendor thinking level to a documented effort o
             ai::api::PreparedStreamOptions options;
             options.max_tokens = 512;
             options.reasoning = clamped;
-            const auto payload = ai::api::build_openai_completions_payload(model, {}, options);
+            const auto payload = ai::api::build_completions_payload(model, {}, options);
             REQUIRE(payload);
             const auto& object = payload->get_object();
             const auto effort = object.find("reasoning_effort");
@@ -612,7 +612,7 @@ TEST_CASE("Kimi Coding maps every vendor thinking level to a documented effort o
 
         ai::api::PreparedStreamOptions omitted_options;
         omitted_options.max_tokens = 512;
-        const auto omitted = ai::api::build_openai_completions_payload(model, {}, omitted_options);
+        const auto omitted = ai::api::build_completions_payload(model, {}, omitted_options);
         REQUIRE(omitted);
         CHECK(omitted->get_object().at("reasoning_effort").get_string() == "none");
     }
@@ -647,7 +647,7 @@ TEST_CASE("Chat Completions replays reasoning and tool history with the received
     ai::api::PreparedStreamOptions options;
     options.max_tokens = 64;
 
-    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+    const auto payload = ai::api::build_completions_payload(model, context, options);
 
     REQUIRE(payload);
     const auto& messages = payload->at("messages").get_array();

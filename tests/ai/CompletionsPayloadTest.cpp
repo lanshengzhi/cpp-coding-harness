@@ -1,10 +1,11 @@
-#include "ai/api/MessageConversion.hpp"
+#include "ai/api/CompletionsPayload.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/Json.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -55,6 +56,26 @@ namespace {
 
 } // namespace
 
+TEST_CASE("Completions payload preserves Model validation errors", "[ai][conversion]") {
+    auto model = completions_model();
+    SECTION("Missing provider identity") { model.provider.clear(); }
+    SECTION("Non-finite cost") { model.cost.input = std::numeric_limits<double>::infinity(); }
+    SECTION("Invalid input capability") { model.input = {static_cast<ai::ModelInput>(-1)}; }
+    const ai::AiContext context;
+    const ai::api::PreparedStreamOptions options;
+    const auto validation = ai::validate_model(model);
+    REQUIRE_FALSE(validation);
+
+    const auto payload = ai::api::build_completions_payload(model, context, options);
+
+    REQUIRE_FALSE(payload);
+    CHECK(payload.error().code == support::ErrorCode::Validation);
+    CHECK(payload.error().code == validation.error().code);
+    CHECK(payload.error().message == validation.error().message);
+    CHECK(payload.error().detail == validation.error().detail);
+    CHECK(payload.error().context == validation.error().context);
+}
+
 TEST_CASE("Completions conversion sanitizes text and fills orphaned tool results",
         "[ai][conversion][issue339][compat-pi]") {
     const auto model = completions_model();
@@ -76,7 +97,7 @@ TEST_CASE("Completions conversion sanitizes text and fills orphaned tool results
     context.messages.push_back(std::move(assistant));
     const ai::api::PreparedStreamOptions options;
 
-    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+    const auto payload = ai::api::build_completions_payload(model, context, options);
 
     REQUIRE(payload);
     const auto texts = payload_string_leaves(*payload);
@@ -95,7 +116,7 @@ TEST_CASE("String-content user messages pass the image downgrade untouched", "[a
     });
     const ai::api::PreparedStreamOptions options;
 
-    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+    const auto payload = ai::api::build_completions_payload(model, context, options);
 
     REQUIRE(payload);
     const auto& messages = payload->at("messages").get_array();
@@ -109,7 +130,7 @@ TEST_CASE("Synthesized user messages arrive as Completions content", "[ai][conve
     context.messages.push_back(user_bash("echo hello", "hello\n", false, 1));
     const ai::api::PreparedStreamOptions options;
 
-    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+    const auto payload = ai::api::build_completions_payload(model, context, options);
 
     REQUIRE(payload);
     const auto& messages = payload->at("messages").get_array();
@@ -126,7 +147,7 @@ TEST_CASE("Excluded bash output never reaches the Completions payload", "[ai][co
     context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 3));
     const ai::api::PreparedStreamOptions options;
 
-    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+    const auto payload = ai::api::build_completions_payload(model, context, options);
 
     REQUIRE(payload);
     const auto texts = payload_string_leaves(*payload);
@@ -140,7 +161,7 @@ TEST_CASE("An all-excluded context converts to an empty Completions payload", "[
     context.messages.push_back(user_bash("echo excluded", "excluded output\n", true, 1));
     const ai::api::PreparedStreamOptions options;
 
-    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+    const auto payload = ai::api::build_completions_payload(model, context, options);
 
     REQUIRE(payload);
     CHECK(payload->at("messages").get_array().empty());
@@ -162,7 +183,7 @@ TEST_CASE("An excluded message between a tool call and result does not orphan th
     context.messages.push_back(ai::tool_result_message("call-1", "bash", "real tool output", false, 3));
     const ai::api::PreparedStreamOptions options;
 
-    const auto payload = ai::api::build_openai_completions_payload(model, context, options);
+    const auto payload = ai::api::build_completions_payload(model, context, options);
 
     REQUIRE(payload);
     const auto texts = payload_string_leaves(*payload);

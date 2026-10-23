@@ -303,8 +303,8 @@ shared by the scoped adapters:
   `.sse`/`-ws.json` frames and full-payload snapshots (the request never depends on the
   response), so no duplicate event snapshots are committed; the capture scenarios re-derive and
   pin the request bytes.
-- `AnthropicMessagesAdapterTest` and `MessageConversionTest` cover the generic string/cache
-  conversion path directly; no Kimi-specific Anthropic wire fixtures remain.
+- `CompletionsPayloadTest` directly covers Chat Completions conversion of the
+  `UserMessage.content` string alternative through image downgrade.
 
 All `-ts-events.json` fixtures are **full-payload** assistant event snapshots (#370, extended
 with terminal-outcome scenarios by #375), not name-only arrays: every event carries its
@@ -440,7 +440,7 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 11 | `openai-codex-responses` adapter: WebSocket-first with narrow SSE fallback, socket reuse (5m idle / 55m age), `previous_response_id` continuation, `store:false`, one retry each for `previous_response_not_found` / pre-start `websocket_connection_limit_reached`, per-session SSE-only marking, one-shot sockets for `cacheRetention:none`, `chatgpt-account-id` header, WS always sends `session-id`/`x-client-request-id` (uuidv4 fallback when no session), SSE sends both only when a session is set | `api/openai-codex-responses.ts` | `src/ai/api/OpenAICodexResponsesAdapter.*`, `BoostBeastWebSocketTransport` | `OpenAICodexResponsesAdapterTest` (21 cases) → `wire/openai-codex-responses-*` (full-payload `-ws-ts-events.json`/`-ts-events.json`) |
 | 12 | `openai-responses` adapter (DeepSeek stateless full-context replay, no `previous_response_id`, developer-role prompt, session-affinity headers silently ignored) | `api/openai-responses.ts` + `openai-responses-shared.ts` | `src/ai/api/OpenAIResponsesAdapter.*` | `OpenAIResponsesAdapterTest` (7 cases) + `ModelRuntimeTest` → `wire/openai-responses-deepseek-*` (full-payload `-ts-events.json`) |
 | 13 | Generic `anthropic-messages` adapter: system extraction, text/image blocks, cache and terminal handling | `api/anthropic-messages.ts` | `src/ai/api/AnthropicMessagesAdapter.*` | `AnthropicMessagesAdapterTest` inline generic stream |
-| 14 | Message/history conversion alignment per path (system placement, surrogate sanitization, tool-result grouping with `is_error`, tool-call id normalization `[A-Za-z0-9_-]`/64, image blocks, encrypted/text-signature replay) | `utils/transform-messages.ts`, `api/*-shared.ts` | `src/ai/api/MessageConversion.*` | `MessageConversionTest` (9 cases) → `conversion/*.json` |
+| 14 | Chat Completions message/history conversion (system placement, surrogate sanitization, image downgrade, orphaned tool results, and reasoning/tool-call replay with received ids; ADR 0074) | `utils/transform-messages.ts`, `api/*-shared.ts` (historical reference) | `src/ai/api/CompletionsPayload.*`, `src/ai/api/MessageNormalization.*` | `CompletionsPayloadTest`, `OpenAICompletionsAdapterTest` |
 | 15 | Usage/cost normalization (Chat Completions uncached/cached/reasoning split, shared `calculateCost` with tiers + 1h cache-write 2×; the retired Responses/Anthropic helper families are deleted — ADR 0074) | `utils/calculate-cost.ts` etc. | `src/ai/api/UsageNormalization.*`, `src/ai/Usage.cpp` | `UsageTest` → `usage/normalization-and-cost.json` (`deepseek` entry) |
 | 16 | Termination matrices (Responses `completed`/`incomplete`/`failed`, no `[DONE]` for DeepSeek; Anthropic `end_turn`…/missing `message_stop` carry) — retired with the adapter families; deleted — ADR 0074 | adapter sources | _deleted (`src/ai/api/Termination.*`, `termination/matrix.json`)_ | the Chat Completions `finish_reason` mapping in `CompletionsEvents.cpp` `set_finish_reason` carries the live terminal policy; unknown-reason lock: `OpenAICompletionsAdapterTest` `"Completions maps an unknown finish_reason to one error terminal"` |
 | 17 | Retries: zero by default; configured retries cover network + transient 429/5xx, never terminal quota/billing; exponential base or Retry-After ≤ 60s | `utils/retry.ts` | `src/ai/providers/RetryPolicy.*` | `ProviderPolicyTest`, per-adapter retry cases |
@@ -464,7 +464,7 @@ the C++ surface, and the committed evidence. Resolution records: [#326]
 | 35 | Raw-stop-reason capture: the Anthropic adapter records the pre-mapping `message_delta.stop_reason` and the Responses family records terminal `status` as `rawStopReason` — retired with the adapter families — ADR 0074; the field and its session JSON round-trip stay live | `api/anthropic-messages.ts:709-711`; `api/openai-responses-shared.ts:567`; `types.ts:411` | `Message.hpp` (`rawStopReason`), `SessionMessageJson.hpp` | `SessionMessageJsonTest` `[issue374]` round-trip; Chat Completions records the raw `finish_reason` |
 | 36 | `"pending"` accepted and emitted by the message JSON mapping in both directions; `rawStopReason` round-trips through the glaze surface under pi's key with absence preserved | `types.ts:391,411` | `src/agent/harness/session/SessionMessageJson.hpp`, `Message.hpp` | `SessionMessageJsonTest` `[issue374]` round-trip and absence cases |
 | 37 | Unknown-stop-reason policy: unknown/unsupported reasons error on both sides (pi `Unhandled stop reason` throw; C++ terminal error) — no behavior change, regression-locked; no frozen pi test exercises the path. The Responses/Anthropic matrices died with the adapter families (ADR 0074); the live Chat Completions `finish_reason` fall-through carries the property | `api/openai-responses-shared.ts:753`; `api/anthropic-messages.ts:1349` | `CompletionsEvents.cpp` `set_finish_reason` unknown → error terminal | `OpenAICompletionsAdapterTest` `"Completions maps an unknown finish_reason to one error terminal"` — the migrated "unknown stop reasons still error" regression lock |
-| 38 | `UserMessage.content` passive sum type `string \| (TextContent \| ImageContent)[]` remains distinguishable end to end; Responses and generic Anthropic conversion preserve their scoped string/cache semantics | `types.ts`; adapter shared sources | `Message.hpp`, `SessionMessageJson.hpp`, `MessageConversion.cpp` | `MessageContractTest`, `SessionMessageJsonTest`, `MessageConversionTest`, adapter tests |
+| 38 | `UserMessage.content` passive sum type `string \| (TextContent \| ImageContent)[]` remains distinguishable end to end; the live Chat Completions conversion preserves the string alternative through image downgrade (ADR 0074) | `types.ts`; adapter shared sources | `Message.hpp`, `SessionMessageJson.hpp`, `CompletionsPayload.cpp`, `MessageNormalization.cpp` | `MessageContractTest`, `SessionMessageJsonTest`, `CompletionsPayloadTest` |
 
 ### Deferred Capabilities (absent from the surface — no placeholders, no compatibility shims)
 
@@ -539,7 +539,7 @@ records `cacheWrite1h` on every `message_start`, defaulting to 0 when the provid
   and usage/cost normalization are all covered by deterministic goldens:
   `OpenAICodexResponsesAdapterTest`, `OpenAIResponsesAdapterTest`,
   `OpenAICompletionsAdapterTest`, and `AnthropicMessagesAdapterTest`, plus
-  `ProviderPolicyTest`, `UsageTest`, `MessageConversionTest`, and the `ModelRuntime` re-drive of
+  `ProviderPolicyTest`, `UsageTest`, `CompletionsPayloadTest`, and the `ModelRuntime` re-drive of
   the DeepSeek wire path. The terminal matrix was retired with its adapters after this gate
   (ADR 0074, issue #1040); its live successors are listed in evidence row 16.
 - **OAuth lifecycle** — Codex login, refresh, logout, cancellation, and expiry-at-request-time

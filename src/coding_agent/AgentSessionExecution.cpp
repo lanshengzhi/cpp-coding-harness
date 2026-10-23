@@ -151,7 +151,7 @@ AgentSession::Impl::Impl(runtime::AgentSessionAssembly assembly)
     // rule is applied on exactly one path, the provider-boundary conversion
     // (`ai::extended_message_to_user_message` drops excluded messages and the
     // conversion loop keeps them invisible to tool-call pairing — see
-    // `MessageConversion.cpp`; #650, #668). The port is shared with the
+    // `ai/api/MessageNormalization.cpp`; #650, #668). The port is shared with the
     // compaction path, so one home serves both consumers. pi reaches its single drop
     // drop the same way: `sdk.ts` wires `convertToLlmWithBlockImages`, that
     // shared function, into the Agent rather than adding a second filter. A

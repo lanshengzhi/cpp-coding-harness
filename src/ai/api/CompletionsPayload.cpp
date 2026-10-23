@@ -1,4 +1,4 @@
-#include "PayloadBuilders.hpp"
+#include "CompletionsPayload.hpp"
 
 #include "MessageNormalization.hpp"
 #include "MessageText.hpp"
@@ -278,8 +278,11 @@ using JsonObject = support::JsonValue::object_t;
 /// `reasoning_effort` — including the explicit `"none"` a thinking-off request
 /// sends — and the session identity rides `X-Magpie-Session` and
 /// `prompt_cache_key`.
-support::Expected<support::JsonValue> build_completions_wire_payload(
+support::Expected<support::JsonValue> build_completions_payload(
         const Model& model, const AiContext& context, const PreparedStreamOptions& options) {
+    if (auto valid = validate_model(model); !valid) {
+        return std::unexpected(valid.error());
+    }
     const auto normalized = normalize_history(model, context);
     auto messages = convert_messages(model, context, normalized);
     if (!messages) {

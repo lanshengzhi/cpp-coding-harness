@@ -18,7 +18,6 @@ cch_parity_declare_target(
         src/ai/Usage.cpp
         src/ai/api/CompletionsEvents.cpp
         src/ai/api/CompletionsPayload.cpp
-        src/ai/api/MessageConversion.cpp
         src/ai/api/MessageNormalization.cpp
         src/ai/api/CompletionsPipeline.cpp
         src/ai/api/UsageNormalization.cpp
