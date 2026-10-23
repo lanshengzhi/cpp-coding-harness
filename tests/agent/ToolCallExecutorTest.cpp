@@ -470,6 +470,73 @@ TEST_CASE("ToolCallExecutor records the duration of a failing tool call", "[agen
     CHECK(*end->duration_ms == *run.result->results[0].duration_ms);
 }
 
+TEST_CASE("a blocked call records no duration because it never executed", "[agent][tool-executor][issue812][spec]") {
+    // audit-1047 `executed success, thrown failure, blocked and unknown calls
+    // keep distinct duration presence`: a blocked call's result and end event
+    // carry `duration=absent`, so no fabricated number reaches the TUI.
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive);
+    auto* tool_ptr = tool.state.get();
+    REQUIRE(registry.add(std::move(tool.tool)));
+
+    agent::BeforeToolCallHook before_hook = [](const agent::BeforeToolCallContext&, std::stop_token) {
+        return support::AsyncResult<agent::BeforeToolCallResult>{support::Expected<agent::BeforeToolCallResult>{
+                agent::BeforeToolCallResult{.block = true, .reason = "blocked by policy"}}};
+    };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error);
+    CHECK_FALSE(run.result->results[0].duration_ms.has_value());
+    CHECK(tool_ptr->invocation_count() == 0);
+    const agent::ToolExecutionEndEvent* end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) end = finished;
+    }
+    REQUIRE(end != nullptr);
+    CHECK_FALSE(end->duration_ms.has_value());
+}
+
+TEST_CASE("the recorded duration covers execute only, not the policy hooks", "[agent][tool-executor][issue812][spec]") {
+    // audit-1047 `hook and execute activity are distinguishable in duration and
+    // wall time`: `durationLessThanBeforeHookDelay`. A window that swallowed the
+    // hooks would report at least the hook delays, so a 60ms before-hook with a
+    // ~0ms tool must still record well under the hook delay.
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive);
+    REQUIRE(registry.add(std::move(tool.tool)));
+
+    const auto sleep_for = [](std::chrono::milliseconds delay) {
+        boost::asio::io_context io;
+        boost::asio::steady_timer timer{io, delay};
+        timer.wait();
+    };
+    agent::BeforeToolCallHook before_hook = [&sleep_for](const agent::BeforeToolCallContext&, std::stop_token) {
+        sleep_for(std::chrono::milliseconds{60});
+        return support::AsyncResult<agent::BeforeToolCallResult>{
+                support::Expected<agent::BeforeToolCallResult>{agent::BeforeToolCallResult{}}};
+    };
+    agent::ToolCallExecutorOptions options;
+    options.before_tool_call = &before_hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    REQUIRE(run.result->results[0].duration_ms.has_value());
+    CHECK(*run.result->results[0].duration_ms < 60);
+}
+
 TEST_CASE("sequential execution coerces and validates the foundational argument contract before hooks and tools",
         "[agent][tool-executor][tool-arguments][spec]") {
     const support::JsonValue contract = support::JsonValue::object_t{
