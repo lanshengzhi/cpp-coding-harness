@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <deque>
 #include <map>
 #include <memory>
 #include <optional>
@@ -109,6 +110,11 @@ struct DocumentWatch::Impl {
 // ── Session ─────────────────────────────────────────────────────────────────
 
 struct Session::Impl {
+    struct PendingCommit {
+        std::move_only_function<support::Expected<void>(Transaction&)> change{};
+        support::AsyncCompletion<void, support::Error> completion{};
+    };
+
     /// One admitted commit whose batch the storage has not settled yet. The
     /// prepared documents stay alive until the settlement, and the committed
     /// values become observable only after it.
@@ -148,7 +154,9 @@ struct Session::Impl {
                     return std::unexpected(session->failure_error());
                 }
                 DocumentRecord record = document.record;
-                record.created_at = seq;
+                if (document.created) {
+                    record.created_at = seq;
+                }
                 document_changes.push_back(DocumentCommitChange{.record = record,
                         .conversation_id = document.address.conversation_id,
                         .value = prepared.value(),
@@ -213,12 +221,19 @@ struct Session::Impl {
         }
     };
 
+    /// The caller keeps Storage alive through the Session and its operations.
     Storage* storage{nullptr};
     bool closed{false};
     bool close_notified{false};
     bool storage_closed{false};
     bool failed{false};
+    bool commit_active{false};
+    bool pumping_commits{false};
+    bool close_finishing{false};
+    bool pump_requested{false};
     std::optional<std::string> failure_message{};
+    std::deque<PendingCommit> pending_commits{};
+    std::vector<support::AsyncCompletion<void, support::Error>> close_completions{};
     std::vector<CommitListener> commit_listeners{};
     std::vector<CloseListener> close_listeners{};
     /// The committed document incarnations this Session knows, by address key.
@@ -230,7 +245,8 @@ struct Session::Impl {
     [[nodiscard]] support::Error failure_error() const { return session_failed_error(); }
 
     /// Fail the Session: the failure is final, the close listeners run, and
-    /// the storage backend is closed.
+    /// the queued commits are rejected in admission order once the committing
+    /// callback has settled.
     void fail(support::Error error) {
         if (failed) {
             return;
@@ -239,7 +255,80 @@ struct Session::Impl {
         failure_message = error.message;
         closed = true;
         notify_close();
+    }
+
+    /// Reject every commit still queued when the Session failed.
+    void reject_pending_commits(const support::Error& error) {
+        while (!pending_commits.empty()) {
+            PendingCommit pending = std::move(pending_commits.front());
+            pending_commits.pop_front();
+            pending.completion(std::unexpected(error));
+        }
+    }
+
+    /// Prepare and commit one callback while holding the mutation line.
+    [[nodiscard]] support::AsyncResult<void> commit_now(
+            std::move_only_function<support::Expected<void>(Transaction&)> change);
+
+    /// Close Storage after every admitted commit settles.
+    void finish_close_if_ready() {
+        if (!closed || close_finishing || pumping_commits || commit_active || !pending_commits.empty()) {
+            return;
+        }
+        close_finishing = true;
         close_storage();
+        std::vector<support::AsyncCompletion<void, support::Error>> completions = std::move(close_completions);
+        close_completions.clear();
+        for (support::AsyncCompletion<void, support::Error>& completion : completions) {
+            completion(support::ExpectedVoid{});
+        }
+    }
+
+    /// Run queued transactions in FIFO order, without recursing when Storage
+    /// settles synchronously.
+    void run_next_commit() {
+        if (pumping_commits) {
+            pump_requested = true;
+            return;
+        }
+        pumping_commits = true;
+        do {
+            pump_requested = false;
+            if (commit_active || pending_commits.empty()) {
+                break;
+            }
+            if (failed) {
+                // Reject in admission order, after the failing commit's own
+                // completion was delivered.
+                reject_pending_commits(failure_error());
+                break;
+            }
+            commit_active = true;
+            PendingCommit pending = std::move(pending_commits.front());
+            pending_commits.pop_front();
+            std::move(commit_now(std::move(pending.change)))
+                    .start([this, completion = std::move(pending.completion)](
+                                   std::expected<void, support::Error> outcome) mutable noexcept {
+                        completion(std::move(outcome));
+                        commit_active = false;
+                        pump_requested = true;
+                        if (!pumping_commits) {
+                            run_next_commit();
+                        }
+                        finish_close_if_ready();
+                    });
+        } while (pump_requested && !commit_active);
+        pumping_commits = false;
+        if (failed) {
+            reject_pending_commits(failure_error());
+        }
+        finish_close_if_ready();
+    }
+
+    /// Admit one transaction to the serialized Session line.
+    void enqueue_commit(PendingCommit pending) {
+        pending_commits.push_back(std::move(pending));
+        run_next_commit();
     }
 
     /// Run the close listeners once.
@@ -294,6 +383,7 @@ struct Session::Impl {
 // ── Transaction ─────────────────────────────────────────────────────────────
 
 struct Transaction::Impl {
+    /// The caller keeps Session and Storage alive through transaction settlement.
     Session::Impl* session{nullptr};
     Storage* storage{nullptr};
     bool has_table_write{false};
@@ -338,7 +428,7 @@ support::Expected<ConversationRecord> Transaction::create_conversation() {
 }
 
 support::Expected<EntryRecord> Transaction::append_entry(
-        ConversationId conversation_id, std::string kind, chord::Json data) {
+        ConversationId conversation_id, std::string kind, chord::Json data, std::optional<EntryHeadVariant> head) {
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
     }
@@ -346,11 +436,19 @@ support::Expected<EntryRecord> Transaction::append_entry(
     if (!id) {
         return std::unexpected(std::move(id.error()));
     }
+    std::optional<EntryId> resolved_head;
+    if (head.has_value()) {
+        if (const EntryId* existing_head = std::get_if<EntryId>(&*head)) {
+            resolved_head = *existing_head;
+        } else {
+            resolved_head = EntryId{.value = *id};
+        }
+    }
     EntryRecord record{.id = EntryId{.value = *id},
             .conversation_id = conversation_id,
             .kind = std::move(kind),
             .data = std::move(data),
-            .head = std::nullopt};
+            .head = resolved_head};
     impl_->has_table_write = true;
     impl_->writes.push_back(StorageWrite{.type = "entry", .entry = record});
     return record;
@@ -517,7 +615,7 @@ SessionEnd Session::closed() const noexcept {
     if (impl_->failed) {
         return SessionEnd{.reason = SessionEndReason::Failed, .failed = true, .error_message = impl_->failure_message};
     }
-    if (impl_->closed) {
+    if (impl_->storage_closed) {
         return SessionEnd{.reason = SessionEndReason::Closed, .failed = false, .error_message = std::nullopt};
     }
     return SessionEnd{.reason = SessionEndReason::Open, .failed = false, .error_message = std::nullopt};
@@ -530,10 +628,27 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
     if (impl_->closed) {
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(session_closed_error())}};
     }
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [session = this, change = std::move(change)](
+                    support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                if (session->impl_->failed) {
+                    completion(std::unexpected(session_failed_error()));
+                    return;
+                }
+                if (session->impl_->closed) {
+                    completion(std::unexpected(session_closed_error()));
+                    return;
+                }
+                session->impl_->enqueue_commit(
+                        Session::Impl::PendingCommit{.change = std::move(change), .completion = std::move(completion)});
+            }}};
+}
 
+support::AsyncResult<void> Session::Impl::commit_now(
+        std::move_only_function<support::Expected<void>(Transaction&)> change) {
     auto transaction_impl = std::make_unique<Transaction::Impl>();
-    transaction_impl->session = impl_.get();
-    transaction_impl->storage = impl_->storage;
+    transaction_impl->session = this;
+    transaction_impl->storage = storage;
     Transaction transaction{std::move(transaction_impl)};
 
     auto outcome = change(transaction);
@@ -549,8 +664,8 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
     }
 
     auto state = std::make_shared<Session::Impl::CommitState>();
-    state->session = impl_.get();
-    state->storage = impl_->storage;
+    state->session = this;
+    state->storage = storage;
     state->documents = std::move(transaction.impl_->documents);
     state->writes = std::move(transaction.impl_->writes);
     transaction.impl_->sealed = true;
@@ -592,16 +707,28 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
                 state->storage->commit(state->writes)
                         .start([state, completion = std::move(completion)](
                                        std::expected<Seq, support::Error> outcome) mutable noexcept {
-                            completion(state->settle(std::move(outcome)));
+                            support::ExpectedVoid settled = state->settle(std::move(outcome));
+                            completion(std::move(settled));
                         });
             }}};
 }
 
 support::AsyncResult<void> Session::close() {
-    impl_->notify_close();
     impl_->closed = true;
-    impl_->close_storage();
-    return support::AsyncResult<void>{support::ExpectedVoid{}};
+    impl_->notify_close();
+    impl_->run_next_commit();
+    impl_->finish_close_if_ready();
+    if (impl_->storage_closed) {
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [session = this](support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                if (session->impl_->storage_closed) {
+                    completion(support::ExpectedVoid{});
+                    return;
+                }
+                session->impl_->close_completions.push_back(std::move(completion));
+            }}};
 }
 
 support::ExpectedVoid Session::subscribe_commits(CommitListener listener) {

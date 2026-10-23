@@ -127,14 +127,17 @@ support::AsyncResult<Seq> MemoryStorage::commit(std::span<const StorageWrite> wr
                 return support::AsyncResult<Seq>{support::Expected<Seq>{std::unexpected(
                         support::make_error(support::ErrorCode::Validation, "Document create write is incomplete"))}};
             }
-            const DocumentRecord& record = *write.document_record;
+            DocumentRecord record = *write.document_record;
             if (next_documents.contains(record.id.value)) {
                 return support::AsyncResult<Seq>{support::Expected<Seq>{std::unexpected(
                         support::make_error(support::ErrorCode::Validation, "Document already exists"))}};
             }
-            next_documents.emplace(record.id.value, StoredDocument{.record = record, .value = *write.document_value});
-            next_document_ids[document_address_key(record.kind, write.document_conversation_id)] = record.id.value;
-            next_id = std::max(next_id, record.id.value + 1);
+            record.created_at = impl_->next_seq;
+            const std::int64_t id = record.id.value;
+            const std::string address_key = document_address_key(record.kind, write.document_conversation_id);
+            next_documents.emplace(id, StoredDocument{.record = std::move(record), .value = *write.document_value});
+            next_document_ids[address_key] = id;
+            next_id = std::max(next_id, id + 1);
         } else if (write.type == "document.change") {
             if (!write.document_id.has_value()) {
                 return support::AsyncResult<Seq>{support::Expected<Seq>{std::unexpected(
