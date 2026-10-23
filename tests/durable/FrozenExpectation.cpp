@@ -4,6 +4,7 @@
 
 #include <cstddef>
 #include <fstream>
+#include <map>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -15,8 +16,8 @@ namespace cch::tests::durable {
 
 namespace {
 
-[[nodiscard]] std::string read_artifact_text() {
-    std::ifstream stream(std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1063/session-transactions.json");
+[[nodiscard]] std::string read_artifact_text(std::string_view artifact_path) {
+    std::ifstream stream(std::string{CCH_SOURCE_DIR} + "/" + std::string{artifact_path});
     std::ostringstream buffer;
     buffer << stream.rdbuf();
     return buffer.str();
@@ -25,20 +26,30 @@ namespace {
 } // namespace
 
 const support::JsonValue& frozen_artifact() {
-    static const support::JsonValue artifact = [] {
-        auto parsed = support::read_json(read_artifact_text());
-        if (!parsed) {
-            // A missing or malformed frozen artifact is a broken fixture, not
-            // a test outcome: the expectations cannot be read at all.
-            std::terminate();
-        }
-        return *parsed;
-    }();
-    return artifact;
+    return frozen_artifact("fixtures/pi-v1.3.0/audit-1063/session-transactions.json");
+}
+
+const support::JsonValue& frozen_artifact(std::string_view artifact_path) {
+    static auto cache = std::map<std::string, support::JsonValue>{};
+    const auto found = cache.find(std::string{artifact_path});
+    if (found != cache.end()) {
+        return found->second;
+    }
+    auto parsed = support::read_json(read_artifact_text(artifact_path));
+    if (!parsed) {
+        // A missing or malformed frozen artifact is a broken fixture, not a
+        // test outcome: the expectations cannot be read at all.
+        std::terminate();
+    }
+    return cache.emplace(std::string{artifact_path}, std::move(*parsed)).first->second;
 }
 
 std::optional<FrozenScenario> FrozenScenario::load(std::string_view scenario_name) {
-    const support::JsonValue::object_t* root = frozen_artifact().get_if<support::JsonValue::object_t>();
+    return load("fixtures/pi-v1.3.0/audit-1063/session-transactions.json", scenario_name);
+}
+
+std::optional<FrozenScenario> FrozenScenario::load(std::string_view artifact_path, std::string_view scenario_name) {
+    const support::JsonValue::object_t* root = frozen_artifact(artifact_path).get_if<support::JsonValue::object_t>();
     if (root == nullptr) {
         return std::nullopt;
     }
