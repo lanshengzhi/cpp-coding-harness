@@ -1,6 +1,7 @@
 #include "tui/OverlayCompositor.hpp"
 
 #include <cch/tui/Overlay.hpp>
+#include <cch/tui/TerminalImage.hpp>
 #include <cch/tui/Utils.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -555,4 +556,84 @@ TEST_CASE("OverlayCompositor reports focus target availability and topmost focus
     low_ptr->set_visible(false);
     CHECK(compositor.topmost_focusable(dimensions) == nullptr);
     CHECK_FALSE(compositor.focus_target_available(low_ptr, dimensions));
+}
+
+// Frozen observation (fixtures/pi-v1.3.0/audit-1035, `wezterm-overlay-inside-
+// placement-span`): a component declares a 2x3 Kitty placement; an overlay row
+// composed at row 1 (inside the span) keeps the placement — frozen re-emits
+// `a=p` after the overlay text in both the shown and hidden frames. The three
+// cases below pin the C++ behavior against that observation.
+
+[[nodiscard]] tui::InlineImageRenderRegion declared_span_image(std::uint64_t resource_id, std::size_t rows = 3) {
+    tui::InlineImageRenderRegion region;
+    region.resource_id = resource_id;
+    region.revision = 1;
+    region.encoded_data = "AAAA";
+    region.mime_type = "image/png";
+    region.pixel_width = 100;
+    region.pixel_height = 100;
+    region.fallback_text = tui::image_fallback(
+            region.mime_type, tui::ImagePixelSize{.width = region.pixel_width, .height = region.pixel_height});
+    region.region = tui::CellRegion{.column = 0, .row = 0, .columns = 2, .rows = rows};
+    region.rows_reserved_in_lines = true;
+    return region;
+}
+
+TEST_CASE("OverlayCompositor materialization keeps the component-declared cell region",
+        "[tui][overlay][image][issue1035][compat-pi]") {
+    tui::RenderResult output{.lines = std::vector<std::string>(4, ""),
+            .images = {declared_span_image(7301)}};
+
+    const auto materialized =
+            tui::detail::OverlayCompositor::materialize_images(std::move(output), kitty_capabilities(), 20, 4);
+
+    REQUIRE(materialized.images.size() == 1);
+    CHECK(materialized.images[0].region.columns == 2);
+    CHECK(materialized.images[0].region.rows == 3);
+}
+
+TEST_CASE("OverlayCompositor materialization truncates an unplaceable image fallback to the viewport width",
+        "[tui][overlay][image][issue1035][compat-pi]") {
+    // Declared 2x5 does not fit the 4-row viewport, so the component fallback
+    // shows; pi truncates the fallback to the render width (`truncateToWidth`,
+    // components/image.ts), never past the terminal columns.
+    tui::RenderResult output{.lines = std::vector<std::string>(4, ""),
+            .images = {declared_span_image(7301, /*rows=*/5)}};
+
+    const auto materialized =
+            tui::detail::OverlayCompositor::materialize_images(std::move(output), kitty_capabilities(), 20, 4);
+
+    REQUIRE(materialized.images.empty());
+    REQUIRE(materialized.lines.size() >= 1);
+    CHECK(tui::visible_width(materialized.lines[0]) <= 20);
+}
+
+TEST_CASE("OverlayCompositor composite keeps base images intersecting an overlay row",
+        "[tui][overlay][image][issue1035][compat-pi]") {
+    tui::detail::OverlayCompositor compositor;
+    const tui::TerminalDimensions dimensions{.columns = 20, .rows = 4};
+    const auto capabilities = kitty_capabilities();
+
+    tui::RenderResult output{.lines = std::vector<std::string>(4, ""),
+            .images = {declared_span_image(7301)}};
+    output = tui::detail::OverlayCompositor::materialize_images(
+            std::move(output), capabilities, dimensions.columns, dimensions.rows);
+    REQUIRE(output.images.size() == 1);
+
+    auto options = absolute_options(0, 1);
+    options.width = 20;
+    options.max_height = 1;
+    auto overlay = std::make_unique<tui::Overlay>(options);
+    REQUIRE(overlay->add_child(std::make_unique<StaticComponent>(std::vector<std::string>{"overlay!"})));
+    REQUIRE(compositor.add_overlay(std::move(overlay)));
+
+    REQUIRE(compositor.composite(dimensions, capabilities, output, false));
+
+    // The overlay row sits inside the placement span: frozen keeps the
+    // placement and re-emits it (audit-1035 `wezterm-overlay-inside-placement-
+    // span` shows `a=p` after the overlay text in both frames).
+    REQUIRE(output.images.size() == 1);
+    CHECK(output.images[0].region.columns == 2);
+    CHECK(output.images[0].region.rows == 3);
+    CHECK(output.lines[1].find("overlay!") != std::string::npos);
 }
