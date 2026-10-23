@@ -1,0 +1,449 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1061",
+  "family": "audit-1061",
+  "capturedAt": "2026-10-23T16:13:12.396Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/chord/src/delta/index.ts:apply,applyOps,assertValidOp,assertSafePath,applyImmutable",
+    "packages/chord/src/delta/index.ts:UnsafePathError,PathError",
+    "packages/chord/test/delta.test.ts:rejects unsafe and malformed paths",
+    "packages/chord/test/delta.test.ts:rejects unknown verbs, malformed tuples, paths, and splice payloads",
+    "packages/chord/test/delta.test.ts:operation assertions"
+  ],
+  "scenarios": [
+    {
+      "name": "a later empty path keeps the preceding mutable write and reports the empty path",
+      "source": "packages/chord/src/delta/index.ts:apply,applyOps,assertValidOp; packages/chord/test/delta.test.ts:rejects unknown verbs, malformed tuples, paths, and splice payloads",
+      "inputs": {
+        "initial": {
+          "value": 1,
+          "items": [
+            "a"
+          ]
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ],
+          [
+            "s",
+            [],
+            3
+          ]
+        ]
+      },
+      "expected": {
+        "targetAfter": {
+          "value": 2,
+          "items": [
+            "a"
+          ]
+        },
+        "error": {
+          "name": "TypeError",
+          "message": "path is empty"
+        }
+      },
+      "normalizations": [
+        "Frozen validates each operation as the loop reaches it, so the leading set stays applied; a whole-batch pre-validation would leave `targetAfter` at `initial`."
+      ]
+    },
+    {
+      "name": "a later unsafe path keeps the preceding mutable write and reports the unsafe segment",
+      "source": "packages/chord/src/delta/index.ts:apply,applyOps,assertSafePath,UnsafePathError",
+      "inputs": {
+        "initial": {
+          "value": 1
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ],
+          [
+            "s",
+            [
+              "__proto__",
+              "polluted"
+            ],
+            true
+          ]
+        ]
+      },
+      "expected": {
+        "targetAfter": {
+          "value": 2
+        },
+        "error": {
+          "name": "UnsafePathError",
+          "message": "unsafe path segment: __proto__"
+        }
+      }
+    },
+    {
+      "name": "a later string splice index keeps the preceding mutable write and reports the splice index",
+      "source": "packages/chord/src/delta/index.ts:apply,applyOps,assertValidOp",
+      "inputs": {
+        "initial": {
+          "value": 1,
+          "items": [
+            "a"
+          ]
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ],
+          [
+            "p",
+            [
+              "items"
+            ],
+            "0",
+            0,
+            [
+              "x"
+            ]
+          ]
+        ]
+      },
+      "expected": {
+        "targetAfter": {
+          "value": 2,
+          "items": [
+            "a"
+          ]
+        },
+        "error": {
+          "name": "TypeError",
+          "message": "p index"
+        }
+      }
+    },
+    {
+      "name": "a later non-bijective permutation keeps the preceding mutable write and reports the permutation",
+      "source": "packages/chord/src/delta/index.ts:apply,applyOps,assertValidOp",
+      "inputs": {
+        "initial": {
+          "value": 1,
+          "a": [
+            "x",
+            "y"
+          ]
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ],
+          [
+            "m",
+            [
+              "a"
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        ]
+      },
+      "expected": {
+        "targetAfter": {
+          "value": 2,
+          "a": [
+            "x",
+            "y"
+          ]
+        },
+        "error": {
+          "name": "TypeError",
+          "message": "m permutation is not a bijection"
+        }
+      }
+    },
+    {
+      "name": "a root replacement adopted before a failing operation leaves the caller object unchanged",
+      "source": "packages/chord/src/delta/index.ts:apply,applyOps",
+      "inputs": {
+        "initial": {
+          "value": 1
+        },
+        "ops": [
+          [
+            "r",
+            {
+              "other": 2
+            }
+          ],
+          [
+            "s",
+            [],
+            3
+          ]
+        ]
+      },
+      "expected": {
+        "targetAfter": {
+          "value": 1
+        },
+        "error": {
+          "name": "TypeError",
+          "message": "path is empty"
+        }
+      },
+      "normalizations": [
+        "A frozen root replacement is adopted into the applier's local root and never written into the caller's object, so the caller keeps `initial` even though the replacement preceded the failure."
+      ]
+    },
+    {
+      "name": "immutable application rejects the same batch and leaves the base unchanged",
+      "source": "packages/chord/src/delta/index.ts:applyImmutable,applyImmutableBatches,applyOps",
+      "inputs": {
+        "initial": {
+          "value": 1,
+          "items": [
+            "a"
+          ]
+        },
+        "ops": [
+          [
+            "s",
+            [
+              "value"
+            ],
+            2
+          ],
+          [
+            "p",
+            [
+              "items"
+            ],
+            "0",
+            0,
+            [
+              "x"
+            ]
+          ]
+        ]
+      },
+      "expected": {
+        "baseAfter": {
+          "value": 1,
+          "items": [
+            "a"
+          ]
+        },
+        "error": {
+          "name": "TypeError",
+          "message": "p index"
+        }
+      }
+    },
+    {
+      "name": "the operation validator rejects each representable malformed shape with its recorded message",
+      "source": "packages/chord/src/delta/index.ts:assertValidOp,assertSafePath; packages/chord/test/delta.test.ts:rejects unknown verbs, malformed tuples, paths, and splice payloads",
+      "inputs": {
+        "shapes": [
+          [
+            "s",
+            [],
+            1
+          ],
+          [
+            "d",
+            []
+          ],
+          [
+            "s",
+            [
+              "a"
+            ]
+          ],
+          [
+            "s",
+            [
+              "a"
+            ],
+            1,
+            2
+          ],
+          [
+            "t",
+            [
+              "s"
+            ],
+            -1
+          ],
+          [
+            "p",
+            [
+              "a"
+            ],
+            0,
+            -1,
+            []
+          ],
+          [
+            "m",
+            [
+              "a"
+            ],
+            [
+              0,
+              0
+            ]
+          ],
+          [
+            "x",
+            [
+              "a"
+            ]
+          ]
+        ]
+      },
+      "expected": {
+        "results": [
+          {
+            "op": [
+              "s",
+              [],
+              1
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "path is empty"
+            }
+          },
+          {
+            "op": [
+              "d",
+              []
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "path is empty"
+            }
+          },
+          {
+            "op": [
+              "s",
+              [
+                "a"
+              ]
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "s arity"
+            }
+          },
+          {
+            "op": [
+              "s",
+              [
+                "a"
+              ],
+              1,
+              2
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "s arity"
+            }
+          },
+          {
+            "op": [
+              "t",
+              [
+                "s"
+              ],
+              -1
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "t shape"
+            }
+          },
+          {
+            "op": [
+              "p",
+              [
+                "a"
+              ],
+              0,
+              -1,
+              []
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "p remove"
+            }
+          },
+          {
+            "op": [
+              "m",
+              [
+                "a"
+              ],
+              [
+                0,
+                0
+              ]
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "m permutation is not a bijection"
+            }
+          },
+          {
+            "op": [
+              "x",
+              [
+                "a"
+              ]
+            ],
+            "accepted": false,
+            "error": {
+              "name": "TypeError",
+              "message": "unknown op verb: x"
+            }
+          }
+        ]
+      },
+      "normalizations": [
+        "The frozen validator takes untyped tuples; C++ spells the same rejections over its typed operation variant, so `s arity` and `unknown op verb` have no C++ spelling and are recorded as the frozen shape contract only."
+      ]
+    }
+  ]
+}

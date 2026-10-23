@@ -1,8 +1,8 @@
 /**
  * `audit-1061` capture: frozen Chord observations that audit-1057 recorded as
- * gaps — `Tracker.prepareReplace`, the draft array-hole rejection, and the
+ * gaps — `Tracker.prepareReplace`, the draft array-hole rejection, the
  * review-repair distinctions for mutable apply, draft reads, adoption
- * revocation and operation folding.
+ * revocation and operation folding, and the per-operation validation order.
  *
  * The script refuses to write evidence unless the private checkout is the exact
  * baseline revision and its tracked source is clean. It re-executes itself
@@ -13,6 +13,10 @@
  *   PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 \
  *     /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx \
  *     fixtures/pi-v1.3.0/audit-1061/capture-1061.mts
+ *
+ * The family is registered after its first capture. Extending it is a
+ * deliberate recapture: set `AUDIT_1061_RECAPTURE=1`, regenerate, then record
+ * the new manifest bytes with `audit_evidence.py register --replace`.
  */
 
 import { execFileSync } from "node:child_process";
@@ -27,6 +31,7 @@ import {
     mutableApplyScenarios,
     operationFoldingScenarios,
 } from "./review-fixes.mts";
+import { validationOrderScenarios } from "./validation-order.mts";
 
 const SCRIPT = fileURLToPath(import.meta.url);
 const REPO = join(dirname(SCRIPT), "../../..");
@@ -101,8 +106,11 @@ if (registered?.revision !== EXPECTED_REVISION) {
     console.error(`baseline ${BASELINE} does not resolve to ${EXPECTED_REVISION}`);
     process.exit(1);
 }
-if (registered.bundles?.[FAMILY] !== undefined) {
-    console.error(`${FAMILY} is already registered; a deliberate recapture needs an explicit registry replacement`);
+if (registered.bundles?.[FAMILY] !== undefined && process.env.AUDIT_1061_RECAPTURE !== "1") {
+    console.error(
+        `${FAMILY} is already registered; a deliberate recapture needs AUDIT_1061_RECAPTURE=1 ` +
+            "and an explicit `audit_evidence.py register --replace`",
+    );
     process.exit(1);
 }
 
@@ -168,6 +176,13 @@ const artifacts = await Promise.all([
         "packages/chord/src/delta/tracker.ts:TrackerImpl.adopt,TrackerImpl.#invalidate,assertReadable,assertWritable",
         "packages/chord/src/delta/tracker.ts:deleteProperty,emitObjectOperations,setProperty,materializePrepared",
     ]),
+    artifactFor("validation-order.json", validationOrderScenarios, [
+        "packages/chord/src/delta/index.ts:apply,applyOps,assertValidOp,assertSafePath,applyImmutable",
+        "packages/chord/src/delta/index.ts:UnsafePathError,PathError",
+        "packages/chord/test/delta.test.ts:rejects unsafe and malformed paths",
+        "packages/chord/test/delta.test.ts:rejects unknown verbs, malformed tuples, paths, and splice payloads",
+        "packages/chord/test/delta.test.ts:operation assertions",
+    ]),
 ]);
 
 const bundle = join(REPO, "fixtures/pi-v1.3.0", FAMILY);
@@ -184,6 +199,7 @@ const sourceFiles = [
     "fixtures/pi-v1.3.0/audit-1061/capture-1061.mts",
     "fixtures/pi-v1.3.0/audit-1061/scenarios.mts",
     "fixtures/pi-v1.3.0/audit-1061/review-fixes.mts",
+    "fixtures/pi-v1.3.0/audit-1061/validation-order.mts",
 ];
 const manifest = {
     schema: "pike/pi-v1.3.0-audit-evidence/1",

@@ -267,7 +267,8 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "missing": 42,
+        "implemented": 2,
+        "missing": 40,
         "not-applicable": 5,
         "partial": 18
       },
@@ -306,30 +307,30 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 997,
-      "missing": 231,
+      "implemented": 999,
+      "missing": 229,
       "not-applicable": 18,
       "partial": 218
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1022,
-      "upstream-captured": 414
+      "unverified": 1021,
+      "upstream-captured": 415
     },
     "evidenceRoute": {
-      "captured": 414,
+      "captured": 415,
       "artifact-only": 0,
       "related-captured": 22,
       "declared-comparison": 32,
       "cpp-regression-only": 10,
-      "unobserved": 58,
+      "unobserved": 57,
       "unobserved-static": 0,
       "historical-v1.0.4": 858,
       "not-audited": 42,
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1022,
+    "unobservedSupported": 1021,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -362,18 +363,15 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1022,
+    "missingObservationRows": 1021,
     "scenarioCoverage": {
-      "scenarios": 458,
-      "scenarioNamed": 320,
-      "artifactCovered": 47,
+      "scenarios": 465,
+      "scenarioNamed": 322,
+      "artifactCovered": 55,
       "orphaned": [
         "audit-1050/input-standalone.json:input-placeholder-reversal-and-custom-styling",
         "audit-1050/input-standalone.json:input-raw-lf-submission-and-rebound-submit",
         "audit-1050/input-standalone.json:input-narrow-unicode-scroll-and-cursor",
-        "audit-1061/prepare-replace.json:a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
-        "audit-1061/prepare-replace.json:a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
-        "audit-1061/prepare-replace.json:an aborted whole-root preparation cannot be adopted",
         "audit-1061/draft-array-holes.json:deleting an array element from a draft rejects the hole and leaves the prepared revision empty",
         "audit-1061/review-fixes.json:a later traversal failure keeps the preceding mutable write",
         "audit-1061/review-fixes.json:draft reads distinguish absent leaves from null and from absent receiver paths",
@@ -2615,36 +2613,6 @@
         "cch_tui:Input.render"
       ],
       "disposition": "input behavior slices must consume this observation when they touch narrow/Unicode cursor scrolling"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement prepared whole-root replacement"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement the no-op whole-root replacement"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "an aborted whole-root preparation cannot be adopted",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement preparation abort"
     },
     {
       "family": "audit-1061",
@@ -6617,32 +6585,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/sqlite/storage.ts:654 (revision materialization)",
       "consumerOwners": [
         "cch_durable"
       ],
-      "boundary": null,
-      "implementation_ticket": null,
-      "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+      "boundary": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
+      "implementation_ticket": "#1061",
+      "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
       "comparisonScenarios": [
-        "mutable application mutates in place except for a root replacement, which returns a new value"
+        "a later empty path keeps the preceding mutable write and reports the empty path"
       ],
       "evidence": {
         "route": "captured",
-        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "artifact": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
-          "mutable application mutates in place except for a root replacement, which returns a new value"
+          "a later empty path keeps the preceding mutable write and reports the empty path"
         ],
-        "result": "Ordinary batch returns the same target and mutates it to {items:['a','b'],value:1}; root replacement returns a distinct {replacement:true}."
+        "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
       },
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision.",
+      "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -6651,7 +6619,7 @@
           "ticket": "1057",
           "rowId": "cch_chord:delta:mutable-application",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
@@ -6857,29 +6825,33 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:planDocument",
       "consumerOwners": [
         "cch_durable"
       ],
-      "boundary": null,
-      "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
-      "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": null
-      },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
-      "gaps": [
-        "The ticket captured root replacements through commits/watchers, not `prepareReplace` directly."
+      "boundary": "src/chord/include/cch/chord/Delta.hpp:Tracker::prepare_replace,Prepared::base,Prepared::value,Tracker::adopt",
+      "implementation_ticket": "#1061",
+      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+      "comparisonScenarios": [
+        "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
       ],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
+      "evidence": {
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
+        ],
+        "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
+      },
+      "missingObservation": null,
+      "gaps": [
+        "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
+      ],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta.",
       "lane": "1057",
       "frozenSymbolsSource": null,
@@ -6889,8 +6861,8 @@
           "ticket": "1057",
           "rowId": "cch_chord:delta:prepare-replace",
           "membership": "supported",
-          "implementation": "missing",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_chord"
         }
       ]
@@ -7168,7 +7140,7 @@
       },
       "missingObservation": "no frozen capture recorded for this row; source-only audit",
       "gaps": [
-        "No captured checkpoint/base scenario in this ticket; checkpoint cost is deliberately not decided here."
+        "No checkpoint predicate or durable Session policy is implemented in this Chord slice; checkpoint cost remains outside #1061."
       ],
       "remainingWork": "no frozen capture recorded for this row; source-only audit",
       "notes": "Recommendation: Defer checkpoint base economics to a measured implementation probe; first make revision/delta replay correct.",

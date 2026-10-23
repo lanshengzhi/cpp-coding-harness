@@ -493,6 +493,30 @@
   },
   "scenarioLinks": [
     {
+      "ticket": "1061",
+      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+      "rows": [
+        "cch_chord:delta:prepare-replace"
+      ],
+      "authority": "#1061 frozen audit capture plus tests/chord/TrackerTest.cpp direct prepared replacement comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1061",
+      "scenario": "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
+      "rows": [
+        "cch_chord:delta:prepare-replace"
+      ],
+      "authority": "#1061 frozen audit capture plus tests/chord/TrackerTest.cpp direct prepared replacement comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1061",
+      "scenario": "an aborted whole-root preparation cannot be adopted",
+      "rows": [
+        "cch_chord:delta:prepare-replace"
+      ],
+      "authority": "#1061 frozen audit capture plus tests/chord/TrackerTest.cpp direct prepared replacement comparison; verification remains upstream-captured"
+    },
+    {
       "ticket": "1047",
       "scenario": "tool duration survives the public session record round trip",
       "rows": [
@@ -555,36 +579,6 @@
         "cch_tui:Input.render"
       ],
       "disposition": "input behavior slices must consume this observation when they touch narrow/Unicode cursor scrolling"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement prepared whole-root replacement"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement the no-op whole-root replacement"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "an aborted whole-root preparation cannot be adopted",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement preparation abort"
     },
     {
       "family": "audit-1061",
