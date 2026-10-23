@@ -554,10 +554,11 @@ TEST_CASE("boot registers discovered themes and the settings Theme submenu commi
     CHECK(screen.find("user-theme") != std::string::npos);
     CHECK(screen.find("cli-theme") != std::string::npos);
 
-    // Select solarized (sorted order: cli-theme, dark, light, solarized,
-    // user-theme — the active dark theme sits at index 1): down twice, then
-    // confirm. The global-scope settings write persists and re-applies.
-    run.type("\x1b[B\x1b[B\r");
+    // Select solarized (sorted order with the reserved system theme first:
+    // system, cli-theme, dark, light, solarized, user-theme — the active
+    // system theme sits at index 0): down four times, then confirm. The
+    // global-scope settings write persists and re-applies.
+    run.type("\x1b[B\x1b[B\x1b[B\x1b[B\r");
     const auto settings_path = fixture.agent_dir / "settings.json";
     std::error_code settings_error;
     REQUIRE(std::filesystem::exists(settings_path, settings_error));
@@ -654,7 +655,7 @@ TEST_CASE("boot with a failing theme keeps the main screen and the dark fallback
     // pi's verbatim message (rendered as an Error chat diagnostic), which
     // stays visible on screen above the fixed editor and footer rows.
     CHECK(screen.find("Failed to load theme \"broken\"") != std::string::npos);
-    CHECK(screen.find("Fell back to dark theme.") != std::string::npos);
+    CHECK(screen.find("Fell back to the system theme.") != std::string::npos);
     // The boot completes: the interactive UI (footer status line with the
     // active model) renders below the bounded loaded-resources block and stays
     // fixed on screen (the #425 bound kept the footer/editor on screen).

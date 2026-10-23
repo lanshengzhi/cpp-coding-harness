@@ -445,7 +445,7 @@ TEST_CASE("startup TUI: theme init resolves the settings theme (G5 controller de
     REQUIRE(running.prompt_result);
 }
 
-TEST_CASE("startup TUI: theme init falls back to the COLORFGBG env default when unset",
+TEST_CASE("startup TUI: theme init boots the generated system theme when the setting is unset",
         "[cli][startup-tui][theme][issue417][spec]") {
     tests::TempWorkspace agent_dir;
     tests::TempWorkspace fallback;
@@ -454,9 +454,10 @@ TEST_CASE("startup TUI: theme init falls back to the COLORFGBG env default when 
         vanished.path().string() + "\n\ncontinue in current cwd\n" +
         fallback.path().string();
 
-    // pi startup-ui.ts: no settings theme → the detected terminal theme.
-    // COLORFGBG "0;15" (background index 15, white) resolves to light; the
-    // light accent is teal (#5a8080).
+    // pi startup-ui.ts: no settings theme → the generated `system` theme,
+    // indexed here because no colors are reported. COLORFGBG "0;15" resolves
+    // the appearance to light; the accent takes the ANSI slot for its family
+    // (violet slot 5).
     tests::EnvVarGuard colorfgbg{"COLORFGBG"};
     colorfgbg.set("0;15");
 
@@ -475,7 +476,7 @@ TEST_CASE("startup TUI: theme init falls back to the COLORFGBG env default when 
             running.prompt_result.emplace(std::move(result));
         });
     drain_ready(running.io);
-    CHECK(color_at_text(running.terminal, "Continue") == "38;2;90;128;128");
+    CHECK(color_at_text(running.terminal, "Continue") == "38;5;5");
     REQUIRE(running.terminal.inject_input("\x1b"));
     REQUIRE(running.terminal.flush_input());
     drain_ready(running.io);
@@ -493,7 +494,8 @@ TEST_CASE("startup TUI: theme init does not register resource themes", "[cli][st
     // A settings theme that exists only as a project `.pi/themes` resource
     // is not registered by the startup host (pi `setRegisteredThemes(
     // loadStartupThemes(...))` is skipped per the G5 record): the boot init
-    // falls back to dark (#8abeb7 accent) instead of resolving the name.
+    // falls back to the generated `system` theme instead of resolving the
+    // name, and its indexed tier paints the accent with ANSI slot 5.
     std::filesystem::create_directories(agent_dir.path() / "themes");
     {
         std::ofstream project_theme(
@@ -517,8 +519,8 @@ TEST_CASE("startup TUI: theme init does not register resource themes", "[cli][st
             running.prompt_result.emplace(std::move(result));
         });
     drain_ready(running.io);
-    // Dark fallback accent (the registered name never resolves).
-    CHECK(color_at_text(running.terminal, "Continue") == "38;2;167;152;215");
+    // System-theme fallback accent (the registered name never resolves).
+    CHECK(color_at_text(running.terminal, "Continue") == "38;5;5");
     REQUIRE(running.terminal.inject_input("\x1b"));
     REQUIRE(running.terminal.flush_input());
     drain_ready(running.io);

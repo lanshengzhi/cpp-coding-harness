@@ -6,6 +6,7 @@
 // `preview`, registered themes + `discover_themes` dedupe with pi's
 // collision diagnostics, and the boot theme init (`init_boot_theme`).
 
+#include "coding_agent/tui/SystemTheme.hpp"
 #include "coding_agent/tui/ThemeController.hpp"
 #include "coding_agent/tui/ThemeColorMath.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -172,6 +173,14 @@ struct ControllerHarness {
     return *color;
 }
 
+/// The generated `system` theme's no-report tier for an appearance hint and
+/// pending state (the controller boots it before any terminal report).
+[[nodiscard]] coding_agent::tui::ResolvedTheme generated_indexed_theme(
+        coding_agent::tui::TerminalAppearance appearance, double saturation = 1.0) {
+    return coding_agent::tui::system_theme_from_colors(coding_agent::tui::generate_system_theme_colors(
+            coding_agent::tui::SystemThemeInput{.saturation = saturation, .appearance_hint = appearance}));
+}
+
 } // namespace
 
 TEST_CASE("Real roots deliver frozen theme RGB and ordered rebind query phases",
@@ -270,7 +279,10 @@ TEST_CASE("Real roots deliver frozen theme RGB and ordered rebind query phases",
     pump();
     CHECK(colors.empty());
     CHECK(phases.empty());
-    CHECK(controller.active_theme_name() == "light");
+    // #1032: the setting is the reserved `system` name, so the generated
+    // theme stays active through every report (the frozen #1037 artifact's
+    // `settledTheme` recorded #991's interim system-to-pairing mapping).
+    CHECK(controller.active_theme_name() == "system");
     const auto lifecycle = tests::read_pi_tui_evidence("product-theme-rebind-lifecycle.json");
     REQUIRE(lifecycle);
     auto timer_marker = active_root.query_terminal_colors(
@@ -317,7 +329,9 @@ TEST_CASE("Real roots deliver frozen theme RGB and ordered rebind query phases",
     CHECK(phases ==
             (to_fullscreen ? std::vector<std::string>{"scheme", "query-written", "colors", "changed"}
                            : std::vector<std::string>{"scheme", "changed", "query-written", "colors", "changed"}));
-    CHECK(controller.active_theme_name() == expected.at("settledTheme").get_string());
+    // #1032: the frozen #1037 artifact settled on the interim pairing theme;
+    // the reserved `system` name now stays active through every report.
+    CHECK(controller.active_theme_name() == "system");
     controller.dispose();
     REQUIRE(active_root.stop());
 }
@@ -343,7 +357,7 @@ TEST_CASE("Real theme query sink distinguishes late FIFO and malformed frozen re
     tests::EnvVarGuard env("COLORFGBG", "0;15");
     auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
     controller.apply_from_settings();
-    CHECK(controller.active_theme_name() == "light");
+    CHECK(controller.active_theme_name() == "system");
     if (name == "same_root_late_query") {
         REQUIRE(wait_for_reports(harness, 1));
         {
@@ -392,7 +406,7 @@ TEST_CASE("Real theme query sink distinguishes late FIFO and malformed frozen re
         if (name != "same_root_late_query") CHECK(harness.reports.size() == 1);
     }
     (void)harness.pump(controller);
-    CHECK(controller.active_theme_name() == "dark");
+    CHECK(controller.active_theme_name() == "system");
     if (name == "unkeyed_reply_pending_target_fifo") {
         // If the first DA1 consumed both requests, these second replies
         // would be dropped and the appearance would remain dark.
@@ -401,7 +415,7 @@ TEST_CASE("Real theme query sink distinguishes late FIFO and malformed frozen re
         REQUIRE(harness.terminal.inject_input("\x1b[?1;2c"));
         CHECK(harness.report_count() == 1);
         (void)harness.pump(controller);
-        CHECK(controller.active_theme_name() == "light");
+        CHECK(controller.active_theme_name() == "system");
     }
 }
 
@@ -517,7 +531,7 @@ TEST_CASE("Theme reports queued before rebind apply once and disposal suppresses
     controller.rebind_tui(replacement);
     const auto changes = harness.changed;
     CHECK(harness.pump(controller) == 1);
-    CHECK(controller.active_theme_name() == "dark");
+    CHECK(controller.active_theme_name() == "system");
     CHECK(harness.changed == changes + 1);
     REQUIRE(harness.terminal.inject_input("\x1b[?997;2n"));
     CHECK(harness.pump(controller) == 1);
@@ -621,19 +635,21 @@ TEST_CASE("apply_from_settings resolves the setting, queries colors, and syncs o
         CHECK(harness.written().substr(before).starts_with("\x1b]10;?\x07\x1b]11;?\x07"));
     }
     {
-        // Unset setting: the COLORFGBG default applies and auto-sync turns on.
+        // Unset setting: the generated system theme applies and auto-sync
+        // turns on.
         tests::EnvVarGuard env("COLORFGBG", "0;15");
         auto controller = make_controller(harness);
         controller.apply_from_settings();
-        CHECK(controller.active_theme_name() == "light");
+        CHECK(controller.active_theme_name() == "system");
         CHECK(harness.written().find("\x1b[?2031h") != std::string::npos);
     }
     {
-        // No COLORFGBG: the dark fallback applies, still with auto-sync on.
+        // No COLORFGBG: the generated system theme still applies (dark hint),
+        // still with auto-sync on.
         tests::EnvVarGuard env("COLORFGBG", std::nullopt);
         auto controller = make_controller(harness);
         controller.apply_from_settings();
-        CHECK(controller.active_theme_name() == "dark");
+        CHECK(controller.active_theme_name() == "system");
         CHECK(harness.written().find("\x1b[?2031h") != std::string::npos);
     }
     {
@@ -686,19 +702,20 @@ TEST_CASE("a late color reply after the query timeout still applies",
     auto controller = make_controller(harness);
 
     controller.apply_from_settings();
-    CHECK(controller.active_theme_name() == "dark");
-    // The 100 ms timeout reports nothing: the palette and the appearance stay.
+    CHECK(controller.active_theme_name() == "system");
+    // The 100 ms timeout reports nothing: the indexed tier and the detected
+    // appearance stay.
     REQUIRE(wait_for_reports(harness, 1));
     REQUIRE(harness.pump(controller) == 1);
     CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Dark);
-    CHECK(controller.active_theme_name() == "dark");
+    CHECK(controller.active_theme_name() == "system");
 
     // pi `onLateReply`: a reply after the timeout is applied again.
     REQUIRE(harness.terminal.inject_input("\x1b]11;#f0f0f0\x07"));
     REQUIRE(harness.report_count() == 1);
     REQUIRE(harness.pump(controller) == 1);
     CHECK(controller.terminal_theme() == coding_agent::tui::TerminalTheme::Light);
-    CHECK(controller.active_theme_name() == "light");
+    CHECK(controller.active_theme_name() == "system");
 }
 
 TEST_CASE("an explicit theme ignores live scheme reports", "[coding_agent][theme][controller][issue991][spec]") {
@@ -751,7 +768,7 @@ TEST_CASE("the scheme listener keeps exactly one registration across rebind and 
     CHECK(harness.written().find("\x1b[?2031l") != std::string::npos);
     REQUIRE(harness.terminal.inject_input("\x1b[?997;1n"));
     CHECK(harness.report_count() == 0);
-    CHECK(controller.active_theme_name() == "light");
+    CHECK(controller.active_theme_name() == "system");
 }
 
 TEST_CASE("shared theme color math classifies terminal appearance like the frozen system theme",
@@ -782,7 +799,7 @@ TEST_CASE("shared theme color math classifies terminal appearance like the froze
     CHECK(terminal_appearance(light_background, light_background) == TerminalAppearance::Light);
 }
 
-TEST_CASE("init_boot_theme resolves the setting or the env default with silent dark fallback",
+TEST_CASE("init_boot_theme resolves the setting or the generated system theme with silent fallback",
         "[coding_agent][theme][controller][issue415][spec]") {
     using coding_agent::tui::init_boot_theme;
     tests::TempWorkspace config;
@@ -790,11 +807,13 @@ TEST_CASE("init_boot_theme resolves the setting or the env default with silent d
 
     {
         tests::EnvVarGuard env("COLORFGBG", "0;15");
-        CHECK(init_boot_theme({}, std::nullopt) == coding_agent::tui::builtin_light_theme());
+        CHECK(init_boot_theme({}, std::nullopt) ==
+                generated_indexed_theme(coding_agent::tui::TerminalAppearance::Light));
     }
     {
         tests::EnvVarGuard env("COLORFGBG", "15;0");
-        CHECK(init_boot_theme({}, std::nullopt) == coding_agent::tui::builtin_dark_theme());
+        CHECK(init_boot_theme({}, std::nullopt) ==
+                generated_indexed_theme(coding_agent::tui::TerminalAppearance::Dark));
     }
     // A defined setting wins over the env default.
     CHECK(init_boot_theme({}, std::optional<std::string>{"dark"}) ==
@@ -804,12 +823,14 @@ TEST_CASE("init_boot_theme resolves the setting or the env default with silent d
     REQUIRE(custom.name == "solarized");
     const coding_agent::tui::RgbThemeColor solarized_accent{.red = 0xab, .green = 0xcd, .blue = 0xef};
     CHECK(accent_of(custom) == solarized_accent);
-    // An unknown name falls back to dark silently.
+    // An unknown name falls back to the generated system theme silently
+    // (pi `initTheme` catch).
+    tests::EnvVarGuard env("COLORFGBG", std::nullopt);
     CHECK(init_boot_theme({}, std::optional<std::string>{"missing"}) ==
-        coding_agent::tui::builtin_dark_theme());
+            generated_indexed_theme(coding_agent::tui::TerminalAppearance::Dark));
 }
 
-TEST_CASE("theme controller boots from the settings theme or the env default",
+TEST_CASE("theme controller boots from the settings theme or the generated system theme",
         "[coding_agent][theme][controller][issue415][spec]") {
     ControllerHarness harness;
 
@@ -822,17 +843,22 @@ TEST_CASE("theme controller boots from the settings theme or the env default",
         CHECK(harness.changed == 0);
     }
     {
+        // pi `markTerminalColorsPending`: before the first report the system
+        // theme renders the grayscale tier of the COLORFGBG appearance.
         tests::EnvVarGuard env("COLORFGBG", "0;15");
         auto controller = make_controller(harness);
-        CHECK(controller.active_theme_name() == "light");
-        CHECK(controller.live_theme().foreground(coding_agent::tui::ThemeToken::Accent, "x") ==
-            "\x1b[38;2;90;128;128mx\x1b[39m");
+        CHECK(controller.active_theme_name() == "system");
+        CHECK(controller.active_resolved_theme() ==
+                generated_indexed_theme(coding_agent::tui::TerminalAppearance::Light, 0.0));
     }
-    // A failing settings theme falls back to dark silently at boot.
+    // A failing settings theme falls back to the generated system theme
+    // silently at boot.
     {
         tests::EnvVarGuard env("COLORFGBG", std::nullopt);
         auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"missing"});
-        CHECK(controller.active_theme_name() == "dark");
+        CHECK(controller.active_theme_name() == "system");
+        CHECK(controller.active_resolved_theme() ==
+                generated_indexed_theme(coding_agent::tui::TerminalAppearance::Dark, 0.0));
         CHECK(harness.errors.empty());
     }
 }
@@ -857,7 +883,7 @@ TEST_CASE("theme controller registered themes apply by name and re-register on s
     // pi `setRegisteredThemes` replaces the map (reload re-registration).
     controller.set_registered_themes({});
     CHECK_FALSE(controller.set_theme_name("solarized", false));
-    CHECK(controller.active_theme_name() == "dark");
+    CHECK(controller.active_theme_name() == "system");
     CHECK(harness.changed == 2);
 }
 
@@ -870,13 +896,17 @@ TEST_CASE("apply_theme_name failure falls back to dark with the verbatim message
     const auto failed = controller.set_theme_name("missing", /* show_error */ true);
 
     CHECK_FALSE(failed);
-    CHECK(controller.active_theme_name() == "dark");
+    CHECK(controller.active_theme_name() == "system");
     // pi applyThemeName verbatim:
-    // `Failed to load theme "<name>": <error>\nFell back to dark theme.`
+    // `Failed to load theme "<name>": <error>\nFell back to the system theme.`
     REQUIRE(harness.errors.size() == 1);
     CHECK(harness.errors[0] ==
-        "Failed to load theme \"missing\": Theme not found: missing\nFell back to dark theme.");
+            "Failed to load theme \"missing\": Theme not found: missing\nFell back to the system theme.");
     CHECK(harness.changed == 1);
+    // The palette is the regenerated system theme (still pending its first
+    // color report, so the grayscale tier), not the previous dark palette.
+    CHECK(controller.active_resolved_theme() ==
+            generated_indexed_theme(coding_agent::tui::TerminalAppearance::Dark, 0.0));
 
     // Without show_error the fallback stays silent.
     harness.errors.clear();
@@ -898,7 +928,7 @@ TEST_CASE("preview applies in memory without committing or changing the active n
 
     // The palette changed in memory; the active name and the change sink
     // did not (pi preview: `setTheme` + invalidate, no `applyThemeName`).
-    CHECK(controller.active_theme_name() == "dark");
+    CHECK(controller.active_theme_name() == "system");
     CHECK(harness.changed == 0);
     CHECK(harness.base_pointer->invalidations == 1);
     CHECK(controller.live_theme().foreground(coding_agent::tui::ThemeToken::Accent, "x") ==
@@ -909,7 +939,7 @@ TEST_CASE("preview applies in memory without committing or changing the active n
     const auto before = harness.base_pointer->invalidations;
     controller.preview("light/dark");
     CHECK(harness.base_pointer->invalidations == before + 1);
-    CHECK(controller.active_theme_name() == "dark");
+    CHECK(controller.active_theme_name() == "system");
 }
 
 TEST_CASE("available_theme_names lists builtins custom directory and registered sorted",
@@ -925,14 +955,16 @@ TEST_CASE("available_theme_names lists builtins custom directory and registered 
 
     auto controller = make_controller(harness, config.path() / "themes", std::move(registered));
 
-    // pi `getAvailableThemes`: builtins + custom directory (invalid files
-    // ignored) + registered, deduped and sorted.
+    // pi `getAvailableThemes`: the generated system theme first, then
+    // builtins + custom directory (invalid files ignored) + registered,
+    // deduped and sorted.
     const auto names = controller.available_theme_names();
-    REQUIRE(names.size() == 4);
-    CHECK(names[0] == "dark");
-    CHECK(names[1] == "light");
-    CHECK(names[2] == "registered");
-    CHECK(names[3] == "solarized");
+    REQUIRE(names.size() == 5);
+    CHECK(names[0] == "system");
+    CHECK(names[1] == "dark");
+    CHECK(names[2] == "light");
+    CHECK(names[3] == "registered");
+    CHECK(names[4] == "solarized");
 }
 
 TEST_CASE("discover_themes parses documents and dedupes with pi collision diagnostics",
@@ -995,6 +1027,268 @@ TEST_CASE("discover_themes parses documents and dedupes with pi collision diagno
         });
     REQUIRE(parse_warning != discovery.diagnostics.end());
     CHECK(parse_warning->path == std::optional<std::string>{"broken.json"});
+}
+
+/// The frozen pi-v1.3.0 system-theme capture (#1032): the discriminating
+/// comparison target for the generated palette, read through the shared
+/// verifier's candidate check (the bundle is registered by the serial
+/// merger, not by this lane).
+[[nodiscard]] const support::JsonValue& system_theme_scenario(
+        const support::JsonValue& artifact, std::string_view name) {
+    for (const auto& scenario : artifact.at("scenarios").get_array()) {
+        if (scenario.at("name").get_string() == name) return scenario;
+    }
+    REQUIRE(false);
+    return artifact;
+}
+
+[[nodiscard]] std::map<std::string, coding_agent::tui::ThemeToken, std::less<>> system_theme_tokens() {
+    std::map<std::string, coding_agent::tui::ThemeToken, std::less<>> by_name;
+    for (const auto token : coding_agent::tui::all_theme_tokens()) {
+        by_name.emplace(coding_agent::tui::theme_token_name(token), token);
+    }
+    return by_name;
+}
+
+[[nodiscard]] tui::RgbColor system_theme_rgb(std::string_view hex) {
+    REQUIRE((hex.size() == 7 && hex.front() == '#'));
+    const auto channel = [&](std::size_t offset) {
+        return static_cast<double>(std::stoul(std::string{hex.substr(offset, 2)}, nullptr, 16));
+    };
+    return tui::RgbColor{.red = channel(1), .green = channel(3), .blue = channel(5)};
+}
+
+[[nodiscard]] tui::TerminalColors system_theme_report(const support::JsonValue& inputs) {
+    tui::TerminalColors colors;
+    const auto& fields = inputs.get_object();
+    const auto string_field = [&fields](std::string_view key) -> const std::string* {
+        const auto found = fields.find(std::string{key});
+        if (found == fields.end()) return nullptr;
+        return found->second.get_if<std::string>();
+    };
+    if (const auto* foreground = string_field("foreground")) {
+        colors.foreground = system_theme_rgb(*foreground);
+    }
+    if (const auto* background = string_field("background")) {
+        colors.background = system_theme_rgb(*background);
+    }
+    if (const auto palette_field = fields.find("palette"); palette_field != fields.end()) {
+        if (palette_field->second.get_if<support::JsonValue::array_t>() != nullptr) {
+            std::vector<tui::RgbColor> palette;
+            for (const auto& entry : palette_field->second.get_array()) {
+                palette.push_back(system_theme_rgb(entry.get_string()));
+            }
+            colors.palette = std::move(palette);
+        }
+    }
+    return colors;
+}
+
+/// Per-token comparison of the product palette against the frozen
+/// 56-token observation: `#rrggbb` → RGB, an integer → the xterm index,
+/// `""` → the terminal default. Also compares the generated appearance and
+/// the faint-token (`dim`) list, both in frozen table order.
+void check_system_theme_matches(const coding_agent::tui::ResolvedTheme& theme, const support::JsonValue& scenario) {
+    using namespace coding_agent::tui;
+    const auto tokens = system_theme_tokens();
+    const auto& expected = scenario.at("expected");
+    const auto& colors = expected.at("colors").get_object();
+    REQUIRE(colors.size() == kThemeTokenCount);
+    for (const auto& [name, value] : colors) {
+        const auto token = tokens.at(name);
+        const auto& actual = color_for(theme, token);
+        if (const auto* hex = value.get_if<std::string>()) {
+            if (hex->empty()) {
+                CHECK(std::holds_alternative<TerminalDefaultThemeColor>(actual));
+            } else {
+                const auto rgb = system_theme_rgb(*hex);
+                const RgbThemeColor expected_color{.red = static_cast<std::uint8_t>(rgb.red),
+                        .green = static_cast<std::uint8_t>(rgb.green),
+                        .blue = static_cast<std::uint8_t>(rgb.blue)};
+                CHECK(actual == ResolvedThemeColor{expected_color});
+            }
+        } else {
+            const auto index = static_cast<std::uint8_t>(value.get_number());
+            CHECK(actual == ResolvedThemeColor{XtermThemeColor{.index = index}});
+        }
+    }
+    if (expected.at("appearance").get_if<support::JsonValue::null_t>() != nullptr) {
+        CHECK_FALSE(theme.appearance.has_value());
+    } else if (expected.at("appearance").get_string() == "dark") {
+        REQUIRE(theme.appearance.has_value());
+        CHECK(*theme.appearance == TerminalAppearance::Dark);
+    } else {
+        REQUIRE(theme.appearance.has_value());
+        CHECK(*theme.appearance == TerminalAppearance::Light);
+    }
+    const auto& dim = expected.at("dim").get_array();
+    REQUIRE(theme.dim.size() == dim.size());
+    for (std::size_t index = 0; index < dim.size(); ++index) {
+        CHECK(theme.dim[index] == tokens.at(dim[index].get_string()));
+    }
+}
+
+/// The frozen body-text contrast observation: recompute the WCAG ratio of
+/// each recorded token on each recorded surface from the product palette
+/// (`""` resolves through the reported terminal colors) and compare the
+/// exact recorded values, including the >= 4.5 minimum guarantee.
+void check_system_theme_text_contrast(const coding_agent::tui::ResolvedTheme& theme,
+        const support::JsonValue& scenario,
+        const tui::TerminalColors& reported) {
+    using namespace coding_agent::tui;
+    const auto tokens = system_theme_tokens();
+    const auto effective = [&](ThemeToken token) -> std::optional<tui::RgbColor> {
+        const auto& color = color_for(theme, token);
+        if (std::holds_alternative<TerminalDefaultThemeColor>(color)) {
+            return reported.foreground;
+        }
+        const auto* rgb = std::get_if<RgbThemeColor>(&color);
+        if (rgb == nullptr) return std::nullopt;
+        return tui::RgbColor{.red = static_cast<double>(rgb->red),
+                .green = static_cast<double>(rgb->green),
+                .blue = static_cast<double>(rgb->blue)};
+    };
+    const auto surface_color = [&](std::string_view surface) -> std::optional<tui::RgbColor> {
+        if (surface == "background") return reported.background;
+        return effective(tokens.at(std::string{surface}));
+    };
+    const auto& contrast = scenario.at("expected").at("textContrast");
+    for (const auto& [token_name, observation] : contrast.get_object()) {
+        const auto color = effective(tokens.at(token_name));
+        REQUIRE(color.has_value());
+        double minimum = std::numeric_limits<double>::infinity();
+        for (const auto& [surface, ratio] : observation.at("surfaces").get_object()) {
+            const auto on = surface_color(surface);
+            REQUIRE(on.has_value());
+            const auto computed = wcag_contrast(*color, *on);
+            CHECK(computed == ratio.get_number());
+            minimum = std::min(minimum, computed);
+        }
+        CHECK(observation.at("minimum").get_number() == minimum);
+        CHECK(minimum >= 4.5);
+    }
+}
+
+TEST_CASE("the reserved system name generates the palette from reported terminal colors",
+        "[coding_agent][theme][controller][system][issue1032][spec]") {
+    const auto artifact = tests::read_pi_v130_audit_candidate("audit-1032", "system-theme-capture.json");
+    REQUIRE(artifact);
+    const auto& indexed_pending =
+            system_theme_scenario(artifact.value(), "no report pending renders indexed grayscale with faint neutrals");
+    const auto& dark_full =
+            system_theme_scenario(artifact.value(), "dark terminal full palette anchors hues to the reported colors");
+    const auto& light_full =
+            system_theme_scenario(artifact.value(), "light terminal full palette anchors hues to the reported colors");
+
+    // The controller boots the system theme pending: grayscale, indexed,
+    // faint neutral tokens (frozen `markTerminalColorsPending` in the
+    // controller constructor, before any report arrived).
+    tests::EnvVarGuard env("COLORFGBG", std::nullopt);
+    ControllerHarness harness;
+    auto controller = make_controller(harness, {}, {}, std::optional<std::string>{"system"});
+    CHECK(controller.active_theme_name() == "system");
+    check_system_theme_matches(controller.active_resolved_theme(), indexed_pending);
+    // pi `Theme.fg` for a faint token: `<ansi>\x1b[2m<text>\x1b[22;39m`.
+    CHECK(controller.live_theme().foreground(coding_agent::tui::ThemeToken::Muted, "x") ==
+            "\x1b[39m\x1b[2mx\x1b[22;39m");
+
+    // A full dark report regenerates the anchored palette through the
+    // public terminal-colors sink (pi `applyTerminalColors`).
+    controller.apply_terminal_colors(system_theme_report(dark_full.at("inputs")));
+    CHECK(controller.active_theme_name() == "system");
+    check_system_theme_matches(controller.active_resolved_theme(), dark_full);
+    check_system_theme_text_contrast(
+            controller.active_resolved_theme(), dark_full, system_theme_report(dark_full.at("inputs")));
+    // Body text reached for the terminal's own foreground ("" tokens): the
+    // faint set is empty and the terminal default renders unstyled.
+    CHECK(controller.live_theme().foreground(coding_agent::tui::ThemeToken::ToolTitle, "x") == "\x1b[39mx\x1b[39m");
+
+    // The same report through a light-background terminal generates the
+    // light appearance (separate controller, COLORFGBG still unset).
+    ControllerHarness light_harness;
+    auto light_controller = make_controller(light_harness, {}, {}, std::optional<std::string>{"system"});
+    light_controller.apply_terminal_colors(system_theme_report(light_full.at("inputs")));
+    CHECK(light_controller.active_theme_name() == "system");
+    check_system_theme_matches(light_controller.active_resolved_theme(), light_full);
+
+    // A repeated identical report is skipped (pi `sameTerminalColors`): the
+    // palette stays the generated one and nothing re-renders.
+    const auto changed = harness.changed;
+    controller.apply_terminal_colors(system_theme_report(dark_full.at("inputs")));
+    CHECK(harness.changed == changed);
+    check_system_theme_matches(controller.active_resolved_theme(), dark_full);
+
+    // Discriminating precedence: an explicit theme name survives the same
+    // report — the generated palette must not leak into it.
+    ControllerHarness explicit_harness;
+    auto explicit_controller = make_controller(explicit_harness, {}, {}, std::optional<std::string>{"dark"});
+    explicit_controller.apply_terminal_colors(system_theme_report(dark_full.at("inputs")));
+    CHECK(explicit_controller.active_theme_name() == "dark");
+    CHECK(explicit_controller.active_resolved_theme() == coding_agent::tui::builtin_dark_theme());
+
+    // The reserved name outranks a registered theme of the same name
+    // (frozen `loadTheme`: the system case runs before registered themes).
+    ControllerHarness reserved_harness;
+    std::vector<coding_agent::tui::RegisteredTheme> registered{{
+            .theme = *coding_agent::tui::parse_theme_json("impostor.json", tests::fixture_theme("system", "#123456")),
+            .source_path = "impostor.json",
+    }};
+    auto reserved_controller =
+            make_controller(reserved_harness, {}, std::move(registered), std::optional<std::string>{"system"});
+    reserved_controller.apply_terminal_colors(system_theme_report(dark_full.at("inputs")));
+    CHECK(reserved_controller.active_theme_name() == "system");
+    check_system_theme_matches(reserved_controller.active_resolved_theme(), dark_full);
+}
+
+TEST_CASE("system theme pending grayscale and indexed tiers match the frozen capture",
+        "[coding_agent][theme][controller][system][issue1032][spec]") {
+    const auto artifact = tests::read_pi_v130_audit_candidate("audit-1032", "system-theme-capture.json");
+    REQUIRE(artifact);
+
+    // Unset COLORFGBG: the appearance hint is the dark fallback; the boot
+    // palette is the indexed grayscale tier until the first report.
+    tests::EnvVarGuard env("COLORFGBG", std::nullopt);
+    ControllerHarness harness;
+    auto controller = make_controller(harness);
+    CHECK(controller.active_theme_name() == "system");
+    check_system_theme_matches(controller.active_resolved_theme(),
+            system_theme_scenario(artifact.value(), "no report pending renders indexed grayscale with faint neutrals"));
+
+    // A timeout that reports nothing still ends the pending state (pi
+    // `setTerminalColors`): the settled indexed tier takes the ANSI slots.
+    controller.apply_terminal_colors(tui::TerminalColors{});
+    CHECK(controller.active_theme_name() == "system");
+    check_system_theme_matches(controller.active_resolved_theme(),
+            system_theme_scenario(artifact.value(), "no report settled renders indexed palette slots"));
+
+    // COLORFGBG as the light hint drives the indexed light variants.
+    tests::EnvVarGuard light_env("COLORFGBG", "0;15");
+    ControllerHarness light_harness;
+    auto light_controller = make_controller(light_harness);
+    check_system_theme_matches(light_controller.active_resolved_theme(),
+            system_theme_scenario(artifact.value(), "no report pending light hint renders indexed grayscale"));
+    light_controller.apply_terminal_colors(tui::TerminalColors{});
+    check_system_theme_matches(light_controller.active_resolved_theme(),
+            system_theme_scenario(artifact.value(), "no report settled light hint renders indexed palette slots"));
+
+    // Tier 2: a background without a palette generates from the families'
+    // own hues, in both appearances.
+    const auto& dark_family = system_theme_scenario(artifact.value(), "dark terminal without palette uses family hues");
+    ControllerHarness family_harness;
+    auto family_controller = make_controller(family_harness);
+    family_controller.apply_terminal_colors(system_theme_report(dark_family.at("inputs")));
+    CHECK(family_controller.active_theme_name() == "system");
+    check_system_theme_matches(family_controller.active_resolved_theme(), dark_family);
+    check_system_theme_text_contrast(
+            family_controller.active_resolved_theme(), dark_family, system_theme_report(dark_family.at("inputs")));
+
+    const auto& light_family =
+            system_theme_scenario(artifact.value(), "light terminal without palette uses family hues");
+    ControllerHarness light_family_harness;
+    auto light_family_controller = make_controller(light_family_harness);
+    light_family_controller.apply_terminal_colors(system_theme_report(light_family.at("inputs")));
+    CHECK(light_family_controller.active_theme_name() == "system");
+    check_system_theme_matches(light_family_controller.active_resolved_theme(), light_family);
 }
 
 TEST_CASE("theme controller preview failure falls back to dark without invalidating",
