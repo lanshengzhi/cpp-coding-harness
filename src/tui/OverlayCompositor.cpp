@@ -316,7 +316,11 @@ RenderResult OverlayCompositor::materialize_images(
                                          ? std::min(image.region.rows, output.lines.size() - target_row)
                                          : std::size_t{1};
         const auto use_fallback = [&] {
-            output.lines[target_row] = image.fallback_text;
+            // pi truncates the component fallback to the render width
+            // (`truncateToWidth`, components/image.ts): the line must never
+            // exceed the viewport/box width it is written into.
+            const auto fallback = truncate_text(image.fallback_text, width);
+            output.lines[target_row] = fallback ? std::move(*fallback) : image.fallback_text;
             if (source_rows > 1) {
                 output.lines.erase(output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + 1),
                         output.lines.begin() + static_cast<std::ptrdiff_t>(target_row + source_rows));
@@ -342,32 +346,46 @@ RenderResult OverlayCompositor::materialize_images(
             image.pixel_height = converted_dimensions->height;
         }
 
-        if (!capabilities.cell_pixels || capabilities.cell_pixels->width == 0 ||
-                capabilities.cell_pixels->height == 0 ||
-                !protocol_supports_mime(capabilities.inline_images, image.mime_type) || image.pixel_width == 0 ||
-                image.pixel_height == 0 || image.region.column >= width) {
-            use_fallback();
-            continue;
-        }
+        // A component-declared cell box with no size constraints (the
+        // InlineImageRenderRegion carries the layout reservation, which the
+        // fullscreen image stage already trusts) is authoritative: a raw
+        // component-rendered escape ships the size the component computed,
+        // like pi's. Images WITH max_width/max_height constraints — the Image
+        // component sets both — are refined here from pixels and the viewport
+        // so a late cell-size update still converges (issue994).
+        const bool declared_box =
+                image.region.columns > 0 && image.region.rows > 0 && !image.max_width && !image.max_height;
+        std::size_t columns = 0;
+        std::size_t rows = 0;
+        if (declared_box) {
+            columns = image.region.columns;
+            rows = image.region.rows;
+        } else {
+            if (!capabilities.cell_pixels || capabilities.cell_pixels->width == 0 ||
+                    capabilities.cell_pixels->height == 0 || image.pixel_width == 0 || image.pixel_height == 0) {
+                use_fallback();
+                continue;
+            }
 
-        const auto available_width = width - image.region.column;
-        const auto default_width = std::min<std::size_t>(width > 2 ? width - 2 : 1, 60);
-        const auto max_width = std::max<std::size_t>(
-            1,
-            std::min(available_width, image.max_width.value_or(default_width)));
-        const auto cells = *capabilities.cell_pixels;
-        const auto default_height = std::max<std::size_t>(
-            1,
-            (max_width * cells.width + cells.height - 1) / cells.height);
-        const auto max_height = std::max<std::size_t>(1, image.max_height.value_or(default_height));
-        const auto size = calculate_image_cell_size({.width = image.pixel_width, .height = image.pixel_height},
-                max_width,
-                max_height,
-                cells,
-                capabilities.inline_images == InlineImageProtocol::Kitty);
-        const auto columns = size.columns;
-        const auto rows = size.rows;
-        if (target_row >= available_rows || rows > available_rows - target_row) {
+            const auto available_width = width - image.region.column;
+            const auto default_width = std::min<std::size_t>(width > 2 ? width - 2 : 1, 60);
+            const auto max_width =
+                    std::max<std::size_t>(1, std::min(available_width, image.max_width.value_or(default_width)));
+            const auto cells = *capabilities.cell_pixels;
+            const auto default_height =
+                    std::max<std::size_t>(1, (max_width * cells.width + cells.height - 1) / cells.height);
+            const auto max_height = std::max<std::size_t>(1, image.max_height.value_or(default_height));
+            const auto size = calculate_image_cell_size({.width = image.pixel_width, .height = image.pixel_height},
+                    max_width,
+                    max_height,
+                    cells,
+                    capabilities.inline_images == InlineImageProtocol::Kitty);
+            columns = size.columns;
+            rows = size.rows;
+        }
+        if (!protocol_supports_mime(capabilities.inline_images, image.mime_type) || image.region.column >= width ||
+                image.region.column + columns > width || target_row >= available_rows ||
+                rows > available_rows - target_row) {
             use_fallback();
             continue;
         }
@@ -476,15 +494,13 @@ support::ExpectedVoid OverlayCompositor::composite(TerminalDimensions dimensions
                     output.lines[target_row], materialized.lines[row], final_col, overlay_width, dimensions.columns);
             if (!composited) return std::unexpected(composited.error());
             output.lines[target_row] = std::move(*composited);
-
-            const CellRegion written{
-                    .column = final_col,
-                    .row = target_row,
-                    .columns = overlay_width,
-                    .rows = 1,
-            };
-            std::erase_if(
-                    output.images, [&](const auto& image) { return cell_regions_intersect(image.region, written); });
+            // Base images whose cell region intersects the overlay row are
+            // KEPT: frozen pi's overlay composite splices text over the
+            // covered cells but leaves the placement record in place, and the
+            // fullscreen image stage re-emits it (audit-1035
+            // `wezterm-overlay-inside-placement-span` shows `a=p` after the
+            // overlay text in both the shown and hidden frames). Erasing them
+            // here was the divergence that dropped the placement.
         }
 
         if (materialized.cursor && materialized.cursor->row < materialized.lines.size()) {

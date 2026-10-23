@@ -293,7 +293,7 @@ TEST_CASE("OverlayCompositor closes an open hyperlink once when the splice is sh
     CHECK(tui::visible_width(output.lines[0]) == 8);
 }
 
-TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "[tui][overlay][spec]") {
+TEST_CASE("OverlayCompositor keeps base images intersecting overlaid regions", "[tui][overlay][spec]") {
     tui::detail::OverlayCompositor compositor;
     const tui::TerminalDimensions dimensions{.columns = 10, .rows = 4};
     const auto capabilities = kitty_capabilities();
@@ -314,9 +314,15 @@ TEST_CASE("OverlayCompositor clips base images intersecting overlaid regions", "
 
     REQUIRE(compositor.composite(dimensions, capabilities, output, false));
 
+    // Frozen pi keeps the placement under an overlaid row and re-emits it
+    // (fixtures/pi-v1.3.0/audit-1035 `wezterm-overlay-inside-placement-span`
+    // shows `a=p` after the overlay text); the previous clip-on-intersect
+    // expectation was the divergence. The overlay text still splices over the
+    // covered cells.
     CHECK(output.lines[0].starts_with("X"));
-    REQUIRE(output.images.size() == 1);
-    CHECK(output.images[0].resource_id == 2);
+    REQUIRE(output.images.size() == 2);
+    CHECK(output.images[0].resource_id == 1);
+    CHECK(output.images[1].resource_id == 2);
 }
 
 TEST_CASE("OverlayCompositor picks the nearest cell aspect for Kitty images", "[tui][overlay][spec][issue994]") {
@@ -581,8 +587,7 @@ TEST_CASE("OverlayCompositor reports focus target availability and topmost focus
 
 TEST_CASE("OverlayCompositor materialization keeps the component-declared cell region",
         "[tui][overlay][image][issue1035][compat-pi]") {
-    tui::RenderResult output{.lines = std::vector<std::string>(4, ""),
-            .images = {declared_span_image(7301)}};
+    tui::RenderResult output{.lines = std::vector<std::string>(4, ""), .images = {declared_span_image(7301)}};
 
     const auto materialized =
             tui::detail::OverlayCompositor::materialize_images(std::move(output), kitty_capabilities(), 20, 4);
@@ -597,8 +602,8 @@ TEST_CASE("OverlayCompositor materialization truncates an unplaceable image fall
     // Declared 2x5 does not fit the 4-row viewport, so the component fallback
     // shows; pi truncates the fallback to the render width (`truncateToWidth`,
     // components/image.ts), never past the terminal columns.
-    tui::RenderResult output{.lines = std::vector<std::string>(4, ""),
-            .images = {declared_span_image(7301, /*rows=*/5)}};
+    tui::RenderResult output{
+            .lines = std::vector<std::string>(4, ""), .images = {declared_span_image(7301, /*rows=*/5)}};
 
     const auto materialized =
             tui::detail::OverlayCompositor::materialize_images(std::move(output), kitty_capabilities(), 20, 4);
@@ -614,8 +619,7 @@ TEST_CASE("OverlayCompositor composite keeps base images intersecting an overlay
     const tui::TerminalDimensions dimensions{.columns = 20, .rows = 4};
     const auto capabilities = kitty_capabilities();
 
-    tui::RenderResult output{.lines = std::vector<std::string>(4, ""),
-            .images = {declared_span_image(7301)}};
+    tui::RenderResult output{.lines = std::vector<std::string>(4, ""), .images = {declared_span_image(7301)}};
     output = tui::detail::OverlayCompositor::materialize_images(
             std::move(output), capabilities, dimensions.columns, dimensions.rows);
     REQUIRE(output.images.size() == 1);
