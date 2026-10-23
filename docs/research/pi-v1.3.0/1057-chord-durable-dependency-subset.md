@@ -1,8 +1,9 @@
 # 1057 — Durable-required Chord dependency subset (pi v1.3.0)
 
 Status: **dependency audit complete; later implementation slices recorded separately** (ticket #1057,
-parent #1044, ADR 0075). #1061 implements prepared full replacement and mutable application in the
-Pike C++ Chord package; its evidence and remaining verification limits are recorded below.
+parent #1044, ADR 0075). #1061 implements prepared full replacement and mutable application, and
+#1062 implements the attached replicated-state and observer-delivery surface in the Pike C++ Chord
+package; evidence and remaining verification limits are recorded below.
 
 ## Result in one paragraph
 
@@ -11,7 +12,7 @@ Frozen pi-durable v1.3.0 imports four public surfaces of `@earendil-works/chord`
 capabilities** in seven families: Context/cancellation, document transactions and observation,
 delta tracking/application, revisions, replicated state, strict JSON, and bounded output. The
 remaining five Chord rows are unrelated plugin/host/RPC/cluster/cell surfaces and are bounded out
-under ADR 0075. The dependency audit carries **46 upstream-captured rows**, **7 deliberately
+under ADR 0075. The dependency audit carries **47 upstream-captured rows**, **6 deliberately
 unverified gaps**, and **5 not-applicable exclusions**. No row is marked `verified`: upstream
 capture records frozen behavior, while verification requires a completed C++ comparison at the same
 scenario boundary. The 1057 bundle contains **33 frozen public-path scenarios** in five artifacts.
@@ -263,8 +264,9 @@ harness modules; `JsonValue`, `Draft`, and `JsonRepresentation` are pervasive do
 
 ## Current C++ mechanics: what maps, what does not
 
-No `cch_chord`, `cch_durable`, document/revision/delta runtime, or replicated-state attachment
-exists in the current tree. The relevant existing mechanics are:
+The #1062 implementation adds attached replicated state and per-subscription delivery in
+`cch_chord`; `cch_durable` and its document transaction runtime remain absent. The remaining relevant
+C++ mechanics are:
 
 | Required obligation | Existing C++ mechanic | Limit |
 | --- | --- | --- |
@@ -273,7 +275,7 @@ exists in the current tree. The relevant existing mechanics are:
 | Detached cleanup / close | `withoutAbortSignal` has no C++ equivalent; current `AgentSession` owns lifecycle directly | A cancelled close currently has no generic detached cleanup path; must not abort storage work |
 | Durable transaction/document observation | `src/coding_agent/include/cch/coding_agent/ProjectionStream.hpp` (ADR 0052) provides Base + ordered value-bearing patches and mailbox resync; `tests/coding_agent/ProjectionStreamTest.cpp` covers attach/convergence/overflow | Projection is an in-process read-model stream, not a document revision source: no document identity, definition version, `Op` batch, revision adoption, stale preparation, or storage durability |
 | Delta tracking/application | None. `support::JsonValue` is a value carrier only; no `Draft`, `Tracker`, `Prepared`, `apply`/`applyImmutable`/`applyImmutableBatches` | Projection `apply_projection_patches` is not a substitute: it replaces read-model slices, does not apply durable JSON operations or preserve revision identity |
-| Replicated state | None. `TaskStore`/`TaskScheduler` are task records/scheduling, not replicated document state | No source attachment, snapshot cursor, gap handling, `onError`, or hydration/update delivery |
+| Replicated state | `src/chord/include/cch/chord/ReplicatedState.hpp` and `src/chord/ReplicatedState.cpp`: atomic source attachment, snapshot cursor, ordered frames, retained immutable values, cursor-gap failure, per-subscriber serialized bounded delivery and disposal | No `cch_durable` source adapter or document-history/retention implementation; these remain in #1063 |
 | Strict JSON | `support::JsonValue` + `read_json`/`write_json`; `tests/support/JsonValueIoTest.cpp` pins Glaze-compatible parsing/serialization | Parser is not a strict JSON-value validator (trailing content tolerated), writer maps non-finite to `null`, object keys are sorted and `undefined` is unrepresentable |
 | Bounded output | `src/support/include/cch/support/BoundedText.hpp` (`bounded_utf8`, `utf8_tail_start`, `bounded_utf8_tail`) and `src/support/include/cch/support/OutputLimiter.hpp`; `tests/support/BoundedTextTest.cpp`/`tests/support/OutputLimiterTest.cpp` cover UTF-8 boundaries and head/tail truncation | No Chord `bytes/droppedBytes/droppedLines` result, no incremental `OutputBuffer`, no `Progress` pacing; these are analogous mechanics, not interchangeable contracts |
 | Progress rate | None | Only the frozen constant is captured; pacing behavior remains unverified |
@@ -339,30 +341,36 @@ The five excluded rows are:
 remain excluded; generic durable storage, transactions, recovery, execution and the required
 document/delta/state semantics are not excluded.
 
-## Implementation update from #1061
+## Implementation updates from #1061 and #1062
 
 The #1061 frozen bundle is registered in `fixtures/pi-v1.3.0/audit-1061/manifest.json` and adds
 direct `prepareReplace` and operation-by-operation validation observations. C++ tests compare
 prepared-base retention, ownership, no-op normalization, stale adoption, abort, mutable partial
 writes after a later invalid operation, and caller-visible root-replacement behavior.
 `delta:prepare-replace` and `delta:mutable-application` are recorded as implemented and
-`upstream-captured`; the ledger records their direct C++ tests while keeping that verification
-status until a same-boundary frozen comparison is accepted. Checkpoint predicate policy remains
-outside #1061 and is not implemented by the Chord slice.
+`upstream-captured`; their C++ regressions remain separate comparison evidence. Checkpoint predicate
+policy remains outside #1061 and is not implemented by the Chord slice.
+
+The #1062 frozen bundle is registered in `fixtures/pi-v1.3.0/audit-1062/manifest.json` and captures
+ordered frame delivery, cursor gaps, observer failure isolation, the 100-delivery pending bound,
+subscription disposal and retained-value behavior. `tests/chord/ReplicatedStateTest.cpp` exercises
+the public `AttachedReplicatedState` API, including a strictly backward cursor and a held listener
+while a fast observer receives all publications. The 1057 ledger records all six state rows as
+implemented and retains their upstream-captured status: C++ tests establish Pike behavior, while the
+frozen artifacts record the upstream behavior. Durable document-source history and eviction remain
+in #1063.
 
 ## Unverified gaps (not exclusions)
 
-The seven unverified required rows are:
+The six unverified required rows are:
 
 1. `context:root-background` — direct root identity/string/default capture; only a derived root is
    observed.
 2. `document:checkpoint-bases` — checkpoint predicate/base selection and retained delta tail.
 3. `document:retention` — document cache eviction/retention timing.
-4. `state:pending-bound` — state-subscriber overflow with an in-flight callback (the durable
-   watcher overflow is captured).
-5. `json:json-value` — a direct C++-comparable `JsonValue` model scenario.
-6. `json:json-representation` — compile-time representation mapping has no runtime scenario.
-7. `output:progress` — throttled `Progress` pacing/timing.
+4. `json:json-value` — a direct C++-comparable `JsonValue` model scenario.
+5. `json:json-representation` — compile-time representation mapping has no runtime scenario.
+6. `output:progress` — throttled `Progress` pacing/timing.
 
 These are recorded as `unverified`, never as Deferred or excluded. The audit also has no row marked
 `verified`: `upstream-captured` records a bundle-pinned frozen observation, and a row becomes
@@ -396,7 +404,7 @@ jq -e . docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json
 
 Capture printed five artifacts and the manifest. `check` printed the candidate registry record
 above and exited 0. The ledger is valid JSON and its counts are 58 rows: 53 supported / 5 excluded;
-33 missing / 18 partial / 2 implemented; 46 upstream-captured / 7 unverified / 5 not-applicable.
+28 missing / 17 partial / 8 implemented; 47 upstream-captured / 6 unverified / 5 not-applicable.
 
 The serial merger should register only this record in
 `fixtures/pi-v1.3.0/baselines.json` under `baselines["pi-v1.3.0"].bundles`, after verifying the
@@ -409,6 +417,6 @@ manifest hash:
 }
 ```
 
-#1057 itself made no shared registry or production alignment changes; later issue #1061 owns the
-Chord implementation and evidence updates described above. Integration merge and issue close-out
-remain separate delivery steps.
+#1057 itself made no shared registry or production alignment changes; later issues #1061 and #1062
+own the Chord implementation and evidence updates described above. Integration merge and issue
+close-out remain separate delivery steps.
