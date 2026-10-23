@@ -48,18 +48,17 @@
   "counts": {
     "rows": 58,
     "membership": {
-      "excluded": 5,
-      "supported": 53
+      "supported": 53,
+      "excluded": 5
     },
     "implementation": {
-      "missing": 33,
-      "partial": 18,
-      "implemented": 2
+      "partial": 17,
+      "missing": 28,
+      "implemented": 8
     },
     "verification": {
-      "not-applicable": 5,
-      "unverified": 7,
-      "upstream-captured": 46
+      "unverified": 6,
+      "upstream-captured": 47
     }
   },
   "rows": [
@@ -1061,25 +1060,23 @@
         "packages/chord/test/replicated-state.test.ts:hydrates at sequence zero when attaching after existing commits; publishes exact source values without applying or re-diffing"
       ],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/session/observation.ts:CommittedStateSource",
       "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": "#1062",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
         "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
         "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
       },
-      "gaps": [
-        "ProjectionStream does not expose a replicated-state source/attachment API, cursor, or onError."
-      ],
+      "gaps": [],
       "notes": "",
-      "cppSeam": "src/coding_agent/include/cch/coding_agent/ProjectionStream.hpp:ProjectionStreamBase,ProjectionStreamPatchMsg,apply_projection_patches",
-      "cppEvidence": "tests/coding_agent/ProjectionStreamTest.cpp:Projection attach delivers a Base then ordered patches to concurrent subscribers; Projection mailbox overflow resynchronizes with a fresh Base and never blocks the Core",
-      "recommendation": "Use an explicit source attachment with a snapshot cursor; the current projection stream is a base+patch analogue but has no source cursor or hydration contract."
+      "cppSeam": "src/chord/include/cch/chord/ReplicatedState.hpp:ReplicatedStateSource,AttachedReplicatedState::attach,value,subscribe; src/chord/ReplicatedState.cpp:ReplicatedStatePublisher::publish,ReplicatedStatePublisher::subscribe",
+      "cppEvidence": "tests/chord/ReplicatedStateTest.cpp:attached state restores the latest committed revision when subscribing after existing commits; attachment captures the snapshot before activation and drains buffered frames in commit order; exact source values are published without applying or re-diffing frame operations; a retained value reference keeps the revision it was read at; negative safe integer cursors are accepted for the snapshot and later frames",
+      "recommendation": "The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063."
     },
     {
       "id": "cch_chord:state:cursor-gap",
@@ -1089,12 +1086,12 @@
         "packages/chord/src/state.ts:AttachedReplicatedState.#receive; packages/chord/test/replicated-state.test.ts:reports cursor gaps, disposes the broken attachment, and ignores later frames"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedStateSource; packages/durable/src/session/session.ts:SessionImpl.documentState",
       "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": "#1062",
       "scenario": "a cursor gap is reported once and leaves the last good replicated value",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
@@ -1103,8 +1100,8 @@
       },
       "gaps": [],
       "notes": "",
-      "cppSeam": "",
-      "cppEvidence": "",
+      "cppSeam": "src/chord/include/cch/chord/ReplicatedState.hpp:ReplicatedStateSourceFrame,ReplicatedStateSourceOptions; src/chord/ReplicatedState.cpp:AttachedReplicatedState::Impl::receive,AttachedReplicatedState::Impl::fail",
+      "cppEvidence": "tests/chord/ReplicatedStateTest.cpp:a cursor gap is reported once and leaves the last good replicated value; a repeated cursor is reported once as a gap and keeps the last good value; a backward cursor reports one ordering gap and retains the last good value; a frame cursor outside the safe integer range fails the attachment and keeps the last good value; a gap while draining buffered activation stops dispatch without touching a disposed listener",
       "recommendation": "Reject a gap rather than silently applying later frames; surface it through a typed error callback."
     },
     {
@@ -1115,12 +1112,12 @@
         "packages/chord/src/state.ts:StateSubscriber; packages/chord/test/replicated-state-delivery.test.ts:isolates a synchronous hydration failure without removing the subscription"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/task-graph.ts:replicatedState(observer,{onError})",
       "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": "#1062",
       "scenario": "a failing state listener is reported through onError without stopping another subscription",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
@@ -1129,8 +1126,8 @@
       },
       "gaps": [],
       "notes": "",
-      "cppSeam": "",
-      "cppEvidence": "",
+      "cppSeam": "src/chord/include/cch/chord/ReplicatedState.hpp:ReplicatedStateErrorHook,ReplicatedStateSink; src/chord/ReplicatedState.cpp:StateSubscriber::drain,StateSubscriber::report",
+      "cppEvidence": "tests/chord/ReplicatedStateTest.cpp:a failing listener is reported in isolation and keeps receiving later deliveries; a synchronous hydration failure is reported without removing the subscription; a callback rejection that settles after unsubscribe is still reported",
       "recommendation": "Catch per-subscriber failures, report them without rethrowing into the source, and keep independent delivery queues."
     },
     {
@@ -1141,12 +1138,12 @@
         "packages/chord/src/state.ts:StateSubscriber.drain; packages/chord/test/replicated-state-delivery.test.ts:serializes reentrant hydration and update callbacks"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts",
       "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": "#1062",
       "scenario": "a watch acquired before start buffers frames and serializes callbacks",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
@@ -1155,8 +1152,8 @@
       },
       "gaps": [],
       "notes": "",
-      "cppSeam": "",
-      "cppEvidence": "",
+      "cppSeam": "src/chord/include/cch/chord/ReplicatedState.hpp:ReplicatedStateSink,AttachedReplicatedState::subscribe; src/chord/ReplicatedState.cpp:StateSubscriber::push,StateSubscriber::drain,ReplicatedStatePublisher::publish",
+      "cppEvidence": "tests/chord/ReplicatedStateTest.cpp:reentrant commits buffer in order and a late subscriber hydrates at the latest sequence; one subscription serializes reentrant hydration and update callbacks in publication order; a held listener serializes its own updates while another subscription converges independently; two subscriptions of the same listener behavior are delivered independently; subscribers are delivered in registration order with reentrant unsubscribe and subscribe",
       "recommendation": "Give every observer an independent serialized queue; never invoke an async listener reentrantly."
     },
     {
@@ -1167,20 +1164,22 @@
         "packages/chord/src/state.ts:StateSubscriber.push; packages/chord/test/replicated-state-delivery.test.ts:excludes a running update from overflow and retains exact value/context/delivery"
       ],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/session/session.ts:SessionImpl.documentState",
       "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
-      "scenario": null,
-      "evidence": null,
-      "gaps": [
-        "The watch overflow scenario covers the durable watcher's 100-frame reset; state-subscriber overflow with an in-flight callback is not separately captured."
-      ],
+      "implementation_ticket": "#1062",
+      "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1062/observer-delivery.json",
+        "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
+        "result": "The frozen observer delivery capture records a 100-pending limit and coalesces overflow to the newest pending value, context, and delivery."
+      },
+      "gaps": [],
       "notes": "",
-      "cppSeam": "",
-      "cppEvidence": "",
+      "cppSeam": "src/chord/include/cch/chord/ReplicatedState.hpp:kReplicatedStatePendingLimit; src/chord/ReplicatedState.cpp:StateSubscriber::push",
+      "cppEvidence": "tests/chord/ReplicatedStateTest.cpp:at most 100 deliveries pend behind one held listener while a commit fits the bound; overflow at the 100-pending bound keeps the newest pending delivery; repeated overflow at the 100-pending bound keeps the newest pending delivery; overflow keeps only the newest pending delivery with its exact value context and delivery; pending overflow keeps the newest frame while fast observers follow every publication",
       "recommendation": "Declare one bounded pending-observation capacity and make overflow collapse to the newest state without corrupting the running callback."
     },
     {
@@ -1191,12 +1190,12 @@
         "packages/chord/src/state.ts:AttachedReplicatedState.dispose; packages/chord/test/replicated-state.test.ts:keeps attachments independent and disposes each idempotently"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/view.ts",
       "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
+      "implementation_ticket": "#1062",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "evidence": {
         "artifact": "fixtures/pi-v1.3.0/audit-1057/replicated-state.json",
@@ -1205,8 +1204,8 @@
       },
       "gaps": [],
       "notes": "",
-      "cppSeam": "",
-      "cppEvidence": "",
+      "cppSeam": "src/chord/include/cch/chord/ReplicatedState.hpp:ReplicatedStateSourceAttachment::dispose,AttachedReplicatedState::dispose; src/chord/ReplicatedState.cpp:StateSubscriber::close,AttachedReplicatedState::Impl::dispose",
+      "cppEvidence": "tests/chord/ReplicatedStateTest.cpp:independent attachments converge separately and dispose idempotently; unsubscribe discards queued deliveries without aborting the running callback; a snapshot cursor outside the safe integer range fails attach and disposes the attachment once",
       "recommendation": "Make observer disposal idempotent and release source resources exactly once; do not clear the last good value."
     },
     {

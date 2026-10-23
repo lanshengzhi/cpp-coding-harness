@@ -96,25 +96,23 @@ the C++ contract, not pi parity.
 
 ## 3. Evidence routes and bundled scenarios
 
-The twenty-three registered bundles ([baselines.json](../../../fixtures/pi-v1.3.0/baselines.json)) hold 76
-artifacts and 461 scenarios. The consolidation covers the 458 scenarios of the registered families
+The twenty-three registered bundles ([baselines.json](../../../fixtures/pi-v1.3.0/baselines.json)) hold 77
+artifacts and 468 scenarios. The consolidation covers all 465 scenarios of the registered families
 (audit-1046 is the bootstrap evidence-infrastructure bundle):
 
-- 320 scenarios are named directly by at least one consolidated row's comparison list;
-- 47 more scenarios are covered because their artifact is referenced by a row (the row records the
+- 346 scenarios are named directly by at least one consolidated row's comparison list;
+- 55 more scenarios are covered because their artifact is referenced by a row (the row records the
   artifact-level capture without listing every scenario name);
-- 91 scenarios are registered as explicit `orphanScenarios` with a reason, related rows and a
+- 64 scenarios are registered as explicit `orphanScenarios` with a reason, related rows and a
   disposition instead of being silently linked to a different semantics: 3 of
-  `audit-1050/input-standalone.json`, 9 of `audit-1061` (`prepare-replace.json`,
-  `draft-array-holes.json`, `review-fixes.json`), 24 of `audit-1062` (`ordered-frames.json`,
-  `observer-delivery.json`, `review-edges.json`), 21 of `audit-1101` (`structured-content.json`,
+  `audit-1050/input-standalone.json`, 6 of `audit-1061` (`draft-array-holes.json`,
+  `review-fixes.json`), 21 of `audit-1101` (`structured-content.json`,
   `structured-content-order.json`), 7 of `audit-1063/session-transactions.json`, 7 of
   `audit-1124/clipboard-osc52.json`, 3 of `audit-1121/output-pad.json`, 1 of
   `audit-1123/named-session-program-status.json`, 1 of `audit-810/thinking-selector.json`, 10 of
   `audit-1032/system-theme-capture.json`, 3 of `audit-1035/placement-span.json` and 2 of
   `audit-831/dock-footer.json`;
-- 0 scenarios are unrouted: no registered audit scenario is missing a route, and the 91
-  orphans above stay explicit rather than being absorbed into a row; the checker fails if any
+- 0 scenarios are unrouted: no registered audit scenario is missing a route; the checker fails if any
   registered audit scenario is neither named, artifact-covered nor registered as an orphan.
 
 Route semantics enforced by the checker:

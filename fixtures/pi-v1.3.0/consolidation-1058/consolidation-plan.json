@@ -547,6 +547,198 @@
         "agent-core:Agent:wait-for-idle"
       ],
       "authority": "/tmp/cch-1044-context/1047-merged.json reviewFindings[6]"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "an attached state restores the latest committed revision when subscribing after existing commits",
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "attachment captures the snapshot before activation and drains buffered frames in commit order",
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "exact source values are published without applying or re-diffing the frame operations",
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a repeated cursor is reported once as a gap and keeps the last good value",
+      "rows": [
+        "cch_chord:state:cursor-gap"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "one subscription serializes reentrant hydration and update callbacks in publication order",
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "independent attachments converge separately and dispose idempotently without affecting each other",
+      "rows": [
+        "cch_chord:state:dispose"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)",
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a held listener serializes its own updates while another subscription converges independently",
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
+      "rows": [
+        "cch_chord:state:pending-bound"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a failing listener is reported through onError in isolation and keeps receiving later deliveries",
+      "rows": [
+        "cch_chord:state:listener-error"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a synchronous hydration failure is reported without removing the subscription",
+      "rows": [
+        "cch_chord:state:listener-error"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "unsubscribe discards queued deliveries without aborting or joining the running callback",
+      "rows": [
+        "cch_chord:state:dispose"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a callback rejection that settles after unsubscribe is still reported",
+      "rows": [
+        "cch_chord:state:listener-error"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "two subscriptions of the same listener are delivered independently",
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
+      "rows": [
+        "cch_chord:state:delivery-order"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a retained value reference keeps the revision it was read at across a later commit",
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
+      "rows": [
+        "cch_chord:state:cursor-gap"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
+      "rows": [
+        "cch_chord:state:dispose"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "negative safe integer cursors are accepted for the snapshot and later frames",
+      "rows": [
+        "cch_chord:state:attached-hydration"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+      "rows": [
+        "cch_chord:state:cursor-gap"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
+      "ticket": "1057",
+      "scenario": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
+      "rows": [
+        "cch_chord:state:cursor-gap"
+      ],
+      "authority": "#1062 registered frozen capture plus tests/chord/ReplicatedStateTest.cpp public API comparison; verification remains upstream-captured"
     }
   ],
   "orphanScenarios": [
@@ -639,246 +831,6 @@
         "cch_chord:delta:mutable-application"
       ],
       "disposition": "the Chord delta slices must consume this observation when they implement nested key delete and readd"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "an attached state restores the latest committed revision when subscribing after existing commits",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": [
-        "cch_chord:state:attached-hydration"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement late attachment"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "attachment captures the snapshot before activation and drains buffered frames in commit order",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": [
-        "cch_chord:state:attached-hydration"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement attachment activation order"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "exact source values are published without applying or re-diffing the frame operations",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": [
-        "cch_chord:Chord:state"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement frame publication"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "a repeated cursor is reported once as a gap and keeps the last good value",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": [
-        "cch_chord:state:cursor-gap"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement repeated-cursor gap reporting"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement reentrant commit buffering"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "one subscription serializes reentrant hydration and update callbacks in publication order",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement per-subscription serialization"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "independent attachments converge separately and dispose idempotently without affecting each other",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
-      "rows": [
-        "cch_chord:state:dispose"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement independent attachment disposal"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:pending-bound"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:pending-bound"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:pending-bound"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a held listener serializes its own updates while another subscription converges independently",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement held-listener serialization"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:pending-bound"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement pending-delivery overflow"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a failing listener is reported through onError in isolation and keeps receiving later deliveries",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement listener failure isolation"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a synchronous hydration failure is reported without removing the subscription",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement hydration failure reporting"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "unsubscribe discards queued deliveries without aborting or joining the running callback",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:dispose"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement unsubscribe semantics"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a callback rejection that settles after unsubscribe is still reported",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement late callback settlement"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "two subscriptions of the same listener are delivered independently",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement independent subscriptions"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement subscriber registration order"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a retained value reference keeps the revision it was read at across a later commit",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:Chord:state"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement retained-value revision stability"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement source contract failure reporting"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:dispose"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement cursor range validation"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "negative safe integer cursors are accepted for the snapshot and later frames",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:attached-hydration"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement negative cursor acceptance"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:cursor-gap"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement frame cursor range validation"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:cursor-gap"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement buffered-activation gap handling"
     },
     {
       "family": "audit-1101",
