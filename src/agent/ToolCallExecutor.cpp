@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <atomic>
+#include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <format>
 #include <memory>
@@ -58,6 +60,13 @@ execute_with_update_lifetime(
 }
 
 constexpr std::string_view kOperationAbortedMessage{"Operation aborted"};
+
+/// pi `Math.round(performance.now() - startedAt)`: the recorded execution
+/// duration in whole milliseconds, measured with the monotonic clock.
+[[nodiscard]] std::int64_t measured_duration_ms(std::chrono::steady_clock::time_point started_at) {
+    return std::llround(
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - started_at).count());
+}
 
 [[nodiscard]] ai::ToolResultMessage error_tool_result(
     const ai::ToolCallContent& call,
@@ -296,9 +305,15 @@ struct SettledToolCall {
                         .partial_result = partial_result,
                 });
     };
+    // pi `executePreparedToolCall`: the clock starts immediately before the
+    // tool's execute and stops when it returns, covering thrown errors, so
+    // both the settled result and the paired end event carry the same
+    // recorded duration (#812).
+    const auto execution_started_at = std::chrono::steady_clock::now();
     auto executed = co_await execute_with_update_lifetime(
             tool, invocation, options.stop_token, std::move(update_sink), update_gate);
     release_concurrency();
+    const auto duration_ms = measured_duration_ms(execution_started_at);
 
     AsyncToolExecutionResult outcome;
     if (!executed) {
@@ -317,6 +332,7 @@ struct SettledToolCall {
     settled.tool_result.content = outcome.content;
     settled.tool_result.details = outcome.details;
     settled.tool_result.is_error = outcome.is_error;
+    settled.tool_result.duration_ms = duration_ms;
     settled.call_terminate = outcome.terminate;
 
     if (options.after_tool_call) {
@@ -451,6 +467,7 @@ boost::asio::awaitable<support::Expected<FinalizedToolCallResult>> ToolCallExecu
                     .tool_name = call.name,
                     .result = execution_result_from(settled.tool_result, settled.call_terminate),
                     .is_error = settled.tool_result.is_error,
+                    .duration_ms = settled.tool_result.duration_ms,
             });
     release_preparation();
     if (!end_emit) {

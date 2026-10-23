@@ -410,6 +410,66 @@ TEST_CASE("ToolCallExecutor executes a single exclusive call through the sequent
     CHECK(count_events<agent::MessageEndEvent>(run.events) == 1);
 }
 
+TEST_CASE("ToolCallExecutor records the measured duration on the settled result and the end event",
+        "[agent][tool-executor][issue812][spec]") {
+    // pi `createToolResultMessage` / `emitToolExecutionEnd`: the transcript
+    // result and the tool_execution_end event carry one monotonic-clock
+    // duration, so a resumed session renders the recorded value instead of
+    // re-measuring (#812).
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive,
+            "tool says ok",
+            std::chrono::milliseconds{40});
+    REQUIRE(registry.add(std::move(tool.tool)));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    REQUIRE(run.result->results[0].duration_ms.has_value());
+    const agent::ToolExecutionEndEvent* end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) end = finished;
+    }
+    REQUIRE(end != nullptr);
+    REQUIRE(end->duration_ms.has_value());
+    CHECK(*run.result->results[0].duration_ms == *end->duration_ms);
+    // The measured window encloses the tool's whole execute and an asio timer
+    // never fires before its expiry, so the recording cannot undercut the
+    // tool's own delay.
+    CHECK(*run.result->results[0].duration_ms >= 40);
+}
+
+TEST_CASE("ToolCallExecutor records the duration of a failing tool call", "[agent][tool-executor][issue812][spec]") {
+    // pi measures through the error path as well (agent-loop.ts wraps
+    // tool.execute in try/catch and still reports elapsed): the error result
+    // keeps its recorded duration (#812 error coverage).
+    agent::ToolRegistry registry;
+    REQUIRE(registry.add(
+            make_failing_tool(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()}, "boom")));
+
+    agent::ToolCallExecutor executor{registry, agent::ToolCallExecutorOptions{}};
+    auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(run.result->results[0].is_error);
+    REQUIRE(run.result->results[0].duration_ms.has_value());
+    const agent::ToolExecutionEndEvent* end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) end = finished;
+    }
+    REQUIRE(end != nullptr);
+    REQUIRE(end->duration_ms.has_value());
+    CHECK(*end->duration_ms == *run.result->results[0].duration_ms);
+}
+
 TEST_CASE("sequential execution coerces and validates the foundational argument contract before hooks and tools",
         "[agent][tool-executor][tool-arguments][spec]") {
     const support::JsonValue contract = support::JsonValue::object_t{
