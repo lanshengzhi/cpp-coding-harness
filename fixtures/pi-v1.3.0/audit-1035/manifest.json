@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1035",
   "family": "audit-1035",
-  "capturedAt": "2026-10-23T01:10:10.305Z",
+  "capturedAt": "2026-10-23T02:58:21.302Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -33,12 +33,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1035/capture-placement-span.mts",
-    "sha256": "bd5b58194402ae7fa56f4630aa72205d45a7f87f06125911c5d845ba85ffcc33",
+    "sha256": "c3c27062b0d94c9d75e1d65f88abdf69881a9f8b195cda5a471319257eb5c385",
     "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1035/capture-placement-span.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1035/capture-placement-span.mts",
-        "sha256": "bd5b58194402ae7fa56f4630aa72205d45a7f87f06125911c5d845ba85ffcc33"
+        "sha256": "c3c27062b0d94c9d75e1d65f88abdf69881a9f8b195cda5a471319257eb5c385"
       }
     ]
   },
@@ -46,8 +46,8 @@
     {
       "path": "placement-span.json",
       "family": "audit-1035",
-      "bytes": 8894,
-      "sha256": "1f01dd7c354e67a0e2c4d379732c88bd8db5bba6798d62440d0b804a162a9934",
+      "bytes": 8984,
+      "sha256": "fe8ec2b990dabc7d23ec3d4fb74283e762a05f02cd027efe37a47dd1b22c8bfa",
       "sourceEndpoints": [
         "packages/tui/src/tui-alt-screen.ts:imageCellsNeedRedraw,drawKittyImagesLast,prepareKittyScreen,compositeOverlays,doRender",
         "packages/tui/src/tui.ts:showOverlay",
@@ -129,7 +129,8 @@
           "normalizations": [
             "rename-image-ids",
             "drop-full-redraw-2J",
-            "drop-cursor-visibility-repeat"
+            "drop-cursor-visibility-repeat",
+            "drop-segment-reset"
           ],
           "upstreamTest": {
             "path": "packages/tui/test/tui-alt-screen.test.ts",
@@ -210,7 +211,8 @@
           "normalizations": [
             "rename-image-ids",
             "drop-full-redraw-2J",
-            "drop-cursor-visibility-repeat"
+            "drop-cursor-visibility-repeat",
+            "drop-segment-reset"
           ],
           "upstreamTest": {
             "path": "packages/tui/test/tui-alt-screen.test.ts",
@@ -294,7 +296,8 @@
           "normalizations": [
             "rename-image-ids",
             "drop-full-redraw-2J",
-            "drop-cursor-visibility-repeat"
+            "drop-cursor-visibility-repeat",
+            "drop-segment-reset"
           ],
           "upstreamTest": {
             "path": "packages/tui/test/tui-alt-screen.test.ts",

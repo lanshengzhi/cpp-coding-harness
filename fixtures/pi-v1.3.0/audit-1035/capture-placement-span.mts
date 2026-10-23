@@ -149,6 +149,11 @@ const NORMALIZATIONS = [
 	// Frozen re-asserts the hidden hardware cursor ("\x1b[?25l") in every frame; the C++
 	// viewport asserts cursor visibility only when it changes.
 	"drop-cursor-visibility-repeat",
+	// Frozen decorates every non-image row write with a per-row segment reset
+	// ("\x1b[0m\x1b]8;;\x07", applyLineResets); the C++ alt screen does not emit it.
+	// Pre-existing decoration gap, tracked outside this ticket — declared here so
+	// the comparison never hides it implicitly.
+	"drop-segment-reset",
 ];
 
 /// One scenario run: the same layout root under one terminal environment, with every

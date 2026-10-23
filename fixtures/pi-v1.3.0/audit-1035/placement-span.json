@@ -2,7 +2,7 @@
   "schema": "pike/pi-v1.3.0-audit-evidence/1",
   "baseline": "pi-v1.3.0",
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
-  "capturedAt": "2026-10-23T01:10:10.305Z",
+  "capturedAt": "2026-10-23T02:58:21.302Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -110,7 +110,8 @@
       "normalizations": [
         "rename-image-ids",
         "drop-full-redraw-2J",
-        "drop-cursor-visibility-repeat"
+        "drop-cursor-visibility-repeat",
+        "drop-segment-reset"
       ],
       "upstreamTest": {
         "path": "packages/tui/test/tui-alt-screen.test.ts",
@@ -191,7 +192,8 @@
       "normalizations": [
         "rename-image-ids",
         "drop-full-redraw-2J",
-        "drop-cursor-visibility-repeat"
+        "drop-cursor-visibility-repeat",
+        "drop-segment-reset"
       ],
       "upstreamTest": {
         "path": "packages/tui/test/tui-alt-screen.test.ts",
@@ -275,7 +277,8 @@
       "normalizations": [
         "rename-image-ids",
         "drop-full-redraw-2J",
-        "drop-cursor-visibility-repeat"
+        "drop-cursor-visibility-repeat",
+        "drop-segment-reset"
       ],
       "upstreamTest": {
         "path": "packages/tui/test/tui-alt-screen.test.ts",
