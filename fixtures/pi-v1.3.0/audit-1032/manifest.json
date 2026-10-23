@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1032",
   "family": "audit-1032",
-  "capturedAt": "2026-10-22T23:15:42.928Z",
+  "capturedAt": "2026-10-23T03:09:35.449Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -15,12 +15,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1032/capture-1032.mts",
-    "sha256": "4de66d7c8d6a0efad1b00daa9c76a624dca1c03979999a7b9262c20bad9fbe72",
+    "sha256": "1f837688d591f5a0f4a605e62c541279c963ccb906128316ef94d312e026e9f4",
     "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1032/capture-1032.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1032/capture-1032.mts",
-        "sha256": "4de66d7c8d6a0efad1b00daa9c76a624dca1c03979999a7b9262c20bad9fbe72"
+        "sha256": "1f837688d591f5a0f4a605e62c541279c963ccb906128316ef94d312e026e9f4"
       }
     ]
   },
@@ -28,11 +28,11 @@
     {
       "path": "system-theme-capture.json",
       "family": "audit-1032",
-      "bytes": 26583,
-      "sha256": "09b8e862b45fbffd1681d185a38470c915475a6f1ce526599e001a300dc570d1",
+      "bytes": 34306,
+      "sha256": "8f5be690975904a23c9550731e91c034db2ad2e36036955f77f9071c59f9cfd5",
       "sourceEndpoints": [
         "packages/coding-agent/src/modes/interactive/theme/system-theme.ts:generateSystemThemeColors,terminalAppearance,relativeLuminance,wcagContrast",
-        "packages/coding-agent/src/modes/interactive/theme/theme.ts:createSystemTheme,loadTheme,getTerminalTheme"
+        "packages/coding-agent/src/modes/interactive/theme/theme.ts:getThemeByName,setTheme,setTerminalColors,markTerminalColorsPending,setTerminalColorScheme,setRegisteredThemes,getTerminalTheme,detectTerminalTheme,resolveThemeSetting,getResolvedThemeColors,getAvailableThemes"
       ],
       "scenarios": [
         {
@@ -366,6 +366,100 @@
                   "toolErrorBg": 11.10116295319903
                 },
                 "minimum": 11.10116295319903
+              }
+            }
+          },
+          "normalizations": []
+        },
+        {
+          "name": "mid gray terminal crosses the frozen relaxation boundary",
+          "inputs": {
+            "saturation": 1,
+            "foreground": "#ffffff",
+            "background": "#646464"
+          },
+          "expected": {
+            "appearance": "dark",
+            "colors": {
+              "selectedBg": "#2e7292",
+              "searchMatchBg": "#a05217",
+              "userMessageBg": "#2e7292",
+              "customMessageBg": "#7156af",
+              "toolPendingBg": "#626b70",
+              "toolSuccessBg": "#327a56",
+              "toolErrorBg": "#be243a",
+              "text": "",
+              "userMessageText": "",
+              "customMessageText": "#c0c4c7",
+              "toolTitle": "",
+              "syntaxOperator": "#c0c4c7",
+              "syntaxPunctuation": "#c0c4c7",
+              "muted": "#c0c4c7",
+              "dim": "#a2aaae",
+              "thinkingText": "#bbc0c3",
+              "toolOutput": "#c0c4c7",
+              "mdLinkUrl": "#c0c4c7",
+              "mdQuote": "#c0c4c7",
+              "mdQuoteBorder": "#c0c4c7",
+              "mdHr": "#c0c4c7",
+              "mdCodeBlockBorder": "#c0c4c7",
+              "toolDiffContext": "#c0c4c7",
+              "syntaxComment": "#c0c4c7",
+              "scrollbarTrack": "#727c82",
+              "scrollbarThumb": "#bbc0c3",
+              "searchMatchText": "#c0c4c7",
+              "borderMuted": "#9da6aa",
+              "accent": "#c5bedf",
+              "borderAccent": "#c1b9de",
+              "customMessageLabel": "#c5bedf",
+              "mdCode": "#c5bedf",
+              "mdListBullet": "#c5bedf",
+              "syntaxType": "#c5bedf",
+              "border": "#9fc6da",
+              "mdLink": "#a7c9dc",
+              "syntaxKeyword": "#a7c9dc",
+              "syntaxVariable": "#9cced2",
+              "success": "#a3d0b5",
+              "mdCodeBlock": "#a3d0b5",
+              "toolDiffAdded": "#a3d0b5",
+              "bashMode": "#9bcdaf",
+              "syntaxNumber": "#a3d0b5",
+              "error": "#e5b6b5",
+              "toolDiffRemoved": "#e5b6b5",
+              "warning": "#e8bc67",
+              "mdHeading": "#e8bc67",
+              "syntaxFunction": "#e8bc67",
+              "syntaxString": "#e2baa2",
+              "thinkingOff": "#939ca1",
+              "thinkingMinimal": "#8ea4b0",
+              "thinkingLow": "#7eaec6",
+              "thinkingMedium": "#93acdc",
+              "thinkingHigh": "#b5a5e8",
+              "thinkingXhigh": "#e799d1",
+              "thinkingMax": "#fe9c9c"
+            },
+            "dim": [],
+            "textContrast": {
+              "text": {
+                "surfaces": {
+                  "background": 5.917570593923599,
+                  "selectedBg": 5.332441544286726
+                },
+                "minimum": 5.332441544286726
+              },
+              "userMessageText": {
+                "surfaces": {
+                  "userMessageBg": 5.332441544286726
+                },
+                "minimum": 5.332441544286726
+              },
+              "toolTitle": {
+                "surfaces": {
+                  "toolPendingBg": 5.445517920305067,
+                  "toolSuccessBg": 5.1803086324382575,
+                  "toolErrorBg": 5.99507015597246
+                },
+                "minimum": 5.1803086324382575
               }
             }
           },

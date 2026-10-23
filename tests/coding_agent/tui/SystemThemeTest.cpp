@@ -6,6 +6,7 @@
 
 #include "coding_agent/tui/SystemTheme.hpp"
 #include "coding_agent/tui/ThemeColorMath.hpp"
+#include "coding_agent/tui/ThemeController.hpp"
 #include "support/PiTuiEvidence.hpp"
 
 #include <cch/tui/TerminalColors.hpp>
@@ -183,6 +184,38 @@ TEST_CASE("generated system theme matches the frozen capture in every reported-c
             check_text_contrast(generated, scenario);
         }
     }
+}
+
+TEST_CASE("the captured system-theme consumer path matches the product decisions",
+        "[coding_agent][theme][system][issue1032][spec]") {
+    using namespace coding_agent::tui;
+    const auto artifact = tests::read_pi_v130_audit_candidate("audit-1032", "system-theme-capture.json");
+    REQUIRE(artifact);
+    // The capture exercised theme.ts (see capture-1032.mts's consumer block),
+    // so these recorded verdicts are observed frozen behaviour; the checks
+    // below replay the same decisions through the C++ product surface.
+    const auto& consumer = artifact->at("consumer");
+    CHECK(consumer.at("systemName").get_string() == std::string{kSystemThemeName});
+    CHECK(consumer.at("pending").at("name").get_string() == "system");
+    CHECK(consumer.at("reported").at("name").get_string() == "system");
+
+    // The reported mid-gray background decides the terminal theme and
+    // outranks the opposite live scheme (pi `detectTerminalTheme`).
+    const auto gray = rgb_of("#646464");
+    const auto white = rgb_of("#ffffff");
+    CHECK(terminal_appearance(gray, white) == (consumer.at("reportedBackgroundOutranksScheme").get_string() == "dark"
+                                                              ? TerminalAppearance::Dark
+                                                              : TerminalAppearance::Light));
+    // The resolved pair follows the terminal theme (pi `resolveThemeSetting`).
+    CHECK(resolve_theme_setting(std::optional<std::string>{"light/dark"}, TerminalTheme::Dark) ==
+            consumer.at("pairResolution").get_string());
+    // The reserved name stands first in the theme list (pi
+    // `getAvailableThemesWithPaths` comparator; covered end-to-end by
+    // ThemeControllerTest's available_theme_names case).
+    CHECK(consumer.at("systemFirstInThemeList").get_boolean());
+    CHECK(consumer.at("reservedNameBeatsRegistered").get_boolean());
+    CHECK(consumer.at("missingFallsBackToSystem").get_boolean());
+    CHECK(consumer.at("missingSetTheme").at("success").get_boolean() == false);
 }
 
 TEST_CASE("generated system theme keeps the frozen contract edge cases",

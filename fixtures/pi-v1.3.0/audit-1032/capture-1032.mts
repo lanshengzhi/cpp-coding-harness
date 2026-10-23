@@ -8,14 +8,23 @@
  * fixed reported-color samples: a dark and a light terminal with a full
  * 16-slot palette (tier 1, palette-anchored hues), the pending grayscale
  * state at zero saturation, background-only reports (tier 2, family hues),
- * and the no-report indexed tier (tier 3, ANSI slots plus the faint `dim`
- * set) in both the pending and the settled states and both appearance hints.
- * Every scenario records the complete 56-token color map (`#rrggbb`, an ANSI
- * palette index, or `""` for the terminal default), the `dim` token list and
- * the generated appearance; scenarios with a reported background also record
- * the body-text WCAG contrast of `text`, `userMessageText` and `toolTitle`
- * on the surfaces the frozen RULES draw them on (minimum 4.5:1 by
- * construction of the frozen `withTextContrast` pass).
+ * the no-report indexed tier (tier 3, ANSI slots plus the faint `dim` set) in
+ * both the pending and the settled states and both appearance hints, and a
+ * mid-gray background (#646464, white foreground) that crosses the frozen
+ * relaxation boundary — the instrumented frozen module first rejects `solve(0)`
+ * there, so the relaxation bisection actually runs (its minimal relaxation is
+ * ~2e-6: the rejected target sits exactly at a reachable-range edge, so the
+ * recorded palette pins the boundary behaviour, and the recorded body-text
+ * contrast pins the 4.5:1 floor on the relaxed result).
+ *
+ * The capture also exercises the theme.ts consumer path the endpoints name:
+ * `markTerminalColorsPending`/`setTerminalColors`/`setTerminalColorScheme`,
+ * the reserved-name dispatch through `getThemeByName`/`getResolvedThemeColors`
+ * (a registered theme named `system` must lose), `getTerminalTheme` and
+ * `detectTerminalTheme` precedence, `resolveThemeSetting` pair resolution, the
+ * `setTheme` failure fallback, and `getAvailableThemes` ordering. These
+ * observations land in the artifact's `consumer` field and are replayed by
+ * `SystemThemeTest.cpp`.
  *
  * Usage (from the repository root):
  *   PI_CHECKOUT=<private frozen checkout> PI_BASELINE=pi-v1.3.0 \
@@ -29,8 +38,9 @@
 
 import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -108,7 +118,7 @@ const { generateSystemThemeColors, relativeLuminance, wcagContrast } = systemThe
 
 const sourceEndpoints = [
 	"packages/coding-agent/src/modes/interactive/theme/system-theme.ts:generateSystemThemeColors,terminalAppearance,relativeLuminance,wcagContrast",
-	"packages/coding-agent/src/modes/interactive/theme/theme.ts:createSystemTheme,loadTheme,getTerminalTheme",
+	"packages/coding-agent/src/modes/interactive/theme/theme.ts:getThemeByName,setTheme,setTerminalColors,markTerminalColorsPending,setTerminalColorScheme,setRegisteredThemes,getTerminalTheme,detectTerminalTheme,resolveThemeSetting,getResolvedThemeColors,getAvailableThemes",
 ];
 
 type Rgb = { r: number; g: number; b: number };
@@ -236,6 +246,16 @@ const lightSample: Sample = {
 	palette: lightPalette,
 	saturation: 1,
 };
+// The relaxation boundary: against the frozen module (instrumented probe of
+// the same revision), solve(0) first rejects at this background for a white
+// foreground, so the relaxation bisection runs. The rejected target sits at a
+// reachable-range edge, so the minimal relaxation is ~2e-6; the recorded
+// palette and the body-text contrast pin the boundary behaviour itself.
+const relaxationSample: Sample = {
+	foreground: "#ffffff",
+	background: "#646464",
+	saturation: 1,
+};
 
 const scenarios = [
 	{
@@ -254,6 +274,12 @@ const scenarios = [
 		name: "pending state renders grayscale at zero saturation",
 		inputs: scenarioInputs({ ...darkSample, saturation: 0 }),
 		expected: observe({ ...darkSample, saturation: 0 }),
+		normalizations: [],
+	},
+	{
+		name: "mid gray terminal crosses the frozen relaxation boundary",
+		inputs: scenarioInputs(relaxationSample),
+		expected: observe(relaxationSample),
 		normalizations: [],
 	},
 	{
@@ -300,6 +326,86 @@ if (relativeLuminance({ r: 0, g: 0, b: 0 }) !== 0) {
 	throw new Error("relativeLuminance(0,0,0) must be 0");
 }
 
+// ── Consumer path (theme.ts) ────────────────────────────────────────────────
+// Exercise every theme.ts function the sourceEndpoints name, so the recorded
+// provenance is real: the reserved-name dispatch, the terminal-theme
+// precedence, pair resolution, the setTheme failure fallback and the theme
+// list ordering. The module keeps terminal colors in module-global state, so
+// this block owns the whole lifecycle deterministically.
+const themeModule = await import(source("packages/coding-agent/src/modes/interactive/theme/theme.ts"));
+const {
+	SYSTEM_THEME_NAME,
+	markTerminalColorsPending,
+	setTerminalColors,
+	setTerminalColorScheme,
+	setRegisteredThemes,
+	getThemeByName,
+	getTerminalTheme,
+	detectTerminalTheme,
+	resolveThemeSetting,
+	setTheme,
+	getResolvedThemeColors,
+	getAvailableThemes,
+} = themeModule;
+
+// Deterministic surroundings: no COLORFGBG, and an empty agent config dir so
+// getAvailableThemes sees only the built-ins and the registered themes.
+delete process.env.COLORFGBG;
+process.env.XDG_CONFIG_HOME = mkdtempSync(path.join(os.tmpdir(), "audit-1032-config-"));
+
+markTerminalColorsPending();
+setTerminalColorScheme(undefined);
+const pendingTheme = getThemeByName(SYSTEM_THEME_NAME);
+if (!pendingTheme) throw new Error("getThemeByName(system) must resolve while pending");
+const pendingColors = getResolvedThemeColors(SYSTEM_THEME_NAME);
+
+setTerminalColors({ background: rgbOf(relaxationSample.background!), foreground: rgbOf("#ffffff") });
+const reportedTheme = getThemeByName(SYSTEM_THEME_NAME);
+if (!reportedTheme) throw new Error("getThemeByName(system) must resolve after a report");
+const reportedColors = getResolvedThemeColors(SYSTEM_THEME_NAME);
+
+const sameColorMap = (first: Record<string, string>, second: Record<string, string>) =>
+	Object.keys(first).length === Object.keys(second).length &&
+	Object.entries(first).every(([token, value]) => second[token] === value);
+
+// The reserved name takes precedence over a registered theme of the same name
+// (frozen `loadTheme` checks SYSTEM_THEME_NAME before registeredThemes).
+setRegisteredThemes([{ name: SYSTEM_THEME_NAME, colors: { accent: "#ff0000" } }] as never);
+const impostorRejected = sameColorMap(getResolvedThemeColors(SYSTEM_THEME_NAME), reportedColors);
+setRegisteredThemes([]);
+
+// A missing name falls back to the generated system theme silently (pi
+// `setTheme` catch): the error reports verbatim and the active palette is the
+// system one.
+const missing = setTheme("audit-1032-missing");
+const missingFallsBackToSystem = sameColorMap(getResolvedThemeColors(), reportedColors);
+
+const consumer = {
+	systemName: SYSTEM_THEME_NAME,
+	pending: {
+		name: pendingTheme.name ?? null,
+		appearance: pendingTheme.appearance ?? null,
+		colors: pendingColors,
+	},
+	reported: {
+		name: reportedTheme.name ?? null,
+		appearance: reportedTheme.appearance ?? null,
+		colors: reportedColors,
+	},
+	reservedNameBeatsRegistered: impostorRejected,
+	missingSetTheme: { success: missing.success, error: missing.error ?? null },
+	missingFallsBackToSystem,
+	terminalThemeWithReportedBackground: getTerminalTheme(),
+	reportedBackgroundOutranksScheme: detectTerminalTheme(
+		{ background: rgbOf(relaxationSample.background!), foreground: rgbOf("#ffffff") },
+		"light",
+	),
+	schemeUsedWithoutBackground: detectTerminalTheme({}, "light"),
+	darkFallbackWithoutAnything: detectTerminalTheme({}),
+	pairResolution: resolveThemeSetting("light/dark", getTerminalTheme()),
+	systemFirstInThemeList: getAvailableThemes()[0] === SYSTEM_THEME_NAME,
+};
+
 const sha256 = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 const artifactName = "system-theme-capture.json";
 const artifact = {
@@ -310,6 +416,7 @@ const artifact = {
 	environment,
 	sourceEndpoints,
 	scenarios,
+	consumer,
 };
 const artifactBytes = Buffer.from(`${JSON.stringify(artifact, null, 2)}\n`);
 const generatorPath = path.relative(repositoryRoot, scriptPath).split(path.sep).join("/");
