@@ -1319,7 +1319,7 @@
         ]
       },
       "cppSeam": "No Remote protocol or stop reply; worker cancellation stops a local thread and joins it.",
-      "cppEvidence": "The captured non-blocking `stop` behavior is the opposite of Pike’s local join-before-result model. Remote abort cannot be implemented until result/worker settlement is separated.",
+      "cppEvidence": "The captured non-blocking `stop` behavior is the opposite of Pike\u2019s local join-before-result model. Remote abort cannot be implemented until result/worker settlement is separated.",
       "status": {
         "membership": "supported",
         "implementation": "missing",
@@ -1414,7 +1414,7 @@
           "the public options prefix and grammar constants are fixed"
         ]
       },
-      "cppSeam": "Pike’s codemode code lives inside `src/coding_agent/extensions/codemode` and depends on WasmEdge, Boost.Asio, `std::thread` and session types; there is no separate `cch_codemode` library or portable build target.",
+      "cppSeam": "Pike\u2019s codemode code lives inside `src/coding_agent/extensions/codemode` and depends on WasmEdge, Boost.Asio, `std::thread` and session types; there is no separate `cch_codemode` library or portable build target.",
       "cppEvidence": "There is no package boundary, no portable target and no Node-free subset. This is an architecture gap that prevents reuse by a remote/durable host without the whole coding-agent runtime.",
       "status": {
         "membership": "supported",
@@ -1550,7 +1550,7 @@
     {
       "id": "codemode-store-entry",
       "capability": "Codemode session store entry",
-      "operation": "Read the branch’s `codemode-store` entries into the next script’s store snapshot; after a successful script, append one entry with `{set,delete}` only when there are writes. The entry is durable/session state, not part of the library sandbox.",
+      "operation": "Read the branch\u2019s `codemode-store` entries into the next script\u2019s store snapshot; after a successful script, append one entry with `{set,delete}` only when there are writes. The entry is durable/session state, not part of the library sandbox.",
       "consumer": "Application session manager, branch replay/fork and scripts using `store()`/`load()`.",
       "upstreamEvidence": {
         "sources": [
@@ -1618,13 +1618,13 @@
         "implementation": "partial",
         "verification": "unverified"
       },
-      "recommendation": "Add the Application save/label step after the output formatter; keep the sandbox’s image bytes unchanged. Test a duplicate image and a write failure.",
+      "recommendation": "Add the Application save/label step after the output formatter; keep the sandbox\u2019s image bytes unchanged. Test a duplicate image and a write failure.",
       "blockers": []
     },
     {
       "id": "codemode-application-tool-guidelines",
       "capability": "Tool prompt guidelines in declarations",
-      "operation": "Append each callable tool’s trimmed prompt guidelines as `- ...` bullets to its declaration description; empty/whitespace guidelines are ignored; the system prompt only contains guidelines for declared tools.",
+      "operation": "Append each callable tool\u2019s trimmed prompt guidelines as `- ...` bullets to its declaration description; empty/whitespace guidelines are ignored; the system prompt only contains guidelines for declared tools.",
       "consumer": "Codemode catalog, `ALL_TOOLS` samples, discovery descriptions and direct-tool script descriptions.",
       "upstreamEvidence": {
         "sources": [
