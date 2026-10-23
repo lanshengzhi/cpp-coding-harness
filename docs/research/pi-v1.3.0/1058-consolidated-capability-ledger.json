@@ -272,10 +272,10 @@
         "partial": 18
       },
       "cch_codemode": {
-        "implemented": 7,
-        "missing": 30,
+        "implemented": 21,
+        "missing": 23,
         "not-applicable": 2,
-        "partial": 12
+        "partial": 5
       },
       "cch_coding_agent": {
         "implemented": 74,
@@ -306,20 +306,20 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 983,
-      "missing": 238,
+      "implemented": 997,
+      "missing": 231,
       "not-applicable": 18,
-      "partial": 225
+      "partial": 218
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1028,
-      "upstream-captured": 408
+      "unverified": 1022,
+      "upstream-captured": 414
     },
     "evidenceRoute": {
-      "captured": 408,
+      "captured": 414,
       "artifact-only": 0,
-      "related-captured": 28,
+      "related-captured": 22,
       "declared-comparison": 32,
       "cpp-regression-only": 10,
       "unobserved": 58,
@@ -329,7 +329,7 @@
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1028,
+    "unobservedSupported": 1022,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -362,7 +362,7 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1028,
+    "missingObservationRows": 1022,
     "scenarioCoverage": {
       "scenarios": 458,
       "scenarioNamed": 320,
@@ -8810,7 +8810,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Codemode tool descriptors, `tools.*` bindings, discovery results, catalog headings and declaration rendering.",
       "consumerOwners": [
@@ -8823,7 +8823,7 @@
         "tool identifiers replace invalid characters and preserve MCP names"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -8831,9 +8831,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Add the captured identifier table to a focused unit test; keep the routing test for the two-name binding.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -8844,7 +8844,7 @@
           "rowId": "codemode-declaration-identifier",
           "membership": "supported",
           "implementation": "implemented",
-          "verification": "unverified",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -8857,8 +8857,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Tool declarations, discovery samples, catalog sections and script signatures.",
       "consumerOwners": [
@@ -8871,7 +8871,7 @@
         "tool signatures and samples use the output schema and input budget"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -8879,9 +8879,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Test the input boundary separately from the output-schema work; both belong in the declaration renderer rather than the sandbox.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -8891,8 +8891,8 @@
           "ticket": "1053",
           "rowId": "codemode-declaration-input-budget",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -9408,7 +9408,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Portable hosts and tests.",
@@ -9444,7 +9444,7 @@
           "ticket": "1053",
           "rowId": "codemode-inline-deadline-abort",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9459,7 +9459,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Cloudflare/portable callers, tests, and any host without worker threads.",
@@ -9494,7 +9494,7 @@
           "ticket": "1053",
           "rowId": "codemode-inline-interrupt-budget",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9510,7 +9510,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Portable hosts and direct callers.",
@@ -9544,7 +9544,7 @@
           "ticket": "1053",
           "rowId": "codemode-inline-success",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10045,7 +10045,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "`toCodemodeDeclaration`, `renderDeclarations`, `ALL_TOOLS` descriptions, discovery samples, and codemode catalog sections.",
@@ -10080,7 +10080,7 @@
           "ticket": "1053",
           "rowId": "codemode-render-tool-signature",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10141,7 +10141,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Tool declarations, `ALL_TOOLS` samples, discovery `searchTools`/`describeTool` output, and the model-facing catalog.",
       "consumerOwners": [
@@ -10162,7 +10162,7 @@
         "local references resolve and recursive or remote references render unknown"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10170,9 +10170,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Add a typed unit-test table mirroring the captured declarations artifact before treating this as verified; do not fold it into the end-to-end sandbox test.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10183,7 +10183,7 @@
           "rowId": "codemode-schema-to-type",
           "membership": "supported",
           "implementation": "implemented",
-          "verification": "unverified",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10198,7 +10198,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application signal handling, direct sandbox callers and the TUI status.",
@@ -10234,7 +10234,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-abort-reason",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10299,7 +10299,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Scripts that need unlisted tools (especially MCP tools), the codemode catalog, and the MCP exposure UI copy.",
@@ -10334,7 +10334,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-discovery",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10350,7 +10350,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application error formatting, model-facing `Script error:` block and the TUI.",
@@ -10387,7 +10387,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-error-taxonomy",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10402,7 +10402,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Scripts and the Application result formatter.",
@@ -10436,7 +10436,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-exit",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10452,7 +10452,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application execute path, discovery globals, model globals, and any host helper attached to a script.",
@@ -10488,7 +10488,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-globals",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10553,7 +10553,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`, direct sandbox callers and the Remote cap.",
@@ -10587,7 +10587,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-memory-limit",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "partial",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10603,7 +10603,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Script output collection, store snapshots and the stable prelude fingerprint.",
       "consumerOwners": [
@@ -10616,7 +10616,7 @@
         "the guest prelude is the frozen sandbox prelude with output and store limits"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10624,9 +10624,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Pin the prelude to v1.3.0 and add limit tests that cross the boundary; do not expose duplicated C++ constants unless a caller needs them.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10637,7 +10637,7 @@
           "rowId": "codemode-script-output-limits",
           "membership": "supported",
           "implementation": "implemented",
-          "verification": "unverified",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10652,8 +10652,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application result formatting, TUI/fallback rendering, image sidecars and output spill.",
       "consumerOwners": [
@@ -10668,7 +10668,7 @@
         "invalid image arguments throw a catchable TypeError inside the script"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10676,9 +10676,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Add a console discriminant to `CodemodeOutputItem` and update the prelude to emit `console`; then use it in the Application output block. Keep text/image ordering tests, but assert console separately.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10688,8 +10688,8 @@
           "ticket": "1053",
           "rowId": "codemode-script-output-text-image-console",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10704,7 +10704,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application session store (`codemode-store` entry), scripts that keep small state across calls, and the result details.",
@@ -10739,7 +10739,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-store-load",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10754,8 +10754,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Scripts that fire-and-forget, the Application nested-call record and the TUI status row.",
       "consumerOwners": [
@@ -10768,7 +10768,7 @@
         "an unawaited tool call is aborted when the script returns and its record is cancelled"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10776,9 +10776,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Map an unfinished nested call to `cancelled` at the codemode result boundary and test the Application details; keep the prelude abort behavior.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10788,8 +10788,8 @@
           "ticket": "1053",
           "rowId": "codemode-script-unawaited-calls",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10949,7 +10949,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "The model-facing tool and every caller that turns a validation failure into a `Script error:` result.",
@@ -10984,7 +10984,7 @@
           "ticket": "1053",
           "rowId": "codemode-source-placement-errors",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }

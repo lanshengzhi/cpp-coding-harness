@@ -47,7 +47,7 @@
         },
         "audit-1051": {
           "manifest": "audit-1051/manifest.json",
-          "manifestSha256": "a571c0eb1477f5cd61f022d40b8616855e16d2969198ac3c786c929273968d68"
+          "manifestSha256": "20b80c535858b44e0c9e47f7d253dad254051c3132525c02cdd80a7c7f1cc535"
         },
         "audit-1052": {
           "manifest": "audit-1052/manifest.json",
@@ -103,7 +103,7 @@
         },
         "audit-810": {
           "manifest": "audit-810/manifest.json",
-          "manifestSha256": "1912896e60f3c1208f288db3b88a73749b01b32f1c1d729ccb688fed9653e8ce"
+          "manifestSha256": "3815cac847e63ef4e1a4780682547c4ab0e9158aead7f7a631a8d44d580822ab"
         },
         "audit-831": {
           "manifest": "audit-831/manifest.json",

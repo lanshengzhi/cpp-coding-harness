@@ -464,6 +464,84 @@ void check_model_selector_layout(const tui::VirtualTerminal& terminal) {
     CHECK(static_cast<std::size_t>(bottom_border - rows.begin()) == *save_hint_row + 1);
 }
 
+/// Issue #1129: the retained-omission viewport consequence at the differential
+/// width. Per-row decision (each row keeps its explicit omission because the
+/// named capability is outside the Supported Capability subset, so a rendered
+/// row without it would be a fake control): Auto-compact, Auto-resize images,
+/// Block images, Editor padding, Autocomplete max items and Clear on shrink.
+/// The counter consequence is accepted explicitly: Pike's counter counts its
+/// own retained row set and reads `(1/13)` where frozen pi v1.3.0 reads
+/// `(1/33)` (the ticket's `(1/32)` is the historical pi-v1.0.4 capture). The
+/// rows and counter text are asserted against the frozen refresh, and the
+/// description line is addressed by its position below the counter so a frame
+/// whose counter matches but whose description sits elsewhere still fails.
+void check_settings_retained_omission_viewport(const tui::VirtualTerminal& terminal, bool filtered) {
+    // Trailing padding is width presentation; row content and order are not.
+    auto rows = terminal.screen();
+    for (auto& row : rows)
+        while (!row.empty() && row.back() == ' ')
+            row.pop_back();
+
+    const auto description_follows_counter =
+            [](const std::vector<std::string>& frame, std::size_t counter_row, std::string_view description) {
+                return counter_row + 2 < frame.size() &&
+                       frame[counter_row + 1].find_first_not_of(' ') == std::string::npos &&
+                       frame[counter_row + 2] == description;
+            };
+
+    if (!filtered) {
+        // Frozen pi v1.3.0 keeps its first viewport at ten rows with the
+        // counter directly below them; Pike's retained row set fills the same
+        // ten-row viewport with its own rows in the same structure.
+        const std::vector<std::string> expected_rows{
+                "→ Skill commands              true",
+                "  Show hardware cursor        false",
+                "  Output padding              1",
+                "  Terminal progress           false",
+                "  Hide thinking               false",
+                "  Default project trust       Ask",
+                "  Thinking level              off",
+                "  TUI mode                    fullscreen",
+                "  Fullscreen exit output      transcript",
+                "  Fullscreen scrollbar        auto",
+        };
+        const auto counter_row = row_containing(rows, "(1/13)");
+        REQUIRE(counter_row.has_value());
+        REQUIRE(*counter_row >= expected_rows.size());
+        const auto first_row = *counter_row - expected_rows.size();
+        for (std::size_t index = 0; index < expected_rows.size(); ++index) {
+            INFO(std::format("settings row {}", index));
+            CHECK(rows[first_row + index] == expected_rows[index]);
+        }
+        INFO(std::format("counter row {}", *counter_row));
+        CHECK(rows[*counter_row] == "  (1/13)");
+        REQUIRE(description_follows_counter(rows, *counter_row, "  Register skills as /skill:name commands"));
+        REQUIRE(*counter_row + 4 < rows.size());
+        CHECK(rows[*counter_row + 4] == "  Type to search · enter/space to change · escape/ctrl+c to cancel");
+
+        // Discriminating case: the counter text still reads `(1/13)` when the
+        // description line is displaced one row up, so a counter-only check
+        // passes; the positional comparison rejects the frame.
+        auto displaced = rows;
+        std::swap(displaced[*counter_row + 1], displaced[*counter_row + 2]);
+        CHECK(displaced[*counter_row] == "  (1/13)");
+        CHECK_FALSE(description_follows_counter(displaced, *counter_row, "  Register skills as /skill:name commands"));
+        return;
+    }
+
+    // Search-filtered view: the description line follows its own selected row,
+    // not the previous selection, so the position rule carries the selection.
+    const auto selected_row = row_containing(rows, "→ Show hardware cursor");
+    REQUIRE(selected_row.has_value());
+    CHECK(rows[*selected_row] == "→ Show hardware cursor        false");
+    REQUIRE(*selected_row + 2 < rows.size());
+    CHECK(rows[*selected_row + 1].find_first_not_of(' ') == std::string::npos);
+    INFO(std::format("description row {}", *selected_row + 2));
+    CHECK(rows[*selected_row + 2] == "  Show the terminal cursor while still positioning it for IME support");
+    CHECK(std::ranges::none_of(
+            rows, [](const std::string& row) { return row.find("Register skills as") != std::string::npos; }));
+}
+
 void check_editor_workspace_footer_composition(
         const tui::VirtualTerminal& terminal, std::string_view scenario, const std::vector<std::string>& inputs) {
     const auto rows = terminal.screen();
@@ -1098,7 +1176,7 @@ void run_extension_editor_scenario(std::string_view scenario,
 } // namespace
 
 TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and ANSI",
-        "[coding_agent][tui][differential][issue797][issue800][issue811][issue1033][spec]") {
+        "[coding_agent][tui][differential][issue797][issue800][issue811][issue1033][issue1128][issue1129][spec]") {
     const auto scenario = environment_or_empty("CCH_DIFFERENTIAL_SCENARIO");
     if (scenario.empty()) SKIP("dual-runtime capture environment is not selected");
     const auto width = parse_size(environment_or_empty("CCH_DIFFERENTIAL_WIDTH"));
@@ -1281,11 +1359,83 @@ TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and 
             }
         }
         drain_ready(io, std::chrono::milliseconds{20});
+        if (scenario == "settings-selector" && (input_index == 1 || input_index == 2)) {
+            check_settings_retained_omission_viewport(terminal, input_index == 2);
+        }
         if (input_index == 0 && (scenario == "editor-long" || scenario == "editor-cjk" || scenario == "editor-token")) {
             check_editor_workspace_footer_composition(terminal, scenario, inputs);
         }
         snapshots.push_back(snapshot(terminal, output_offset));
         output_offset = output_size(terminal);
+    }
+
+    if (scenario == "scrollback") {
+        // Issue #1128: the retained rows are asserted per row, never through
+        // the report's projection booleans. Probe provenance
+        // (/tmp/cpp-harness-pike-v1.3.0-scrollback-probe.json): the refreshed
+        // dual-runtime capture ran against frozen pi v1.3.0 at
+        // 71023aec1546d6d677a65669c5665c0927ce0dd0 and pi retained these nine
+        // rows after the declared profile projection removed its
+        // runtime-identity and startup-documentation rows. Owner disposition:
+        // no production fix; the historical pi-v1.0.4 retained-row delta was
+        // then the boot-72 wrap family (fixed in #1127) plus the old baseline.
+        // The hint rows below are byte-identical to pi's retained rows and the
+        // remaining rows are this scenario's deterministic content.
+        const std::vector<std::string> expected_retained{
+                " escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash",
+                "  · ctrl+o more",
+                " Press ctrl+o to show full startup help and loaded resources.",
+                " line one",
+                " deterministic scrollback reply 1",
+                " line two",
+                " deterministic scrollback reply 2",
+                " line three",
+                " deterministic scrollback reply 3",
+        };
+        const auto retained_rows = [](const tui::VirtualTerminal& term) {
+            std::vector<std::string> rows;
+            for (auto line : term.scrollback()) {
+                // Trailing padding is width presentation, not retained content.
+                while (!line.empty() && line.back() == ' ')
+                    line.pop_back();
+                if (!line.empty()) rows.push_back(std::move(line));
+            }
+            return rows;
+        };
+        const auto retained = retained_rows(terminal);
+        REQUIRE(retained.size() == expected_retained.size());
+        for (std::size_t index = 0; index < retained.size(); ++index) {
+            INFO(std::format("retained row {}", index));
+            CHECK(retained[index] == expected_retained[index]);
+        }
+
+        // Discriminating case: an implementation that keeps the row count but
+        // swaps two retained rows ("line one" with its reply) still satisfies
+        // a count/length check; the per-row comparison rejects it.
+        auto mutated = retained;
+        REQUIRE(mutated.size() >= 5);
+        std::swap(mutated[3], mutated[4]);
+        CHECK(mutated.size() == retained.size());
+        CHECK(mutated != expected_retained);
+
+        // The retained rows must survive a full repaint: the probe's
+        // 72->100->72 round trip left them row for row identical, so the same
+        // round trip runs here after the rows are already retained and the
+        // live screen repaints twice without losing or reordering them.
+        const auto wide_offset = output_size(terminal);
+        REQUIRE(terminal.inject_resize({.columns = 100, .rows = 24}));
+        REQUIRE(tests::pump_until(io, [&] { return output_size(terminal) > wide_offset; }));
+        drain_ready(io, std::chrono::milliseconds{20});
+        const auto narrow_offset = output_size(terminal);
+        REQUIRE(terminal.inject_resize({.columns = width, .rows = 24}));
+        REQUIRE(tests::pump_until(io, [&] { return output_size(terminal) > narrow_offset; }));
+        drain_ready(io, std::chrono::milliseconds{20});
+        const auto repainted = retained_rows(terminal);
+        REQUIRE(repainted.size() == expected_retained.size());
+        for (std::size_t index = 0; index < repainted.size(); ++index) {
+            INFO(std::format("repainted retained row {}", index));
+            CHECK(repainted[index] == expected_retained[index]);
+        }
     }
 
     if (!output_path.empty()) {
