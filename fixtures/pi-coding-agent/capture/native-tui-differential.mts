@@ -122,6 +122,11 @@ type Scenario = {
 	resize?: string;
 	omissions: string[];
 	omissionPatterns?: string[];
+	// A dedicated-report scenario never joins the default 17-scenario run:
+	// the checked-in report.json stays byte-stable, and the scenario is
+	// captured and verified explicitly through `--scenario <id>` against its
+	// own CCH_DIFFERENTIAL_REPORT path (issue #1033).
+	dedicatedReport?: boolean;
 };
 
 const scenarios: Scenario[] = [
@@ -159,6 +164,16 @@ const scenarios: Scenario[] = [
 	{ id: "resize-100-72", width: 100, inputs: [], resize: "72x40->100x40", omissions: [] },
 	{ id: "resize-120-100", width: 120, inputs: [], resize: "100x50->120x50", omissions: [] },
 	{ id: "scrollback", width: 72, inputs: ["line one\r", "line two\r", "line three\r", "line four\r", "line five\r", "line six\r"], omissions: [] },
+	{
+		id: "extension-editor",
+		width: 100,
+		inputs: [],
+		omissions: [
+			"pi's action-handler map on the editor component has no C++ EditorComponent counterpart; recorded as a capability difference with its count",
+			"pi re-assigns borderColor twice per border-token change at install; Pike applies one TextStyleHook per token change, so the first-install assignment counts differ by design",
+		],
+		dedicatedReport: true,
+	},
 ];
 
 // Versioned expectation adaptations bridge the checked-in historical evidence
@@ -223,12 +238,23 @@ const triageByScenario: Record<string, Triage> = Object.fromEntries([
 	["resize-100-72", { classification: "product-defect", evidence: ["report.json:resize-100-72", "report.json:boot-72"], rationale: "After resizing to 72 columns, the startup help wraps differently from pi at the same segment boundary recorded by boot-72; the resize behavior matches." }],
 	["resize-120-100", { classification: "match", evidence: ["report.json:resize-120-100"], rationale: "The profile-stripped shared regular Native TUI header matches pi after resizing." }],
 	["scrollback", { classification: "product-defect", evidence: ["report.json:scrollback", "report.json:boot-72"], rationale: "After the declared startup and footer projections, the retained scrollback structure still differs from pi. The snapshots also retain the 72-column startup-help wrap difference recorded by boot-72; profileProjection.scrollbackStructureEqual=false confirms a separate retained-row delta." }],
+	["extension-editor", {
+		classification: "match",
+		evidence: ["fixtures/pi-v1.3.0/audit-1051/extension-editor.json", "report-extension-editor.json"],
+		rationale: "Both runtimes install a probe extension editor through the real extension-UI registration the product builds for a session's prompt slot, and reproduce the frozen audit-1051 contract: factory inputs present (tui/theme/keybindings), factory called once per install (2 total), submit/change callbacks copied before the first text transfer, text and focus transferred at install, padding/autocomplete options applied exactly once per install, the border token follows thinking-level and Bash-mode changes, restore carries the prompt to the default editor with no second editor rendered, reinstall transfers the prompt slot's text and focus, and submit clears the editor through the copied submit sink. The compared authority is that lifecycle contract (resolved border RGB, transfer and option facts), because the two probe editors draw different chrome: pi's CustomEditor renders its own frame while the Pike probe renders an ext-editor row, so the settled cells stay evidence. Expectations come from the frozen pi-v1.3.0 run only; Pike never regenerates them.",
+		acceptedDifferences: [
+			"pi's editor component carries an app-action-handler map (16 entries in the frozen capture); the C++ EditorComponent contract has no action-handler facet, so the count is recorded as a capability difference (issue #1033).",
+			"pi's install path assigns borderColor twice per border-token change (6 assignments in the first install's lifetime); Pike applies one TextStyleHook per token change (4 in the first install's lifetime). The token follow itself compares exactly, including the resolved RGB of each border sample.",
+			"Pike restore/reinstall run through the reload-family re-apply path (the refreshed registration context installs none, then installs again), the reachable Pike counterpart of pi's setEditorComponent(undefined/factory) shortcut; the carried-text, single-editor and focus facts are compared exactly.",
+		],
+	}],
 ] satisfies Array<[string, Triage]>);
 
 const volatileModelProse = [
 	"deterministic assistant reply",
 	"deterministic status reply",
 	"deterministic tool answer",
+	"deterministic extension reply",
 	"deterministic scrollback reply 1",
 	"deterministic scrollback reply 2",
 	"deterministic scrollback reply 3",
@@ -964,6 +990,21 @@ function normalizeStyledRows(value: unknown, workspace: string, repositoryRoot: 
 	});
 }
 
+function normalizeObservationText(value: unknown, workspace: string, repositoryRoot: string, scenario: Scenario): unknown {
+	if (typeof value === "string") {
+		// Fact payloads (for example a recorded viewport) can carry workspace
+		// or repository paths; they normalize exactly like snapshot cell text.
+		return replaceFixturePaths(value, workspace, repositoryRoot, scenario);
+	}
+	if (Array.isArray(value)) return value.map((item) => normalizeObservationText(item, workspace, repositoryRoot, scenario));
+	if (typeof value === "object" && value !== null) {
+		return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(
+			([key, item]) => [key, normalizeObservationText(item, workspace, repositoryRoot, scenario)],
+		));
+	}
+	return value;
+}
+
 function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
 	const workspace = typeof capture.workspace === "string" ? capture.workspace : "/tmp/cpp-harness-pike-differential";
 	const snapshots = Array.isArray(capture.snapshots) ? capture.snapshots : [];
@@ -974,6 +1015,9 @@ function normalizeCapture(capture: Record<string, unknown>, scenario: Scenario, 
 		workspace: typeof capture.workspace === "string" ? replaceFixturePaths(capture.workspace, workspace, repositoryRoot, scenario) : undefined,
 		inputs: capture.inputs,
 		theme: normalizeThemeEvidence(capture.theme, `${String(capture.runtime)}/${scenario.id}`),
+		...(capture.observation === undefined
+			? {}
+			: { observation: normalizeObservationText(capture.observation, workspace, repositoryRoot, scenario) }),
 		snapshots: snapshots.map((item) => {
 			const snapshot = item as Record<string, unknown>;
 			const rawCursor = snapshot.cursor as Record<string, unknown> | undefined;
@@ -1010,6 +1054,7 @@ function stableProjection(capture: Record<string, unknown>, scenario: Scenario, 
 		width: normalized.width,
 		workspace: normalized.workspace,
 		inputs: normalized.inputs,
+		...(normalized.observation === undefined ? {} : { observation: normalized.observation }),
 		snapshots: (normalized.snapshots as Record<string, unknown>[]).map((snapshot) => ({
 			visible: snapshot.visible,
 			scrollback: snapshot.scrollback,
@@ -1077,6 +1122,9 @@ function normalizeCaptureForComparison(capture: Record<string, unknown>, scenari
 		width: capture.width,
 		workspace: typeof capture.workspace === "string" ? replaceFixturePaths(capture.workspace, workspace, repositoryRoot, scenario) : undefined,
 		inputs: capture.inputs,
+		...(capture.observation === undefined
+			? {}
+			: { observation: normalizeObservationText(capture.observation, workspace, repositoryRoot, scenario) }),
 		theme: normalizeThemeEvidence(capture.theme, `${String(capture.runtime)}/${scenario.id}`),
 		snapshots: snapshots.map((item) => {
 			const snapshot = item as Record<string, unknown>;
@@ -1109,6 +1157,7 @@ function stableProjectionForComparison(capture: Record<string, unknown>, scenari
 		width: normalized.width,
 		workspace: normalized.workspace,
 		inputs: normalized.inputs,
+		...(normalized.observation === undefined ? {} : { observation: normalized.observation }),
 		snapshots: (normalized.snapshots as Record<string, unknown>[]).map((snapshot) => ({
 			visible: snapshot.visible,
 			scrollback: snapshot.scrollback,
@@ -1700,6 +1749,49 @@ function verifyHistoricalComparisonPolicy(): void {
 	);
 }
 
+// The dedicated evidence scenarios compare the recorded editor-lifecycle
+// contract instead of settled cell text: both runtimes install a probe editor
+// whose chrome renders differently (pi's CustomEditor draws its own frame,
+// Pike's probe renders an "ext-editor:" row), so the cells are evidence while
+// the shared contract fields are the comparison authority. Fields whose text
+// literals follow from the differently-triggered restore/reinstall path (the
+// typed command on Pike, the alt+e/alt+i shortcuts on pi) stay out of the
+// compared subset and are covered by the triage's accepted differences.
+function observationContract(observation: unknown): Record<string, unknown> | undefined {
+	if (typeof observation !== "object" || observation === null) return undefined;
+	const measurements = (observation as Record<string, unknown>).measurements;
+	if (typeof measurements !== "object" || measurements === null || Array.isArray(measurements)) return undefined;
+	const shared = [
+		"installText",
+		"factoryCalls",
+		"thinkingBorderChanged",
+		"bashBorderChanged",
+		"bashOffBorderRestored",
+		"borderThinkingOffRgb",
+		"borderThinkingMinimalRgb",
+		"borderBashRgb",
+		"restoreCarriedText",
+		"restoreLeftSingleEditor",
+		"reinstallCarriedText",
+		"reinstalledFocused",
+		"submitInvokedOnSubmit",
+		"submitClearedEditor",
+		"editorBorderRowsPerFrame",
+		"setPaddingXCallsPerInstall",
+		"setAutocompleteMaxVisibleCallsPerInstall",
+		"setAutocompleteProviderCallsPerInstall",
+		"typedOnChangeInstalls",
+		"onSubmitAndOnChangeAssigned",
+	];
+	const contract: Record<string, unknown> = {};
+	for (const field of shared) {
+		const value = (measurements as Record<string, unknown>)[field];
+		if (value === undefined) throw new Error(`extension-editor observation is missing contract field ${field}`);
+		contract[field] = value;
+	}
+	return contract;
+}
+
 function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, scenario: Scenario, repositoryRoot: string): Record<string, unknown> {
 	// The styled-cell comparison resolves a cell color through the theme the
 	// capture carries. The colors ride on the comparison projection instead of
@@ -1727,6 +1819,14 @@ function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, sce
 	const scrollbackPresentationEqual = styledRowsEqual(pikeProjection, piProjection, "scrollback");
 	const presentationEqual = visiblePresentationEqual && scrollbackPresentationEqual;
 	const sgrEqual = JSON.stringify(pikeSnapshots.map((item) => item.sgr)) === JSON.stringify(piSnapshots.map((item) => item.sgr));
+	// Dedicated evidence scenarios compare the recorded lifecycle contract; the
+	// cells stay evidence because the probe editors draw different chrome.
+	const pikeContract = scenario.dedicatedReport === true ? observationContract(pikeProjection.observation) : undefined;
+	const piContract = scenario.dedicatedReport === true ? observationContract(piProjection.observation) : undefined;
+	// Fail closed: a missing observation is a capture defect, never an equal
+	// contract by undefined-to-undefined coincidence.
+	const observationContractEqual = pikeContract !== undefined && piContract !== undefined &&
+		JSON.stringify(pikeContract) === JSON.stringify(piContract);
 	const pikeResolved = profileProjectionForComparison(pikeProjection, scenario);
 	const piResolved = profileProjectionForComparison(piProjection, scenario);
 	const omissionProjection = omitProjectionLines(pikeResolved, scenario.omissionPatterns ?? []);
@@ -1756,9 +1856,20 @@ function compare(pike: Record<string, unknown>, pi: Record<string, unknown>, sce
 			omissionCellPresentationEqual: omissionPresentation,
 			omissionSgrStructureEqual: omissionSgr,
 			omissionProjectionEqual,
+			...(scenario.dedicatedReport === true
+				? { observationContract: { pike: pikeContract ?? null, pi: piContract ?? null, equal: observationContractEqual } }
+				: {}),
 		},
 		profileProjection: compareProfileProjection(pikeProjection, piProjection, scenario),
-		classification: equal ? "match" : omissionOnly ? "intentional-subset-omission" : "supported-capability-regression",
+		classification: scenario.dedicatedReport === true
+			? observationContractEqual
+				? "match"
+				: "supported-capability-regression"
+			: equal
+				? "match"
+				: omissionOnly
+					? "intentional-subset-omission"
+					: "supported-capability-regression",
 		omissions: scenario.omissions,
 		omissionEvidence: {
 			patterns: scenario.omissionPatterns ?? [],
@@ -2191,9 +2302,6 @@ async function runParent(): Promise<number> {
 	if (scenarioIndex >= 0 && scenarioFilter === undefined) {
 		throw new Error("--scenario requires a differential scenario id");
 	}
-	if (scenarioFilter !== undefined && process.argv.includes("--write")) {
-		throw new Error("--scenario is a debug capture mode and cannot be combined with --write");
-	}
 	const baseline = resolvePiBaseline();
 	const checkout = baseline.checkout;
 	const repositoryRoot = repositoryRootFromEnvironment();
@@ -2201,6 +2309,28 @@ async function runParent(): Promise<number> {
 	const temporaryDirectory = path.join(differentialDir, `.verify-${process.pid}`);
 	rmSync(temporaryDirectory, { recursive: true, force: true });
 	mkdirSync(temporaryDirectory, { recursive: true });
+	// A single-scenario run (--scenario) writes or verifies one scenario's
+	// evidence at CCH_DIFFERENTIAL_REPORT; the default run keeps the
+	// checked-in report's exact scenario set so the historical gate stays
+	// byte-stable when a dedicated-report scenario joins the list.
+	const writeRequested = process.argv.includes("--write");
+	const expectedReport = !writeRequested && existsSync(reportPath)
+		? JSON.parse(readFileSync(reportPath, "utf8")) as Record<string, unknown>
+		: undefined;
+	const activeScenarios = scenarioFilter !== undefined
+		? scenarios.filter((scenario) => scenario.id === scenarioFilter)
+		: expectedReport !== undefined
+			? (expectedReport.scenarios as Record<string, unknown>[]).map((item) => {
+					const scenario = scenarios.find((candidate) => candidate.id === item.id);
+					if (!scenario) throw new Error(`differential report contains unknown scenario ${String(item.id)}`);
+					return scenario;
+				})
+			: scenarios.filter((scenario) => !scenario.dedicatedReport);
+	if (scenarioFilter !== undefined && activeScenarios.length === 0) {
+		throw new Error(
+			`--scenario '${scenarioFilter}' does not name a differential scenario (known: ${scenarios.map((scenario) => scenario.id).join(", ")})`,
+		);
+	}
 	const report: Record<string, unknown> = {
 		schema: 3,
 		captureBase,
@@ -2222,14 +2352,6 @@ async function runParent(): Promise<number> {
 		scenarios: [] as Record<string, unknown>[],
 	};
 	try {
-		const activeScenarios = scenarioFilter === undefined
-			? scenarios
-			: scenarios.filter((scenario) => scenario.id === scenarioFilter);
-		if (scenarioFilter !== undefined && activeScenarios.length === 0) {
-			throw new Error(
-				`--scenario '${scenarioFilter}' does not name a differential scenario (known: ${scenarios.map((scenario) => scenario.id).join(", ")})`,
-			);
-		}
 		for (const scenario of activeScenarios) {
 			const pikeOutput = path.join(temporaryDirectory, `${scenario.id}.pike.json`);
 			const piOutput = path.join(temporaryDirectory, `${scenario.id}.pi.json`);
@@ -2243,7 +2365,10 @@ async function runParent(): Promise<number> {
 			console.log(
 				`${scenario.id}: observed ${comparison.classification} | triage ${triageByScenario[scenario.id].classification}`,
 			);
-			if (scenarioFilter !== undefined) continue;
+			if (scenarioFilter !== undefined && !writeRequested && expectedReport === undefined) {
+				console.log(`--scenario ${scenarioFilter}: capture only; pass --write to record, or set CCH_DIFFERENTIAL_REPORT to verify`);
+				return 0;
+			}
 			const pikeCapture = normalizeCapture(pike, scenario, repositoryRoot);
 			const piCapture = normalizeCapture(pi, scenario, repositoryRoot);
 			(report.scenarios as Record<string, unknown>[]).push({
@@ -2261,10 +2386,6 @@ async function runParent(): Promise<number> {
 					pi: stableProjection(piCapture, scenario, repositoryRoot),
 				}),
 			});
-		}
-		if (scenarioFilter !== undefined) {
-			console.log(`--scenario ${scenarioFilter}: debug capture only; no report was written or verified`);
-			return 0;
 		}
 	} finally {
 		rmSync(temporaryDirectory, { recursive: true, force: true });
@@ -2328,6 +2449,478 @@ function inputStateBarrier(scenario: Scenario, inputIndex: number): {
 	return {};
 }
 
+/// The frozen `audit-1051` extension-editor choreography, run against the
+/// frozen checkout through the same product boundary the audit used:
+/// `ctx.ui.setEditorComponent` installs the probe editor, `alt+e` restores the
+/// default editor, `alt+i` reinstalls it, and the probe records every product
+/// call. The observation mirrors the Pike cell's vocabulary so one contract
+/// projection compares both runtimes' lifecycle evidence.
+async function capturePiExtensionEditor(
+	scenario: Scenario,
+	output: string,
+	runtime: {
+		createHarness: any;
+		fauxAssistantMessage: any;
+		AgentSessionRuntime: any;
+		InteractiveMode: any;
+		getResolvedThemeColors: any;
+		VirtualTerminal: any;
+		CustomEditor: any;
+	},
+): Promise<never> {
+	const workspace = process.env.CCH_DIFFERENTIAL_WORKSPACE;
+	if (workspace === undefined || workspace === "") throw new Error("pi child requires CCH_DIFFERENTIAL_WORKSPACE");
+	let workspacePath = workspace;
+	mkdirSync(workspacePath, { recursive: true });
+	mkdirSync(path.join(workspacePath, ".pi"), { recursive: true });
+	process.chdir(workspacePath);
+	const agentDirectory = process.env.PI_CODING_AGENT_DIR ?? `/tmp/cpp-harness-pike-differential-${scenario.id}`;
+	mkdirSync(agentDirectory, { recursive: true });
+
+	const facts: Record<string, any>[] = [];
+	const installs: any[] = [];
+	let latest: any;
+	const factoryInputs: Record<string, any>[] = [];
+	const factory = (tui: any, theme: any, keybindings: any) => {
+		factoryInputs.push({
+			tui: { type: typeof tui, methods: ["requestRender", "setFocus", "getFocus", "stop"].filter((name) => typeof tui?.[name] === "function") },
+			theme: { type: typeof theme, keys: Object.keys(theme ?? {}).sort(), borderColorType: typeof theme?.borderColor, selectListType: typeof theme?.selectList },
+			keybindings: { type: typeof keybindings, constructor: keybindings?.constructor?.name ?? "" },
+		});
+		latest = new PiObservedEditor(tui, theme, keybindings, runtime.CustomEditor);
+		installs.push(latest);
+		return latest;
+	};
+
+	const harness = await runtime.createHarness({
+		models: differentialModels,
+		settings: { theme: "dark" },
+		extensionFactories: [
+			{
+				name: "pike-differential-extension-editor",
+				factory: (pi: any) => {
+					pi.on("session_start", async (_event: any, ctx: any) => {
+						facts.push({ stage: "session_start" });
+						ctx.ui.setEditorText("before-install");
+						ctx.ui.setEditorComponent(factory);
+						facts.push({
+							stage: "installed",
+							text: ctx.ui.getEditorText(),
+							focused: latest?.focused ?? false,
+							actionHandlerNames: latest === undefined ? [] : [...latest.actionHandlers.keys()],
+						});
+					});
+					pi.registerShortcut("alt+e", {
+						description: "restore the default editor",
+						handler: (ctx: any) => {
+							facts.push({ stage: "restore.request", text: ctx.ui.getEditorText(), customFocused: latest?.focused ?? false });
+							ctx.ui.setEditorComponent(undefined);
+							facts.push({ stage: "restore.done", text: ctx.ui.getEditorText(), customFocused: latest?.focused ?? false });
+						},
+					});
+					pi.registerShortcut("alt+i", {
+						description: "install the probe editor again",
+						handler: (ctx: any) => {
+							facts.push({ stage: "reinstall.request", text: ctx.ui.getEditorText() });
+							ctx.ui.setEditorComponent(factory);
+							facts.push({ stage: "reinstall.done", text: ctx.ui.getEditorText(), customFocused: latest?.focused ?? false });
+						},
+					});
+					pi.registerShortcut("alt+s", {
+						description: "record the current editor text",
+						handler: (ctx: any) => {
+							facts.push({ stage: "state", text: ctx.ui.getEditorText() });
+						},
+					});
+				},
+			},
+		],
+	});
+	harness.setResponses([runtime.fauxAssistantMessage("deterministic extension reply")]);
+
+	class ExtensionTerminal extends runtime.VirtualTerminal {
+		ansi = "";
+		cursorVisible = true;
+
+		override write(data: string): void {
+			this.ansi += data;
+			for (const match of data.matchAll(/\x1b\[\?25([hl])/g)) this.cursorVisible = match[1] === "h";
+			super.write(data);
+		}
+
+		override hideCursor(): void {
+			this.cursorVisible = false;
+			super.hideCursor();
+		}
+
+		override showCursor(): void {
+			this.cursorVisible = true;
+			super.showCursor();
+		}
+	}
+
+	const terminal = new ExtensionTerminal(scenario.width, profile.viewportRows);
+	const services = {
+		cwd: workspacePath,
+		agentDir: agentDirectory,
+		modelRuntime: harness.session.modelRuntime,
+		settingsManager: harness.settingsManager,
+		resourceLoader: harness.session.resourceLoader,
+		diagnostics: [],
+	};
+	const runtimeHost = new runtime.AgentSessionRuntime(harness.session, services, async () => {
+		throw new Error("session replacement is not used by the differential capture");
+	});
+	const mode = new runtime.InteractiveMode(runtimeHost, { terminal, tuiMode: "regular", initialThemeSetting: "dark" });
+	void mode.run().catch((error: unknown) => {
+		console.error(error);
+		process.exitCode = 1;
+	});
+
+	const waitForStage = async (stage: string): Promise<void> => {
+		const deadline = Date.now() + 8_000;
+		while (Date.now() < deadline) {
+			if (facts.some((fact) => fact.stage === stage)) return;
+			await delay(20);
+		}
+		throw new Error(`extension-editor probe did not record stage ${JSON.stringify(stage)}: ${JSON.stringify(facts)}`);
+	};
+	const flush = async (): Promise<void> => {
+		await terminal.waitForRender();
+		await delay(20);
+	};
+
+	const snapshots: Record<string, unknown>[] = [];
+	let ansiOffset = 0;
+	const snapshot = async (): Promise<void> => {
+		await flush();
+		snapshots.push(await capture(terminal, workspacePath, ansiOffset));
+		ansiOffset = terminal.ansi.length;
+	};
+
+	await waitForTerminalText(terminal, "Press ctrl+o");
+	await waitForStage("installed");
+	await snapshot();
+
+	const borderBeforeTyping = latest?.borderColor?.("x") ?? null;
+	terminal.sendInput("typed-after-install");
+	await flush();
+	facts.push({ stage: "typed", text: latest?.getText(), border: latest?.borderColor?.("x") ?? null });
+	await snapshot();
+
+	terminal.sendInput("\x1b[Z");
+	await waitForTerminalText(terminal, "Thinking level: minimal");
+	await flush();
+	facts.push({
+		stage: "thinking",
+		borderBefore: borderBeforeTyping,
+		borderAfter: latest?.borderColor?.("x") ?? null,
+		footerLine: terminal.getViewport().find((line: string) => line.includes("faux-1")) ?? null,
+	});
+	await snapshot();
+
+	terminal.sendInput("\x03");
+	await delay(80);
+	terminal.sendInput("!");
+	await delay(140);
+	await flush();
+	facts.push({ stage: "bash", text: latest?.getText(), border: latest?.borderColor?.("x") ?? null });
+	await snapshot();
+	terminal.sendInput("\x7f");
+	await delay(140);
+	await flush();
+	facts.push({ stage: "bash_off", text: latest?.getText(), border: latest?.borderColor?.("x") ?? null });
+	await snapshot();
+
+	terminal.sendInput("after-install");
+	await delay(120);
+	await flush();
+	facts.push({ stage: "typed_before_restore", text: latest?.getText() });
+
+	terminal.sendInput("\x1be");
+	await waitForStage("restore.done");
+	await snapshot();
+
+	terminal.sendInput("default-typed");
+	await delay(120);
+	terminal.sendInput("\x1bs");
+	await waitForStage("state");
+	await snapshot();
+
+	terminal.sendInput("\x1bi");
+	await waitForStage("reinstall.done");
+	await flush();
+	facts.push({ stage: "reinstalled", editorBorderRows: piEditorBorderRows(terminal.getViewport()) });
+	await snapshot();
+
+	terminal.sendInput("submitted-draft");
+	await delay(200);
+	terminal.sendInput("\r");
+	await waitForTerminalText(terminal, "deterministic extension reply");
+	await delay(300);
+	await flush();
+	facts.push({
+		stage: "submitted",
+		textAfterSubmit: latest?.getText() ?? null,
+		onSubmitInvocations: latest?.observations.filter((event: any) => event.event === "inner.onSubmit").length ?? 0,
+		onSubmitAssigned: latest?.observations.some((event: any) => event.event === "onSubmit" && event.assigned === true) ?? false,
+	});
+	await snapshot();
+
+	const measurements = piExtensionEditorMeasurements(facts, installs);
+	const observation = {
+		facts,
+		installs: installs.map((install) => install.observations),
+		factoryInputs,
+		measurements,
+	};
+	const report = {
+		runtime: "pi",
+		scenario: scenario.id,
+		width: scenario.width,
+		workspace: workspacePath,
+		inputs: scenario.inputs,
+		theme: {
+			name: profile.theme.name,
+			colorCapability: profile.theme.colorCapability,
+			colors: runtime.getResolvedThemeColors(),
+		},
+		snapshots,
+		observation,
+	};
+	writeJson(output, report);
+	harness.cleanup();
+	await delay(10);
+	process.exit(0);
+}
+
+/// Observations recorded through pi's real `ctx.ui.setEditorComponent`
+/// boundary, with the frozen audit-1051 event vocabulary.
+class PiObservedEditor {
+	readonly actionHandlers = new Map<string, () => void>();
+	readonly observations: Record<string, any>[] = [];
+	private readonly inner: any;
+	private onSubmitValue?: (text: string) => void;
+	private onChangeValue?: (text: string) => void;
+	private onEscapeValue?: () => void;
+	private onCtrlDValue?: () => void;
+	private onPasteImageValue?: () => void;
+	private onExtensionShortcutValue?: (data: string) => boolean;
+	private borderColorValue?: (text: string) => string;
+
+	constructor(tui: any, theme: any, keybindings: any, editorClass: any) {
+		this.inner = new editorClass(tui, theme, keybindings, { paddingX: 0 });
+		this.inner.actionHandlers = this.actionHandlers;
+		this.inner.onSubmit = (text: string) => {
+			this.observations.push({ event: "inner.onSubmit", text });
+			this.onSubmitValue?.(text);
+		};
+		this.inner.onChange = (text: string) => {
+			this.observations.push({ event: "inner.onChange", text });
+			this.onChangeValue?.(text);
+		};
+		this.inner.onEscape = () => {
+			this.observations.push({ event: "inner.onEscape" });
+			this.onEscapeValue?.();
+		};
+		this.inner.onCtrlD = () => {
+			this.observations.push({ event: "inner.onCtrlD" });
+			this.onCtrlDValue?.();
+		};
+		this.inner.onPasteImage = () => {
+			this.observations.push({ event: "inner.onPasteImage" });
+			this.onPasteImageValue?.();
+		};
+		// pi routes registered extension shortcuts through the installed
+		// editor, so the probe must forward the app's handler to the inner
+		// CustomEditor or alt+e/alt+i never reach the extension.
+		this.inner.onExtensionShortcut = (data: string) => {
+			this.observations.push({ event: "inner.onExtensionShortcut", data: Buffer.from(data, "utf8").toString("hex") });
+			return this.onExtensionShortcutValue?.(data) ?? false;
+		};
+		this.observations.push({ event: "constructed", text: this.inner.getText(), focused: this.inner.focused });
+	}
+
+	get focused(): boolean {
+		return this.inner.focused;
+	}
+	set focused(value: boolean) {
+		this.observations.push({ event: "focus", value });
+		this.inner.focused = value;
+	}
+	get borderColor(): ((text: string) => string) | undefined {
+		return this.borderColorValue;
+	}
+	set borderColor(value: ((text: string) => string) | undefined) {
+		this.borderColorValue = value;
+		this.observations.push({ event: "borderColor", sample: value?.("x") ?? null });
+	}
+	get onSubmit(): ((text: string) => void) | undefined {
+		return this.onSubmitValue;
+	}
+	set onSubmit(value: ((text: string) => void) | undefined) {
+		this.onSubmitValue = value;
+		this.observations.push({ event: "onSubmit", assigned: typeof value === "function" });
+	}
+	get onChange(): ((text: string) => void) | undefined {
+		return this.onChangeValue;
+	}
+	set onChange(value: ((text: string) => void) | undefined) {
+		this.onChangeValue = value;
+		this.observations.push({ event: "onChange", assigned: typeof value === "function" });
+	}
+	get onEscape(): (() => void) | undefined {
+		return this.onEscapeValue;
+	}
+	set onEscape(value: (() => void) | undefined) {
+		this.onEscapeValue = value;
+		this.observations.push({ event: "onEscape", assigned: typeof value === "function" });
+	}
+	get onCtrlD(): (() => void) | undefined {
+		return this.onCtrlDValue;
+	}
+	set onCtrlD(value: (() => void) | undefined) {
+		this.onCtrlDValue = value;
+		this.observations.push({ event: "onCtrlD", assigned: typeof value === "function" });
+	}
+	get onPasteImage(): (() => void) | undefined {
+		return this.onPasteImageValue;
+	}
+	set onPasteImage(value: (() => void) | undefined) {
+		this.onPasteImageValue = value;
+		this.observations.push({ event: "onPasteImage", assigned: typeof value === "function" });
+	}
+	get onExtensionShortcut(): ((data: string) => boolean) | undefined {
+		return this.onExtensionShortcutValue;
+	}
+	set onExtensionShortcut(value: ((data: string) => boolean) | undefined) {
+		this.onExtensionShortcutValue = value;
+		this.observations.push({ event: "onExtensionShortcut", assigned: typeof value === "function" });
+	}
+	setPaddingX(padding: number): void {
+		this.observations.push({ event: "setPaddingX", padding });
+		this.inner.setPaddingX(padding);
+	}
+	setAutocompleteMaxVisible(maxVisible: number): void {
+		this.observations.push({ event: "setAutocompleteMaxVisible", maxVisible });
+		this.inner.setAutocompleteMaxVisible(maxVisible);
+	}
+	setAutocompleteProvider(provider: any): void {
+		this.observations.push({ event: "setAutocompleteProvider", present: provider != null });
+		this.inner.setAutocompleteProvider(provider);
+	}
+	getText(): string {
+		return this.inner.getText();
+	}
+	setText(text: string): void {
+		this.observations.push({ event: "setText", text });
+		this.inner.setText(text);
+	}
+	getExpandedText(): string {
+		return this.inner.getExpandedText?.() ?? this.inner.getText();
+	}
+	insertTextAtCursor(text: string): void {
+		this.inner.insertTextAtCursor?.(text);
+	}
+	addToHistory(text: string): void {
+		this.inner.addToHistory?.(text);
+	}
+	handleInput(data: string): void {
+		this.observations.push({ event: "input", hex: Buffer.from(data, "utf8").toString("hex") });
+		this.inner.handleInput(data);
+	}
+	render(width: number): string[] {
+		const lines = this.inner.render(width);
+		this.observations.push({ event: "render", width, lineCount: lines.length });
+		return lines;
+	}
+	invalidate(): void {
+		this.inner.invalidate();
+	}
+}
+
+/// The shared border-sample projection: both runtimes record the SGR sequence
+/// naming the border color; the contract compares the resolved RGB parameters.
+function piStyledSampleRgb(sample: unknown): string | null {
+	if (typeof sample !== "string") return null;
+	const match = sample.match(/\x1b\[(38;2;\d+;\d+;\d+)m/);
+	return match?.[1] ?? null;
+}
+
+function piEditorBorderRows(viewport: string[]): number {
+	return viewport.filter((line) => /^\u2500+$/.test(line.trim())).length;
+}
+
+/// The observation measurements the Pike cell also emits for the shared
+/// contract projection. Values whose literals follow from the restore/reinstall
+/// trigger are recorded as evidence but stay out of the compared subset.
+function piExtensionEditorMeasurements(facts: Record<string, any>[], installs: PiObservedEditor[]): Record<string, unknown> {
+	const fact = (stage: string) => facts.find((item) => item.stage === stage) ?? {};
+	const events = (install: PiObservedEditor) => install.observations;
+	const named = (install: PiObservedEditor, name: string) => events(install).filter((event) => event.event === name);
+	const assignedBeforeFirstTransfer = (install: PiObservedEditor, sink: string): boolean => {
+		const sinkIndex = events(install).findIndex((event) => event.event === sink);
+		const transferIndex = events(install).findIndex((event) => event.event === "setText");
+		return sinkIndex >= 0 && transferIndex >= 0 && sinkIndex < transferIndex;
+	};
+	const perInstallCount = (name: string): number => {
+		const counts = installs.map((install) => named(install, name).length);
+		return counts.every((count) => count === counts[0]) ? (counts[0] ?? 0) : Math.max(...counts);
+	};
+	const thinking = fact("thinking");
+	const bash = fact("bash");
+	const bashOff = fact("bash_off");
+	const restoreRequest = fact("restore.request");
+	const restoreDone = fact("restore.done");
+	const state = fact("state");
+	const reinstallDone = fact("reinstall.done");
+	const submitted = fact("submitted");
+	const reinstalled = fact("reinstalled");
+	return {
+		installText: fact("installed").text ?? null,
+		factoryCalls: installs.length,
+		thinkingBorderChanged: piStyledSampleRgb(thinking.borderBefore) !== piStyledSampleRgb(thinking.borderAfter),
+		bashBorderChanged: piStyledSampleRgb(bash.border) !== piStyledSampleRgb(thinking.borderAfter),
+		bashOffBorderRestored: piStyledSampleRgb(bashOff.border) === piStyledSampleRgb(thinking.borderAfter),
+		borderThinkingOffRgb: piStyledSampleRgb(thinking.borderBefore),
+		borderThinkingMinimalRgb: piStyledSampleRgb(thinking.borderAfter),
+		borderBashRgb: piStyledSampleRgb(bash.border),
+		restoreRequestText: restoreRequest.text ?? null,
+		restoreCarriedText: restoreDone.text === restoreRequest.text,
+		restoreLeftSingleEditor: restoreDone.customFocused === false,
+		reinstallCarriedText: reinstallDone.text === state.text,
+		reinstalledFocused: reinstallDone.customFocused === true,
+		submitInvokedOnSubmit: (submitted.onSubmitInvocations ?? 0) >= 1,
+		submitClearedEditor: submitted.textAfterSubmit === "",
+		submittedText: "submitted-draft",
+		editorBorderRowsPerFrame: reinstalled.editorBorderRows ?? 0,
+		setPaddingXCallsPerInstall: perInstallCount("setPaddingX"),
+		setAutocompleteMaxVisibleCallsPerInstall: perInstallCount("setAutocompleteMaxVisible"),
+		// The provider's per-install floor: pi applies one provider per install,
+		// while Pike's view re-applies its provider once more when it rebuilds the
+		// prompt slot after the reinstalling reload, so a uniform-or-max count
+		// would diverge. The compared count is the minimum across installs, the
+		// "every install received its provider" invariant both runtimes pin at
+		// one; Pike's duplicate application rides in its install events.
+		setAutocompleteProviderCallsPerInstall: Math.min(...installs.map((install) => named(install, "setAutocompleteProvider").length)),
+		// onChange invocation, not just assignment: the number of installs whose
+		// event stream records at least one change invocation carrying a non-empty
+		// draft. Raw counts stay evidence-side because the terminals deliver typed
+		// text at different granularity (Pike per key event, pi per input chunk),
+		// and pi's editor also echoes programmatic setText into onChange.
+		typedOnChangeInstalls: installs.filter((install) =>
+			named(install, "inner.onChange").some((event) => typeof event.text === "string" && event.text.length > 0)
+		).length,
+		onSubmitAndOnChangeAssigned: installs.every(
+			(install) => assignedBeforeFirstTransfer(install, "onSubmit") && assignedBeforeFirstTransfer(install, "onChange") &&
+				named(install, "onSubmit").some((event) => event.assigned === true) &&
+				named(install, "onChange").some((event) => event.assigned === true),
+		),
+		actionHandlersPresent: [...(installs[0]?.actionHandlers.keys() ?? [])].length > 0,
+		borderColorAssignmentsInFirstInstall: installs.length === 0 ? 0 : named(installs[0], "borderColor").length,
+	};
+}
+
 async function runPiChild(): Promise<number> {
 	const scenario = scenarios.find((item) => item.id === process.env.CCH_DIFFERENTIAL_SCENARIO);
 	const output = process.env.CCH_DIFFERENTIAL_OUTPUT;
@@ -2355,6 +2948,18 @@ async function runPiChild(): Promise<number> {
 	const { InteractiveMode } = await import(source("packages/coding-agent/src/modes/interactive/interactive-mode.ts"));
 	const { getResolvedThemeColors } = await import(source("packages/coding-agent/src/modes/interactive/theme/theme.ts"));
 	const { VirtualTerminal } = await import(source("packages/tui/test/virtual-terminal.ts"));
+	if (scenario.id === "extension-editor") {
+		const { CustomEditor } = await import(source("packages/coding-agent/src/modes/interactive/components/custom-editor.ts"));
+		await capturePiExtensionEditor(scenario, output, {
+			createHarness,
+			fauxAssistantMessage,
+			AgentSessionRuntime,
+			InteractiveMode,
+			getResolvedThemeColors,
+			VirtualTerminal,
+			CustomEditor,
+		});
+	}
 
 	const workspace = process.env.CCH_DIFFERENTIAL_WORKSPACE;
 	if (workspace === undefined || workspace === "") throw new Error("pi child requires CCH_DIFFERENTIAL_WORKSPACE");
