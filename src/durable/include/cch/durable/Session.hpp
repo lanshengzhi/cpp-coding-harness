@@ -10,6 +10,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 namespace cch::durable {
 
@@ -57,6 +58,83 @@ private:
 /// the identity of `kind`; the caller keeps the only copy.
 [[nodiscard]] DocumentDefinition define_document(std::string kind, std::move_only_function<chord::Json()> initial);
 
+/// Select the entry being appended as the first entry of its active context.
+struct SelfEntryHead {};
+
+/// An explicit context head, or the entry being appended (`"self"`).
+using EntryHeadVariant = std::variant<EntryId, SelfEntryHead>;
+
+/// One entry record with its application payload decoded to a C++ type.
+template <typename Data> struct TypedEntry {
+    EntryId id{};
+    ConversationId conversation_id{};
+    std::string kind{};
+    Data data{};
+    std::optional<EntryId> head{};
+};
+
+/// Definition of an entry kind and its JSON payload codec (frozen pi
+/// `defineEntry`). Copies share one kind and codec contract, as upstream entry
+/// tokens are reusable handles.
+template <typename Data> class EntryDefinition {
+public:
+    using EncodeHook = std::move_only_function<support::Expected<chord::Json>(const Data&) const>;
+    using DecodeHook = std::move_only_function<support::Expected<Data>(const chord::Json&) const>;
+
+    /// The stable entry discriminator carried by this token.
+    [[nodiscard]] const std::string& kind() const noexcept { return impl_->kind; }
+
+    /// Whether a stored entry has this token's discriminator (frozen `Entry.is`).
+    [[nodiscard]] bool is(const EntryRecord& entry) const noexcept { return entry.kind == impl_->kind; }
+
+    /// Convert a typed payload to its persisted JSON representation.
+    [[nodiscard]] support::Expected<chord::Json> encode(const Data& data) const { return impl_->encoder(data); }
+
+    /// Decode a persisted JSON payload to this entry kind's C++ value.
+    [[nodiscard]] support::Expected<Data> decode(const chord::Json& data) const { return impl_->decoder(data); }
+
+private:
+    struct Impl {
+        std::string kind;
+        EncodeHook encoder;
+        DecodeHook decoder;
+    };
+
+    template <typename T>
+    friend support::Expected<EntryDefinition<T>> define_entry(
+            std::string, typename EntryDefinition<T>::EncodeHook, typename EntryDefinition<T>::DecodeHook);
+
+    EntryDefinition(std::string kind, EncodeHook encoder, DecodeHook decoder)
+        : impl_(std::make_shared<Impl>(
+                  Impl{.kind = std::move(kind), .encoder = std::move(encoder), .decoder = std::move(decoder)})) {}
+
+    std::shared_ptr<const Impl> impl_;
+};
+
+/// Define a typed entry kind with codecs between its C++ payload and stored JSON.
+template <typename Data>
+[[nodiscard]] support::Expected<EntryDefinition<Data>> define_entry(std::string kind,
+        typename EntryDefinition<Data>::EncodeHook encoder,
+        typename EntryDefinition<Data>::DecodeHook decoder) {
+    if (kind.empty()) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Entry kind must be a non-empty string"));
+    }
+    if (!encoder || !decoder) {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "Entry kind requires payload codecs"));
+    }
+    return EntryDefinition<Data>{std::move(kind), std::move(encoder), std::move(decoder)};
+}
+
+/// Define a JSON-backed entry kind that stores and returns its payload directly.
+[[nodiscard]] inline support::Expected<EntryDefinition<chord::Json>> define_entry(std::string kind) {
+    return define_entry<chord::Json>(
+            std::move(kind),
+            [](const chord::Json& data) -> support::Expected<chord::Json> { return data; },
+            [](const chord::Json& data) -> support::Expected<chord::Json> { return data; });
+}
+
 /// One logical document address: a Session document has no conversation, a
 /// conversation document names its conversation (frozen pi `DocumentAddress`).
 struct DocumentAddress {
@@ -82,8 +160,33 @@ public:
     [[nodiscard]] support::Expected<ConversationRecord> create_conversation();
 
     /// Append one entry to a conversation (frozen pi `Tx.appendEntry`).
-    [[nodiscard]] support::Expected<EntryRecord> append_entry(
-            ConversationId conversation_id, std::string kind, chord::Json data);
+    [[nodiscard]] support::Expected<EntryRecord> append_entry(ConversationId conversation_id,
+            std::string kind,
+            chord::Json data,
+            std::optional<EntryHeadVariant> head = std::nullopt);
+
+    /// Append a typed entry with its kind and payload codec supplied by the
+    /// definition (frozen `Tx.appendEntry<D>`); `head` selects an existing
+    /// context head or `SelfEntryHead` to select this entry.
+    template <typename Data>
+    [[nodiscard]] support::Expected<TypedEntry<Data>> append_entry(const EntryDefinition<Data>& definition,
+            ConversationId conversation_id,
+            Data data,
+            std::optional<EntryHeadVariant> head = std::nullopt) {
+        auto encoded = definition.encode(data);
+        if (!encoded) {
+            return std::unexpected(std::move(encoded.error()));
+        }
+        auto record = append_entry(conversation_id, definition.kind(), std::move(*encoded), head);
+        if (!record) {
+            return std::unexpected(std::move(record.error()));
+        }
+        return TypedEntry<Data>{.id = record->id,
+                .conversation_id = record->conversation_id,
+                .kind = std::move(record->kind),
+                .data = std::move(data),
+                .head = record->head};
+    }
 
     /// Look up one conversation (frozen pi `Tx.conversation`). Rejected with
     /// `Tx.conversation() cannot read tables after the first table write` when
@@ -94,6 +197,32 @@ public:
     /// `Tx.entry() cannot read tables after the first table write` when the
     /// transaction already wrote a table.
     [[nodiscard]] support::Expected<std::optional<EntryRecord>> entry(EntryId id);
+
+    /// Look up an entry through a typed definition. A missing entry or a
+    /// different kind returns an empty optional; invalid stored JSON returns
+    /// the definition decoder's error.
+    template <typename Data>
+    [[nodiscard]] support::Expected<std::optional<TypedEntry<Data>>> entry(
+            const EntryDefinition<Data>& definition, EntryId id) {
+        auto record = entry(id);
+        if (!record) {
+            return std::unexpected(std::move(record.error()));
+        }
+        if (!record->has_value() || !definition.is(**record)) {
+            return std::optional<TypedEntry<Data>>{};
+        }
+        auto data = definition.decode((**record).data);
+        if (!data) {
+            return std::unexpected(std::move(data.error()));
+        }
+        const EntryRecord& stored = **record;
+        return std::optional<TypedEntry<Data>>{std::in_place,
+                TypedEntry<Data>{.id = stored.id,
+                        .conversation_id = stored.conversation_id,
+                        .kind = stored.kind,
+                        .data = std::move(*data),
+                        .head = stored.head}};
+    }
 
     /// Scan the conversations (frozen pi `Tx.scanConversations`). Rejected
     /// with `Tx.scanConversations() cannot read tables after the first table
@@ -236,14 +365,18 @@ public:
     [[nodiscard]] static std::unique_ptr<Session> create(Storage& storage);
 
     /// Run one atomic transaction on the Session mutation line (frozen pi
-    /// `Session.commit`). The callback receives the transaction's view; a
+    /// `Session.commit`). The callback receives the transaction's view. A
     /// callback that reports an error rolls the transaction back, publishes
-    /// nothing, and leaves the Session usable.
+    /// nothing, and leaves the Session usable. Commits execute in admission
+    /// order, and the next callback starts after prior Storage settlement.
+    /// The Session must outlive the operation until its completion callback
+    /// returns, because the mutation line continues there.
     [[nodiscard]] support::AsyncResult<void> commit(
             std::move_only_function<support::Expected<void>(Transaction&)> change);
 
-    /// Seal admission, settle admitted commits, then close the storage
-    /// (frozen pi `Session.close`). Idempotent.
+    /// Seal admission and stop observers immediately, settle admitted commits,
+    /// then close Storage (frozen pi `Session.close`). Idempotent. The Session
+    /// must outlive the operation until its completion callback returns.
     [[nodiscard]] support::AsyncResult<void> close();
 
     /// Observe every committed batch (frozen pi `Session.subscribeCommits`).
