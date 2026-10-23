@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1035",
   "family": "audit-1035",
-  "capturedAt": "2026-10-22T23:17:52.612Z",
+  "capturedAt": "2026-10-23T01:10:10.305Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -33,12 +33,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1035/capture-placement-span.mts",
-    "sha256": "5b10ba2222fd532f0ee746cbb951ca6c53161a892866579bf6c9da6b04d36efd",
+    "sha256": "bd5b58194402ae7fa56f4630aa72205d45a7f87f06125911c5d845ba85ffcc33",
     "command": "PI_CHECKOUT=/tmp/cch-1050-pi-frozen PI_BASELINE=pi-v1.3.0 /tmp/cch-1050-pi-frozen/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1035/capture-placement-span.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1035/capture-placement-span.mts",
-        "sha256": "5b10ba2222fd532f0ee746cbb951ca6c53161a892866579bf6c9da6b04d36efd"
+        "sha256": "bd5b58194402ae7fa56f4630aa72205d45a7f87f06125911c5d845ba85ffcc33"
       }
     ]
   },
@@ -46,10 +46,11 @@
     {
       "path": "placement-span.json",
       "family": "audit-1035",
-      "bytes": 5974,
-      "sha256": "6de938379f56c07054733fe8261ac6463e24d4ab14b35d39761b27f45cf3ba28",
+      "bytes": 8894,
+      "sha256": "1f01dd7c354e67a0e2c4d379732c88bd8db5bba6798d62440d0b804a162a9934",
       "sourceEndpoints": [
-        "packages/tui/src/tui-alt-screen.ts:imageCellsNeedRedraw,drawKittyImagesLast,prepareKittyScreen,doRender",
+        "packages/tui/src/tui-alt-screen.ts:imageCellsNeedRedraw,drawKittyImagesLast,prepareKittyScreen,compositeOverlays,doRender",
+        "packages/tui/src/tui.ts:showOverlay",
         "packages/tui/src/terminal-image.ts:encodeKitty,getKittyImagePlacement,getKittyImagePlacementRows,deleteAllKittyPlacements",
         "packages/tui/test/tui-alt-screen.test.ts:redraws WezTerm Kitty images after writes to covered rows"
       ],
@@ -202,6 +203,90 @@
                 ],
                 "writes": [
                   "\u001b[?2026h\u001b[4;1H\u001b[2Kdone\u001b[0m\u001b]8;;\u0007\u001b[?25l\u001b[?2026l"
+                ]
+              }
+            ]
+          },
+          "normalizations": [
+            "rename-image-ids",
+            "drop-full-redraw-2J",
+            "drop-cursor-visibility-repeat"
+          ],
+          "upstreamTest": {
+            "path": "packages/tui/test/tui-alt-screen.test.ts",
+            "case": "redraws WezTerm Kitty images after writes to covered rows"
+          }
+        },
+        {
+          "name": "wezterm-overlay-inside-placement-span",
+          "inputs": {
+            "dimensions": {
+              "columns": 20,
+              "rows": 4
+            },
+            "capabilities": "kitty",
+            "weztermPane": true,
+            "image": {
+              "id": 7301,
+              "columns": 2,
+              "rows": 3,
+              "widthPx": 100,
+              "heightPx": 100,
+              "mimeType": "image/png",
+              "data": "AAAA"
+            },
+            "content": {
+              "rows": [
+                "image-anchor",
+                "covered-text",
+                "",
+                "tail"
+              ],
+              "overlay": {
+                "line": "overlay!",
+                "row": 1,
+                "column": 0,
+                "width": 20,
+                "maxHeight": 1
+              }
+            }
+          },
+          "expected": {
+            "phases": [
+              {
+                "action": "initial",
+                "viewport": [
+                  "",
+                  "",
+                  "",
+                  "after"
+                ],
+                "writes": [
+                  "\u001b[?2026h\u001b_Ga=d,d=A,q=2\u001b\\\u001b[2J\u001b[1;1H\u001b[2K\u001b[2;1H\u001b[2K\u001b[3;1H\u001b[2K\u001b[4;1H\u001b[2K\u001b[2;1H\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[0m\u001b]8;;\u0007\u001b[4;1Hafter\u001b[0m\u001b]8;;\u0007\u001b[1;1H\u001b_Ga=T,f=100,q=2,C=1,c=2,r=3,i=7301;AAAA\u001b\\\u001b[?25l\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "overlay-shown",
+                "viewport": [
+                  "",
+                  "overlay!",
+                  "",
+                  "after"
+                ],
+                "writes": [
+                  "\u001b[?2026h\u001b_Ga=d,d=a,q=2\u001b\\\u001b[1;1H\u001b[2K\u001b[2;1H\u001b[2K\u001b[3;1H\u001b[2K\u001b[4;1H\u001b[2K\u001b[2;1H\u001b[0m\u001b]8;;\u0007overlay!            \u001b[0m\u001b]8;;\u0007\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[0m\u001b]8;;\u0007\u001b[4;1Hafter\u001b[0m\u001b]8;;\u0007\u001b[1;1H\u001b_Ga=p,q=2,C=1,c=2,r=3,i=7301\u001b\\\u001b[?25l\u001b[?2026l"
+                ]
+              },
+              {
+                "action": "overlay-hidden",
+                "viewport": [
+                  "",
+                  "",
+                  "",
+                  "after"
+                ],
+                "writes": [
+                  "\u001b[?2026h\u001b_Ga=d,d=a,q=2\u001b\\\u001b[1;1H\u001b[2K\u001b[2;1H\u001b[2K\u001b[3;1H\u001b[2K\u001b[4;1H\u001b[2K\u001b[2;1H\u001b[0m\u001b]8;;\u0007\u001b[3;1H\u001b[0m\u001b]8;;\u0007\u001b[4;1Hafter\u001b[0m\u001b]8;;\u0007\u001b[1;1H\u001b_Ga=p,q=2,C=1,c=2,r=3,i=7301\u001b\\\u001b[?25l\u001b[?2026l"
                 ]
               }
             ]

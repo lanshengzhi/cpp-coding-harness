@@ -26,6 +26,7 @@
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Component.hpp>
 #include <cch/tui/Image.hpp>
+#include <cch/tui/Overlay.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "support/Json.hpp"
@@ -309,6 +310,69 @@ void replay_scenario(std::string_view name, bool wezterm) {
     REQUIRE(tui.stop());
 }
 
+/// A plain overlay body: the compositor paints it at the requested rect, and
+/// the covered base row keeps its content beneath it.
+class OverlayLine final : public cch::tui::Component {
+public:
+    explicit OverlayLine(std::string line) : line_(std::move(line)) {}
+
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        return cch::tui::RenderResult{.lines = {line_}};
+    }
+
+    void invalidate() override {}
+
+private:
+    std::string line_;
+};
+
+/// Replays the frozen overlay-inside-span scenario: an overlay row composed at
+/// row 1 changes a row inside the live placement span, so the frozen WezTerm
+/// trigger repaints the placement AFTER the overlay text, in both the shown
+/// and the hidden frame.
+void replay_overlay_scenario(std::string_view name) {
+    const auto& scenario = scenario_of(name);
+    const auto& inputs = scenario.at("inputs");
+    const auto& image = inputs.at("image");
+    const auto& overlay_inputs = inputs.at("content").at("overlay");
+
+    ScopedEnvironmentVariable wezterm_pane("WEZTERM_PANE");
+    ScopedEnvironmentVariable term_program("TERM_PROGRAM");
+    term_program.unset();
+    wezterm_pane.set("1");
+
+    cch::tui::VirtualTerminal terminal(
+            {.columns = static_cast<std::size_t>(inputs.at("dimensions").at("columns").get_number()),
+                    .rows = static_cast<std::size_t>(inputs.at("dimensions").at("rows").get_number()),
+                    .capabilities = {.inline_images = cch::tui::InlineImageProtocol::Kitty}});
+    cch::tui::AltScreen tui(terminal);
+    std::vector<cch::tui::InlineImageRenderRegion> images;
+    images.push_back(placement_region(image));
+    tui.set_layout_root(std::make_unique<SpanChild>(std::move(images)));
+
+    REQUIRE(tui.start());
+    PhaseChecker check(terminal, scenario);
+    REQUIRE(tui.render());
+    check.check("initial");
+
+    auto overlay = std::make_unique<cch::tui::Overlay>(
+            cch::tui::OverlayOptions{.width = cch::tui::SizeValue{overlay_inputs.at("width").get_number()},
+                    .max_height = cch::tui::SizeValue{overlay_inputs.at("maxHeight").get_number()},
+                    .row = cch::tui::SizeValue{overlay_inputs.at("row").get_number()},
+                    .col = cch::tui::SizeValue{overlay_inputs.at("column").get_number()}});
+    REQUIRE(overlay->add_child(std::make_unique<OverlayLine>(overlay_inputs.at("line").get_string())));
+    auto* overlay_pointer = overlay.get();
+    REQUIRE(tui.add_overlay(std::move(overlay)));
+    REQUIRE(tui.render());
+    check.check("overlay-shown");
+
+    REQUIRE(tui.remove_overlay(overlay_pointer));
+    REQUIRE(tui.render());
+    check.check("overlay-hidden");
+    check.require_done();
+    REQUIRE(tui.stop());
+}
+
 } // namespace
 
 TEST_CASE("frozen WezTerm placement-span repaint emits image bytes after the erase and text passes",
@@ -319,4 +383,9 @@ TEST_CASE("frozen WezTerm placement-span repaint emits image bytes after the era
 TEST_CASE("frozen non-WezTerm control rewrites the covered row without image commands",
         "[tui][image][alt-screen][issue1035][compat-pi]") {
     replay_scenario("plain-terminal-placement-span-control", false);
+}
+
+TEST_CASE("frozen WezTerm overlay inside a placement span repaints with image bytes last",
+        "[tui][image][alt-screen][issue1035][compat-pi]") {
+    replay_overlay_scenario("wezterm-overlay-inside-placement-span");
 }

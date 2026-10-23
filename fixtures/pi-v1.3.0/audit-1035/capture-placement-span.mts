@@ -222,6 +222,77 @@ async function captureScenario(weztermPane: boolean) {
 const weztermPhases = await captureScenario(true);
 const controlPhases = await captureScenario(false);
 
+// Frozen ground truth for the overlay-inside-span divergence proofs: an
+// overlay row composed at row 1 (inside the live placement span [0, 3)).
+// Frozen keeps the placement and re-emits `a=p` AFTER the overlay text in
+// both the shown and hidden frames; the bytes are captured into the artifact
+// by the overlay scenario below.
+const overlayPhases = await captureOverlayScenario();
+
+/// A second run with an overlay composed over a covered row: the realistic
+/// trigger — the overlay row appears INSIDE the live placement span, so the
+/// frozen trigger must repaint the images around the overlay bytes.
+async function captureOverlayScenario() {
+	process.env.WEZTERM_PANE = "1";
+	setCapabilities(KITTY);
+	try {
+		const terminal = new VirtualTerminal(20, 4);
+		const writes: string[] = [];
+		const original = terminal.write.bind(terminal);
+		terminal.write = (data: string) => {
+			writes.push(data);
+			original(data);
+		};
+		registerKittyImageMetadata({
+			imageId: IMAGE_ID,
+			columns: IMAGE.columns,
+			rows: IMAGE.rows,
+			widthPx: IMAGE.widthPx,
+			heightPx: IMAGE.heightPx,
+		});
+		const imageLine = encodeKitty(IMAGE.data, {
+			columns: IMAGE.columns,
+			rows: IMAGE.rows,
+			imageId: IMAGE_ID,
+			moveCursor: false,
+		});
+		const tui = new TuiAltScreen(terminal);
+		tui.setLayoutRoot({
+			render: () => [imageLine, "", "", "after"],
+			invalidate: () => {},
+		});
+		tui.start();
+		let cursor = writes.length;
+		await terminal.waitForRender();
+		const phases: any[] = [];
+		const observe = async (action: string) => {
+			await terminal.waitForRender();
+			phases.push({
+				action,
+				viewport: terminal.getViewport().map((line: string) => line.trimEnd()),
+				writes: writes.slice(cursor),
+			});
+			cursor = writes.length;
+		};
+		await observe("initial");
+
+		// Row 1 is inside the placement span [0, 3): composing the overlay row
+		// there is the frozen #10319 regression shape.
+		const handle = tui.showOverlay(
+			{ render: () => ["overlay!"], invalidate: () => {} },
+			{ row: 1, col: 0, width: 20, maxHeight: 1 } as any,
+		);
+		await observe("overlay-shown");
+		handle.hide();
+		await observe("overlay-hidden");
+		tui.stop();
+		return phases;
+	} finally {
+		resetCapabilitiesCache();
+		delete process.env.WEZTERM_PANE;
+	}
+}
+
 // Guards: fail the capture unless the frozen binary really exhibits the two-tier trigger.
 {
 	const frame = weztermPhases[1].writes.join("");
@@ -240,10 +311,22 @@ const controlPhases = await captureScenario(false);
 		throw new Error("the non-WezTerm control must not emit any image command for a span-covered change");
 	if (!controlFrame.includes("\x1b[2;1H\x1b[2Kchanged"))
 		throw new Error("the non-WezTerm control must rewrite only the changed covered row");
+	for (const action of ["overlay-shown", "overlay-hidden"]) {
+		const phase = overlayPhases.find((entry: any) => entry.action === action);
+		const frame = phase.writes.join("");
+		if (!frame.includes("\x1b_Ga=d,d=a,q=2\x1b\\"))
+			throw new Error(`the overlay ${action} frame must delete all placements first`);
+		const placementAt = frame.indexOf("\x1b_Ga=p,q=2");
+		const textAt = frame.indexOf("overlay!");
+		if (action === "overlay-shown" && !(textAt >= 0 && placementAt > textAt))
+			throw new Error("the overlay text must be written before the image re-placement");
+		if (placementAt < 0) throw new Error(`the overlay ${action} frame must re-place the image`);
+	}
 }
 
 const sourceEndpoints = [
-	"packages/tui/src/tui-alt-screen.ts:imageCellsNeedRedraw,drawKittyImagesLast,prepareKittyScreen,doRender",
+	"packages/tui/src/tui-alt-screen.ts:imageCellsNeedRedraw,drawKittyImagesLast,prepareKittyScreen,compositeOverlays,doRender",
+	"packages/tui/src/tui.ts:showOverlay",
 	"packages/tui/src/terminal-image.ts:encodeKitty,getKittyImagePlacement,getKittyImagePlacementRows,deleteAllKittyPlacements",
 	"packages/tui/test/tui-alt-screen.test.ts:redraws WezTerm Kitty images after writes to covered rows",
 ];
@@ -287,6 +370,22 @@ const scenarios = [
 			},
 		},
 		expected: { phases: controlPhases },
+		normalizations: NORMALIZATIONS,
+		upstreamTest,
+	},
+	{
+		name: "wezterm-overlay-inside-placement-span",
+		inputs: {
+			dimensions: { columns: 20, rows: 4 },
+			capabilities: "kitty",
+			weztermPane: true,
+			image: IMAGE,
+			content: {
+				rows: ["image-anchor", "covered-text", "", "tail"],
+				overlay: { line: "overlay!", row: 1, column: 0, width: 20, maxHeight: 1 },
+			},
+		},
+		expected: { phases: overlayPhases },
 		normalizations: NORMALIZATIONS,
 		upstreamTest,
 	},
