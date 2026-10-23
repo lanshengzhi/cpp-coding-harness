@@ -417,6 +417,10 @@ DetectedImageCapabilities detect_image_capabilities(TmuxHyperlinkProbe tmux_forw
     return detected;
 }
 
+bool is_wezterm_terminal() {
+    return environment_present("WEZTERM_PANE") || lowercase_environment("TERM_PROGRAM") == "wezterm";
+}
+
 std::string hyperlink(std::string_view text, std::string_view url) {
     return std::format("\x1b]8;;{}\x1b\\{}\x1b]8;;\x1b\\", url, text);
 }

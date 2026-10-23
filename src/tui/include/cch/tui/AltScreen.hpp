@@ -418,6 +418,10 @@ private:
     /// (pi `beforeTerminalStart`): an iTerm2 session suppresses image
     /// placements for its whole lifetime and shows the text fallback.
     InlineImageProtocol session_image_protocol_{InlineImageProtocol::None};
+    /// The frozen `isWezTerm` gate captured when the session started
+    /// (pi `tui-alt-screen.ts:1709`): the second-tier placement-span repaint
+    /// and the images-last emission order apply only on WezTerm (#1035).
+    bool wezterm_session_{false};
     /// Rendered row count per mounted child of the implicit document, in mount
     /// order (pi `implicitDocument.mouseLayout.children`).
     std::vector<std::pair<Component*, std::size_t>> implicit_document_rows_;

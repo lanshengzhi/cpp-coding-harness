@@ -581,6 +581,7 @@ support::ExpectedVoid AltScreen::start() {
     // whether the root places Kitty images or shows the text fallback for its
     // whole lifetime, and a previous session's uploads are forgotten.
     session_image_protocol_ = terminal_.capabilities().inline_images;
+    wezterm_session_ = is_wezterm_terminal();
     image_pipeline_->clear_image_placements();
     if (focused_ == nullptr) fallback_focus();
     if (auto result = terminal_.start(
@@ -602,6 +603,9 @@ support::ExpectedVoid AltScreen::start() {
     // through restore_render_state() is the #985 transfer case: the terminal
     // already shows those rows, so it survives start().
     if (baseline_from_restore_) {
+        // The transferred baseline is also the image stage's `previousScreen`:
+        // the restored frame skips the rows the terminal already shows.
+        image_pipeline_->restore_screen(previous_lines_);
         baseline_from_restore_ = false;
     } else {
         first_render_ = true;
@@ -1641,12 +1645,18 @@ support::ExpectedVoid AltScreen::render_viewport(std::vector<std::string> lines,
     write_accounting_ = {};
     if (full_repaint) ++full_redraws_;
 
+    // Frozen `applySelection` and `applyLineResets` precede the image stage:
+    // selection resolves on the component screen, and the anchor replacement
+    // never sees a covered row's selection state.
+    selection_source_lines_ = lines;
+    auto selected_lines = apply_text_selection(lines);
     // The frozen fullscreen image stage (tui-alt-screen.ts
     // `prepareKittyScreen`): changed image anchors force the full row rewrite
     // and its placement cleanup, and offscreen uploads past the frozen caps
-    // are deleted by image id.
-    auto prepared =
-            image_pipeline_->prepare_fullscreen_images(std::move(lines), images, session_image_protocol_, full_repaint);
+    // are deleted by image id. The prepared rows below are the write form; the
+    // selection-applied component screen is the change-detection basis.
+    auto prepared = image_pipeline_->prepare_fullscreen_images(
+            std::move(selected_lines), images, session_image_protocol_, full_repaint, wezterm_session_);
     lines = std::move(prepared.lines);
     const bool rewrite_all_rows = full_repaint || prepared.images_need_redraw;
 
@@ -1674,22 +1684,61 @@ support::ExpectedVoid AltScreen::render_viewport(std::vector<std::string> lines,
         write_accounting_.committed_bytes += cleanup.size();
     }
 
-    selection_source_lines_ = lines;
-    const auto selected_lines = apply_text_selection(lines);
-    for (std::size_t row = 0; row < visible_rows; ++row) {
-        const std::string empty;
-        const auto& desired = row < selected_lines.size() ? selected_lines[row] : empty;
-        if (!rewrite_all_rows && row < previous_lines_.size() && previous_lines_[row] == desired) continue;
-        // Absolute row placement with an explicit line erase: the viewport is
-        // not a flow, so a shorter row must not leave the previous tail behind.
-        auto output = std::format("\x1b[{};1H\x1b[2K{}", row + 1, desired);
+    // Frozen `drawKittyImagesLast` (tui-alt-screen.ts:1748-1751): WezTerm
+    // erases the Kitty cells a row write touches, so a WezTerm Kitty repaint
+    // erases every rewritten row first, then writes the text rows, then
+    // re-places the images — no later row write may intersect a covered cell.
+    // Every other terminal and every text-only frame keeps the interleaved
+    // erase-and-write pass.
+    const bool draw_images_last =
+            rewrite_all_rows && session_image_protocol_ == InlineImageProtocol::Kitty && wezterm_session_ &&
+            std::ranges::any_of(lines, [](const std::string& line) { return is_image_line(line); });
+    const std::string empty;
+    const auto& desired_at = [&](std::size_t row) -> const std::string& {
+        return row < lines.size() ? lines[row] : empty;
+    };
+    const auto row_unchanged = [&](std::size_t row) {
+        if (rewrite_all_rows) return false;
+        // Frozen compares two `undefined` rows as equal: a row past both the
+        // current and the previous screen is skipped, never rewritten empty.
+        return row >= prepared.changed_rows.size() || !prepared.changed_rows[row];
+    };
+    const auto write_row = [&](const std::string& output) -> support::ExpectedVoid {
         ++write_accounting_.attempted_writes;
-        if (auto written = terminal_.write(output); !written) {
-            (void)terminal_.end_synchronized_update();
-            return std::unexpected(written.error());
-        }
+        if (auto written = terminal_.write(output); !written) return std::unexpected(written.error());
         ++write_accounting_.committed_writes;
         write_accounting_.committed_bytes += output.size();
+        return {};
+    };
+    const auto fail_frame = [this](const auto& error) -> support::ExpectedVoid {
+        (void)terminal_.end_synchronized_update();
+        return std::unexpected(error);
+    };
+    if (draw_images_last) {
+        // Erase pass: bare cursor-addressed line erases, no payload.
+        for (std::size_t row = 0; row < visible_rows; ++row) {
+            if (row_unchanged(row)) continue;
+            if (auto written = write_row(std::format("\x1b[{};1H\x1b[2K", row + 1)); !written)
+                return fail_frame(written.error());
+        }
+        // Text pass, then image pass: rows are written bare because the erase
+        // pass already cleared them.
+        for (const bool image_pass : {false, true}) {
+            for (std::size_t row = 0; row < visible_rows; ++row) {
+                if (row_unchanged(row) || is_image_line(desired_at(row)) != image_pass) continue;
+                if (auto written = write_row(std::format("\x1b[{};1H{}", row + 1, desired_at(row))); !written)
+                    return fail_frame(written.error());
+            }
+        }
+    } else {
+        // Interleaved pass: absolute row placement with an explicit line
+        // erase — the viewport is not a flow, so a shorter row must not leave
+        // the previous tail behind.
+        for (std::size_t row = 0; row < visible_rows; ++row) {
+            if (row_unchanged(row)) continue;
+            if (auto written = write_row(std::format("\x1b[{};1H\x1b[2K{}", row + 1, desired_at(row))); !written)
+                return fail_frame(written.error());
+        }
     }
 
     const bool show_cursor = resolved.has_value() && show_hardware_cursor_;
@@ -1712,9 +1761,8 @@ support::ExpectedVoid AltScreen::render_viewport(std::vector<std::string> lines,
     // Commit the frame only after it fully reached the terminal, so a failed
     // frame repaints instead of being skipped by the differential.
     previous_lines_.assign(visible_rows, std::string{});
-    for (std::size_t row = 0; row < visible_rows && row < selected_lines.size(); ++row)
-        previous_lines_[row] = selected_lines[row];
-    selection_source_lines_ = lines;
+    for (std::size_t row = 0; row < visible_rows && row < lines.size(); ++row)
+        previous_lines_[row] = lines[row];
     previous_dimensions_ = dimensions;
     cursor_ = resolved;
     first_render_ = false;

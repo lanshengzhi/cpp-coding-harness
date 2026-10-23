@@ -39,6 +39,12 @@ inline constexpr std::size_t kMaxCachedOffscreenKittyDecodedBytes = 64 * 1024 * 
 /// frozen cleanup bytes that precede the row writes.
 struct FullscreenImageFrame {
     std::vector<std::string> lines;
+    /// Frozen `changedRows` (pi `tui-alt-screen.ts:1705`): the component-rendered
+    /// rows that differ from the previous frame's screen. The writer skips an
+    /// unchanged row even when its prepared bytes differ, because a
+    /// transmission-to-`a=p` replacement switch is cache state, not a content
+    /// change (#1035).
+    std::vector<bool> changed_rows;
     /// Frozen `clearImages`: delete every cached resource on a full redraw
     /// when nothing was uploaded yet, every placement once something was, and
     /// placements only on an image-anchor redraw. Empty when the frame keeps
@@ -93,14 +99,25 @@ public:
     /// clear bytes and full-row rewrite a changed anchor requires. A non-Kitty
     /// session (including the fullscreen iTerm2 fallback, which suppresses
     /// images for the whole session) writes the fallback text at each anchor
-    /// row and places nothing. `full_redraw` maps the root's full repaint.
+    /// row and places nothing. `full_redraw` maps the root's full repaint;
+    /// `wezterm_session` maps pi's `isWezTerm`, the second-tier
+    /// `imageCellsNeedRedraw` gate (#1035): under WezTerm a changed text row
+    /// strictly inside a live placement span repaints the images even when no
+    /// anchor identity, geometry or anchor string changed.
     [[nodiscard]] FullscreenImageFrame prepare_fullscreen_images(std::vector<std::string> lines,
             const std::vector<InlineImageRenderRegion>& images,
             InlineImageProtocol protocol,
-            bool full_redraw);
+            bool full_redraw,
+            bool wezterm_session);
     /// Drop the uploaded-placement cache at a session boundary
-    /// (pi `beforeTerminalStart`/`beforeTerminalStop`).
+    /// (pi `beforeTerminalStart`/`beforeTerminalStop`). Also drops the
+    /// fullscreen change-detection baseline, like the frozen `previousScreen`
+    /// reset; a transferred render state re-seeds it through `restore_screen`.
     void clear_image_placements() noexcept;
+    /// Re-seed the fullscreen change-detection baseline with the rows a
+    /// transferred render state already wrote (#985/#997): the restored frame
+    /// must skip those rows instead of rewriting them.
+    void restore_screen(const std::vector<std::string>& rows) { previous_fullscreen_lines_ = rows; }
 
 private:
     void compose_images(std::vector<std::string>& lines,
@@ -119,8 +136,9 @@ private:
         std::uint64_t revision{0};
     };
 
-    /// One cached fullscreen upload: the session upload id, the anchor command
-    /// of its last prepared frame, and the frozen eviction accounting.
+    /// One cached fullscreen upload: the session upload id, the placement-only
+    /// reuse command of its last prepared frame, and the frozen eviction
+    /// accounting.
     struct FullscreenImagePlacement {
         TerminalImageHandle handle;
         std::uint64_t revision{0};
@@ -128,7 +146,12 @@ private:
         std::size_t decoded_bytes{0};
         std::size_t row{0};
         std::size_t column{0};
-        std::string anchor;
+        /// The `a=p` reuse bytes for this handle and geometry: what a cache
+        /// hit re-places. Comparing reuse strings — not the transmission the
+        /// first frame wrote — is pi's anchor-change trigger (#1035): the
+        /// transmission-to-replacement switch is cache state, not a content
+        /// change, and must not repaint by itself.
+        std::string reuse;
         /// Visible in the previous prepared frame: an anchor that stops being
         /// visible forces a redraw so its old cells are rewritten.
         bool anchored{false};
@@ -155,6 +178,11 @@ private:
     /// Upload ids in frozen LRU order (oldest first): visible placements move
     /// to the back on each redraw frame, exactly like the frozen Map order.
     std::vector<std::uint64_t> fullscreen_image_order_;
+    /// The previous frame's component-rendered screen: the frozen
+    /// `previousScreen` the second-tier span trigger diffs against. The
+    /// prepared (anchor-replaced) lines are write-only state and must not feed
+    /// change detection (#1035).
+    std::vector<std::string> previous_fullscreen_lines_;
     bool restored_state_pending_start_{false};
     std::size_t full_redraws_{0};
     bool show_hardware_cursor_{false};
