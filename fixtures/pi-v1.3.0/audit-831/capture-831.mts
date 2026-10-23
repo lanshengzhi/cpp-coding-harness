@@ -179,13 +179,16 @@ class Viewport {
 
 const scenario = async (name: string, inputs: DockInputs, actions: StepAction[]) => {
     const viewport = new Viewport(inputs);
-    const steps = [];
-    for (const action of actions) steps.push(await viewport.apply(action));
+    const frames = [];
+    for (const action of actions) frames.push(await viewport.apply(action));
     viewport.stop();
+    // The validator's scenario record shape (scripts/evidence/audit_evidence.py):
+    // name, non-empty inputs, and the recorded observation under `expected`.
     return {
         name,
-        dimensions: { columns: inputs.columns, rows: inputs.rows },
         inputs: {
+            columns: inputs.columns,
+            rows: inputs.rows,
             document: inputs.document,
             pending: inputs.pending ?? "",
             status: inputs.status ?? "",
@@ -193,7 +196,7 @@ const scenario = async (name: string, inputs: DockInputs, actions: StepAction[])
             footer: inputs.footer,
             steps: actions,
         },
-        steps,
+        expected: { frames },
     };
 };
 
@@ -252,6 +255,14 @@ const artifact = normalize({
     revision,
     family,
     capturedAt: new Date().toISOString(),
+    environment: {
+        platform: process.platform,
+        arch: process.arch,
+        libc: "glibc",
+        glibcVersion: glibc,
+        node: process.version,
+        tsx: tsxVersion,
+    },
     sourceEndpoints: [
         "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
         "packages/tui/src/components/stack.ts:VStack,distribute",
@@ -298,12 +309,12 @@ const manifest = normalize({
             bytes: Buffer.byteLength(artifactBytes),
             sha256: sha256(artifactBytes),
             sourceEndpoints: artifact.sourceEndpoints,
-            scenarioCount: scenarios.length,
+            scenarios: artifact.scenarios,
         },
     ],
 });
 writeFileSync(path.join(familyDir, "manifest.json"), `${JSON.stringify(manifest, null, 2)}\n`);
 console.log(
     `${family}: captured ${scenarios.length} scenarios ` +
-        `(${scenarios.flatMap((entry) => entry.steps).length} frames) into ${artifactName}`,
+        `(${scenarios.reduce((total, entry) => total + entry.expected.frames.length, 0)} frames) into ${artifactName}`,
 );

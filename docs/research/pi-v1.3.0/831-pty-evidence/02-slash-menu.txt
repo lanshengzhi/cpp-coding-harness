@@ -1,0 +1,30 @@
+>7u
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+──────────────────────────────────────────────────
+/
+──────────────────────────────────────────────────
+→ clear
+  commands
+  compact        Manually compact the session co
+  copy           Copy last agent message to clip
+  exit           Quit pike
+  (1/25)
+
+0.0%/1.0M (auto)       auto/glm-5.3-flash • medium

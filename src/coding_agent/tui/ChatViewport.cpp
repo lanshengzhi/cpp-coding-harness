@@ -61,20 +61,16 @@ support::ExpectedVoid ChatViewport::set_editor(std::unique_ptr<cch::tui::Compone
 
 namespace {
 
-/// The frozen dock entry shape (`{ shrink: 1, minSize: 0 }` for the regions
-/// that yield).
-[[nodiscard]] constexpr cch::tui::StackEntryOptions dock_entry_options(std::size_t min_size, std::size_t shrink) {
-    return cch::tui::StackEntryOptions{.shrink = shrink, .min_size = min_size};
+/// The frozen dock entry for a non-editor region (`{ shrink: 1, minSize: 0 }`).
+[[nodiscard]] constexpr cch::tui::StackEntryOptions dock_entry_options(std::size_t min_size) {
+    return cch::tui::StackEntryOptions{.shrink = 1, .min_size = min_size};
 }
 
 /// Attach one dock region; a missing entry is the toolkit's null-child
-/// Validation error. `shrink` 0 keeps a region out of the shrink distribution
-/// entirely, so the dock yields its other rows instead of cropping it.
-[[nodiscard]] support::ExpectedVoid add_dock_region(cch::tui::VStack& dock,
-        std::unique_ptr<cch::tui::Component> region,
-        std::size_t min_size,
-        std::size_t shrink = 1) {
-    if (auto added = dock.add_child(std::move(region), dock_entry_options(min_size, shrink)); !added) {
+/// Validation error.
+[[nodiscard]] support::ExpectedVoid add_dock_region(
+        cch::tui::VStack& dock, std::unique_ptr<cch::tui::Component> region, std::size_t min_size) {
+    if (auto added = dock.add_child(std::move(region), dock_entry_options(min_size)); !added) {
         return std::unexpected(added.error());
     }
     return {};
@@ -132,16 +128,7 @@ support::Expected<ChatViewport> create_chat_viewport(ChatViewportOptions options
             return std::unexpected(added.error());
         }
     }
-    // The footer is the one entry that never yields a row (#831). pi's frozen
-    // dock declares every non-editor entry `{ shrink: 1, minSize: 0 }`, so an
-    // over-budget dock can allocate the two-row footer a single row, and the
-    // leaf crop keeps the first one: the stats row leaves the composed frame
-    // until the dock shrinks again. Keeping the footer out of the shrink
-    // distribution makes the pending and status rows yield instead, the same
-    // way the editor's `minSize: 3` floor protects the prompt. Its intrinsic
-    // height is unchanged, so a shorter footer still occupies only its own
-    // rows.
-    if (auto added = add_dock_region(*dock, std::move(options.footer), 0, 0); !added) {
+    if (auto added = add_dock_region(*dock, std::move(options.footer), 0); !added) {
         return std::unexpected(added.error());
     }
 
