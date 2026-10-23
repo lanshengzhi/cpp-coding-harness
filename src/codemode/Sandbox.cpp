@@ -1,6 +1,11 @@
 #include <cch/codemode/Sandbox.hpp>
 
+#include <cch/codemode/Declarations.hpp>
+
+#include "codemode/Deterministic.hpp"
+#include "codemode/Guest.hpp"
 #include "codemode/Prelude.hpp"
+#include "codemode/Shared.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
@@ -46,6 +51,30 @@
 
 namespace cch::codemode {
 
+using detail::add_function;
+using detail::gen_i32;
+using detail::globals_json;
+using detail::Guest;
+using detail::Handle;
+using detail::HostFdFdstatGet;
+using detail::HostFdWrite;
+using detail::HostModuleDenied;
+using detail::HostPromiseRejection;
+using detail::HostTimezone;
+using detail::HostWasiStub;
+using detail::kBridgeName;
+using detail::kWasiErnoBadf;
+using detail::kWasiErnoNosys;
+using detail::kWasiErnoSuccess;
+using detail::make_function;
+using detail::make_module;
+using detail::parse_store_writes;
+using detail::sandbox_error;
+using detail::store_json;
+using detail::tools_json;
+using detail::validate_globals;
+using detail::VT;
+
 std::filesystem::path default_codemode_guest_wasm_path() {
     // pi resolves the guest through the packaged module tree
     // (`createRequire(...).resolve("quickjs-wasi/quickjs.wasm")`), so the
@@ -67,168 +96,6 @@ std::filesystem::path default_codemode_guest_wasm_path() {
 
 namespace {
 
-using Handle = std::int32_t;
-using VT = enum WasmEdge_ValType;
-
-constexpr std::string_view kBridgeName = "bridge";
-constexpr std::int32_t kWasiErnoSuccess = 0;
-constexpr std::int32_t kWasiErnoBadf = 8;
-constexpr std::int32_t kWasiErnoNosys = 52;
-
-WasmEdge_Value gen_i32(std::int32_t value) { return WasmEdge_ValueGenI32(value); }
-
-/// One instantiated guest plus the re-entrant call helpers. The helpers read
-/// and call into the guest from inside a host import (the `host_call` bridge),
-/// where WasmEdge exposes the calling frame's executor and module.
-struct Guest {
-    WasmEdge_ExecutorContext* executor = nullptr;
-    WasmEdge_ModuleInstanceContext* module = nullptr;
-    WasmEdge_MemoryInstanceContext* memory = nullptr;
-
-    [[nodiscard]] WasmEdge_FunctionInstanceContext* find(const char* name) const {
-        WasmEdge_String s = WasmEdge_StringCreateByCString(name);
-        WasmEdge_FunctionInstanceContext* f = WasmEdge_ModuleInstanceFindFunction(module, s);
-        WasmEdge_StringDelete(s);
-        return f;
-    }
-
-    [[nodiscard]] std::int32_t call_i32(
-            WasmEdge_FunctionInstanceContext* fn, std::initializer_list<WasmEdge_Value> params) const {
-        if (fn == nullptr) return 0;
-        std::vector<WasmEdge_Value> in(params);
-        WasmEdge_Value out[1]{};
-        if (!WasmEdge_ResultOK(WasmEdge_ExecutorInvoke(
-                    executor, fn, in.empty() ? nullptr : in.data(), static_cast<std::uint32_t>(in.size()), out, 1))) {
-            return 0;
-        }
-        return WasmEdge_ValueGetI32(out[0]);
-    }
-
-    void call_void(WasmEdge_FunctionInstanceContext* fn, std::initializer_list<WasmEdge_Value> params) const {
-        if (fn == nullptr) return;
-        std::vector<WasmEdge_Value> in(params);
-        (void)WasmEdge_ExecutorInvoke(
-                executor, fn, in.empty() ? nullptr : in.data(), static_cast<std::uint32_t>(in.size()), nullptr, 0);
-    }
-
-    [[nodiscard]] std::uint32_t load_u32(std::uint32_t offset) const {
-        std::uint32_t value = 0;
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, offset, 4)) std::memcpy(&value, p, 4);
-        return value;
-    }
-
-    void store_u32(std::uint32_t offset, std::uint32_t value) const {
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, offset, 4)) std::memcpy(p, &value, 4);
-    }
-
-    void store_u64(std::uint32_t offset, std::uint64_t value) const {
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, offset, 8)) std::memcpy(p, &value, 8);
-    }
-
-    /// Copy a NUL-terminated string into guest memory; returns its pointer (0 on OOM).
-    [[nodiscard]] std::uint32_t write_cstr(std::string_view text) const {
-        const std::int32_t ptr = call_i32(find("wasm_malloc"), {gen_i32(static_cast<std::int32_t>(text.size() + 1))});
-        if (ptr == 0) return 0;
-        std::uint8_t* dst = WasmEdge_MemoryInstanceGetPointer(
-                memory, static_cast<std::uint32_t>(ptr), static_cast<std::uint32_t>(text.size() + 1));
-        if (dst == nullptr) return 0;
-        std::memcpy(dst, text.data(), text.size());
-        dst[text.size()] = '\0';
-        return static_cast<std::uint32_t>(ptr);
-    }
-
-    /// Stringify a guest value the way pi's `JSValueHandle.toString()` does: the
-    /// explicit byte length is read so embedded NULs survive. Any value coerces
-    /// to a string (executing guest `toString`, as pi's bridge does).
-    [[nodiscard]] std::string read_string(Handle handle) const {
-        const std::int32_t len_ptr = call_i32(find("wasm_malloc"), {gen_i32(4)});
-        if (len_ptr == 0) return {};
-        const std::int32_t cstr = call_i32(find("qjs_get_string_len"), {gen_i32(handle), gen_i32(len_ptr)});
-        if (cstr == 0) return {};
-        const std::uint32_t length = load_u32(static_cast<std::uint32_t>(len_ptr));
-        std::string text;
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, static_cast<std::uint32_t>(cstr), length)) {
-            text.assign(reinterpret_cast<char*>(p), length);
-        }
-        call_void(find("qjs_free_cstring"), {gen_i32(cstr)});
-        return text;
-    }
-
-    [[nodiscard]] Handle new_string(std::string_view text) const {
-        const std::uint32_t ptr = write_cstr(text);
-        return call_i32(find("qjs_new_string"),
-                {gen_i32(static_cast<std::int32_t>(ptr)), gen_i32(static_cast<std::int32_t>(text.size()))});
-    }
-
-    [[nodiscard]] Handle undefined() const { return call_i32(find("qjs_get_undefined"), {}); }
-    [[nodiscard]] Handle true_value() const { return call_i32(find("qjs_get_true"), {}); }
-    [[nodiscard]] Handle false_value() const { return call_i32(find("qjs_get_false"), {}); }
-    [[nodiscard]] bool is_undefined(Handle handle) const {
-        return call_i32(find("qjs_is_undefined"), {gen_i32(handle)}) != 0;
-    }
-
-    [[nodiscard]] Handle global() const { return call_i32(find("qjs_get_global"), {}); }
-
-    [[nodiscard]] Handle get_prop(Handle object, std::string_view name) const {
-        const std::uint32_t ptr = write_cstr(name);
-        return call_i32(find("qjs_get_prop_string"), {gen_i32(object), gen_i32(static_cast<std::int32_t>(ptr))});
-    }
-
-    Handle call(Handle function, Handle this_value, const std::vector<Handle>& args) const {
-        std::uint32_t argv = 0;
-        if (!args.empty()) {
-            argv = static_cast<std::uint32_t>(
-                    call_i32(find("wasm_malloc"), {gen_i32(static_cast<std::int32_t>(args.size() * 4))}));
-            for (std::size_t i = 0; i < args.size(); ++i)
-                store_u32(argv + static_cast<std::uint32_t>(i * 4), static_cast<std::uint32_t>(args[i]));
-        }
-        return call_i32(find("qjs_call"),
-                {gen_i32(function),
-                        gen_i32(this_value),
-                        gen_i32(static_cast<std::int32_t>(args.size())),
-                        gen_i32(static_cast<std::int32_t>(argv))});
-    }
-
-    [[nodiscard]] bool is_exception(Handle handle) const {
-        return call_i32(find("qjs_is_exception"), {gen_i32(handle)}) != 0;
-    }
-
-    [[nodiscard]] std::string exception_text() const {
-        const Handle exc = call_i32(find("qjs_get_exception"), {});
-        return read_string(exc);
-    }
-
-    /// The current pending exception as the run's script error: `name`,
-    /// `message`, and `stack` come off the exception object itself. A script
-    /// that fails to compile reaches the host this way, outside the prelude's
-    /// `describeError`, so the shape mirrors it (`Name: message` stack head).
-    [[nodiscard]] CodemodeError exception_error() const {
-        const Handle exc = call_i32(find("qjs_get_exception"), {});
-        if (is_undefined(exc)) return CodemodeError{CodemodeError::Kind::Script, {}};
-        CodemodeError error{CodemodeError::Kind::Script, {}};
-        const Handle name = get_prop(exc, "name");
-        const Handle message = get_prop(exc, "message");
-        const Handle stack = get_prop(exc, "stack");
-        if (!is_undefined(name)) error.name = read_string(name);
-        if (!is_undefined(message)) error.message = read_string(message);
-        if (!is_undefined(stack)) {
-            std::string text = read_string(stack);
-            // QuickJS frames-only stacks get the same `Name: message` head the
-            // prelude's errorText and frozen pi both report.
-            if (error.name.has_value() && !text.starts_with(*error.name)) {
-                const std::string head = error.message.empty() ? *error.name : *error.name + ": " + error.message;
-                if (!text.empty())
-                    text = head + "\n" + text;
-                else
-                    text = head;
-            }
-            error.stack = std::move(text);
-        }
-        if (error.message.empty() && !is_undefined(exc)) error.message = read_string(exc);
-        return error;
-    }
-};
-
 /// One queued `tools.*`/global call the script made and is awaiting.
 struct PendingToolCall {
     Handle id = 0;
@@ -237,30 +104,6 @@ struct PendingToolCall {
     /// Index into `RunState::calls` for this call's public record.
     std::size_t record = 0;
 };
-
-/// pi `storeWrites` payload of `done(ok, payload, writes)`: `[[key, json], [key]]`
-/// entries — a two-element entry sets the key, a one-element entry deletes it.
-[[nodiscard]] CodemodeStoreWrites parse_store_writes(std::string_view payload) {
-    CodemodeStoreWrites writes;
-    auto parsed = support::read_json(payload);
-    if (!parsed || !parsed->holds<support::JsonValue::array_t>()) return writes;
-    for (const auto& entry : parsed->get_array()) {
-        if (!entry.holds<support::JsonValue::array_t>()) continue;
-        const auto& fields = entry.get_array();
-        if (fields.empty() || !fields[0].holds<std::string>()) continue;
-        const std::string& key = fields[0].get_string();
-        if (fields.size() == 1) {
-            writes.deleted.push_back(key);
-            continue;
-        }
-        if (!fields[1].holds<std::string>()) continue;
-        // The guest hands the value back as JSON text; parse it so callers
-        // merge structured values into the next snapshot.
-        auto value = support::read_json(fields[1].get_string());
-        writes.set.emplace(key, value ? std::move(*value) : support::JsonValue{});
-    }
-    return writes;
-}
 
 /// The bridge between the sandbox worker thread and the host executor. The
 /// worker (which owns WasmEdge and can only be stopped by its interrupt flag)
@@ -374,6 +217,46 @@ struct SandboxLink {
         return std::move(result);
     }
 };
+
+/// pi worker mode keeps the host's real clock and real randomness: only a
+/// deterministic `start` run replaces them (see `Deterministic.cpp`).
+WasmEdge_Result HostClockTimeGet(
+        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
+    const std::int32_t clock_id = WasmEdge_ValueGetI32(in[0]);
+    if (clock_id != 0 && clock_id != 1) {
+        out[0] = gen_i32(kWasiErnoNosys);
+        return WasmEdge_Result_Success;
+    }
+    Guest guest{nullptr,
+            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
+            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
+    const std::uint32_t result_ptr = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[2]));
+    const auto now = std::chrono::system_clock::now().time_since_epoch();
+    const auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
+    guest.store_u64(result_ptr, static_cast<std::uint64_t>(nanos));
+    out[0] = gen_i32(kWasiErnoSuccess);
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result HostRandomGet(
+        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
+    Guest guest{nullptr,
+            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
+            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
+    const std::uint32_t buf = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[0]));
+    const std::uint32_t len = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
+    if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(guest.memory, buf, len)) {
+        // Not a cryptographic boundary: the guest only seeds Math.random and
+        // extension PRNGs, and no host secret crosses it.
+        std::uint64_t seed = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+        for (std::uint32_t i = 0; i < len; ++i) {
+            seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+            p[i] = static_cast<std::uint8_t>(seed >> 33);
+        }
+    }
+    out[0] = gen_i32(kWasiErnoSuccess);
+    return WasmEdge_Result_Success;
+}
 
 /// All mutable state of one `run`. A pointer to it is the `data` of every host
 /// import, so the bridge can reach the guest and the accumulating result.
@@ -539,245 +422,6 @@ WasmEdge_Result HostInterrupt(
     return WasmEdge_Result_Success;
 }
 
-WasmEdge_Result HostPromiseRejection(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value*) {
-    // The shim frees the two heap-owned values the guest handed over; without a
-    // rejection handler they would leak. #874 has no unhandled-rejection surface.
-    Guest guest{WasmEdge_CallingFrameGetExecutor(frame),
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    guest.call_void(guest.find("qjs_free_value"), {gen_i32(WasmEdge_ValueGetI32(in[0]))});
-    guest.call_void(guest.find("qjs_free_value"), {gen_i32(WasmEdge_ValueGetI32(in[1]))});
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostTimezone(void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
-    out[0] = gen_i32(0);
-    return WasmEdge_Result_Success;
-}
-
-/// No ESM loader is registered: a `import`/`require` in the script fails closed
-/// rather than reaching any host module.
-WasmEdge_Result HostModuleDenied(
-        void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
-    out[0] = gen_i32(0);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostFdWrite(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    // The guest's engine diagnostics go to fd 1/2; they belong to the host and
-    // are discarded (pi `discardOutput`). Reported as written so libc does not retry.
-    const std::int32_t fd = WasmEdge_ValueGetI32(in[0]);
-    if (fd != 1 && fd != 2) {
-        out[0] = gen_i32(kWasiErnoBadf);
-        return WasmEdge_Result_Success;
-    }
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t iovs = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
-    const std::uint32_t count = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[2]));
-    const std::uint32_t nwritten = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[3]));
-    std::uint32_t total = 0;
-    for (std::uint32_t i = 0; i < count; ++i)
-        total += guest.load_u32(iovs + i * 8 + 4);
-    guest.store_u32(nwritten, total);
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostFdFdstatGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    const std::int32_t fd = WasmEdge_ValueGetI32(in[0]);
-    if (fd != 1 && fd != 2) {
-        out[0] = gen_i32(kWasiErnoBadf);
-        return WasmEdge_Result_Success;
-    }
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t stat = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
-    if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(guest.memory, stat, 24)) {
-        std::memset(p, 0, 24);
-        p[0] = 2; // fs_filetype = CHARACTER_DEVICE
-    }
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostClockTimeGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    const std::int32_t clock_id = WasmEdge_ValueGetI32(in[0]);
-    if (clock_id != 0 && clock_id != 1) {
-        out[0] = gen_i32(kWasiErnoNosys);
-        return WasmEdge_Result_Success;
-    }
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t result_ptr = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[2]));
-    const auto now = std::chrono::system_clock::now().time_since_epoch();
-    const auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-    guest.store_u64(result_ptr, static_cast<std::uint64_t>(nanos));
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostRandomGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t buf = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[0]));
-    const std::uint32_t len = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
-    if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(guest.memory, buf, len)) {
-        // Not a cryptographic boundary: the guest only seeds Math.random and
-        // extension PRNGs, and no host secret crosses it.
-        std::uint64_t seed = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
-        for (std::uint32_t i = 0; i < len; ++i) {
-            seed = seed * 6364136223846793005ull + 1442695040888963407ull;
-            p[i] = static_cast<std::uint8_t>(seed >> 33);
-        }
-    }
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostWasiStub(void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
-    out[0] = gen_i32(kWasiErnoNosys);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_FunctionInstanceContext* make_function(
-        WasmEdge_HostFunc_t function, void* data, std::initializer_list<VT> params, std::initializer_list<VT> returns) {
-    std::vector<VT> p(params);
-    std::vector<VT> r(returns);
-    WasmEdge_FunctionTypeContext* type = WasmEdge_FunctionTypeCreate(p.empty() ? nullptr : p.data(),
-            static_cast<std::uint32_t>(p.size()),
-            r.empty() ? nullptr : r.data(),
-            static_cast<std::uint32_t>(r.size()));
-    WasmEdge_FunctionInstanceContext* instance = WasmEdge_FunctionInstanceCreate(type, function, data, 0);
-    WasmEdge_FunctionTypeDelete(type);
-    return instance;
-}
-
-void add_function(WasmEdge_ModuleInstanceContext* module, const char* name, WasmEdge_FunctionInstanceContext* fn) {
-    WasmEdge_String s = WasmEdge_StringCreateByCString(name);
-    WasmEdge_ModuleInstanceAddFunction(module, s, fn);
-    WasmEdge_StringDelete(s);
-}
-
-WasmEdge_ModuleInstanceContext* make_module(const char* name) {
-    WasmEdge_String s = WasmEdge_StringCreateByCString(name);
-    WasmEdge_ModuleInstanceContext* module = WasmEdge_ModuleInstanceCreate(s);
-    WasmEdge_StringDelete(s);
-    return module;
-}
-
-[[nodiscard]] support::Error sandbox_error(std::string message, std::string detail = {}) {
-    return support::make_error(support::ErrorCode::Validation, std::move(message), std::move(detail));
-}
-
-/// pi `toCodemodeIdentifier`-shaped JSON list of the tools the script may call.
-[[nodiscard]] std::string tools_json(const std::vector<CodemodeToolDescriptor>& tools) {
-    support::JsonValue::array_t list;
-    list.reserve(tools.size());
-    for (const auto& tool : tools) {
-        list.push_back(support::JsonValue::object_t{
-                {"name", tool.name},
-                {"jsName", tool.js_name},
-                {"description", tool.description},
-        });
-    }
-    auto written = support::write_json(support::JsonValue{std::move(list)});
-    return written ? *written : std::string{"[]"};
-}
-
-/// pi `checkGlobals` (execution.ts): one dot-separated part of a global name
-/// must be a JavaScript identifier.
-[[nodiscard]] bool is_js_identifier(std::string_view part) {
-    if (part.empty()) return false;
-    const auto is_start = [](char c) {
-        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_' || c == '$';
-    };
-    if (!is_start(part.front())) return false;
-    return std::all_of(part.begin() + 1, part.end(), [&](char c) { return is_start(c) || (c >= '0' && c <= '9'); });
-}
-
-/// pi `checkGlobals`, shaped only by the frozen audit-1053 observations:
-/// identifier shape, the reserved name `tools`, duplicate names, and a plain
-/// global conflicting with a namespace. The upstream reserved-name set beyond
-/// `tools` is not captured, so no further names are invented here.
-[[nodiscard]] support::ExpectedVoid validate_globals(const std::vector<CodemodeGlobal>& globals) {
-    std::set<std::string> seen;
-    std::set<std::string> plain;
-    std::set<std::string> namespaces;
-    for (const auto& global : globals) {
-        bool valid = !global.name.empty() && global.name != "tools";
-        std::size_t start = 0;
-        while (valid) {
-            const std::size_t dot = global.name.find('.', start);
-            const std::string_view part = std::string_view{global.name}.substr(
-                    start, dot == std::string::npos ? std::string_view::npos : dot - start);
-            if (!is_js_identifier(part)) {
-                valid = false;
-                break;
-            }
-            if (dot == std::string::npos) break;
-            start = dot + 1;
-        }
-        if (!valid) {
-            return std::unexpected(sandbox_error(std::format("Invalid global name \"{}\"", global.name)));
-        }
-        if (!seen.insert(global.name).second) {
-            return std::unexpected(sandbox_error(std::format("Global \"{}\" is already registered", global.name)));
-        }
-        const std::size_t dot = global.name.find('.');
-        const std::string top = dot == std::string::npos ? global.name : global.name.substr(0, dot);
-        if (dot == std::string::npos) {
-            if (namespaces.contains(top)) {
-                return std::unexpected(
-                        sandbox_error(std::format("Global \"{}\" conflicts with the namespace \"{}\"", top, top)));
-            }
-            plain.insert(std::move(top));
-        } else {
-            if (plain.contains(top)) {
-                return std::unexpected(
-                        sandbox_error(std::format("Global \"{}\" conflicts with the namespace \"{}\"", top, top)));
-            }
-            namespaces.insert(std::move(top));
-        }
-    }
-    return {};
-}
-
-/// pi `globalsJson`: the prelude binds each entry as a top-level callable, or
-/// as a member of its dotted namespace.
-[[nodiscard]] std::string globals_json(const std::vector<CodemodeGlobal>& globals) {
-    support::JsonValue::array_t list;
-    list.reserve(globals.size());
-    for (const auto& global : globals) {
-        list.push_back(support::JsonValue::object_t{
-                {"name", global.name},
-                {"spread", global.spread},
-        });
-    }
-    auto written = support::write_json(support::JsonValue{std::move(list)});
-    return written ? *written : std::string{"[]"};
-}
-
-/// pi `storeJson`: an object mapping each key to its value's JSON text; the
-/// guest keeps the text form (sizes count JSON characters).
-[[nodiscard]] std::string store_json(const std::map<std::string, support::JsonValue>& store) {
-    support::JsonValue::object_t object;
-    for (const auto& [key, value] : store) {
-        auto written = support::write_json(value);
-        object.emplace(key, support::JsonValue{written ? std::move(*written) : std::string{"null"}});
-    }
-    auto written = support::write_json(support::JsonValue{std::move(object)});
-    return written ? *written : std::string{"{}"};
-}
 
 } // namespace
 
@@ -826,10 +470,10 @@ support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
                 std::format("codemode sandbox guest '{}' is not a valid WebAssembly module", impl->wasm_path.string()),
                 WasmEdge_ResultGetMessage(valid)));
     }
-    return std::make_unique<CodemodeSandbox>(ConstructionKey{}, std::move(impl));
+    return std::make_unique<CodemodeSandbox>(ConstructionKey{}, std::shared_ptr<Impl>{std::move(impl)});
 }
 
-CodemodeSandbox::CodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+CodemodeSandbox::CodemodeSandbox(ConstructionKey, std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
 CodemodeSandbox::~CodemodeSandbox() = default;
 CodemodeSandbox::CodemodeSandbox(CodemodeSandbox&&) noexcept = default;
 CodemodeSandbox& CodemodeSandbox::operator=(CodemodeSandbox&&) noexcept = default;
@@ -839,14 +483,10 @@ namespace {
 /// `drain` runs queued guest microtasks. It stops early once the script settled
 /// or the host interrupted it, so a runaway microtask loop cannot spin here.
 bool drain_jobs(const Guest& guest, const RunState& state) {
-    while (guest.call_i32(guest.find("qjs_is_job_pending"), {}) != 0) {
-        if (state.finished || state.timed_out || state.stop_token.stop_requested() ||
-                (state.link != nullptr && state.link->interrupt.load())) {
-            return false;
-        }
-        if (guest.call_i32(guest.find("qjs_execute_pending_job"), {}) < 0) return false;
-    }
-    return true;
+    return detail::drain_jobs(guest, [&state] {
+        return state.finished || state.timed_out || state.stop_token.stop_requested() ||
+               (state.link != nullptr && state.link->interrupt.load());
+    });
 }
 
 } // namespace
@@ -1079,7 +719,7 @@ namespace {
         // is published by the caller (see `run`), shared with the host loop.
         state.started = std::chrono::steady_clock::now();
         g.call_void(g.find("qjs_set_interrupt_handler"), {gen_i32(1)});
-        g.call(run_fn, api, {script_fn});
+        (void)g.call(run_fn, api, {script_fn});
         drain_jobs(g, state);
 
         // Settle every tool call the script is awaiting, then drain again. A
@@ -1088,7 +728,7 @@ namespace {
         while (!state.finished) {
             if (state.interrupted()) break;
             if (state.pending.empty()) {
-                g.call(stalled_fn, api, {});
+                (void)g.call(stalled_fn, api, {});
                 drain_jobs(g, state);
                 if (state.interrupted()) break;
                 if (!state.finished) {
@@ -1120,7 +760,8 @@ namespace {
                         std::chrono::steady_clock::now() - state.call_issued[call.record])
                                              .count();
                 const Handle payload_handle = g.new_string(response->payload);
-                g.call(settle_fn, api, {id_handle, response->ok ? g.true_value() : g.false_value(), payload_handle});
+                (void)g.call(
+                        settle_fn, api, {id_handle, response->ok ? g.true_value() : g.false_value(), payload_handle});
                 drain_jobs(g, state);
             }
         }
@@ -1327,6 +968,126 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         co_return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "the codemode sandbox worker did not report a result"));
     });
+}
+
+} // namespace cch::codemode
+
+namespace cch::codemode {
+
+/// pi `CodemodeRun`: the caller's handle on one deterministic execution.
+/// `State` owns the VM driver and the single-consumption completion; `deliver`
+/// and `finished` forward to it, and `result` hands out the terminal outcome.
+struct CodemodeSandbox::Run::State {
+    /// Keeps the AST module alive even if the owning sandbox is destroyed.
+    std::shared_ptr<CodemodeSandbox::Impl> owner;
+    /// The run's driver, started when `start` returns.
+    std::unique_ptr<detail::DeterministicRun> driver;
+    /// Guards `taken`: `result()` is a single-consumption operation (§6.2).
+    std::mutex mutex;
+    bool taken{false};
+};
+
+CodemodeSandbox::Run::Run(std::shared_ptr<State> state) : state_(std::move(state)) {}
+CodemodeSandbox::Run::Run(Run&&) noexcept = default;
+CodemodeSandbox::Run& CodemodeSandbox::Run::operator=(Run&&) noexcept = default;
+CodemodeSandbox::Run::~Run() = default;
+
+bool CodemodeSandbox::Run::finished() const { return state_ != nullptr && state_->driver->finished(); }
+
+std::optional<CodemodeDeliveryRejection> CodemodeSandbox::Run::deliver(
+        std::int64_t seq, double now, std::int64_t id, CodemodeOutcome outcome) {
+    if (state_ == nullptr) {
+        return CodemodeDeliveryRejection{
+                CodemodeDeliveryRejection::Reason::UnknownCall, std::format("Call {} is not waiting for a result", id)};
+    }
+    return state_->driver->deliver(seq, now, id, std::move(outcome));
+}
+
+support::AsyncResult<CodemodeRunResult> CodemodeSandbox::Run::result() {
+    // A moved-from handle has no run to report; pi's `CodemodeRun.result` is a
+    // promise that is always present, so a second consumption is a caller bug
+    // the single-consumption contract reports rather than a silent hang.
+    if (state_ == nullptr) {
+        return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "the codemode run handle was moved from"))}};
+    }
+    {
+        std::lock_guard lock(state_->mutex);
+        if (state_->taken) {
+            return support::AsyncResult<CodemodeRunResult>{
+                    support::Expected<CodemodeRunResult>{std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "the codemode run result was already consumed"))}};
+        }
+        state_->taken = true;
+    }
+    // The producer contract is `noexcept` (AsyncResult.hpp): a throwing or
+    // duplicate completion is an invariant violation, and the driver delivers
+    // exactly once.
+    support::AsyncResult<CodemodeRunResult>::producer_type producer =
+            [state = state_](support::AsyncCompletion<CodemodeRunResult, support::Error> complete) noexcept {
+                state->driver->consume(std::move(complete));
+            };
+    return support::AsyncResult<CodemodeRunResult>{std::move(producer)};
+}
+
+support::Expected<CodemodeSandbox::Run> CodemodeSandbox::start(std::string script, CodemodeRunOptions options) {
+    // pi `start`'s validation, in its order, before any VM exists: a rejected
+    // option set never creates a worker.
+    if (options.started_at < 0) {
+        return std::unexpected(
+                sandbox_error("startedAt must be a non-negative number of milliseconds since the epoch"));
+    }
+    if (options.seed > 0xffffffffull) {
+        return std::unexpected(sandbox_error("seed must be a 32-bit unsigned integer"));
+    }
+    if (options.expected_seed.has_value() && *options.expected_seed != options.seed) {
+        return std::unexpected(sandbox_error(std::format(
+                "Deterministic replay seed mismatch: expected {}, got {}", *options.expected_seed, options.seed)));
+    }
+    {
+        std::set<std::string> names;
+        for (const auto& tool : options.tools) {
+            if (!names.insert(tool.name).second) return std::unexpected(sandbox_error("Tool names must be unique"));
+        }
+        std::set<std::string> script_names;
+        for (const auto& tool : options.tools) {
+            const std::string js_name = tool.js_name.empty() ? to_codemode_identifier(tool.name) : tool.js_name;
+            if (!script_names.insert(js_name).second) {
+                return std::unexpected(sandbox_error("Tool script names must be unique"));
+            }
+        }
+    }
+    if (auto valid = validate_globals(options.globals); !valid) {
+        return std::unexpected(std::move(valid.error()));
+    }
+
+    detail::DeterministicStart start;
+    start.script = std::move(script);
+    start.tools = std::move(options.tools);
+    for (auto& tool : start.tools) {
+        if (tool.js_name.empty()) tool.js_name = to_codemode_identifier(tool.name);
+    }
+    start.globals = std::move(options.globals);
+    start.store_json = store_json(options.store);
+    start.started_at_ms = options.started_at;
+    start.seed = static_cast<std::uint32_t>(options.seed);
+    start.memory_limit_bytes = options.memory_limit_bytes;
+    start.expected_fingerprint = options.expected_fingerprint;
+    start.timeout = options.timeout;
+    start.stop_token = options.stop_token;
+    start.abort_message = std::move(options.abort_message);
+
+    detail::DeterministicHost host;
+    // pi `forwardCall`/`onStarted`/`onIdle`: the callbacks run on the run's own
+    // worker thread, so a callback must not block. `deliver` only enqueues.
+    host.on_started = std::move(options.callbacks.on_started);
+    host.on_call = std::move(options.callbacks.on_call);
+    host.on_idle = std::move(options.callbacks.on_idle);
+
+    auto state = std::make_shared<Run::State>();
+    state->owner = impl_;
+    state->driver = std::make_unique<detail::DeterministicRun>(impl_->ast, std::move(start), std::move(host));
+    return Run{std::move(state)};
 }
 
 } // namespace cch::codemode

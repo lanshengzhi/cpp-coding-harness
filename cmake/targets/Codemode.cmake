@@ -11,7 +11,10 @@ cch_parity_declare_target(
     OWNER cch_codemode
     SOURCES
         src/codemode/Declarations.cpp
+        src/codemode/Deterministic.cpp
+        src/codemode/Guest.cpp
         src/codemode/Sandbox.cpp
+        src/codemode/Shared.cpp
         src/codemode/Source.cpp
     DEPENDS
         cch_ai

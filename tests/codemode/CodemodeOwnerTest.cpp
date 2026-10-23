@@ -30,6 +30,7 @@
 
 #include <algorithm>
 
+#include <array>
 #include <chrono>
 #include <cstdint>
 #include <expected>
@@ -37,11 +38,13 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <limits>
 #include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <thread>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -1178,4 +1181,822 @@ TEST_CASE("an aborted public codemode caller does not start the script", "[codem
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
     CHECK(result->output.empty());
+}
+
+namespace {
+
+/// One deterministic run's recorded observations, exactly what pi's
+/// `startRecording` in `fixtures/pi-v1.3.0/audit-1053/scenarios.mts` collects:
+/// the calls in issue order, the idles, the event order, and the fingerprint.
+class ConcurrentCalls {
+public:
+    void push_back(const codemode::CodemodeHostCall& call) {
+        std::lock_guard lock(mutex_);
+        calls_.push_back(call);
+    }
+
+    [[nodiscard]] std::size_t size() const {
+        std::lock_guard lock(mutex_);
+        return calls_.size();
+    }
+
+    [[nodiscard]] bool empty() const { return size() == 0; }
+
+    [[nodiscard]] codemode::CodemodeHostCall operator[](std::size_t index) const {
+        std::lock_guard lock(mutex_);
+        return calls_[index];
+    }
+
+private:
+    mutable std::mutex mutex_;
+    std::vector<codemode::CodemodeHostCall> calls_;
+};
+
+struct DeterministicRecording {
+    ConcurrentCalls calls;
+    std::vector<std::pair<std::int64_t, std::int64_t>> idles;
+    std::vector<std::string> events;
+    std::string fingerprint;
+};
+
+/// The audit's `startRecording` answer: echo the call's argument array back.
+[[nodiscard]] codemode::CodemodeOutcome echo_outcome(const codemode::CodemodeHostCall& call) {
+    codemode::CodemodeOutcome outcome;
+    outcome.ok = true;
+    outcome.value_json = call.arguments_json.value_or(std::string{"null"});
+    return outcome;
+}
+
+} // namespace
+
+TEST_CASE("a public codemode caller replays a deterministic run from the same start seed and answers",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "the same script, start
+    // time, seed and answers make the same calls and output"): two runs of the
+    // same script with the same start, seed and answers produce identical
+    // calls, value, and output, and the virtual clock and seeded randomness are
+    // the frozen values.
+    constexpr std::int64_t kStartedAt = 1768471200000;
+    const std::string script =
+            "const values = [Date.now(), performance.now(), Math.random(), Math.random(), new Date().toISOString()]; "
+            "const first = await tools.echo(values); "
+            "text(JSON.stringify([Date.now(), performance.now(), Math.random()])); "
+            "return await tools.echo(first.concat(Math.random()));";
+
+    auto sandbox = make_sandbox();
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "echo", .js_name = "echo", .description = "Echo the argument."},
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+
+    auto record = [&](DeterministicRecording& recording) -> codemode::CodemodeSandbox::Run {
+        codemode::CodemodeRunOptions options;
+        options.started_at = kStartedAt;
+        options.seed = 1;
+        options.tools = tools;
+        options.timeout = std::chrono::seconds{20};
+        options.callbacks.on_started = [&recording](std::string_view fingerprint) {
+            recording.fingerprint = std::string{fingerprint};
+            recording.events.push_back("started");
+        };
+        options.callbacks.on_call = [&recording](const codemode::CodemodeHostCall& call) {
+            recording.calls.push_back(call);
+            recording.events.push_back(std::format("call {}", call.id));
+        };
+        options.callbacks.on_idle = [&recording](std::int64_t seq, std::int64_t issued) {
+            recording.idles.emplace_back(seq, issued);
+            recording.events.push_back(std::format("idle {}", seq));
+        };
+        auto started = sandbox->start(script, std::move(options));
+        REQUIRE(started.has_value());
+        return std::move(*started);
+    };
+
+    DeterministicRecording one;
+    DeterministicRecording two;
+    auto first = record(one);
+    auto second = record(two);
+
+    // The caller answers every call with the audit's echo answer, numbered
+    // from 1 and stamped with `startedAt + 1000 * seq`.
+    auto answer_all = [&](codemode::CodemodeSandbox::Run& run, DeterministicRecording& recording) {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+        std::int64_t seq = 0;
+        while (seq < 2 && std::chrono::steady_clock::now() < deadline) {
+            // Wait for the next call, then answer the oldest unanswered one.
+            if (recording.calls.size() <= static_cast<std::size_t>(seq)) {
+                std::this_thread::sleep_for(std::chrono::milliseconds{2});
+                continue;
+            }
+            const auto call = recording.calls[static_cast<std::size_t>(seq)];
+            ++seq;
+            auto rejected = run.deliver(seq, static_cast<double>(kStartedAt + 1000 * seq), call.id, echo_outcome(call));
+            REQUIRE_FALSE(rejected.has_value());
+        }
+    };
+    answer_all(first, one);
+    answer_all(second, two);
+
+    auto first_result = run_async(first.result());
+    auto second_result = run_async(second.result());
+    REQUIRE(first_result.has_value());
+    REQUIRE(second_result.has_value());
+    REQUIRE_FALSE(first_result->error.has_value());
+
+    // The frozen calls: the virtual clock reads `startedAt`, `performance.now()`
+    // starts at 0, and the two `Math.random()` draws are the seed-1 values.
+    REQUIRE(one.calls.size() == 2);
+    CHECK(one.calls[0].id == 1);
+    CHECK(one.calls[0].name == "echo");
+    CHECK(one.calls[0].arguments_json ==
+            std::format("[{},0,0.34227450605335275,0.4620546081390098,\"2026-01-15T10:00:00.000Z\"]", kStartedAt));
+    REQUIRE(one.calls[1].id == 2);
+    CHECK(one.calls[1].arguments_json ==
+            std::format("[{},0,0.34227450605335275,0.4620546081390098,\"2026-01-15T10:00:00.000Z\","
+                        "0.056110785474501323]",
+                    kStartedAt));
+
+    // The frozen output: the clock advanced to the first answer's `now`, and
+    // the third draw continues the same sequence.
+    REQUIRE(first_result->output.size() == 1);
+    CHECK(first_result->output[0].data == "[1768471201000,1000,0.5807179129204683]");
+
+    // Replay equality: the second run makes the same calls with the same
+    // arguments and produces the same output.
+    REQUIRE(two.calls.size() == one.calls.size());
+    for (std::size_t index = 0; index < one.calls.size(); ++index) {
+        CHECK(two.calls[index].id == one.calls[index].id);
+        CHECK(two.calls[index].name == one.calls[index].name);
+        CHECK(two.calls[index].arguments_json == one.calls[index].arguments_json);
+    }
+    CHECK(second_result->output.size() == first_result->output.size());
+    CHECK(second_result->output[0].data == first_result->output[0].data);
+    CHECK(second_result->value_json == first_result->value_json);
+
+    // The frozen idles and `during`.
+    REQUIRE(one.idles.size() == 2);
+    CHECK(one.idles[0] == std::pair<std::int64_t, std::int64_t>{0, 1});
+    CHECK(one.idles[1] == std::pair<std::int64_t, std::int64_t>{1, 2});
+    REQUIRE(first_result->during.has_value());
+    CHECK(first_result->during->seq == 2);
+    CHECK(first_result->during->issued == 2);
+
+    // `finished` is set with the outcome.
+    CHECK(first.finished());
+}
+
+TEST_CASE("a public codemode caller applies reversed answers by result number not arrival order",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "results are applied in
+    // seq order even when delivered in reverse order"): seq 2 arrives first and
+    // waits for seq 1, so the script observes `["b", "a"]`.
+    auto sandbox = make_sandbox();
+    const std::string script = "const order = []; "
+                               "await Promise.all([tools.wait(\"a\").then(() => order.push(\"a\")), "
+                               "tools.wait(\"b\").then(() => order.push(\"b\"))]); return order;";
+
+    DeterministicRecording recording;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.callbacks.on_call = [&recording](const codemode::CodemodeHostCall& call) {
+        recording.calls.push_back(call);
+        recording.events.push_back(std::format("call {}", call.id));
+    };
+    options.callbacks.on_idle = [&recording](std::int64_t seq, std::int64_t issued) {
+        recording.idles.emplace_back(seq, issued);
+        recording.events.push_back(std::format("idle {}", seq));
+    };
+    auto started = sandbox->start(script, std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    // Wait for both calls, then answer seq 2 before seq 1.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (recording.calls.size() < 2 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    REQUIRE(recording.calls.size() == 2);
+    const auto a = recording.calls[0];
+    const auto b = recording.calls[1];
+    CHECK_FALSE(run.deliver(2,
+                           1768471202000.0,
+                           a.id,
+                           codemode::CodemodeOutcome{
+                                   .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt})
+                    .has_value());
+    CHECK_FALSE(run.deliver(1,
+                           1768471201000.0,
+                           b.id,
+                           codemode::CodemodeOutcome{
+                                   .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt})
+                    .has_value());
+
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    CHECK(result->value_json == "[\"b\",\"a\"]");
+
+    // The frozen idles: the script's first run with both calls issued, then
+    // result 1 with both still issued.
+    REQUIRE(recording.idles.size() == 2);
+    CHECK(recording.idles[0] == std::pair<std::int64_t, std::int64_t>{0, 2});
+    CHECK(recording.idles[1] == std::pair<std::int64_t, std::int64_t>{1, 2});
+}
+
+TEST_CASE("a public codemode caller rejects a reused result number a non-finite clock and an unknown call "
+          "deterministically",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "deliver rejects a wrong
+    // call, a reused result number and a non-finite clock without settling the
+    // run"): each refusal carries pi's exact message, and a later valid answer
+    // still settles the run.
+    auto sandbox = make_sandbox();
+    DeterministicRecording recording;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.callbacks.on_call = [&recording](
+                                        const codemode::CodemodeHostCall& call) { recording.calls.push_back(call); };
+    auto started = sandbox->start("return await Promise.all([tools.wait(1), tools.wait(2)])", std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (recording.calls.size() < 2 && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    REQUIRE(recording.calls.size() == 2);
+    const std::array<std::int64_t, 2> call_ids{recording.calls[0].id, recording.calls[1].id};
+
+    // A non-finite clock is refused before anything is recorded.
+    const auto nan = std::numeric_limits<double>::quiet_NaN();
+    auto clock = run.deliver(1,
+            nan,
+            call_ids[0],
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt});
+    REQUIRE(clock.has_value());
+    CHECK(clock->reason == codemode::CodemodeDeliveryRejection::Reason::Clock);
+    CHECK(clock->message == "The clock value of result 1 is not a finite number");
+    CHECK_FALSE(run.finished());
+
+    // A valid first answer uses result 1 for call 1. Reusing it while call 2
+    // remains pending is refused without settling the run.
+    auto first = run.deliver(1,
+            1768471200000.0,
+            call_ids[0],
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt});
+    CHECK_FALSE(first.has_value());
+    auto duplicate = run.deliver(1,
+            1768471200000.0,
+            call_ids[1],
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt});
+    REQUIRE(duplicate.has_value());
+    CHECK(duplicate->reason == codemode::CodemodeDeliveryRejection::Reason::ResultNumber);
+    CHECK(duplicate->message == "Result number 1 is not a positive integer used once");
+    CHECK_FALSE(run.finished());
+
+    // An id no call is waiting on is refused, and does not consume result 2.
+    auto unknown = run.deliver(2,
+            1768471200000.0,
+            99,
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "null", .message = {}, .properties_json = std::nullopt});
+    REQUIRE(unknown.has_value());
+    CHECK(unknown->reason == codemode::CodemodeDeliveryRejection::Reason::UnknownCall);
+    CHECK(unknown->message == "Call 99 is not waiting for a result");
+    CHECK_FALSE(run.finished());
+
+    // The valid seq 2 answer then settles it: refusals leave calls available.
+    CHECK_FALSE(
+            run.deliver(2,
+                       1768471200000.0,
+                       call_ids[1],
+                       codemode::CodemodeOutcome{
+                               .ok = true, .value_json = "\"fine\"", .message = {}, .properties_json = std::nullopt})
+                    .has_value());
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    CHECK(result->value_json == "[null,\"fine\"]");
+    CHECK(run.finished());
+
+    // The finished guard precedes sequence validation, matching pi.
+    CHECK_FALSE(
+            run.deliver(1,
+                       1768471200000.0,
+                       call_ids[0],
+                       codemode::CodemodeOutcome{
+                               .ok = true, .value_json = "\"again\"", .message = {}, .properties_json = std::nullopt})
+                    .has_value());
+}
+
+TEST_CASE("a public codemode caller gets the fingerprint before the first call and a reused result number is refused",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "the VM fingerprint
+    // arrives before calls, idles report issued calls, and a different heap
+    // changes the fingerprint"): `started` precedes `call 1`, idles report the
+    // calls issued after each result, and the fingerprint names the engine, the
+    // prelude, the heap, and the budget.
+    auto sandbox = make_sandbox();
+
+    DeterministicRecording recording;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "echo", .js_name = "echo", .description = "Echo the argument."},
+    };
+    options.memory_limit_bytes = 64ull * 1024 * 1024;
+    options.timeout = std::chrono::seconds{20};
+    options.callbacks.on_started = [&recording](std::string_view fingerprint) {
+        recording.fingerprint = std::string{fingerprint};
+        recording.events.push_back("started");
+    };
+    options.callbacks.on_call = [&recording](const codemode::CodemodeHostCall& call) {
+        recording.calls.push_back(call);
+        recording.events.push_back(std::format("call {}", call.id));
+    };
+    options.callbacks.on_idle = [&recording](std::int64_t seq, std::int64_t issued) {
+        recording.idles.emplace_back(seq, issued);
+        recording.events.push_back(std::format("idle {}", seq));
+    };
+
+    auto started = sandbox->start(
+            "await tools.echo(1); await Promise.all([tools.echo(2), tools.echo(3)]);", std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    // Answer each call as it arrives, numbered in issue order.
+    std::int64_t seq = 0;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (seq < 3 && std::chrono::steady_clock::now() < deadline) {
+        if (recording.calls.size() <= static_cast<std::size_t>(seq)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{2});
+            continue;
+        }
+        const auto& call = recording.calls[static_cast<std::size_t>(seq)];
+        ++seq;
+        CHECK_FALSE(run.deliver(seq, 1768471200000.0 + static_cast<double>(seq) * 1000.0, call.id, echo_outcome(call))
+                        .has_value());
+    }
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+
+    // `started` precedes the first call, and every call is numbered in issue order.
+    REQUIRE(recording.events.size() >= 3);
+    CHECK(recording.events[0] == "started");
+    CHECK(recording.events[1] == "call 1");
+    CHECK(recording.events[2] == "idle 0");
+    REQUIRE(recording.calls.size() == 3);
+    CHECK(recording.calls[0].id == 1);
+    CHECK(recording.calls[1].id == 2);
+    CHECK(recording.calls[2].id == 3);
+
+    // The frozen idles: the first run issued one call, then result 1 and
+    // result 2 each report all three issued calls.
+    REQUIRE(recording.idles.size() == 3);
+    CHECK(recording.idles[0] == std::pair<std::int64_t, std::int64_t>{0, 1});
+    CHECK(recording.idles[1] == std::pair<std::int64_t, std::int64_t>{1, 3});
+    CHECK(recording.idles[2] == std::pair<std::int64_t, std::int64_t>{2, 3});
+
+    // The fingerprint names the VM, the prelude, the heap and the budget.
+    CHECK(recording.fingerprint.starts_with("quickjs-wasi "));
+    CHECK(recording.fingerprint.find(", quickjs ") != std::string::npos);
+    CHECK(recording.fingerprint.find(", prelude ") != std::string::npos);
+    CHECK(recording.fingerprint.ends_with(", heap 67108864, budget none"));
+
+    // The same VM options keep the fingerprint; a different heap changes it.
+    DeterministicRecording same;
+    DeterministicRecording other;
+    auto record_fingerprint = [](codemode::CodemodeSandbox& target,
+                                      DeterministicRecording& into,
+                                      std::uint64_t heap) -> std::unique_ptr<codemode::CodemodeSandbox::Run> {
+        codemode::CodemodeRunOptions run_options;
+        run_options.started_at = 1768471200000;
+        run_options.seed = 1;
+        run_options.memory_limit_bytes = heap;
+        run_options.timeout = std::chrono::seconds{20};
+        run_options.callbacks.on_started = [&into](std::string_view fingerprint) {
+            into.fingerprint = std::string{fingerprint};
+        };
+        auto pending = target.start("return 1", std::move(run_options));
+        REQUIRE(pending.has_value());
+        return std::make_unique<codemode::CodemodeSandbox::Run>(std::move(*pending));
+    };
+    auto same_run = record_fingerprint(*sandbox, same, 64ull * 1024 * 1024);
+    auto other_sandbox = make_sandbox();
+    auto other_run = record_fingerprint(*other_sandbox, other, 32ull * 1024 * 1024);
+    auto same_result = run_async(same_run->result());
+    auto other_result = run_async(other_run->result());
+    REQUIRE(same_result.has_value());
+    REQUIRE(other_result.has_value());
+    CHECK(same.fingerprint == recording.fingerprint);
+    CHECK(other.fingerprint != recording.fingerprint);
+    CHECK(other.fingerprint.ends_with(", heap 33554432, budget none"));
+}
+
+TEST_CASE("a public codemode caller gets illegal start options refused before any VM exists",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "start rejects invalid
+    // start times, seeds and duplicate script names"): each rejected option set
+    // reports pi's exact message.
+    auto sandbox = make_sandbox();
+
+    auto rejected = [&](codemode::CodemodeRunOptions options) {
+        auto started = sandbox->start("", std::move(options));
+        REQUIRE_FALSE(started.has_value());
+        return started.error().message;
+    };
+
+    codemode::CodemodeRunOptions negative_time;
+    negative_time.started_at = -1;
+    CHECK(rejected(std::move(negative_time)) ==
+            "startedAt must be a non-negative number of milliseconds since the epoch");
+
+    codemode::CodemodeRunOptions bad_seed;
+    bad_seed.seed = 0x1'0000'0000ull;
+    CHECK(rejected(std::move(bad_seed)) == "seed must be a 32-bit unsigned integer");
+
+    codemode::CodemodeRunOptions duplicate_names;
+    duplicate_names.tools = {
+            {.name = "x", .js_name = "x", .description = {}},
+            {.name = "x", .js_name = "x", .description = {}},
+    };
+    CHECK(rejected(std::move(duplicate_names)) == "Tool names must be unique");
+
+    // Two different tool names whose derived script names collide: `a-b` and
+    // `a_b` both become `a_b` (`toCodemodeIdentifier`).
+    codemode::CodemodeRunOptions duplicate_script_names;
+    duplicate_script_names.tools = {
+            {.name = "a-b", .js_name = {}, .description = {}},
+            {.name = "a_b", .js_name = {}, .description = {}},
+    };
+    CHECK(rejected(std::move(duplicate_script_names)) == "Tool script names must be unique");
+}
+
+TEST_CASE("a public codemode caller sees a seed mismatch change randomness without changing the start time",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "a changed seed is a replay
+    // mismatch and changes randomness without changing the start time"): the
+    // same seed reproduces the draw, a different seed does not, and the clock
+    // reads the same `startedAt` either way. Seed 0 is distinct from seed 1,
+    // which the frozen capture pins to a different first draw.
+    auto sandbox = make_sandbox();
+    auto draw = [&](std::uint64_t seed) {
+        codemode::CodemodeRunOptions options;
+        options.started_at = 1768471200000;
+        options.seed = seed;
+        options.timeout = std::chrono::seconds{20};
+        auto started = sandbox->start("return [Date.now(), Math.random()]", std::move(options));
+        REQUIRE(started.has_value());
+        auto run = std::move(*started);
+        auto result = run_async(run.result());
+        REQUIRE(result.has_value());
+        REQUIRE_FALSE(result->error.has_value());
+        return *result->value_json;
+    };
+
+    const std::string seed_one = draw(1);
+    const std::string seed_one_again = draw(1);
+    const std::string seed_two = draw(2);
+    const std::string seed_zero = draw(0);
+
+    CHECK(seed_one == seed_one_again);
+    CHECK(seed_one != seed_two);
+    CHECK(seed_zero != seed_one);
+    CHECK(seed_one == "[1768471200000,0.34227450605335275]");
+    CHECK(seed_zero == "[1768471200000,0.6711372530266764]");
+
+    // Replay mismatch is a rejection observation, separate from showing the
+    // changed random output: callers carry the recorded seed alongside the
+    // current inputs, and a mismatch refuses before the VM is created.
+    codemode::CodemodeRunOptions mismatch;
+    mismatch.started_at = 1768471200000;
+    mismatch.seed = 2;
+    mismatch.expected_seed = 1;
+    auto rejected_seed = sandbox->start("return 1", std::move(mismatch));
+    REQUIRE_FALSE(rejected_seed.has_value());
+    CHECK(rejected_seed.error().message == "Deterministic replay seed mismatch: expected 1, got 2");
+
+    // Fingerprint mismatch is checked after the VM reports the fingerprint but
+    // before the script runs; no call is exposed and the deterministic error is
+    // part of the normal run result.
+    std::string actual_fingerprint;
+    codemode::CodemodeRunOptions capture;
+    capture.started_at = 1768471200000;
+    capture.seed = 1;
+    capture.callbacks.on_started = [&actual_fingerprint](
+                                           std::string_view value) { actual_fingerprint = std::string{value}; };
+    auto capture_started = sandbox->start("return 1", std::move(capture));
+    REQUIRE(capture_started.has_value());
+    auto capture_run = std::move(*capture_started);
+    auto capture_result = run_async(capture_run.result());
+    REQUIRE(capture_result.has_value());
+    REQUIRE_FALSE(actual_fingerprint.empty());
+
+    std::vector<codemode::CodemodeHostCall> unexpected_calls;
+    codemode::CodemodeRunOptions fingerprint_mismatch;
+    fingerprint_mismatch.started_at = 1768471200000;
+    fingerprint_mismatch.seed = 1;
+    fingerprint_mismatch.expected_fingerprint = "different VM";
+    fingerprint_mismatch.tools = {
+            {.name = "echo", .js_name = "echo", .description = "Echo the argument."},
+    };
+    fingerprint_mismatch.callbacks.on_call = [&unexpected_calls](const codemode::CodemodeHostCall& call) {
+        unexpected_calls.push_back(call);
+    };
+    auto mismatch_started = sandbox->start("await tools.echo(1); return 2", std::move(fingerprint_mismatch));
+    REQUIRE(mismatch_started.has_value());
+    auto mismatch_run = std::move(*mismatch_started);
+    auto mismatch_result = run_async(mismatch_run.result());
+    REQUIRE(mismatch_result.has_value());
+    REQUIRE(mismatch_result->error.has_value());
+    CHECK(mismatch_result->error->kind == codemode::CodemodeError::Kind::Sandbox);
+    CHECK(mismatch_result->error->message.find("Deterministic replay fingerprint mismatch: expected 'different VM'") ==
+            0);
+    CHECK(unexpected_calls.empty());
+}
+
+TEST_CASE("a public codemode caller gets during for the result the VM was processing when the script ended",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "during reports the result
+    // the VM was processing when the script ended"): `return 1` reports
+    // `{seq: 0, issued: 0}`, a two-call script `{seq: 2, issued: 2}`, and a
+    // failing three-call script `{seq: 3, issued: 3}`.
+    auto sandbox = make_sandbox();
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "echo", .js_name = "echo", .description = "Echo the argument."},
+    };
+
+    struct Case {
+        std::string script;
+        bool ok;
+        std::int64_t seq;
+        std::int64_t issued;
+    };
+    const std::vector<Case> cases{
+            {"return 1", true, 0, 0},
+            {"await tools.echo(1); return await tools.echo(2)", true, 2, 2},
+            {"await tools.echo(1); await Promise.all([tools.echo(2), tools.echo(3)]); throw new Error('x')",
+                    false,
+                    3,
+                    3},
+    };
+
+    for (const auto& test : cases) {
+        ConcurrentCalls calls;
+        codemode::CodemodeRunOptions options;
+        options.started_at = 1768471200000;
+        options.seed = 1;
+        options.tools = tools;
+        options.timeout = std::chrono::seconds{20};
+        options.callbacks.on_call = [&calls](const codemode::CodemodeHostCall& call) { calls.push_back(call); };
+        auto started = sandbox->start(test.script, std::move(options));
+        REQUIRE(started.has_value());
+        auto run = std::move(*started);
+
+        std::int64_t seq = 0;
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+        while (std::chrono::steady_clock::now() < deadline) {
+            if (calls.size() <= static_cast<std::size_t>(seq)) {
+                if (run.finished()) break;
+                std::this_thread::sleep_for(std::chrono::milliseconds{2});
+                continue;
+            }
+            const auto& call = calls[static_cast<std::size_t>(seq)];
+            ++seq;
+            CHECK_FALSE(
+                    run.deliver(seq, 1768471200000.0 + static_cast<double>(seq) * 1000.0, call.id, echo_outcome(call))
+                            .has_value());
+        }
+        auto result = run_async(run.result());
+        REQUIRE(result.has_value());
+        INFO("script: " << test.script);
+        CHECK(result->error.has_value() == !test.ok);
+        REQUIRE(result->during.has_value());
+        CHECK(result->during->seq == test.seq);
+        CHECK(result->during->issued == test.issued);
+    }
+}
+
+TEST_CASE("a public codemode caller numbers globals with tools and gets rejection properties on the script Error",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "globals count as issued
+    // calls and rejection properties reach the script Error"): a global takes
+    // call id 1, the tool takes id 2, the idles report both, the tool record is
+    // `error`, and the rejection's message reaches the script.
+    auto sandbox = make_sandbox();
+    ConcurrentCalls calls;
+    std::vector<std::pair<std::int64_t, std::int64_t>> idles;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "echo", .js_name = "echo", .description = "Echo the argument."},
+    };
+    options.globals = {
+            {.name = "search", .spread = true},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.callbacks.on_call = [&calls](const codemode::CodemodeHostCall& call) { calls.push_back(call); };
+    options.callbacks.on_idle = [&idles](std::int64_t seq, std::int64_t issued) { idles.emplace_back(seq, issued); };
+    auto started =
+            sandbox->start("const found = await search(\"x\", 2); "
+                           "try { await tools.echo(\"fail\"); } catch (error) { text(error.message); } return found;",
+                    std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    // Answer the global first with its value, then reject the tool call.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    std::int64_t seq = 0;
+    while (seq < 2 && std::chrono::steady_clock::now() < deadline) {
+        if (calls.size() <= static_cast<std::size_t>(seq)) {
+            std::this_thread::sleep_for(std::chrono::milliseconds{2});
+            continue;
+        }
+        const auto& call = calls[static_cast<std::size_t>(seq)];
+        ++seq;
+        if (call.target == codemode::CodemodeHostCall::Target::Global) {
+            CHECK_FALSE(run.deliver(seq,
+                                   1768471200000.0 + static_cast<double>(seq) * 1000.0,
+                                   call.id,
+                                   codemode::CodemodeOutcome{.ok = true,
+                                           .value_json = "[\"found\"]",
+                                           .message = {},
+                                           .properties_json = std::nullopt})
+                            .has_value());
+        } else {
+            CHECK_FALSE(
+                    run.deliver(seq,
+                               1768471200000.0 + static_cast<double>(seq) * 1000.0,
+                               call.id,
+                               codemode::CodemodeOutcome{
+                                       .ok = false, .value_json = {}, .message = "no", .properties_json = std::nullopt})
+                            .has_value());
+        }
+    }
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+
+    // The frozen call numbering: the global is id 1 and the tool id 2.
+    REQUIRE(calls.size() == 2);
+    CHECK(calls[0].id == 1);
+    CHECK(calls[0].target == codemode::CodemodeHostCall::Target::Global);
+    CHECK(calls[0].name == "search");
+    CHECK(calls[0].arguments_json == "[\"x\",2]");
+    CHECK(calls[1].id == 2);
+    CHECK(calls[1].target == codemode::CodemodeHostCall::Target::Tool);
+    CHECK(calls[1].name == "echo");
+    CHECK(calls[1].arguments_json == "\"fail\"");
+
+    // The idles report both issued calls, and only the tool has a record.
+    REQUIRE(idles.size() >= 2);
+    CHECK(idles[0] == std::pair<std::int64_t, std::int64_t>{0, 1});
+    CHECK(idles[1] == std::pair<std::int64_t, std::int64_t>{1, 2});
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].name == "echo");
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Error);
+    CHECK(result->calls[0].duration_ms.has_value());
+
+    // The rejection message reached the script and the global's value is the result.
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data == "no");
+    CHECK(result->value_json == "[\"found\"]");
+}
+
+TEST_CASE("a public codemode caller gets an uncatchable abort and a cancelled record in a deterministic run",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "abort in a deterministic
+    // run is an uncatchable aborted error and finished becomes true"): the
+    // script's own `catch` cannot swallow the abort, the output it wrote is
+    // dropped because the run never reached it, and the pending call keeps a
+    // `cancelled` record with a duration.
+    auto sandbox = make_sandbox();
+    ConcurrentCalls calls;
+    std::stop_source cancel;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.stop_token = cancel.get_token();
+    options.abort_message = std::string{"diverged"};
+    options.callbacks.on_call = [&calls](const codemode::CodemodeHostCall& call) { calls.push_back(call); };
+    auto started = sandbox->start(
+            "try { await tools.wait(1); } catch { text(\"caught\"); } text(\"after\");", std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (calls.empty() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    REQUIRE(calls.size() == 1);
+    cancel.request_stop();
+
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(result->error->message == "diverged");
+    CHECK(result->output.empty());
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].name == "wait");
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
+    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(run.finished());
+}
+
+TEST_CASE("a public codemode caller keeps a call waiting when its answer cannot be serialized",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "a nonserializable answer
+    // leaves the call waiting and a later valid answer settles it"): pi's
+    // `JSON.stringify` throws before anything is recorded, so result 1 stays
+    // available and the later answer settles the run.
+    auto sandbox = make_sandbox();
+    ConcurrentCalls calls;
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.tools = {
+            {.name = "wait", .js_name = "wait", .description = "Wait for the host."},
+    };
+    options.timeout = std::chrono::seconds{20};
+    options.callbacks.on_call = [&calls](const codemode::CodemodeHostCall& call) { calls.push_back(call); };
+    auto started = sandbox->start("return await tools.wait(1)", std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds{20};
+    while (calls.empty() && std::chrono::steady_clock::now() < deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    }
+    REQUIRE(calls.size() == 1);
+
+    // A value the host cannot express as JSON. pi reaches this through
+    // `JSON.stringify` throwing on a BigInt; this API receives the JSON text
+    // already, so the same refusal is text that is not JSON — recorded nowhere,
+    // exactly as pi records nothing.
+    auto bad = run.deliver(1,
+            1768471200000.0,
+            calls[0].id,
+            codemode::CodemodeOutcome{
+                    .ok = true, .value_json = "{not json}", .message = {}, .properties_json = std::nullopt});
+    REQUIRE(bad.has_value());
+    CHECK(bad->reason == codemode::CodemodeDeliveryRejection::Reason::Serialization);
+    CHECK(bad->message == "The value of result 1 is not JSON");
+    CHECK_FALSE(run.finished());
+
+    // The same result number is still free, and the valid answer settles it.
+    CHECK_FALSE(
+            run.deliver(1,
+                       1768471200000.0,
+                       calls[0].id,
+                       codemode::CodemodeOutcome{
+                               .ok = true, .value_json = "\"fine\"", .message = {}, .properties_json = std::nullopt})
+                    .has_value());
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    CHECK(result->value_json == "\"fine\"");
+}
+
+TEST_CASE("a public codemode caller gets UTC and no WeakRef in a deterministic run",
+        "[codemode][deterministic][issue1093][spec]") {
+    // Frozen pi v1.3.0 (`deterministic-replay.json`, "deterministic runs use a
+    // virtual UTC clock and seeded randomness without WeakRef"): the clock
+    // reads `startedAt`, `performance.now()` is 0, `getHours()` on the epoch is
+    // 0 in UTC, the timezone offset is 0, and `WeakRef`/`FinalizationRegistry`
+    // do not exist.
+    auto sandbox = make_sandbox();
+    codemode::CodemodeRunOptions options;
+    options.started_at = 1768471200000;
+    options.seed = 1;
+    options.timeout = std::chrono::seconds{20};
+    auto started = sandbox->start("return [Date.now(), performance.now(), Math.random(), new Date(0).getHours(), "
+                                  "new Date(0).getTimezoneOffset(), typeof WeakRef, typeof FinalizationRegistry]",
+            std::move(options));
+    REQUIRE(started.has_value());
+    auto run = std::move(*started);
+    auto result = run_async(run.result());
+    REQUIRE(result.has_value());
+    REQUIRE_FALSE(result->error.has_value());
+    CHECK(result->value_json == "[1768471200000,0,0.34227450605335275,0,0,\"undefined\",\"undefined\"]");
 }

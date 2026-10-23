@@ -85,6 +85,15 @@ struct CodemodeCallRecord {
     std::optional<double> duration_ms;
 };
 
+/// pi `CodemodeDuring` (`packages/codemode/src/types.ts`): what a
+/// deterministic run reports about where the script ended. `seq` is the result
+/// the VM was processing when the script finished (0: its first run, before any
+/// result), `issued` the total calls it had issued by then.
+struct CodemodeDuring {
+    std::int64_t seq{0};
+    std::int64_t issued{0};
+};
+
 /// pi `CodemodeResult`: the terminal outcome of one script run. `error` unset
 /// means success and `value_json` (when present) holds the script's return
 /// value as JSON text.
@@ -97,6 +106,10 @@ struct CodemodeRunResult {
     /// pi `storeWrites`: the run's `store()`/`load()` write set. Present only
     /// for successful runs (including `exit()`); failed runs report no writes.
     std::optional<CodemodeStoreWrites> store_writes;
+    /// pi `during`: present only for a deterministic (`start`) run, whose
+    /// completion metadata names the result the VM was processing. A normal
+    /// `run` reports no `during`, exactly as pi's `execute()` does.
+    std::optional<CodemodeDuring> during;
 };
 
 /// pi inline mode's `DEFAULT_INTERRUPT_BUDGET` (packages/codemode inline.ts):
@@ -167,6 +180,116 @@ struct CodemodeGlobal {
     bool spread{false};
 };
 
+/// One call a deterministic run issued, reported to the caller through
+/// `CodemodeRunOptions::on_call`. The caller answers it with
+/// `CodemodeRun::deliver`, so the host — not the sandbox — decides every
+/// result a replayed script sees (pi `CodemodeHostCall`).
+struct CodemodeHostCall {
+    /// The VM's call id: unique within the run, numbered from 1 across tools
+    /// and globals alike.
+    std::int64_t id{0};
+    /// pi `target`: a `tools.<name>` call or a bound global.
+    enum class Target { Tool, Global };
+    Target target{Target::Tool};
+    /// The registered tool name, or the global's bound name.
+    std::string name;
+    /// The call argument as JSON text. Empty when the call passed no argument
+    /// (pi `args === undefined`), which is not the same as a JSON `null`.
+    std::optional<std::string> arguments_json;
+};
+
+/// pi `CodemodeOutcome`: the caller's answer to one issued call. `ok` carries
+/// the JSON text of the tool's value (empty for `undefined`); a rejection
+/// carries the error message and, optionally, a JSON object whose properties
+/// the script's `Error` receives — pi's structured tool failure.
+struct CodemodeOutcome {
+    bool ok{true};
+    /// `ok`: the value's JSON text, or empty for `undefined`.
+    std::string value_json;
+    /// `!ok`: the rejection message the script sees.
+    std::string message;
+    /// `!ok`: a JSON object whose properties are merged onto the script's
+    /// `Error` (`name`, `message`, and `stack` excepted).
+    std::optional<std::string> properties_json;
+};
+
+/// What a deterministic run reports as it advances (pi `CodemodeRunOptions`
+/// callbacks). The fingerprint arrives before the script's first call; `idle`
+/// arrives after each applied result with the total calls issued so far.
+struct CodemodeRunCallbacks {
+    /// pi `onStarted`: the VM's fingerprint, before the script runs and before
+    /// any of its calls.
+    std::function<void(std::string_view fingerprint)> on_started;
+    /// pi `onCall`: the script issued a call; answer it through
+    /// `CodemodeRun::deliver`. A call left unanswered keeps the script waiting.
+    std::function<void(const CodemodeHostCall& call)> on_call;
+    /// pi `onIdle(seq, issued)`: the VM processed result `seq` (0: the script's
+    /// first run, before any result) and waits again.
+    std::function<void(std::int64_t seq, std::int64_t issued)> on_idle;
+};
+
+/// pi `CodemodeRunOptions`: everything a deterministic run fixes so the same
+/// inputs reproduce the same calls and output on any VM with the same
+/// fingerprint.
+struct CodemodeRunOptions {
+    /// The VM clock's start in milliseconds since the epoch: `Date.now()` reads
+    /// this until the first result arrives. A negative or non-finite value is
+    /// rejected at `start`.
+    std::int64_t started_at{0};
+    /// Seeds `Math.random()` and the VM's other randomness. A 32-bit unsigned
+    /// integer; anything else is rejected at `start`.
+    std::uint64_t seed{0};
+    /// The run's own tool surface. Names and derived script names must be
+    /// unique; the sandbox's registered tools are not used.
+    std::vector<CodemodeToolDescriptor> tools;
+    /// The run's own globals; validated like `create`'s.
+    std::vector<CodemodeGlobal> globals;
+    /// `store()`/`load()` snapshot for this run.
+    std::map<std::string, support::JsonValue> store;
+    /// The fingerprint from the recorded run. If the VM produces a different
+    /// fingerprint, the run reports a deterministic sandbox error before the
+    /// script runs. Unset accepts the current VM and reports its fingerprint.
+    std::optional<std::string> expected_fingerprint;
+    /// The seed from the recorded run. A mismatch rejects `start` before a VM
+    /// is created. Unset uses `seed` directly.
+    std::optional<std::uint64_t> expected_seed;
+    /// Per-run guest heap cap; it is part of the fingerprint. Unset leaves the
+    /// guest uncapped.
+    std::optional<std::uint64_t> memory_limit_bytes;
+    /// Deadline for this run. Unset means no deadline, as pi's `start` defaults
+    /// to (not the sandbox's default timeout).
+    std::optional<std::chrono::milliseconds> timeout;
+    /// The run's cancellation. A pre-cancelled token settles the run as aborted
+    /// without creating a VM.
+    std::stop_token stop_token;
+    /// The run's progress callbacks.
+    CodemodeRunCallbacks callbacks;
+    /// pi's abort reason text, reported when `stop_token` cancels the run.
+    std::optional<std::string> abort_message;
+};
+
+/// The result of one `deliver` call: either the answer was accepted, or the
+/// deterministic protocol refused it. pi throws from `deliver` for exactly
+/// these refusals and leaves the run unsettled, so the caller can retry with a
+/// valid answer; a rejected delivery never advances the script.
+struct CodemodeDeliveryRejection {
+    enum class Reason {
+        /// The result number is not a positive integer used once.
+        ResultNumber,
+        /// The clock value is not finite.
+        Clock,
+        /// No call with that id is waiting for a result.
+        UnknownCall,
+        /// The rejection properties are not a JSON object.
+        Properties,
+        /// The answer could not be serialized (a value JSON cannot hold).
+        Serialization,
+    };
+    Reason reason{Reason::UnknownCall};
+    /// pi's message text, byte-for-byte.
+    std::string message;
+};
+
 /// The codemode wasm sandbox (spec #865, ticket #874). It loads pi's actual
 /// codemode guest (QuickJS compiled to wasm) through WasmEdge, registers only
 /// the twelve imports the guest declares (no filesystem, socket, process, or
@@ -205,7 +328,7 @@ public:
         ConstructionKey() = default;
         friend class CodemodeSandbox;
     };
-    CodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl);
+    CodemodeSandbox(ConstructionKey, std::shared_ptr<Impl> impl);
 
     CodemodeSandbox(CodemodeSandbox&&) noexcept;
     CodemodeSandbox& operator=(CodemodeSandbox&&) noexcept;
@@ -235,8 +358,57 @@ public:
             std::map<std::string, support::JsonValue> store = {},
             std::optional<std::string> abort_message = std::nullopt);
 
+    /// One running deterministic execution: the caller's handle on the VM
+    /// between `start` and the run's terminal result. `deliver` advances it and
+    /// `result` resolves once. pi `CodemodeRun`.
+    class Run {
+    public:
+        Run(Run&&) noexcept;
+        Run& operator=(Run&&) noexcept;
+        ~Run();
+        Run(const Run&) = delete;
+        Run& operator=(const Run&) = delete;
+
+        /// pi `CodemodeRun.result`: the run's terminal outcome, delivered once.
+        /// A run the caller never answers stays pending, exactly as pi's does.
+        [[nodiscard]] support::AsyncResult<CodemodeRunResult> result();
+
+        /// pi `CodemodeRun.finished`: whether the run has its outcome. It is set
+        /// when the outcome is decided, before `result` settles; it does not
+        /// mean the VM has exited.
+        [[nodiscard]] bool finished() const;
+
+        /// pi `CodemodeRun.deliver(seq, now, id, outcome)`: answer call `id` as
+        /// result number `seq`, with the VM clock reading `now` (ms since the
+        /// epoch) while it processes this result. Results are numbered 1, 2, ...
+        /// and applied strictly in that order whatever order they arrive in, so
+        /// an answer delivered early waits for the missing number. A rejection
+        /// leaves the run unsettled and the call still waiting.
+        [[nodiscard]] std::optional<CodemodeDeliveryRejection> deliver(
+                std::int64_t seq, double now, std::int64_t id, CodemodeOutcome outcome);
+
+    private:
+        struct State;
+        explicit Run(std::shared_ptr<State> state);
+        std::shared_ptr<State> state_;
+        friend class CodemodeSandbox;
+    };
+
+    /// pi `CodemodeSandboxBase.start`: run `script` deterministically with the
+    /// caller answering its calls. The same script, start time, seed, tools,
+    /// globals, store, and answers in the same `seq` order reproduce the same
+    /// calls and output on any VM with the same fingerprint, so a host can
+    /// replay the run after a restart. The VM runs in UTC, its clock reads
+    /// `started_at` and then the `now` of the result being processed, its
+    /// randomness comes from `seed`, and `WeakRef`/`FinalizationRegistry` do not
+    /// exist. The sandbox's own tools and globals are not used.
+    /// A rejected option set (negative start time, a seed that is not a 32-bit
+    /// unsigned integer, duplicate tool names or script names, invalid globals)
+    /// fails here, before any VM exists.
+    [[nodiscard]] support::Expected<Run> start(std::string script, CodemodeRunOptions options);
+
 private:
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Impl> impl_;
 };
 
 } // namespace cch::codemode
