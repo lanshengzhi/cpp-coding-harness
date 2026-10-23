@@ -470,6 +470,49 @@ TEST_CASE("ToolCallExecutor records the duration of a failing tool call", "[agen
     CHECK(*end->duration_ms == *run.result->results[0].duration_ms);
 }
 
+TEST_CASE("an afterToolCall override keeps the recorded duration", "[agent][tool-executor][issue812][spec]") {
+    // audit-1047 `a successful call keeps its duration after the
+    // afterToolCall hook rewrites the result`: the hook replaces content and
+    // details, and the duration the execute window measured must survive, or
+    // a resumed session would lose the value a live one drew.
+    agent::ToolRegistry registry;
+    auto tool = make_recording_tool(ai::Tool{"read_file", "Read", test::empty_object_tool_argument_contract()},
+            agent::ToolConcurrency::Exclusive,
+            "tool says ok",
+            std::chrono::milliseconds{40});
+    REQUIRE(registry.add(std::move(tool.tool)));
+
+    agent::AfterToolCallHook after_hook = [](const agent::AfterToolCallContext&,
+                                                  std::stop_token) -> support::AsyncResult<agent::AfterToolCallResult> {
+        return support::AsyncResult<agent::AfterToolCallResult>{
+                support::Expected<agent::AfterToolCallResult>{agent::AfterToolCallResult{
+                        .content = std::vector<ai::Content>{ai::text_content("overridden")},
+                        .details = std::nullopt,
+                        .is_error = std::nullopt,
+                        .terminate = std::nullopt,
+                }}};
+    };
+    agent::ToolCallExecutorOptions options;
+    options.after_tool_call = &after_hook;
+    agent::ToolCallExecutor executor{registry, std::move(options)};
+    auto assistant = assistant_with_calls({make_call("call-1", "read_file")});
+
+    auto run = run_executor(executor, assistant);
+
+    REQUIRE(run.result);
+    REQUIRE(run.result->results.size() == 1);
+    CHECK(ai::text_from_content(run.result->results[0].content) == "overridden");
+    REQUIRE(run.result->results[0].duration_ms.has_value());
+    CHECK(*run.result->results[0].duration_ms >= 40);
+    const agent::ToolExecutionEndEvent* end = nullptr;
+    for (const auto& event : run.events) {
+        if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) end = finished;
+    }
+    REQUIRE(end != nullptr);
+    REQUIRE(end->duration_ms.has_value());
+    CHECK(*end->duration_ms == *run.result->results[0].duration_ms);
+}
+
 TEST_CASE("a blocked call records no duration because it never executed", "[agent][tool-executor][issue812][spec]") {
     // audit-1047 `executed success, thrown failure, blocked and unknown calls
     // keep distinct duration presence`: a blocked call's result and end event
