@@ -25,10 +25,10 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 
-#include <algorithm>
-
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_message.hpp>
+
+#include <algorithm>
 
 #include <chrono>
 #include <cstdint>
@@ -121,8 +121,7 @@ template <typename T> [[nodiscard]] std::expected<T, support::Error> run_async(s
 
 [[nodiscard]] std::unique_ptr<codemode::CodemodeSandbox> make_sandbox(
         std::vector<codemode::CodemodeGlobal> globals = {}) {
-    auto sandbox = codemode::CodemodeSandbox::create(
-            codemode::default_codemode_guest_wasm_path(), std::move(globals));
+    auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path(), std::move(globals));
     REQUIRE(sandbox.has_value());
     return std::move(*sandbox);
 }
@@ -586,6 +585,217 @@ TEST_CASE("a public codemode caller fails the run when the guest hits its store 
             "store(\"big\") value has 262147 characters of JSON, more than the limit of 262144."));
     CHECK_FALSE(result->value_json.has_value());
     CHECK_FALSE(result->store_writes.has_value());
+}
+
+TEST_CASE("a public codemode caller returns its value and text output from a successful budgeted run",
+        "[codemode][inline][issue1097][spec]") {
+    // Frozen pi v1.3.0 (`inline-interrupt.json`, "a successful inline execution
+    // returns its value and text output"): a budgeted execution that finishes
+    // reports ok with the value, the text output, no calls, and a present (but
+    // empty) write set.
+    auto sandbox = make_sandbox();
+    auto budget_limits = limits();
+    budget_limits.interrupt_budget = codemode::kDefaultInterruptBudget;
+
+    auto result = run_async(sandbox->run("text('inline'); return 7", {}, budget_limits, {}, nullptr));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == "7");
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data == "inline");
+    CHECK(result->calls.empty());
+    REQUIRE(result->store_writes.has_value());
+    CHECK(result->store_writes->set.empty());
+    CHECK(result->store_writes->deleted.empty());
+}
+
+TEST_CASE("a public codemode caller stops pure computation with the interrupt budget, not the deadline",
+        "[codemode][inline][issue1097][spec]") {
+    // Frozen pi v1.3.0 (`inline-interrupt.json`, "an inline script that
+    // computes without awaiting is stopped by its interrupt budget, not the
+    // deadline"): both a tight loop and a tight await-loop exceed the budget
+    // (polls counted across the whole execution) and fail as a timeout with
+    // the frozen budget message — even with an earlier deadline pending.
+    //
+    // The budget is scaled to this harness's pinned guest (#874 quickjs.wasi
+    // 3.2): it polls its interrupt handler about two orders of magnitude less
+    // often than pi v1.3.0's guest, so frozen pi's 1000-poll capture would take
+    // over 20 s here. The frozen contract under test is that polls are counted
+    // across the whole execution and reported with this exact message shape.
+    auto sandbox = make_sandbox();
+    auto budget_limits = limits();
+    budget_limits.timeout = std::chrono::seconds{30};
+    budget_limits.interrupt_budget = 20;
+
+    for (const char* script : {"while (true) {}", "while (true) await null"}) {
+        auto result = run_async(sandbox->run(script, {}, budget_limits, {}, nullptr));
+        REQUIRE(result.has_value());
+        REQUIRE(result->error.has_value());
+        CHECK(result->error->kind == codemode::CodemodeError::Kind::Timeout);
+        CHECK(result->error->message == "Execution exceeded its interrupt budget of 20");
+    }
+}
+
+TEST_CASE("a public codemode caller counts the interrupt budget across tool waits",
+        "[codemode][inline][issue1097][spec]") {
+    // Frozen pi v1.3.0 (`inline-interrupt.json`, "the interrupt budget counts
+    // across awaits on tools"): a loop that alternates compute and awaited
+    // tool calls keeps spending the same budget; the run fails with the
+    // budget message after the calls that fit. (The frozen capture's exact
+    // call count depends on pi's poll rate; the contract here is the error
+    // plus completed settled calls.)
+    auto sandbox = make_sandbox();
+    auto budget_limits = limits();
+    budget_limits.timeout = std::chrono::seconds{30};
+    budget_limits.interrupt_budget = 20;
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "tick", .js_name = "tick", .description = "Count one tick."},
+    };
+    codemode::CodemodeToolCallHandler handler = [](std::string_view, std::string_view, std::stop_token) {
+        return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{"null"}}};
+    };
+
+    auto result =
+            run_async(sandbox->run("let n = 0;\nfor (;;) { for (let i = 0; i < 100; i++) n += i; await tools.tick(); }",
+                    tools,
+                    budget_limits,
+                    {},
+                    std::move(handler)));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Timeout);
+    CHECK(result->error->message == "Execution exceeded its interrupt budget of 20");
+    CHECK(result->calls.size() >= 2);
+    // Every settled call is `ok`; the call in flight when the budget ran out is
+    // reported cancelled by the finish sweep.
+    const auto settled_calls = result->calls.size() - 1;
+    CHECK(std::ranges::all_of(result->calls.begin(),
+            result->calls.begin() + static_cast<std::ptrdiff_t>(settled_calls),
+            [](const codemode::CodemodeCallRecord& call) {
+                return call.status == codemode::CodemodeCallRecord::Status::Ok;
+            }));
+}
+
+TEST_CASE("a public codemode caller reports the deadline when a tool waits past it and keeps partial output",
+        "[codemode][inline][issue1097][spec]") {
+    // Frozen pi v1.3.0 (`inline-interrupt.json`, "an inline deadline while a
+    // tool waits reports the deadline, not the interrupt budget"): the run
+    // fails with the deadline message, the output emitted before the call is
+    // kept, and the in-flight call is cancelled with a duration.
+    auto sandbox = make_sandbox();
+    auto deadline_limits = limits();
+    deadline_limits.timeout = std::chrono::milliseconds{40};
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "hang", .js_name = "hang", .description = "Hang until cancelled."},
+    };
+    std::atomic<bool> tool_aborted{false};
+    codemode::CodemodeToolCallHandler handler = [&tool_aborted](std::string_view,
+                                                        std::string_view,
+                                                        std::stop_token signal) -> support::AsyncResult<std::string> {
+        return support::detail::make_async_result(
+                [&tool_aborted, signal]() -> boost::asio::awaitable<support::Expected<std::string>> {
+                    auto executor = co_await boost::asio::this_coro::executor;
+                    boost::asio::steady_timer timer{executor};
+                    while (!signal.stop_requested()) {
+                        timer.expires_after(std::chrono::milliseconds{5});
+                        co_await timer.async_wait(boost::asio::use_awaitable);
+                    }
+                    tool_aborted.store(true);
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "aborted"));
+                });
+    };
+
+    auto result = run_async(sandbox->run("text('partial'); await tools.hang(); return 'unreachable';",
+            tools,
+            deadline_limits,
+            {},
+            std::move(handler)));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Timeout);
+    CHECK(result->error->message == "Execution timed out after 40 ms");
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data == "partial");
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
+    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(tool_aborted.load());
+}
+
+TEST_CASE("a public codemode caller aborting while a tool waits keeps partial output and cancels the call",
+        "[codemode][inline][issue1097][spec]") {
+    // Frozen pi v1.3.0 (`inline-interrupt.json`, "caller abort during an
+    // inline tool wait aborts the tool and keeps partial output"): the run
+    // settles aborted with the reason's message, the output before the call is
+    // kept, and the in-flight call is cancelled with a duration.
+    auto sandbox = make_sandbox();
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "hang", .js_name = "hang", .description = "Hang until cancelled."},
+    };
+    std::atomic<bool> tool_aborted{false};
+    std::stop_source cancel;
+    codemode::CodemodeToolCallHandler handler = [&tool_aborted, &cancel](std::string_view,
+                                                        std::string_view,
+                                                        std::stop_token signal) -> support::AsyncResult<std::string> {
+        return support::detail::make_async_result(
+                [&tool_aborted, &cancel, signal]() -> boost::asio::awaitable<support::Expected<std::string>> {
+                    // The caller aborts while the tool is in flight.
+                    cancel.request_stop();
+                    auto executor = co_await boost::asio::this_coro::executor;
+                    boost::asio::steady_timer timer{executor};
+                    while (!signal.stop_requested()) {
+                        timer.expires_after(std::chrono::milliseconds{5});
+                        co_await timer.async_wait(boost::asio::use_awaitable);
+                    }
+                    tool_aborted.store(true);
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "aborted"));
+                });
+    };
+
+    auto result = run_async(sandbox->run("text('partial'); await tools.hang(); return 'unreachable';",
+            tools,
+            limits(),
+            cancel.get_token(),
+            std::move(handler),
+            {},
+            std::string{"cancelled"}));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(result->error->message == "cancelled");
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data == "partial");
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
+    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(tool_aborted.load());
+    CHECK_FALSE(result->value_json.has_value());
+}
+
+TEST_CASE("a public codemode caller reports a pre-aborted run with the abort reason and never starts it",
+        "[codemode][inline][issue1097][spec]") {
+    // Frozen pi v1.3.0 (`inline-interrupt.json`, "an inline execution with an
+    // already-aborted signal never creates a VM"): the run settles as aborted
+    // with the reason's message, with no output and no calls.
+    auto sandbox = make_sandbox();
+    std::stop_source cancel;
+    cancel.request_stop();
+
+    auto result = run_async(sandbox->run(
+            "text('unreachable'); return 1", {}, limits(), cancel.get_token(), nullptr, {}, std::string{"early"}));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(result->error->message == "early");
+    CHECK(result->output.empty());
+    CHECK(result->calls.empty());
+    CHECK_FALSE(result->value_json.has_value());
 }
 
 TEST_CASE("a public codemode caller reads a store snapshot across calls and drops failed writes",

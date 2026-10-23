@@ -99,6 +99,14 @@ struct CodemodeRunResult {
     std::optional<CodemodeStoreWrites> store_writes;
 };
 
+/// pi inline mode's `DEFAULT_INTERRUPT_BUDGET` (packages/codemode inline.ts):
+/// the poll budget an inline execution gets when the caller does not override
+/// it. This class runs pi's worker mode, whose scripts are bounded by the
+/// deadline and carry no poll budget, so an inline caller opts in by setting
+/// `CodemodeLimits::interrupt_budget` (this constant when it wants pi's inline
+/// default).
+inline constexpr std::uint64_t kDefaultInterruptBudget = 100000;
+
 /// pi `CodemodeSandboxOptions`/`CodemodeExecuteOptions` bounds the sandbox can
 /// enforce from outside the guest.
 struct CodemodeLimits {
@@ -110,6 +118,15 @@ struct CodemodeLimits {
     /// reports an exhaustion as an `InternalError: out of memory` script
     /// error. Unset runs the guest without a memory cap (pi's default).
     std::optional<std::uint64_t> memory_limit_bytes;
+    /// pi inline mode's `interruptBudget`: the number of guest interrupt polls
+    /// one execution may use (counted across the whole run, including tool
+    /// waits) before it fails with `Execution exceeded its interrupt budget of
+    /// N`. This is the only limit on a script that computes without awaiting a
+    /// tool. Unset keeps this class's worker-mode behavior (pi's worker thread
+    /// has no poll budget; the deadline bounds it); inline callers opt in by
+    /// setting it, typically to `kDefaultInterruptBudget`. An explicit 0 also
+    /// leaves polling unbounded.
+    std::optional<std::uint64_t> interrupt_budget;
 };
 
 /// Executes one tool a script requested through `tools.*` or a global, reusing
@@ -207,12 +224,16 @@ public:
     /// `store` is the run's `store()`/`load()` snapshot: the caller seeds it
     /// from prior runs' reported writes and persists the reported writes after
     /// a successful run.
+    /// Runs the script; `abort_message` is the frozen abort reason's text
+    /// reported when `stop_token` cancels the run (pi reads the AbortSignal
+    /// reason's message; the default without a reason is "Execution aborted").
     [[nodiscard]] support::AsyncResult<CodemodeRunResult> run(std::string script,
             std::vector<CodemodeToolDescriptor> tools,
             CodemodeLimits limits,
             std::stop_token stop_token = {},
             CodemodeToolCallHandler handler = {},
-            std::map<std::string, support::JsonValue> store = {});
+            std::map<std::string, support::JsonValue> store = {},
+            std::optional<std::string> abort_message = std::nullopt);
 
 private:
     std::unique_ptr<Impl> impl_;

@@ -743,7 +743,7 @@
       "cppEvidence": "`CodemodeSandboxTest.cpp:143` only checks the pre-cancelled `Aborted` kind and empty output. Pike drops the caller reason and uses different messages from v1.3.0 (`cancelled`/`early`). Partial output on a mid-run abort is not tested through the public result.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Pass an abort reason alongside the stop token (or a cancellation payload) and preserve partial output; add the captured mid-wait and pre-aborted cases.",
@@ -1148,7 +1148,7 @@
       "cppEvidence": "Pike cannot interleave inline execution or cap compute by poll count. A synchronous runaway on the calling thread is not possible because every run gets its own thread; the captured budget semantics are absent.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add an inline launcher only with a real interrupt-budget implementation (not a timeout alias). Keep it out of the Application default path unless a portable target requires it.",
@@ -1170,10 +1170,10 @@
         ]
       },
       "cppSeam": "No Inline class; the worker sandbox has a deadline/stop path with different abort messages and no pre-VM creation guarantee.",
-      "cppEvidence": "The deadline-vs-budget distinction cannot be represented. Pike’s worker path does abort a tool wait and keep prior output, but it starts a thread and reports its own cancellation text.",
+      "cppEvidence": "The deadline-vs-budget distinction cannot be represented. Pike\u2019s worker path does abort a tool wait and keep prior output, but it starts a thread and reports its own cancellation text.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement deadline and abort semantics together in the inline seam; test the exact message selection and no-VM pre-abort case.",
@@ -1198,7 +1198,7 @@
       "cppEvidence": "The success result is the same core shape as the worker sandbox; only the execution destination is missing. It should be covered by the generic result row once the inline class exists.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Reuse the core result mapping when adding Inline; add one success scenario to prove the destination, not a duplicate result-shape test.",

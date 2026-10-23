@@ -288,6 +288,10 @@ struct SandboxLink {
     /// Set by the host when the run's deadline or cancellation must stop a
     /// wasm-spinning worker; read by the guest's `host_interrupt` import.
     std::atomic<bool> interrupt{false};
+    /// The run's absolute deadline (nanoseconds since the steady clock's epoch),
+    /// published by the worker when the limits carry a timeout; 0 means none.
+    /// The host's request loop enforces it while a tool call waits.
+    std::atomic<std::int64_t> deadline_nanos{0};
     /// Set by the worker when the script settled (success, failure, or
     /// exit()): calls still in flight are unawaited and must be cancelled by
     /// the host instead of waiting for their handlers.
@@ -391,11 +395,31 @@ struct RunState {
     /// the record gains a duration when the call settles or is cancelled.
     std::vector<CodemodeCallRecord> calls;
     std::vector<std::chrono::steady_clock::time_point> call_issued;
+    std::uint64_t polls{0};
+    bool budget_exhausted{false};
+    /// pi's abort reason text (the AbortSignal reason's message); reported when
+    /// the host cancels the run. Without a reason pi reports "Execution aborted".
+    std::optional<std::string> abort_message;
 
     [[nodiscard]] bool interrupted() {
-        // The script's own deadline is evaluated first so a timeout is reported
-        // as a timeout even when the host's monitor also flagged the worker.
-        if (limits.timeout.count() > 0 && std::chrono::steady_clock::now() - started > limits.timeout) {
+        // pi inline counts every interrupt poll across the whole execution and
+        // stops the VM once the count passes the budget; the budget outranks
+        // the deadline because a computing script reaches the poll count first
+        // (frozen inline-interrupt evidence). An unset budget keeps pi's
+        // worker-thread behavior: polling itself never fails the run.
+        if (limits.interrupt_budget.has_value()) {
+            ++polls;
+            if (*limits.interrupt_budget > 0 && polls > *limits.interrupt_budget) {
+                budget_exhausted = true;
+                return true;
+            }
+        }
+        // The script's own deadline is evaluated so a timeout is reported as a
+        // timeout even when the host's monitor also flagged the worker.
+        if (link != nullptr && link->deadline_nanos.load() > 0 &&
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                                .count() > link->deadline_nanos.load()) {
             timed_out = true;
             return true;
         }
@@ -839,11 +863,13 @@ namespace {
         SandboxLink& link,
         WasmEdge_ASTModuleContext* ast,
         const std::string& globals_list_json,
-        const std::string& store_snapshot_json) {
+        const std::string& store_snapshot_json,
+        std::optional<std::string> abort_message) {
     RunState state;
     state.limits = limits;
     state.stop_token = stop_token;
     state.link = &link;
+    state.abort_message = std::move(abort_message);
     state.tools = std::move(tools);
     state.started = std::chrono::steady_clock::now();
     // The interrupt handler is armed only once the script starts (below), so the
@@ -869,7 +895,10 @@ namespace {
     };
 
     if (stop_token.stop_requested()) {
-        state.error = CodemodeError{CodemodeError::Kind::Aborted, "The script was cancelled before it ran."};
+        // pi settles a pre-aborted execution with the abort reason's message
+        // and never starts a VM for it (frozen inline-interrupt evidence).
+        state.error = CodemodeError{
+                CodemodeError::Kind::Aborted, state.abort_message.value_or(std::string{"Execution aborted"})};
         return finish();
     }
 
@@ -1046,7 +1075,8 @@ namespace {
 
         // Arm the deadline and the interrupt before the script body runs, so the
         // timeout bounds the script (including a synchronous runaway loop) and
-        // not the fixed prelude evaluation above.
+        // not the fixed prelude evaluation above. The run's absolute deadline
+        // is published by the caller (see `run`), shared with the host loop.
         state.started = std::chrono::steady_clock::now();
         g.call_void(g.find("qjs_set_interrupt_handler"), {gen_i32(1)});
         g.call(run_fn, api, {script_fn});
@@ -1105,15 +1135,24 @@ namespace {
     state.pending.clear();
 
     if (!state.finished) {
-        if (!state.timed_out && state.limits.timeout.count() > 0 &&
-                std::chrono::steady_clock::now() - state.started > state.limits.timeout) {
+        if (!state.timed_out && state.link != nullptr && state.link->deadline_nanos.load() > 0 &&
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                                .count() > state.link->deadline_nanos.load()) {
             state.timed_out = true;
         }
-        if (state.timed_out) {
+        if (state.budget_exhausted) {
+            // The exhausted budget decides the outcome, like pi's inline
+            // launcher: the run fails as a timeout with the budget message.
+            state.error = CodemodeError{CodemodeError::Kind::Timeout,
+                    std::format("Execution exceeded its interrupt budget of {}",
+                            state.limits.interrupt_budget.value_or(0))};
+        } else if (state.timed_out) {
             state.error = CodemodeError{CodemodeError::Kind::Timeout,
                     std::format("Execution timed out after {} ms", state.limits.timeout.count())};
         } else if (state.stop_token.stop_requested()) {
-            state.error = CodemodeError{CodemodeError::Kind::Aborted, "The script was cancelled."};
+            state.error =
+                    CodemodeError{CodemodeError::Kind::Aborted, state.abort_message.value_or("Execution aborted")};
         } else if (!state.error.has_value()) {
             fail_sandbox("The codemode sandbox guest stopped without reporting a result.");
         }
@@ -1130,7 +1169,8 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         CodemodeLimits limits,
         std::stop_token stop_token,
         CodemodeToolCallHandler handler,
-        std::map<std::string, support::JsonValue> store) {
+        std::map<std::string, support::JsonValue> store,
+        std::optional<std::string> abort_message) {
     return support::detail::make_async_result([this,
                                                       script = std::move(script),
                                                       tools = std::move(tools),
@@ -1138,7 +1178,8 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                                                       stop_token,
                                                       handler = std::move(handler),
                                                       globals_list_json = globals_json(impl_->globals),
-                                                      store_snapshot_json = store_json(store)]() mutable
+                                                      store_snapshot_json = store_json(store),
+                                                      abort_message = std::move(abort_message)]() mutable
                                                       -> boost::asio::awaitable<support::Expected<CodemodeRunResult>> {
         auto executor = co_await boost::asio::this_coro::executor;
         auto link = std::make_shared<SandboxLink>();
@@ -1155,6 +1196,13 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                         ? std::optional<std::chrono::steady_clock::time_point>{std::chrono::steady_clock::now() +
                                                                                limits.timeout}
                         : std::nullopt;
+        // One deadline for the whole run: the monitor, the engine's own clock,
+        // and the request loop all read this instant, so pi's timeout counts
+        // from execution start (VM startup included).
+        if (deadline.has_value()) {
+            link->deadline_nanos.store(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(deadline->time_since_epoch()).count());
+        }
         auto monitor_timer = std::make_shared<boost::asio::steady_timer>(executor);
         boost::asio::co_spawn(
                 executor,
@@ -1166,13 +1214,11 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                         if (error) co_return; // cancelled: the run finished
                         const bool expired = deadline.has_value() && std::chrono::steady_clock::now() >= *deadline;
                         if (stop_token.stop_requested() || expired) {
-                            if (stop_token.stop_requested()) {
-                                // Cancellation must stop a wasm-spinning worker.
-                                link->interrupt.store(true);
-                            }
-                            // Abort an in-flight nested call at the deadline or on
-                            // cancellation; the engine's own clock reports the
-                            // timeout once the worker resumes.
+                            // Cancellation and the deadline must both stop a
+                            // wasm-spinning worker and abort an in-flight nested
+                            // call; the engine's own clock reports the outcome
+                            // once the worker resumes.
+                            link->interrupt_worker();
                             call_stop->request_stop();
                             co_return;
                         }
@@ -1188,7 +1234,8 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                                           limits,
                                           stop_token,
                                           globals_list_json = std::move(globals_list_json),
-                                          store_snapshot_json = std::move(store_snapshot_json)]() mutable {
+                                          store_snapshot_json = std::move(store_snapshot_json),
+                                          abort_message = std::move(abort_message)]() mutable {
             link->finish(run_engine(std::move(script),
                     std::move(tools),
                     limits,
@@ -1196,7 +1243,8 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                     *link,
                     impl_->ast,
                     globals_list_json,
-                    store_snapshot_json));
+                    store_snapshot_json,
+                    abort_message));
         });
 
         // One handler resolves every call of this run; the shared owner lets
@@ -1252,8 +1300,12 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                 // The answer is moot when the script has already settled, or
                 // when the host cancelled the run (stop or deadline): pi decides
                 // the result first and later VM messages never reach the guest.
-                const bool cancelled_by_host =
-                        link->script_settled.load() || stop_token.stop_requested();
+                const auto now_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                                               .count();
+                const auto run_deadline = link->deadline_nanos.load();
+                const bool cancelled_by_host = link->script_settled.load() || stop_token.stop_requested() ||
+                                               (run_deadline > 0 && now_nanos > run_deadline);
                 if (!answer_moot && !cancelled_by_host) {
                     link->deliver(request.id, (*slot)->ok, std::move((*slot)->payload));
                 }
