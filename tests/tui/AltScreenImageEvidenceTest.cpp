@@ -214,6 +214,33 @@ private:
     std::vector<cch::tui::InlineImageRenderRegion> images_;
 };
 
+/// A component whose image changes ONLY its revision between renders: same
+/// resource id, same row/column, same placement command, new revision.
+class RevisionChild final : public cch::tui::Component {
+public:
+    [[nodiscard]] cch::support::Expected<cch::tui::RenderResult> render(std::size_t) override {
+        cch::tui::InlineImageRenderRegion region;
+        region.resource_id = 7301;
+        region.revision = revision_;
+        region.encoded_data = "AAAA";
+        region.mime_type = "image/png";
+        region.pixel_width = 100;
+        region.pixel_height = 100;
+        region.fallback_text = cch::tui::image_fallback(
+                region.mime_type, cch::tui::ImagePixelSize{.width = region.pixel_width, .height = region.pixel_height});
+        region.region = cch::tui::CellRegion{.column = 0, .row = 0, .columns = 2, .rows = 3};
+        region.source_rows = 3;
+        region.rows_reserved_in_lines = true;
+        return cch::tui::RenderResult{.lines = {"", "", "", "after"}, .images = {std::move(region)}};
+    }
+
+    void invalidate() override {}
+    void bump_revision() { ++revision_; }
+
+private:
+    std::size_t revision_{1};
+};
+
 /// A focusable overlay body: the overlay path only composes images while a
 /// visible overlay exists, so the regression needs a focusable child.
 class OverlayFocusProbe final : public cch::tui::Component, public cch::tui::Focusable {
@@ -625,5 +652,45 @@ TEST_CASE("frozen fullscreen width change retransmits the image under the same i
         check.check(action);
     }
     check.require_done();
+    REQUIRE(tui.stop());
+}
+
+TEST_CASE("a fullscreen image revision change retransmits the image under the same id",
+        "[tui][image][alt-screen][issue1035][spec]") {
+    // A revision-only change — same resource id, same row/column, same a=p
+    // reuse command — must still ship the fresh transmission. The image stage
+    // moves the cache to the new revision when it prepares the transmission;
+    // a frame that then emits no image bytes leaves the terminal showing the
+    // old revision while the cache claims the new one.
+    cch::tui::VirtualTerminal terminal({.columns = 20,
+            .rows = 4,
+            .capabilities = {.inline_images = cch::tui::InlineImageProtocol::Kitty}});
+    cch::tui::AltScreen tui(terminal);
+    auto root = std::make_unique<RevisionChild>();
+    auto* root_ptr = root.get();
+    tui.set_layout_root(std::move(root));
+
+    REQUIRE(tui.start());
+    REQUIRE(tui.render());
+    const auto initial = observed_commands(terminal, 0);
+    const auto initial_transmissions = static_cast<std::size_t>(std::ranges::count_if(initial,
+            [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; }));
+    REQUIRE(initial_transmissions == 1);
+
+    const auto marker = terminal.output().size();
+    root_ptr->bump_revision();
+    REQUIRE(tui.render());
+    const auto revision_frame = observed_commands(terminal, marker);
+    const auto retransmissions = static_cast<std::size_t>(std::ranges::count_if(revision_frame,
+            [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; }));
+    CHECK(retransmissions == 1);
+    if (retransmissions == 1) {
+        const auto transmission = std::ranges::find_if(revision_frame,
+                [](const ObservedCommand& command) { return command.text.find("a=T") != std::string::npos; });
+        // Same placement command as the initial frame: same image id and cell
+        // geometry, only the revision moved.
+        CHECK(transmission->text.find("i=7301") != std::string::npos);
+        CHECK(transmission->text.find("c=2,r=3") != std::string::npos);
+    }
     REQUIRE(tui.stop());
 }
