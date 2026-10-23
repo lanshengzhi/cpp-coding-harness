@@ -28,6 +28,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/tui/AltScreenTest.cpp
         tests/tui/AltScreenImageEvidenceTest.cpp
+        tests/tui/AltScreenPlacementSpanTest.cpp
         tests/tui/AltScreenSearchTest.cpp
         tests/tui/AltScreenViewportTest.cpp
         tests/tui/AutocompleteTest.cpp

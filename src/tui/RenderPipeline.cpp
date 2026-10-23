@@ -777,14 +777,51 @@ support::ExpectedVoid RenderPipeline::render(RenderResult materialized,
 void RenderPipeline::clear_image_placements() noexcept {
     fullscreen_image_placements_.clear();
     fullscreen_image_order_.clear();
+    previous_fullscreen_lines_.clear();
 }
 
 FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::string> lines,
         const std::vector<InlineImageRenderRegion>& images,
         InlineImageProtocol protocol,
-        bool full_redraw) {
-    FullscreenImageFrame frame{
-            .lines = std::move(lines), .clear_bytes = {}, .deletion_bytes = {}, .images_need_redraw = false};
+        bool full_redraw,
+        bool wezterm_session) {
+    FullscreenImageFrame frame{.lines = std::move(lines),
+            .changed_rows = {},
+            .clear_bytes = {},
+            .deletion_bytes = {},
+            .images_need_redraw = false};
+
+    // Frozen `changedRows` (pi `tui-alt-screen.ts:1705`), computed on the
+    // component-rendered screen BEFORE the anchor replacement mutates it. The
+    // write pass skips unchanged rows by this, and the second-tier span
+    // trigger diffs inside it; the prepared bytes are write-only state. Rows
+    // past either screen are `undefined` in the frozen comparison: a row the
+    // current screen dropped counts as changed, a row both screens lack counts
+    // as unchanged.
+    const auto screen_rows = std::max(frame.lines.size(), previous_fullscreen_lines_.size());
+    frame.changed_rows.resize(screen_rows);
+    for (std::size_t row = 0; row < screen_rows; ++row) {
+        frame.changed_rows[row] = row >= frame.lines.size() || row >= previous_fullscreen_lines_.size() ||
+                                  frame.lines[row] != previous_fullscreen_lines_[row];
+    }
+    bool span_row_changed = false;
+    if (!full_redraw && wezterm_session && protocol == InlineImageProtocol::Kitty) {
+        for (const auto& image : images) {
+            const auto span_end = image.region.row + image.region.rows;
+            for (std::size_t row = image.region.row; row < span_end && row < frame.lines.size(); ++row) {
+                if (frame.changed_rows[row]) {
+                    span_row_changed = true;
+                    break;
+                }
+            }
+            if (span_row_changed) break;
+        }
+    }
+    // Commit the frozen `previousScreen` only AFTER diffing against it, and
+    // before any anchor replacement: change detection never sees the prepared
+    // (write-only) lines.
+    previous_fullscreen_lines_ = frame.lines;
+
     if (protocol != InlineImageProtocol::Kitty) {
         // Frozen fullscreen sessions on iTerm2 null out the image capability
         // for the whole session: the component's text fallback shows and no
@@ -837,20 +874,23 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::
             auto encoded = detail::encode_terminal_image(protocol, term_img, handle);
             if (!encoded) continue;
             frame.lines[image.region.row] = std::string(image.region.column, ' ') + *encoded;
-            for (std::size_t row = image.region.row + 1; row < image.region.row + image.region.rows; ++row) {
-                frame.lines[row].clear();
-            }
             need_redraw = true;
             continue;
         }
 
         const auto cached = fullscreen_image_placements_.find(image.resource_id);
+        const auto handle = cached != fullscreen_image_placements_.end() ? cached->second.handle : allocate_image_id();
         std::string anchor;
+        // A revision change means new pixels: the anchor carries a fresh
+        // transmission below, and the cache moves to the new revision when it
+        // is prepared. The frame MUST emit those bytes — otherwise the
+        // terminal keeps showing the old revision while the cache claims the
+        // new one — so a revision change is a redraw trigger on its own, even
+        // when the position and the a=p reuse command are unchanged.
+        bool revision_changed = false;
         if (cached != fullscreen_image_placements_.end() && cached->second.revision == image.revision) {
-            anchor = detail::encode_kitty_image_placement(term_img, cached->second.handle);
+            anchor = detail::encode_kitty_image_placement(term_img, handle);
         } else {
-            const auto handle =
-                    cached != fullscreen_image_placements_.end() ? cached->second.handle : allocate_image_id();
             auto encoded = detail::encode_terminal_image(protocol, term_img, handle);
             if (!encoded) continue;
             auto& placement = fullscreen_image_placements_[image.resource_id];
@@ -859,21 +899,27 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::
             placement.transmission_bytes = encoded->size();
             placement.decoded_bytes = image.pixel_width * image.pixel_height * 4;
             anchor = std::move(*encoded);
+            revision_changed = true;
         }
 
         auto& placement = fullscreen_image_placements_[image.resource_id];
+        // The reuse command this frame's geometry resolves to. Frozen repaints
+        // only when the anchor content changes: a cache hit re-places the same
+        // bytes, and the first frame's transmission-to-replacement switch is
+        // cache state, not a content change (#1035).
+        const auto next_reuse = detail::encode_kitty_image_placement(term_img, handle);
         const bool moved = placement.row != image.region.row || placement.column != image.region.column;
-        if (!placement.anchored || moved || placement.anchor != anchor) need_redraw = true;
-        placement.anchor = anchor;
+        if (!placement.anchored || moved || placement.reuse != next_reuse || revision_changed) need_redraw = true;
+        placement.reuse = next_reuse;
         placement.row = image.region.row;
         placement.column = image.region.column;
         placement.visible = true;
         visible_resources.emplace_back(image.region.row, image.resource_id);
 
+        // Frozen `prepareKittyScreen` rewrites only the anchor line: the rows a
+        // placement spans keep their content, so a live span can hold text rows
+        // that later changes repaint around (#1035).
         frame.lines[image.region.row] = std::string(image.region.column, ' ') + anchor;
-        for (std::size_t row = image.region.row + 1; row < image.region.row + image.region.rows; ++row) {
-            frame.lines[row].clear();
-        }
     }
 
     for (const auto& [resource_id, placement] : fullscreen_image_placements_) {
@@ -882,13 +928,21 @@ FullscreenImageFrame RenderPipeline::prepare_fullscreen_images(std::vector<std::
     for (auto& [resource_id, placement] : fullscreen_image_placements_)
         placement.anchored = placement.visible;
 
+    // Frozen `imageCellsNeedRedraw`, the second trigger tier
+    // (tui-alt-screen.ts:1709-1722): under WezTerm with the Kitty protocol, a
+    // changed row strictly inside a live placement span repaints the images
+    // even when no anchor identity, geometry or reuse string changed — and only
+    // when the anchor tier stayed quiet.
+    const bool image_cells_need_redraw = !need_redraw && !full_redraw && wezterm_session &&
+                                         protocol == InlineImageProtocol::Kitty && span_row_changed;
+    frame.images_need_redraw = need_redraw || image_cells_need_redraw;
+
     if (full_redraw) {
         frame.clear_bytes = had_uploaded_images ? delete_all_kitty_placements() : delete_all_kitty_images();
-    } else if (need_redraw) {
+    } else if (frame.images_need_redraw) {
         frame.clear_bytes = delete_all_kitty_placements();
     }
-    frame.images_need_redraw = need_redraw;
-    if (!full_redraw && !need_redraw) {
+    if (!full_redraw && !frame.images_need_redraw) {
         // Frozen never calls prepareKittyScreen when no image row changed, so
         // the cache keeps its order and nothing is evicted.
         return frame;

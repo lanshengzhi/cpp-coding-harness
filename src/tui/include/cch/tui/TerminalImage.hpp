@@ -120,6 +120,13 @@ struct KittyImageHeader {
 [[nodiscard]] DetectedImageCapabilities detect_image_capabilities(
     TmuxHyperlinkProbe tmux_forwards_hyperlink = detail::probe_tmux_hyperlinks);
 
+/// The frozen `isWezTerm` render-path gate (pi `tui-alt-screen.ts:1709`): the
+/// second-tier placement-span repaint and the images-last emission order apply
+/// only when `WEZTERM_PANE` is set (JS-truthy: empty is absent) or
+/// `TERM_PROGRAM` names WezTerm. Render paths read this instead of re-deriving
+/// the capability matrix.
+[[nodiscard]] bool is_wezterm_terminal();
+
 struct ImageCapabilityOverrides {
     std::optional<InlineImageProtocol> images{std::nullopt};
     std::optional<TerminalColorCapability> color{std::nullopt};
