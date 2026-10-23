@@ -787,19 +787,24 @@
         "sources": [
           "packages/coding-agent/src/extensions/mcp/index.ts:ensureDiscoveryActive",
           "packages/coding-agent/src/extensions/tool-search/tool.ts:TOOL_SEARCH_TOOL_NAME,createToolSearchTool",
-          "packages/coding-agent/src/extensions/mcp/index.ts:MCP_EXPOSURE_ALIASES"
+          "packages/coding-agent/src/extensions/mcp/index.ts:MCP_EXPOSURE_ALIASES",
+          "packages/durable/test/tool-search.test.ts:deferred tools and tool_search"
         ],
-        "scenarios": []
+        "scenarios": [
+          "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+          "an unrelated tool_search query loads nothing and leaves the offered set unchanged"
+        ]
       },
-      "cppSeam": "`src/coding_agent/mcp/McpExposure.hpp:McpExposure::Deferred`; `src/coding_agent/runtime/McpSessionManager.cpp:ensure_discovery_active`; there is no `tool_search` tool in Pike.",
-      "cppEvidence": "`McpServersSectionTest.cpp:91` renders the `(tool_search)` clause, but `McpSessionManager::ensure_discovery_active` activates nothing for deferred servers; the manager warning states neither codemode nor tool_search is active. Deferred tools are registered but unreachable.",
+      "cppSeam": "`src/coding_agent/mcp/McpExposure.hpp:McpExposure::Deferred`; `src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp:load_tools` and `ToolSearch.cpp:rank_tool_search_candidates`; `src/coding_agent/runtime/McpSessionManager.cpp:ensure_discovery_active,search_tools,activate_tools,restore_loaded_tools`; `src/coding_agent/runtime/McpProductionAdapters.cpp:AgentMcpToolSurface::activate_tools,restore_loaded_tools`; `src/coding_agent/AgentSessionExecution.cpp:queue_tool_loadout,replay_loaded_tools`; `src/coding_agent/runtime/SessionFactory.cpp:ToolSearchToolSource`.",
+      "cppEvidence": "`McpSessionIntegrationTest.cpp` reproduces both captured scenarios through the public `AgentSession::prompt`: a `deferred` server's tools stay out of the offered set until `tool_search` loads the single ranked match with the frozen text `Loaded 1 tool. They are available from your next call:\\n- mcp__echo__echo: Echo the incoming text back.`, the next request executes it, and a no-match search returns `No matching tools found.` with an unchanged offered set. Repeated searches in one run load the next-ranked match each time without re-announcing a loaded tool (pi's two-search ordering case in `packages/durable/test/tool-search.test.ts`). The loadout is a persisted `SystemMessage.tools_added` record: the fork case runs `echo` in one branch and the erroring `fail` in the other and both keep their own set across reopen, and the ordering case reopens the same session three times to load `slow`, `hang` and `crash` in rank order. `ToolSearchTest.cpp` covers the ranking seam directly.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
-        "verification": "unverified"
+        "implementation": "implemented",
+        "verification": "upstream-captured"
       },
-      "recommendation": "Either add the `tool_search` owner surface or record deferred as unreachable in the membership ledger. Do not silently treat deferred as direct or codemode.",
-      "blockers": []
+      "recommendation": "Keep deferred tools undeclared until `tool_search` loads them, keep the loadout in the session transcript so forks and resumes replay their own set, and keep an extension tool's execute copyable per call because a model searches and calls tools more than once.",
+      "blockers": [],
+      "notes": "C++ covers the two captured scenarios, the frozen two-search ordering case and the durable loadout. `ExtensionToolRegistry::convert_extension_tool` now copies the extension execute per model call, so a registered `tool_search`, `codemode` or MCP tool stays callable for the whole session (it previously consumed the move-only operation on the first call)."
     },
     {
       "id": "mcp-prompts-sampling",
