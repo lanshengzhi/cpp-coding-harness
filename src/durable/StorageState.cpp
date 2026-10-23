@@ -147,9 +147,11 @@ struct StorageState::Impl {
                 if (found == next_documents.end()) {
                     return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown document"));
                 }
-                if (write.document_value.has_value()) {
-                    found->second.value = *write.document_value;
+                if (!write.document_value.has_value()) {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "Document change write is incomplete"));
                 }
+                found->second.value = *write.document_value;
             } else if (write.type == "document.retire") {
                 if (!write.document_id.has_value()) {
                     return std::unexpected(
