@@ -23,8 +23,13 @@ namespace cch::tests::durable {
 /// behavior changes the expectations the C++ side must meet.
 class FrozenScenario {
 public:
-    /// Load the scenario with this exact frozen name.
+    /// Load the scenario with this exact frozen name from the default
+    /// `audit-1063` artifact.
     [[nodiscard]] static std::optional<FrozenScenario> load(std::string_view scenario_name);
+
+    /// Load one scenario from the named repository-relative artifact.
+    [[nodiscard]] static std::optional<FrozenScenario> load(
+            std::string_view artifact_path, std::string_view scenario_name);
 
     /// The frozen `expected` object of the scenario.
     [[nodiscard]] const support::JsonValue& expected() const noexcept { return expected_; }
@@ -52,6 +57,10 @@ private:
 
 /// The frozen artifact of the `audit-1063` family, parsed once per process.
 [[nodiscard]] const support::JsonValue& frozen_artifact();
+
+/// The frozen artifact at the repository-relative path, parsed once per
+/// process.
+[[nodiscard]] const support::JsonValue& frozen_artifact(std::string_view artifact_path);
 
 /// Convert one immutable Chord revision into the passive JSON value, so it can
 /// be compared with the frozen artifact's own values.
