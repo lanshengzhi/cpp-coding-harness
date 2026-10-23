@@ -11,7 +11,7 @@ namespace cch::coding_agent::extensions {
 class ToolSearchToolSource final : public ExtensionToolSource {
 public:
     using Search = std::function<std::vector<ToolSearchCandidate>(std::string_view, std::size_t)>;
-    using Activate = std::function<void(std::vector<std::string>)>;
+    using Activate = std::function<support::ExpectedVoid(std::vector<std::string>)>;
     ToolSearchToolSource(Search search, Activate activate);
     [[nodiscard]] support::Expected<std::vector<ExtensionTool>> load_tools() override;
 

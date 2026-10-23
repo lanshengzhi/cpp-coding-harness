@@ -1756,7 +1756,8 @@ struct PreparedAssemblyTarget final {
     plan.extension_tool_sources.push_back(std::make_unique<extensions::ToolSearchToolSource>(
             [manager = mcp_manager](
                     std::string_view query, std::size_t limit) { return manager->search_tools(query, limit); },
-            [manager = mcp_manager](std::vector<std::string> names) { manager->activate_tools(std::move(names)); }));
+            [manager = mcp_manager](
+                    std::vector<std::string> names) { return manager->activate_tools(std::move(names)); }));
 
     // pi `defaultActive: false` registrations collected while the extension
     // sources load (today only the codemode tool). The session excludes these

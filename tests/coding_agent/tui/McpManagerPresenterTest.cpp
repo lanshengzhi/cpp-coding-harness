@@ -141,6 +141,17 @@ public:
     void register_resource_tools(
             McpExposure, std::vector<std::shared_ptr<coding_agent::mcp::McpResourceServer>>) override {}
     void set_active_tools(std::vector<std::string> names) override { active = std::move(names); }
+    [[nodiscard]] support::ExpectedVoid activate_tools(std::vector<std::string> names) override {
+        for (auto& name : names) {
+            if (std::ranges::find(active, name) == active.end()) active.push_back(std::move(name));
+        }
+        return {};
+    }
+    void restore_loaded_tools(std::vector<std::string> names) override {
+        for (auto& name : names) {
+            if (std::ranges::find(active, name) == active.end()) active.push_back(std::move(name));
+        }
+    }
     [[nodiscard]] std::vector<std::string> active_tools() const override { return active; }
     [[nodiscard]] std::vector<McpSurfaceTool> all_tools() const override {
         std::vector<McpSurfaceTool> tools;

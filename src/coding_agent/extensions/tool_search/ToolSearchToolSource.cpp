@@ -45,14 +45,24 @@ support::Expected<std::vector<ExtensionTool>> ToolSearchToolSource::load_tools()
         auto matches = search(query->second.get_string(), limit);
         std::vector<std::string> names;
         std::string text;
-        for (const auto& match : matches) {
+        for (const auto& match : matches)
             names.push_back(match.name);
-            text += std::format("- {}: {}\n", match.name, match.description);
-        }
         if (names.empty())
-            text = "No matching inactive tools found.";
-        else
-            activate(std::move(names));
+            text = "No matching tools found.";
+        else {
+            const auto count = names.size();
+            text = std::format(
+                    "Loaded {} tool{}. They are available from your next call:", count, count == 1 ? "" : "s");
+            for (const auto& match : matches) {
+                text += std::format("\n- {}: {}", match.name, match.description);
+            }
+            if (auto activated = activate(std::move(names)); !activated) {
+                result.is_error = true;
+                result.content.push_back(ai::text_content(activated.error().message));
+                return support::AsyncResult<ExtensionToolResult>{
+                        support::Expected<ExtensionToolResult>{std::move(result)}};
+            }
+        }
         result.content.push_back(ai::text_content(std::move(text)));
         return support::AsyncResult<ExtensionToolResult>{support::Expected<ExtensionToolResult>{std::move(result)}};
     };

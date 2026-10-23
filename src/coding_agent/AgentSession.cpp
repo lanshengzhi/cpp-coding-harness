@@ -680,12 +680,22 @@ boost::asio::awaitable<support::Expected<std::unique_ptr<AgentSession>>> AgentSe
     // is awaited so the creation result reports resolved server states, and a
     // failed server is a failed connection — never a veto on the session.
     if (auto& manager = session->impl_->services_.mcp_manager; manager && session->impl_->agent_) {
-        manager->attach_tool_surface(std::make_shared<runtime::AgentMcpToolSurface>(
-                *session->impl_->agent_, session->impl_->assembly_tool_names_));
+        const std::weak_ptr<AgentSession::Impl> weak_impl = session->impl_;
+        manager->attach_tool_surface(std::make_shared<runtime::AgentMcpToolSurface>(*session->impl_->agent_,
+                session->impl_->assembly_tool_names_,
+                [weak_impl](ai::SystemMessage message) -> support::ExpectedVoid {
+                    const auto impl = weak_impl.lock();
+                    if (!impl) {
+                        return std::unexpected(
+                                support::make_error(support::ErrorCode::Validation, "session is unavailable"));
+                    }
+                    return impl->queue_tool_loadout(std::move(message));
+                }));
         if (auto started = co_await support::detail::await_async_result(manager->start()); !started) {
             co_return std::unexpected(std::move(started.error()));
         }
     }
+    session->impl_->replay_loaded_tools();
     if (auto persisted = co_await session->impl_->persist_initial_system_message(); !persisted) {
         co_return std::unexpected(persisted.error());
     }
