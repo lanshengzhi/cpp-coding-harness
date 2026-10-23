@@ -1,7 +1,7 @@
 {
   "schema": 3,
   "captureBase": {
-    "sha": "01e2332819db853ceabc9b83d08b9938db652b95",
+    "sha": "cfd07c39c8cea4c94abae854176d53da4aed6349",
     "requiredFixes": {
       "issue811": "d467587cb5d00611aff3a642851c710069f11038",
       "issue1024": "2664ecc15bed9c1ec6ffbe646edfd9bb8054c32b",
@@ -96,6 +96,8 @@
             "editorBorderRowsPerFrame": 2,
             "setPaddingXCallsPerInstall": 1,
             "setAutocompleteMaxVisibleCallsPerInstall": 1,
+            "setAutocompleteProviderCallsPerInstall": 1,
+            "typedOnChangeInstalls": 2,
             "onSubmitAndOnChangeAssigned": true
           },
           "pi": {
@@ -116,6 +118,8 @@
             "editorBorderRowsPerFrame": 2,
             "setPaddingXCallsPerInstall": 1,
             "setAutocompleteMaxVisibleCallsPerInstall": 1,
+            "setAutocompleteProviderCallsPerInstall": 1,
+            "typedOnChangeInstalls": 2,
             "onSubmitAndOnChangeAssigned": true
           },
           "equal": true
@@ -838,11 +842,13 @@
               "restoreLeftSingleEditor": true,
               "restoreRequestText": "/reload",
               "setAutocompleteMaxVisibleCallsPerInstall": 1,
+              "setAutocompleteProviderCallsPerInstall": 1,
               "setPaddingXCallsPerInstall": 1,
               "submitClearedEditor": true,
               "submitInvokedOnSubmit": true,
               "submittedText": "submitted-draft",
-              "thinkingBorderChanged": true
+              "thinkingBorderChanged": true,
+              "typedOnChangeInstalls": 2
             }
           },
           "snapshots": [
@@ -4188,6 +4194,7 @@
               "setPaddingXCallsPerInstall": 1,
               "setAutocompleteMaxVisibleCallsPerInstall": 1,
               "setAutocompleteProviderCallsPerInstall": 1,
+              "typedOnChangeInstalls": 2,
               "onSubmitAndOnChangeAssigned": true,
               "actionHandlersPresent": true,
               "borderColorAssignmentsInFirstInstall": 6
@@ -8407,7 +8414,7 @@
           ]
         }
       },
-      "stableDigest": "c78f976ade8f302c46acf1255b3671608f3e05a7b84fe64ef05fbb3d15a0300c"
+      "stableDigest": "9025eda60e0a19ae3b00900aefcdee207b38b6bbe3890e7089170c2e881ae27b"
     }
   ],
   "themeParity": {

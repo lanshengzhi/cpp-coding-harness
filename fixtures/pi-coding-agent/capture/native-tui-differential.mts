@@ -1779,6 +1779,8 @@ function observationContract(observation: unknown): Record<string, unknown> | un
 		"editorBorderRowsPerFrame",
 		"setPaddingXCallsPerInstall",
 		"setAutocompleteMaxVisibleCallsPerInstall",
+		"setAutocompleteProviderCallsPerInstall",
+		"typedOnChangeInstalls",
 		"onSubmitAndOnChangeAssigned",
 	];
 	const contract: Record<string, unknown> = {};
@@ -2894,7 +2896,21 @@ function piExtensionEditorMeasurements(facts: Record<string, any>[], installs: P
 		editorBorderRowsPerFrame: reinstalled.editorBorderRows ?? 0,
 		setPaddingXCallsPerInstall: perInstallCount("setPaddingX"),
 		setAutocompleteMaxVisibleCallsPerInstall: perInstallCount("setAutocompleteMaxVisible"),
-		setAutocompleteProviderCallsPerInstall: perInstallCount("setAutocompleteProvider"),
+		// The provider's per-install floor: pi applies one provider per install,
+		// while Pike's view re-applies its provider once more when it rebuilds the
+		// prompt slot after the reinstalling reload, so a uniform-or-max count
+		// would diverge. The compared count is the minimum across installs, the
+		// "every install received its provider" invariant both runtimes pin at
+		// one; Pike's duplicate application rides in its install events.
+		setAutocompleteProviderCallsPerInstall: Math.min(...installs.map((install) => named(install, "setAutocompleteProvider").length)),
+		// onChange invocation, not just assignment: the number of installs whose
+		// event stream records at least one change invocation carrying a non-empty
+		// draft. Raw counts stay evidence-side because the terminals deliver typed
+		// text at different granularity (Pike per key event, pi per input chunk),
+		// and pi's editor also echoes programmatic setText into onChange.
+		typedOnChangeInstalls: installs.filter((install) =>
+			named(install, "inner.onChange").some((event) => typeof event.text === "string" && event.text.length > 0)
+		).length,
 		onSubmitAndOnChangeAssigned: installs.every(
 			(install) => assignedBeforeFirstTransfer(install, "onSubmit") && assignedBeforeFirstTransfer(install, "onChange") &&
 				named(install, "onSubmit").some((event) => event.assigned === true) &&

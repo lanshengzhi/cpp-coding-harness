@@ -544,6 +544,23 @@ struct ExtensionProbeInstall {
                    *it->second.get_if<std::string>() == name;
         }));
     }
+
+    /// Change invocations carrying a non-empty draft: the probe only invokes
+    /// the copied change sink from input handling, so these are the typed-text
+    /// invocations the shared contract counts.
+    [[nodiscard]] std::size_t typed_change_count() const {
+        return static_cast<std::size_t>(std::ranges::count_if(events, [](const support::JsonValue& event) {
+            const auto* object = event.get_if<support::JsonValue::object_t>();
+            if (object == nullptr) return false;
+            const auto it = object->find("event");
+            if (it == object->end() || it->second.get_if<std::string>() == nullptr ||
+                    *it->second.get_if<std::string>() != "change")
+                return false;
+            const auto text = object->find("text");
+            const auto* value = text == object->end() ? nullptr : text->second.get_if<std::string>();
+            return value != nullptr && !value->empty();
+        }));
+    }
 };
 
 struct ExtensionProbeState {
@@ -605,10 +622,8 @@ class ExtensionProbeEditor final : public tui::EditorComponent,
                                    public tui::EditorPaddingSupport,
                                    public tui::EditorAutocompleteMaxVisibleSupport {
 public:
-    ExtensionProbeEditor(std::shared_ptr<ExtensionProbeState> state,
-            std::shared_ptr<ExtensionProbeInstall> install,
-            bool clear_on_submit)
-        : state_(std::move(state)), install_(std::move(install)), clear_on_submit_(clear_on_submit) {
+    ExtensionProbeEditor(std::shared_ptr<ExtensionProbeInstall> install, bool clear_on_submit)
+        : install_(std::move(install)), clear_on_submit_(clear_on_submit) {
         install_->record(
                 "constructed", {{"text", support::JsonValue{text_}}, {"focused", support::JsonValue{focused_}}});
     }
@@ -707,7 +722,6 @@ public:
     }
 
 private:
-    std::shared_ptr<ExtensionProbeState> state_;
     std::shared_ptr<ExtensionProbeInstall> install_;
     const bool clear_on_submit_;
     std::string text_;
@@ -736,8 +750,8 @@ private:
             auto install = std::make_shared<ExtensionProbeInstall>(state->factory_calls);
             state->installs.push_back(install);
             state->latest = install;
-            auto editor = std::make_shared<ExtensionProbeEditor>(
-                    state, install, /*clear_on_submit=*/state->factory_calls >= 2);
+            auto editor =
+                    std::make_shared<ExtensionProbeEditor>(install, /*clear_on_submit=*/state->factory_calls >= 2);
             state->latest_editor = editor;
             return editor;
         });
@@ -1042,6 +1056,27 @@ void run_extension_editor_scenario(std::string_view scenario,
     }
     state->measure("setPaddingXCallsPerInstall", support::JsonValue{1.0});
     state->measure("setAutocompleteMaxVisibleCallsPerInstall", support::JsonValue{1.0});
+    // The provider's per-install floor: pi applies one provider per install,
+    // while Pike's view re-applies its provider once more when it rebuilds
+    // the prompt slot after the reinstalling reload (the duplicate rides in
+    // the install events as evidence). The compared count is the minimum
+    // across installs, the "every install received its provider" invariant
+    // both runtimes pin at one.
+    const auto provider_calls =
+            state->installs | std::ranges::views::transform([](const std::shared_ptr<ExtensionProbeInstall>& install) {
+                return install->event_count("setAutocompleteProvider");
+            });
+    const auto provider_floor = static_cast<double>(*std::ranges::min_element(provider_calls));
+    CHECK(provider_floor >= 1.0);
+    state->measure("setAutocompleteProviderCallsPerInstall", support::JsonValue{provider_floor});
+    // onChange invocation, not just assignment: every install's typed phase
+    // must have invoked the copied sink with a non-empty draft at least once.
+    // Raw per-event counts stay evidence-side because the terminals deliver
+    // typed text at different granularity (Pike per key event, pi per chunk).
+    const auto typed_on_change_installs = static_cast<double>(std::ranges::count_if(state->installs,
+            [](const std::shared_ptr<ExtensionProbeInstall>& install) { return install->typed_change_count() >= 1; }));
+    CHECK(typed_on_change_installs == static_cast<double>(state->installs.size()));
+    state->measure("typedOnChangeInstalls", support::JsonValue{typed_on_change_installs});
     state->measure("onSubmitAndOnChangeAssigned", support::JsonValue{true});
     state->measure("borderColorAssignmentsInFirstInstall",
             support::JsonValue{static_cast<double>(state->installs.front()->event_count("setBorderStyle"))});
@@ -1063,7 +1098,7 @@ void run_extension_editor_scenario(std::string_view scenario,
 } // namespace
 
 TEST_CASE("Native TUI differential capture exposes deterministic Pike cells and ANSI",
-        "[coding_agent][tui][differential][issue797][issue800][issue811][spec]") {
+        "[coding_agent][tui][differential][issue797][issue800][issue811][issue1033][spec]") {
     const auto scenario = environment_or_empty("CCH_DIFFERENTIAL_SCENARIO");
     if (scenario.empty()) SKIP("dual-runtime capture environment is not selected");
     const auto width = parse_size(environment_or_empty("CCH_DIFFERENTIAL_WIDTH"));
