@@ -191,6 +191,39 @@ TEST_CASE(
     CHECK(detail_object.at("stderr").get_string() == "denied");
 }
 
+TEST_CASE("tool-result message round-trips the recorded execution duration",
+        "[harness][session][u2][glaze][compat-pi][issue812]") {
+    // pi `ToolResultMessage.durationMs` persists in the session record, so a
+    // resumed session renders the same recorded duration instead of
+    // re-measuring (#812).
+    ai::ToolResultMessage result;
+    result.tool_call_id = "call-1";
+    result.tool_name = "read_file";
+    result.content.emplace_back(ai::text_content("ok"));
+    result.is_error = false;
+    result.timestamp = 1718000000456;
+    result.duration_ms = 1234;
+
+    auto json = write_message_json(ai::MessageVariant{result});
+    REQUIRE(json);
+    CHECK(json->find(R"("durationMs":1234)") != std::string::npos);
+
+    auto parsed = read_message_json(*json);
+    REQUIRE(parsed);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(*parsed));
+    const auto& round_trip = std::get<ai::ToolResultMessage>(*parsed);
+    REQUIRE(round_trip.duration_ms.has_value());
+    CHECK(*round_trip.duration_ms == 1234);
+
+    // Absence stays absence: entries recorded before the field existed load
+    // without it (pi: "Absent for legacy results").
+    auto legacy = read_message_json(
+            R"({"role":"toolResult","toolCallId":"call-9","toolName":"read_file","content":[{"type":"text","text":"ok"}],"timestamp":1718000000456})");
+    REQUIRE(legacy);
+    REQUIRE(std::holds_alternative<ai::ToolResultMessage>(*legacy));
+    CHECK_FALSE(std::get<ai::ToolResultMessage>(*legacy).duration_ms.has_value());
+}
+
 TEST_CASE("assistant content round-trips text, thinking, and tool-call variants",
         "[harness][session][u2][glaze][compat-pi]") {
     ai::AssistantMessage msg;
