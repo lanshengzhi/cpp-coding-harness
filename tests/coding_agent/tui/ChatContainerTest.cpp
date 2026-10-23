@@ -2,6 +2,7 @@
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "support/RenderedScreen.hpp"
+#include "support/Json.hpp"
 
 #include <cch/agent/AgentEvent.hpp>
 #include <cch/ai/Message.hpp>
@@ -496,6 +497,88 @@ TEST_CASE("Streaming assistant incremental block freeze maintains flat processin
 #else
     CHECK(max_chunk_us < 2000.0);
 #endif
+}
+
+TEST_CASE("ChatContainer settles the tool block with the recorded duration and a resumed projection renders the same "
+          "value",
+        "[coding_agent][tui][issue812][spec]") {
+    // #812: the settled block renders the duration the agent loop recorded
+    // (pi ToolResultMessage.durationMs), never a wall-clock re-measurement, so
+    // a session resumed from the projection read model renders the identical
+    // row. The mid-stream frame is the barrier discriminant: no duration row
+    // exists before the settled result arrives (pi exposes durationMs only
+    // when !isPartial).
+    constexpr std::int64_t kRecordedMs = 12'345;
+    auto theme = test_theme();
+
+    const auto live_screen = [&] {
+        coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+        auto args = support::read_json(R"({"command":"ls -la"})");
+        REQUIRE(args);
+        chat.apply_event(agent::ToolExecutionStartEvent{
+                .tool_call_id = "call_812",
+                .tool_name = "bash",
+                .args = *args,
+        });
+        chat.apply_event(agent::ToolExecutionUpdateEvent{
+                .tool_call_id = "call_812",
+                .tool_name = "bash",
+                .args = support::JsonValue{},
+                .partial_result =
+                        agent::AsyncToolExecutionResult{
+                                .content = {ai::text_content("listing")},
+                                .details = std::nullopt,
+                                .is_error = false,
+                        },
+        });
+        const auto mid_stream = tests::rendered_screen(chat, 100);
+        CHECK(mid_stream.find("listing") != std::string::npos);
+        CHECK(mid_stream.find("Took ") == std::string::npos);
+        chat.apply_event(agent::ToolExecutionEndEvent{
+                .tool_call_id = "call_812",
+                .tool_name = "bash",
+                .result =
+                        agent::AsyncToolExecutionResult{
+                                .content = {ai::text_content("total 0")},
+                                .details = std::nullopt,
+                                .is_error = false,
+                        },
+                .is_error = false,
+                .duration_ms = kRecordedMs,
+        });
+        return tests::rendered_screen(chat, 100);
+    }();
+    REQUIRE(live_screen.find("total 0") != std::string::npos);
+    REQUIRE(live_screen.find("Took 12.3s") != std::string::npos);
+
+    const auto resumed_screen = [&](std::optional<std::int64_t> duration_ms) {
+        coding_agent::tui::ChatContainer chat(theme, test_keybinding_slot());
+        coding_agent::AgentSessionSnapshot snapshot;
+        snapshot.tool_executions = {
+                coding_agent::ToolExecutionSnapshot{
+                        .tool_call_id = "call_812",
+                        .tool_name = "bash",
+                        .arguments_json = R"({"command":"ls -la"})",
+                        .status = coding_agent::ToolExecutionStatus::Succeeded,
+                        .output_tail = "total 0",
+                        .duration_ms = duration_ms,
+                },
+        };
+        chat.initialize(snapshot);
+        return tests::rendered_screen(chat, 100);
+    };
+
+    // The settled block rebuilt from the projection read model renders the
+    // recorded row, byte for byte, with no re-measurement drift.
+    const auto resumed = resumed_screen(kRecordedMs);
+    CHECK(resumed == live_screen);
+
+    // The row follows the recording, not the wall clock: a read model whose
+    // recorded duration differs renders a different row, and a legacy read
+    // model without a recording renders no duration row at all (pi: absent
+    // for legacy results).
+    CHECK(resumed_screen(61'000).find("Took 1m 1s") != std::string::npos);
+    CHECK(resumed_screen(std::nullopt).find("Took ") == std::string::npos);
 }
 
 TEST_CASE("ChatContainer settles an older repeated bash entry in place", "[coding_agent][tui][issue597][spec]") {

@@ -55,8 +55,9 @@ public:
     /// also drives the content width the renderers measure, because the block
     /// pads by the same amount on both sides.
     void set_output_pad(std::size_t output_pad);
-    /// pi `markExecutionStarted`: the agent began running the tool. Stamps the
-    /// execution clock once, so a renderer can measure how long the tool ran.
+    /// pi `markExecutionStarted`: the agent began running the tool. Latches
+    /// the flag once; the duration a renderer shows comes from the recorded
+    /// result, not from a wall-clock stamp (#812).
     void mark_execution_started();
     /// pi `setArgsComplete`: the streamed arguments stopped growing.
     void set_args_complete();
@@ -91,10 +92,9 @@ private:
     /// pi `outputPad`: the tool block's horizontal padding. The default is pi's
     /// `outputPad` setting default of 1.
     std::size_t output_pad_{1};
-    /// The execution-start and result-settlement instants pi keeps in the
-    /// renderer state; nullopt until the transition happens.
-    std::optional<ai::TimestampMs> started_at_ms_{std::nullopt};
-    std::optional<ai::TimestampMs> ended_at_ms_{std::nullopt};
+    /// pi `executionStarted`: the agent began running the tool, latched once
+    /// the way pi's flag is.
+    bool execution_started_{false};
     /// pi `state.cachedWidth`: the width the last render measured at, so a
     /// renderer that folds to the frame width is recomputed when that width
     /// changes (pi's `if (state.cachedLines === undefined || state.cachedWidth !== width)`).

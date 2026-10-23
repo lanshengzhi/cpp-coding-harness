@@ -145,16 +145,21 @@ struct NestedToolCallRunner::Impl {
         }
 
         scopes.erase(nested_id);
-        const auto duration_ms = static_cast<std::uint64_t>(
+        const auto duration_ms = static_cast<std::int64_t>(
                 std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started_at)
                         .count());
         const std::string error_text = outcome.is_error ? text_of(outcome.content) : std::string{};
-        scope.recorder->finish(record, outcome.is_error, error_text, duration_ms);
+        scope.recorder->finish(record, outcome.is_error, error_text, static_cast<std::uint64_t>(duration_ms));
+        // The nested end event carries the same recorded duration its record
+        // just took (pi: `endDurationMatchesOutcome`, audit-1047). The record's
+        // window additionally contains the event emission and the full nested
+        // pipeline, so the two agree at this point in the call.
         (void)host.emit(ToolExecutionEndEvent{
                 .tool_call_id = nested_id,
                 .tool_name = name,
                 .result = outcome,
                 .is_error = outcome.is_error,
+                .duration_ms = duration_ms,
                 .parent_tool_call_id = caller_id,
         });
         co_return outcome;

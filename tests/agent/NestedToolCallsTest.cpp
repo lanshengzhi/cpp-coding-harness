@@ -23,6 +23,7 @@ namespace {
 
 struct FakeHost {
     std::vector<agent::ToolInvocation> calls;
+    std::vector<agent::AgentLifecycleEvent> events;
     bool error{false};
     std::string text{"ok"};
 };
@@ -39,7 +40,10 @@ struct FakeHost {
         return support::AsyncResult<agent::AsyncToolExecutionResult>{
                 support::Expected<agent::AsyncToolExecutionResult>{std::move(result)}};
     };
-    closures.emit = [](const agent::AgentLifecycleEvent&) { return support::ExpectedVoid{}; };
+    closures.emit = [&host](const agent::AgentLifecycleEvent& event) {
+        host.events.push_back(event);
+        return support::ExpectedVoid{};
+    };
     return agent::NestedToolCallRunner{std::move(closures)};
 }
 
@@ -73,6 +77,38 @@ TEST_CASE(
     CHECK(summary->calls->calls[0].status == "ok");
     CHECK(summary->calls->calls[0].duration_ms.has_value());
     CHECK_FALSE(runner.take_record("call_1").has_value());
+}
+
+TEST_CASE("a nested call's end event carries the duration its record took", "[agent][codemode][issue812][spec]") {
+    // audit-1047 `nested calls forward parent ids and separate record duration
+    // from execute duration`: `endDurationPresent` and `endDurationMatchesOutcome`.
+    // The end event is what the TUI's tool block settles from, so a nested
+    // block with no duration is a block whose recording is lost (#812).
+    FakeHost host;
+    auto runner = make_runner(host);
+
+    auto outcome = tests::run_async_result(runner.execute("call_1", "echo", support::JsonValue{}, {}));
+    REQUIRE(outcome.has_value());
+
+    const agent::ToolExecutionEndEvent* end = nullptr;
+    std::size_t starts = 0;
+    for (const auto& event : host.events) {
+        if (std::holds_alternative<agent::ToolExecutionStartEvent>(event)) ++starts;
+        if (const auto* finished = std::get_if<agent::ToolExecutionEndEvent>(&event)) end = finished;
+    }
+    CHECK(starts == 1);
+    REQUIRE(end != nullptr);
+    REQUIRE(end->duration_ms.has_value());
+    CHECK(*end->duration_ms >= 0);
+
+    // The event's duration and the record's are the same recording, so a
+    // settled nested block and its transcript record cannot disagree.
+    auto summary = runner.take_record("call_1");
+    REQUIRE(summary.has_value());
+    REQUIRE(summary->calls.has_value());
+    REQUIRE(summary->calls->calls.size() == 1);
+    REQUIRE(summary->calls->calls[0].duration_ms.has_value());
+    CHECK(*end->duration_ms == static_cast<std::int64_t>(*summary->calls->calls[0].duration_ms));
 }
 
 TEST_CASE("the nested-call record drops calls beyond pi's 256-call limit", "[agent][codemode][issue885][spec]") {

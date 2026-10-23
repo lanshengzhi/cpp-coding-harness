@@ -688,6 +688,7 @@ struct ChatContainer::Impl {
         if (execution.artifact_reference) {
             result.details = support::JsonValue::object_t{{"artifact_reference", *execution.artifact_reference}};
         }
+        result.duration_ms = execution.duration_ms;
         return result;
     }
 
@@ -1150,6 +1151,7 @@ void ChatContainer::apply_event(const agent::AgentLifecycleEvent& event) {
                 .content = end->result.content,
                 .details = end->result.details,
                 .is_error = end->result.is_error,
+                .duration_ms = end->duration_ms,
         };
         tool.component->update_result(tool.result);
         impl_->invalidate_and_update_tool_owner(&tool);

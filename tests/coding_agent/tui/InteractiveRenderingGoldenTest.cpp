@@ -370,8 +370,12 @@ struct ToolBlocksSession {
             .timestamp = 1'700'000'000'003,
     }}));
 
-    REQUIRE(store->append(ai::MessageVariant{
-            ai::tool_result_message("block-bash", "bash", prefixed_lines("bash", 1, 12), false, 1'700'000'000'004)}));
+    // The bash result records pi's `durationMs` the way a real execution
+    // does, so a resumed session has a value to draw (#812).
+    auto bash_result =
+            ai::tool_result_message("block-bash", "bash", prefixed_lines("bash", 1, 12), false, 1'700'000'000'004);
+    bash_result.duration_ms = 12'345;
+    REQUIRE(store->append(ai::MessageVariant{bash_result}));
     REQUIRE(store->append(ai::MessageVariant{
             ai::tool_result_message("block-write", "write", "wrote 14 lines", false, 1'700'000'000'005)}));
     REQUIRE(store->append(ai::MessageVariant{
@@ -680,6 +684,41 @@ TEST_CASE("rendering golden: the four tool renderers and the fallback compose in
     CHECK(screen.find(bash_row) < screen.find(write_row));
     CHECK(screen.find(write_row) < screen.find(edit_row));
     CHECK(screen.find(edit_row) < screen.find(probe_row));
+
+    REQUIRE(terminal.inject_input("\x04"));
+    drain_ready(io);
+    REQUIRE(run_result);
+    CHECK(*run_result);
+}
+
+TEST_CASE("rendering golden: a resumed session draws the tool duration recorded in its transcript",
+        "[coding_agent][tui][rendering][issue812][spec]") {
+    // #812 through the highest caller: a persisted toolResult carrying pi's
+    // `durationMs` resumes into the real interactive mode and the settled
+    // block draws that recorded value. Nothing in this path measures a clock —
+    // the resumed session never saw the execution — so a rendered `Took` row
+    // can only come from the transcript record.
+    auto fixture = make_tool_blocks_session();
+    tests::RuntimeLoopDriver runtime_driver(fixture->runtime);
+
+    tui::VirtualTerminal terminal({.columns = 80, .rows = 64});
+    boost::asio::io_context io;
+    std::optional<support::ExpectedVoid> run_result;
+    boost::asio::co_spawn(io,
+            coding_agent::tui::run_interactive_mode(terminal, make_run(*fixture->session, fixture->config.path())),
+            [&](std::exception_ptr exception, support::ExpectedVoid result) {
+                CHECK(exception == nullptr);
+                run_result.emplace(std::move(result));
+            });
+    drain_ready(io);
+
+    const auto screen = visible_screen(terminal);
+
+    // The resumed `block-bash` block draws the duration its transcript
+    // recorded. The bash body is folded to its tail, so the duration row is
+    // the last row of that block; asserting the exact row proves the value
+    // came from the recording rather than from any clock this path could read.
+    CHECK(screen.find("Took 12.3s") != std::string::npos);
 
     REQUIRE(terminal.inject_input("\x04"));
     drain_ready(io);

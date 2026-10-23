@@ -178,14 +178,14 @@ void strip_spill_footer(std::string& output,
     return context.theme.foreground(ThemeToken::Warning, "[" + joined + "]");
 }
 
-/// pi `bash.ts:125-129`, settled half only. pi prints `Elapsed` while partial
-/// against a live `Date.now()` on a 1 s redraw interval, and this tool block
-/// has no loader to drive one (ADR), so a `Took` ships against the end stamp
-/// the host took and no duration line renders before it exists.
+/// pi `render-utils.ts:165`, settled half only. pi prints `Elapsed` while
+/// partial against a live `Date.now()` on a 1 s redraw interval, and this
+/// tool block has no loader to drive one, so no duration line renders before
+/// the settled result exists. The line shows the duration the agent loop
+/// recorded, which is the same value a resumed session renders (#812).
 [[nodiscard]] std::optional<std::string> duration_line(const ToolRenderContext& context) {
-    if (!context.started_at_ms.has_value() || !context.ended_at_ms.has_value()) return std::nullopt;
-    const auto elapsed = *context.ended_at_ms - *context.started_at_ms;
-    return context.theme.foreground(ThemeToken::Muted, std::format("Took {}", format_duration(elapsed)));
+    if (context.is_partial || !context.duration_ms.has_value()) return std::nullopt;
+    return context.theme.foreground(ThemeToken::Muted, std::format("Took {}", format_duration(*context.duration_ms)));
 }
 
 } // namespace

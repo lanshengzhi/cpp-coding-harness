@@ -136,6 +136,9 @@ struct MessageDto {
     std::optional<glz::generic> details{std::nullopt};
     std::optional<glz::generic> nestedCalls{std::nullopt};
     std::optional<bool> isError{std::nullopt};
+    /// pi `ToolResultMessage.durationMs`: the recorded execution duration,
+    /// absent for legacy entries and never-executed results (#812).
+    std::optional<std::int64_t> durationMs{std::nullopt};
     // Extended message type fields
     std::optional<std::string> command{std::nullopt};
     std::optional<std::string> output{std::nullopt};
@@ -805,6 +808,7 @@ template <typename Block, typename Convert>
                                    ? std::optional<glz::generic>{support::json_to_glaze(*message.nested_calls)}
                                    : std::nullopt,
             .isError = message.is_error,
+            .durationMs = message.duration_ms,
             .timestamp = message.timestamp,
     };
 }
@@ -982,6 +986,7 @@ template <typename Block, typename Convert>
                                         : std::nullopt,
                 .is_error = dto.isError.value_or(false),
                 .timestamp = dto.timestamp,
+                .duration_ms = dto.durationMs,
         }};
     }
 

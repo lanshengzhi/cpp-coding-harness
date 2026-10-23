@@ -53,8 +53,7 @@ struct SeamContext {
                 .is_partial = true,
                 .is_error = false,
                 .expanded = false,
-                .started_at_ms = std::nullopt,
-                .ended_at_ms = std::nullopt,
+                .duration_ms = std::nullopt,
         };
     }
 
@@ -293,14 +292,14 @@ TEST_CASE("a path outside the home directory is not shortened and a bare home pa
     CHECK(coding_agent::tui::shorten_path("/home/agentic/notes.txt") == "~ic/notes.txt");
 }
 
-TEST_CASE("the execution-start and args-complete transitions reach a renderer, and the clock is stamped once",
-        "[coding_agent][tui][tool-renderers][issue824][spec]") {
+TEST_CASE("the execution-start and args-complete transitions reach a renderer, and the recorded duration settles with "
+          "the result",
+        "[coding_agent][tui][tool-renderers][issue824][issue812][spec]") {
     struct Observation {
         bool execution_started{false};
         bool args_complete{false};
         bool is_partial{true};
-        std::optional<std::int64_t> started_at_ms{std::nullopt};
-        std::optional<std::int64_t> ended_at_ms{std::nullopt};
+        std::optional<std::int64_t> duration_ms{std::nullopt};
     };
     std::vector<Observation> observed;
     const auto observe = [&observed](const coding_agent::tui::ToolRenderContext& context) {
@@ -308,8 +307,7 @@ TEST_CASE("the execution-start and args-complete transitions reach a renderer, a
                 .execution_started = context.execution_started,
                 .args_complete = context.args_complete,
                 .is_partial = context.is_partial,
-                .started_at_ms = context.started_at_ms,
-                .ended_at_ms = context.ended_at_ms,
+                .duration_ms = context.duration_ms,
         });
         return coding_agent::tui::ToolRenderedText{};
     };
@@ -330,48 +328,57 @@ TEST_CASE("the execution-start and args-complete transitions reach a renderer, a
             theme, keybindings, "bash", "call_1", R"({"command":"ls -la"})", "/workspace", std::move(registry));
 
     // The whole transition sequence, not a single flag: a check that only
-    // asked "did anything set execution_started" would pass while the stamp
-    // was re-taken per render, the end was stamped on a partial result, or
+    // asked "did anything set execution_started" would pass while the
+    // duration leaked through a partial result, was re-taken per render, or
     // the args-complete signal never arrived.
     REQUIRE(observed.size() == 1);
     CHECK(observed[0].execution_started == false);
     CHECK(observed[0].args_complete == false);
-    CHECK(observed[0].started_at_ms == std::nullopt);
-    CHECK(observed[0].ended_at_ms == std::nullopt);
+    CHECK(observed[0].duration_ms == std::nullopt);
 
     component.mark_execution_started();
     REQUIRE(observed.size() == 2);
     CHECK(observed[1].execution_started);
-    REQUIRE(observed[1].started_at_ms.has_value());
-
-    // The stamp is taken once: a second call neither re-renders nor moves the
-    // instant the duration is measured from.
+    // The flag latches once: a second call neither re-renders nor re-fires.
     component.mark_execution_started();
     CHECK(observed.size() == 2);
+    // Starting execution alone exposes no duration: the value arrives with
+    // the settled result, not from a wall-clock stamp (#812).
+    CHECK(observed[1].duration_ms == std::nullopt);
 
     component.set_args_complete();
     REQUIRE(observed.size() == 3);
     CHECK(observed[2].args_complete);
 
-    const auto partial = ai::ToolResultMessage{
+    auto partial = ai::ToolResultMessage{
             .tool_call_id = "call_1",
             .tool_name = "bash",
             .content = {ai::text_content("running")},
             .details = std::nullopt,
             .is_error = false,
             .timestamp = 0,
+            .duration_ms = 12'345,
     };
     component.update_result(partial, /*is_partial=*/true);
     REQUIRE(observed.size() == 4);
     CHECK(observed[3].is_partial);
-    CHECK(observed[3].ended_at_ms == std::nullopt);
+    // pi `getRenderContext`: `durationMs: this.isPartial ? undefined : ...` —
+    // even a result value already carrying a recording stays hidden until
+    // the settle transition.
+    CHECK(observed[3].duration_ms == std::nullopt);
 
     component.update_result(partial, /*is_partial=*/false);
     REQUIRE(observed.size() == 5);
     CHECK(observed[4].is_partial == false);
-    REQUIRE(observed[4].ended_at_ms.has_value());
-    REQUIRE(observed[1].started_at_ms.has_value());
-    CHECK(*observed[4].ended_at_ms >= *observed[1].started_at_ms);
+    CHECK(observed[4].duration_ms == 12'345);
+
+    // A settled result without a recording keeps absence (pi: absent for
+    // legacy results), instead of fabricating a wall-clock number.
+    partial.duration_ms = std::nullopt;
+    component.update_result(partial, /*is_partial=*/false);
+    REQUIRE(observed.size() == 6);
+    CHECK(observed[5].is_partial == false);
+    CHECK(observed[5].duration_ms == std::nullopt);
 }
 
 TEST_CASE("the tool block a path-bearing renderer draws is hyperlink-gated on the terminal capability",
