@@ -1,0 +1,197 @@
+Filters: [issue831]
+Randomness seeded to: 637686367
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_coding_agent_interactive is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+Dock footer rows survive an over-budget fullscreen dock
+-------------------------------------------------------------------------------
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/DockFooterFrameTest.cpp:224
+...............................................................................
+
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/DockFooterFrameTest.cpp:90: FAILED:
+  CHECK( stats_row.find("/128k (auto)") != std::string::npos )
+with expansion:
+  18446744073709551615 (0xffffffffffffffff)
+  !=
+  18446744073709551615 (0xffffffffffffffff)
+with messages:
+  mode: fullscreen
+  frame: autocomplete-over-nine-lines
+  composed rows: 
+  | streaming in flight|
+  |Steering: queued 0|
+  |Steering: queued 1|
+  |Steering: queued 2|
+  |Steering: queued 3|
+  |Steering: queued 4|
+  |Steering: queued 5|
+  |Steering: queued 6|
+  |Steering: queued 7|
+  |Steering: queued 8|
+  |Steering: queued 9|
+  |Steering: queued 10|
+  |Steering: queued 11|
+  |Steering: queued 12|
+  |Steering: queued 13|
+  |Steering: queued 14|
+  |Steering: queued 15|
+  |Steering: queued 16|
+  |Steering: queued 17|
+  |── ⠙ Working ─────────────────────────────────────|
+  |/|
+  |line two|
+  |line three|
+  |line four|
+  |line five|
+  |line six|
+  |line seven|
+  |line eight|
+  |line nine|
+  |/tmp/cpp-harness-catch2-2641974-302772990573911...|
+
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/DockFooterFrameTest.cpp:91: FAILED:
+  CHECK( path_row.find("cpp-harness") != std::string::npos )
+with expansion:
+  18446744073709551615 (0xffffffffffffffff)
+  !=
+  18446744073709551615 (0xffffffffffffffff)
+with messages:
+  mode: fullscreen
+  frame: autocomplete-over-nine-lines
+  composed rows: 
+  | streaming in flight|
+  |Steering: queued 0|
+  |Steering: queued 1|
+  |Steering: queued 2|
+  |Steering: queued 3|
+  |Steering: queued 4|
+  |Steering: queued 5|
+  |Steering: queued 6|
+  |Steering: queued 7|
+  |Steering: queued 8|
+  |Steering: queued 9|
+  |Steering: queued 10|
+  |Steering: queued 11|
+  |Steering: queued 12|
+  |Steering: queued 13|
+  |Steering: queued 14|
+  |Steering: queued 15|
+  |Steering: queued 16|
+  |Steering: queued 17|
+  |── ⠙ Working ─────────────────────────────────────|
+  |/|
+  |line two|
+  |line three|
+  |line four|
+  |line five|
+  |line six|
+  |line seven|
+  |line eight|
+  |line nine|
+  |/tmp/cpp-harness-catch2-2641974-302772990573911...|
+
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/DockFooterFrameTest.cpp:90: FAILED:
+  CHECK( stats_row.find("/128k (auto)") != std::string::npos )
+with expansion:
+  18446744073709551615 (0xffffffffffffffff)
+  !=
+  18446744073709551615 (0xffffffffffffffff)
+with messages:
+  mode: fullscreen
+  frame: after-resize
+  composed rows: 
+  | streaming in flight|
+  |Steering: queued 0|
+  |Steering: queued 1|
+  |Steering: queued 2|
+  |Steering: queued 3|
+  |Steering: queued 4|
+  |Steering: queued 5|
+  |Steering: queued 6|
+  |Steering: queued 7|
+  |Steering: queued 8|
+  |Steering: queued 9|
+  |Steering: queued 10|
+  |Steering: queued 11|
+  |Steering: queued 12|
+  |Steering: queued 13|
+  |Steering: queued 14|
+  |Steering: queued 15|
+  |Steering: queued 16|
+  |Steering: queued 17|
+  |── ⠙ Working ───────────────────────────────────────────────|
+  |/|
+  |line two|
+  |line three|
+  |line four|
+  |line five|
+  |line six|
+  |line seven|
+  |line eight|
+  |line nine|
+  |/tmp/cpp-harness-catch2-2641974-302772990573911-0/tmp/cpp...|
+
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/DockFooterFrameTest.cpp:91: FAILED:
+  CHECK( path_row.find("cpp-harness") != std::string::npos )
+with expansion:
+  18446744073709551615 (0xffffffffffffffff)
+  !=
+  18446744073709551615 (0xffffffffffffffff)
+with messages:
+  mode: fullscreen
+  frame: after-resize
+  composed rows: 
+  | streaming in flight|
+  |Steering: queued 0|
+  |Steering: queued 1|
+  |Steering: queued 2|
+  |Steering: queued 3|
+  |Steering: queued 4|
+  |Steering: queued 5|
+  |Steering: queued 6|
+  |Steering: queued 7|
+  |Steering: queued 8|
+  |Steering: queued 9|
+  |Steering: queued 10|
+  |Steering: queued 11|
+  |Steering: queued 12|
+  |Steering: queued 13|
+  |Steering: queued 14|
+  |Steering: queued 15|
+  |Steering: queued 16|
+  |Steering: queued 17|
+  |── ⠙ Working ───────────────────────────────────────────────|
+  |/|
+  |line two|
+  |line three|
+  |line four|
+  |line five|
+  |line six|
+  |line seven|
+  |line eight|
+  |line nine|
+  |/tmp/cpp-harness-catch2-2641974-302772990573911-0/tmp/cpp...|
+
+-------------------------------------------------------------------------------
+ChatViewport keeps both footer rows when the dock is over budget
+-------------------------------------------------------------------------------
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/ChatViewportTest.cpp:219
+...............................................................................
+
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/ChatViewportTest.cpp:241: FAILED:
+  CHECK( rows[rows.size() - 2] == "footer-1" )
+with expansion:
+  "editor-7" == "footer-1"
+
+/home/lansy/.cache/cch-1044/wt/laneC/tests/coding_agent/tui/ChatViewportTest.cpp:242: FAILED:
+  CHECK( rows[rows.size() - 1] == "footer-2" )
+with expansion:
+  "editor-8" == "footer-2"
+
+===============================================================================
+test cases:   3 |   1 passed | 2 failed
+assertions: 478 | 472 passed | 6 failed
+

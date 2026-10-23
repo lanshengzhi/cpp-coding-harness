@@ -1,0 +1,732 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "831",
+  "family": "audit-831",
+  "capturedAt": "2026-10-23T03:21:05.684Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-831/capture-831.mts",
+    "sha256": "4a4c0662c5b6d0e16495c1ab0cd95e95cf7c612aaf62602cc0997d2101ff9928",
+    "command": "PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-831/capture-831.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-831/capture-831.mts",
+        "sha256": "4a4c0662c5b6d0e16495c1ab0cd95e95cf7c612aaf62602cc0997d2101ff9928"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "dock-footer.json",
+      "family": "audit-831",
+      "bytes": 23546,
+      "sha256": "8992c0fec7b31b822db5069582dd158201fc54bcb61300dcaffb8013703f5bf7",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/modes/interactive/chat-viewport.ts:createChatViewport",
+        "packages/tui/src/components/stack.ts:VStack,distribute",
+        "packages/tui/src/layout.ts:layoutComponent,updateClips",
+        "packages/tui/test/virtual-terminal.ts:VirtualTerminal"
+      ],
+      "scenarios": [
+        {
+          "name": "dock-fits-autocomplete-and-multiline",
+          "inputs": {
+            "columns": 50,
+            "rows": 30,
+            "document": [
+              "transcript row 1",
+              "transcript row 2",
+              "transcript row 3",
+              "transcript row 4",
+              "transcript row 5",
+              "transcript row 6",
+              "transcript row 7",
+              "transcript row 8",
+              "transcript row 9",
+              "transcript row 10",
+              "transcript row 11",
+              "transcript row 12",
+              "transcript row 13",
+              "transcript row 14",
+              "transcript row 15",
+              "transcript row 16",
+              "transcript row 17",
+              "transcript row 18",
+              "transcript row 19",
+              "transcript row 20",
+              "transcript row 21",
+              "transcript row 22",
+              "transcript row 23",
+              "transcript row 24",
+              "transcript row 25",
+              "transcript row 26",
+              "transcript row 27",
+              "transcript row 28",
+              "transcript row 29",
+              "transcript row 30",
+              "transcript row 31",
+              "transcript row 32",
+              "transcript row 33",
+              "transcript row 34",
+              "transcript row 35",
+              "transcript row 36",
+              "transcript row 37",
+              "transcript row 38",
+              "transcript row 39",
+              "transcript row 40"
+            ],
+            "pending": "",
+            "status": "── Working ──",
+            "editor": "prompt",
+            "footer": [
+              "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+              "0.0%/128k (auto)                        fake-model"
+            ],
+            "steps": [
+              {
+                "name": "baseline"
+              },
+              {
+                "name": "autocomplete-open",
+                "editor": "/\nmenu-item-1\nmenu-item-2\nmenu-item-3\nmenu-item-4\nmenu-item-5\nmenu-item-6"
+              },
+              {
+                "name": "nine-line-paste",
+                "editor": "/\nline two\nline three\nline four\nline five\nline six\nline seven\nline eight\nline nine"
+              },
+              {
+                "name": "submit",
+                "editor": ""
+              },
+              {
+                "name": "resize-60x30",
+                "resize": {
+                  "columns": 60,
+                  "rows": 30
+                }
+              }
+            ]
+          },
+          "expected": {
+            "frames": [
+              {
+                "action": "baseline",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 17",
+                  "transcript row 18",
+                  "transcript row 19",
+                  "transcript row 20",
+                  "transcript row 21",
+                  "transcript row 22",
+                  "transcript row 23",
+                  "transcript row 24",
+                  "transcript row 25",
+                  "transcript row 26",
+                  "transcript row 27",
+                  "transcript row 28",
+                  "transcript row 29",
+                  "transcript row 30",
+                  "transcript row 31",
+                  "transcript row 32",
+                  "transcript row 33",
+                  "transcript row 34",
+                  "transcript row 35",
+                  "transcript row 36",
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "── Working ──",
+                  "prompt",
+                  "",
+                  "",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 16,
+                  "viewportHeight": 24,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "autocomplete-open",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 21",
+                  "transcript row 22",
+                  "transcript row 23",
+                  "transcript row 24",
+                  "transcript row 25",
+                  "transcript row 26",
+                  "transcript row 27",
+                  "transcript row 28",
+                  "transcript row 29",
+                  "transcript row 30",
+                  "transcript row 31",
+                  "transcript row 32",
+                  "transcript row 33",
+                  "transcript row 34",
+                  "transcript row 35",
+                  "transcript row 36",
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "── Working ──",
+                  "/",
+                  "menu-item-1",
+                  "menu-item-2",
+                  "menu-item-3",
+                  "menu-item-4",
+                  "menu-item-5",
+                  "menu-item-6",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 20,
+                  "viewportHeight": 20,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "nine-line-paste",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 23",
+                  "transcript row 24",
+                  "transcript row 25",
+                  "transcript row 26",
+                  "transcript row 27",
+                  "transcript row 28",
+                  "transcript row 29",
+                  "transcript row 30",
+                  "transcript row 31",
+                  "transcript row 32",
+                  "transcript row 33",
+                  "transcript row 34",
+                  "transcript row 35",
+                  "transcript row 36",
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "── Working ──",
+                  "/",
+                  "line two",
+                  "line three",
+                  "line four",
+                  "line five",
+                  "line six",
+                  "line seven",
+                  "line eight",
+                  "line nine",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 22,
+                  "viewportHeight": 18,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "submit",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 17",
+                  "transcript row 18",
+                  "transcript row 19",
+                  "transcript row 20",
+                  "transcript row 21",
+                  "transcript row 22",
+                  "transcript row 23",
+                  "transcript row 24",
+                  "transcript row 25",
+                  "transcript row 26",
+                  "transcript row 27",
+                  "transcript row 28",
+                  "transcript row 29",
+                  "transcript row 30",
+                  "transcript row 31",
+                  "transcript row 32",
+                  "transcript row 33",
+                  "transcript row 34",
+                  "transcript row 35",
+                  "transcript row 36",
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "── Working ──",
+                  "",
+                  "",
+                  "",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 16,
+                  "viewportHeight": 24,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "resize-60x30",
+                "rows": 30,
+                "columns": 60,
+                "screen": [
+                  "transcript row 17",
+                  "transcript row 18",
+                  "transcript row 19",
+                  "transcript row 20",
+                  "transcript row 21",
+                  "transcript row 22",
+                  "transcript row 23",
+                  "transcript row 24",
+                  "transcript row 25",
+                  "transcript row 26",
+                  "transcript row 27",
+                  "transcript row 28",
+                  "transcript row 29",
+                  "transcript row 30",
+                  "transcript row 31",
+                  "transcript row 32",
+                  "transcript row 33",
+                  "transcript row 34",
+                  "transcript row 35",
+                  "transcript row 36",
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "── Working ──",
+                  "",
+                  "",
+                  "",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 16,
+                  "viewportHeight": 24,
+                  "isFollowingEnd": true
+                }
+              }
+            ]
+          }
+        },
+        {
+          "name": "dock-over-budget-editor-growth",
+          "inputs": {
+            "columns": 50,
+            "rows": 30,
+            "document": [
+              "transcript row 1",
+              "transcript row 2",
+              "transcript row 3",
+              "transcript row 4",
+              "transcript row 5",
+              "transcript row 6",
+              "transcript row 7",
+              "transcript row 8",
+              "transcript row 9",
+              "transcript row 10",
+              "transcript row 11",
+              "transcript row 12",
+              "transcript row 13",
+              "transcript row 14",
+              "transcript row 15",
+              "transcript row 16",
+              "transcript row 17",
+              "transcript row 18",
+              "transcript row 19",
+              "transcript row 20",
+              "transcript row 21",
+              "transcript row 22",
+              "transcript row 23",
+              "transcript row 24",
+              "transcript row 25",
+              "transcript row 26",
+              "transcript row 27",
+              "transcript row 28",
+              "transcript row 29",
+              "transcript row 30",
+              "transcript row 31",
+              "transcript row 32",
+              "transcript row 33",
+              "transcript row 34",
+              "transcript row 35",
+              "transcript row 36",
+              "transcript row 37",
+              "transcript row 38",
+              "transcript row 39",
+              "transcript row 40"
+            ],
+            "pending": "Steering: queued 0\nSteering: queued 1\nSteering: queued 2\nSteering: queued 3\nSteering: queued 4\nSteering: queued 5\nSteering: queued 6\nSteering: queued 7\nSteering: queued 8\nSteering: queued 9\nSteering: queued 10\nSteering: queued 11\nSteering: queued 12\nSteering: queued 13\nSteering: queued 14\nSteering: queued 15\nSteering: queued 16\nSteering: queued 17\nSteering: queued 18\nSteering: queued 19",
+            "status": "── Working ──",
+            "editor": "prompt",
+            "footer": [
+              "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+              "0.0%/128k (auto)                        fake-model"
+            ],
+            "steps": [
+              {
+                "name": "baseline"
+              },
+              {
+                "name": "autocomplete-open",
+                "editor": "/\nmenu-item-1\nmenu-item-2\nmenu-item-3\nmenu-item-4\nmenu-item-5\nmenu-item-6"
+              },
+              {
+                "name": "nine-line-paste",
+                "editor": "/\nline two\nline three\nline four\nline five\nline six\nline seven\nline eight\nline nine"
+              },
+              {
+                "name": "autocomplete-over-nine-lines",
+                "editor": "/\nline two\nline three\nline four\nline five\nline six\nline seven\nline eight\nline nine\nmenu-item-1\nmenu-item-2\nmenu-item-3\nmenu-item-4\nmenu-item-5\nmenu-item-6"
+              },
+              {
+                "name": "submit",
+                "editor": ""
+              },
+              {
+                "name": "resize-60x30",
+                "resize": {
+                  "columns": 60,
+                  "rows": 30
+                }
+              }
+            ]
+          },
+          "expected": {
+            "frames": [
+              {
+                "action": "baseline",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "Steering: queued 0",
+                  "Steering: queued 1",
+                  "Steering: queued 2",
+                  "Steering: queued 3",
+                  "Steering: queued 4",
+                  "Steering: queued 5",
+                  "Steering: queued 6",
+                  "Steering: queued 7",
+                  "Steering: queued 8",
+                  "Steering: queued 9",
+                  "Steering: queued 10",
+                  "Steering: queued 11",
+                  "Steering: queued 12",
+                  "Steering: queued 13",
+                  "Steering: queued 14",
+                  "Steering: queued 15",
+                  "Steering: queued 16",
+                  "Steering: queued 17",
+                  "Steering: queued 18",
+                  "Steering: queued 19",
+                  "── Working ──",
+                  "prompt",
+                  "",
+                  "",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 36,
+                  "viewportHeight": 4,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "autocomplete-open",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 40",
+                  "Steering: queued 0",
+                  "Steering: queued 1",
+                  "Steering: queued 2",
+                  "Steering: queued 3",
+                  "Steering: queued 4",
+                  "Steering: queued 5",
+                  "Steering: queued 6",
+                  "Steering: queued 7",
+                  "Steering: queued 8",
+                  "Steering: queued 9",
+                  "Steering: queued 10",
+                  "Steering: queued 11",
+                  "Steering: queued 12",
+                  "Steering: queued 13",
+                  "Steering: queued 14",
+                  "Steering: queued 15",
+                  "Steering: queued 16",
+                  "Steering: queued 17",
+                  "Steering: queued 18",
+                  "── Working ──",
+                  "/",
+                  "menu-item-1",
+                  "menu-item-2",
+                  "menu-item-3",
+                  "menu-item-4",
+                  "menu-item-5",
+                  "menu-item-6",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 39,
+                  "viewportHeight": 1,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "nine-line-paste",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 40",
+                  "Steering: queued 0",
+                  "Steering: queued 1",
+                  "Steering: queued 2",
+                  "Steering: queued 3",
+                  "Steering: queued 4",
+                  "Steering: queued 5",
+                  "Steering: queued 6",
+                  "Steering: queued 7",
+                  "Steering: queued 8",
+                  "Steering: queued 9",
+                  "Steering: queued 10",
+                  "Steering: queued 11",
+                  "Steering: queued 12",
+                  "Steering: queued 13",
+                  "Steering: queued 14",
+                  "Steering: queued 15",
+                  "Steering: queued 16",
+                  "Steering: queued 17",
+                  "Steering: queued 18",
+                  "/",
+                  "line two",
+                  "line three",
+                  "line four",
+                  "line five",
+                  "line six",
+                  "line seven",
+                  "line eight",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 39,
+                  "viewportHeight": 1,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "autocomplete-over-nine-lines",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 40",
+                  "Steering: queued 0",
+                  "Steering: queued 1",
+                  "Steering: queued 2",
+                  "Steering: queued 3",
+                  "Steering: queued 4",
+                  "Steering: queued 5",
+                  "Steering: queued 6",
+                  "Steering: queued 7",
+                  "Steering: queued 8",
+                  "Steering: queued 9",
+                  "Steering: queued 10",
+                  "Steering: queued 11",
+                  "Steering: queued 12",
+                  "Steering: queued 13",
+                  "Steering: queued 14",
+                  "/",
+                  "line two",
+                  "line three",
+                  "line four",
+                  "line five",
+                  "line six",
+                  "line seven",
+                  "line eight",
+                  "line nine",
+                  "menu-item-1",
+                  "menu-item-2",
+                  "menu-item-3",
+                  "menu-item-4",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848..."
+                ],
+                "lastTwoRows": [
+                  "menu-item-4",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848..."
+                ],
+                "footerRowsVisible": false,
+                "transcript": {
+                  "scrollTop": 39,
+                  "viewportHeight": 1,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "submit",
+                "rows": 30,
+                "columns": 50,
+                "screen": [
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "Steering: queued 0",
+                  "Steering: queued 1",
+                  "Steering: queued 2",
+                  "Steering: queued 3",
+                  "Steering: queued 4",
+                  "Steering: queued 5",
+                  "Steering: queued 6",
+                  "Steering: queued 7",
+                  "Steering: queued 8",
+                  "Steering: queued 9",
+                  "Steering: queued 10",
+                  "Steering: queued 11",
+                  "Steering: queued 12",
+                  "Steering: queued 13",
+                  "Steering: queued 14",
+                  "Steering: queued 15",
+                  "Steering: queued 16",
+                  "Steering: queued 17",
+                  "Steering: queued 18",
+                  "Steering: queued 19",
+                  "── Working ──",
+                  "",
+                  "",
+                  "",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 36,
+                  "viewportHeight": 4,
+                  "isFollowingEnd": true
+                }
+              },
+              {
+                "action": "resize-60x30",
+                "rows": 30,
+                "columns": 60,
+                "screen": [
+                  "transcript row 37",
+                  "transcript row 38",
+                  "transcript row 39",
+                  "transcript row 40",
+                  "Steering: queued 0",
+                  "Steering: queued 1",
+                  "Steering: queued 2",
+                  "Steering: queued 3",
+                  "Steering: queued 4",
+                  "Steering: queued 5",
+                  "Steering: queued 6",
+                  "Steering: queued 7",
+                  "Steering: queued 8",
+                  "Steering: queued 9",
+                  "Steering: queued 10",
+                  "Steering: queued 11",
+                  "Steering: queued 12",
+                  "Steering: queued 13",
+                  "Steering: queued 14",
+                  "Steering: queued 15",
+                  "Steering: queued 16",
+                  "Steering: queued 17",
+                  "Steering: queued 18",
+                  "Steering: queued 19",
+                  "── Working ──",
+                  "",
+                  "",
+                  "",
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "lastTwoRows": [
+                  "/tmp/cpp-harness-catch2-2625741-301292044582848...",
+                  "0.0%/128k (auto)                        fake-model"
+                ],
+                "footerRowsVisible": true,
+                "transcript": {
+                  "scrollTop": 36,
+                  "viewportHeight": 4,
+                  "isFollowingEnd": true
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
