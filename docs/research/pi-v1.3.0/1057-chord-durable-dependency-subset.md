@@ -1,7 +1,8 @@
 # 1057 — Durable-required Chord dependency subset (pi v1.3.0)
 
-Status: **audit complete; implementation deferred to a measured follow-up probe** (ticket #1057,
-parent #1044, ADR 0075). No production C++ alignment changes are made by this ticket.
+Status: **dependency audit complete; later implementation slices recorded separately** (ticket #1057,
+parent #1044, ADR 0075). #1061 implements prepared full replacement and mutable application in the
+Pike C++ Chord package; its evidence and remaining verification limits are recorded below.
 
 ## Result in one paragraph
 
@@ -10,12 +11,13 @@ Frozen pi-durable v1.3.0 imports four public surfaces of `@earendil-works/chord`
 capabilities** in seven families: Context/cancellation, document transactions and observation,
 delta tracking/application, revisions, replicated state, strict JSON, and bounded output. The
 remaining five Chord rows are unrelated plugin/host/RPC/cluster/cell surfaces and are bounded out
-under ADR 0075. The audit carries **45 upstream-captured rows**, **8 deliberately unverified gaps**,
-and **5 not-applicable exclusions**. No row is marked `verified`: serial registry registration
-proves only that the committed bundle is intact, and a `verified` row requires a committed C++
-comparison against these scenarios. The evidence bundle contains **33 genuine frozen public-path
-scenarios** in five artifacts; all were captured from a private clean checkout at
-`71023aec1546d6d677a65669c5665c0927ce0dd0` with exact observed values. The durable transaction
+under ADR 0075. The dependency audit carries **46 upstream-captured rows**, **7 deliberately
+unverified gaps**, and **5 not-applicable exclusions**. No row is marked `verified`: upstream
+capture records frozen behavior, while verification requires a completed C++ comparison at the same
+scenario boundary. The 1057 bundle contains **33 frozen public-path scenarios** in five artifacts.
+#1061 adds separate direct `prepareReplace` and sequential mutable-validation captures against the
+same private clean checkout at `71023aec1546d6d677a65669c5665c0927ce0dd0` with exact observed
+values. The durable transaction
 evidence includes rollback, committed-revision/sequence observation, a stale prepared revision, and
 a definition-version mismatch, so a full-snapshot-only substitute cannot satisfy the delta/revision
 obligations.
@@ -337,25 +339,34 @@ The five excluded rows are:
 remain excluded; generic durable storage, transactions, recovery, execution and the required
 document/delta/state semantics are not excluded.
 
+## Implementation update from #1061
+
+The #1061 frozen bundle is registered in `fixtures/pi-v1.3.0/audit-1061/manifest.json` and adds
+direct `prepareReplace` and operation-by-operation validation observations. C++ tests compare
+prepared-base retention, ownership, no-op normalization, stale adoption, abort, mutable partial
+writes after a later invalid operation, and caller-visible root-replacement behavior.
+`delta:prepare-replace` and `delta:mutable-application` are recorded as implemented and
+`upstream-captured`; the ledger records their direct C++ tests while keeping that verification
+status until a same-boundary frozen comparison is accepted. Checkpoint predicate policy remains
+outside #1061 and is not implemented by the Chord slice.
+
 ## Unverified gaps (not exclusions)
 
-The eight unverified required rows are:
+The seven unverified required rows are:
 
 1. `context:root-background` — direct root identity/string/default capture; only a derived root is
    observed.
 2. `document:checkpoint-bases` — checkpoint predicate/base selection and retained delta tail.
 3. `document:retention` — document cache eviction/retention timing.
-4. `delta:prepare-replace` — direct `Tracker.prepareReplace` observation (root replacement is
-   captured indirectly through commits/watchers).
-5. `state:pending-bound` — state-subscriber overflow with an in-flight callback (the durable
+4. `state:pending-bound` — state-subscriber overflow with an in-flight callback (the durable
    watcher overflow is captured).
-6. `json:json-value` — a direct C++-comparable `JsonValue` model scenario.
-7. `json:json-representation` — compile-time representation mapping has no runtime scenario.
-8. `output:progress` — throttled `Progress` pacing/timing.
+5. `json:json-value` — a direct C++-comparable `JsonValue` model scenario.
+6. `json:json-representation` — compile-time representation mapping has no runtime scenario.
+7. `output:progress` — throttled `Progress` pacing/timing.
 
 These are recorded as `unverified`, never as Deferred or excluded. The audit also has no row marked
 `verified`: `upstream-captured` records a bundle-pinned frozen observation, and a row becomes
-`verified` only when a committed C++ comparison accepts the same scenario; the eight gaps remain
+`verified` only when a committed C++ comparison accepts the same scenario; the seven gaps remain
 visible.
 
 ## Preserved constraints
@@ -364,8 +375,9 @@ visible.
 - XDG configuration/state roots and historical evidence remain untouched.
 - Existing third-party TS/JS runtime exclusion and the no-old-Pike-migration decision are
   untouched.
-- No shared registry, verifier, tests, README, or historical bundle is edited by this ticket.
-- No production alignment code, manifest owner, or C++ target is introduced by this audit.
+- #1057 did not change shared registry or production alignment files; #1061's later changes are
+  identified in the implementation update above.
+- #1057 introduced no production alignment code, manifest owner, or C++ target.
 
 ## Validation and handoff
 
@@ -384,7 +396,7 @@ jq -e . docs/research/pi-v1.3.0/1057-chord-durable-dependency-subset.json
 
 Capture printed five artifacts and the manifest. `check` printed the candidate registry record
 above and exited 0. The ledger is valid JSON and its counts are 58 rows: 53 supported / 5 excluded;
-35 missing / 18 partial; 45 upstream-captured / 8 unverified / 5 not-applicable.
+33 missing / 18 partial / 2 implemented; 46 upstream-captured / 7 unverified / 5 not-applicable.
 
 The serial merger should register only this record in
 `fixtures/pi-v1.3.0/baselines.json` under `baselines["pi-v1.3.0"].bundles`, after verifying the
@@ -397,6 +409,6 @@ manifest hash:
 }
 ```
 
-No shared file is staged or edited by this ticket. The final ticket commit and integration merge
-are performed after this report is written; the exact commit, pins, branch and merge state are in
-the ticket handoff.
+#1057 itself made no shared registry or production alignment changes; later issue #1061 owns the
+Chord implementation and evidence updates described above. Integration merge and issue close-out
+remain separate delivery steps.

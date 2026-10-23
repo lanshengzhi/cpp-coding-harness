@@ -52,13 +52,14 @@
       "supported": 53
     },
     "implementation": {
-      "missing": 35,
-      "partial": 18
+      "missing": 33,
+      "partial": 18,
+      "implemented": 2
     },
     "verification": {
       "not-applicable": 5,
-      "unverified": 8,
-      "upstream-captured": 45
+      "unverified": 7,
+      "upstream-captured": 46
     }
   },
   "rows": [
@@ -705,7 +706,7 @@
       "scenario": null,
       "evidence": null,
       "gaps": [
-        "No captured checkpoint/base scenario in this ticket; checkpoint cost is deliberately not decided here."
+        "No checkpoint predicate or durable Session policy is implemented in this Chord slice; checkpoint cost remains outside #1061."
       ],
       "notes": "",
       "cppSeam": "",
@@ -901,22 +902,22 @@
         "packages/chord/src/delta/index.ts:apply; packages/chord/test/delta.test.ts:applies mutable and immutable operations"
       ],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/sqlite/storage.ts:654 (revision materialization)",
-      "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
-      "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+      "boundary": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
+      "implementation_ticket": "#1061",
+      "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
       "evidence": {
-        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
-        "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
-        "result": "Ordinary batch returns the same target and mutates it to {items:['a','b'],value:1}; root replacement returns a distinct {replacement:true}."
+        "artifact": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
+        "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
+        "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
       },
       "gaps": [],
-      "notes": "",
-      "cppSeam": "",
-      "cppEvidence": "",
+      "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API.",
+      "cppSeam": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
+      "cppEvidence": "tests/chord/DeltaTest.cpp:application follows frozen sequential validation and replacement semantics; mutable application exposes the replacement result and batch classifications",
       "recommendation": "Use mutable application only on values owned by the materializer, never on a committed/shared revision."
     },
     {
@@ -1031,20 +1032,24 @@
         "packages/chord/src/delta/tracker.ts:Tracker.prepareReplace; packages/chord/test/delta.test.ts:emits an owned root replacement without traversing large replacement input"
       ],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:planDocument",
-      "boundary": null,
-      "implementation_ticket": "unfiled implementation probe",
-      "scenario": null,
-      "evidence": null,
+      "boundary": "src/chord/include/cch/chord/Delta.hpp:Tracker::prepare_replace,Prepared::base,Prepared::value,Tracker::adopt",
+      "implementation_ticket": "#1061",
+      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+      "evidence": {
+        "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
+        "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+        "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
+      },
       "gaps": [
-        "The ticket captured root replacements through commits/watchers, not `prepareReplace` directly."
+        "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
       ],
       "notes": "",
-      "cppSeam": "",
-      "cppEvidence": "",
+      "cppSeam": "src/chord/include/cch/chord/Delta.hpp:Tracker::prepare_replace,Prepared::base,Prepared::value,Tracker::adopt",
+      "cppEvidence": "tests/chord/TrackerTest.cpp:prepare replace keeps the checkpoint base immutable and stales same-base preparations; prepare replace of a deeply equal root emits no operations and stales a competitor; an aborted or foreign whole-root preparation cannot be adopted",
       "recommendation": "Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta."
     },
     {
