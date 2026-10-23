@@ -148,6 +148,7 @@ cch_parity_declare_target(
         src/coding_agent/tui/SlashCommandRouter.cpp
         src/coding_agent/tui/StatusIndicator.cpp
         src/coding_agent/tui/SuspendController.cpp
+        src/coding_agent/tui/SystemTheme.cpp
         src/coding_agent/tui/TerminationSignals.cpp
         src/coding_agent/tui/ThinkingSelector.cpp
         src/coding_agent/tui/Theme.cpp

@@ -1970,6 +1970,11 @@ TEST_CASE("live User Bash blocks stream through one status block with a loader a
 
 TEST_CASE("User Bash blocks style model-context inclusion through theme tokens", "[coding_agent][tui][issue89][spec]") {
     tests::TempWorkspace workspace;
+    // Pin the built-in dark theme: the token styling below is the assertion
+    // under test, not the settings default (the generated system theme boots
+    // in its pending tier, which renders every token as the terminal
+    // default).
+    workspace.write("settings.json", R"({"theme": "dark"})");
     tests::RuntimeFixture runtime;
     auto client = std::make_shared<RecordingChatProvider>();
     auto shell = std::make_unique<tests::FakeUserShell>();
@@ -2036,6 +2041,9 @@ TEST_CASE("User Bash blocks style model-context inclusion through theme tokens",
 TEST_CASE("the editor enters Bash mode on trimmed ! input and recalls the original submission verbatim",
         "[coding_agent][tui][issue89][issue94][issue98][spec]") {
     tests::TempWorkspace workspace;
+    // Pin the built-in dark theme so the bashMode border has a color to probe
+    // (the generated system theme's pending tier renders the terminal default).
+    workspace.write("settings.json", R"({"theme": "dark"})");
     tests::RuntimeFixture runtime;
     const std::string secret = "sk-abcdefghijklmnopqrstuvwxyz123456";
     auto client = std::make_shared<RecordingChatProvider>();

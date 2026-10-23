@@ -502,6 +502,31 @@ std::string LiveTheme::apply_style(
     bool background) {
     std::lock_guard lock(impl->mutex);
     const auto& resolved = color_for(impl->theme, token);
+    if (!background && std::ranges::find(impl->theme.dim, token) != impl->theme.dim.end()) {
+        // pi `Theme.fg` for a faint token: `<ansi>\x1b[2m<text>\x1b[22;39m`
+        // (SGR 2 closed together with the foreground reset).
+        const auto mode = impl->capability == cch::tui::TerminalColorCapability::TrueColor
+                                  ? cch::tui::TerminalColorMode::TrueColor
+                                  : cch::tui::TerminalColorMode::Xterm256;
+        std::string ansi;
+        if (std::holds_alternative<TerminalDefaultThemeColor>(resolved)) {
+            ansi = "\x1b[39m";
+        } else if (const auto* rgb = std::get_if<RgbThemeColor>(&resolved)) {
+            const auto formatted =
+                    cch::tui::foreground_ansi(cch::tui::Color{cch::tui::RgbColor{.red = static_cast<double>(rgb->red),
+                                                      .green = static_cast<double>(rgb->green),
+                                                      .blue = static_cast<double>(rgb->blue)}},
+                            mode);
+            if (!formatted) std::terminate();
+            ansi = std::move(*formatted);
+        } else {
+            const auto formatted = cch::tui::foreground_ansi(
+                    cch::tui::Color{cch::tui::IndexedColor{std::get<XtermThemeColor>(resolved).index}}, mode);
+            if (!formatted) std::terminate();
+            ansi = std::move(*formatted);
+        }
+        return ansi + "\x1b[2m" + text + "\x1b[22;39m";
+    }
     std::optional<cch::tui::Color> foreground;
     std::optional<cch::tui::Color> background_color;
     if (const auto* rgb = std::get_if<RgbThemeColor>(&resolved)) {

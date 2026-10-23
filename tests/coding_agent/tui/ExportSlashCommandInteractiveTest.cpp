@@ -147,7 +147,10 @@ TEST_CASE("/export with no destination writes pi's default HTML next to the sess
     }
     // The base64 payload sits in pi's `<script id="session-data">` slot.
     CHECK(html.find("<script id=\"session-data\" type=\"application/json\">") != std::string::npos);
-    CHECK(html.find("--exportPageBg: #21252c;") != std::string::npos);
+    // The default theme is the generated system theme, whose userMessageBg is
+    // the terminal default: pi's export resolves that to the guessed dark
+    // background (rgb(0, 0, 0)), and deriveExportColors keeps it black.
+    CHECK(html.find("--exportPageBg: rgb(0, 0, 0);") != std::string::npos);
     std::error_code error;
     std::filesystem::remove(expected, error);
     REQUIRE_FALSE(error);

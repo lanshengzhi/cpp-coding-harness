@@ -3126,8 +3126,8 @@ TEST_CASE("Native TUI terminal theme rebinding protocol and mode switch acceptan
 
         // A light initial appearance makes the old dark reply discriminating.
         REQUIRE(live_editor_theme.border != nullptr);
-        const auto light_border = live_editor_theme.border("─");
-        CHECK_FALSE(light_border.empty());
+        const auto initial_border = live_editor_theme.border("─");
+        CHECK_FALSE(initial_border.empty());
 
         // Verify initial query commands on regular root match artifact 31 exact vector
         const auto initial_commands = tests::extract_theme_protocol_commands(inner_vt.output());
@@ -3156,7 +3156,7 @@ TEST_CASE("Native TUI terminal theme rebinding protocol and mode switch acceptan
         drain_ready(io);
 
         // Active root has no pending query; old replies do not mutate theme state
-        CHECK(live_editor_theme.border("─") == light_border);
+        CHECK(live_editor_theme.border("─") == initial_border);
 
         // ── Phase A5: Scheme notification on active fullscreen root ─────────
         const auto before_scheme_a = inner_vt.output().size();
@@ -3177,7 +3177,11 @@ TEST_CASE("Native TUI terminal theme rebinding protocol and mode switch acceptan
         REQUIRE(inner_vt.inject_input("\x1b[?1;2c"));
         drain_ready(io);
 
-        CHECK(live_editor_theme.border("─") == light_border);
+        // The first reported background repaints the pending/indexed tier
+        // with the generated colors; the reported light appearance then
+        // holds against the opposite scheme reports below.
+        const auto light_border = live_editor_theme.border("─");
+        CHECK(light_border != initial_border);
 
         // ── Phase B1: Trigger a query on fullscreen root so a query is PENDING BEFORE switch ──
         const auto before_pending_b = inner_vt.output().size();

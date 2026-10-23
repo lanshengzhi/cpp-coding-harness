@@ -1,5 +1,6 @@
 #include "coding_agent/tui/ThemeController.hpp"
 
+#include "coding_agent/tui/SystemTheme.hpp"
 #include "coding_agent/tui/ThemeColorMath.hpp"
 #include "coding_agent/ResourceDiagnosticPolicy.hpp"
 #include "coding_agent/BoundedText.hpp"
@@ -11,6 +12,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <format>
+#include <iterator>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -29,6 +31,18 @@ namespace {
 [[nodiscard]] std::string combined_theme_error(const support::Error& error) {
     if (error.detail.empty() || error.detail == error.message) return error.message;
     return error.message + ": " + error.detail;
+}
+
+[[nodiscard]] TerminalAppearance appearance_of(TerminalTheme theme) {
+    return theme == TerminalTheme::Light ? TerminalAppearance::Light : TerminalAppearance::Dark;
+}
+
+/// pi `getTerminalTheme` appearance for the generated theme's hint: the
+/// reported background, then the live scheme, then COLORFGBG, then dark.
+[[nodiscard]] ResolvedTheme boot_system_theme(TerminalTheme detection) {
+    SystemThemeInput input;
+    input.appearance_hint = appearance_of(detection);
+    return system_theme_from_colors(generate_system_theme_colors(input));
 }
 
 /// pi `detectColorFgBgTheme`: only a one- or two-digit basic-16 index is
@@ -176,10 +190,6 @@ std::optional<std::string> resolve_theme_setting(
     return terminal_theme == TerminalTheme::Light ? light : dark;
 }
 
-std::string_view terminal_theme_name(TerminalTheme theme) {
-    return theme == TerminalTheme::Light ? "light" : "dark";
-}
-
 struct ThemeController::Impl {
     Impl(std::filesystem::path configured_custom_themes_dir,
             std::vector<RegisteredTheme> configured_registered,
@@ -210,12 +220,18 @@ struct ThemeController::Impl {
         scheme_dispatch->deactivate();
     }
 
-    /// pi `applyThemeName` + `setTheme`: load by name; success replaces the
-    /// palette and records the name, failure replaces the palette with
-    /// `dark` and records the fallback. Either way the change notifies; the
+    /// pi `applyThemeName` + `setTheme`: the reserved system name regenerates
+    /// from the retained terminal colors; any other name loads, and failure
+    /// replaces the palette with the generated system theme (pi `setTheme`'s
+    /// catch) and records it as active. Either way the change notifies; the
     /// verbatim fallback message reports only when `show_error` is set. The
     /// constructor loads the boot theme without notifying (pi `initTheme`).
     [[nodiscard]] bool apply_theme_name(std::string_view name, bool show_error_, bool notify = true) {
+        if (name == kSystemThemeName) {
+            apply_system_theme();
+            if (notify) notify_changed();
+            return true;
+        }
         auto loaded = load_theme_by_name(name, custom_themes_dir, registered);
         std::optional<std::string> error;
         if (loaded) {
@@ -223,23 +239,38 @@ struct ThemeController::Impl {
             live.replace(std::move(*loaded), capability);
             active_name = std::string{name};
         } else {
-            active_theme = builtin_dark_theme();
-            live.replace(builtin_dark_theme(), capability);
-            active_name = "dark";
+            apply_system_theme();
             error = combined_theme_error(loaded.error());
         }
         if (notify) notify_changed();
         if (error && show_error_) {
             // pi `applyThemeName` verbatim:
-            // `Failed to load theme "<name>": <error>\nFell back to dark theme.`
-            invoke_best_effort_sink(
-                show_error,
-                std::format(
-                    "Failed to load theme \"{}\": {}\nFell back to dark theme.",
-                    name,
-                    *error));
+            // `Failed to load theme "<name>": <error>\nFell back to the system theme.`
+            invoke_best_effort_sink(show_error,
+                    std::format("Failed to load theme \"{}\": {}\nFell back to the system theme.", name, *error));
         }
         return loaded.has_value();
+    }
+
+    /// pi `createSystemTheme`: the resolved system theme from the retained
+    /// terminal colors, the pending grayscale state and the terminal
+    /// appearance hint.
+    [[nodiscard]] ResolvedTheme generated_system_theme() {
+        SystemThemeInput input;
+        input.saturation = terminal_colors_pending ? 0.0 : 1.0;
+        input.appearance_hint = appearance_of(detected_terminal_theme());
+        if (terminal_colors.has_value()) {
+            input.foreground = terminal_colors->foreground;
+            input.background = terminal_colors->background;
+            if (terminal_colors->palette.has_value()) input.palette = terminal_colors->palette;
+        }
+        return system_theme_from_colors(generate_system_theme_colors(input));
+    }
+
+    void apply_system_theme() {
+        active_theme = generated_system_theme();
+        live.replace(active_theme, capability);
+        active_name = std::string{kSystemThemeName};
     }
 
     void notify_changed() {
@@ -258,27 +289,30 @@ struct ThemeController::Impl {
 
     [[nodiscard]] bool automatic_setting() {
         const auto setting = read_theme_setting(theme_setting);
-        return !setting || setting->find('/') != std::string::npos || *setting == "system";
+        return !setting || setting->find('/') != std::string::npos || *setting == kSystemThemeName;
     }
 
-    [[nodiscard]] std::optional<std::string> effective_theme_setting() {
-        const auto setting = read_theme_setting(theme_setting);
-        if (!setting || *setting == "system") return std::nullopt;
-        return resolve_theme_setting(setting, detected_terminal_theme());
+    /// pi `resolveThemeName`: the settings theme with automatic pairs
+    /// resolved against the terminal appearance, else the reserved system
+    /// theme (the default).
+    [[nodiscard]] std::string resolve_theme_name() {
+        const auto resolved = resolve_theme_setting(read_theme_setting(theme_setting), detected_terminal_theme());
+        return resolved.value_or(std::string{kSystemThemeName});
     }
 
     void apply_current_selection(bool show_error, bool notify = true) {
         terminal_theme = detected_terminal_theme();
-        auto theme_name = effective_theme_setting();
-        if (!theme_name) theme_name = std::string{terminal_theme_name(terminal_theme)};
-        (void)apply_theme_name(*theme_name, show_error, notify);
+        (void)apply_theme_name(resolve_theme_name(), show_error, notify);
     }
 
     void reapply_for_terminal() {
         if (active_name == "<in-memory>") return;
-        const auto theme_name = effective_theme_setting();
-        if (!theme_name || *theme_name != active_name) {
-            apply_current_selection(false);
+        terminal_theme = detected_terminal_theme();
+        const auto theme_name = resolve_theme_name();
+        // The system theme always regenerates (pi `reapplyForTerminal`); other
+        // names re-apply only when the resolved pair half changed.
+        if (theme_name == kSystemThemeName || theme_name != active_name) {
+            (void)apply_theme_name(theme_name, false);
         }
     }
 
@@ -329,6 +363,9 @@ struct ThemeController::Impl {
     cch::tui::TerminalColorSchemeListenerHandle scheme_listener;
     std::optional<cch::tui::TerminalColors> terminal_colors;
     std::optional<TerminalTheme> terminal_scheme;
+    /// pi `terminalColorsPending`: true from construction until the first
+    /// report arrives; the system theme renders grayscale meanwhile.
+    bool terminal_colors_pending{true};
     bool auto_sync_enabled{false};
     LiveTheme live;
 };
@@ -391,6 +428,9 @@ void ThemeController::apply_terminal_colors(cch::tui::TerminalColors colors) {
     // retained colors (timeouts report nothing), otherwise reapply and repaint.
     if (impl_->terminal_colors && *impl_->terminal_colors == next) return;
     impl_->terminal_colors = next;
+    // pi `setTerminalColors`: the first report ends the pending state the
+    // system theme renders grayscale in.
+    impl_->terminal_colors_pending = false;
     impl_->reapply_for_terminal();
     impl_->root->invalidate();
     impl_->root->request_render();
@@ -443,44 +483,45 @@ void ThemeController::dispose() {
 }
 
 bool ThemeController::set_theme_name(std::string_view name, bool show_error) {
-    if (name == "system") {
-        // pi `setThemeName` enables auto-sync for the system theme, whose
-        // generated colors are outside #991: the appearance-selected
-        // built-in theme stands in for it.
-        impl_->set_auto_sync(true);
-        impl_->apply_current_selection(show_error);
-        return true;
-    }
-    impl_->set_auto_sync(false);
+    // pi `setThemeName` enables mode-2031 auto-sync only for the system theme.
+    impl_->set_auto_sync(name == kSystemThemeName);
     return impl_->apply_theme_name(name, show_error);
 }
 
 void ThemeController::preview(std::string_view theme_setting_or_name) {
     // pi `preview`: resolve a setting against the terminal theme, else keep
-    // the active name; apply in memory (pi `setTheme` — failure replaces
-    // the palette with dark silently) and invalidate only on success.
+    // the active name; apply in memory (pi `setTheme` — failure replaces the
+    // palette with the generated system theme) and invalidate only on
+    // success.
     const auto resolved = resolve_theme_setting(
         std::optional<std::string>{std::string{theme_setting_or_name}},
         impl_->terminal_theme);
     const auto& name = resolved ? *resolved : impl_->active_name;
+    if (name == kSystemThemeName) {
+        impl_->live.replace(impl_->generated_system_theme(), impl_->capability);
+        impl_->root->invalidate();
+        return;
+    }
     auto loaded = load_theme_by_name(name, impl_->custom_themes_dir, impl_->registered);
     if (loaded) {
         impl_->live.replace(std::move(*loaded), impl_->capability);
         impl_->root->invalidate();
     } else {
-        impl_->live.replace(builtin_dark_theme(), impl_->capability);
+        impl_->live.replace(impl_->generated_system_theme(), impl_->capability);
     }
 }
 
 std::vector<std::string> ThemeController::available_theme_names() const {
-    // pi `getAvailableThemesWithPaths` + `getAvailableThemes`: builtins,
-    // then the custom-directory scan (invalid files ignored here like pi),
-    // then registered themes — deduped first-wins and sorted by name.
+    // pi `getAvailableThemesWithPaths` + `getAvailableThemes`: the generated
+    // system theme first (it has no file and is reserved), then builtins, the
+    // custom-directory scan (invalid files ignored here like pi), and
+    // registered themes — deduped first-wins and sorted by name.
     std::vector<std::string> names;
     std::set<std::string, std::less<>> seen;
     const auto add = [&](std::string name) {
         if (seen.insert(name).second) names.push_back(std::move(name));
     };
+    add(std::string{kSystemThemeName});
     add(builtin_dark_theme().name);
     add(builtin_light_theme().name);
 
@@ -512,6 +553,10 @@ std::vector<std::string> ThemeController::available_theme_names() const {
         add(candidate.theme.name);
     }
     std::sort(names.begin(), names.end());
+    // The system theme comes first: it is the default and adapts to every
+    // terminal (pi `getAvailableThemesWithPaths` comparator).
+    const auto system = std::ranges::find(names, kSystemThemeName);
+    if (system != names.end()) std::rotate(names.begin(), system, std::next(system));
     return names;
 }
 
@@ -536,19 +581,20 @@ const std::optional<cch::tui::TerminalColors>& ThemeController::reported_termina
 ResolvedTheme init_boot_theme(
     const std::filesystem::path& agent_config_directory,
     const std::optional<std::string>& theme_setting) {
-    // pi `initTheme`: resolve the settings theme (slash values read as
-    // unset) or the env-detected default, load it, and fall back to dark
+    // pi `initTheme`: load the raw settings theme (pairs are not resolved
+    // here; the interactive controller resolves them when it re-inits) or the
+    // reserved system theme, and fall back to the generated system theme
     // silently. Registered themes are absent at boot (registration follows
     // session creation), exactly like pi's main.ts initTheme.
-    const auto detection = detect_terminal_theme_from_env();
-    const auto resolved = resolve_theme_setting(theme_setting, detection.value_or(TerminalTheme::Dark));
-    const auto name = resolved ? *resolved : std::string{terminal_theme_name(detection.value_or(TerminalTheme::Dark))};
+    const auto detection = detect_terminal_theme_from_env().value_or(TerminalTheme::Dark);
+    const auto name = theme_setting.value_or(std::string{kSystemThemeName});
+    if (name == kSystemThemeName) return boot_system_theme(detection);
     const auto custom_themes_dir = agent_config_directory.empty()
         ? std::filesystem::path{}
         : agent_config_directory / "themes";
     auto loaded = load_theme_by_name(name, custom_themes_dir, {});
     if (loaded) return std::move(*loaded);
-    return builtin_dark_theme();
+    return boot_system_theme(detection);
 }
 
 ThemeDiscoveryResult discover_themes(std::vector<LoadedThemeResource> documents) {

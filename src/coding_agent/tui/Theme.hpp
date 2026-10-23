@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ThemeColorMath.hpp"
+
 #include <cch/tui/Markdown.hpp>
 #include <cch/tui/SelectList.hpp>
 #include <cch/tui/SettingsList.hpp>
@@ -86,6 +88,13 @@ struct ResolvedTheme {
     /// `getThemeExportColors` re-reads the theme JSON; retaining the map
     /// avoids the second read).
     std::map<std::string, ThemeExportValueVariant, std::less<>> vars{};
+    /// pi `Theme.appearance` (the generated system theme): the terminal
+    /// appearance the palette was generated for. Absent for file and
+    /// built-in themes.
+    std::optional<TerminalAppearance> appearance{std::nullopt};
+    /// pi `Theme.dim`: tokens rendered faint (SGR 2) — the generated system
+    /// theme's no-report tier. Empty for file and built-in themes.
+    std::vector<ThemeToken> dim{};
 
     bool operator==(const ResolvedTheme&) const = default;
 };

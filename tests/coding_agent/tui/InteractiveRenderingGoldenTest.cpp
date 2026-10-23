@@ -310,6 +310,10 @@ struct ToolBlocksSession {
 
 [[nodiscard]] std::unique_ptr<ToolBlocksSession> make_tool_blocks_session() {
     auto fixture = std::make_unique<ToolBlocksSession>();
+    // Pin the built-in dark theme: this golden asserts pi's token styling, and
+    // the generated system theme's pending tier renders every token as the
+    // terminal default.
+    fixture->config.write("settings.json", R"({"theme": "dark"})");
     fixture->workspace = rendering_workspace_path("tool-blocks");
     const auto session_file = fixture->workspace / "tool-blocks.jsonl";
     auto store = harness::session::SessionStore::create_new(session_file,

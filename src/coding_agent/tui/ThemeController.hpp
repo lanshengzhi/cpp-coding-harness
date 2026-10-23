@@ -40,8 +40,6 @@ enum class TerminalTheme {
     const std::optional<std::string>& setting,
     TerminalTheme terminal_theme);
 
-[[nodiscard]] std::string_view terminal_theme_name(TerminalTheme theme);
-
 /// One registered theme (pi `setRegisteredThemes`): the parsed theme plus
 /// its source path (pi `Theme.sourcePath`; absent only for in-memory
 /// instances, which the subset never creates) and source scope (pi
@@ -71,23 +69,29 @@ using ThemeSettingProvider = std::move_only_function<std::optional<std::string>(
 /// the `theme.ts` subset, owning the live palette every component renders
 /// through (pi's module-global `theme` instance):
 ///
-/// - Boot init resolves explicit or paired settings against COLORFGBG,
-///   then the dark fallback; no setting maps the unsupported generated
-///   `system` theme to the appearance-selected built-in theme (#991 scope).
+/// - Boot init resolves explicit or paired settings against COLORFGBG;
+///   without a usable setting it boots the generated `system` theme, whose
+///   indexed tier needs no reported colors.
 /// - `apply_from_settings` applies the current selection, queries OSC 10/11/4
 ///   and DA1, consumes partial and late replies, and enables mode 2031 only
 ///   for automatic selection. Reported background appearance outranks live
 ///   scheme, COLORFGBG, and dark fallback.
-/// - `apply_theme_name` replicates pi `applyThemeName`: failure replaces
-///   the palette with `dark`, records the fallback as active, and reports
-///   the verbatim message when `show_error` is set.
+/// - `apply_theme_name` replicates pi `applyThemeName`: the reserved
+///   `system` name regenerates from the retained terminal colors; failure of
+///   any other name replaces the palette with the generated system theme,
+///   records it as active, and reports the verbatim message when
+///   `show_error` is set.
 /// - `preview` is pi `preview`: in-memory apply without committing or
 ///   changing the active name; success invalidates and requests a render.
+/// - The system theme renders grayscale while the first color report is
+///   pending (pi `markTerminalColorsPending`); the first
+///   `apply_terminal_colors` ends that state.
 /// - Every change invalidates the borrowed root and fires `on_changed`
 ///   (pi `notifyChanged` → `ui.invalidate()` + `onChanged`), which the
 ///   interactive host wires to the editor border refresh.
 ///
-/// Generated system-theme colors and the file watcher remain outside #991.
+/// The theme file watcher remains outside #991/#1032 (frozen pi skips the
+/// generated and built-in themes).
 class ThemeController final {
 public:
     /// `custom_themes_dir` is the user custom-themes directory
@@ -124,7 +128,8 @@ public:
     void apply_from_settings();
 
     /// Apply terminal reports on the product executor (the TUI delivers them
-    /// from its timer or input path).
+    /// from its timer or input path). The first report ends the system
+    /// theme's pending grayscale state (pi `setTerminalColors`).
     void apply_terminal_colors(cch::tui::TerminalColors colors);
     void apply_terminal_color_scheme(TerminalTheme scheme);
 
@@ -171,13 +176,14 @@ private:
 };
 
 /// pi `initTheme` subset: the boot theme init for all modes before the
-/// no-model guard (pi main.ts). Resolves the settings theme (slash values
-/// read as unset) or the COLORFGBG-detected default, loads it (builtins,
-/// then `<agent_config_directory>/themes/<name>.json`), and falls back to
-/// `dark` silently on failure — the palette every mode boots with. The
-/// interactive controller re-inits from the same settings at TUI
-/// construction (pi `InteractiveThemeController`), and the startup-TUI host
-/// (pi `startup-ui.ts` `createStartupTui`) consumes the same init.
+/// no-model guard (pi main.ts). Loads the raw settings theme (pairs resolve
+/// only in the interactive controller), the env-detected default or the
+/// reserved generated `system` theme, falls back to the generated system
+/// theme silently on failure, and resolves builtins and
+/// `<agent_config_directory>/themes/<name>.json` — the palette every mode
+/// boots with. The interactive controller re-inits from the same settings at
+/// TUI construction (pi `InteractiveThemeController`), and the startup-TUI
+/// host (pi `startup-ui.ts` `createStartupTui`) consumes the same init.
 [[nodiscard]] ResolvedTheme init_boot_theme(
     const std::filesystem::path& agent_config_directory,
     const std::optional<std::string>& theme_setting);

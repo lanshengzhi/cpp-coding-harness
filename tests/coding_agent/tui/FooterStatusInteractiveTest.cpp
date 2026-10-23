@@ -837,6 +837,9 @@ TEST_CASE("Native TUI app.editor.external edits prompt.md through VISUAL and res
 TEST_CASE("Native TUI editor border color transitions for bash mode and thinking level",
         "[coding_agent][tui][footer][issue411][spec]") {
     ResumedSessionFixture fixture;
+    // Pin the built-in dark theme: the border colors must be distinguishable
+    // (the generated system theme's pending tier renders the terminal default).
+    fixture.config.write("settings.json", R"({"theme": "dark"})");
     fixture.create();
     // Bash mode requires the session-owned user shell (the interactive host
     // always provides one).

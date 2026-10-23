@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <string>
 #include <string_view>
@@ -81,6 +82,48 @@ namespace cch::tests {
         return std::unexpected(support::make_error(support::ErrorCode::Unknown,
                 "Named pi-v1.3.0 audit evidence verification failed: " + std::string(family) + "/" +
                         std::string(artifact)));
+    }
+    return support::read_json(payload);
+}
+
+/// Read from a captured but not yet registered pi-v1.3.0 audit family (a
+/// lane's own bundle before the serial merger applies the `register`
+/// patch). The shared verifier's `check` validates the candidate manifest
+/// and every pinned artifact byte (manifest digest, generator digest,
+/// artifact SHA-256, envelope baseline/revision binding) fail-closed; only
+/// after that verification succeeds does the reader return the artifact
+/// bytes from the verified path. `verify`/`read` stay reserved for
+/// registered families.
+[[nodiscard]] inline support::Expected<support::JsonValue> read_pi_v130_audit_candidate(
+        std::string_view family, std::string_view artifact) {
+    const auto runner = std::filesystem::path{CCH_SOURCE_DIR} / "scripts/evidence/audit_evidence.py";
+    const std::filesystem::path manifest =
+            std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-v1.3.0" / family / "manifest.json";
+    const std::string check_command = quote_evidence_argument(CCH_PYTHON3) + " " +
+                                      quote_evidence_argument(runner.string()) + " check --manifest " +
+                                      quote_evidence_argument(manifest.string());
+    const int check_status = std::system(check_command.c_str());
+    if (check_status != 0) {
+        return std::unexpected(support::make_error(support::ErrorCode::Unknown,
+                "Named pi-v1.3.0 audit candidate verification failed: " + std::string(family) + "/" +
+                        std::string(artifact)));
+    }
+    const std::filesystem::path path = std::filesystem::path{CCH_SOURCE_DIR} / "fixtures/pi-v1.3.0" / family / artifact;
+    std::FILE* input = std::fopen(path.string().c_str(), "rb");
+    if (!input) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown, "audit candidate artifact is missing: " + path.string()));
+    }
+    std::string payload;
+    std::array<char, 4096> buffer{};
+    while (const auto count = std::fread(buffer.data(), 1, buffer.size(), input)) {
+        payload.append(buffer.data(), count);
+    }
+    const bool read_failed = std::ferror(input) != 0;
+    std::fclose(input);
+    if (read_failed) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Unknown, "audit candidate artifact could not be read: " + path.string()));
     }
     return support::read_json(payload);
 }
