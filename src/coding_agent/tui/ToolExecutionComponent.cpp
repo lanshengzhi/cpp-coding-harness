@@ -9,7 +9,6 @@
 #include "support/Json.hpp"
 
 #include <cch/support/Error.hpp>
-#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -31,11 +30,6 @@ constexpr std::size_t kDefaultTerminalWidth = 80;
 
 [[nodiscard]] std::string safe_text(std::string text) {
     return bounded_redacted_presentation(std::move(text));
-}
-
-[[nodiscard]] ai::TimestampMs now_ms() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
-            .count();
 }
 
 [[nodiscard]] std::string result_text(const ai::ToolResultMessage& result) {
@@ -84,7 +78,6 @@ void ToolExecutionComponent::update_args(std::string arguments_json) {
 void ToolExecutionComponent::update_result(
     ai::ToolResultMessage result,
     bool is_partial) {
-    if (!is_partial && !ended_at_ms_.has_value()) ended_at_ms_ = now_ms();
     result_ = std::move(result);
     is_partial_ = is_partial;
     rebuild();
@@ -103,8 +96,8 @@ void ToolExecutionComponent::set_output_pad(std::size_t output_pad) {
 }
 
 void ToolExecutionComponent::mark_execution_started() {
-    if (started_at_ms_.has_value()) return;
-    started_at_ms_ = now_ms();
+    if (execution_started_) return;
+    execution_started_ = true;
     rebuild();
 }
 
@@ -161,12 +154,11 @@ void ToolExecutionComponent::rebuild() {
             .expand_key = expand_key_,
             .expand_hint = expand_hint_,
             .args_complete = args_complete_,
-            .execution_started = started_at_ms_.has_value(),
+            .execution_started = execution_started_,
             .is_partial = is_partial_,
             .is_error = result_ && result_->is_error,
             .expanded = expanded_,
-            .started_at_ms = started_at_ms_,
-            .ended_at_ms = ended_at_ms_,
+            .duration_ms = !is_partial_ && result_ ? result_->duration_ms : std::nullopt,
     };
 
     auto& renderer = registry_.lookup(tool_name_);

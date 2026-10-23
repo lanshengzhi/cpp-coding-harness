@@ -21,8 +21,10 @@ namespace cch::coding_agent::tui {
 /// argument object is an empty object rather than a partial one: a title never
 /// renders a growing JSON fragment. pi's `state` (per-render scratch for
 /// component reuse) and `lastComponent` have no counterpart because the seam
-/// returns strings and owns no components; the execution clock that pi keeps
-/// in `state` is exposed here as `started_at_ms`/`ended_at_ms` instead.
+/// returns strings and owns no components; pi keeps the execution clock in
+/// that scratch, while this host instead receives the duration the agent loop
+/// recorded on the settled result (pi `durationMs`), which also survives a
+/// resume (#812).
 struct ToolRenderContext {
     /// pi `args`: the tool call arguments. The host owns this value.
     const support::JsonValue& args;
@@ -60,8 +62,7 @@ struct ToolRenderContext {
     std::string_view expand_hint;
     /// pi `argsComplete`: the streamed arguments stopped growing.
     bool args_complete{false};
-    /// pi `executionStarted`: the agent began running the tool. True exactly
-    /// when `started_at_ms` carries a value.
+    /// pi `executionStarted`: the agent began running the tool.
     bool execution_started{false};
     /// pi `isPartial`: the result view is still streaming.
     bool is_partial{true};
@@ -70,12 +71,15 @@ struct ToolRenderContext {
     bool is_error{false};
     /// pi `expanded`: the result view is expanded.
     bool expanded{false};
-    /// pi's `BashRenderState.startedAt` / `endedAt`, stamped by the host from
-    /// the execution-start and result-settlement transitions. `ai::TimestampMs`
-    /// milliseconds since the Unix epoch, or nullopt where the transition has
-    /// not happened yet.
-    std::optional<std::int64_t> started_at_ms{std::nullopt};
-    std::optional<std::int64_t> ended_at_ms{std::nullopt};
+    /// pi `ToolRenderContext.durationMs`: the execution duration the agent
+    /// loop recorded on the settled result (`ToolResultMessage.durationMs`).
+    /// pi exposes `this.isPartial ? undefined : this.result?.durationMs`, so
+    /// no duration line renders before the settled result arrives; the host
+    /// mirrors that by leaving this nullopt while `is_partial` holds. Absent
+    /// for legacy results and never-executed calls, and identical after a
+    /// resume because the recorded value, not a wall-clock measurement, feeds
+    /// the renderer (#812).
+    std::optional<std::int64_t> duration_ms{std::nullopt};
 };
 
 } // namespace cch::coding_agent::tui
