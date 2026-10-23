@@ -2,11 +2,14 @@
 
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
 
 #include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <filesystem>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -48,13 +51,41 @@ struct CodemodeError {
     std::string message;
 };
 
+/// pi `CodemodeResultShape.storeWrites`: the write set one successful run
+/// reports back to the host. The caller merges it into the snapshot it passes
+/// to the next run.
+struct CodemodeStoreWrites {
+    /// Keys set or overwritten, with their JSON values.
+    std::map<std::string, support::JsonValue> set;
+    /// Keys deleted through `store(key, undefined)`.
+    std::vector<std::string> deleted;
+};
+
+/// pi `CodemodeResultShape.calls`: one record per `tools.*`/global call the
+/// script issued, in issue order. A call the script never awaited, or one cut
+/// short by caller cancellation, is `Cancelled`; a rejected call is `Error`.
+struct CodemodeCallRecord {
+    enum class Status { Ok, Error, Cancelled };
+    /// The registered tool or global name the script called.
+    std::string name;
+    Status status{Status::Ok};
+    /// pi `durationMs`: the call's monotonic duration. Present once the call
+    /// settled — for ok, error, and cancelled records alike.
+    std::optional<double> duration_ms;
+};
+
 /// pi `CodemodeResult`: the terminal outcome of one script run. `error` unset
 /// means success and `value_json` (when present) holds the script's return
 /// value as JSON text.
 struct CodemodeRunResult {
     std::vector<CodemodeOutputItem> output;
+    /// pi `calls`: every call the script issued, in issue order.
+    std::vector<CodemodeCallRecord> calls;
     std::optional<std::string> value_json;
     std::optional<CodemodeError> error;
+    /// pi `storeWrites`: the run's `store()`/`load()` write set. Present only
+    /// for successful runs (including `exit()`); failed runs report no writes.
+    std::optional<CodemodeStoreWrites> store_writes;
 };
 
 /// pi `CodemodeSandboxOptions`/`CodemodeExecuteOptions` bounds the sandbox can
@@ -90,6 +121,20 @@ struct CodemodeToolDescriptor {
     std::string description;
 };
 
+/// pi `CodemodeGlobal` (packages/codemode/src/runtime/execution.ts): one host
+/// global bound into the script surface for every run of this sandbox. A
+/// `spread` global receives the call's argument array; a dotted name such as
+/// `models.classify` groups with its namespace into one frozen namespace
+/// object. Invalid names, duplicates, and namespace conflicts are construction
+/// errors (audit-1053 script-execution.json).
+struct CodemodeGlobal {
+    /// Top-level identifier (`searchTools`) or dotted namespace member
+    /// (`models.classify`).
+    std::string name;
+    /// pi `spread`: the call's arguments arrive as one array.
+    bool spread{false};
+};
+
 /// The codemode wasm sandbox (spec #865, ticket #874). It loads pi's actual
 /// codemode guest (QuickJS compiled to wasm) through WasmEdge, registers only
 /// the twelve imports the guest declares (no filesystem, socket, process, or
@@ -114,7 +159,10 @@ class CodemodeSandbox {
 public:
     /// Parse and validate the guest module at `wasm_path`. A missing or invalid
     /// module is an explicit error; nothing is deferred to the first `run`.
-    [[nodiscard]] static support::Expected<std::unique_ptr<CodemodeSandbox>> create(std::filesystem::path wasm_path);
+    /// `globals` are bound into every run's script surface; invalid names,
+    /// duplicates, and namespace conflicts fail here, before any run.
+    [[nodiscard]] static support::Expected<std::unique_ptr<CodemodeSandbox>> create(
+            std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals = {});
 
     /// Construction passkey (§7.7): `std::make_unique` cannot reach a private
     /// constructor, so construction goes through the public constructor below,
@@ -141,11 +189,15 @@ public:
     /// or a name not in `tools`, is a rejected call the script sees — never a
     /// silent success. A fresh worker (and a fresh guest instance) runs per
     /// call, so a crashed, timed-out, or aborted run never poisons a later one.
+    /// `store` is the run's `store()`/`load()` snapshot: the caller seeds it
+    /// from prior runs' reported writes and persists the reported writes after
+    /// a successful run.
     [[nodiscard]] support::AsyncResult<CodemodeRunResult> run(std::string script,
             std::vector<CodemodeToolDescriptor> tools,
             CodemodeLimits limits,
             std::stop_token stop_token = {},
-            CodemodeToolCallHandler handler = {});
+            CodemodeToolCallHandler handler = {},
+            std::map<std::string, support::JsonValue> store = {});
 
 private:
     std::unique_ptr<Impl> impl_;

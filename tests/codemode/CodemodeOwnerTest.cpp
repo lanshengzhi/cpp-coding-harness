@@ -16,10 +16,16 @@
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
+#include <boost/asio/as_tuple.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/this_coro.hpp>
+#include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
+
+#include <algorithm>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/catch_message.hpp>
@@ -31,6 +37,7 @@
 #include <format>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
@@ -112,8 +119,10 @@ template <typename T> [[nodiscard]] std::expected<T, support::Error> run_async(s
     return future.get();
 }
 
-[[nodiscard]] std::unique_ptr<codemode::CodemodeSandbox> make_sandbox() {
-    auto sandbox = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path());
+[[nodiscard]] std::unique_ptr<codemode::CodemodeSandbox> make_sandbox(
+        std::vector<codemode::CodemodeGlobal> globals = {}) {
+    auto sandbox = codemode::CodemodeSandbox::create(
+            codemode::default_codemode_guest_wasm_path(), std::move(globals));
     REQUIRE(sandbox.has_value());
     return std::move(*sandbox);
 }
@@ -261,6 +270,297 @@ TEST_CASE("a public codemode caller keeps prior output when an injected tool rej
     CHECK(result->error->message.find("nested tool rejected the call") != std::string::npos);
     REQUIRE(result->output.size() == 1);
     CHECK(result->output[0].data == "before");
+}
+
+TEST_CASE("a public codemode caller executes discovery-returned tools with namespace-consistent names",
+        "[codemode][discovery][globals][issue1091][spec]") {
+    // #1091: the script discovers a tool through a spread global, then executes
+    // the returned raw name through the tools surface. The raw name and its
+    // normalized identifier must reach the same host call — an empty catalog
+    // or a name-mangled call would not be discovery.
+    auto sandbox = make_sandbox({
+            {.name = "searchTools", .spread = true},
+            {.name = "describeTool", .spread = true},
+    });
+    std::vector<std::string> calls;
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "counter.add", .js_name = "counter_add", .description = "Add two numbers."},
+    };
+    codemode::CodemodeToolCallHandler handler = [&calls](std::string_view name,
+                                                        std::string_view arguments,
+                                                        std::stop_token) {
+        calls.push_back(std::format("{}:{}", name, arguments));
+        if (name == "searchTools") {
+            return support::AsyncResult<std::string>{support::Expected<std::string>{
+                    std::string{R"([{"name":"counter.add","description":"Add two numbers."}])"}}};
+        }
+        if (name == "describeTool") {
+            return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{
+                    R"({"name":"counter.add","declaration":"declare const tools: { counter_add(args: {a: number, b: number}): Promise<unknown> };"})"}}};
+        }
+        // Sum the arguments so the raw-name call and the normalized-name call
+        // prove they each executed with their own argument.
+        double sum = 0.0;
+        if (auto args = support::read_json(arguments)) {
+            if (const auto* fields = args->get_if<support::JsonValue::object_t>()) {
+                for (const char* key : {"a", "b"}) {
+                    if (const auto it = fields->find(key); it != fields->end()) {
+                        if (const auto* number = it->second.get_if<double>()) sum += *number;
+                    }
+                }
+            }
+        }
+        return support::AsyncResult<std::string>{
+                support::Expected<std::string>{std::format("{{\"value\":{:.0f}}}", sum)}};
+    };
+
+    auto result = run_async(sandbox->run("const found = await searchTools('add');\n"
+                                         "const target = found[0].name;\n"
+                                         "const described = await describeTool(target);\n"
+                                         "const viaRaw = await tools[target]({ a: 2, b: 3 });\n"
+                                         "const viaJs = await tools.counter_add({ a: 1, b: 1 });\n"
+                                         "text(described.declaration);\n"
+                                         "return [target, viaRaw.value, viaJs.value];",
+            tools,
+            limits(),
+            {},
+            std::move(handler)));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == R"(["counter.add",5,2])");
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data ==
+            "declare const tools: { counter_add(args: {a: number, b: number}): Promise<unknown> };");
+    // namespace/name consistency: discovery, the raw-name call, and the
+    // normalized-identifier call all observe the registered name.
+    REQUIRE(calls.size() == 4);
+    CHECK(calls[0] == R"(searchTools:["add"])");
+    CHECK(calls[1] == R"(describeTool:["counter.add"])");
+    CHECK(calls[2] == R"(counter.add:{"a":2,"b":3})");
+    CHECK(calls[3] == R"(counter.add:{"a":1,"b":1})");
+}
+
+TEST_CASE("a public codemode caller cannot execute a discovery name the host does not provide",
+        "[codemode][discovery][issue1091][spec]") {
+    // Acceptance discriminating case (#1091 "an empty catalog does not count"):
+    // discovery must reflect the actually-callable set. A catalog name the
+    // host did not register must not be executable, so a discovery surface
+    // that advertises tools the callable set lacks is observable to the script.
+    auto sandbox = make_sandbox({
+            {.name = "searchTools", .spread = true},
+    });
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "counter.add", .js_name = "counter_add", .description = "Add two numbers."},
+    };
+    codemode::CodemodeToolCallHandler handler = [](std::string_view name, std::string_view, std::stop_token) {
+        if (name == "searchTools") {
+            // The double claims a tool the host never registered.
+            return support::AsyncResult<std::string>{support::Expected<std::string>{
+                    std::string{R"([{"name":"ghost.tool","description":"Not registered."}])"}}};
+        }
+        return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{"null"}}};
+    };
+
+    auto result = run_async(sandbox->run("const found = await searchTools('ghost');\n"
+                                         "try {\n"
+                                         "  await tools[found[0].name]({});\n"
+                                         "  return 'executed';\n"
+                                         "} catch (error) {\n"
+                                         "  return [error.name, error.message];\n"
+                                         "}",
+            tools,
+            limits(),
+            {},
+            std::move(handler)));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json ==
+            R"(["TypeError","tools.ghost.tool does not exist. Available: counter_add. ALL_TOOLS lists every tool; searchTools(query) finds tools by topic. Check for a member with \"ghost.tool\" in tools."])");
+}
+
+TEST_CASE("a public codemode caller reads a store snapshot across calls and drops failed writes",
+        "[codemode][store][issue1091][spec]") {
+    auto sandbox = make_sandbox();
+    std::map<std::string, support::JsonValue> snapshot;
+    snapshot.emplace("seed", support::JsonValue{7});
+    snapshot.emplace("stale", support::JsonValue{1});
+
+    auto first = run_async(sandbox->run("store(\"counter\", 41);\n"
+                                        "store(\"stale\", undefined);\n"
+                                        "return load(\"seed\");",
+            {},
+            limits(),
+            {},
+            {},
+            snapshot));
+
+    REQUIRE(first.has_value());
+    CHECK_FALSE(first->error.has_value());
+    REQUIRE(first->value_json.has_value());
+    CHECK(*first->value_json == "7");
+    // Frozen rule: a successful run reports exactly its writes — one update
+    // and one delete; the untouched snapshot key is not a write.
+    REQUIRE(first->store_writes.has_value());
+    REQUIRE(first->store_writes->set.size() == 1);
+    const auto counter = first->store_writes->set.find("counter");
+    REQUIRE(counter != first->store_writes->set.end());
+    const auto* counter_value = counter->second.get_if<double>();
+    REQUIRE(counter_value != nullptr);
+    CHECK(*counter_value == 41.0);
+    CHECK(first->store_writes->deleted == std::vector<std::string>{"stale"});
+
+    // Cross-call snapshot: the caller merges the reported writes into the
+    // next run's snapshot, so load() sees the update and the delete.
+    for (const auto& key : first->store_writes->deleted)
+        snapshot.erase(key);
+    for (auto& [key, value] : first->store_writes->set)
+        snapshot[key] = value;
+
+    auto second = run_async(
+            sandbox->run("return [load(\"counter\"), load(\"stale\")];", {}, limits(), {}, {}, std::move(snapshot)));
+
+    REQUIRE(second.has_value());
+    CHECK_FALSE(second->error.has_value());
+    REQUIRE(second->value_json.has_value());
+    CHECK(*second->value_json == "[41,null]");
+
+    // Frozen rule: only successful executions report writes.
+    auto failed = run_async(sandbox->run("store(\"lost\", 1);\nthrow new Error(\"x\");", {}, limits()));
+    REQUIRE(failed.has_value());
+    REQUIRE(failed->error.has_value());
+    CHECK(failed->error->kind == codemode::CodemodeError::Kind::Script);
+    CHECK_FALSE(failed->store_writes.has_value());
+}
+
+TEST_CASE("a public codemode caller records an unawaited call as cancelled and aborts it",
+        "[codemode][calls][issue1091][spec]") {
+    // #1091 frozen rule: a call the script never awaited is aborted when the
+    // script returns, and its record is cancelled with a duration.
+    auto sandbox = make_sandbox();
+    bool tool_aborted = false;
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "hang", .js_name = "hang", .description = "Hang until cancelled."},
+    };
+    codemode::CodemodeToolCallHandler handler = [&tool_aborted](
+                                                        std::string_view, std::string_view, std::stop_token signal) {
+        return support::detail::make_async_result(
+                [&tool_aborted, signal]() mutable -> boost::asio::awaitable<support::Expected<std::string>> {
+                    auto executor = co_await boost::asio::this_coro::executor;
+                    boost::asio::steady_timer timer(executor);
+                    while (!signal.stop_requested()) {
+                        timer.expires_after(std::chrono::milliseconds{5});
+                        const auto [error] =
+                                co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+                        (void)error;
+                    }
+                    tool_aborted = true;
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Validation, "tool aborted"));
+                });
+    };
+
+    auto result = run_async(sandbox->run("tools.hang();\nreturn \"done\";", tools, limits(), {}, std::move(handler)));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == "\"done\"");
+    REQUIRE(result->calls.size() == 1);
+    CHECK(result->calls[0].name == "hang");
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
+    CHECK(result->calls[0].duration_ms.has_value());
+    // The frozen scenario asserts the host call observed the abort.
+    CHECK(tool_aborted);
+}
+
+TEST_CASE("a public codemode caller records settled calls with ok and error statuses",
+        "[codemode][calls][issue1091][spec]") {
+    auto sandbox = make_sandbox();
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "ok", .js_name = "ok", .description = "Succeed."},
+            {.name = "fail", .js_name = "fail", .description = "Reject the call."},
+    };
+    codemode::CodemodeToolCallHandler handler = [](std::string_view name, std::string_view, std::stop_token) {
+        if (name == "ok") {
+            return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{"1"}}};
+        }
+        return support::AsyncResult<std::string>{support::Expected<std::string>{
+                std::unexpected(support::make_error(support::ErrorCode::Validation, "boom"))}};
+    };
+
+    auto result = run_async(sandbox->run("const one = await tools.ok();\n"
+                                         "let caught = \"\";\n"
+                                         "try { await tools.fail(); } catch (error) { caught = error.message; }\n"
+                                         "return [one, caught];",
+            tools,
+            limits(),
+            {},
+            std::move(handler)));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == R"([1,"boom"])");
+    REQUIRE(result->calls.size() == 2);
+    CHECK(result->calls[0].name == "ok");
+    CHECK(result->calls[0].status == codemode::CodemodeCallRecord::Status::Ok);
+    CHECK(result->calls[0].duration_ms.has_value());
+    CHECK(result->calls[1].name == "fail");
+    CHECK(result->calls[1].status == codemode::CodemodeCallRecord::Status::Error);
+    CHECK(result->calls[1].duration_ms.has_value());
+}
+
+TEST_CASE("a public codemode caller binds a dotted global into its frozen namespace and spreads arguments",
+        "[codemode][globals][issue1091][spec]") {
+    // pi `globalsJson`: a dotted global binds as a member of a frozen namespace
+    // object; with `spread` the guest passes the whole argument array instead of
+    // the first argument.
+    auto sandbox = make_sandbox({
+            {.name = "models.classify", .spread = true},
+    });
+    std::atomic<bool> called{false};
+    codemode::CodemodeToolCallHandler handler = [&called](std::string_view name,
+                                                        std::string_view arguments,
+                                                        std::stop_token) {
+        called.store(true);
+        CHECK(name == "models.classify");
+        CHECK(arguments == R"([{"input":"x"}])");
+        return support::AsyncResult<std::string>{support::Expected<std::string>{std::string{R"("classified")"}}};
+    };
+
+    auto result = run_async(
+            sandbox->run("return await models.classify({ input: 'x' });", {}, limits(), {}, std::move(handler)));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    CHECK(called.load());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == R"("classified")");
+}
+
+TEST_CASE("a public codemode caller rejects invalid globals at construction with the frozen errors",
+        "[codemode][globals][issue1091][spec]") {
+    // #1091 frozen observations (audit-1053 script-execution.json): identifier
+    // shape, one reserved name, duplicates, and namespace conflicts are
+    // construction errors with these exact messages.
+    const std::pair<std::vector<codemode::CodemodeGlobal>, std::string> cases[] = {
+            {{codemode::CodemodeGlobal{.name = "tools"}}, "Invalid global name \"tools\""},
+            {{codemode::CodemodeGlobal{.name = "a-b"}}, "Invalid global name \"a-b\""},
+            {{codemode::CodemodeGlobal{.name = "x"}, codemode::CodemodeGlobal{.name = "x"}},
+                    "Global \"x\" is already registered"},
+            {{codemode::CodemodeGlobal{.name = "ns"}, codemode::CodemodeGlobal{.name = "ns.m"}},
+                    "Global \"ns\" conflicts with the namespace \"ns\""},
+    };
+    for (const auto& [globals, expected] : cases) {
+        auto created = codemode::CodemodeSandbox::create(codemode::default_codemode_guest_wasm_path(), globals);
+        CHECK_FALSE(created.has_value());
+        if (!created) {
+            CHECK(created.error().message == expected);
+        }
+    }
 }
 
 TEST_CASE("an aborted public codemode caller does not start the script", "[codemode][sandbox][issue1064][spec]") {

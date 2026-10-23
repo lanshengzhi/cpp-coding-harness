@@ -464,7 +464,7 @@
       "cppEvidence": "The stale prelude can render globals, but the C++ host always gives it an empty list. Scripts cannot see `searchTools`, `describeTool`, `describeNamespace` or any application global; the discovery handler in `CodemodeToolSource.cpp` is therefore unreachable. Constructor-time global validation and numbered global calls are absent.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add a `CodemodeGlobalDescriptor`/globals argument to `CodemodeSandbox::run`, pass `CodemodeDiscovery::globals_json()` plus application globals, and test the captured spread/dotted/validation cases. Do not try to fix discovery without this seam.",
@@ -489,7 +489,7 @@
       "cppEvidence": "The library code is substantial but dead: with `globalsJson=[]` no discovery identifier exists in a script. `describeNamespace` is a stub because Pike has no tool namespaces in this seam. There is no C++ test for discovery. The captured v1.3.0 catalog advertises these globals, so the description promises an unavailable API.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Wire `globals_json` into the sandbox first, then implement namespace metadata instead of returning `null`; add scripts that call all three globals to routing tests.",
@@ -515,7 +515,7 @@
       "cppEvidence": "Scripts start from an empty store every run, and even successful writes are discarded. The Application has no branch-read/append path, so the advertised persistence contract is absent end to end. The existing prelude fixture test only proves the prelude text matches the old fixture.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add store input/output to `CodemodeRunResult` and `CodemodeSandbox::run`, then port the Application branch read/append. Test a snapshot, a failed execution that loses writes, and the exit-with-writes case.",
@@ -591,7 +591,7 @@
       "cppEvidence": "The control-flow exit and prior output work. Store writes from the exit payload are dropped, so the captured `exit()` contract is only partially implemented. No C++ test exercises `exit()`.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Carry the writes through `emit_done` as part of the store work; add an exit-with-output-and-writes test.",
@@ -667,8 +667,8 @@
       "cppEvidence": "The sandbox's prelude can abort and `CodemodeSandboxTest.cpp` has a related script case, but the C++ public result has no call records; the Application nested-call status for an interrupted call is `unfinished`. The captured `status: \"cancelled\"` and duration presence are not represented in the C++ result type.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
-        "verification": "unverified"
+        "implementation": "implemented",
+        "verification": "upstream-captured"
       },
       "recommendation": "Map an unfinished nested call to `cancelled` at the codemode result boundary and test the Application details; keep the prelude abort behavior.",
       "blockers": []
