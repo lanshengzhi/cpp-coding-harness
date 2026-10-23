@@ -24,7 +24,7 @@
       },
       {
         "path": "fixtures/pi-coding-agent/capture/native-tui-differential.mts",
-        "sha256": "f0376baf941b30be09fdf10879c985a8d11b6017bd83a4a38719c012c7d80960"
+        "sha256": "4c1c4986132c188e33a338f3fcf04ca72044a9ee75823ceee51f70e8a5316ab0"
       },
       {
         "path": "fixtures/pi-coding-agent/capture/grok-mermaid-stub.mts",
