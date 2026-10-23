@@ -39,6 +39,10 @@ struct CodemodeOutputItem {
     /// `Image` only: the detected MIME type (pi detects it from the base64
     /// signature; the type in the data URI is ignored).
     std::string mime_type;
+    /// pi's `console: true` flag: the item came from `console.*` rather than a
+    /// script `text()` call. Frozen pi marks console output this way in the
+    /// result's output items while keeping `type: "text"`.
+    bool console{false};
 };
 
 /// Why a run did not produce a value (pi `CodemodeError`): a script-thrown
@@ -46,9 +50,16 @@ struct CodemodeOutputItem {
 struct CodemodeError {
     enum class Kind { Script, Sandbox, Timeout, Aborted };
     Kind kind{Kind::Sandbox};
-    /// The user-visible message. A script error is the prelude's `Name: message`
-    /// text; a sandbox error names the boundary that failed.
+    /// The user-visible message. A script error carries the thrown error's
+    /// `message`; a sandbox error names the boundary that failed.
     std::string message;
+    /// Script errors only: the thrown error's `name` (frozen pi reports e.g.
+    /// `Error`, `TypeError`, `SyntaxError`, `InternalError`). Absent when the
+    /// guest threw a non-Error value, whose payload carries only `message`.
+    std::optional<std::string> name{};
+    /// Script errors only: the guest's `Name: message` text plus frames,
+    /// matching frozen pi's stack field. Absent for non-Error throws.
+    std::optional<std::string> stack{};
 };
 
 /// pi `CodemodeResultShape.storeWrites`: the write set one successful run
@@ -95,6 +106,10 @@ struct CodemodeLimits {
     /// polls this; a script that exceeds it is interrupted and reported as a
     /// timeout. Zero disables the timeout.
     std::chrono::milliseconds timeout{std::chrono::seconds{300}};
+    /// pi `memoryLimitBytes`: cap on the guest's linear memory. The guest
+    /// reports an exhaustion as an `InternalError: out of memory` script
+    /// error. Unset runs the guest without a memory cap (pi's default).
+    std::optional<std::uint64_t> memory_limit_bytes;
 };
 
 /// Executes one tool a script requested through `tools.*` or a global, reusing

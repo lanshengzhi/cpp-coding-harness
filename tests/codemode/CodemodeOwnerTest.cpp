@@ -382,6 +382,212 @@ TEST_CASE("a public codemode caller cannot execute a discovery name the host doe
             R"(["TypeError","tools.ghost.tool does not exist. Available: counter_add. ALL_TOOLS lists every tool; searchTools(query) finds tools by topic. Check for a member with \"ghost.tool\" in tools."])");
 }
 
+TEST_CASE("a public codemode caller collects mixed output in order with the console marker and image MIME",
+        "[codemode][output][issue1092][spec]") {
+    // Frozen pi v1.3.0 (`fixtures/pi-v1.3.0/audit-1053/script-execution.json`,
+    // "a script returns a JSON value after top-level await and collects output
+    // in order"): `text()` and `console.*` both produce `type: "text"` items,
+    // console items carry `console: true`, and `image()` passes the base64 data
+    // and detected MIME through. The data URI is the same 1x1 PNG pi used.
+    auto sandbox = make_sandbox();
+
+    auto result = run_async(sandbox->run("text('plain'); console.log('log', 2); console.error('err'); "
+                                         "image('data:image/png;base64,"
+                                         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/"
+                                         "lYQ5WQAAAABJRU5ErkJggg=='); "
+                                         "return { a: 1 }",
+            {},
+            limits(),
+            {},
+            nullptr));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    REQUIRE(result->value_json.has_value());
+    CHECK(*result->value_json == R"({"a":1})");
+    const auto& output = result->output;
+    REQUIRE(output.size() == 4);
+    CHECK(output[0].kind == codemode::CodemodeOutputItem::Kind::Text);
+    CHECK(output[0].data == "plain");
+    CHECK_FALSE(output[0].console);
+    CHECK(output[1].kind == codemode::CodemodeOutputItem::Kind::Text);
+    CHECK(output[1].data == "log 2");
+    CHECK(output[1].console);
+    CHECK(output[2].data == "err");
+    CHECK(output[2].console);
+    CHECK(output[3].kind == codemode::CodemodeOutputItem::Kind::Image);
+    CHECK(output[3].data ==
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAFgwJ/lYQ5WQAAAABJRU5ErkJggg==");
+    CHECK(output[3].mime_type == "image/png");
+    CHECK_FALSE(output[3].console);
+}
+
+TEST_CASE("a public codemode caller reports a script error with its name message stack and prior output",
+        "[codemode][errors][issue1092][spec]") {
+    // Frozen pi v1.3.0 (`script-execution.json`, "a script failure keeps prior
+    // output and reports the script error with its line"): kind `script`, the
+    // error's name/message, the guest stack with the script's line, and the
+    // output emitted before the throw.
+    auto sandbox = make_sandbox();
+
+    auto result = run_async(sandbox->run("text(\"before\");\nthrow new Error(\"boom\")", {}, limits(), {}, nullptr));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Script);
+    CHECK(result->error->name == "Error");
+    CHECK(result->error->message == "boom");
+    REQUIRE(result->error->stack.has_value());
+    CHECK(*result->error->stack == "Error: boom\n    at <anonymous> (codemode.js:2:11)");
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data == "before");
+    CHECK_FALSE(result->value_json.has_value());
+    CHECK(result->calls.empty());
+    CHECK_FALSE(result->store_writes.has_value());
+}
+
+TEST_CASE("a public codemode caller reports non-Error throws BigInt returns and syntax errors as script errors",
+        "[codemode][errors][issue1092][spec]") {
+    // Frozen pi v1.3.0 (`script-execution.json`, "non-Error throws, syntax
+    // errors and non-serializable returns are script errors"): a non-Error
+    // throw carries only `message`; a non-serializable return surfaces the
+    // guest stringify TypeError with its stack; a syntax error surfaces with
+    // the guest's line report.
+    auto sandbox = make_sandbox();
+
+    auto plain = run_async(sandbox->run("throw \"plain\"", {}, limits(), {}, nullptr));
+    REQUIRE(plain.has_value());
+    REQUIRE(plain->error.has_value());
+    CHECK(plain->error->kind == codemode::CodemodeError::Kind::Script);
+    CHECK(plain->error->message == "plain");
+    CHECK_FALSE(plain->error->name.has_value());
+    CHECK_FALSE(plain->error->stack.has_value());
+    CHECK(plain->output.empty());
+
+    auto bigint = run_async(sandbox->run("return 1n", {}, limits(), {}, nullptr));
+    REQUIRE(bigint.has_value());
+    REQUIRE(bigint->error.has_value());
+    CHECK(bigint->error->name == "TypeError");
+    CHECK(bigint->error->message == "BigInt are forbidden in JSON.stringify");
+    REQUIRE(bigint->error->stack.has_value());
+    CHECK(bigint->error->stack->starts_with("TypeError: BigInt are forbidden in JSON.stringify"));
+
+    auto syntax = run_async(sandbox->run("text(", {}, limits(), {}, nullptr));
+    REQUIRE(syntax.has_value());
+    REQUIRE(syntax->error.has_value());
+    CHECK(syntax->error->name == "SyntaxError");
+    CHECK(syntax->error->message == "unexpected token in expression: '}'");
+    REQUIRE(syntax->error->stack.has_value());
+    CHECK(syntax->error->stack->starts_with("SyntaxError: unexpected token in expression: '}'"));
+}
+
+TEST_CASE("a public codemode caller treats exit() as success with prior output and the write set",
+        "[codemode][output][issue1092][spec]") {
+    // Frozen pi v1.3.0 (`script-execution.json`, "exit() succeeds with prior
+    // output and store writes and stops later output"): `exit()` ends the run
+    // as success, keeps the output emitted before it, stops later output, and
+    // reports the pending store writes.
+    auto sandbox = make_sandbox();
+
+    auto result = run_async(sandbox->run(
+            "text(\"before\"); store(\"a\", {x: 1}); store(\"b\", 2); store(\"b\", undefined); exit(); text(\"after\")",
+            {},
+            limits(),
+            {},
+            nullptr));
+
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    CHECK_FALSE(result->value_json.has_value());
+    REQUIRE(result->output.size() == 1);
+    CHECK(result->output[0].data == "before");
+    REQUIRE(result->store_writes.has_value());
+    REQUIRE(result->store_writes->set.size() == 1);
+    const auto* a_value = result->store_writes->set.at("a").get_if<support::JsonValue::object_t>();
+    REQUIRE(a_value != nullptr);
+    const auto x = a_value->find("x");
+    REQUIRE(x != a_value->end());
+    const auto* x_value = x->second.get_if<double>();
+    REQUIRE(x_value != nullptr);
+    CHECK(*x_value == 1.0);
+    REQUIRE(result->store_writes->deleted.size() == 1);
+    CHECK(result->store_writes->deleted[0] == "b");
+    CHECK(result->calls.empty());
+}
+
+TEST_CASE("a public codemode caller reports guest memory exhaustion as an out-of-memory script error",
+        "[codemode][limits][issue1092][spec]") {
+    // Frozen pi v1.3.0 (`script-execution.json`, "a memory-limited VM reports
+    // out of memory as a script error", upstream portable.test.ts "caps the
+    // interrupt budget and memory at the remote's limits"): with the guest
+    // memory capped, an allocation past the cap fails the run as a script
+    // error named InternalError with message "out of memory".
+    auto sandbox = make_sandbox();
+    auto memory_limits = limits();
+    memory_limits.memory_limit_bytes = 8u * 1024u * 1024u;
+
+    // The allocation pattern is the frozen upstream case (pi
+    // packages/codemode/test/portable.test.ts:93-105): each iteration builds a
+    // unique 1 MiB string, so QuickJS cannot intern or rope its way out of
+    // actually allocating; the 8 MiB cap exhausts within a handful of rounds.
+    auto result =
+            run_async(sandbox->run("const parts = [];\nfor (;;) parts.push(\"x\".repeat(1 << 20) + parts.length);",
+                    {},
+                    memory_limits,
+                    {},
+                    nullptr));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Script);
+    CHECK(result->error->name == "InternalError");
+    CHECK(result->error->message == "out of memory");
+    CHECK(result->output.empty());
+    CHECK(result->calls.empty());
+}
+
+TEST_CASE("a public codemode caller fails the run when the guest hits its output item limit",
+        "[codemode][limits][issue1092][spec]") {
+    // The frozen prelude enforces pi's output limits (16 MiB of characters or
+    // 100000 text/image/console items) guest-side: past the limit the script
+    // fails with the frozen RangeError, and the host reports it as a script
+    // error. One over-limit text() is the cheap discriminating case; the
+    // 100000-item variant differs only in which clause trips first.
+    auto sandbox = make_sandbox();
+
+    auto result =
+            run_async(sandbox->run("text('x'.repeat(16777217)); return 'unreachable';", {}, limits(), {}, nullptr));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Script);
+    CHECK(result->error->name == "RangeError");
+    CHECK(result->error->message ==
+            "script output exceeded the limit of 16777216 characters or 100000 text(), image(), and console calls. "
+            "Print a summary instead, or write large data to a file with a tool.");
+    CHECK_FALSE(result->value_json.has_value());
+}
+
+TEST_CASE("a public codemode caller fails the run when the guest hits its store value limit",
+        "[codemode][limits][issue1092][spec]") {
+    // The frozen prelude enforces pi's store limits guest-side (262144 JSON
+    // characters per value, 1048576 total): past a limit the script fails with
+    // the frozen RangeError and the host reports it as a script error.
+    auto sandbox = make_sandbox();
+
+    auto result = run_async(
+            sandbox->run("store('big', 'x'.repeat(262145)); return 'unreachable';", {}, limits(), {}, nullptr));
+
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Script);
+    CHECK(result->error->name == "RangeError");
+    CHECK(result->error->message.starts_with(
+            "store(\"big\") value has 262147 characters of JSON, more than the limit of 262144."));
+    CHECK_FALSE(result->value_json.has_value());
+    CHECK_FALSE(result->store_writes.has_value());
+}
+
 TEST_CASE("a public codemode caller reads a store snapshot across calls and drops failed writes",
         "[codemode][store][issue1091][spec]") {
     auto sandbox = make_sandbox();

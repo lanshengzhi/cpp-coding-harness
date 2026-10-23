@@ -197,6 +197,36 @@ struct Guest {
         const Handle exc = call_i32(find("qjs_get_exception"), {});
         return read_string(exc);
     }
+
+    /// The current pending exception as the run's script error: `name`,
+    /// `message`, and `stack` come off the exception object itself. A script
+    /// that fails to compile reaches the host this way, outside the prelude's
+    /// `describeError`, so the shape mirrors it (`Name: message` stack head).
+    [[nodiscard]] CodemodeError exception_error() const {
+        const Handle exc = call_i32(find("qjs_get_exception"), {});
+        if (is_undefined(exc)) return CodemodeError{CodemodeError::Kind::Script, {}};
+        CodemodeError error{CodemodeError::Kind::Script, {}};
+        const Handle name = get_prop(exc, "name");
+        const Handle message = get_prop(exc, "message");
+        const Handle stack = get_prop(exc, "stack");
+        if (!is_undefined(name)) error.name = read_string(name);
+        if (!is_undefined(message)) error.message = read_string(message);
+        if (!is_undefined(stack)) {
+            std::string text = read_string(stack);
+            // QuickJS frames-only stacks get the same `Name: message` head the
+            // prelude's errorText and frozen pi both report.
+            if (error.name.has_value() && !text.starts_with(*error.name)) {
+                const std::string head = error.message.empty() ? *error.name : *error.name + ": " + error.message;
+                if (!text.empty())
+                    text = head + "\n" + text;
+                else
+                    text = head;
+            }
+            error.stack = std::move(text);
+        }
+        if (error.message.empty() && !is_undefined(exc)) error.message = read_string(exc);
+        return error;
+    }
 };
 
 /// One queued `tools.*`/global call the script made and is awaiting.
@@ -384,8 +414,7 @@ struct RunState {
                 store_writes = parse_store_writes(g.read_string(args[3]));
             }
         } else {
-            error = CodemodeError{
-                    CodemodeError::Kind::Script, args.size() > 2 ? message_from(args[2], g) : std::string{}};
+            error = args.size() > 2 ? error_from(args[2], g) : CodemodeError{CodemodeError::Kind::Script, {}};
         }
         finished = true;
         // The host stops waiting on in-flight handlers: anything still pending
@@ -396,16 +425,31 @@ struct RunState {
         }
     }
 
-    [[nodiscard]] static std::string message_from(Handle payload, const Guest& g) {
+    /// The prelude reports a failed run with `describeError(error)`: a JSON
+    /// object carrying `message` for every throw, plus `name` and `stack` when
+    /// the thrown value was an Error (frozen pi's error taxonomy).
+    [[nodiscard]] static CodemodeError error_from(Handle payload, const Guest& g) {
         const std::string raw = g.read_string(payload);
         auto parsed = support::read_json(raw);
         if (parsed && parsed->holds<support::JsonValue::object_t>()) {
             const auto& object = parsed->get_object();
+            CodemodeError error{CodemodeError::Kind::Script, raw};
+            bool described = false;
             if (const auto it = object.find("message"); it != object.end()) {
-                if (const auto* message = it->second.get_if<std::string>()) return *message;
+                if (const auto* message = it->second.get_if<std::string>()) {
+                    error.message = *message;
+                    described = true;
+                }
             }
+            if (const auto it = object.find("name"); it != object.end()) {
+                if (const auto* name = it->second.get_if<std::string>()) error.name = *name;
+            }
+            if (const auto it = object.find("stack"); it != object.end()) {
+                if (const auto* stack = it->second.get_if<std::string>()) error.stack = *stack;
+            }
+            if (described) return error;
         }
-        return raw;
+        return CodemodeError{CodemodeError::Kind::Script, raw};
     }
 
     void handle_bridge(const Guest& g, const std::vector<Handle>& args) {
@@ -417,6 +461,9 @@ struct RunState {
             item.kind = channel == "image" ? CodemodeOutputItem::Kind::Image : CodemodeOutputItem::Kind::Text;
             item.data = args.size() > 2 ? g.read_string(args[2]) : std::string{};
             item.mime_type = args.size() > 3 ? g.read_string(args[3]) : std::string{};
+            // The frozen prelude routes `console.*` through its own channel;
+            // the result keeps `type: "text"` and marks the item `console`.
+            item.console = channel == "console";
             output.push_back(std::move(item));
             return;
         }
@@ -791,7 +838,6 @@ namespace {
         std::stop_token stop_token,
         SandboxLink& link,
         WasmEdge_ASTModuleContext* ast,
-        WasmEdge_ConfigureContext* configure,
         const std::string& globals_list_json,
         const std::string& store_snapshot_json) {
     RunState state;
@@ -827,8 +873,20 @@ namespace {
         return finish();
     }
 
+    // Each run gets its own configure: the executor references it for its
+    // whole lifetime and WasmEdge's C API can only overwrite, never unset, a
+    // page limit (a fresh configure defaults to 65536 pages — the 4 GiB
+    // wasm32 ceiling, i.e. uncapped). pi `memoryLimitBytes` caps the guest's
+    // linear memory in 64 KiB pages so an exhausting allocation fails inside
+    // the guest as a catchable `InternalError: out of memory` script error.
+    WasmEdge_ConfigureContext* run_configure = WasmEdge_ConfigureCreate();
+    if (limits.memory_limit_bytes.has_value()) {
+        WasmEdge_ConfigureSetMaxMemoryPage(
+                run_configure, static_cast<std::uint32_t>((*limits.memory_limit_bytes + 65535) / 65536));
+    }
+
     WasmEdge_StoreContext* store = WasmEdge_StoreCreate();
-    WasmEdge_ExecutorContext* executor = WasmEdge_ExecutorCreate(configure, nullptr);
+    WasmEdge_ExecutorContext* executor = WasmEdge_ExecutorCreate(run_configure, nullptr);
 
     auto fail_sandbox = [&](std::string message) {
         state.error = CodemodeError{CodemodeError::Kind::Sandbox, std::move(message)};
@@ -908,6 +966,7 @@ namespace {
         WasmEdge_ModuleInstanceDelete(wasi);
         WasmEdge_ExecutorDelete(executor);
         WasmEdge_StoreDelete(store);
+        WasmEdge_ConfigureDelete(run_configure);
         return finish();
     }
 
@@ -923,6 +982,7 @@ namespace {
         WasmEdge_ModuleInstanceDelete(module);
         WasmEdge_ExecutorDelete(executor);
         WasmEdge_StoreDelete(store);
+        WasmEdge_ConfigureDelete(run_configure);
     };
 
     if (state.guest.memory == nullptr) {
@@ -979,7 +1039,7 @@ namespace {
                         gen_i32(static_cast<std::int32_t>(script_name_ptr)),
                         gen_i32(0)});
         if (g.is_exception(script_fn)) {
-            state.error = CodemodeError{CodemodeError::Kind::Script, g.exception_text()};
+            state.error = g.exception_error();
             cleanup();
             return finish();
         }
@@ -1135,7 +1195,6 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                     stop_token,
                     *link,
                     impl_->ast,
-                    impl_->configure,
                     globals_list_json,
                     store_snapshot_json));
         });

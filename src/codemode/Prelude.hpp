@@ -1,11 +1,16 @@
 #pragma once
 
-// Generated from pi v1.0.4 (`7c10bd43`)
-// `packages/codemode/src/runtime/prelude-source.ts` (PRELUDE_SOURCE), with the
-// TS template placeholders expanded and the template escapes resolved. The
-// codemode sandbox evaluates this inside the guest before the declared script,
-// exactly as pi's worker does. Do not edit by hand; see
-// `fixtures/codemode/quickjs/README.md`.
+// Generated from the frozen pi v1.3.0 sandbox prelude, captured by the 1053
+// codemode audit (`fixtures/pi-v1.3.0/audit-1053/script-execution.json`,
+// scenario "the guest prelude is the frozen sandbox prelude with output and
+// store limits", `.expected`). This is pi v1.3.0's
+// `packages/codemode/src/runtime/prelude-source.ts` (PRELUDE_SOURCE) with the
+// TS template placeholders expanded — the audit-1053 ledger and ADR 0075 make
+// frozen pi v1.3.0 the behavioral authority over the earlier v1.0.4 bytes.
+// The codemode sandbox evaluates this inside the guest before the declared
+// script, exactly as pi's worker does. Do not edit by hand; regenerate from
+// the frozen evidence and keep `fixtures/codemode/quickjs/prelude.js` equal
+// (tests/coding_agent/CodemodeSandboxTest.cpp asserts the two stay in sync).
 
 namespace cch::codemode {
 
@@ -341,17 +346,17 @@ inline constexpr char kCodemodePreludeSource[] =
 	function imageUrl(value) {
 		if (typeof value === "string") return value;
 		if (typeof value !== "object" || value === null || Array.isArray(value)) {
-			throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or a raw MCP image block");
+			throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or an image block { type: \"image\", data, mimeType }");
 		}
 		if (value.image_url !== undefined) {
-			if (typeof value.image_url !== "string") throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or a raw MCP image block");
+			if (typeof value.image_url !== "string") throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or an image block { type: \"image\", data, mimeType }");
 			return value.image_url;
 		}
-		if (typeof value.type !== "string") throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or a raw MCP image block");
+		if (typeof value.type !== "string") throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or an image block { type: \"image\", data, mimeType }");
 		if (value.type !== "image") {
-			throw new TypeErrorCtor('image only accepts MCP image blocks, got "' + value.type + '"');
+			throw new TypeErrorCtor('image only accepts image blocks, got "' + value.type + '"');
 		}
-		if (typeof value.data !== "string" || value.data === "") throw new TypeErrorCtor("image expected MCP image data");
+		if (typeof value.data !== "string" || value.data === "") throw new TypeErrorCtor("image expected image block data");
 		if (value.data.toLowerCase().startsWith("data:")) return value.data;
 		return "data:;base64," + value.data;
 	}
@@ -367,7 +372,7 @@ inline constexpr char kCodemodePreludeSource[] =
 
 	function image(value) {
 		const url = imageUrl(value);
-		if (url === "") throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or a raw MCP image block");
+		if (url === "") throw new TypeErrorCtor("image expects a non-empty image URL string, an object with image_url, or an image block { type: \"image\", data, mimeType }");
 		const colon = url.indexOf(":");
 		const scheme = colon === -1 ? "" : url.slice(0, colon).toLowerCase();
 		if (scheme === "http" || scheme === "https") {
@@ -408,7 +413,7 @@ inline constexpr char kCodemodePreludeSource[] =
 	const console = {};
 	for (const level of ["log", "info", "warn", "error", "debug"]) {
 		console[level] = (...args) => {
-			output("text", args.map(format).join(" "));
+			output("console", args.map(format).join(" "));
 		};
 	}
 	Object.freeze(console);
@@ -421,12 +426,20 @@ inline constexpr char kCodemodePreludeSource[] =
 	Object.defineProperty(globalThis, "exit", { value: exit, enumerable: true });
 
 	return {
-		settle(id, ok, payload) {
+		settle(id, ok, payload, propertiesJson) {
 			const entry = pending.get(id);
 			if (!entry) return;
 			pending.delete(id);
 			if (!ok) {
-				entry.reject(new ErrorCtor(payload));
+				const error = new ErrorCtor(payload);
+				if (propertiesJson !== undefined) {
+					const properties = parse(propertiesJson);
+					for (const key of Object.keys(properties)) {
+						if (key === "name" || key === "message" || key === "stack") continue;
+						Object.defineProperty(error, key, { value: properties[key], writable: true, enumerable: true, configurable: true });
+					}
+				}
+				entry.reject(error);
 				return;
 			}
 			let value;

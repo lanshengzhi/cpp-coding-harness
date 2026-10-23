@@ -542,8 +542,8 @@
       "cppEvidence": "`CodemodeSandboxTest.cpp:92` checks text order/value and `:107` checks image MIME/data. `CodemodeOutputPresentationTest.cpp` checks fallback rendering and image sidecars. Neither can distinguish console output from `text()` because the C++ item has no console field. The v1.3.0 `console: true` channel is lost.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
-        "verification": "unverified"
+        "implementation": "implemented",
+        "verification": "upstream-captured"
       },
       "recommendation": "Add a console discriminant to `CodemodeOutputItem` and update the prelude to emit `console`; then use it in the Application output block. Keep text/image ordering tests, but assert console separately.",
       "blockers": []
@@ -619,7 +619,7 @@
       "cppEvidence": "Pike preserves the script error text, including a stack, in `message`, but has no typed `name`/`stack` fields. `CodemodeSandboxTest.cpp:122` only checks the message substring for a thrown Error. Captured BigInt, non-Error, syntax, unknown-tool and OOM shapes cannot be represented exactly in the C++ result type.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Extend `CodemodeError` with optional name/stack and parse the prelude payload; test the captured taxonomy through the public result rather than only `message.find`.",
@@ -644,7 +644,7 @@
       "status": {
         "membership": "supported",
         "implementation": "implemented",
-        "verification": "unverified"
+        "verification": "upstream-captured"
       },
       "recommendation": "Pin the prelude to v1.3.0 and add limit tests that cross the boundary; do not expose duplicated C++ constants unless a caller needs them.",
       "blockers": []
@@ -716,7 +716,7 @@
       "cppEvidence": "Pike cannot limit the guest heap. The captured v1.3.0 OOM path (and the Remote cap) is absent. The existing prelude output limit is not a substitute: a script can allocate without emitting output.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "partial",
         "verification": "upstream-captured"
       },
       "recommendation": "Add `memoryLimitBytes` to `CodemodeLimits` and configure the WasmEdge memory limit before instantiation; use 256 MiB in the Application and verify the captured OOM shape.",
