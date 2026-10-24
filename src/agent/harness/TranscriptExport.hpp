@@ -1,12 +1,13 @@
 #pragma once
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/agent/harness/session/SessionEntry.hpp>
 
 #include <cch/support/Error.hpp>
 
 #include <functional>
 #include <stop_token>
 #include <string>
+#include <vector>
 
 namespace cch::harness {
 
@@ -15,13 +16,12 @@ namespace cch::harness {
 /// move-only; it is not independently copyable.
 using TranscriptExportHandler = std::move_only_function<support::Expected<std::string>(std::stop_token)>;
 
-/// Builds the transcript_export handler. The destination is replaced with the
-/// same snapshot on every run, so a crash after the write and before terminal
-/// commit is safe to recover by replay.
-///
-/// The returned handler borrows `store`; it must not outlive it.
-[[nodiscard]] TranscriptExportHandler transcript_export_handler(
-        cch::harness::session::SessionStore& store, // must outlive the handler
+/// Builds the transcript_export handler from the session metadata and active
+/// branch captured by its caller. The handler owns those values and the
+/// destination is replaced with the same snapshot on every run, so replay is
+/// safe after a crash between the write and terminal commit.
+[[nodiscard]] TranscriptExportHandler transcript_export_handler(cch::harness::session::SessionMetadata metadata,
+        std::vector<cch::harness::session::SessionEntry> branch,
         std::string destination);
 
 } // namespace cch::harness
