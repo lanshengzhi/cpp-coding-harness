@@ -53,6 +53,12 @@ support::Expected<std::optional<DocumentRecord>> MemoryStorage::find_document(
 
 support::Expected<std::optional<chord::Json>> MemoryStorage::document(DocumentId id) { return impl_->document(id); }
 
+support::Expected<std::optional<TaskRecord>> MemoryStorage::task(TaskId id) { return impl_->task(id); }
+
+support::Expected<std::vector<TaskRecord>> MemoryStorage::scan_tasks(std::size_t limit) {
+    return impl_->scan_tasks(limit);
+}
+
 support::ExpectedVoid MemoryStorage::close() {
     impl_->close();
     return {};

@@ -361,6 +361,7 @@ struct SqliteStorage::Impl {
         const std::string entries = table(options.prefix, "entries");
         const std::string documents = table(options.prefix, "documents");
         const std::string revisions = table(options.prefix, "document_revisions");
+        const std::string tasks = table(options.prefix, "tasks");
         const std::string record_ids = table(options.prefix, "record_ids");
         const std::string metadata_table = table(options.prefix, "durable_metadata");
         const auto restore_record_id = [this, &record_ids](
@@ -543,6 +544,28 @@ struct SqliteStorage::Impl {
                         if (!retired_state) return std::unexpected(std::move(retired_state.error()));
                     }
                     return {};
+                });
+        if (!loaded) return loaded;
+
+        loaded = load_rows(
+                std::format(
+                        "SELECT id,conversation_id,kind,status,abort_requested,background,record FROM {} ORDER BY id",
+                        tasks),
+                [this, &restore_record_id](sqlite3_stmt* row) -> support::ExpectedVoid {
+                    const auto* record_text = reinterpret_cast<const char*>(sqlite3_column_text(row, 6));
+                    if (record_text == nullptr) return std::unexpected(corrupt("Invalid persisted task JSON"));
+                    const auto parsed = parse_json(record_text);
+                    if (!parsed) return std::unexpected(corrupt("Invalid persisted task JSON"));
+                    auto decoded = decode_task_record(*parsed);
+                    if (!decoded) return std::unexpected(std::move(decoded.error()));
+                    const std::int64_t id = sqlite3_column_int64(row, 0);
+                    if (decoded->id.value != id) {
+                        return std::unexpected(corrupt("Persisted task ID mismatch"));
+                    }
+                    const std::array write{StorageWrite{.type = "task", .task = *decoded}};
+                    auto restored = state.restore(write, 1);
+                    if (!restored) return std::unexpected(std::move(restored.error()));
+                    return restore_record_id(id, "task");
                 });
         if (!loaded) return loaded;
 
@@ -780,6 +803,35 @@ struct SqliteStorage::Impl {
                 if (!stepped) return fail(std::move(stepped.error()));
                 if (sqlite3_changes(database) != 1)
                     return fail(corrupt("Document retirement did not update one live record"));
+            } else if (write.type == "task") {
+                if (!write.task.has_value()) {
+                    return fail(corrupt("Task write has no record"));
+                }
+                const TaskRecord& task = *write.task;
+                const std::string record_str = as_string(encode_task_record(task));
+                auto result = insert(
+                        std::format("INSERT INTO {}(id,conversation_id,kind,status,abort_requested,background,record) "
+                                    "VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(id) DO UPDATE SET "
+                                    "conversation_id=excluded.conversation_id,kind=excluded.kind,"
+                                    "status=excluded.status,abort_requested=excluded.abort_requested,"
+                                    "background=excluded.background,record=excluded.record",
+                                table(options.prefix, "tasks")),
+                        [&](Statement& statement) -> support::ExpectedVoid {
+                            if (auto bound = statement.bind_int(1, task.id.value); !bound) return bound;
+                            if (auto bound = statement.bind_int(2, task.conversation_id.value); !bound) return bound;
+                            if (auto bound = statement.bind_text(3, task.kind); !bound) return bound;
+                            if (auto bound = statement.bind_text(4, task.state.status); !bound) return bound;
+                            if (auto bound = statement.bind_int(5, task.abort_requested ? 1 : 0); !bound) return bound;
+                            if (auto bound = statement.bind_int(6, task.background ? 1 : 0); !bound) return bound;
+                            return statement.bind_text(7, record_str);
+                        });
+                if (!result) return fail(std::move(result.error()));
+                auto id_result = insert(std::format("INSERT OR IGNORE INTO {}(id,record_type) VALUES(?1,'task')",
+                                                table(options.prefix, "record_ids")),
+                        [&](Statement& statement) -> support::ExpectedVoid {
+                            return statement.bind_int(1, task.id.value);
+                        });
+                if (!id_result) return fail(std::move(id_result.error()));
             }
         }
         auto metadata = insert(std::format("UPDATE {} SET next_id=?1,next_seq=?2 WHERE singleton=1",
@@ -894,6 +946,14 @@ support::Expected<std::optional<DocumentRecord>> SqliteStorage::find_document(
 support::Expected<std::optional<chord::Json>> SqliteStorage::document(DocumentId id) {
     if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
     return impl_->state.document(id);
+}
+support::Expected<std::optional<TaskRecord>> SqliteStorage::task(TaskId id) {
+    if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
+    return impl_->state.task(id);
+}
+support::Expected<std::vector<TaskRecord>> SqliteStorage::scan_tasks(std::size_t limit) {
+    if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
+    return impl_->state.scan_tasks(limit);
 }
 support::ExpectedVoid SqliteStorage::close() {
     if (impl_->database != nullptr) {

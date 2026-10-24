@@ -16,12 +16,14 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_durable
     SOURCES
+        src/durable/Harness.cpp
         src/durable/JsonlStorage.cpp
         src/durable/SqliteStorage.cpp
         src/durable/Session.cpp
         src/durable/Storage.cpp
         src/durable/StorageEncoding.cpp
         src/durable/StorageState.cpp
+        src/durable/Task.cpp
     DEPENDS
         cch_chord
         cch_support

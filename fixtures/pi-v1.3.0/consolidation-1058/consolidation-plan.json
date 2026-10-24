@@ -841,6 +841,86 @@
       "disposition": "the Chord delta slices must consume this observation when they implement nested key delete and readd"
     },
     {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a multi-phase task advances checkpoints and commits a completed terminal receipt",
+      "reason": "Captured by #1076 after the #1058 ledger was committed, but the existing task rows in the 1055 ledger route only to their earlier artifacts; linking this specific execution observation to a row would retroactively upgrade its recorded verification.",
+      "rows": [
+        "cch_durable:task-reservation-checkpoint"
+      ],
+      "disposition": "the task checkpoint implementation must consume this observation when extending reservations through multiple durable phases"
+    },
+    {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a task memo survives checkpoint replacement and is cleared on terminal settlement",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; keep the new memo lifecycle observation explicit without changing the 1055 verification record.",
+      "rows": [
+        "cch_durable:task-memos"
+      ],
+      "disposition": "the durable task memo implementation must consume this observation when changing memo persistence"
+    },
+    {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a multi-phase task commits a typed failed outcome with error and partial result",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; this typed error and partial result was not in the 1055 route.",
+      "rows": [
+        "cch_durable:task-observed-outcomes"
+      ],
+      "disposition": "the task outcome implementation must consume this observation when changing its typed failure receipt"
+    },
+    {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "abortTask marks a running task and runs its abort handler to commit an aborted outcome",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; this running-task abort handler execution was not explicitly routed by the 1055 rows.",
+      "rows": [
+        "cch_durable:abort-task-protocol"
+      ],
+      "disposition": "the abort protocol implementation must consume this observation when changing handler invocation or abort signaling"
+    },
+    {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "aborting a task with a missing definition commits an orphaned outcome",
+      "reason": "Captured by #1076 after the #1058 ledger was committed and supplies the scenario evidence absent from the 1055 scheduler-outcomes row.",
+      "rows": [
+        "cch_durable:task-scheduler-outcomes"
+      ],
+      "disposition": "the scheduler-written orphaned outcome implementation must consume this observation"
+    },
+    {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a phase returning without durable progress faults the task",
+      "reason": "Captured by #1076 after the #1058 ledger was committed and supplies a no-progress fault observation absent from the 1055 scheduler-outcomes row.",
+      "rows": [
+        "cch_durable:task-scheduler-outcomes"
+      ],
+      "disposition": "the scheduler-written no-progress fault implementation must consume this observation"
+    },
+    {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "resuming an interrupted task continues from its durable checkpoint without rerunning completed phases",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; this exact interrupted-phase recovery scenario was not routed by the earlier row.",
+      "rows": [
+        "cch_durable:task-reservation-checkpoint"
+      ],
+      "disposition": "the task recovery implementation must consume this observation when changing checkpoint resume"
+    },
+    {
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "terminal record and result receipt commit in the same atomic storage batch",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; retain the specific atomic record/result observation without altering earlier verification.",
+      "rows": [
+        "cch_durable:task-terminal-receipt-atomicity"
+      ],
+      "disposition": "the task terminal commit implementation must consume this observation when changing atomic receipt persistence"
+    },
+    {
       "family": "audit-1101",
       "artifact": "structured-content.json",
       "scenario": "client and conversion preserve an object structuredContent when content is absent",

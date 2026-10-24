@@ -292,12 +292,13 @@ struct ParsedSidecar {
     std::size_t start{0};
 };
 
-enum class MainKind { Conversation, Entry, DocumentCreate, DocumentChange, DocumentRetire };
+enum class MainKind { Conversation, Entry, Task, DocumentCreate, DocumentChange, DocumentRetire };
 
 struct MainOperation {
     MainKind kind{MainKind::Conversation};
     ConversationRecord conversation{};
     EntryRecord entry{};
+    TaskRecord task{};
     DocumentRecord document_record{};
     std::optional<ConversationId> document_conversation_id{};
     DocumentId document_id{};
@@ -447,6 +448,21 @@ struct MainMarker {
         }
         return MainOperation{.kind = MainKind::Entry, .entry = std::move(*entry)};
     }
+    if (*type == "task") {
+        const auto* record = support::json_member(*operation, "value");
+        if (record == nullptr) {
+            return std::unexpected(corruption("Invalid task write in " + std::string{description}));
+        }
+        auto json = chord::Json::from_support(*record);
+        if (!json) {
+            return std::unexpected(std::move(json.error()));
+        }
+        auto decoded = decode_task_record(*json);
+        if (!decoded) {
+            return std::unexpected(std::move(decoded.error()));
+        }
+        return MainOperation{.kind = MainKind::Task, .task = std::move(*decoded)};
+    }
     if (*type == "document.retire") {
         const auto id = support::json_integer_member(*operation, "id");
         if (!id) {
@@ -573,6 +589,13 @@ struct EncodedCommit {
         } else if (write.type == "entry") {
             main_writes.push_back(
                     object({{"type", support::JsonValue{"entry"}}, {"value", entry_value(*write.entry)}}));
+        } else if (write.type == "task") {
+            if (write.task.has_value()) {
+                main_writes.push_back(object({
+                        {"type", support::JsonValue{"task"}},
+                        {"value", encode_task_record(*write.task).to_support()},
+                }));
+            }
         } else if (write.type == "document.create") {
             const std::string file = document_file(write.document_record->id);
             const std::int64_t ordinal = add_sidecar(file,
@@ -776,6 +799,8 @@ struct JsonlStorage::Impl {
                     writes.push_back(StorageWrite{.type = "conversation", .conversation = operation.conversation});
                 } else if (operation.kind == MainKind::Entry) {
                     writes.push_back(StorageWrite{.type = "entry", .entry = operation.entry});
+                } else if (operation.kind == MainKind::Task) {
+                    writes.push_back(StorageWrite{.type = "task", .task = operation.task});
                 } else if (operation.kind == MainKind::DocumentRetire) {
                     writes.push_back(StorageWrite{.type = "document.retire", .document_id = operation.document_id});
                 } else {
@@ -1035,6 +1060,20 @@ support::Expected<std::optional<chord::Json>> JsonlStorage::document(DocumentId 
         return std::unexpected(*error);
     }
     return impl_->state.document(id);
+}
+
+support::Expected<std::optional<TaskRecord>> JsonlStorage::task(TaskId id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.task(id);
+}
+
+support::Expected<std::vector<TaskRecord>> JsonlStorage::scan_tasks(std::size_t limit) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.scan_tasks(limit);
 }
 
 support::ExpectedVoid JsonlStorage::close() {
