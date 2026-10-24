@@ -273,8 +273,8 @@
         "partial": 17
       },
       "cch_codemode": {
-        "implemented": 26,
-        "missing": 19,
+        "implemented": 31,
+        "missing": 14,
         "not-applicable": 2,
         "partial": 4
       },
@@ -307,8 +307,8 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1011,
-      "missing": 220,
+      "implemented": 1016,
+      "missing": 215,
       "not-applicable": 18,
       "partial": 215
     },
@@ -9431,7 +9431,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable/remote cancellation and tests.",
@@ -9465,7 +9465,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-abort-stop",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9480,7 +9480,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable Object/remote host policy and tests.",
@@ -9514,7 +9514,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-caps",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9579,7 +9579,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable Objects, remote isolates, worker boundaries and tests.",
@@ -9614,7 +9614,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-exchange",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9629,7 +9629,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Remote callers, durable sessions and the TUI.",
@@ -9663,7 +9663,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-failures",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9678,7 +9678,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Remote transport efficiency and tests.",
@@ -9712,7 +9712,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-output-batching",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
