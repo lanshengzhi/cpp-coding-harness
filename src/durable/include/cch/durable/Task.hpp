@@ -85,6 +85,12 @@ private:
 };
 
 /// Builder for defining a `TaskDefinition`.
+///
+/// `build()` consumes the builder: it moves the definition out, so a builder is
+/// valid for exactly one successful `build()`. A second `build()` on the same
+/// builder, or any mutator called after a successful `build()`, returns a
+/// `Validation` error (`build()`) or is a no-op that leaves the builder
+/// buildable-but-empty, which the next `build()` also reports as `Validation`.
 class TaskDefinitionBuilder {
 public:
     explicit TaskDefinitionBuilder(std::string kind, std::int64_t version = 1);
@@ -95,11 +101,20 @@ public:
     TaskDefinitionBuilder(const TaskDefinitionBuilder&) = delete;
     TaskDefinitionBuilder& operator=(const TaskDefinitionBuilder&) = delete;
 
+    /// Mutators are only meaningful before the first successful `build()`.
+    /// After it, the builder holds no definition and the mutator is a no-op.
     TaskDefinitionBuilder& initial(std::move_only_function<chord::Json(const chord::Json&)> fn);
     TaskDefinitionBuilder& phase(std::string name, PhaseHandler handler);
     TaskDefinitionBuilder& abort(AbortHandler handler);
 
+    /// Build the definition and consume this builder. Calling it again on the
+    /// same builder returns a `Validation` error instead of reading a moved-out
+    /// definition.
     [[nodiscard]] support::Expected<TaskDefinition> build();
+
+    /// Whether this builder still owns a definition, i.e. `build()` has not
+    /// succeeded yet.
+    [[nodiscard]] bool valid() const noexcept;
 
 private:
     std::unique_ptr<TaskDefinition::Impl> impl_;

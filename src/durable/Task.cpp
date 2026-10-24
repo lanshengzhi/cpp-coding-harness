@@ -65,21 +65,33 @@ TaskDefinitionBuilder::TaskDefinitionBuilder(TaskDefinitionBuilder&&) noexcept =
 TaskDefinitionBuilder& TaskDefinitionBuilder::operator=(TaskDefinitionBuilder&&) noexcept = default;
 
 TaskDefinitionBuilder& TaskDefinitionBuilder::initial(std::move_only_function<chord::Json(const chord::Json&)> fn) {
-    impl_->initial = std::move(fn);
+    if (impl_) {
+        impl_->initial = std::move(fn);
+    }
     return *this;
 }
 
 TaskDefinitionBuilder& TaskDefinitionBuilder::phase(std::string name, PhaseHandler handler) {
-    impl_->phases.emplace(std::move(name), std::move(handler));
+    if (impl_) {
+        impl_->phases.emplace(std::move(name), std::move(handler));
+    }
     return *this;
 }
 
 TaskDefinitionBuilder& TaskDefinitionBuilder::abort(AbortHandler handler) {
-    impl_->abort_handler = std::move(handler);
+    if (impl_) {
+        impl_->abort_handler = std::move(handler);
+    }
     return *this;
 }
 
+bool TaskDefinitionBuilder::valid() const noexcept { return impl_ != nullptr; }
+
 support::Expected<TaskDefinition> TaskDefinitionBuilder::build() {
+    if (!impl_) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "TaskDefinitionBuilder::build() consumes the builder; it was called again after a successful build"));
+    }
     if (impl_->kind.empty()) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "Task kind must not be empty"));
     }
