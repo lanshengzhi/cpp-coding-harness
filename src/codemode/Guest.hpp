@@ -123,5 +123,9 @@ WasmEdge_Result HostFdFdstatGet(
         void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out);
 WasmEdge_Result HostWasiStub(
         void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out);
+WasmEdge_Result HostClockTimeGet(
+        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out);
+WasmEdge_Result HostRandomGet(
+        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out);
 
 } // namespace cch::codemode::detail

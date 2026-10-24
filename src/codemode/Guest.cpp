@@ -1,5 +1,6 @@
 #include "codemode/Guest.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <cstring>
 #include <string>
@@ -255,6 +256,50 @@ WasmEdge_Result HostFdFdstatGet(
 
 WasmEdge_Result HostWasiStub(void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
     out[0] = gen_i32(kWasiErnoNosys);
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result HostClockTimeGet(
+        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
+    const std::int32_t clock_id = WasmEdge_ValueGetI32(in[0]);
+    if (clock_id != 0 && clock_id != 1) {
+        out[0] = gen_i32(kWasiErnoNosys);
+        return WasmEdge_Result_Success;
+    }
+    Guest guest{nullptr,
+            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
+            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
+    const std::uint32_t out_buf = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[2]));
+    std::uint64_t nanos = 0;
+    if (clock_id == 0) {
+        nanos = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::system_clock::now().time_since_epoch())
+                        .count());
+    } else {
+        nanos = static_cast<std::uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                std::chrono::steady_clock::now().time_since_epoch())
+                        .count());
+    }
+    guest.store_u64(out_buf, nanos);
+    out[0] = gen_i32(kWasiErnoSuccess);
+    return WasmEdge_Result_Success;
+}
+
+WasmEdge_Result HostRandomGet(
+        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
+    Guest guest{nullptr,
+            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
+            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
+    const std::uint32_t buf = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[0]));
+    const std::uint32_t len = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
+    if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(guest.memory, buf, len)) {
+        std::uint64_t seed = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
+        for (std::uint32_t i = 0; i < len; ++i) {
+            seed = seed * 6364136223846793005ull + 1442695040888963407ull;
+            p[i] = static_cast<std::uint8_t>(seed >> 33);
+        }
+    }
+    out[0] = gen_i32(kWasiErnoSuccess);
     return WasmEdge_Result_Success;
 }
 

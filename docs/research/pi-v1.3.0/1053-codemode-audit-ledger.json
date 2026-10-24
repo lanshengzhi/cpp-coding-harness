@@ -1245,11 +1245,11 @@
           "remote output is buffered instead of one exchange per output item"
         ]
       },
-      "cppSeam": "No Remote class, protocol message types, exchange callback or serve function in C++.",
-      "cppEvidence": "The entire Remote contract is absent. There is no way to run a script in another isolate or to route its tool calls back to the caller. This is a structural missing library target, not an application formatting gap.",
+      "cppSeam": "`src/codemode/include/cch/codemode/Remote.hpp`, `src/codemode/Remote.cpp`: `CodemodeRemote`, `RemoteCodemodeSandbox`, `serve_codemode_remote`",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox runs tools in the caller and the script on the remote` asserts caller-side tool execution, argument parsing, output collection and result return across exchanges matching `fixtures/pi-v1.3.0/audit-1053/remote-exchange.json`.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Port the request/message/reply protocol and `serveCodemodeRemote` as a library interface; keep transport serialization JSON-safe and test the captured exchange trace before adding a Durable Object wrapper.",
@@ -1269,11 +1269,11 @@
           "remote output is buffered instead of one exchange per output item"
         ]
       },
-      "cppSeam": "No Remote exchange exists, so no batching policy exists.",
-      "cppEvidence": "A naive future implementation could send one message per line; the captured trace gives the required batching contract. Do not build the transport without it.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `kRemoteFlushItems` (1000) and `kRemoteFlushChars` (1 MiB) output buffer flush policy",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox batches output instead of making one exchange per line` asserts 5000 console lines batched into <= 6 exchanges matching `fixtures/pi-v1.3.0/audit-1053/remote-exchange.json`.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Port batching with the exchange implementation and assert the exchange-size sequence, not only the final output.",
@@ -1293,11 +1293,11 @@
           "the remote caps the requested interrupt budget and memory limit"
         ]
       },
-      "cppSeam": "No Remote or memory limit; the worker timeout exists but no cap negotiation.",
-      "cppEvidence": "The cap negotiation itself depends on missing Inline/Remote and memory-limit seams. Pike cannot report either captured remote cap failure.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `serve_codemode_remote` caps interrupt budget and max memory limit bytes against host serve options",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits` asserts budget timeout and out of memory script errors matching `fixtures/pi-v1.3.0/audit-1053/remote-exchange.json`.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement caps in `serveCodemodeRemote` after the memory and interrupt-budget primitives exist; do not implement a remote-only cap that the local sandbox cannot honor.",
@@ -1318,11 +1318,11 @@
           "caller abort answers the remote's exchange with stop and settles without waiting for remote compute"
         ]
       },
-      "cppSeam": "No Remote protocol or stop reply; worker cancellation stops a local thread and joins it.",
-      "cppEvidence": "The captured non-blocking `stop` behavior is the opposite of Pike’s local join-before-result model. Remote abort cannot be implemented until result/worker settlement is separated.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `RemoteCodemodeSandbox::run` abort handling answers `stop` across exchange, cancels pending calls, and settles immediately without waiting for remote worker exit",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately` and discriminating abort check verify immediate local return (< 200 ms and < 150 ms) and stop reply.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Build abort on the exchange/stop protocol and result-vs-exit separation; test that local settlement does not await remote compute.",
@@ -1342,11 +1342,11 @@
           "a failing, silent or unreachable remote is a sandbox error with the transport reason"
         ]
       },
-      "cppSeam": "No Remote class or transport error mapping.",
-      "cppEvidence": "The exact three failure branches and messages are absent. Local sandbox errors have a similar kind but no transport reason contract.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `RemoteCodemodeSandbox::run` error classification for `Remote sandbox failed: <reason>`, `Remote sandbox returned before the script settled`, and `Failed to reach the remote sandbox: <reason>`",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason` asserts the exact three sandbox error messages.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Port the three branches with the captured messages; keep transport exceptions out of the VM/script error kind.",
@@ -1390,14 +1390,14 @@
           "a generic remote runs the script and calls the caller's tools across the exchange"
         ]
       },
-      "cppSeam": "No protocol types or JSON serialization seam in C++.",
-      "cppEvidence": "The C++ worker protocol is an in-process `SandboxLink` with C++ structs and a condition variable. It cannot cross a process/isolate boundary and has no versioned wire shape.",
+      "cppSeam": "`src/codemode/include/cch/codemode/Remote.hpp`: aggregate request and message contracts, `CodemodeRemoteMessageVariant`, `CodemodeRemoteReplyVariant`, and the `CodemodeRemoteExchangeHook` interface.",
+      "cppEvidence": "`CodemodeRemoteTest.cpp` exercises the request, call/output/done/failure message variants, result/stop/null replies, and exchange hook through `CodemodeRemote` and `serve_codemode_remote`. The contracts contain values and JSON text only, with transport encoding left to the remote implementation.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Port the plain-data protocol separately from the worker implementation; do not reuse `SandboxLink` across a transport boundary.",
+      "recommendation": "Keep transport encoding in the remote implementation; do not reuse the in-process `RemoteServeLink` across a transport boundary.",
       "blockers": []
     },
     {
