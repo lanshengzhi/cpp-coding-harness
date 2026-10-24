@@ -40,7 +40,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 3.2. pi-shaped seams keep pi wire vocabulary in `camelCase`: `AsyncFileSystem::readTextFile`, `SessionTree::getEntry`, fields like `mtimeMs`, `exitCode`, `filePath`. This is the one sanctioned camelCase region (§15); it does not extend to cch-native code.
 
-3.3. Suffix vocabulary: `*Event` for event structs; `*Result`, `*Options`, `*Config` for passive structs; `*Sink`, `*Hook`, `*Committer` for `move_only_function` aliases; `*Variant` for variant aliases; `*Dto` confined to the Glaze layer. An asynchronous operation is identified by its `AsyncResult` return type rather than a mandatory `Async` prefix. Identity-bearing physical capabilities keep domain names such as `AsyncFileSystem` and `AsyncShell` where the frozen Interface already uses them.
+3.3. Suffix vocabulary: `*Event` for event structs; `*Result`, `*Options`, `*Config` for passive structs; `*Sink`, `*Hook`, `*Committer` for `move_only_function` aliases; `*Variant` for variant aliases (event variant sum types may keep the `*Event` family suffix, such as `AgentLifecycleEvent`); `*Dto` confined to the Glaze layer. An asynchronous operation is identified by its `AsyncResult` return type rather than a mandatory `Async` prefix. Identity-bearing physical capabilities keep domain names such as `AsyncFileSystem` and `AsyncShell` where the frozen Interface already uses them.
 
 3.4. Enums are always `enum class`; enumerators are `PascalCase` unless mirroring wire vocabulary, which keeps its wire spelling.
 
@@ -48,11 +48,11 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 3.6. Files are `PascalCase`; header/source pairs share a stem (`Agent.hpp`/`Agent.cpp`); tests are `<Stem>Test.cpp`; fixtures are `*Fixture.hpp`.
 
-3.7. Namespaces: root `cch`, one nested namespace per module (`cch::harness::session`), declared with nested syntax (`namespace cch::agent {`). File-local helpers live in an anonymous namespace inside the module namespace.
+3.7. Namespaces: root `cch`, nested module namespaces (e.g. `cch::agent`, `cch::ai`, or sub-namespaces such as `cch::harness::session`), declared with nested syntax (`namespace cch::agent {`). File-local helpers live in an anonymous namespace inside the module namespace.
 
 ## 4. Data contracts (passive values)
 
-4.1. Owner Interface value contracts are aggregate structs with default member initializers (`bool truncated{false};`) — no user-declared constructors, no behavior beyond trivial helpers (`docs/agents/architecture.md` §Passive value contracts; ADR 0019; statically checked for key headers, see §14).
+4.1. Owner Interface value contracts are aggregate structs with default member initializers (`bool truncated{false};`) — no user-declared constructors, no behavior beyond trivial helpers (`docs/agents/architecture.md` §Passive value contracts; ADR 0019; statically checked for key headers in architecture tests).
 
 4.2. Sum types are a `std::variant` behind a named `using` alias (`MessageVariant`, `AgentLifecycleEvent`). Dispatch with `std::visit` + `if constexpr`, or `std::get_if`.
 
@@ -152,7 +152,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 10.3. Bounded output goes through the owning package's declared output/presentation budgets. No ad hoc `substr` truncation of model- or user-visible text, and process pipes continue draining after retained output reaches its bound (ADR 0040).
 
-10.4. Filesystem path resolution lives in `src/agent/harness/WorkspaceFileSystem.hpp` and its split implementation units `WorkspacePathResolution.cpp` (pi `resolveToCwd` normalization and resolution, the pi-shaped path queries, and the root/error helpers), `WorkspaceFileOperations.cpp` (the no-follow open/read/write primitives and the pi-shaped file, metadata, and listing surface), `WorkspaceFileSystemFdWalk.cpp`, and `WorkspaceFileSystemTemp.cpp`. The units are split by concern, not by provenance: no unit name refers to retired behaviour. Every operation resolves uniformly through pi `resolveToCwd` semantics (ADR 0057): unicode-space normalization, leading-`@` stripping, and `~` expansion against `$HOME`, then absolute paths are honored anywhere after lexical normalization and relative paths resolve against the workspace root with `..` resolved by normalization rather than rejected. Filesystem access authority matches the host user process — there is no workspace containment, path allowlist, or resolution-scope split. The no-follow symlink policy and atomic writes apply uniformly. File tools route through it; flag a file-too…
+10.4. Filesystem path resolution lives in `src/agent/harness/WorkspaceFileSystem.hpp`. Every operation resolves uniformly through pi `resolveToCwd` semantics (ADR 0057): unicode-space normalization, leading-`@` stripping, and `~` expansion against `$HOME`, then absolute paths are honored anywhere after lexical normalization and relative paths resolve against the workspace root with `..` resolved by normalization rather than rejected. Filesystem access authority matches the host user process — there is no workspace containment, path allowlist, or resolution-scope split. The no-follow symlink policy and atomic writes apply uniformly. File tools route through it; flag a file-tool path that bypasses its resolution or duplicates its path checks elsewhere. Path handling for unrelated capabilities is outside this rule (`docs/agents/architecture.md` §Security and containment).
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 
@@ -168,7 +168,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 11.3. `CHECK` reports a failure and continues. Use `REQUIRE` / `REQUIRE_FALSE` only for preconditions whose failure makes later dereference, indexing, or execution unsafe. Use explicit skip reporting for unavailable platform prerequisites.
 
-11.4. Tags are `[module][feature]`, module first, spelled like the owning test area: `[ai]`, `[agent]`, `[codemode]`, `[harness]`, `[tools]`, `[support]`, `[tui]`, `[cli]`, `[architecture]`, `[coding_agent]`. Add parity tags `[u1]`–`[u9]` and issue-traceability tags `[issueNN]` where they apply. Fatal-contract probes carry a `[fatal]` tag; the owning shard's `catch_discover_tests` selects `[fatal]` with a tightened CTest timeout. Tags map to CTest labels.
+11.4. Tags are `[module][feature]`, module first, spelled like the owning test area (e.g. `[ai]`, `[agent]`, `[tui]`, `[tools]`, `[harness]`). Add parity tags `[u1]`–`[u9]` and issue-traceability tags `[issueNN]` where they apply. Fatal-contract probes carry a `[fatal]` tag; the owning shard's `catch_discover_tests` selects `[fatal]` with a tightened CTest timeout. Tags map to CTest labels.
 
 11.5. Layout follows Capability Owner or support ownership: `tests/<owner-or-support>/<Stem>Test.cpp`, with deeper directories for cohesive areas. Shared helpers live in `tests/support/` under `namespace cch::tests` and do not create a cross-Owner production seam. Test include roots are declared in `cmake/tests/TestsSetup.cmake` (`CCH_FORMAL_TEST_INCLUDE_DIRS`); shared helpers are included as `"support/<Header>.hpp"` against the declared `tests/` root.
 
@@ -182,7 +182,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 ## 12. CMake
 
-12.1. CMake targets conform to the Capability Owner Package graph in `docs/agents/architecture.md` (authoritative Owner libraries: `cch_ai`, `cch_agent_core`, `cch_chord`, `cch_codemode`, `cch_tui`, and repository-private `cch_coding_agent`; `cch_support` is the pi-neutral support library). The legal direct cross-Owner project edges are `cch_agent_core -> cch_ai`, `cch_codemode -> cch_ai`, and `cch_coding_agent -> {cch_agent_core, cch_ai, cch_codemode}`; `cch_coding_agent -> cch_tui` is legal only from a target whose role is not `owner`, which the manifest records in `implementation_owner_dependencies` so the headless owner library cannot reach the frontend. The same role split governs the direct-include edge check. Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets. Flag a cross-Owner dependency not permitted for the source target's Owner and role by `cmake/parity/manifest.json` (ADR 0039, ADR 0053).
+12.1. CMake targets conform to the Capability Owner Package graph in `docs/agents/architecture.md` and the authoritative parity manifest (`cmake/parity/manifest.json`; ADR 0039, ADR 0053). Cross-Owner edges target only authoritative Owner libraries, never same-Owner private implementation targets. Headless Owner libraries remain independent of frontend targets; `implementation_owner_dependencies` adds permitted cross-Owner dependencies only for targets whose role is not `owner`. Flag any cross-Owner dependency or direct-include edge not permitted for the source target's Owner and role by `cmake/parity/manifest.json`.
 
 12.2. Use the central CMake constructors for every production target. Each declaration names exactly one role (`owner`, `implementation`, `support`, `composition`, or classified `external`), one Owner where applicable, its explicit source set, unconditional direct dependencies, and defaults. Every production source compiles once; the production graph is acyclic. Do not bypass the constructors with ad hoc target declarations.
 
@@ -218,8 +218,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 Sanctioned deviations are grandfathered only on untouched existing lines. Added or modified lines comply with the current rule unless an exception below explicitly permits the deviation.
 
 - **camelCase pi vocabulary (§3.2):** untouched camelCase declarations and uses are grandfathered. A new or renamed camelCase identifier is allowed only when its issue/spec or an adjacent comment identifies the matching pi identifier; otherwise the declaration uses `snake_case`. This semantic rule covers filesystem/session/trust seams, wire fields, and skill/prompt parity code without a path allowlist.
-- **Variant-alias naming (§3.3):** `Content`, `AssistantContent`, `Credential`, `AuthPromptKind`, and `AuthEventKind` predate the `*Variant` suffix and are intentionally kept to avoid public API churn (debt recorded in #372); added or renamed variant aliases use `*Variant`.
-- **Native TUI immediate preview frames (ADR 0051):** the existing coalesced preview and ~33 ms counted ticker are historical migration paths. [ADR 0067](docs/adr/0067-align-the-linux-tui-toolkit-and-native-tui-with-pi-v1-0-4.md) replaces their paint authority with the common toolkit policy. #978 migrates actual scheduling and disables Native Editor local echo while retaining asynchronous Projection consumption/reconciliation and successful-frame accounting; #987 deletes the old APIs and accepts streaming/Busy/Close convergence. Untouched legacy code remains pending those migrations; new painting code follows ADR 0067.
+- **Variant-alias naming (§3.3):** `Content` and `AssistantContent` predate the suffix rule and are intentionally kept to avoid public API churn (debt recorded in #372).
 
 ### Citation migrations
 
