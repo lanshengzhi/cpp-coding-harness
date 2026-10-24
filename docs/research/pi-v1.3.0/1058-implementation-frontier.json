@@ -938,7 +938,7 @@
           "fixtures/pi-v1.3.0/audit-1056/workflow.json: tool hooks rewrite arguments before execution and observe the committed result"
         ],
         "comparison": "Compare phase logs, checkpoint state, version outcomes, hook order and terminal receipts with the frozen durable task captures.",
-        "missing": "Scheduler-written orphaned/faulted outcomes were not observed in a scenario (1055 residual gap) and stay unverified."
+        "missing": "The #1076 F3a slice verifies multi-phase checkpoint progression and resume, typed completed/failed/aborted outcomes, abort-mark rejection for phase writes, abort-handler memo and terminal-outcome writes, missing-definition orphaning, no-progress faulting, and the terminal task write at Storage::commit. Definition version migration/replacement, task phase hooks and hook isolation remain unverified in C++; scheduler-written orphaned/faulted outcomes are observed for this slice, while broader F3 acceptance remains incomplete."
       },
       "coverage": [
         "cch_durable:task-definition",

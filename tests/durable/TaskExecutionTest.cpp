@@ -5,36 +5,90 @@
 #include <cch/durable/SqliteStorage.hpp>
 #include <cch/durable/Storage.hpp>
 #include <cch/durable/Task.hpp>
-#include "FrozenExpectation.hpp"
-#include "Outcome.hpp"
+#include "durable/FrozenExpectation.hpp"
+#include "durable/Outcome.hpp"
+#include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
 #include <memory>
+#include <mutex>
+#include <optional>
+#include <span>
+#include <stop_token>
 #include <string>
-#include <thread>
 #include <vector>
 
 namespace cch::tests::durable {
 using namespace cch::durable;
+using cch::tests::TempWorkspace;
 
 namespace {
 
 const std::string kAuditArtifact = "fixtures/pi-v1.3.0/audit-1076/task-outcomes.json";
 
-std::filesystem::path unique_temp_dir(std::string_view prefix) {
-    const auto p = std::filesystem::temp_directory_path() /
-                   (std::string{prefix} + "_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()));
-    std::filesystem::create_directories(p);
-    return p;
-}
+/// Record the exact batches passed to Storage::commit while delegating every
+/// operation to the selected real backend.
+class CommitObservingStorage final : public Storage {
+public:
+    explicit CommitObservingStorage(Storage& inner) : inner_(inner) {}
+
+    [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
+        commit_batches_.emplace_back(writes.begin(), writes.end());
+        return inner_.commit(writes);
+    }
+
+    [[nodiscard]] support::Expected<std::int64_t> mint_id() override { return inner_.mint_id(); }
+
+    [[nodiscard]] support::Expected<std::optional<ConversationRecord>> conversation(ConversationId id) override {
+        return inner_.conversation(id);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<StoredEntry>> entry(EntryId id) override { return inner_.entry(id); }
+
+    [[nodiscard]] support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit) override {
+        return inner_.scan_conversations(limit);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
+            ConversationId conversation_id, std::size_t limit) override {
+        return inner_.scan_entries(conversation_id, limit);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
+            std::string_view kind, std::optional<ConversationId> conversation_id) override {
+        return inner_.find_document(kind, conversation_id);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override {
+        return inner_.document(id);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_.task(id); }
+
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
+        return inner_.scan_tasks(limit);
+    }
+
+    [[nodiscard]] support::ExpectedVoid close() override { return inner_.close(); }
+
+    [[nodiscard]] const std::vector<std::vector<StorageWrite>>& commit_batches() const noexcept {
+        return commit_batches_;
+    }
+
+private:
+    Storage& inner_; // must outlive this observing wrapper
+    std::vector<std::vector<StorageWrite>> commit_batches_;
+};
 
 } // namespace
 
 TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and commits completed receipt",
-          "[durable][task][audit-1076]") {
+        "[durable][task][issue1076]") {
     const auto scenario = FrozenScenario::load(
             kAuditArtifact, "a multi-phase task advances checkpoints and commits a completed terminal receipt");
     REQUIRE(scenario.has_value());
@@ -60,24 +114,24 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
         REQUIRE(input_obj != nullptr);
         const double target = *input_obj->at("to").as_number();
 
-        return runtime.commit([target](Transaction&, const TaskRecord& current)
-                                      -> support::Expected<std::optional<NextTaskState>> {
-            const auto* cur_cp = current.state.checkpoint ? current.state.checkpoint->as_object() : nullptr;
-            if (cur_cp == nullptr) {
-                return std::unexpected(support::make_error(support::ErrorCode::Validation, "No checkpoint"));
-            }
-            const double next_n = *cur_cp->at("n").as_number() + 1.0;
-            if (next_n >= target) {
-                return NextTaskState::terminal(TaskOutcome{
-                        .status = "completed",
-                        .result = chord::Json(next_n),
+        return runtime.commit(
+                [target](Transaction&, const TaskRecord& current) -> support::Expected<std::optional<NextTaskState>> {
+                    const auto* cur_cp = current.state.checkpoint ? current.state.checkpoint->as_object() : nullptr;
+                    if (cur_cp == nullptr) {
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation, "No checkpoint"));
+                    }
+                    const double next_n = *cur_cp->at("n").as_number() + 1.0;
+                    if (next_n >= target) {
+                        return NextTaskState::terminal(TaskOutcome{
+                                .status = "completed",
+                                .result = chord::Json(next_n),
+                        });
+                    }
+                    chord::Json::Object next_cp;
+                    next_cp.emplace("phase", "count");
+                    next_cp.emplace("n", next_n);
+                    return NextTaskState::running(chord::Json(std::move(next_cp)));
                 });
-            }
-            chord::Json::Object next_cp;
-            next_cp.emplace("phase", "count");
-            next_cp.emplace("n", next_n);
-            return NextTaskState::running(chord::Json(std::move(next_cp)));
-        });
     });
 
     auto def = def_builder.build();
@@ -97,8 +151,7 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
         const auto& registered_def = harness->session(); // compile check
         (void)registered_def;
         // Lookup definition from harness
-        auto created = tx.create_task(
-                *harness->task_definition("audit1076.counter"), chord::Json(input));
+        auto created = tx.create_task(*harness->task_definition("audit1076.counter"), chord::Json(input));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
         return {};
@@ -135,7 +188,7 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
 }
 
 TEST_CASE("TaskExecution: task memo survives checkpoint replacement and is cleared on terminal settlement",
-          "[durable][task][audit-1076]") {
+        "[durable][task][issue1076]") {
     const auto scenario = FrozenScenario::load(
             kAuditArtifact, "a task memo survives checkpoint replacement and is cleared on terminal settlement");
     REQUIRE(scenario.has_value());
@@ -191,8 +244,7 @@ TEST_CASE("TaskExecution: task memo survives checkpoint replacement and is clear
     chord::Json::Object input;
     input.emplace("amount", 7.0);
     auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto created = tx.create_task(
-                *harness->task_definition("audit1076.memo"), chord::Json(input));
+        auto created = tx.create_task(*harness->task_definition("audit1076.memo"), chord::Json(input));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
         return {};
@@ -219,7 +271,7 @@ TEST_CASE("TaskExecution: task memo survives checkpoint replacement and is clear
 }
 
 TEST_CASE("TaskExecution: task commits typed failed outcome with error detail and partial result",
-          "[durable][task][audit-1076]") {
+        "[durable][task][issue1076]") {
     const auto scenario = FrozenScenario::load(
             kAuditArtifact, "a multi-phase task commits a typed failed outcome with error and partial result");
     REQUIRE(scenario.has_value());
@@ -236,15 +288,16 @@ TEST_CASE("TaskExecution: task commits typed failed outcome with error detail an
         chord::Json::Object partial;
         partial.emplace("partial", 42.0);
 
-        return runtime.commit([detail = std::move(detail), partial = std::move(partial)](
-                                      Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+        return runtime.commit([detail = std::move(detail), partial = std::move(partial)](Transaction&,
+                                      const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
             return NextTaskState::terminal(TaskOutcome{
                     .status = "failed",
                     .result = chord::Json(partial),
-                    .error = TaskOutcomeError{
-                            .message = "transfer declined",
-                            .detail = chord::Json(detail),
-                    },
+                    .error =
+                            TaskOutcomeError{
+                                    .message = "transfer declined",
+                                    .detail = chord::Json(detail),
+                            },
             });
         });
     });
@@ -261,8 +314,7 @@ TEST_CASE("TaskExecution: task commits typed failed outcome with error detail an
 
     TaskId task_id;
     auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto created = tx.create_task(
-                *harness->task_definition("audit1076.fail"), chord::Json(chord::Json::Object{}));
+        auto created = tx.create_task(*harness->task_definition("audit1076.fail"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
         return {};
@@ -288,14 +340,18 @@ TEST_CASE("TaskExecution: task commits typed failed outcome with error detail an
     REQUIRE(consume(harness->close()).has_value());
 }
 
-TEST_CASE("TaskExecution: abort_task marks running task and executes abort handler",
-          "[durable][task][audit-1076]") {
+TEST_CASE("TaskExecution: abort_task marks running task and executes abort handler", "[durable][task][issue1076]") {
     const auto scenario = FrozenScenario::load(
             kAuditArtifact, "abortTask marks a running task and runs its abort handler to commit an aborted outcome");
     REQUIRE(scenario.has_value());
 
-    bool abort_run_signalled = false;
-    bool abort_handler_ran = false;
+    std::atomic_bool phase_memo_rejected{false};
+    std::atomic_bool phase_commit_rejected{false};
+    std::atomic_bool abort_handler_ran{false};
+    std::atomic_bool abort_memo_committed{false};
+    std::mutex phase_mutex;
+    std::condition_variable phase_cv;
+    bool phase_started = false;
 
     auto def_builder = TaskDefinitionBuilder("audit1076.abort", 1);
     def_builder.initial([](const chord::Json&) {
@@ -304,20 +360,33 @@ TEST_CASE("TaskExecution: abort_task marks running task and executes abort handl
         return chord::Json(std::move(obj));
     });
     def_builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        // Run until stop is requested
-        while (!runtime.stop_token().stop_requested()) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        const std::stop_token stop = runtime.stop_token();
+        {
+            std::unique_lock lock(phase_mutex);
+            phase_started = true;
+            phase_cv.notify_all();
+            std::stop_callback wake_on_stop{stop, [&phase_cv] { phase_cv.notify_all(); }};
+            if (!phase_cv.wait_for(lock, std::chrono::seconds{30}, [&stop] { return stop.stop_requested(); })) {
+                return support::AsyncResult<void>{std::unexpected(
+                        support::make_error(support::ErrorCode::Timeout, "Timed out waiting for abort request"))};
+            }
         }
-        abort_run_signalled = true;
+        auto memo = consume(runtime.memo("after-abort", chord::Json("late")));
+        phase_memo_rejected.store(!memo.has_value());
+        auto progress = consume(
+                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    return NextTaskState::terminal(
+                            TaskOutcome{.status = "completed", .result = chord::Json("too late")});
+                }));
+        phase_commit_rejected.store(!progress.has_value());
         return support::AsyncResult<void>{support::ExpectedVoid{}};
     });
     def_builder.abort([&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        abort_handler_ran = true;
+        abort_handler_ran.store(true);
+        auto memo = consume(runtime.memo("abort-cleanup", chord::Json("saved")));
+        abort_memo_committed.store(memo.has_value());
         return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-            return NextTaskState::terminal(TaskOutcome{
-                    .status = "aborted",
-                    .reason = "requested",
-            });
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted", .reason = "requested"});
         });
     });
 
@@ -330,11 +399,9 @@ TEST_CASE("TaskExecution: abort_task marks running task and executes abort handl
     auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
     REQUIRE(harness_res.has_value());
     auto harness = std::move(harness_res.value());
-
     TaskId task_id;
     auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto created = tx.create_task(
-                *harness->task_definition("audit1076.abort"), chord::Json(chord::Json::Object{}));
+        auto created = tx.create_task(*harness->task_definition("audit1076.abort"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
         return {};
@@ -342,34 +409,94 @@ TEST_CASE("TaskExecution: abort_task marks running task and executes abort handl
     REQUIRE(commit_res.has_value());
 
     REQUIRE(harness->resume().has_value());
-    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    {
+        std::unique_lock lock(phase_mutex);
+        REQUIRE(phase_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return phase_started; }));
+    }
 
     auto abort_res = consume(harness->abort_task(task_id));
-    REQUIRE(abort_res.has_value());
-    CHECK(abort_res.value() == *scenario->string_member("abortResult"));
-
+    CHECK(abort_res.has_value());
+    if (abort_res.has_value()) {
+        CHECK(abort_res.value() == *scenario->string_member("abortResult"));
+    }
     auto receipt_res = consume(harness->wait_for_task(task_id));
     REQUIRE(receipt_res.has_value());
     const auto& receipt = receipt_res.value();
-    CHECK(abort_run_signalled);
-    CHECK(abort_handler_ran);
+    CHECK(phase_memo_rejected.load());
+    CHECK(phase_commit_rejected.load());
+    CHECK(abort_handler_ran.load());
+    CHECK(abort_memo_committed.load());
     CHECK(receipt.abort_requested);
     CHECK(receipt.state.status == "terminal");
     REQUIRE(receipt.state.outcome.has_value());
-    CHECK(receipt.state.outcome->status == "aborted");
-    CHECK(receipt.state.outcome->reason == "requested");
+    REQUIRE(receipt.state.outcome->reason.has_value());
+    const auto* expected_outcome = scenario->object_member("outcome");
+    REQUIRE(expected_outcome != nullptr);
+    chord::Json::Object actual_outcome;
+    actual_outcome.emplace("status", receipt.state.outcome->status);
+    actual_outcome.emplace("reason", *receipt.state.outcome->reason);
+    CHECK(json_equals(chord::Json(std::move(actual_outcome)), *expected_outcome));
 
     REQUIRE(consume(harness->close()).has_value());
 }
 
-TEST_CASE("TaskExecution: aborting task with missing definition commits orphaned outcome",
-          "[durable][task][audit-1076]") {
+TEST_CASE("TaskExecution: abort handler may commit a failed terminal outcome", "[durable][task][issue1076]") {
+    auto def_builder = TaskDefinitionBuilder("audit1076.abort-failure", 1);
+    def_builder.initial([](const chord::Json&) {
+        chord::Json::Object obj;
+        obj.emplace("phase", "run");
+        return chord::Json(std::move(obj));
+    });
+    def_builder.phase(
+            "run", [](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
+    def_builder.abort([](const TaskRecord&, TaskRuntime& runtime) {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{
+                    .status = "failed",
+                    .error = TaskOutcomeError{.message = "cleanup failed"},
+            });
+        });
+    });
+
+    auto def = def_builder.build();
+    REQUIRE(def.has_value());
+    MemoryStorage storage;
+    std::vector<TaskDefinition> tasks;
+    tasks.push_back(std::move(*def));
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    TaskId task_id;
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(
+                *harness->task_definition("audit1076.abort-failure"), chord::Json(chord::Json::Object{}));
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+    auto abort_res = consume(harness->abort_task(task_id));
+    REQUIRE(abort_res.has_value());
+    CHECK(abort_res.value() == "marked");
+
+    REQUIRE(harness->resume().has_value());
+    auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    REQUIRE(receipt_res.value().state.outcome.has_value());
+    CHECK(receipt_res.value().state.outcome->status == "failed");
+    REQUIRE(receipt_res.value().state.outcome->error.has_value());
+    CHECK(receipt_res.value().state.outcome->error->message == "cleanup failed");
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE(
+        "TaskExecution: aborting task with missing definition commits orphaned outcome", "[durable][task][issue1076]") {
     const auto scenario = FrozenScenario::load(
             kAuditArtifact, "aborting a task with a missing definition commits an orphaned outcome");
     REQUIRE(scenario.has_value());
 
-    const auto dir = unique_temp_dir("cch_test_orphan");
-    const auto db_path = dir / "durable.sqlite";
+    TempWorkspace workspace;
+    const auto db_path = workspace.path() / "durable.sqlite";
 
     TaskId task_id;
     {
@@ -379,9 +506,10 @@ TEST_CASE("TaskExecution: aborting task with missing definition commits orphaned
                                             obj.emplace("phase", "run");
                                             return chord::Json(std::move(obj));
                                         })
-                                        .phase("run", [](const TaskRecord&, TaskRuntime&) {
-                                            return support::AsyncResult<void>{support::ExpectedVoid{}};
-                                        })
+                                        .phase("run",
+                                                [](const TaskRecord&, TaskRuntime&) {
+                                                    return support::AsyncResult<void>{support::ExpectedVoid{}};
+                                                })
                                         .build();
         auto storage = *SqliteStorage::open(db_path);
         std::vector<TaskDefinition> tasks;
@@ -422,14 +550,11 @@ TEST_CASE("TaskExecution: aborting task with missing definition commits orphaned
 
         REQUIRE(consume(harness->close()).has_value());
     }
-
-    std::filesystem::remove_all(dir);
 }
 
-TEST_CASE("TaskExecution: phase returning without durable progress faults the task",
-          "[durable][task][audit-1076]") {
-    const auto scenario = FrozenScenario::load(
-            kAuditArtifact, "a phase returning without durable progress faults the task");
+TEST_CASE("TaskExecution: phase returning without durable progress faults the task", "[durable][task][issue1076]") {
+    const auto scenario =
+            FrozenScenario::load(kAuditArtifact, "a phase returning without durable progress faults the task");
     REQUIRE(scenario.has_value());
 
     auto def_builder = TaskDefinitionBuilder("audit1076.no-progress", 1);
@@ -455,8 +580,8 @@ TEST_CASE("TaskExecution: phase returning without durable progress faults the ta
 
     TaskId task_id;
     auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto created = tx.create_task(
-                *harness->task_definition("audit1076.no-progress"), chord::Json(chord::Json::Object{}));
+        auto created =
+                tx.create_task(*harness->task_definition("audit1076.no-progress"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
         return {};
@@ -478,16 +603,19 @@ TEST_CASE("TaskExecution: phase returning without durable progress faults the ta
 }
 
 TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint without rerunning completed phases",
-          "[durable][task][audit-1076]") {
-    const auto scenario = FrozenScenario::load(
-            kAuditArtifact, "resuming an interrupted task continues from its durable checkpoint without rerunning completed phases");
+        "[durable][task][issue1076]") {
+    const auto scenario = FrozenScenario::load(kAuditArtifact,
+            "resuming an interrupted task continues from its durable checkpoint without rerunning completed phases");
     REQUIRE(scenario.has_value());
 
-    const auto dir = unique_temp_dir("cch_test_resume");
-    const auto db_path = dir / "durable.sqlite";
+    TempWorkspace workspace;
+    const auto db_path = workspace.path() / "durable.sqlite";
 
     std::vector<std::string> initial_log;
     TaskId task_id;
+    std::mutex phase_mutex;
+    std::condition_variable phase_cv;
+    bool p2_started = false;
 
     // Run phase 1, which commits checkpoint p2
     {
@@ -502,8 +630,8 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
             chord::Json::Object cp;
             cp.emplace("phase", "p2");
             cp.emplace("n", 1.0);
-            return runtime.commit([cp = std::move(cp)](Transaction&, const TaskRecord&)
-                                          -> support::Expected<std::optional<NextTaskState>> {
+            return runtime.commit([cp = std::move(cp)](Transaction&,
+                                          const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
                 return NextTaskState::running(chord::Json(cp));
             });
         });
@@ -511,20 +639,27 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
         def_builder.phase("p2", [&](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
             if (interrupt_first) {
                 interrupt_first = false;
-                while (!runtime.stop_token().stop_requested()) {
-                    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                const std::stop_token stop = runtime.stop_token();
+                std::unique_lock lock(phase_mutex);
+                p2_started = true;
+                phase_cv.notify_all();
+                std::stop_callback wake_on_stop{stop, [&phase_cv] { phase_cv.notify_all(); }};
+                if (!phase_cv.wait_for(lock, std::chrono::seconds{30}, [&stop] { return stop.stop_requested(); })) {
+                    return support::AsyncResult<void>{std::unexpected(
+                            support::make_error(support::ErrorCode::Timeout, "Timed out waiting for harness close"))};
                 }
                 return support::AsyncResult<void>{support::ExpectedVoid{}};
             }
             const auto* cp = task.state.checkpoint->as_object();
             const double n = *cp->at("n").as_number();
             initial_log.push_back("p2:" + std::to_string(static_cast<int>(n)));
-            return runtime.commit([n](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                return NextTaskState::terminal(TaskOutcome{
-                        .status = "completed",
-                        .result = chord::Json(n + 10.0),
-                });
-            });
+            return runtime.commit(
+                    [n](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                        return NextTaskState::terminal(TaskOutcome{
+                                .status = "completed",
+                                .result = chord::Json(n + 10.0),
+                        });
+                    });
         });
 
         auto storage = *SqliteStorage::open(db_path);
@@ -535,18 +670,20 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
         auto harness = std::move(harness_res.value());
 
         auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-            auto created = tx.create_task(
-                    *harness->task_definition("audit1076.resume"), chord::Json(chord::Json::Object{}));
+            auto created =
+                    tx.create_task(*harness->task_definition("audit1076.resume"), chord::Json(chord::Json::Object{}));
             if (!created) return std::unexpected(created.error());
             task_id = *created;
             return {};
         }));
         REQUIRE(commit_res.has_value());
 
-        // Resume and let p1 run
         REQUIRE(harness->resume().has_value());
-        std::this_thread::sleep_for(std::chrono::milliseconds(20));
-        // Close harness while p2 is running or before it finishes
+        {
+            std::unique_lock lock(phase_mutex);
+            REQUIRE(phase_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return p2_started; }));
+        }
+        // Closing requests stop after p1 has committed the p2 checkpoint and p2 has started.
         REQUIRE(consume(harness->close()).has_value());
     }
 
@@ -568,12 +705,13 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
             const auto* cp = task.state.checkpoint->as_object();
             const double n = *cp->at("n").as_number();
             reopened_log.push_back("p2:" + std::to_string(static_cast<int>(n)));
-            return runtime.commit([n](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                return NextTaskState::terminal(TaskOutcome{
-                        .status = "completed",
-                        .result = chord::Json(n + 10.0),
-                });
-            });
+            return runtime.commit(
+                    [n](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                        return NextTaskState::terminal(TaskOutcome{
+                                .status = "completed",
+                                .result = chord::Json(n + 10.0),
+                        });
+                    });
         });
 
         auto storage = *SqliteStorage::open(db_path);
@@ -600,17 +738,18 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
 
         REQUIRE(consume(harness->close()).has_value());
     }
-
-    std::filesystem::remove_all(dir);
 }
 
 TEST_CASE("TaskExecution: terminal record and receipt are committed in the same atomic commit",
-          "[durable][task][audit-1076]") {
+        "[durable][task][issue1076]") {
     const auto scenario = FrozenScenario::load(
             kAuditArtifact, "terminal record and result receipt commit in the same atomic storage batch");
     REQUIRE(scenario.has_value());
 
-    std::vector<CommitPublication> publications;
+    TempWorkspace workspace;
+    const auto db_path = workspace.path() / "atomic.sqlite";
+    auto sqlite_storage = *SqliteStorage::open(db_path);
+    CommitObservingStorage storage{*sqlite_storage};
 
     auto def_builder = TaskDefinitionBuilder("audit1076.atomic", 1);
     def_builder.initial([](const chord::Json&) {
@@ -618,14 +757,17 @@ TEST_CASE("TaskExecution: terminal record and receipt are committed in the same 
         obj.emplace("phase", "run");
         return chord::Json(std::move(obj));
     });
+    chord::Json::Object expected_result;
+    expected_result.emplace("receiptId", 999.0);
+    const auto expected_json = chord::Json(expected_result);
     def_builder.phase("run", [](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        chord::Json::Object res;
-        res.emplace("receiptId", 999.0);
-        return runtime.commit([res = std::move(res)](Transaction&, const TaskRecord&)
-                                      -> support::Expected<std::optional<NextTaskState>> {
+        chord::Json::Object result;
+        result.emplace("receiptId", 999.0);
+        return runtime.commit([result = std::move(result)](Transaction&,
+                                      const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
             return NextTaskState::terminal(TaskOutcome{
                     .status = "completed",
-                    .result = chord::Json(res),
+                    .result = chord::Json(result),
             });
         });
     });
@@ -633,21 +775,16 @@ TEST_CASE("TaskExecution: terminal record and receipt are committed in the same 
     auto def = def_builder.build();
     REQUIRE(def.has_value());
 
-    MemoryStorage storage;
     std::vector<TaskDefinition> tasks;
     tasks.push_back(std::move(*def));
     auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
     REQUIRE(harness_res.has_value());
     auto harness = std::move(harness_res.value());
 
-    REQUIRE(harness->session().subscribe_commits([&](const CommitPublication& pub) {
-        publications.push_back(pub);
-    }).has_value());
-
     TaskId task_id;
     auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto created = tx.create_task(
-                *harness->task_definition("audit1076.atomic"), chord::Json(chord::Json::Object{}));
+        auto created =
+                tx.create_task(*harness->task_definition("audit1076.atomic"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
         return {};
@@ -665,31 +802,38 @@ TEST_CASE("TaskExecution: terminal record and receipt are committed in the same 
     REQUIRE(receipt.state.outcome->result.has_value());
     CHECK(*receipt.state.outcome->result->as_object()->at("receiptId").as_number() == 999.0);
 
-    // Discriminating check: find all commit publications containing the task becoming terminal
-    int terminal_commit_count = 0;
-    bool found_terminal_with_outcome = false;
-
-    for (const auto& pub : publications) {
-        for (const auto& change : pub.changes) {
-            if (const auto* table_change = std::get_if<TableCommitChange>(&change)) {
-                if (table_change->type == "task" && table_change->task.has_value() &&
-                    table_change->task->id == task_id && table_change->task->state.status == "terminal") {
-                    terminal_commit_count++;
-                    if (table_change->task->state.outcome.has_value() &&
-                        table_change->task->state.outcome->status == "completed" &&
-                        table_change->task->state.outcome->result.has_value()) {
-                        found_terminal_with_outcome = true;
-                    }
-                }
+    // The receipt is the result inside the terminal TaskRecord. Observe the exact
+    // batch passed to Storage::commit and require both in that same task write.
+    std::size_t terminal_write_count = 0;
+    bool found_receipt_in_terminal_batch = false;
+    for (const auto& batch : storage.commit_batches()) {
+        for (const StorageWrite& write : batch) {
+            if (write.type != "task" || !write.task.has_value() || write.task->id != task_id ||
+                    write.task->state.status != "terminal") {
+                continue;
             }
+            ++terminal_write_count;
+            found_receipt_in_terminal_batch =
+                    batch.size() == 1 && write.task->state.outcome.has_value() &&
+                    write.task->state.outcome->status == "completed" &&
+                    write.task->state.outcome->result == std::optional<chord::Json>{expected_json};
         }
     }
 
-    // Must be exactly 1 atomic commit that transitions the task to terminal AND carries the receipt/result
-    CHECK(terminal_commit_count == 1);
-    CHECK(found_terminal_with_outcome);
+    CHECK(terminal_write_count == 1);
+    CHECK(found_receipt_in_terminal_batch);
 
     REQUIRE(consume(harness->close()).has_value());
+
+    auto reopened_storage = *SqliteStorage::open(db_path);
+    auto persisted = reopened_storage->task(task_id);
+    REQUIRE(persisted.has_value());
+    REQUIRE(persisted->has_value());
+    CHECK((*persisted)->state.status == "terminal");
+    REQUIRE((*persisted)->state.outcome.has_value());
+    REQUIRE((*persisted)->state.outcome->result.has_value());
+    CHECK(*(*persisted)->state.outcome->result == expected_json);
+    REQUIRE(reopened_storage->close().has_value());
 }
 
 } // namespace cch::tests::durable

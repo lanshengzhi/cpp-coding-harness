@@ -17,7 +17,7 @@ namespace cch::durable {
 /// Options for opening a Harness (frozen pi `HarnessOptions`).
 struct HarnessOptions {
     std::vector<TaskDefinition> tasks{};
-    std::function<std::int64_t()> now{};
+    std::move_only_function<std::int64_t()> now{};
 };
 
 /// Top-level durable runtime harness (frozen pi `Harness`).
@@ -30,7 +30,7 @@ public:
     Harness(const Harness&) = delete;
     Harness& operator=(const Harness&) = delete;
 
-    /// Open a Harness over storage.
+    /// Open a Harness over storage. The caller keeps `storage` alive until `close()` completes.
     [[nodiscard]] static support::AsyncResult<std::unique_ptr<Harness>> open(
             Storage& storage, HarnessOptions options = {});
 
@@ -45,7 +45,7 @@ public:
             std::move_only_function<support::Expected<void>(Transaction&)> change);
 
     /// Resume scheduling tasks.
-    support::ExpectedVoid resume();
+    [[nodiscard]] support::ExpectedVoid resume();
 
     /// Reconcile surviving running tasks back to pending (call upon reopen).
     [[nodiscard]] support::AsyncResult<void> open_tasks();
@@ -53,7 +53,7 @@ public:
     /// Wait for a task to reach terminal status and return its terminal record receipt.
     [[nodiscard]] support::AsyncResult<TaskRecord> wait_for_task(TaskId id);
 
-    /// Abort a task. Returns "marked" or "terminal".
+    /// Abort a task. Returns "marked" or "terminal". The Harness must outlive the asynchronous operation.
     [[nodiscard]] support::AsyncResult<std::string> abort_task(TaskId id);
 
     /// Read the latest complete record for one task.
