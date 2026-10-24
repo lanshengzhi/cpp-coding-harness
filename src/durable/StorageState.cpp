@@ -29,6 +29,7 @@ struct StoredDocument {
     DocumentRecord record;
     std::optional<ConversationId> conversation_id;
     chord::Json value;
+    std::optional<Seq> retired_at;
 };
 
 /// One stored entry with the sequence of the commit that persisted it.
@@ -75,6 +76,7 @@ struct StorageState::Impl {
             return std::unexpected(closed_error());
         }
         if (writes.empty()) {
+            next_seq = std::max(next_seq, seq + 1);
             return consume_seq ? seq : next_seq;
         }
 
@@ -132,10 +134,15 @@ struct StorageState::Impl {
                 record.created_at = seq;
                 const std::int64_t id = record.id.value;
                 const std::string address_key = document_address_key(record.kind, write.document_conversation_id);
+                if (next_document_ids.contains(address_key)) {
+                    return std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "Document address already has a current incarnation"));
+                }
                 next_documents.emplace(id,
                         StoredDocument{.record = std::move(record),
                                 .conversation_id = write.document_conversation_id,
-                                .value = *write.document_value});
+                                .value = *write.document_value,
+                                .retired_at = std::nullopt});
                 next_document_ids[address_key] = id;
                 next_id = std::max(next_id, id + 1);
             } else if (write.type == "document.change") {
@@ -161,8 +168,13 @@ struct StorageState::Impl {
                 if (found == next_documents.end()) {
                     return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown document"));
                 }
-                next_document_ids.erase(document_address_key(found->second.record.kind, found->second.conversation_id));
-                next_documents.erase(found);
+                found->second.retired_at = seq;
+                const std::string address =
+                        document_address_key(found->second.record.kind, found->second.conversation_id);
+                const auto current = next_document_ids.find(address);
+                if (current != next_document_ids.end() && current->second == write.document_id->value) {
+                    next_document_ids.erase(current);
+                }
             } else {
                 return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown storage write"));
             }
@@ -212,6 +224,15 @@ std::int64_t StorageState::reserve_id() {
 }
 
 Seq StorageState::next_seq() const { return impl_->next_seq; }
+
+support::ExpectedVoid StorageState::restore_high_water_marks(std::int64_t next_id, Seq next_seq) {
+    if (impl_->closed) {
+        return std::unexpected(impl_->closed_error());
+    }
+    impl_->next_id = std::max(impl_->next_id, next_id);
+    impl_->next_seq = std::max(impl_->next_seq, next_seq);
+    return {};
+}
 
 support::Expected<std::optional<ConversationRecord>> StorageState::conversation(ConversationId id) {
     if (impl_->closed) {

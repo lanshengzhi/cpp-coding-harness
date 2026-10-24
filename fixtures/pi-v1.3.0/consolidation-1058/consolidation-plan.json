@@ -493,6 +493,14 @@
   },
   "scenarioLinks": [
     {
+      "ticket": "1054",
+      "scenario": "SQLite applies entry ID bounds and stores document revisions with configured busy and WAL options",
+      "rows": [
+        "cch_durable:Storage:sqlite:options"
+      ],
+      "authority": "#1075 registered frozen capture plus tests/durable/SqliteStorageTest.cpp public API comparison; verification remains upstream-captured"
+    },
+    {
       "ticket": "1061",
       "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
       "rows": [

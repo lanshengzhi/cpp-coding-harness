@@ -1,0 +1,160 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1075",
+  "family": "audit-1075",
+  "capturedAt": "2026-10-24T02:10:38.655Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage,NodeSqliteDatabase",
+    "packages/durable/src/storage/sqlite/storage.ts:SqliteStorage.scanEntries,applyDocumentActions",
+    "packages/durable/src/storage/sqlite/migrations.ts:document_revisions",
+    "packages/durable/src/storage/sqlite/database.ts:SqliteDatabase",
+    "packages/durable/src/session/transaction.ts:Transaction.conversation,entry,task,scanConversations,scanEntries,scanTasks,latestHeadMarker,submissionByRequest",
+    "packages/durable/test/sqlite-storage.test.ts:SqliteStorage filtered scans and options"
+  ],
+  "scenarios": [
+    {
+      "name": "SQLite applies entry ID bounds and stores document revisions with configured busy and WAL options",
+      "inputs": {
+        "backend": "SqliteStorage",
+        "busyTimeoutMs": 30,
+        "walAutoCheckpointPages": 7
+      },
+      "expected": {
+        "transactionReads": {
+          "conversation": {
+            "id": 100
+          },
+          "missingConversation": null,
+          "entry": {
+            "kind": "audit1075.filtered",
+            "selected": true,
+            "id": 101,
+            "conversationId": 100,
+            "head": 101
+          },
+          "missingEntry": null,
+          "task": {
+            "id": 105,
+            "conversationId": 100,
+            "kind": "audit1075.read-probe",
+            "version": 1,
+            "input": null,
+            "background": false,
+            "abortRequested": false,
+            "state": {
+              "status": "pending",
+              "checkpoint": {
+                "phase": "ready"
+              }
+            }
+          },
+          "missingTask": null,
+          "conversations": {
+            "items": [
+              {
+                "id": 100
+              }
+            ]
+          },
+          "entries": {
+            "items": [
+              {
+                "kind": "audit1075.filtered",
+                "selected": true,
+                "id": 101,
+                "conversationId": 100,
+                "head": 101
+              }
+            ]
+          },
+          "tasks": {
+            "items": [
+              {
+                "id": 105,
+                "conversationId": 100,
+                "kind": "audit1075.read-probe",
+                "version": 1,
+                "input": null,
+                "background": false,
+                "abortRequested": false,
+                "state": {
+                  "status": "pending",
+                  "checkpoint": {
+                    "phase": "ready"
+                  }
+                }
+              }
+            ]
+          },
+          "latestHeadMarker": {
+            "kind": "audit1075.filtered",
+            "selected": true,
+            "id": 101,
+            "conversationId": 100,
+            "head": 101
+          },
+          "submissionByRequest": {
+            "conversationId": 100,
+            "requestId": "audit1075.request-1",
+            "type": "input",
+            "status": "queued",
+            "id": 106
+          },
+          "missingSubmissionByRequest": null
+        },
+        "connectionSettings": {
+          "busyTimeoutMs": {
+            "timeout": 30
+          },
+          "walAutoCheckpointPages": {
+            "wal_autocheckpoint": 7
+          },
+          "journalMode": {
+            "journal_mode": "wal"
+          }
+        },
+        "revisions": [
+          {
+            "seq": 51,
+            "kind": "base",
+            "version": 3,
+            "content": "{\"revision\":2}"
+          },
+          {
+            "seq": 52,
+            "kind": "delta",
+            "version": 3,
+            "content": "[[\"s\",[\"revision\"],3]]"
+          },
+          {
+            "seq": 53,
+            "kind": "base",
+            "version": 1,
+            "content": "{\"revision\":1}"
+          },
+          {
+            "seq": 54,
+            "kind": "base",
+            "version": 1,
+            "content": "{\"revision\":2}"
+          }
+        ],
+        "busyMessage": "database is locked",
+        "elapsedMs": 30.461692000000085
+      },
+      "normalizations": [
+        "elapsedMs is expected to be at least the configured 30 ms busy timeout and below 2,000 ms"
+      ]
+    }
+  ]
+}
