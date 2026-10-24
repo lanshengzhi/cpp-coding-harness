@@ -13,6 +13,7 @@ cch_parity_declare_target(
         src/codemode/Declarations.cpp
         src/codemode/Deterministic.cpp
         src/codemode/Guest.cpp
+        src/codemode/Remote.cpp
         src/codemode/Sandbox.cpp
         src/codemode/Shared.cpp
         src/codemode/Source.cpp

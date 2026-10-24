@@ -57,10 +57,12 @@ using detail::gen_i32;
 using detail::globals_json;
 using detail::Guest;
 using detail::Handle;
+using detail::HostClockTimeGet;
 using detail::HostFdFdstatGet;
 using detail::HostFdWrite;
 using detail::HostModuleDenied;
 using detail::HostPromiseRejection;
+using detail::HostRandomGet;
 using detail::HostTimezone;
 using detail::HostWasiStub;
 using detail::kBridgeName;
@@ -228,46 +230,6 @@ struct SandboxLink {
         return std::move(result);
     }
 };
-
-/// pi worker mode keeps the host's real clock and real randomness: only a
-/// deterministic `start` run replaces them (see `Deterministic.cpp`).
-WasmEdge_Result HostClockTimeGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    const std::int32_t clock_id = WasmEdge_ValueGetI32(in[0]);
-    if (clock_id != 0 && clock_id != 1) {
-        out[0] = gen_i32(kWasiErnoNosys);
-        return WasmEdge_Result_Success;
-    }
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t result_ptr = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[2]));
-    const auto now = std::chrono::system_clock::now().time_since_epoch();
-    const auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-    guest.store_u64(result_ptr, static_cast<std::uint64_t>(nanos));
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostRandomGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t buf = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[0]));
-    const std::uint32_t len = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
-    if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(guest.memory, buf, len)) {
-        // Not a cryptographic boundary: the guest only seeds Math.random and
-        // extension PRNGs, and no host secret crosses it.
-        std::uint64_t seed = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
-        for (std::uint32_t i = 0; i < len; ++i) {
-            seed = seed * 6364136223846793005ull + 1442695040888963407ull;
-            p[i] = static_cast<std::uint8_t>(seed >> 33);
-        }
-    }
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
-}
 
 /// All mutable state of one `run`. A pointer to it is the `data` of every host
 /// import, so the bridge can reach the guest and the accumulating result.
