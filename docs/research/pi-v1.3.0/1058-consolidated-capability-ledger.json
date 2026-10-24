@@ -273,10 +273,10 @@
         "partial": 17
       },
       "cch_codemode": {
-        "implemented": 21,
-        "missing": 23,
+        "implemented": 26,
+        "missing": 19,
         "not-applicable": 2,
-        "partial": 5
+        "partial": 4
       },
       "cch_coding_agent": {
         "implemented": 75,
@@ -307,10 +307,10 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1006,
-      "missing": 224,
+      "implemented": 1011,
+      "missing": 220,
       "not-applicable": 18,
-      "partial": 216
+      "partial": 215
     },
     "verification": {
       "not-applicable": 28,
@@ -10781,7 +10781,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`; host concurrency policy; every `CodemodeSandbox.execute()`/`start()`.",
@@ -10808,7 +10808,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add an `acquireWorker`-shaped admission callback (or an application-owned semaphore) around thread creation, with release on construction failure/exit. Do not use the timeout as a capacity mechanism.",
+      "notes": "Recommendation: Keep admission tied to actual worker exit, not result settlement; this is process-local thread accounting and makes no crash- or power-loss recovery claim.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10817,7 +10817,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-admission",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10833,7 +10833,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `finally { await sandbox.close() }`, session teardown and reuse tests.",
@@ -10859,7 +10859,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add `close()` with a terminal error and idempotent teardown to the host API, then use it in the Application `finally`; do not rely on object destruction for cancellation.",
+      "notes": "Recommendation: Keep close idempotent and terminal; callers should close explicitly rather than rely on destruction for cancellation.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10868,7 +10868,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-close",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10884,7 +10884,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application worker creation and sandbox error reporting.",
@@ -10910,7 +10910,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Keep the eager wasm validation; add a typed worker-start failure path and release semantics with the admission seam.",
+      "notes": "Recommendation: Keep eager guest validation and the typed start failure path with one-shot reservation release.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10919,7 +10919,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-construction-failure",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10936,7 +10936,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application concurrency accounting, `CodemodeSandbox.close()`, and tests that distinguish result settlement from process/thread exit.",
@@ -10964,7 +10964,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Separate result settlement from thread exit in the host API and add `onWorkerStarted`/`close`; the worker-lifetime scenario family must be rerun against that seam.",
+      "notes": "Recommendation: Keep result settlement independent from actual worker exit and retain the real-thread exit-gate tests; do not claim crash- or power-loss recovery.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10973,7 +10973,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-lifetime",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10987,7 +10987,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application concurrency accounting and `CodemodeSandbox.close()`.",
@@ -11012,7 +11012,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Implement the lifetime seam first; then add the repeated-cancel test with an independent released-at-result probe.",
+      "notes": "Recommendation: Retain separate result and actual-exit observations and one-shot release callbacks; this is in-process accounting only.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11021,7 +11021,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-repeated-cancellation",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
