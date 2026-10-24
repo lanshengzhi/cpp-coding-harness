@@ -320,8 +320,8 @@
     "evidenceRoute": {
       "captured": 417,
       "artifact-only": 0,
-      "related-captured": 22,
-      "declared-comparison": 32,
+      "related-captured": 23,
+      "declared-comparison": 31,
       "cpp-regression-only": 10,
       "unobserved": 55,
       "unobserved-static": 0,
@@ -365,8 +365,8 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 465,
-      "scenarioNamed": 346,
+      "scenarios": 466,
+      "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
         "audit-1050/input-standalone.json:input-placeholder-reversal-and-custom-styling",
@@ -22784,22 +22784,25 @@
       "implementation_ticket": "#1058-draft",
       "scenario": "C++ SQLite open with non-default WAL checkpoint and busy timeout",
       "comparisonScenarios": [
-        "C++ SQLite open with non-default WAL checkpoint and busy timeout"
+        "C++ SQLite open with non-default WAL checkpoint and busy timeout",
+        "SQLite applies entry ID bounds and stores document revisions with configured busy and WAL options"
       ],
       "evidence": {
-        "route": "declared-comparison",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
+        "route": "related-captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1075/sqlite-transaction-options.json",
+        "scenarioMatch": "direct-global",
+        "capturedScenarios": [
+          "SQLite applies entry ID bounds and stores document revisions with configured busy and WAL options"
+        ],
         "result": "Not captured; the capture uses adapter defaults and records the resulting WAL journal mode."
       },
-      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [
         "No configurable SQLite connection options exist.",
         "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
         "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
       ],
-      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "notes": "",
       "lane": "1054",
       "frozenSymbolsSource": null,
