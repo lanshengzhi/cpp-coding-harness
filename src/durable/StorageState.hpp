@@ -48,6 +48,8 @@ public:
 
     [[nodiscard]] std::int64_t reserve_id();
     [[nodiscard]] Seq next_seq() const;
+    /// Restore durable allocator high-water marks after loading a backend.
+    [[nodiscard]] support::ExpectedVoid restore_high_water_marks(std::int64_t next_id, Seq next_seq);
 
     [[nodiscard]] support::Expected<std::optional<ConversationRecord>> conversation(ConversationId id);
     [[nodiscard]] support::Expected<std::optional<StoredEntry>> entry(EntryId id);

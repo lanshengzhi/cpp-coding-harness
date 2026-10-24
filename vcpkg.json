@@ -14,6 +14,10 @@
     "utf8proc",
     "icu",
     {
+      "$comment": "SQLite-backed durable Storage (#1075); this uses the pinned vcpkg sqlite3 port, not the retired application session schema.",
+      "name": "sqlite3"
+    },
+    {
       "$comment": "codemode sandbox runtime (spec #865, ticket #874): WasmEdge 0.13.5 from the pinned baseline via the in-tree overlay port cmake/vcpkg-ports/wasmedge, which carries gcc16-demote-warnings.patch. Default features (tools) are off; only the static library and headers are consumed.",
       "name": "wasmedge",
       "default-features": false
