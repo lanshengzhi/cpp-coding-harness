@@ -1390,14 +1390,14 @@
           "a generic remote runs the script and calls the caller's tools across the exchange"
         ]
       },
-      "cppSeam": "No protocol types or JSON serialization seam in C++.",
-      "cppEvidence": "The C++ worker protocol is an in-process `SandboxLink` with C++ structs and a condition variable. It cannot cross a process/isolate boundary and has no versioned wire shape.",
+      "cppSeam": "`src/codemode/include/cch/codemode/Remote.hpp`: aggregate request and message contracts, `CodemodeRemoteMessageVariant`, `CodemodeRemoteReplyVariant`, and the `CodemodeRemoteExchangeHook` interface.",
+      "cppEvidence": "`CodemodeRemoteTest.cpp` exercises the request, call/output/done/failure message variants, result/stop/null replies, and exchange hook through `CodemodeRemote` and `serve_codemode_remote`. The contracts contain values and JSON text only, with transport encoding left to the remote implementation.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Port the plain-data protocol separately from the worker implementation; do not reuse `SandboxLink` across a transport boundary.",
+      "recommendation": "Keep transport encoding in the remote implementation; do not reuse the in-process `RemoteServeLink` across a transport boundary.",
       "blockers": []
     },
     {

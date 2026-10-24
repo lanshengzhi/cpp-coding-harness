@@ -273,8 +273,8 @@
         "partial": 17
       },
       "cch_codemode": {
-        "implemented": 31,
-        "missing": 14,
+        "implemented": 32,
+        "missing": 13,
         "not-applicable": 2,
         "partial": 4
       },
@@ -307,8 +307,8 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 1016,
-      "missing": 215,
+      "implemented": 1017,
+      "missing": 214,
       "not-applicable": 18,
       "partial": 215
     },
@@ -9727,7 +9727,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Remote transports, Cloudflare RPC, durable object boundaries and tests.",
@@ -9752,7 +9752,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Port the plain-data protocol separately from the worker implementation; do not reuse `SandboxLink` across a transport boundary.",
+      "notes": "Recommendation: Keep transport encoding in the remote implementation; do not reuse the in-process `RemoteServeLink` across a transport boundary.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -9761,7 +9761,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-protocol",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
