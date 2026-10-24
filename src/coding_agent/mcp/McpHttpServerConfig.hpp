@@ -30,7 +30,4 @@ struct McpHttpServerConfig : McpServerConfigBase, cch::mcp::HttpServerConfig {
     std::optional<cch::mcp::OAuthServerConfig> resolved_oauth{std::nullopt};
 };
 
-/// Registration-time TLS gate (ADR 0054), forwarding to the cch_mcp owner.
-[[nodiscard]] support::ExpectedVoid validate_mcp_http_server_config(const McpHttpServerConfig& config);
-
 } // namespace cch::coding_agent::mcp

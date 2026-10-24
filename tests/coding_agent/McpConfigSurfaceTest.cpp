@@ -16,7 +16,6 @@
 #include "support/TempWorkspace.hpp"
 
 #include <cch/mcp/OAuthConfig.hpp>
-#include <cch/mcp/OAuthConfig.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <catch2/catch_test_macros.hpp>

@@ -80,7 +80,7 @@ struct McpConfigLoad {
 /// configuration; every read, parse, or validation failure lands in `errors`
 /// with its file path, never as a silent drop. The streamable-http URL is not
 /// validated here — assembly applies the TLS-only gate
-/// (`validate_mcp_http_server_config`, ADR 0054) at registration.
+/// (`cch::mcp::validate_http_server_config`, ADR 0054) at registration.
 [[nodiscard]] McpConfigLoad load_mcp_config(
         const std::filesystem::path& agent_dir, const std::filesystem::path& cwd, bool project_trusted);
 

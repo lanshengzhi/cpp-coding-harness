@@ -14,6 +14,7 @@
 
 #include <cch/mcp/OAuthConfig.hpp>
 #include <cch/mcp/OAuthHttpClient.hpp>
+#include <cch/mcp/OAuthState.hpp>
 #include <cch/mcp/RequestAuthSource.hpp>
 #include <cch/support/AsyncResult.hpp>
 
@@ -59,7 +60,7 @@ struct McpOAuthCallbackSettings {
 
 /// pi `registeredRedirectUrls(state.clientInformation)[0] ?? FALLBACK`: the
 /// redirect URI the request-time refresh sends for a stored registration.
-[[nodiscard]] std::string mcp_oauth_registered_redirect_url(const std::optional<OAuthState>& state);
+[[nodiscard]] std::string mcp_oauth_registered_redirect_url(const std::optional<cch::mcp::OAuthState>& state);
 
 /// pi `signInPrompt` plus the CLI's `--timeout`: the authorization URL to show,
 /// and the pasted-redirect-URL fallback for when the browser cannot reach the

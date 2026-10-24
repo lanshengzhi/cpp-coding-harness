@@ -33,6 +33,7 @@
 #include <cch/mcp/OAuthFlow.hpp>
 #include <cch/mcp/OAuthProvider.hpp>
 #include <cch/mcp/OAuthServerConfig.hpp>
+#include <cch/mcp/OAuthState.hpp>
 #include <cch/mcp/Pkce.hpp>
 #include <cch/mcp/RequestAuthSource.hpp>
 #include <cch/support/Error.hpp>
@@ -277,10 +278,10 @@ struct LoginHarness {
 
 // ── resolver helpers ────────────────────────────────────────────────────────
 
-[[nodiscard]] app_mcp::McpOAuthState oauth_state(std::string access, std::string refresh, std::int64_t expires) {
-    app_mcp::McpOAuthState state;
+[[nodiscard]] cch::mcp::OAuthState oauth_state(std::string access, std::string refresh, std::int64_t expires) {
+    cch::mcp::OAuthState state;
     state.server_url = "https://echo.example.com/mcp";
-    app_mcp::McpOAuthTokens tokens;
+    cch::mcp::OAuthTokens tokens;
     tokens.access_token = std::move(access);
     tokens.token_type = "Bearer";
     if (!refresh.empty()) {
@@ -292,12 +293,12 @@ struct LoginHarness {
     return state;
 }
 
-void seed_state(app_mcp::McpAuthStore& store, const app_mcp::McpOAuthState& state) {
+void seed_state(app_mcp::McpAuthStore& store, const cch::mcp::OAuthState& state) {
     auto stored = store.save("echo", state.server_url, state);
     REQUIRE(stored.has_value());
 }
 
-[[nodiscard]] std::optional<app_mcp::McpOAuthState> read_state(app_mcp::McpAuthStore& store) {
+[[nodiscard]] std::optional<cch::mcp::OAuthState> read_state(app_mcp::McpAuthStore& store) {
     auto stored = store.load("echo", "https://echo.example.com/mcp");
     REQUIRE(stored.has_value());
     return std::move(*stored);

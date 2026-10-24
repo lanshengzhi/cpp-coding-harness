@@ -20,6 +20,7 @@
 #include <cch/mcp/OAuthDiscovery.hpp>
 #include <cch/mcp/OAuthFlow.hpp>
 #include <cch/mcp/OAuthHttpClient.hpp>
+#include <cch/mcp/OAuthState.hpp>
 #include <cch/mcp/Pkce.hpp>
 #include <cch/support/Error.hpp>
 
@@ -87,7 +88,7 @@ struct Harness {
                 cch::mcp::authorize_mcp(store, "echo", kServerUrl, oauth, kRedirectUrl, http, std::move(options)));
     }
 
-    [[nodiscard]] std::optional<app_mcp::McpOAuthState> state() {
+    [[nodiscard]] std::optional<cch::mcp::OAuthState> state() {
         auto stored = store->load("echo", kServerUrl);
         REQUIRE(stored.has_value());
         return std::move(*stored);
@@ -207,10 +208,10 @@ TEST_CASE("a stored refresh token is rotated and the rotated values are persiste
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    app_mcp::McpOAuthState seeded;
+    cch::mcp::OAuthState seeded;
     seeded.server_url = kServerUrl;
     seeded.client_information = cch::mcp::OAuthClientInformation{.client_id = "dyn-client-1"};
-    app_mcp::McpOAuthTokens tokens;
+    cch::mcp::OAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "old-refresh";
@@ -242,10 +243,10 @@ TEST_CASE("a dead refresh token invalidates the tokens and re-authorizes instead
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    app_mcp::McpOAuthState seeded;
+    cch::mcp::OAuthState seeded;
     seeded.server_url = kServerUrl;
     seeded.client_information = cch::mcp::OAuthClientInformation{.client_id = "dyn-client-1"};
-    app_mcp::McpOAuthTokens tokens;
+    cch::mcp::OAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "dead-refresh";
@@ -274,11 +275,11 @@ TEST_CASE("a dead refresh token invalidates the tokens and re-authorizes instead
 TEST_CASE("invalid_client invalidates the registration and registers again", "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    app_mcp::McpOAuthState seeded;
+    cch::mcp::OAuthState seeded;
     seeded.server_url = kServerUrl;
     // A registration the server no longer knows, with a refresh token to use.
     seeded.client_information = cch::mcp::OAuthClientInformation{.client_id = "stale-client"};
-    app_mcp::McpOAuthTokens tokens;
+    cch::mcp::OAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "old-refresh";
@@ -308,7 +309,7 @@ TEST_CASE("an invalid_client during a code exchange also drops the PKCE verifier
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    app_mcp::McpOAuthState seeded;
+    cch::mcp::OAuthState seeded;
     seeded.server_url = kServerUrl;
     seeded.client_information = cch::mcp::OAuthClientInformation{.client_id = "stale-client"};
     seeded.code_verifier = "verifier-1";
@@ -404,7 +405,7 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    app_mcp::McpOAuthState seeded;
+    cch::mcp::OAuthState seeded;
     seeded.server_url = kServerUrl;
     seeded.client_information = cch::mcp::OAuthClientInformation{.client_id = "dyn-client-1"};
     seeded.code_verifier = "verifier-1";
@@ -437,7 +438,7 @@ TEST_CASE("a server that does not support the authorization code grant or PKCE S
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    app_mcp::McpOAuthState seeded;
+    cch::mcp::OAuthState seeded;
     seeded.server_url = kServerUrl;
     seeded.client_information = cch::mcp::OAuthClientInformation{.client_id = "dyn-client-1"};
     REQUIRE(harness.store->save("echo", kServerUrl, seeded).has_value());
@@ -464,10 +465,10 @@ TEST_CASE("a server that does not support the authorization code grant or PKCE S
 TEST_CASE("a server_error refresh is quiet and falls through to authorization", "[coding_agent][mcp][issue884][spec]") {
     Harness harness;
     tests::RuntimeFixture runtime;
-    app_mcp::McpOAuthState seeded;
+    cch::mcp::OAuthState seeded;
     seeded.server_url = kServerUrl;
     seeded.client_information = cch::mcp::OAuthClientInformation{.client_id = "dyn-client-1"};
-    app_mcp::McpOAuthTokens tokens;
+    cch::mcp::OAuthTokens tokens;
     tokens.access_token = "old-access";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "old-refresh";
