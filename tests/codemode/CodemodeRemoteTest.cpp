@@ -12,17 +12,20 @@
 
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
+#include "support/ReleaseGate.hpp"
 
+#include <boost/asio/any_io_executor.hpp>
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
 #include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/use_future.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <atomic>
 #include <chrono>
-#include <condition_variable>
 #include <cstdint>
 #include <future>
 #include <memory>
@@ -42,7 +45,7 @@ template <typename T> [[nodiscard]] std::expected<T, support::Error> run_async(s
     boost::asio::io_context io;
     auto future = boost::asio::co_spawn(
             io,
-            [&]() -> boost::asio::awaitable<std::expected<T, support::Error>> {
+            [operation = std::move(operation)]() mutable -> boost::asio::awaitable<std::expected<T, support::Error>> {
                 co_return co_await support::detail::await_async_result(std::move(operation));
             },
             boost::asio::use_future);
@@ -51,21 +54,24 @@ template <typename T> [[nodiscard]] std::expected<T, support::Error> run_async(s
 }
 
 /// Helper that wraps serve_codemode_remote and records message exchanges and replies.
-struct RecordingRemote : public codemode::CodemodeRemote {
+struct RecordingRemote final : public codemode::CodemodeRemote {
     codemode::CodemodeServeOptions options;
     std::mutex mutex;
+    std::mutex stop_reply_mutex;
+    bool stop_reply_recorded{false};
     std::vector<std::vector<std::string>> exchange_message_kinds;
     std::vector<std::size_t> exchange_sizes;
     std::vector<std::string> reply_kinds;
+    std::promise<void> stop_reply_received;
     std::vector<support::AsyncResult<void>> served;
 
     explicit RecordingRemote(codemode::CodemodeServeOptions opts = {}) : options(std::move(opts)) {}
 
     [[nodiscard]] support::AsyncResult<void> execute(
-            codemode::CodemodeRemoteRequest request, codemode::CodemodeRemoteExchange exchange) override {
-        auto wrapped_exchange = [this, exchange = std::move(exchange)](
-                                        std::vector<codemode::CodemodeRemoteMessage> messages) mutable
-                -> support::AsyncResult<codemode::CodemodeRemoteReply> {
+            codemode::CodemodeRemoteRequest request, codemode::CodemodeRemoteExchangeHook exchange) override {
+        auto exchange_hook = std::make_shared<codemode::CodemodeRemoteExchangeHook>(std::move(exchange));
+        auto wrapped_exchange = [this, exchange_hook](std::vector<codemode::CodemodeRemoteMessageVariant> messages)
+                -> support::AsyncResult<codemode::CodemodeRemoteReplyVariant> {
             std::vector<std::string> kinds;
             kinds.reserve(messages.size());
             for (const auto& msg : messages) {
@@ -97,19 +103,30 @@ struct RecordingRemote : public codemode::CodemodeRemote {
             }
 
             return support::detail::make_async_result(
-                    [this, exchange, messages = std::move(messages)]() mutable
-                            -> boost::asio::awaitable<support::Expected<codemode::CodemodeRemoteReply>> {
-                        auto reply = co_await support::detail::await_async_result(exchange(std::move(messages)));
+                    [this, exchange_hook, messages = std::move(messages)]() mutable
+                            -> boost::asio::awaitable<support::Expected<codemode::CodemodeRemoteReplyVariant>> {
+                        auto reply =
+                                co_await support::detail::await_async_result((*exchange_hook)(std::move(messages)));
                         if (reply) {
                             std::string kind = "null";
+                            const bool is_stop = std::holds_alternative<codemode::CodemodeRemoteStopReply>(*reply);
                             if (std::holds_alternative<codemode::CodemodeRemoteResultReply>(*reply)) {
                                 const auto& res = std::get<codemode::CodemodeRemoteResultReply>(*reply);
                                 kind = std::format("result:{}", res.ok ? "true" : "false");
-                            } else if (std::holds_alternative<codemode::CodemodeRemoteStopReply>(*reply)) {
+                            } else if (is_stop) {
                                 kind = "stop";
                             }
-                            std::lock_guard lock(mutex);
-                            reply_kinds.push_back(std::move(kind));
+                            {
+                                std::lock_guard lock(mutex);
+                                reply_kinds.push_back(std::move(kind));
+                            }
+                            if (is_stop) {
+                                std::lock_guard lock(stop_reply_mutex);
+                                if (!stop_reply_recorded) {
+                                    stop_reply_recorded = true;
+                                    stop_reply_received.set_value();
+                                }
+                            }
                         }
                         co_return reply;
                     });
@@ -214,6 +231,29 @@ TEST_CASE("RemoteCodemodeSandbox batches output instead of making one exchange p
     CHECK(remote->exchange_sizes == expected_sizes);
 }
 
+TEST_CASE("serve_codemode_remote stops when an output batch receives a stop reply", "[codemode][remote]") {
+    std::size_t output_count = 0;
+    std::size_t terminal_count = 0;
+    codemode::CodemodeRemoteExchangeHook exchange =
+            [&output_count, &terminal_count](std::vector<codemode::CodemodeRemoteMessageVariant> messages)
+            -> support::AsyncResult<codemode::CodemodeRemoteReplyVariant> {
+        for (const auto& message : messages) {
+            if (std::holds_alternative<codemode::CodemodeRemoteOutputMessage>(message)) ++output_count;
+            if (std::holds_alternative<codemode::CodemodeRemoteDoneMessage>(message)) ++terminal_count;
+        }
+        return support::AsyncResult<codemode::CodemodeRemoteReplyVariant>{
+                support::Expected<codemode::CodemodeRemoteReplyVariant>{codemode::CodemodeRemoteStopReply{}}};
+    };
+
+    codemode::CodemodeRemoteRequest request;
+    request.data.code = "for (let i = 0; i < 1000; i++) console.log(i); return 'unreachable'";
+    auto result = run_async(codemode::serve_codemode_remote(std::move(request), std::move(exchange)));
+
+    REQUIRE(result.has_value());
+    CHECK(output_count == 1000);
+    CHECK(terminal_count == 0);
+}
+
 TEST_CASE("RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits", "[codemode][remote]") {
     codemode::CodemodeServeOptions serve_opts;
     serve_opts.max_interrupt_budget = 1000;
@@ -248,6 +288,7 @@ TEST_CASE("RemoteCodemodeSandbox caps the interrupt budget and memory at the rem
 TEST_CASE("RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately",
         "[codemode][remote]") {
     auto remote = std::make_shared<RecordingRemote>();
+    auto stop_reply_received = remote->stop_reply_received.get_future();
     codemode::RemoteCodemodeSandboxOptions options;
     options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
 
@@ -301,8 +342,12 @@ TEST_CASE("RemoteCodemodeSandbox tells the remote to stop when caller aborts and
     const auto settled_time = std::chrono::steady_clock::now();
     const auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(settled_time - abort_time).count();
 
-    // Must settle without waiting for remote compute or worker delay (discriminating check: < 200 ms)
+    // Must settle without waiting for remote compute or worker delay (discriminating check: < 200 ms).
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
     CHECK(elapsed_ms < 200);
+#else
+    (void)elapsed_ms;
+#endif
 
     REQUIRE(run_res.has_value());
     REQUIRE(run_res->error.has_value());
@@ -313,35 +358,21 @@ TEST_CASE("RemoteCodemodeSandbox tells the remote to stop when caller aborts and
     CHECK(run_res->calls[0].status == codemode::CodemodeCallRecord::Status::Cancelled);
     CHECK(run_res->calls[0].duration_ms.has_value());
 
-    // Reply sent across exchange must be stop
-    bool saw_stop = false;
-    for (int i = 0; i < 50; ++i) {
-        {
-            std::lock_guard lock(remote->mutex);
-            for (const auto& reply : remote->reply_kinds) {
-                if (reply == "stop") {
-                    saw_stop = true;
-                    break;
-                }
-            }
-        }
-        if (saw_stop) break;
-        std::this_thread::sleep_for(std::chrono::milliseconds{10});
-    }
-    CHECK(saw_stop);
+    // Reply sent across exchange must be stop.
+    CHECK(stop_reply_received.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
 }
 
 TEST_CASE(
         "RemoteCodemodeSandbox discriminating abort check: does not block on slow remote exit", "[codemode][remote]") {
     // Discriminating test: A slow remote that delays 600 ms after receiving stop before returning execute().
     // The caller's run() must return immediately (< 100 ms) instead of waiting for the remote exit!
-    struct SlowExitRemote : public codemode::CodemodeRemote {
+    struct SlowExitRemote final : public codemode::CodemodeRemote {
         [[nodiscard]] support::AsyncResult<void> execute(
-                codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchange exchange) override {
+                codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook exchange) override {
             return support::detail::make_async_result(
                     [exchange = std::move(exchange)]() mutable -> boost::asio::awaitable<support::Expected<void>> {
                         auto executor = co_await boost::asio::this_coro::executor;
-                        std::vector<codemode::CodemodeRemoteMessage> msgs;
+                        std::vector<codemode::CodemodeRemoteMessageVariant> msgs;
                         msgs.push_back(codemode::CodemodeRemoteCallMessage{
                                 .id = 1, .target = "tool", .name = "slow_call", .args = std::nullopt});
                         auto reply = co_await support::detail::await_async_result(exchange(std::move(msgs)));
@@ -400,19 +431,172 @@ TEST_CASE(
 
     // If caller blocked on remote execute() exit, elapsed would be >= 600 ms.
     // It must settle without waiting for remote compute: elapsed < 150 ms.
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
     CHECK(elapsed < 150);
+#else
+    (void)elapsed;
+#endif
     REQUIRE(result.has_value());
     REQUIRE(result->error.has_value());
     CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+}
+
+TEST_CASE(
+        "RemoteCodemodeSandbox rejects runs after close and closes active executions promptly", "[codemode][remote]") {
+    struct DelayedExitRemote final : public codemode::CodemodeRemote {
+        std::promise<void> stopped;
+        std::atomic<bool> returned{false};
+
+        [[nodiscard]] support::AsyncResult<void> execute(
+                codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook exchange) override {
+            return support::detail::make_async_result([this, exchange = std::move(exchange)]() mutable
+                                                              -> boost::asio::awaitable<support::Expected<void>> {
+                auto reply = co_await support::detail::await_async_result(exchange({codemode::CodemodeRemoteCallMessage{
+                        .id = 1, .target = "tool", .name = "hang", .args = "null"}}));
+                if (reply && std::holds_alternative<codemode::CodemodeRemoteStopReply>(*reply)) {
+                    stopped.set_value();
+                    auto executor = co_await boost::asio::this_coro::executor;
+                    boost::asio::steady_timer delay(executor);
+                    delay.expires_after(std::chrono::milliseconds{300});
+                    co_await delay.async_wait(boost::asio::use_awaitable);
+                }
+                returned.store(true);
+                co_return support::ExpectedVoid{};
+            });
+        }
+    };
+
+    auto remote = std::make_shared<DelayedExitRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+    auto sandbox = std::move(*created);
+
+    auto stopped = remote->stopped.get_future();
+    std::promise<void> handler_started;
+    auto handler_started_future = handler_started.get_future();
+    codemode::CodemodeToolCallHandler handler = [&handler_started](std::string_view,
+                                                        std::string_view,
+                                                        std::stop_token signal) -> support::AsyncResult<std::string> {
+        handler_started.set_value();
+        return support::detail::make_async_result([signal]() -> boost::asio::awaitable<support::Expected<std::string>> {
+            auto executor = co_await boost::asio::this_coro::executor;
+            boost::asio::steady_timer timer(executor);
+            while (!signal.stop_requested()) {
+                timer.expires_after(std::chrono::milliseconds{10});
+                co_await timer.async_wait(boost::asio::use_awaitable);
+            }
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "closed"));
+        });
+    };
+    auto run_future = std::async(std::launch::async, [&] {
+        return run_async(sandbox->run("await tools.hang()",
+                {{.name = "hang", .js_name = "hang", .description = "waits"}},
+                {},
+                {},
+                std::move(handler)));
+    });
+    handler_started_future.wait();
+    const auto close_time = std::chrono::steady_clock::now();
+    sandbox->close();
+    auto result = run_future.get();
+    const auto close_elapsed =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - close_time)
+                    .count();
+
+#if defined(__SANITIZE_ADDRESS__) || defined(__SANITIZE_THREAD__)
+    // Sanitizer overhead invalidates this performance bound; functional assertions still run.
+    (void)close_elapsed;
+#else
+    CHECK(close_elapsed < 150);
+#endif
+    REQUIRE(result.has_value());
+    REQUIRE(result->error.has_value());
+    CHECK(result->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(result->error->message == "Sandbox closed");
+    CHECK(result->calls.size() == 1);
+    CHECK(result->calls.front().status == codemode::CodemodeCallRecord::Status::Cancelled);
+    CHECK(stopped.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    CHECK_FALSE(remote->returned.load());
+
+    auto after_close = run_async(sandbox->run("return 2"));
+    REQUIRE(after_close.has_value());
+    REQUIRE(after_close->error.has_value());
+    CHECK(after_close->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(after_close->error->message == "Sandbox closed");
+}
+
+TEST_CASE("RemoteCodemodeSandbox keeps a settled result when remote cleanup fails later", "[codemode][remote]") {
+    struct LateFailureRemote final : public codemode::CodemodeRemote {
+        std::shared_ptr<tests::ReleaseGate> release_gate = std::make_shared<tests::ReleaseGate>();
+        std::mutex executor_mutex;
+        std::optional<boost::asio::any_io_executor> executor;
+        std::promise<void> reply_received;
+        std::promise<void> failure_returned;
+
+        void release() {
+            std::optional<boost::asio::any_io_executor> target;
+            {
+                std::lock_guard lock(executor_mutex);
+                target = executor;
+            }
+            if (target) {
+                boost::asio::post(*target, [release_gate = release_gate] { release_gate->release(); });
+            }
+        }
+
+        [[nodiscard]] support::AsyncResult<void> execute(
+                codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook exchange) override {
+            return support::detail::make_async_result(
+                    [this, release_gate = release_gate, exchange = std::move(exchange)]() mutable
+                            -> boost::asio::awaitable<support::Expected<void>> {
+                        auto reply = co_await support::detail::await_async_result(
+                                exchange({codemode::CodemodeRemoteDoneMessage{.ok = true,
+                                        .value = "\\\"settled\\\"",
+                                        .writes = "[]",
+                                        .error = std::nullopt,
+                                        .during = std::nullopt}}));
+                        if (!reply) co_return support::ExpectedVoid{};
+                        auto current_executor = co_await boost::asio::this_coro::executor;
+                        {
+                            std::lock_guard lock(executor_mutex);
+                            executor = current_executor;
+                        }
+                        reply_received.set_value();
+                        co_await release_gate->wait();
+                        failure_returned.set_value();
+                        co_return std::unexpected(support::make_error(support::ErrorCode::Process, "late reset"));
+                    });
+        }
+    };
+
+    auto remote = std::make_shared<LateFailureRemote>();
+    codemode::RemoteCodemodeSandboxOptions options;
+    options.remote = [remote]() -> support::Expected<std::shared_ptr<codemode::CodemodeRemote>> { return remote; };
+    auto created = codemode::RemoteCodemodeSandbox::create(std::move(options));
+    REQUIRE(created.has_value());
+    auto sandbox = std::move(*created);
+    auto reply_received = remote->reply_received.get_future();
+    auto failure_returned = remote->failure_returned.get_future();
+
+    auto result = run_async(sandbox->run("return 1"));
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->error.has_value());
+    CHECK(result->value_json == "\\\"settled\\\"");
+    CHECK(reply_received.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    remote->release();
+    CHECK(failure_returned.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    CHECK_FALSE(result->error.has_value());
 }
 
 TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason",
         "[codemode][remote]") {
     // 1. Failing / rejecting remote
     {
-        struct FailingRemote : public codemode::CodemodeRemote {
+        struct FailingRemote final : public codemode::CodemodeRemote {
             [[nodiscard]] support::AsyncResult<void> execute(
-                    codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchange) override {
+                    codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook) override {
                 return support::AsyncResult<void>{
                         std::unexpected(support::make_error(support::ErrorCode::Validation, "object reset"))};
             }
@@ -433,9 +617,9 @@ TEST_CASE("RemoteCodemodeSandbox reports failing, silent or unreachable remote a
 
     // 2. Silent remote (returns without settling script)
     {
-        struct SilentRemote : public codemode::CodemodeRemote {
+        struct SilentRemote final : public codemode::CodemodeRemote {
             [[nodiscard]] support::AsyncResult<void> execute(
-                    codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchange) override {
+                    codemode::CodemodeRemoteRequest, codemode::CodemodeRemoteExchangeHook) override {
                 return support::AsyncResult<void>{support::ExpectedVoid{}};
             }
         };

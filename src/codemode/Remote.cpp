@@ -17,6 +17,8 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
+#include <atomic>
 #include <charconv>
 #include <chrono>
 #include <condition_variable>
@@ -64,7 +66,7 @@ using detail::tools_json;
     auto parsed = support::read_json(raw);
     if (parsed && parsed->holds<support::JsonValue::object_t>()) {
         const auto& obj = parsed->get_object();
-        CodemodeError err{CodemodeError::Kind::Script, std::string{raw}};
+        CodemodeError err{.kind = CodemodeError::Kind::Script, .message = std::string{raw}};
         bool described = false;
         if (const auto it = obj.find("message"); it != obj.end()) {
             if (const auto* msg = it->second.get_if<std::string>()) {
@@ -80,42 +82,114 @@ using detail::tools_json;
         }
         if (described) return err;
     }
-    return CodemodeError{CodemodeError::Kind::Script, std::string{raw}};
+    return CodemodeError{.kind = CodemodeError::Kind::Script, .message = std::string{raw}};
 }
+
+/// Owns remote execution threads after the caller has stopped awaiting them.
+/// Completed workers are joined without delaying caller settlement.
+class RemoteWorkerReaper {
+    struct Worker {
+        std::thread thread;
+        std::shared_ptr<std::atomic<bool>> finished;
+    };
+
+public:
+    RemoteWorkerReaper() : reaper_([this](std::stop_token stop) { reap(stop); }) {}
+
+    ~RemoteWorkerReaper() {
+        reaper_.request_stop();
+        condition_.notify_all();
+        if (reaper_.joinable()) reaper_.join();
+    }
+
+    RemoteWorkerReaper(const RemoteWorkerReaper&) = delete;
+    RemoteWorkerReaper& operator=(const RemoteWorkerReaper&) = delete;
+
+    static RemoteWorkerReaper& instance() {
+        static RemoteWorkerReaper reaper;
+        return reaper;
+    }
+
+    void adopt(std::thread worker, std::shared_ptr<std::atomic<bool>> finished) {
+        {
+            std::lock_guard lock(mutex_);
+            workers_.push_back(Worker{.thread = std::move(worker), .finished = std::move(finished)});
+        }
+        condition_.notify_one();
+    }
+
+    void notify() noexcept { condition_.notify_one(); }
+
+private:
+    void reap(std::stop_token stop) {
+        while (true) {
+            std::vector<std::thread> completed;
+            {
+                std::unique_lock lock(mutex_);
+                condition_.wait(lock, [this, stop] {
+                    return stop.stop_requested() ||
+                           std::any_of(workers_.begin(), workers_.end(), [](const Worker& worker) {
+                               return worker.finished->load(std::memory_order_acquire);
+                           });
+                });
+                for (auto it = workers_.begin(); it != workers_.end();) {
+                    if (stop.stop_requested() || it->finished->load(std::memory_order_acquire)) {
+                        completed.push_back(std::move(it->thread));
+                        it = workers_.erase(it);
+                    } else {
+                        ++it;
+                    }
+                }
+                if (stop.stop_requested() && workers_.empty() && completed.empty()) return;
+            }
+            for (auto& worker : completed) {
+                if (worker.joinable()) worker.join();
+            }
+        }
+    }
+
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    std::vector<Worker> workers_;
+    std::jthread reaper_;
+};
 
 /// Link coordinating the remote WasmEdge worker thread and the host coroutine in serve_codemode_remote.
 struct RemoteServeLink {
     std::mutex mutex;
     std::condition_variable cv_worker;
-    std::condition_variable cv_coro;
 
-    std::vector<CodemodeRemoteMessage> outgoing_batch;
+    std::vector<CodemodeRemoteMessageVariant> outgoing_batch;
     bool has_outgoing{false};
+    bool batch_in_flight{false};
     bool wait_for_reply{false};
 
-    std::optional<CodemodeRemoteReply> incoming_reply;
+    std::optional<CodemodeRemoteReplyVariant> incoming_reply;
     bool has_reply{false};
 
     std::atomic<bool> stop_requested{false};
     std::atomic<bool> worker_done{false};
 
-    CodemodeRemoteReply send_batch(std::vector<CodemodeRemoteMessage> batch, bool need_reply) {
+    CodemodeRemoteReplyVariant send_batch(std::vector<CodemodeRemoteMessageVariant> batch, bool need_reply) {
         std::unique_lock lock(mutex);
+        cv_worker.wait(lock, [&] { return !batch_in_flight || stop_requested.load(); });
+        if (stop_requested.load()) return CodemodeRemoteStopReply{};
+
         outgoing_batch = std::move(batch);
         has_outgoing = true;
+        batch_in_flight = true;
         wait_for_reply = need_reply;
         has_reply = false;
-        cv_coro.notify_all();
 
-        if (!need_reply) {
-            return CodemodeRemoteNullReply{};
+        if (need_reply) {
+            cv_worker.wait(lock, [&] { return has_reply || stop_requested.load(); });
+            if (stop_requested.load()) return CodemodeRemoteStopReply{};
+            return std::move(*incoming_reply);
         }
 
-        cv_worker.wait(lock, [&] { return has_reply || stop_requested.load(); });
-        if (stop_requested.load()) {
-            return CodemodeRemoteStopReply{};
-        }
-        return std::move(*incoming_reply);
+        cv_worker.wait(lock, [&] { return !batch_in_flight || stop_requested.load(); });
+        return stop_requested.load() ? CodemodeRemoteReplyVariant{CodemodeRemoteStopReply{}}
+                                     : CodemodeRemoteReplyVariant{CodemodeRemoteNullReply{}};
     }
 
     void mark_worker_done() {
@@ -123,7 +197,6 @@ struct RemoteServeLink {
             std::lock_guard lock(mutex);
             worker_done.store(true);
         }
-        cv_coro.notify_all();
         cv_worker.notify_all();
     }
 };
@@ -136,7 +209,7 @@ struct RemoteVmState {
     bool budget_exhausted{false};
     bool stopped{false};
     bool finished{false};
-    std::vector<CodemodeRemoteMessage> buffered;
+    std::vector<CodemodeRemoteMessageVariant> buffered;
     std::size_t buffered_chars{0};
     Handle api{0};
     Handle settle_fn{0};
@@ -173,7 +246,8 @@ struct RemoteVmState {
                 auto batch = std::move(buffered);
                 buffered.clear();
                 buffered_chars = 0;
-                link->send_batch(std::move(batch), /*need_reply=*/false);
+                const auto reply = link->send_batch(std::move(batch), /*need_reply=*/false);
+                if (std::holds_alternative<CodemodeRemoteStopReply>(reply)) stopped = true;
             }
             return;
         }
@@ -228,7 +302,8 @@ struct RemoteVmState {
             buffered.clear();
             buffered_chars = 0;
             batch.push_back(std::move(done));
-            link->send_batch(std::move(batch), /*need_reply=*/false);
+            const auto reply = link->send_batch(std::move(batch), /*need_reply=*/false);
+            if (std::holds_alternative<CodemodeRemoteStopReply>(reply)) stopped = true;
             return;
         }
     }
@@ -293,7 +368,7 @@ void run_remote_worker(CodemodeRemoteRequest request,
 
     if (!WasmEdge_ResultOK(loaded) || ast == nullptr) {
         CodemodeRemoteFailureMessage fail;
-        fail.error = CodemodeError{CodemodeError::Kind::Sandbox, "Failed to load guest module"};
+        fail.error = CodemodeError{.kind = CodemodeError::Kind::Sandbox, .message = "Failed to load guest module"};
         link->send_batch({std::move(fail)}, /*need_reply=*/false);
         cleanup();
         return;
@@ -304,7 +379,7 @@ void run_remote_worker(CodemodeRemoteRequest request,
     WasmEdge_ValidatorDelete(validator);
     if (!WasmEdge_ResultOK(valid)) {
         CodemodeRemoteFailureMessage fail;
-        fail.error = CodemodeError{CodemodeError::Kind::Sandbox, "Failed to validate guest module"};
+        fail.error = CodemodeError{.kind = CodemodeError::Kind::Sandbox, .message = "Failed to validate guest module"};
         link->send_batch({std::move(fail)}, /*need_reply=*/false);
         cleanup();
         return;
@@ -384,7 +459,8 @@ void run_remote_worker(CodemodeRemoteRequest request,
 
     if (!env_ok || !wasi_ok || !WasmEdge_ResultOK(inst_res)) {
         CodemodeRemoteFailureMessage fail;
-        fail.error = CodemodeError{CodemodeError::Kind::Sandbox, "Failed to instantiate guest module"};
+        fail.error =
+                CodemodeError{.kind = CodemodeError::Kind::Sandbox, .message = "Failed to instantiate guest module"};
         link->send_batch({std::move(fail)}, /*need_reply=*/false);
         WasmEdge_ModuleInstanceDelete(env);
         WasmEdge_ModuleInstanceDelete(wasi);
@@ -409,7 +485,7 @@ void run_remote_worker(CodemodeRemoteRequest request,
     g.call_void(g.find("_initialize"), {});
     if (g.call_i32(g.find("qjs_init"), {}) != 0) {
         CodemodeRemoteFailureMessage fail;
-        fail.error = CodemodeError{CodemodeError::Kind::Sandbox, "qjs_init failed"};
+        fail.error = CodemodeError{.kind = CodemodeError::Kind::Sandbox, .message = "qjs_init failed"};
         link->send_batch({std::move(fail)}, /*need_reply=*/false);
         module_cleanup();
         return;
@@ -425,7 +501,8 @@ void run_remote_worker(CodemodeRemoteRequest request,
                     gen_i32(0)});
     if (g.is_exception(prelude)) {
         CodemodeRemoteFailureMessage fail;
-        fail.error = CodemodeError{CodemodeError::Kind::Sandbox, "Prelude evaluation failed: " + g.exception_text()};
+        fail.error = CodemodeError{
+                .kind = CodemodeError::Kind::Sandbox, .message = "Prelude evaluation failed: " + g.exception_text()};
         link->send_batch({std::move(fail)}, /*need_reply=*/false);
         module_cleanup();
         return;
@@ -497,12 +574,13 @@ void run_remote_worker(CodemodeRemoteRequest request,
     if (!state.finished && !state.stopped) {
         if (state.budget_exhausted) {
             CodemodeRemoteFailureMessage fail;
-            fail.error = CodemodeError{CodemodeError::Kind::Timeout,
-                    std::format("Execution exceeded its interrupt budget of {}", state.budget)};
+            fail.error = CodemodeError{.kind = CodemodeError::Kind::Timeout,
+                    .message = std::format("Execution exceeded its interrupt budget of {}", state.budget)};
             auto batch = std::move(state.buffered);
             state.buffered.clear();
             batch.push_back(std::move(fail));
-            link->send_batch(std::move(batch), /*need_reply=*/false);
+            const auto reply = link->send_batch(std::move(batch), /*need_reply=*/false);
+            if (std::holds_alternative<CodemodeRemoteStopReply>(reply)) state.stopped = true;
         } else if (g.is_exception(g.call_i32(g.find("qjs_get_exception"), {}))) {
             auto exc = g.exception_error();
             CodemodeRemoteDoneMessage done;
@@ -517,14 +595,16 @@ void run_remote_worker(CodemodeRemoteRequest request,
             auto batch = std::move(state.buffered);
             state.buffered.clear();
             batch.push_back(std::move(done));
-            link->send_batch(std::move(batch), /*need_reply=*/false);
+            const auto reply = link->send_batch(std::move(batch), /*need_reply=*/false);
+            if (std::holds_alternative<CodemodeRemoteStopReply>(reply)) state.stopped = true;
         } else {
             CodemodeRemoteCrashMessage crash;
             crash.message = "The remote codemode guest stopped without reporting a result.";
             auto batch = std::move(state.buffered);
             state.buffered.clear();
             batch.push_back(std::move(crash));
-            link->send_batch(std::move(batch), /*need_reply=*/false);
+            const auto reply = link->send_batch(std::move(batch), /*need_reply=*/false);
+            if (std::holds_alternative<CodemodeRemoteStopReply>(reply)) state.stopped = true;
         }
     }
 
@@ -534,7 +614,7 @@ void run_remote_worker(CodemodeRemoteRequest request,
 } // namespace
 
 support::AsyncResult<void> serve_codemode_remote(
-        CodemodeRemoteRequest request, CodemodeRemoteExchange exchange, CodemodeServeOptions options) {
+        CodemodeRemoteRequest request, CodemodeRemoteExchangeHook exchange, CodemodeServeOptions options) {
     const std::uint64_t max_budget = options.max_interrupt_budget.value_or(kDefaultInterruptBudget);
     const std::uint64_t budget =
             request.interrupt_budget.has_value() ? std::min(*request.interrupt_budget, max_budget) : max_budget;
@@ -552,90 +632,186 @@ support::AsyncResult<void> serve_codemode_remote(
     std::filesystem::path wasm_path =
             options.wasm_path.empty() ? default_codemode_guest_wasm_path() : options.wasm_path;
 
-    return support::detail::make_async_result([request = std::move(request),
-                                                      exchange = std::move(exchange),
-                                                      budget,
-                                                      memory_limit_bytes,
-                                                      wasm_path = std::move(wasm_path)]() mutable
-                                                      -> boost::asio::awaitable<support::Expected<void>> {
-        auto executor = co_await boost::asio::this_coro::executor;
-        auto link = std::make_shared<RemoteServeLink>();
+    return support::detail::make_async_result(
+            [request = std::move(request),
+                    exchange = std::move(exchange),
+                    budget,
+                    memory_limit_bytes,
+                    wasm_path = std::move(wasm_path)]() mutable -> boost::asio::awaitable<support::Expected<void>> {
+                auto executor = co_await boost::asio::this_coro::executor;
+                auto link = std::make_shared<RemoteServeLink>();
 
-        std::thread worker([request = std::move(request), budget, memory_limit_bytes, wasm_path, link]() mutable {
-            run_remote_worker(std::move(request), budget, memory_limit_bytes, std::move(wasm_path), link.get());
-        });
+                std::thread worker(
+                        [request = std::move(request), budget, memory_limit_bytes, wasm_path, link]() mutable {
+                            run_remote_worker(
+                                    std::move(request), budget, memory_limit_bytes, std::move(wasm_path), link.get());
+                        });
 
-        boost::asio::steady_timer timer(executor);
-        while (!link->worker_done.load()) {
-            std::vector<CodemodeRemoteMessage> batch;
-            bool need_reply = false;
-            {
-                std::unique_lock lock(link->mutex);
-                if (!link->has_outgoing && !link->worker_done.load()) {
-                    timer.expires_after(std::chrono::milliseconds{5});
-                    const auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
-                    (void)ec;
-                    continue;
-                }
-                if (link->has_outgoing) {
-                    batch = std::move(link->outgoing_batch);
-                    need_reply = link->wait_for_reply;
-                    link->has_outgoing = false;
-                }
-            }
+                boost::asio::steady_timer timer(executor);
+                while (true) {
+                    std::vector<CodemodeRemoteMessageVariant> batch;
+                    bool need_reply = false;
+                    bool has_batch = false;
+                    bool worker_done = false;
+                    {
+                        std::lock_guard lock(link->mutex);
+                        if (link->has_outgoing) {
+                            batch = std::move(link->outgoing_batch);
+                            need_reply = link->wait_for_reply;
+                            link->has_outgoing = false;
+                            has_batch = true;
+                            link->cv_worker.notify_all();
+                        }
+                        worker_done = link->worker_done.load();
+                    }
 
-            if (!batch.empty()) {
-                auto reply_result = co_await support::detail::await_async_result(exchange(std::move(batch)));
-                if (!reply_result) {
-                    link->stop_requested.store(true);
-                    link->cv_worker.notify_all();
-                    break;
-                }
-                if (std::holds_alternative<CodemodeRemoteStopReply>(*reply_result)) {
-                    link->stop_requested.store(true);
-                    link->cv_worker.notify_all();
-                    break;
-                }
-                if (need_reply) {
-                    std::lock_guard lock(link->mutex);
-                    link->incoming_reply = std::move(*reply_result);
-                    link->has_reply = true;
-                    link->cv_worker.notify_all();
-                }
-            }
-        }
+                    if (!has_batch) {
+                        if (worker_done) break;
+                        timer.expires_after(std::chrono::milliseconds{5});
+                        const auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+                        (void)ec;
+                        continue;
+                    }
 
-        if (worker.joinable()) worker.join();
-        co_return support::ExpectedVoid{};
-    });
+                    auto reply_result = co_await support::detail::await_async_result(exchange(std::move(batch)));
+                    {
+                        std::lock_guard lock(link->mutex);
+                        if (!reply_result || std::holds_alternative<CodemodeRemoteStopReply>(*reply_result)) {
+                            link->stop_requested.store(true);
+                        } else if (need_reply) {
+                            link->incoming_reply = std::move(*reply_result);
+                            link->has_reply = true;
+                        }
+                        link->batch_in_flight = false;
+                        link->cv_worker.notify_all();
+                    }
+                    if (link->stop_requested.load()) break;
+                }
+
+                if (worker.joinable()) worker.join();
+                co_return support::ExpectedVoid{};
+            });
 }
 
 struct RemoteCodemodeSandbox::Impl {
+    struct PendingExchange {
+        std::mutex mutex;
+        bool resolved{false};
+        std::optional<CodemodeRemoteReplyVariant> reply;
+        support::AsyncCompletion<CodemodeRemoteReplyVariant, support::Error> completion;
+
+        void resolve(CodemodeRemoteReplyVariant value) {
+            support::AsyncCompletion<CodemodeRemoteReplyVariant, support::Error> done;
+            {
+                std::lock_guard lock(mutex);
+                if (resolved) return;
+                resolved = true;
+                if (completion) {
+                    done = std::move(completion);
+                } else {
+                    reply = std::move(value);
+                    return;
+                }
+            }
+            done(support::Expected<CodemodeRemoteReplyVariant>{std::move(value)});
+        }
+
+        void set_completion(support::AsyncCompletion<CodemodeRemoteReplyVariant, support::Error> done) {
+            std::optional<CodemodeRemoteReplyVariant> ready;
+            {
+                std::lock_guard lock(mutex);
+                if (resolved) {
+                    ready = std::move(reply);
+                } else {
+                    completion = std::move(done);
+                    return;
+                }
+            }
+            done(support::Expected<CodemodeRemoteReplyVariant>{std::move(*ready)});
+        }
+    };
+
+    struct RunState {
+        std::mutex mutex;
+        bool settled{false};
+        bool stopped{false};
+        bool remote_returned{false};
+        std::optional<support::Error> remote_error;
+        std::optional<std::string> abort_message;
+        CodemodeRunResult result;
+        std::vector<std::chrono::steady_clock::time_point> call_issued;
+        std::vector<std::weak_ptr<PendingExchange>> pending_exchanges;
+        std::stop_source call_stop;
+        std::move_only_function<void()> wake_host;
+
+        void request_stop(std::string message) {
+            std::vector<std::shared_ptr<PendingExchange>> pending;
+            std::move_only_function<void()> wake;
+            {
+                std::lock_guard lock(mutex);
+                if (stopped || settled) return;
+                stopped = true;
+                abort_message = message;
+                result.error = CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = message};
+                const auto now = std::chrono::steady_clock::now();
+                for (std::size_t i = 0; i < result.calls.size(); ++i) {
+                    if (!result.calls[i].duration_ms.has_value()) {
+                        result.calls[i].status = CodemodeCallRecord::Status::Cancelled;
+                        result.calls[i].duration_ms =
+                                std::chrono::duration<double, std::milli>(now - call_issued[i]).count();
+                    }
+                }
+                wake = std::move(wake_host);
+                std::erase_if(pending_exchanges, [&pending](const std::weak_ptr<PendingExchange>& weak) {
+                    if (auto active = weak.lock()) {
+                        pending.push_back(std::move(active));
+                        return false;
+                    }
+                    return true;
+                });
+            }
+            call_stop.request_stop();
+            for (const auto& exchange : pending)
+                exchange->resolve(CodemodeRemoteStopReply{});
+            if (wake) wake();
+        }
+    };
+
     RemoteCodemodeSandboxOptions options;
-    std::mutex workers_mutex;
-    std::vector<std::thread> workers;
+    std::mutex mutex;
+    bool closed{false};
+    std::vector<std::weak_ptr<RunState>> active_runs;
 
     explicit Impl(RemoteCodemodeSandboxOptions opts) : options(std::move(opts)) {}
-
-    ~Impl() {
-        std::lock_guard lock(workers_mutex);
-        for (auto& w : workers) {
-            if (w.joinable()) w.join();
-        }
-    }
 };
 
-RemoteCodemodeSandbox::RemoteCodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+RemoteCodemodeSandbox::RemoteCodemodeSandbox(ConstructionKey, std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
 RemoteCodemodeSandbox::RemoteCodemodeSandbox(RemoteCodemodeSandbox&&) noexcept = default;
 RemoteCodemodeSandbox& RemoteCodemodeSandbox::operator=(RemoteCodemodeSandbox&&) noexcept = default;
 RemoteCodemodeSandbox::~RemoteCodemodeSandbox() = default;
 
 support::Expected<std::unique_ptr<RemoteCodemodeSandbox>> RemoteCodemodeSandbox::create(
         RemoteCodemodeSandboxOptions options) {
-    return std::make_unique<RemoteCodemodeSandbox>(ConstructionKey{}, std::make_unique<Impl>(std::move(options)));
+    return std::make_unique<RemoteCodemodeSandbox>(ConstructionKey{}, std::make_shared<Impl>(std::move(options)));
 }
 
-void RemoteCodemodeSandbox::close() {}
+void RemoteCodemodeSandbox::close() {
+    std::vector<std::shared_ptr<Impl::RunState>> active_runs;
+    {
+        std::lock_guard lock(impl_->mutex);
+        if (impl_->closed) return;
+        impl_->closed = true;
+        std::erase_if(impl_->active_runs, [&active_runs](const std::weak_ptr<Impl::RunState>& weak) {
+            if (auto active = weak.lock()) {
+                active_runs.push_back(std::move(active));
+                return false;
+            }
+            return true;
+        });
+    }
+    for (const auto& state : active_runs)
+        state->request_stop("Sandbox closed");
+}
 
 support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string script,
         std::vector<CodemodeToolDescriptor> tools,
@@ -646,31 +822,40 @@ support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string s
         std::optional<std::string> abort_message) {
     if (stop_token.stop_requested()) {
         CodemodeRunResult result;
-        result.error =
-                CodemodeError{CodemodeError::Kind::Aborted, abort_message.value_or("This operation was aborted")};
+        result.error = CodemodeError{
+                .kind = CodemodeError::Kind::Aborted, .message = abort_message.value_or("This operation was aborted")};
         return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::move(result)}};
+    }
+
+    {
+        std::lock_guard lock(impl_->mutex);
+        if (impl_->closed) {
+            CodemodeRunResult result;
+            result.error = CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = "Sandbox closed"};
+            return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::move(result)}};
+        }
     }
 
     if (!impl_->options.remote) {
         CodemodeRunResult result;
-        result.error =
-                CodemodeError{CodemodeError::Kind::Sandbox, "Failed to reach the remote sandbox: no remote configured"};
+        result.error = CodemodeError{.kind = CodemodeError::Kind::Sandbox,
+                .message = "Failed to reach the remote sandbox: no remote configured"};
         return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::move(result)}};
     }
 
     auto remote_res = impl_->options.remote();
     if (!remote_res) {
         CodemodeRunResult result;
-        result.error = CodemodeError{CodemodeError::Kind::Sandbox,
-                std::format("Failed to reach the remote sandbox: {}", remote_res.error().message)};
+        result.error = CodemodeError{.kind = CodemodeError::Kind::Sandbox,
+                .message = std::format("Failed to reach the remote sandbox: {}", remote_res.error().message)};
         return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::move(result)}};
     }
 
     auto remote = *remote_res;
     if (!remote) {
         CodemodeRunResult result;
-        result.error =
-                CodemodeError{CodemodeError::Kind::Sandbox, "Failed to reach the remote sandbox: remote is null"};
+        result.error = CodemodeError{
+                .kind = CodemodeError::Kind::Sandbox, .message = "Failed to reach the remote sandbox: remote is null"};
         return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::move(result)}};
     }
 
@@ -686,18 +871,7 @@ support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string s
     request.interrupt_budget =
             limits.interrupt_budget.has_value() ? limits.interrupt_budget : impl_->options.interrupt_budget;
 
-    struct RemoteRunState {
-        std::mutex mutex;
-        bool settled{false};
-        bool stopped{false};
-        bool remote_returned{false};
-        std::optional<support::Error> remote_error;
-        CodemodeRunResult result;
-        std::vector<std::chrono::steady_clock::time_point> call_issued;
-        std::stop_source call_stop;
-    };
-
-    return support::detail::make_async_result([impl = impl_.get(),
+    return support::detail::make_async_result([impl = impl_,
                                                       remote = std::move(remote),
                                                       request = std::move(request),
                                                       stop_token,
@@ -705,66 +879,104 @@ support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string s
                                                       abort_message = std::move(abort_message)]() mutable
                                                       -> boost::asio::awaitable<support::Expected<CodemodeRunResult>> {
         auto executor = co_await boost::asio::this_coro::executor;
-        auto state = std::make_shared<RemoteRunState>();
+        auto state = std::make_shared<Impl::RunState>();
+        auto timer = std::make_shared<boost::asio::steady_timer>(executor);
+        {
+            std::lock_guard lock(state->mutex);
+            state->wake_host = [executor, timer] { boost::asio::post(executor, [timer] { timer->cancel(); }); };
+        }
+        {
+            std::lock_guard lock(impl->mutex);
+            if (impl->closed) {
+                CodemodeRunResult result;
+                result.error = CodemodeError{.kind = CodemodeError::Kind::Aborted, .message = "Sandbox closed"};
+                co_return result;
+            }
+            impl->active_runs.push_back(state);
+        }
         auto handler_ptr = std::make_shared<CodemodeToolCallHandler>(std::move(handler));
 
-        auto exchange =
-                [state, handler_ptr, executor](
-                        std::vector<CodemodeRemoteMessage> messages) -> support::AsyncResult<CodemodeRemoteReply> {
-            return support::detail::make_async_result(
-                    [state, handler_ptr, executor, messages = std::move(messages)]() mutable
-                            -> boost::asio::awaitable<support::Expected<CodemodeRemoteReply>> {
-                        std::unique_lock lock(state->mutex);
-                        if (state->stopped) {
-                            co_return CodemodeRemoteStopReply{};
-                        }
+        auto exchange = [state, handler_ptr, executor](std::vector<CodemodeRemoteMessageVariant> messages)
+                -> support::AsyncResult<CodemodeRemoteReplyVariant> {
+            auto pending = std::make_shared<Impl::PendingExchange>();
+            return support::AsyncResult<CodemodeRemoteReplyVariant>{support::AsyncProducer<CodemodeRemoteReplyVariant,
+                    support::Error>{[state, handler_ptr, executor, messages = std::move(messages), pending](
+                                            support::AsyncCompletion<CodemodeRemoteReplyVariant, support::Error>
+                                                    done) mutable noexcept {
+                pending->set_completion(std::move(done));
+                bool stopped = false;
+                {
+                    std::lock_guard lock(state->mutex);
+                    stopped = state->stopped;
+                    if (!stopped) state->pending_exchanges.push_back(pending);
+                }
+                if (stopped) {
+                    pending->resolve(CodemodeRemoteStopReply{});
+                    return;
+                }
+                boost::asio::co_spawn(
+                        executor,
+                        [state, handler_ptr, messages = std::move(messages), pending]() mutable
+                                -> boost::asio::awaitable<void> {
+                            std::unique_lock lock(state->mutex);
+                            if (state->stopped) {
+                                lock.unlock();
+                                pending->resolve(CodemodeRemoteStopReply{});
+                                co_return;
+                            }
 
-                        std::optional<CodemodeRemoteCallMessage> call;
-                        for (const auto& msg : messages) {
-                            std::visit(
-                                    [&](const auto& m) {
-                                        using T = std::decay_t<decltype(m)>;
-                                        if constexpr (std::is_same_v<T, CodemodeRemoteOutputMessage>) {
-                                            state->result.output.push_back(m.item);
-                                        } else if constexpr (std::is_same_v<T, CodemodeRemoteCallMessage>) {
-                                            call = m;
-                                        } else if constexpr (std::is_same_v<T, CodemodeRemoteDoneMessage>) {
-                                            state->settled = true;
-                                            if (m.ok) {
-                                                state->result.value_json = m.value;
-                                                if (!m.writes.empty()) {
-                                                    state->result.store_writes = parse_store_writes(m.writes);
-                                                }
-                                            } else {
-                                                if (m.error.has_value()) {
+                            std::optional<CodemodeRemoteCallMessage> call;
+                            for (const auto& msg : messages) {
+                                std::visit(
+                                        [&](const auto& m) {
+                                            using T = std::decay_t<decltype(m)>;
+                                            if constexpr (std::is_same_v<T, CodemodeRemoteOutputMessage>) {
+                                                state->result.output.push_back(m.item);
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteCallMessage>) {
+                                                call = m;
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteDoneMessage>) {
+                                                state->settled = true;
+                                                if (m.ok) {
+                                                    state->result.value_json = m.value;
+                                                    if (!m.writes.empty()) {
+                                                        state->result.store_writes = parse_store_writes(m.writes);
+                                                    }
+                                                } else if (m.error.has_value()) {
                                                     state->result.error = parse_error_json(*m.error);
                                                 }
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteFailureMessage>) {
+                                                state->settled = true;
+                                                state->result.error = m.error;
+                                            } else if constexpr (std::is_same_v<T, CodemodeRemoteCrashMessage>) {
+                                                state->settled = true;
+                                                state->result.error = CodemodeError{
+                                                        .kind = CodemodeError::Kind::Sandbox, .message = m.message};
                                             }
-                                        } else if constexpr (std::is_same_v<T, CodemodeRemoteFailureMessage>) {
-                                            state->settled = true;
-                                            state->result.error = m.error;
-                                        } else if constexpr (std::is_same_v<T, CodemodeRemoteCrashMessage>) {
-                                            state->settled = true;
-                                            state->result.error =
-                                                    CodemodeError{CodemodeError::Kind::Sandbox, m.message};
-                                        }
-                                    },
-                                    msg);
-                        }
+                                        },
+                                        msg);
+                            }
 
-                        if (call.has_value()) {
+                            if (!call.has_value()) {
+                                lock.unlock();
+                                pending->resolve(CodemodeRemoteNullReply{});
+                                co_return;
+                            }
+
                             const auto record_idx = state->result.calls.size();
                             state->result.calls.push_back(CodemodeCallRecord{.name = call->name,
                                     .status = CodemodeCallRecord::Status::Ok,
                                     .duration_ms = std::nullopt});
                             state->call_issued.push_back(std::chrono::steady_clock::now());
+                            const std::string call_name = call->name;
+                            const std::string call_args = call->args.value_or("");
+                            const auto call_id = call->id;
                             lock.unlock();
 
                             std::string payload;
                             bool ok = false;
                             if (*handler_ptr) {
-                                auto call_res = co_await support::detail::await_async_result((*handler_ptr)(
-                                        call->name, call->args.value_or(""), state->call_stop.get_token()));
+                                auto call_res = co_await support::detail::await_async_result(
+                                        (*handler_ptr)(call_name, call_args, state->call_stop.get_token()));
                                 if (call_res) {
                                     ok = true;
                                     payload = std::move(*call_res);
@@ -772,7 +984,7 @@ support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string s
                                     payload = call_res.error().message;
                                 }
                             } else {
-                                payload = std::format("tool '{}' is not available to the codemode sandbox", call->name);
+                                payload = std::format("tool '{}' is not available to the codemode sandbox", call_name);
                             }
 
                             lock.lock();
@@ -784,81 +996,83 @@ support::AsyncResult<CodemodeRunResult> RemoteCodemodeSandbox::run(std::string s
                             }
                             if (state->stopped) {
                                 state->result.calls[record_idx].status = CodemodeCallRecord::Status::Cancelled;
-                                co_return CodemodeRemoteStopReply{};
+                                lock.unlock();
+                                pending->resolve(CodemodeRemoteStopReply{});
+                                co_return;
                             }
                             state->result.calls[record_idx].status =
                                     ok ? CodemodeCallRecord::Status::Ok : CodemodeCallRecord::Status::Error;
-                            co_return CodemodeRemoteResultReply{.id = call->id,
+                            CodemodeRemoteReplyVariant reply = CodemodeRemoteResultReply{.id = call_id,
                                     .ok = ok,
                                     .payload = std::move(payload),
                                     .seq = std::nullopt,
                                     .now = std::nullopt,
                                     .properties = {}};
-                        }
-
-                        co_return CodemodeRemoteNullReply{};
-                    });
+                            lock.unlock();
+                            pending->resolve(std::move(reply));
+                        },
+                        boost::asio::detached);
+            }}};
         };
 
-        std::thread worker([state, remote, request = std::move(request), exchange = std::move(exchange)]() mutable {
+        auto worker_finished = std::make_shared<std::atomic<bool>>(false);
+        std::thread worker([state,
+                                   remote = std::move(remote),
+                                   request = std::move(request),
+                                   exchange = std::move(exchange),
+                                   worker_finished]() mutable {
             boost::asio::io_context remote_ctx;
             boost::asio::co_spawn(
                     remote_ctx,
-                    [&]() -> boost::asio::awaitable<void> {
+                    [state,
+                            remote = std::move(remote),
+                            request = std::move(request),
+                            exchange = std::move(exchange)]() mutable -> boost::asio::awaitable<void> {
                         auto exec_res = co_await support::detail::await_async_result(
                                 remote->execute(std::move(request), std::move(exchange)));
                         std::lock_guard lock(state->mutex);
                         state->remote_returned = true;
-                        if (!exec_res) {
-                            state->remote_error = exec_res.error();
-                        }
+                        if (!exec_res) state->remote_error = exec_res.error();
                     },
                     boost::asio::detached);
             remote_ctx.run();
+            worker_finished->store(true, std::memory_order_release);
+            RemoteWorkerReaper::instance().notify();
         });
-        {
-            std::lock_guard lock(impl->workers_mutex);
-            impl->workers.push_back(std::move(worker));
+        RemoteWorkerReaper::instance().adopt(std::move(worker), worker_finished);
+
+        std::stop_callback stop_callback(stop_token,
+                [state, abort_message] { state->request_stop(abort_message.value_or("This operation was aborted")); });
+        if (stop_token.stop_requested()) {
+            state->request_stop(abort_message.value_or("This operation was aborted"));
         }
-
-        boost::asio::steady_timer timer(executor);
         while (true) {
-            if (stop_token.stop_requested()) {
-                std::lock_guard lock(state->mutex);
-                state->stopped = true;
-                state->call_stop.request_stop();
-                const auto now = std::chrono::steady_clock::now();
-                for (std::size_t i = 0; i < state->result.calls.size(); ++i) {
-                    if (!state->result.calls[i].duration_ms.has_value()) {
-                        state->result.calls[i].status = CodemodeCallRecord::Status::Cancelled;
-                        state->result.calls[i].duration_ms =
-                                std::chrono::duration<double, std::milli>(now - state->call_issued[i]).count();
-                    }
-                }
-                state->result.error = CodemodeError{
-                        CodemodeError::Kind::Aborted, abort_message.value_or("This operation was aborted")};
-                co_return state->result;
-            }
-
             {
                 std::lock_guard lock(state->mutex);
+                if (state->stopped) {
+                    state->wake_host = {};
+                    co_return state->result;
+                }
                 if (state->remote_returned || state->settled) {
-                    if (state->remote_error.has_value()) {
-                        if (!state->stopped) {
-                            state->result.error = CodemodeError{CodemodeError::Kind::Sandbox,
-                                    std::format("Remote sandbox failed: {}", state->remote_error->message)};
-                        }
-                    } else if (!state->settled && !state->stopped) {
-                        state->result.error = CodemodeError{
-                                CodemodeError::Kind::Sandbox, "Remote sandbox returned before the script settled"};
+                    if (state->settled) {
+                        state->wake_host = {};
+                        co_return state->result;
                     }
+                    if (state->remote_error.has_value()) {
+                        state->result.error = CodemodeError{.kind = CodemodeError::Kind::Sandbox,
+                                .message = std::format("Remote sandbox failed: {}", state->remote_error->message)};
+                    } else {
+                        state->result.error = CodemodeError{.kind = CodemodeError::Kind::Sandbox,
+                                .message = "Remote sandbox returned before the script settled"};
+                    }
+                    state->wake_host = {};
                     co_return state->result;
                 }
             }
 
-            timer.expires_after(std::chrono::milliseconds{5});
-            const auto [ec] = co_await timer.async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
-            (void)ec;
+            timer->expires_after(std::chrono::milliseconds{5});
+            const auto [error] = co_await timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+            (void)error;
         }
     });
 }

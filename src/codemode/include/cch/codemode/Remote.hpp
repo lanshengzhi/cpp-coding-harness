@@ -83,7 +83,7 @@ struct CodemodeRemoteFailureMessage {
 };
 
 /// Messages sent from remote worker to host across exchange (`WorkerToHostMessage` + failure).
-using CodemodeRemoteMessage = std::variant<CodemodeRemoteCallMessage,
+using CodemodeRemoteMessageVariant = std::variant<CodemodeRemoteCallMessage,
         CodemodeRemoteOutputMessage,
         CodemodeRemoteDoneMessage,
         CodemodeRemoteCrashMessage,
@@ -108,19 +108,23 @@ struct CodemodeRemoteStopReply {};
 struct CodemodeRemoteNullReply {};
 
 /// Reply sent from caller to remote across exchange (`HostToWorkerMessage` | stop | null).
-using CodemodeRemoteReply = std::variant<CodemodeRemoteNullReply, CodemodeRemoteResultReply, CodemodeRemoteStopReply>;
+using CodemodeRemoteReplyVariant =
+        std::variant<CodemodeRemoteNullReply, CodemodeRemoteResultReply, CodemodeRemoteStopReply>;
 
 /// pi `CodemodeRemoteExchange`: called repeatedly during execution.
-using CodemodeRemoteExchange =
-        std::function<support::AsyncResult<CodemodeRemoteReply>(std::vector<CodemodeRemoteMessage> messages)>;
+using CodemodeRemoteExchangeHook = std::move_only_function<support::AsyncResult<CodemodeRemoteReplyVariant>(
+        std::vector<CodemodeRemoteMessageVariant> messages)>;
 
 /// pi `CodemodeRemote`: interface representing the remote worker/isolate/Durable Object.
 class CodemodeRemote {
 public:
     virtual ~CodemodeRemote() = default;
     [[nodiscard]] virtual support::AsyncResult<void> execute(
-            CodemodeRemoteRequest request, CodemodeRemoteExchange exchange) = 0;
+            CodemodeRemoteRequest request, CodemodeRemoteExchangeHook exchange) = 0;
 };
+
+/// Creates a remote worker for one sandbox run.
+using CodemodeRemoteFactoryHook = std::move_only_function<support::Expected<std::shared_ptr<CodemodeRemote>>()>;
 
 /// Remote output batching constants (upstream pi `FLUSH_ITEMS` and `FLUSH_CHARS`).
 inline constexpr std::size_t kRemoteFlushItems = 1000;
@@ -137,11 +141,11 @@ struct CodemodeServeOptions {
 /// Runs one execution's VM and forwards messages through `exchange`.
 /// Resolves once VM stopped and terminal message delivered, or caller asked to stop.
 [[nodiscard]] support::AsyncResult<void> serve_codemode_remote(
-        CodemodeRemoteRequest request, CodemodeRemoteExchange exchange, CodemodeServeOptions options = {});
+        CodemodeRemoteRequest request, CodemodeRemoteExchangeHook exchange, CodemodeServeOptions options = {});
 
 /// Options for `RemoteCodemodeSandbox`.
 struct RemoteCodemodeSandboxOptions {
-    std::function<support::Expected<std::shared_ptr<CodemodeRemote>>()> remote;
+    CodemodeRemoteFactoryHook remote;
     std::vector<CodemodeGlobal> globals;
     std::optional<std::uint64_t> interrupt_budget;
 };
@@ -159,7 +163,7 @@ public:
     [[nodiscard]] static support::Expected<std::unique_ptr<RemoteCodemodeSandbox>> create(
             RemoteCodemodeSandboxOptions options);
 
-    RemoteCodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl);
+    RemoteCodemodeSandbox(ConstructionKey, std::shared_ptr<Impl> impl);
 
     RemoteCodemodeSandbox(RemoteCodemodeSandbox&&) noexcept;
     RemoteCodemodeSandbox& operator=(RemoteCodemodeSandbox&&) noexcept;
@@ -179,7 +183,7 @@ public:
             std::optional<std::string> abort_message = std::nullopt);
 
 private:
-    std::unique_ptr<Impl> impl_;
+    std::shared_ptr<Impl> impl_;
 };
 
 } // namespace cch::codemode
