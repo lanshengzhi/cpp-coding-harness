@@ -31,21 +31,25 @@
 #include <algorithm>
 
 #include <array>
+#include <atomic>
 #include <chrono>
 #include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <format>
 #include <fstream>
+#include <future>
 #include <iterator>
 #include <limits>
 #include <map>
 #include <memory>
+#include <condition_variable>
+#include <mutex>
 #include <optional>
 #include <stop_token>
 #include <string>
-#include <thread>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <vector>
 
@@ -135,7 +139,447 @@ template <typename T> [[nodiscard]] std::expected<T, support::Error> run_async(s
     return bounds;
 }
 
+struct WorkerExitGate {
+    std::mutex mutex;
+    std::condition_variable condition;
+    bool released{false};
+
+    void wait() {
+        std::unique_lock lock(mutex);
+        condition.wait(lock, [this] { return released; });
+    }
+
+    void release() {
+        {
+            std::lock_guard lock(mutex);
+            released = true;
+        }
+        condition.notify_all();
+    }
+};
+
+struct WorkerHostProbe {
+    std::mutex mutex;
+    std::condition_variable condition;
+    std::size_t capacity{2};
+    std::size_t active{0};
+    std::size_t acquire_attempts{0};
+    std::size_t acquired{0};
+    std::size_t start_attempts{0};
+    std::size_t started{0};
+    std::size_t task_completed{0};
+    std::size_t tool_calls{0};
+    std::size_t exit_callbacks{0};
+    std::size_t max_active{0};
+    bool fail_start{false};
+    std::vector<std::shared_ptr<WorkerExitGate>> exit_gates;
+    std::vector<std::thread> workers;
+    std::atomic<std::size_t> released{0};
+
+    [[nodiscard]] bool wait_for_tool_calls(std::size_t expected) {
+        std::unique_lock lock(mutex);
+        return condition.wait_for(lock, std::chrono::seconds{5}, [this, expected] { return tool_calls >= expected; });
+    }
+
+    [[nodiscard]] bool wait_for_task_completion(std::size_t expected) {
+        std::unique_lock lock(mutex);
+        return condition.wait_for(
+                lock, std::chrono::seconds{5}, [this, expected] { return task_completed >= expected; });
+    }
+
+    [[nodiscard]] bool wait_for_exit_callbacks(std::size_t expected) {
+        std::unique_lock lock(mutex);
+        return condition.wait_for(
+                lock, std::chrono::seconds{5}, [this, expected] { return exit_callbacks >= expected; });
+    }
+
+    void release_exit(std::size_t index) {
+        std::shared_ptr<WorkerExitGate> gate;
+        {
+            std::lock_guard lock(mutex);
+            gate = exit_gates.at(index);
+        }
+        gate->release();
+    }
+
+    void release_all_exits() {
+        std::vector<std::shared_ptr<WorkerExitGate>> gates;
+        {
+            std::lock_guard lock(mutex);
+            gates = exit_gates;
+        }
+        for (const auto& gate : gates)
+            gate->release();
+    }
+
+    void wait_for_releases(std::size_t expected) {
+        std::size_t observed = released.load(std::memory_order_acquire);
+        while (observed < expected) {
+            released.wait(observed, std::memory_order_acquire);
+            observed = released.load(std::memory_order_acquire);
+        }
+    }
+
+    void join_workers() {
+        release_all_exits();
+        std::vector<std::thread> joining;
+        {
+            std::lock_guard lock(mutex);
+            joining.swap(workers);
+        }
+        for (auto& worker : joining) {
+            if (worker.joinable()) worker.join();
+        }
+    }
+
+    ~WorkerHostProbe() { join_workers(); }
+};
+
+[[nodiscard]] codemode::CodemodeWorkerHost worker_host(std::shared_ptr<WorkerHostProbe> probe) {
+    codemode::CodemodeWorkerHost host;
+    host.acquire_worker = [probe]() -> support::Expected<codemode::CodemodeWorkerRelease> {
+        {
+            std::lock_guard lock(probe->mutex);
+            ++probe->acquire_attempts;
+            if (probe->active == probe->capacity) {
+                return std::unexpected(support::make_error(support::ErrorCode::Busy, "worker capacity exhausted"));
+            }
+            ++probe->active;
+            ++probe->acquired;
+            probe->max_active = std::max(probe->max_active, probe->active);
+        }
+        return codemode::CodemodeWorkerRelease{[probe]() {
+            {
+                std::lock_guard lock(probe->mutex);
+                --probe->active;
+            }
+            probe->released.fetch_add(1, std::memory_order_release);
+            probe->released.notify_all();
+        }};
+    };
+    host.start_worker = [probe](codemode::CodemodeWorkerTask task,
+                                codemode::CodemodeWorkerExit exited) -> support::Expected<void> {
+        {
+            std::lock_guard lock(probe->mutex);
+            ++probe->start_attempts;
+            if (probe->fail_start) {
+                return std::unexpected(
+                        support::make_error(support::ErrorCode::Validation, "worker construction failed"));
+            }
+        }
+        auto gate = std::make_shared<WorkerExitGate>();
+        std::thread worker([probe, task = std::move(task), exited = std::move(exited), gate]() mutable {
+            task();
+            {
+                std::lock_guard lock(probe->mutex);
+                ++probe->task_completed;
+            }
+            probe->condition.notify_all();
+            gate->wait();
+            exited();
+            {
+                std::lock_guard lock(probe->mutex);
+                ++probe->exit_callbacks;
+            }
+            probe->condition.notify_all();
+        });
+        {
+            std::lock_guard lock(probe->mutex);
+            ++probe->started;
+            probe->exit_gates.push_back(std::move(gate));
+            probe->workers.push_back(std::move(worker));
+        }
+        return {};
+    };
+    return host;
+}
+
+[[nodiscard]] std::unique_ptr<codemode::CodemodeSandbox> make_sandbox(
+        codemode::CodemodeWorkerHost host, std::vector<codemode::CodemodeGlobal> globals = {}) {
+    auto sandbox = codemode::CodemodeSandbox::create(
+            codemode::default_codemode_guest_wasm_path(), std::move(globals), std::move(host));
+    REQUIRE(sandbox.has_value());
+    return std::move(*sandbox);
+}
+
+struct WorkerTestGuard {
+    std::shared_ptr<WorkerHostProbe> probe;
+    std::vector<std::stop_source*> cancellations;
+
+    ~WorkerTestGuard() {
+        for (auto* cancellation : cancellations)
+            cancellation->request_stop();
+        probe->release_all_exits();
+    }
+};
+
+struct StopSourceGuard {
+    std::stop_source* source;
+
+    ~StopSourceGuard() { source->request_stop(); }
+};
+
+[[nodiscard]] codemode::CodemodeToolCallHandler hanging_handler(std::shared_ptr<WorkerHostProbe> probe) {
+    return [probe](std::string_view, std::string_view, std::stop_token signal) {
+        return support::detail::make_async_result(
+                [probe, signal]() -> boost::asio::awaitable<support::Expected<std::string>> {
+                    {
+                        std::lock_guard lock(probe->mutex);
+                        ++probe->tool_calls;
+                    }
+                    probe->condition.notify_all();
+                    auto executor = co_await boost::asio::this_coro::executor;
+                    boost::asio::steady_timer timer{executor};
+                    while (!signal.stop_requested()) {
+                        timer.expires_after(std::chrono::milliseconds{5});
+                        co_await timer.async_wait(boost::asio::use_awaitable);
+                    }
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Cancelled, "nested tool cancelled"));
+                });
+    };
+}
+
+template <typename T>
+[[nodiscard]] std::future<std::expected<T, support::Error>> run_async_later(support::AsyncResult<T> operation) {
+    return std::async(std::launch::async,
+            [operation = std::move(operation)]() mutable { return run_async(std::move(operation)); });
+}
+
 } // namespace
+
+TEST_CASE("codemode worker results settle before exit while admission stays bounded",
+        "[codemode][worker][issue1096][spec]") {
+    auto probe = std::make_shared<WorkerHostProbe>();
+    auto sandbox = make_sandbox(worker_host(probe));
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "hang", .js_name = "hang", .description = "Wait until cancelled."},
+    };
+    std::array<std::stop_source, 3> cancellations;
+    std::vector<std::future<std::expected<codemode::CodemodeRunResult, support::Error>>> results;
+    WorkerTestGuard cleanup{probe, {&cancellations[0], &cancellations[1], &cancellations[2]}};
+    const auto launch = [&](std::size_t index) {
+        results.push_back(run_async_later(sandbox->run("await tools.hang(); return 'unreachable';",
+                tools,
+                limits(),
+                cancellations[index].get_token(),
+                hanging_handler(probe),
+                {},
+                std::string{"cancelled"})));
+    };
+
+    launch(0);
+    CHECK(probe->wait_for_tool_calls(1));
+    cancellations[0].request_stop();
+    CHECK(probe->wait_for_task_completion(1));
+
+    launch(1);
+    CHECK(probe->wait_for_tool_calls(2));
+    cancellations[1].request_stop();
+    CHECK(probe->wait_for_task_completion(2));
+
+    // The third attempt is denied while both cancelled workers are held at the
+    // exit gate, even though both scripts have already reached terminal states.
+    auto denied = run_async(sandbox->run("return 3", {}, limits()));
+    REQUIRE(denied.has_value());
+    REQUIRE(denied->error.has_value());
+    CHECK(denied->error->kind == codemode::CodemodeError::Kind::Sandbox);
+    CHECK(denied->error->message == "worker capacity exhausted");
+    {
+        std::lock_guard lock(probe->mutex);
+        CHECK(probe->acquired == 2);
+        CHECK(probe->start_attempts == 2);
+        CHECK(probe->started == 2);
+        CHECK(probe->active == 2);
+        CHECK(probe->max_active == 2);
+    }
+    const bool first_settled_before_exit = results[0].wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+    const bool second_settled_before_exit = results[1].wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+    CHECK(first_settled_before_exit);
+    CHECK(second_settled_before_exit);
+    CHECK(probe->released.load(std::memory_order_acquire) == 0);
+
+    probe->release_exit(0);
+    probe->release_exit(1);
+    auto first = results[0].get();
+    auto second = results[1].get();
+    REQUIRE(first.has_value());
+    REQUIRE(second.has_value());
+    REQUIRE(first->error.has_value());
+    REQUIRE(second->error.has_value());
+    CHECK(first->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(second->error->kind == codemode::CodemodeError::Kind::Aborted);
+    probe->wait_for_releases(2);
+
+    launch(2);
+    CHECK(probe->wait_for_tool_calls(3));
+    cancellations[2].request_stop();
+    CHECK(probe->wait_for_task_completion(3));
+    const bool third_settled_before_exit = results[2].wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+    CHECK(third_settled_before_exit);
+    CHECK(probe->released.load(std::memory_order_acquire) == 2);
+    probe->release_exit(2);
+    auto third = results[2].get();
+    REQUIRE(third.has_value());
+    REQUIRE(third->error.has_value());
+    CHECK(third->error->kind == codemode::CodemodeError::Kind::Aborted);
+    probe->wait_for_releases(3);
+    CHECK(probe->wait_for_exit_callbacks(3));
+    {
+        std::lock_guard lock(probe->mutex);
+        CHECK(probe->acquired == 3);
+        CHECK(probe->started == 3);
+        CHECK(probe->active == 0);
+        CHECK(probe->max_active == 2);
+        CHECK(probe->exit_callbacks == 3);
+    }
+}
+
+TEST_CASE("native codemode workers release admission independently of earlier workers",
+        "[codemode][worker][issue1096][spec]") {
+    auto sandbox = make_sandbox();
+    struct NativeProbe {
+        std::mutex mutex;
+        std::condition_variable condition;
+        bool first_tool_started{false};
+        std::atomic<bool> tool_aborted{false};
+    };
+    auto probe = std::make_shared<NativeProbe>();
+    std::stop_source cancellation;
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "hang", .js_name = "hang", .description = "Wait until cancelled."},
+    };
+    codemode::CodemodeToolCallHandler handler = [probe](std::string_view, std::string_view, std::stop_token signal) {
+        return support::detail::make_async_result(
+                [probe, signal]() -> boost::asio::awaitable<support::Expected<std::string>> {
+                    {
+                        std::lock_guard lock(probe->mutex);
+                        probe->first_tool_started = true;
+                    }
+                    probe->condition.notify_all();
+                    auto executor = co_await boost::asio::this_coro::executor;
+                    boost::asio::steady_timer timer{executor};
+                    while (!signal.stop_requested()) {
+                        timer.expires_after(std::chrono::milliseconds{5});
+                        co_await timer.async_wait(boost::asio::use_awaitable);
+                    }
+                    probe->tool_aborted.store(true);
+                    co_return std::unexpected(
+                            support::make_error(support::ErrorCode::Cancelled, "nested tool cancelled"));
+                });
+    };
+    auto first_future = run_async_later(sandbox->run(
+            "await tools.hang(); return 1", tools, limits(), cancellation.get_token(), std::move(handler)));
+    StopSourceGuard cleanup{&cancellation};
+    {
+        std::unique_lock lock(probe->mutex);
+        REQUIRE(probe->condition.wait_for(
+                lock, std::chrono::seconds{5}, [&probe] { return probe->first_tool_started; }));
+    }
+
+    auto second = run_async(sandbox->run("return 2", {}, limits()));
+    REQUIRE(second.has_value());
+    CHECK_FALSE(second->error.has_value());
+    REQUIRE(second->value_json.has_value());
+    CHECK(*second->value_json == "2");
+
+    std::optional<std::expected<codemode::CodemodeRunResult, support::Error>> third;
+    const auto retry_deadline = std::chrono::steady_clock::now() + std::chrono::seconds{5};
+    do {
+        third.emplace(run_async(sandbox->run("return 3", {}, limits())));
+        if (!third->has_value() || !(**third).error.has_value() ||
+                (**third).error->message != "worker capacity exhausted") {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds{2});
+    } while (std::chrono::steady_clock::now() < retry_deadline);
+    REQUIRE(third.has_value());
+    REQUIRE(third->has_value());
+    CHECK_FALSE((**third).error.has_value());
+    REQUIRE((**third).value_json.has_value());
+    CHECK(*(**third).value_json == "3");
+
+    cancellation.request_stop();
+    CHECK(first_future.wait_for(std::chrono::seconds{5}) == std::future_status::ready);
+    CHECK(probe->tool_aborted.load());
+    auto first = first_future.get();
+    REQUIRE(first.has_value());
+    REQUIRE(first->error.has_value());
+    CHECK(first->error->kind == codemode::CodemodeError::Kind::Aborted);
+}
+
+TEST_CASE("codemode worker admission follows wasm load and releases a failed start once",
+        "[codemode][worker][issue1096][spec]") {
+    auto load_probe = std::make_shared<WorkerHostProbe>();
+    auto missing = codemode::CodemodeSandbox::create(
+            codemode::default_codemode_guest_wasm_path() / "missing.wasm", {}, worker_host(load_probe));
+    CHECK_FALSE(missing.has_value());
+    {
+        std::lock_guard lock(load_probe->mutex);
+        CHECK(load_probe->acquire_attempts == 0);
+        CHECK(load_probe->acquired == 0);
+        CHECK(load_probe->start_attempts == 0);
+    }
+
+    auto start_probe = std::make_shared<WorkerHostProbe>();
+    start_probe->fail_start = true;
+    auto sandbox = make_sandbox(worker_host(start_probe));
+    auto failed_start = run_async(sandbox->run("return 1", {}, limits()));
+    REQUIRE(failed_start.has_value());
+    REQUIRE(failed_start->error.has_value());
+    CHECK(failed_start->error->kind == codemode::CodemodeError::Kind::Sandbox);
+    CHECK(failed_start->error->message == "worker construction failed");
+    CHECK(start_probe->released.load(std::memory_order_acquire) == 1);
+    {
+        std::lock_guard lock(start_probe->mutex);
+        CHECK(start_probe->acquire_attempts == 1);
+        CHECK(start_probe->acquired == 1);
+        CHECK(start_probe->start_attempts == 1);
+        CHECK(start_probe->started == 0);
+        CHECK(start_probe->active == 0);
+    }
+}
+
+TEST_CASE("closing codemode settles the run before its worker exit releases admission",
+        "[codemode][worker][issue1096][spec]") {
+    auto probe = std::make_shared<WorkerHostProbe>();
+    auto sandbox = make_sandbox(worker_host(probe));
+    const std::vector<codemode::CodemodeToolDescriptor> tools{
+            {.name = "hang", .js_name = "hang", .description = "Wait until cancelled."},
+    };
+    std::stop_source cancellation;
+    std::vector<std::future<std::expected<codemode::CodemodeRunResult, support::Error>>> results;
+    WorkerTestGuard cleanup{probe, {&cancellation}};
+    results.push_back(run_async_later(sandbox->run("await tools.hang(); return 'unreachable';",
+            tools,
+            limits(),
+            cancellation.get_token(),
+            hanging_handler(probe))));
+    CHECK(probe->wait_for_tool_calls(1));
+
+    sandbox->close();
+    CHECK(probe->wait_for_task_completion(1));
+    const bool settled_before_exit = results[0].wait_for(std::chrono::seconds{5}) == std::future_status::ready;
+    CHECK(settled_before_exit);
+    CHECK(probe->released.load(std::memory_order_acquire) == 0);
+    auto after_close = run_async(sandbox->run("return 2", {}, limits()));
+    REQUIRE(after_close.has_value());
+    REQUIRE(after_close->error.has_value());
+    CHECK(after_close->error->message == "Sandbox closed");
+    {
+        std::lock_guard lock(probe->mutex);
+        CHECK(probe->acquired == 1);
+        CHECK(probe->start_attempts == 1);
+    }
+
+    probe->release_exit(0);
+    auto closed_run = results[0].get();
+    REQUIRE(closed_run.has_value());
+    REQUIRE(closed_run->error.has_value());
+    CHECK(closed_run->error->kind == codemode::CodemodeError::Kind::Aborted);
+    CHECK(closed_run->error->message == "Sandbox closed");
+    probe->wait_for_releases(1);
+}
 
 TEST_CASE("the public codemode source parser keeps only a first-line options command",
         "[codemode][source][issue1064][spec]") {

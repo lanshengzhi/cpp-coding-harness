@@ -154,6 +154,21 @@ struct CodemodeLimits {
 using CodemodeToolCallHandler = std::move_only_function<support::AsyncResult<std::string>(
         std::string_view name, std::string_view arguments_json, std::stop_token signal)>;
 
+/// Worker task, exit callback, and admission release operation used by the
+/// codemode sandbox's host-owned worker lifecycle seam.
+using CodemodeWorkerTask = std::move_only_function<void()>;
+using CodemodeWorkerExit = std::move_only_function<void()>;
+using CodemodeWorkerRelease = std::move_only_function<void()>;
+
+/// Host-owned admission and worker startup for one codemode run. Admission is
+/// acquired after guest validation and released once on startup failure or
+/// actual worker exit. Hosts can supply process-wide capacity policy; omitted
+/// operations use the native pthread implementation and default limit of two.
+struct CodemodeWorkerHost {
+    std::move_only_function<support::Expected<CodemodeWorkerRelease>()> acquire_worker;
+    std::move_only_function<support::Expected<void>(CodemodeWorkerTask, CodemodeWorkerExit)> start_worker;
+};
+
 /// One tool the script may call through `tools.<js_name>` (pi `CodemodeTool`).
 /// The host lists these into the guest's `toolsJson`, so a call routes back
 /// through `CodemodeToolCallHandler`.
@@ -318,6 +333,8 @@ public:
     /// duplicates, and namespace conflicts fail here, before any run.
     [[nodiscard]] static support::Expected<std::unique_ptr<CodemodeSandbox>> create(
             std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals = {});
+    [[nodiscard]] static support::Expected<std::unique_ptr<CodemodeSandbox>> create(
+            std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals, CodemodeWorkerHost worker_host);
 
     /// Construction passkey (§7.7): `std::make_unique` cannot reach a private
     /// constructor, so construction goes through the public constructor below,
@@ -333,6 +350,10 @@ public:
     CodemodeSandbox(CodemodeSandbox&&) noexcept;
     CodemodeSandbox& operator=(CodemodeSandbox&&) noexcept;
     ~CodemodeSandbox();
+
+    /// Stop accepting runs and request cancellation of every active worker.
+    /// Run results may settle before worker-exit callbacks release admission.
+    void close();
     CodemodeSandbox(const CodemodeSandbox&) = delete;
     CodemodeSandbox& operator=(const CodemodeSandbox&) = delete;
 

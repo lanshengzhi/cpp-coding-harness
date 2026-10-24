@@ -37,6 +37,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <pthread.h>
 #include <set>
 #include <string>
 #include <string_view>
@@ -111,6 +112,15 @@ struct PendingToolCall {
 /// through the session's asynchronous tool pipeline. This is pi's worker
 /// `parentPort` message pair, realized with a mutex and a condition variable
 /// because the host side is an asio coroutine rather than a JS event loop.
+struct WorkerAdmissionRelease {
+    CodemodeWorkerRelease release;
+    std::atomic<bool> released{false};
+
+    void invoke() {
+        if (!released.exchange(true) && release) release();
+    }
+};
+
 struct SandboxLink {
     struct Request {
         int id{0};
@@ -139,6 +149,7 @@ struct SandboxLink {
     /// exit()): calls still in flight are unawaited and must be cancelled by
     /// the host instead of waiting for their handlers.
     std::atomic<bool> script_settled{false};
+    std::atomic<bool> closed{false};
     /// Wakes the host coroutine when the worker has a request or a result.
     std::function<void()> wake_host;
 
@@ -422,12 +433,127 @@ WasmEdge_Result HostInterrupt(
     return WasmEdge_Result_Success;
 }
 
+} // namespace
+
+namespace {
+
+struct ActiveSandboxRun {
+    std::shared_ptr<SandboxLink> link;
+    std::shared_ptr<std::stop_source> call_stop;
+};
+
+struct NativeWorkerTask {
+    CodemodeWorkerTask task;
+};
+
+struct NativeWorkerTaskState {
+    std::unique_ptr<NativeWorkerTask> task;
+};
+
+struct NativeWorkerJoinState {
+    std::mutex mutex;
+    std::condition_variable condition;
+    pthread_t worker{};
+    CodemodeWorkerExit exited;
+    bool ready{false};
+    bool start_failed{false};
+};
+
+struct NativeWorkerJoinThreadState {
+    std::shared_ptr<NativeWorkerJoinState> state;
+};
+
+void* run_worker_task(void* data) noexcept {
+    std::unique_ptr<NativeWorkerTaskState> state{static_cast<NativeWorkerTaskState*>(data)};
+    state->task->task();
+    return nullptr;
+}
+
+void* join_native_worker(void* data) noexcept {
+    std::unique_ptr<NativeWorkerJoinThreadState> thread_state{static_cast<NativeWorkerJoinThreadState*>(data)};
+    const auto state = std::move(thread_state->state);
+    pthread_t worker;
+    {
+        std::unique_lock lock(state->mutex);
+        state->condition.wait(lock, [&state] { return state->ready; });
+        if (state->start_failed) return nullptr;
+        worker = state->worker;
+    }
+    if (pthread_join(worker, nullptr) != 0) std::terminate();
+    state->exited();
+    return nullptr;
+}
+
+[[nodiscard]] std::shared_ptr<std::mutex> default_worker_admission_mutex() {
+    static auto mutex = std::make_shared<std::mutex>();
+    return mutex;
+}
+
+[[nodiscard]] std::shared_ptr<std::size_t> default_worker_count() {
+    static auto count = std::make_shared<std::size_t>(0);
+    return count;
+}
+
+[[nodiscard]] support::Expected<void> start_native_worker(CodemodeWorkerTask task, CodemodeWorkerExit exited) {
+    pthread_attr_t joiner_attributes;
+    const int initialized = pthread_attr_init(&joiner_attributes);
+    if (initialized != 0) {
+        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                std::format("could not initialize worker join attributes: {}", initialized)));
+    }
+    const int detached = pthread_attr_setdetachstate(&joiner_attributes, PTHREAD_CREATE_DETACHED);
+    if (detached != 0) {
+        (void)pthread_attr_destroy(&joiner_attributes);
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, std::format("could not configure worker join thread: {}", detached)));
+    }
+
+    auto join_state = std::make_shared<NativeWorkerJoinState>();
+    join_state->exited = std::move(exited);
+    auto joiner_state = std::make_unique<NativeWorkerJoinThreadState>(NativeWorkerJoinThreadState{join_state});
+    pthread_t joiner;
+    const int joiner_created = pthread_create(&joiner, &joiner_attributes, join_native_worker, joiner_state.get());
+    (void)pthread_attr_destroy(&joiner_attributes);
+    if (joiner_created != 0) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, std::format("could not start worker join thread: {}", joiner_created)));
+    }
+    (void)joiner_state.release();
+
+    auto worker_state = std::make_unique<NativeWorkerTaskState>(
+            NativeWorkerTaskState{std::make_unique<NativeWorkerTask>(NativeWorkerTask{std::move(task)})});
+    pthread_t worker;
+    const int worker_created = pthread_create(&worker, nullptr, run_worker_task, worker_state.get());
+    if (worker_created != 0) {
+        {
+            std::lock_guard lock(join_state->mutex);
+            join_state->start_failed = true;
+            join_state->ready = true;
+        }
+        join_state->condition.notify_one();
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, std::format("could not start codemode worker: {}", worker_created)));
+    }
+    (void)worker_state.release();
+    {
+        std::lock_guard lock(join_state->mutex);
+        join_state->worker = worker;
+        join_state->ready = true;
+    }
+    join_state->condition.notify_one();
+    return {};
+}
 
 } // namespace
 
 struct CodemodeSandbox::Impl {
     std::filesystem::path wasm_path;
     std::vector<CodemodeGlobal> globals;
+    CodemodeWorkerHost worker_host;
+    std::mutex worker_host_mutex;
+    std::mutex lifecycle_mutex;
+    bool closed{false};
+    std::vector<std::weak_ptr<ActiveSandboxRun>> active_runs;
     WasmEdge_ConfigureContext* configure = nullptr;
     WasmEdge_ASTModuleContext* ast = nullptr;
 
@@ -439,6 +565,11 @@ struct CodemodeSandbox::Impl {
 
 support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
         std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals) {
+    return create(std::move(wasm_path), std::move(globals), {});
+}
+
+support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
+        std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals, CodemodeWorkerHost worker_host) {
     // pi `checkGlobals` rejects a bad surface before the guest module is
     // considered, so construction fails without touching the filesystem.
     if (auto valid = validate_globals(globals); !valid) {
@@ -450,9 +581,10 @@ support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
                 sandbox_error(std::format("codemode sandbox guest '{}' does not exist", wasm_path.string()),
                         "the codemode guest module (quickjs.wasm) must be present to run declared scripts"));
     }
-    auto impl = std::make_unique<Impl>();
+    auto impl = std::make_shared<Impl>();
     impl->wasm_path = std::move(wasm_path);
     impl->globals = std::move(globals);
+    impl->worker_host = std::move(worker_host);
     impl->configure = WasmEdge_ConfigureCreate();
     WasmEdge_LoaderContext* loader = WasmEdge_LoaderCreate(impl->configure);
     const WasmEdge_Result loaded = WasmEdge_LoaderParseFromFile(loader, &impl->ast, impl->wasm_path.c_str());
@@ -470,10 +602,52 @@ support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
                 std::format("codemode sandbox guest '{}' is not a valid WebAssembly module", impl->wasm_path.string()),
                 WasmEdge_ResultGetMessage(valid)));
     }
-    return std::make_unique<CodemodeSandbox>(ConstructionKey{}, std::shared_ptr<Impl>{std::move(impl)});
+    if (!impl->worker_host.acquire_worker) {
+        const auto admission_mutex = default_worker_admission_mutex();
+        const auto active_workers = default_worker_count();
+        impl->worker_host.acquire_worker = [admission_mutex,
+                                                   active_workers]() -> support::Expected<CodemodeWorkerRelease> {
+            {
+                std::lock_guard lock(*admission_mutex);
+                if (*active_workers >= 2) {
+                    return std::unexpected(support::make_error(support::ErrorCode::Busy, "worker capacity exhausted"));
+                }
+                ++*active_workers;
+            }
+            return CodemodeWorkerRelease{[admission_mutex, active_workers]() {
+                std::lock_guard lock(*admission_mutex);
+                --*active_workers;
+            }};
+        };
+    }
+    if (!impl->worker_host.start_worker) impl->worker_host.start_worker = start_native_worker;
+    return std::make_unique<CodemodeSandbox>(ConstructionKey{}, std::move(impl));
 }
 
 CodemodeSandbox::CodemodeSandbox(ConstructionKey, std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+void CodemodeSandbox::close() {
+    std::vector<std::shared_ptr<ActiveSandboxRun>> active_runs;
+    {
+        std::lock_guard lock(impl_->lifecycle_mutex);
+        if (impl_->closed) return;
+        impl_->closed = true;
+        std::erase_if(impl_->active_runs, [&active_runs](const std::weak_ptr<ActiveSandboxRun>& weak) {
+            if (auto active = weak.lock()) {
+                active_runs.push_back(std::move(active));
+                return false;
+            }
+            return true;
+        });
+    }
+    for (const auto& active : active_runs) {
+        active->link->closed.store(true);
+        active->link->interrupt_worker();
+        active->call_stop->request_stop();
+        if (active->link->wake_host) active->link->wake_host();
+    }
+}
+
 CodemodeSandbox::~CodemodeSandbox() = default;
 CodemodeSandbox::CodemodeSandbox(CodemodeSandbox&&) noexcept = default;
 CodemodeSandbox& CodemodeSandbox::operator=(CodemodeSandbox&&) noexcept = default;
@@ -713,11 +887,16 @@ namespace {
             return finish();
         }
 
-        // Arm the deadline and the interrupt before the script body runs, so the
-        // timeout bounds the script (including a synchronous runaway loop) and
-        // not the fixed prelude evaluation above. The run's absolute deadline
-        // is published by the caller (see `run`), shared with the host loop.
+        // Arm the deadline and interrupt before the script body runs, so the
+        // timeout bounds the script (including a synchronous runaway loop), not
+        // guest startup or fixed prelude evaluation. Publish it for the host
+        // request loop and the run's cancellation monitor.
         state.started = std::chrono::steady_clock::now();
+        if (limits.timeout.count() > 0) {
+            const auto deadline = state.started + limits.timeout;
+            link.deadline_nanos.store(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(deadline.time_since_epoch()).count());
+        }
         g.call_void(g.find("qjs_set_interrupt_handler"), {gen_i32(1)});
         (void)g.call(run_fn, api, {script_fn});
         drain_jobs(g, state);
@@ -812,7 +991,7 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         CodemodeToolCallHandler handler,
         std::map<std::string, support::JsonValue> store,
         std::optional<std::string> abort_message) {
-    return support::detail::make_async_result([this,
+    return support::detail::make_async_result([impl = impl_,
                                                       script = std::move(script),
                                                       tools = std::move(tools),
                                                       limits,
@@ -832,35 +1011,39 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         // call in flight aborts instead of pinning the host forever.
         auto call_stop = std::make_shared<std::stop_source>();
         if (stop_token.stop_requested()) call_stop->request_stop();
-        const auto deadline =
-                limits.timeout.count() > 0
-                        ? std::optional<std::chrono::steady_clock::time_point>{std::chrono::steady_clock::now() +
-                                                                               limits.timeout}
-                        : std::nullopt;
-        // One deadline for the whole run: the monitor, the engine's own clock,
-        // and the request loop all read this instant, so pi's timeout counts
-        // from execution start (VM startup included).
-        if (deadline.has_value()) {
-            link->deadline_nanos.store(
-                    std::chrono::duration_cast<std::chrono::nanoseconds>(deadline->time_since_epoch()).count());
+        auto active_run = std::make_shared<ActiveSandboxRun>(ActiveSandboxRun{link, call_stop});
+        {
+            std::lock_guard lock(impl->lifecycle_mutex);
+            if (impl->closed) {
+                CodemodeRunResult closed_result;
+                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                co_return closed_result;
+            }
+            std::erase_if(
+                    impl->active_runs, [](const std::weak_ptr<ActiveSandboxRun>& weak) { return weak.expired(); });
+            impl->active_runs.push_back(active_run);
         }
         auto monitor_timer = std::make_shared<boost::asio::steady_timer>(executor);
         boost::asio::co_spawn(
                 executor,
-                [stop_token, deadline, call_stop, monitor_timer, link]() -> boost::asio::awaitable<void> {
+                [stop_token, call_stop, monitor_timer, link]() -> boost::asio::awaitable<void> {
                     while (true) {
                         monitor_timer->expires_after(std::chrono::milliseconds{25});
                         const auto [error] =
                                 co_await monitor_timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
                         if (error) co_return; // cancelled: the run finished
-                        const bool expired = deadline.has_value() && std::chrono::steady_clock::now() >= *deadline;
+                        const auto deadline_nanos = link->deadline_nanos.load();
+                        const bool expired =
+                                deadline_nanos > 0 && std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                              std::chrono::steady_clock::now().time_since_epoch())
+                                                                      .count() >= deadline_nanos;
                         if (stop_token.stop_requested() || expired) {
-                            // Cancellation and the deadline must both stop a
-                            // wasm-spinning worker and abort an in-flight nested
-                            // call; the engine's own clock reports the outcome
-                            // once the worker resumes.
+                            // Cancellation and the deadline stop a wasm-spinning
+                            // worker and abort an in-flight nested call. Wake the
+                            // host loop so it can settle without joining the worker.
                             link->interrupt_worker();
                             call_stop->request_stop();
+                            if (link->wake_host) link->wake_host();
                             co_return;
                         }
                         if (link->done()) co_return;
@@ -868,25 +1051,59 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                 },
                 boost::asio::detached);
 
-        auto worker = std::thread([this,
-                                          link,
-                                          script = std::move(script),
-                                          tools = std::move(tools),
-                                          limits,
-                                          stop_token,
-                                          globals_list_json = std::move(globals_list_json),
-                                          store_snapshot_json = std::move(store_snapshot_json),
-                                          abort_message = std::move(abort_message)]() mutable {
-            link->finish(run_engine(std::move(script),
-                    std::move(tools),
-                    limits,
-                    stop_token,
-                    *link,
-                    impl_->ast,
-                    globals_list_json,
-                    store_snapshot_json,
-                    abort_message));
-        });
+        support::Expected<CodemodeWorkerRelease> admission;
+        {
+            std::lock_guard host_lock(impl->worker_host_mutex);
+            admission = impl->worker_host.acquire_worker();
+        }
+        if (!admission) {
+            monitor_timer->cancel();
+            CodemodeRunResult denied;
+            denied.error = CodemodeError{CodemodeError::Kind::Sandbox, admission.error().message};
+            co_return denied;
+        }
+        auto release = std::make_shared<WorkerAdmissionRelease>();
+        release->release = std::move(*admission);
+        support::Expected<void> started;
+        {
+            std::lock_guard lifecycle_lock(impl->lifecycle_mutex);
+            if (impl->closed) {
+                release->invoke();
+                monitor_timer->cancel();
+                CodemodeRunResult closed_result;
+                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                co_return closed_result;
+            }
+            std::lock_guard host_lock(impl->worker_host_mutex);
+            started = impl->worker_host.start_worker(
+                    [impl,
+                            link,
+                            script = std::move(script),
+                            tools = std::move(tools),
+                            limits,
+                            stop_token,
+                            globals_list_json = std::move(globals_list_json),
+                            store_snapshot_json = std::move(store_snapshot_json),
+                            abort_message = std::move(abort_message)]() mutable {
+                        link->finish(run_engine(std::move(script),
+                                std::move(tools),
+                                limits,
+                                stop_token,
+                                *link,
+                                impl->ast,
+                                globals_list_json,
+                                store_snapshot_json,
+                                abort_message));
+                    },
+                    [release]() { release->invoke(); });
+        }
+        if (!started) {
+            release->invoke();
+            monitor_timer->cancel();
+            CodemodeRunResult failed_start;
+            failed_start.error = CodemodeError{CodemodeError::Kind::Sandbox, started.error().message};
+            co_return failed_start;
+        }
 
         // One handler resolves every call of this run; the shared owner lets
         // each in-flight call run as its own coroutine below.
@@ -924,6 +1141,19 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                 // run completes (the frozen rule the host contract promises).
                 bool answer_moot = false;
                 while (!slot->has_value()) {
+                    if (link->closed.load() || stop_token.stop_requested()) {
+                        call_stop->request_stop();
+                        link->interrupt_worker();
+                        answer_moot = true;
+                    }
+                    const auto deadline_nanos = link->deadline_nanos.load();
+                    if (deadline_nanos > 0 && std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                      std::chrono::steady_clock::now().time_since_epoch())
+                                                              .count() >= deadline_nanos) {
+                        call_stop->request_stop();
+                        link->interrupt_worker();
+                        answer_moot = true;
+                    }
                     if (link->script_settled.load()) {
                         call_stop->request_stop();
                         link->interrupt_worker();
@@ -951,7 +1181,15 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                     link->deliver(request.id, (*slot)->ok, std::move((*slot)->payload));
                 }
             }
-            if (link->done()) break;
+            if (link->done() || link->closed.load() || stop_token.stop_requested()) break;
+            const auto run_deadline = link->deadline_nanos.load();
+            if (run_deadline > 0 && std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                            std::chrono::steady_clock::now().time_since_epoch())
+                                                    .count() >= run_deadline) {
+                link->interrupt_worker();
+                call_stop->request_stop();
+                break;
+            }
             timer->expires_after(std::chrono::milliseconds{50});
             const auto [error] = co_await timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
             (void)error;
@@ -961,10 +1199,20 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
             }
         }
 
+        while (!link->done()) {
+            timer->expires_after(std::chrono::milliseconds{5});
+            const auto [error] = co_await timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+            (void)error;
+        }
         monitor_timer->cancel();
-        if (worker.joinable()) worker.join();
         auto result = link->take_result();
-        if (result) co_return std::move(*result);
+        if (result) {
+            if (link->closed.load()) {
+                result->error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                result->value_json.reset();
+            }
+            co_return std::move(*result);
+        }
         co_return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "the codemode sandbox worker did not report a result"));
     });
