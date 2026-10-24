@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <variant>
@@ -35,6 +36,70 @@ struct DocumentId {
     std::int64_t value{0};
 
     [[nodiscard]] bool operator==(const DocumentId&) const = default;
+};
+
+/// One durable task identity (frozen pi `TaskId`).
+struct TaskId {
+    std::int64_t value{0};
+
+    [[nodiscard]] bool operator==(const TaskId&) const = default;
+};
+
+/// JSON-safe error snapshot persisted instead of a runtime error (frozen pi `TaskOutcomeError`).
+struct TaskOutcomeError {
+    std::string message{};
+    std::optional<chord::Json> detail{std::nullopt};
+
+    [[nodiscard]] bool operator==(const TaskOutcomeError&) const = default;
+};
+
+/// Durable reason and optional result recorded when a task becomes terminal (frozen pi `TaskOutcome`).
+struct TaskOutcome {
+    /// Terminal outcome status: "completed", "failed", "aborted", "orphaned", or "faulted".
+    std::string status{};
+    std::optional<chord::Json> result{std::nullopt};
+    std::optional<TaskOutcomeError> error{std::nullopt};
+    std::optional<std::string> reason{std::nullopt};
+
+    [[nodiscard]] bool operator==(const TaskOutcome&) const = default;
+};
+
+/// Complete durable execution state of a task (frozen pi `TaskState`).
+struct TaskState {
+    /// Status: "pending", "running", "waiting", "completing", or "terminal".
+    std::string status{};
+    std::optional<chord::Json> checkpoint{std::nullopt};
+    std::optional<TaskOutcome> outcome{std::nullopt};
+
+    [[nodiscard]] bool operator==(const TaskState&) const = default;
+};
+
+/// Complete replacement record for one durable task state machine (frozen pi `TaskRecord`).
+struct TaskRecord {
+    TaskId id{};
+    ConversationId conversation_id{};
+    std::string kind{};
+    std::int64_t version{1};
+    chord::Json input{};
+    std::optional<TaskId> owner{std::nullopt};
+    bool background{false};
+    bool abort_requested{false};
+    std::optional<std::string> abort_reason{std::nullopt};
+    std::optional<std::int64_t> started_at{std::nullopt};
+    std::optional<std::int64_t> ended_at{std::nullopt};
+    TaskState state{};
+    std::map<std::string, chord::Json> memos{};
+
+    [[nodiscard]] bool operator==(const TaskRecord&) const = default;
+};
+
+/// Task options when creating a task (frozen pi `TaskOptions`).
+struct TaskOptions {
+    std::optional<ConversationId> conversation_id{std::nullopt};
+    std::optional<TaskId> owner{std::nullopt};
+    bool background{false};
+    bool abandon_on_restart{false};
+    std::optional<chord::Json> checkpoint{std::nullopt};
 };
 
 /// The sequence of one adopted storage commit (frozen pi `Seq`). Sequences
@@ -72,13 +137,17 @@ struct DocumentRecord {
 
 /// One committed table record (frozen pi `TableCommitChange`).
 struct TableCommitChange {
-    /// The record kind: `conversation` or `entry` (frozen
+    /// The record kind: `conversation`, `entry` or `task` (frozen
     /// `StorageWrite.type`).
     std::string type{};
     /// The conversation the record belongs to.
     ConversationId conversation_id{};
-    /// The entry the record carries; absent for a conversation record.
+    /// The entry the record carries; absent for a conversation or task record.
     std::optional<EntryId> entry_id{};
+    /// The task the record carries; absent for a conversation or entry record.
+    std::optional<TaskId> task_id{};
+    /// The full task record of a task commit change.
+    std::optional<TaskRecord> task{};
 };
 
 /// One committed document change (frozen pi `DocumentCommitChange`).
@@ -108,13 +177,15 @@ struct CommitPublication {
 /// One record or document mutation in an atomic storage commit (frozen pi
 /// `StorageWrite`).
 struct StorageWrite {
-    /// The write kind: `conversation`, `entry`, `document.create`,
+    /// The write kind: `conversation`, `entry`, `task`, `document.create`,
     /// `document.change` or `document.retire` (frozen `StorageWrite.type`).
     std::string type{};
     /// The conversation record of a `conversation` write.
     std::optional<ConversationRecord> conversation{};
     /// The entry record of an `entry` write.
     std::optional<EntryRecord> entry{};
+    /// The task record of a `task` write.
+    std::optional<TaskRecord> task{};
     /// The document record of a `document.create` write.
     std::optional<DocumentRecord> document_record{};
     /// The incarnation a `document.change` or `document.retire` write targets.

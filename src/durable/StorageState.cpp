@@ -62,6 +62,8 @@ struct StorageState::Impl {
     std::map<std::int64_t, std::vector<std::int64_t>> entry_ids_by_conversation;
     std::map<std::int64_t, StoredDocument> documents;
     std::map<std::string, std::int64_t> document_id_by_address;
+    std::map<std::int64_t, TaskRecord> tasks;
+    std::vector<std::int64_t> task_ids;
     std::int64_t next_id{kFirstId};
     Seq next_seq{kFirstSeq};
     std::string closed_message;
@@ -90,6 +92,8 @@ struct StorageState::Impl {
         std::map<std::int64_t, std::vector<std::int64_t>> next_entry_ids = entry_ids_by_conversation;
         std::map<std::int64_t, StoredDocument> next_documents = documents;
         std::map<std::string, std::int64_t> next_document_ids = document_id_by_address;
+        std::map<std::int64_t, TaskRecord> next_tasks = tasks;
+        std::vector<std::int64_t> next_task_ids = task_ids;
         std::int64_t next_id = this->next_id;
 
         for (const StorageWrite& write : detached) {
@@ -175,6 +179,28 @@ struct StorageState::Impl {
                 if (current != next_document_ids.end() && current->second == write.document_id->value) {
                     next_document_ids.erase(current);
                 }
+            } else if (write.type == "task") {
+                if (!write.task.has_value()) {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "Task write has no record"));
+                }
+                const TaskRecord& record = *write.task;
+                const auto existing = next_tasks.find(record.id.value);
+                if (existing != next_tasks.end()) {
+                    if (existing->second.state.status == "terminal") {
+                        return std::unexpected(
+                                support::make_error(support::ErrorCode::Validation, "Task is already terminal"));
+                    }
+                    if (existing->second.conversation_id != record.conversation_id) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Task cannot change conversations"));
+                    }
+                    existing->second = record;
+                } else {
+                    next_tasks.emplace(record.id.value, record);
+                    next_task_ids.push_back(record.id.value);
+                }
+                next_id = std::max(next_id, record.id.value + 1);
             } else {
                 return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown storage write"));
             }
@@ -186,6 +212,8 @@ struct StorageState::Impl {
         entry_ids_by_conversation = std::move(next_entry_ids);
         documents = std::move(next_documents);
         document_id_by_address = std::move(next_document_ids);
+        tasks = std::move(next_tasks);
+        task_ids = std::move(next_task_ids);
         this->next_id = next_id;
         next_seq = std::max(next_seq, seq + 1);
         return consume_seq ? seq : next_seq;
@@ -322,6 +350,32 @@ support::Expected<std::optional<chord::Json>> StorageState::document(DocumentId 
         return std::optional<chord::Json>{};
     }
     return std::optional<chord::Json>{found->second.value};
+}
+
+support::Expected<std::optional<TaskRecord>> StorageState::task(TaskId id) {
+    if (impl_->closed) {
+        return std::unexpected(impl_->closed_error());
+    }
+    const auto found = impl_->tasks.find(id.value);
+    if (found == impl_->tasks.end()) {
+        return std::optional<TaskRecord>{};
+    }
+    return std::optional<TaskRecord>{found->second};
+}
+
+support::Expected<std::vector<TaskRecord>> StorageState::scan_tasks(std::size_t limit) {
+    if (impl_->closed) {
+        return std::unexpected(impl_->closed_error());
+    }
+    std::vector<TaskRecord> records;
+    records.reserve(std::min(limit, impl_->tasks.size()));
+    for (const auto& [id, record] : impl_->tasks) {
+        if (records.size() >= limit) {
+            break;
+        }
+        records.push_back(record);
+    }
+    return records;
 }
 
 bool StorageState::closed() const { return impl_->closed; }

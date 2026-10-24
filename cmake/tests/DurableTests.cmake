@@ -14,6 +14,7 @@ include_guard(GLOBAL)
         tests/durable/SqliteStorageTest.cpp
         tests/durable/SessionTransactionTest.cpp
         tests/durable/SessionWatchTest.cpp
+        tests/durable/TaskExecutionTest.cpp
 )
     target_include_directories(cch_tests_durable PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_durable

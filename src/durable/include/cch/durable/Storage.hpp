@@ -72,6 +72,14 @@ public:
     /// `Storage.document`).
     [[nodiscard]] virtual support::Expected<std::optional<chord::Json>> document(DocumentId id) = 0;
 
+    /// Look up the latest complete record for one task (frozen pi
+    /// `Storage.task`).
+    [[nodiscard]] virtual support::Expected<std::optional<TaskRecord>> task(TaskId id) = 0;
+
+    /// Scan task records, oldest first, returning at most `limit` tasks (frozen
+    /// pi `Storage.scanTasks`).
+    [[nodiscard]] virtual support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) = 0;
+
     /// Release backend resources; all later operations must reject (frozen pi
     /// `Storage.close`).
     [[nodiscard]] virtual support::ExpectedVoid close() = 0;
@@ -108,6 +116,10 @@ public:
             std::string_view kind, std::optional<ConversationId> conversation_id) override;
 
     [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override;
+
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override;
+
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override;
 
     [[nodiscard]] support::ExpectedVoid close() override;
 

@@ -1,0 +1,173 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1076",
+  "family": "audit-1076",
+  "capturedAt": "2026-10-24T03:30:16.515Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "docs/research/pi-v1.3.0/capture-1076-task-outcomes.mts",
+    "sha256": "995d1aa050718838a1d9fb668abad4eaeb19e4853fd5eaeaf316d81d97119ad3",
+    "command": "PI_CHECKOUT=/home/lansy/Work/github/coding-agent/pi PI_BASELINE=pi-v1.3.0 NODE_OPTIONS='--conditions=source' TSX_TSCONFIG_PATH=/home/lansy/Work/github/coding-agent/pi/tsconfig.json /home/lansy/Work/github/coding-agent/pi/node_modules/.bin/tsx docs/research/pi-v1.3.0/capture-1076-task-outcomes.mts",
+    "sources": [
+      {
+        "path": "docs/research/pi-v1.3.0/capture-1076-task-outcomes.mts",
+        "sha256": "995d1aa050718838a1d9fb668abad4eaeb19e4853fd5eaeaf316d81d97119ad3"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "task-outcomes.json",
+      "family": "audit-1076",
+      "bytes": 4156,
+      "sha256": "4b3068df1d55e756ba0fe5e8f1165575636b3adfec51260ffcafb40d3b4e78e5",
+      "sourceEndpoints": [
+        "packages/durable/src/tasks.ts:defineTask",
+        "packages/durable/src/harness/harness.ts:Harness.open,resume,waitForTask,abortTask",
+        "packages/durable/src/harness/scheduler.ts:TaskScheduler",
+        "packages/durable/src/session/transaction.ts:Transaction.createTask,setTask",
+        "packages/durable/src/storage/sqlite/node.ts:openNodeSqliteStorage"
+      ],
+      "scenarios": [
+        {
+          "name": "a multi-phase task advances checkpoints and commits a completed terminal receipt",
+          "inputs": {
+            "task": "audit1076.counter",
+            "to": 3
+          },
+          "expected": {
+            "phasesSeen": [
+              0,
+              1,
+              2
+            ],
+            "invocations": 1,
+            "result": 3,
+            "status": "terminal",
+            "outcomeStatus": "completed",
+            "startedAtPresent": true,
+            "endedAtPresent": true,
+            "terminalHasMemos": false
+          },
+          "normalizations": [
+            "timestamps startedAt and endedAt are normalized to presence assertions",
+            "task IDs are omitted"
+          ]
+        },
+        {
+          "name": "a task memo survives checkpoint replacement and is cleared on terminal settlement",
+          "inputs": {
+            "task": "audit1076.memo",
+            "amount": 7
+          },
+          "expected": {
+            "runningMemos": {
+              "requested": 7
+            },
+            "terminalStatus": "terminal",
+            "terminalHasMemos": false,
+            "outcomeStatus": "completed"
+          }
+        },
+        {
+          "name": "a multi-phase task commits a typed failed outcome with error and partial result",
+          "inputs": {
+            "task": "audit1076.fail"
+          },
+          "expected": {
+            "status": "terminal",
+            "outcome": {
+              "status": "failed",
+              "error": {
+                "message": "transfer declined",
+                "detail": {
+                  "code": 402
+                }
+              },
+              "result": {
+                "partial": 42
+              }
+            }
+          }
+        },
+        {
+          "name": "abortTask marks a running task and runs its abort handler to commit an aborted outcome",
+          "inputs": {
+            "task": "audit1076.abort"
+          },
+          "expected": {
+            "abortResult": "marked",
+            "abortRunSignalled": true,
+            "abortHandlerRan": true,
+            "status": "terminal",
+            "outcome": {
+              "status": "aborted",
+              "reason": "requested"
+            },
+            "abortRequested": true
+          }
+        },
+        {
+          "name": "aborting a task with a missing definition commits an orphaned outcome",
+          "inputs": {
+            "task": "audit1076.orphan"
+          },
+          "expected": {
+            "abortResult": "marked",
+            "status": "terminal",
+            "outcome": {
+              "status": "orphaned",
+              "reason": "missing_task"
+            }
+          }
+        },
+        {
+          "name": "a phase returning without durable progress faults the task",
+          "inputs": {
+            "task": "audit1076.no-progress"
+          },
+          "expected": {
+            "status": "terminal",
+            "outcomeStatus": "faulted",
+            "errorMessage": "Task audit1076.no-progress phase run returned without durable progress"
+          }
+        },
+        {
+          "name": "resuming an interrupted task continues from its durable checkpoint without rerunning completed phases",
+          "inputs": {
+            "task": "audit1076.resume"
+          },
+          "expected": {
+            "reopenedPhasesRan": [
+              "p2:1"
+            ],
+            "status": "terminal",
+            "result": 11
+          }
+        },
+        {
+          "name": "terminal record and result receipt commit in the same atomic storage batch",
+          "inputs": {
+            "task": "audit1076.atomic"
+          },
+          "expected": {
+            "terminalBatchCount": 1,
+            "batchHasRecordAndOutcome": true,
+            "terminalResult": {
+              "receiptId": 999
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

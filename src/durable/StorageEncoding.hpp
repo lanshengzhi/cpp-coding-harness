@@ -2,6 +2,7 @@
 
 #include <cch/chord/Delta.hpp>
 #include <cch/chord/Json.hpp>
+#include <cch/durable/Records.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -21,5 +22,8 @@ namespace cch::durable {
 
 [[nodiscard]] support::Expected<chord::Path> decode_path(const support::JsonValue& value);
 [[nodiscard]] support::Expected<chord::OpBatch> decode_ops(const support::JsonValue& value);
+
+[[nodiscard]] chord::Json encode_task_record(const TaskRecord& task);
+[[nodiscard]] support::Expected<TaskRecord> decode_task_record(const chord::Json& json);
 
 } // namespace cch::durable

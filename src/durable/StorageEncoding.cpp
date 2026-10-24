@@ -224,4 +224,180 @@ support::Expected<chord::OpBatch> decode_ops(const support::JsonValue& value) {
     return ops;
 }
 
+chord::Json encode_task_record(const TaskRecord& task) {
+    chord::Json::Object obj;
+    obj.emplace("id", chord::Json(static_cast<double>(task.id.value)));
+    obj.emplace("conversationId", chord::Json(static_cast<double>(task.conversation_id.value)));
+    obj.emplace("kind", chord::Json(task.kind));
+    obj.emplace("version", chord::Json(static_cast<double>(task.version)));
+    obj.emplace("input", task.input);
+    if (task.owner.has_value()) {
+        obj.emplace("owner", chord::Json(static_cast<double>(task.owner->value)));
+    }
+    obj.emplace("background", chord::Json(task.background));
+    obj.emplace("abortRequested", chord::Json(task.abort_requested));
+    if (task.abort_reason.has_value()) {
+        obj.emplace("abortReason", chord::Json(*task.abort_reason));
+    }
+    if (task.started_at.has_value()) {
+        obj.emplace("startedAt", chord::Json(static_cast<double>(*task.started_at)));
+    }
+    if (task.ended_at.has_value()) {
+        obj.emplace("endedAt", chord::Json(static_cast<double>(*task.ended_at)));
+    }
+    chord::Json::Object state_obj;
+    state_obj.emplace("status", chord::Json(task.state.status));
+    if (task.state.checkpoint.has_value()) {
+        state_obj.emplace("checkpoint", *task.state.checkpoint);
+    }
+    if (task.state.outcome.has_value()) {
+        chord::Json::Object outcome_obj;
+        outcome_obj.emplace("status", chord::Json(task.state.outcome->status));
+        if (task.state.outcome->result.has_value()) {
+            outcome_obj.emplace("result", *task.state.outcome->result);
+        }
+        if (task.state.outcome->reason.has_value()) {
+            outcome_obj.emplace("reason", chord::Json(*task.state.outcome->reason));
+        }
+        if (task.state.outcome->error.has_value()) {
+            chord::Json::Object error_obj;
+            error_obj.emplace("message", chord::Json(task.state.outcome->error->message));
+            if (task.state.outcome->error->detail.has_value()) {
+                error_obj.emplace("detail", *task.state.outcome->error->detail);
+            }
+            outcome_obj.emplace("error", chord::Json(std::move(error_obj)));
+        }
+        state_obj.emplace("outcome", chord::Json(std::move(outcome_obj)));
+    }
+    obj.emplace("state", chord::Json(std::move(state_obj)));
+    if (!task.memos.empty()) {
+        chord::Json::Object memos_obj;
+        for (const auto& [k, v] : task.memos) {
+            memos_obj.emplace(k, v);
+        }
+        obj.emplace("memos", chord::Json(std::move(memos_obj)));
+    }
+    return chord::Json(std::move(obj));
+}
+
+support::Expected<TaskRecord> decode_task_record(const chord::Json& json) {
+    const auto* obj = json.as_object();
+    if (obj == nullptr) {
+        return std::unexpected(corruption("Task record must be a JSON object"));
+    }
+    const auto id_it = obj->find("id");
+    const auto conv_it = obj->find("conversationId");
+    const auto kind_it = obj->find("kind");
+    const auto ver_it = obj->find("version");
+    const auto input_it = obj->find("input");
+    const auto state_it = obj->find("state");
+    if (id_it == obj->end() || conv_it == obj->end() || kind_it == obj->end() || ver_it == obj->end() ||
+            input_it == obj->end() || state_it == obj->end()) {
+        return std::unexpected(corruption("Task record missing required fields"));
+    }
+    const auto* id_num = id_it->second.as_number();
+    const auto* conv_num = conv_it->second.as_number();
+    const auto* kind_str = kind_it->second.as_string();
+    const auto* ver_num = ver_it->second.as_number();
+    const auto* state_obj = state_it->second.as_object();
+    if (id_num == nullptr || conv_num == nullptr || kind_str == nullptr || ver_num == nullptr || state_obj == nullptr) {
+        return std::unexpected(corruption("Invalid task record field types"));
+    }
+    const auto status_it = state_obj->find("status");
+    if (status_it == state_obj->end() || status_it->second.as_string() == nullptr) {
+        return std::unexpected(corruption("Task state missing status"));
+    }
+    TaskState state;
+    state.status = *status_it->second.as_string();
+    const auto cp_it = state_obj->find("checkpoint");
+    if (cp_it != state_obj->end()) {
+        state.checkpoint = cp_it->second;
+    }
+    const auto outcome_it = state_obj->find("outcome");
+    if (outcome_it != state_obj->end()) {
+        const auto* outcome_obj = outcome_it->second.as_object();
+        if (outcome_obj != nullptr) {
+            TaskOutcome outcome;
+            const auto out_status_it = outcome_obj->find("status");
+            if (out_status_it != outcome_obj->end() && out_status_it->second.as_string() != nullptr) {
+                outcome.status = *out_status_it->second.as_string();
+            }
+            const auto res_it = outcome_obj->find("result");
+            if (res_it != outcome_obj->end()) {
+                outcome.result = res_it->second;
+            }
+            const auto reason_it = outcome_obj->find("reason");
+            if (reason_it != outcome_obj->end() && reason_it->second.as_string() != nullptr) {
+                outcome.reason = *reason_it->second.as_string();
+            }
+            const auto err_it = outcome_obj->find("error");
+            if (err_it != outcome_obj->end()) {
+                const auto* err_obj = err_it->second.as_object();
+                if (err_obj != nullptr) {
+                    TaskOutcomeError err;
+                    const auto msg_it = err_obj->find("message");
+                    if (msg_it != err_obj->end() && msg_it->second.as_string() != nullptr) {
+                        err.message = *msg_it->second.as_string();
+                    }
+                    const auto detail_it = err_obj->find("detail");
+                    if (detail_it != err_obj->end()) {
+                        err.detail = detail_it->second;
+                    }
+                    outcome.error = std::move(err);
+                }
+            }
+            state.outcome = std::move(outcome);
+        }
+    }
+
+    TaskRecord record{
+            .id = TaskId{static_cast<std::int64_t>(*id_num)},
+            .conversation_id = ConversationId{static_cast<std::int64_t>(*conv_num)},
+            .kind = *kind_str,
+            .version = static_cast<std::int64_t>(*ver_num),
+            .input = input_it->second,
+            .owner = std::nullopt,
+            .background = false,
+            .abort_requested = false,
+            .abort_reason = std::nullopt,
+            .started_at = std::nullopt,
+            .ended_at = std::nullopt,
+            .state = std::move(state),
+            .memos = {},
+    };
+
+    const auto owner_it = obj->find("owner");
+    if (owner_it != obj->end() && owner_it->second.as_number() != nullptr) {
+        record.owner = TaskId{static_cast<std::int64_t>(*owner_it->second.as_number())};
+    }
+    const auto bg_it = obj->find("background");
+    if (bg_it != obj->end() && bg_it->second.as_boolean() != nullptr) {
+        record.background = *bg_it->second.as_boolean();
+    }
+    const auto abort_it = obj->find("abortRequested");
+    if (abort_it != obj->end() && abort_it->second.as_boolean() != nullptr) {
+        record.abort_requested = *abort_it->second.as_boolean();
+    }
+    const auto abort_reason_it = obj->find("abortReason");
+    if (abort_reason_it != obj->end() && abort_reason_it->second.as_string() != nullptr) {
+        record.abort_reason = *abort_reason_it->second.as_string();
+    }
+    const auto started_it = obj->find("startedAt");
+    if (started_it != obj->end() && started_it->second.as_number() != nullptr) {
+        record.started_at = static_cast<std::int64_t>(*started_it->second.as_number());
+    }
+    const auto ended_it = obj->find("endedAt");
+    if (ended_it != obj->end() && ended_it->second.as_number() != nullptr) {
+        record.ended_at = static_cast<std::int64_t>(*ended_it->second.as_number());
+    }
+    const auto memos_it = obj->find("memos");
+    if (memos_it != obj->end() && memos_it->second.as_object() != nullptr) {
+        for (const auto& [k, v] : *memos_it->second.as_object()) {
+            record.memos.emplace(k, v);
+        }
+    }
+
+    return record;
+}
+
 } // namespace cch::durable

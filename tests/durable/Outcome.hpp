@@ -3,7 +3,9 @@
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 
+#include <condition_variable>
 #include <expected>
+#include <mutex>
 #include <utility>
 
 namespace cch::tests::durable {
@@ -39,9 +41,19 @@ template <> struct Outcome<void> {
 /// Consume one `AsyncResult` and return its terminal outcome.
 template <typename T> [[nodiscard]] Outcome<T> consume(cch::support::AsyncResult<T> result) {
     Outcome<T> outcome;
-    std::move(result).start([&outcome](std::expected<T, cch::support::Error> terminal) mutable noexcept {
+    std::mutex m;
+    std::condition_variable cv;
+    bool completed = false;
+
+    std::move(result).start([&](std::expected<T, cch::support::Error> terminal) mutable noexcept {
+        std::unique_lock lock(m);
         outcome.result = std::move(terminal);
+        completed = true;
+        cv.notify_one();
     });
+
+    std::unique_lock lock(m);
+    cv.wait(lock, [&] { return completed; });
     return outcome;
 }
 

@@ -15,6 +15,7 @@
 namespace cch::durable {
 
 class Storage;
+class TaskDefinition;
 
 /// One logical document definition with its initial value (frozen pi
 /// `defineDoc`).
@@ -240,6 +241,19 @@ public:
     /// when it does not exist yet (frozen pi `Tx.doc`). The returned draft is
     /// a handle: every operation on it fails once the transaction settles.
     [[nodiscard]] support::Expected<chord::Draft> doc(const DocumentDefinition& definition, DocumentAddress address);
+
+    /// Create a task (frozen pi `Tx.createTask`).
+    [[nodiscard]] support::Expected<TaskId> create_task(
+            const TaskDefinition& definition, chord::Json input, TaskOptions options = {});
+
+    /// Look up one task by ID (frozen pi `Tx.task`).
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id);
+
+    /// Set or replace one task record (frozen pi `Tx.setTask`).
+    support::ExpectedVoid set_task(TaskRecord record);
+
+    /// Scan task records (frozen pi `Tx.scanTasks`).
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit);
 
 private:
     friend class Session;

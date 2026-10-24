@@ -1,6 +1,7 @@
 #include <cch/durable/Session.hpp>
 
 #include <cch/durable/Storage.hpp>
+#include <cch/durable/Task.hpp>
 
 #include <cstddef>
 #include <cstdint>
@@ -182,6 +183,12 @@ struct Session::Impl {
                     publication.changes.push_back(TableCommitChange{.type = "entry",
                             .conversation_id = write.entry->conversation_id,
                             .entry_id = write.entry->id});
+                } else if (write.type == "task" && write.task.has_value()) {
+                    publication.changes.push_back(TableCommitChange{.type = "task",
+                            .conversation_id = write.task->conversation_id,
+                            .entry_id = std::nullopt,
+                            .task_id = write.task->id,
+                            .task = write.task});
                 }
             }
             for (const DocumentCommitChange& change : document_changes) {
@@ -549,6 +556,65 @@ support::Expected<chord::Draft> Transaction::doc(const DocumentDefinition& defin
             .change = std::move(change),
             .created = created});
     return draft;
+}
+
+support::Expected<TaskId> Transaction::create_task(
+        const TaskDefinition& definition, chord::Json input, TaskOptions options) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    auto id = impl_->storage->mint_id();
+    if (!id) {
+        return std::unexpected(std::move(id.error()));
+    }
+    ConversationId conv_id = options.conversation_id.value_or(ConversationId{1});
+    TaskRecord record{
+            .id = TaskId{.value = *id},
+            .conversation_id = conv_id,
+            .kind = definition.kind(),
+            .version = definition.version(),
+            .input = input,
+            .owner = options.owner,
+            .background = options.background,
+            .abort_requested = false,
+            .abort_reason = std::nullopt,
+            .started_at = std::nullopt,
+            .ended_at = std::nullopt,
+            .state =
+                    TaskState{
+                            .status = "pending",
+                            .checkpoint =
+                                    options.checkpoint.has_value() ? options.checkpoint : definition.initial(input),
+                            .outcome = std::nullopt,
+                    },
+            .memos = {},
+    };
+    impl_->has_table_write = true;
+    impl_->writes.push_back(StorageWrite{.type = "task", .task = record});
+    return TaskId{.value = *id};
+}
+
+support::Expected<std::optional<TaskRecord>> Transaction::task(TaskId id) {
+    if (auto rejected = impl_->reject_read("task"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->task(id);
+}
+
+support::ExpectedVoid Transaction::set_task(TaskRecord record) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    impl_->has_table_write = true;
+    impl_->writes.push_back(StorageWrite{.type = "task", .task = std::move(record)});
+    return {};
+}
+
+support::Expected<std::vector<TaskRecord>> Transaction::scan_tasks(std::size_t limit) {
+    if (auto rejected = impl_->reject_read("scanTasks"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->scan_tasks(limit);
 }
 
 // ── DocumentWatch ───────────────────────────────────────────────────────────

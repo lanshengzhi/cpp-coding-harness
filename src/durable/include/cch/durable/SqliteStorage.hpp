@@ -42,6 +42,8 @@ public:
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
             std::string_view kind, std::optional<ConversationId> conversation_id) override;
     [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override;
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override;
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override;
     [[nodiscard]] support::ExpectedVoid close() override;
 
 private:
