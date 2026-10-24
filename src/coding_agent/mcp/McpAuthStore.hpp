@@ -22,18 +22,6 @@
 
 namespace cch::coding_agent::mcp {
 
-/// pi `OAuthTokens`, narrowed to the fields the MCP flow stores.
-using OAuthTokens = cch::mcp::OAuthTokens;
-using McpOAuthTokens = cch::mcp::OAuthTokens;
-
-/// pi `OAuthClientInformationMixed`, narrowed to the public-client fields.
-using OAuthClientInformation = cch::mcp::OAuthClientInformation;
-using McpOAuthClientInformation = cch::mcp::OAuthClientInformation;
-
-/// pi `OAuthState`: one server's OAuth state.
-using OAuthState = cch::mcp::OAuthState;
-using McpOAuthState = cch::mcp::OAuthState;
-
 /// The per-server OAuth state in `<agentDir>/mcp-auth.json`.
 class McpAuthStore final : public cch::mcp::OAuthStateStore {
 public:
@@ -48,16 +36,16 @@ public:
     /// The server's state, taking over the legacy bare-URL key on first load
     /// (pi `load`: "the first server to load legacy state takes it over").
     /// `std::nullopt` when neither key is present.
-    [[nodiscard]] support::Expected<std::optional<OAuthState>> load(
+    [[nodiscard]] support::Expected<std::optional<cch::mcp::OAuthState>> load(
             std::string_view name, std::string_view server_url) override;
 
     /// Write the server's state under its `mcp__<server>|<url>` key.
     [[nodiscard]] support::ExpectedVoid save(
-            std::string_view name, std::string_view server_url, const OAuthState& state) override;
+            std::string_view name, std::string_view server_url, const cch::mcp::OAuthState& state) override;
 
     /// The stored tokens, for noticing another process's sign-in. Does not take
     /// over legacy state (pi `tokens`).
-    [[nodiscard]] support::Expected<std::optional<OAuthTokens>> tokens(
+    [[nodiscard]] support::Expected<std::optional<cch::mcp::OAuthTokens>> tokens(
             std::string_view name, std::string_view server_url);
 
     /// Delete the server's credentials, whether they sit under the namespaced

@@ -433,7 +433,7 @@ TEST_CASE("a non-TLS MCP HTTP URL is rejected at registration", "[coding_agent][
     insecure.name = "insecure";
     insecure.url = "http://127.0.0.1:9/mcp";
 
-    auto valid = coding_agent::mcp::validate_mcp_http_server_config(insecure);
+    auto valid = cch::mcp::validate_http_server_config(insecure);
     REQUIRE_FALSE(valid.has_value());
     CHECK(valid.error().code == support::ErrorCode::Validation);
     CHECK(valid.error().message.find("https") != std::string::npos);

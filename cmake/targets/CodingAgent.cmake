@@ -19,12 +19,10 @@ cch_parity_declare_target(
         src/coding_agent/extensions/ExtensionToolRegistry.cpp
         src/coding_agent/extensions/tool_search/ToolSearch.cpp
         src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp
-        src/coding_agent/extensions/tool_search/ToolSearchToolSource.cpp
         src/coding_agent/mcp/McpAuthStore.cpp
         src/coding_agent/mcp/McpConfigFile.cpp
         src/coding_agent/mcp/McpConfigWrite.cpp
         src/coding_agent/mcp/McpExtensionToolSource.cpp
-        src/coding_agent/mcp/McpHttpServerConfig.cpp
         src/coding_agent/mcp/McpOAuthLogin.cpp
         src/coding_agent/mcp/McpOAuthSignIn.cpp
         src/coding_agent/mcp/McpOAuthTokenResolver.cpp

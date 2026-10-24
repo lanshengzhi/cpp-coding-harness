@@ -26,9 +26,8 @@
 #include "support/AsyncResultBridge.hpp"
 
 #include <cch/ai/Content.hpp>
-#include <cch/mcp/StdioClient.hpp>
-#include <cch/mcp/StdioClient.hpp>
 #include <cch/ai/Message.hpp>
+#include <cch/mcp/StdioClient.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <boost/asio/awaitable.hpp>
