@@ -15,6 +15,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -94,7 +95,11 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
     REQUIRE(scenario.has_value());
 
     std::vector<double> seen_phases;
-    int invocation_count = 0;
+    // Frozen `invocations` counts distinct JS `TaskRuntime` object identities.
+    // This harness constructs one `HarnessTaskRuntime` per phase invocation on
+    // the stack, so a C++ identity here would be a stack address that may be
+    // reused; the observation is recorded as non-comparable instead of being
+    // replaced by the phase count (see 1076-task-execution.md).
 
     auto def_builder = TaskDefinitionBuilder("audit1076.counter", 1);
     def_builder.initial([](const chord::Json&) {
@@ -103,15 +108,26 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
         obj.emplace("n", 0.0);
         return chord::Json(std::move(obj));
     });
+    // Callback observations: this lambda runs on a Harness execution thread, so
+    // it records what it saw and the test thread asserts it after the wait.
+    std::atomic_bool phase_checkpoint_missing{false};
+    std::atomic_bool phase_input_missing{false};
     def_builder.phase("count", [&](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        invocation_count++;
         const auto* cp = task.state.checkpoint ? task.state.checkpoint->as_object() : nullptr;
-        REQUIRE(cp != nullptr);
+        if (cp == nullptr) {
+            phase_checkpoint_missing.store(true);
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Validation, "No checkpoint"))};
+        }
         const double current_n = *cp->at("n").as_number();
         seen_phases.push_back(current_n);
 
         const auto* input_obj = task.input.as_object();
-        REQUIRE(input_obj != nullptr);
+        if (input_obj == nullptr) {
+            phase_input_missing.store(true);
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Validation, "No input"))};
+        }
         const double target = *input_obj->at("to").as_number();
 
         return runtime.commit(
@@ -164,6 +180,10 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
     REQUIRE(receipt_res.has_value());
     const auto& receipt = receipt_res.value();
 
+    // Callback observations recorded on the execution thread.
+    CHECK_FALSE(phase_checkpoint_missing.load());
+    CHECK_FALSE(phase_input_missing.load());
+
     // Check against frozen observations
     const auto* expected_phases = scenario->array_member("phasesSeen");
     REQUIRE(expected_phases != nullptr);
@@ -172,11 +192,19 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
         CHECK(seen_phases[i] == expected_phases->at(i).get_number());
     }
 
-    CHECK(receipt.state.status == *scenario->string_member("status"));
+    const auto expected_status = scenario->string_member("status");
+    REQUIRE(expected_status.has_value());
+    CHECK(receipt.state.status == *expected_status);
     REQUIRE(receipt.state.outcome.has_value());
-    CHECK(receipt.state.outcome->status == *scenario->string_member("outcomeStatus"));
+    const auto expected_outcome_status = scenario->string_member("outcomeStatus");
+    REQUIRE(expected_outcome_status.has_value());
+    CHECK(receipt.state.outcome->status == *expected_outcome_status);
     REQUIRE(receipt.state.outcome->result.has_value());
-    CHECK(*receipt.state.outcome->result->as_number() == *scenario->number_member("result"));
+    const auto expected_result = scenario->number_member("result");
+    REQUIRE(expected_result.has_value());
+    const auto* result_number = receipt.state.outcome->result->as_number();
+    REQUIRE(result_number != nullptr);
+    CHECK(*result_number == *expected_result);
 
     // started_at and ended_at presence
     CHECK(receipt.started_at.has_value());
@@ -203,9 +231,17 @@ TEST_CASE("TaskExecution: task memo survives checkpoint replacement and is clear
     });
     def_builder.phase("p1", [&](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
         const auto* input_obj = task.input.as_object();
-        REQUIRE(input_obj != nullptr);
+        if (input_obj == nullptr) {
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Validation, "No input"))};
+        }
         const double amount = *input_obj->at("amount").as_number();
 
+        // `runtime` is a reference to the Harness-owned runtime for this phase
+        // invocation. Its lifetime spans the returned AsyncResult: the Harness
+        // constructs it on the execution stack and only destroys it after this
+        // result's terminal completion, so capturing the reference here is
+        // valid for as long as the producer's callbacks can run.
         return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
                 [&runtime, amount](support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
                     runtime.memo("requested", chord::Json(amount))
@@ -259,13 +295,19 @@ TEST_CASE("TaskExecution: task memo survives checkpoint replacement and is clear
 
     // Running memo check: "requested" was 7
     REQUIRE(running_memos_seen.contains("requested"));
-    CHECK(*running_memos_seen["requested"].as_number() == 7.0);
+    const auto* requested_amount = running_memos_seen["requested"].as_number();
+    REQUIRE(requested_amount != nullptr);
+    CHECK(*requested_amount == 7.0);
 
     // Terminal memo check: memos must be empty on terminal settlement
     CHECK(receipt.memos.empty());
-    CHECK(receipt.state.status == *scenario->string_member("terminalStatus"));
+    const auto expected_terminal_status = scenario->string_member("terminalStatus");
+    REQUIRE(expected_terminal_status.has_value());
+    CHECK(receipt.state.status == *expected_terminal_status);
     REQUIRE(receipt.state.outcome.has_value());
-    CHECK(receipt.state.outcome->status == *scenario->string_member("outcomeStatus"));
+    const auto expected_outcome_status = scenario->string_member("outcomeStatus");
+    REQUIRE(expected_outcome_status.has_value());
+    CHECK(receipt.state.outcome->status == *expected_outcome_status);
 
     REQUIRE(consume(harness->close()).has_value());
 }
@@ -326,16 +368,26 @@ TEST_CASE("TaskExecution: task commits typed failed outcome with error detail an
     REQUIRE(receipt_res.has_value());
     const auto& receipt = receipt_res.value();
 
-    CHECK(receipt.state.status == *scenario->string_member("status"));
+    const auto expected_status = scenario->string_member("status");
+    REQUIRE(expected_status.has_value());
+    CHECK(receipt.state.status == *expected_status);
     REQUIRE(receipt.state.outcome.has_value());
     const auto& outcome = *receipt.state.outcome;
     CHECK(outcome.status == "failed");
     REQUIRE(outcome.error.has_value());
     CHECK(outcome.error->message == "transfer declined");
     REQUIRE(outcome.error->detail.has_value());
-    CHECK(*outcome.error->detail->as_object()->at("code").as_number() == 402.0);
+    const auto* detail_object = outcome.error->detail->as_object();
+    REQUIRE(detail_object != nullptr);
+    const auto* code_number = detail_object->at("code").as_number();
+    REQUIRE(code_number != nullptr);
+    CHECK(*code_number == 402.0);
     REQUIRE(outcome.result.has_value());
-    CHECK(*outcome.result->as_object()->at("partial").as_number() == 42.0);
+    const auto* result_object = outcome.result->as_object();
+    REQUIRE(result_object != nullptr);
+    const auto* partial_number = result_object->at("partial").as_number();
+    REQUIRE(partial_number != nullptr);
+    CHECK(*partial_number == 42.0);
 
     REQUIRE(consume(harness->close()).has_value());
 }
@@ -415,10 +467,10 @@ TEST_CASE("TaskExecution: abort_task marks running task and executes abort handl
     }
 
     auto abort_res = consume(harness->abort_task(task_id));
-    CHECK(abort_res.has_value());
-    if (abort_res.has_value()) {
-        CHECK(abort_res.value() == *scenario->string_member("abortResult"));
-    }
+    REQUIRE(abort_res.has_value());
+    const auto expected_abort_result = scenario->string_member("abortResult");
+    REQUIRE(expected_abort_result.has_value());
+    CHECK(abort_res.value() == *expected_abort_result);
     auto receipt_res = consume(harness->wait_for_task(task_id));
     REQUIRE(receipt_res.has_value());
     const auto& receipt = receipt_res.value();
@@ -538,12 +590,16 @@ TEST_CASE(
 
         auto abort_res = consume(harness->abort_task(task_id));
         REQUIRE(abort_res.has_value());
-        CHECK(abort_res.value() == *scenario->string_member("abortResult"));
+        const auto expected_abort_result = scenario->string_member("abortResult");
+        REQUIRE(expected_abort_result.has_value());
+        CHECK(abort_res.value() == *expected_abort_result);
 
         auto receipt_res = consume(harness->wait_for_task(task_id));
         REQUIRE(receipt_res.has_value());
         const auto& receipt = receipt_res.value();
-        CHECK(receipt.state.status == *scenario->string_member("status"));
+        const auto expected_status = scenario->string_member("status");
+        REQUIRE(expected_status.has_value());
+        CHECK(receipt.state.status == *expected_status);
         REQUIRE(receipt.state.outcome.has_value());
         CHECK(receipt.state.outcome->status == "orphaned");
         CHECK(receipt.state.outcome->reason == "missing_task");
@@ -593,11 +649,17 @@ TEST_CASE("TaskExecution: phase returning without durable progress faults the ta
     REQUIRE(receipt_res.has_value());
     const auto& receipt = receipt_res.value();
 
-    CHECK(receipt.state.status == *scenario->string_member("status"));
+    const auto expected_status = scenario->string_member("status");
+    REQUIRE(expected_status.has_value());
+    CHECK(receipt.state.status == *expected_status);
     REQUIRE(receipt.state.outcome.has_value());
-    CHECK(receipt.state.outcome->status == *scenario->string_member("outcomeStatus"));
+    const auto expected_outcome_status = scenario->string_member("outcomeStatus");
+    REQUIRE(expected_outcome_status.has_value());
+    CHECK(receipt.state.outcome->status == *expected_outcome_status);
     REQUIRE(receipt.state.outcome->error.has_value());
-    CHECK(receipt.state.outcome->error->message == *scenario->string_member("errorMessage"));
+    const auto expected_error_message = scenario->string_member("errorMessage");
+    REQUIRE(expected_error_message.has_value());
+    CHECK(receipt.state.outcome->error->message == *expected_error_message);
 
     REQUIRE(consume(harness->close()).has_value());
 }
@@ -650,7 +712,11 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
                 }
                 return support::AsyncResult<void>{support::ExpectedVoid{}};
             }
-            const auto* cp = task.state.checkpoint->as_object();
+            const auto* cp = task.state.checkpoint ? task.state.checkpoint->as_object() : nullptr;
+            if (cp == nullptr) {
+                return support::AsyncResult<void>{
+                        std::unexpected(support::make_error(support::ErrorCode::Validation, "No checkpoint"))};
+            }
             const double n = *cp->at("n").as_number();
             initial_log.push_back("p2:" + std::to_string(static_cast<int>(n)));
             return runtime.commit(
@@ -685,6 +751,12 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
         }
         // Closing requests stop after p1 has committed the p2 checkpoint and p2 has started.
         REQUIRE(consume(harness->close()).has_value());
+
+        // Before close, only p1 had recorded its entry: p2's interrupt branch
+        // returns before logging. This is the pre-interruption half of the
+        // resume observation, asserted here on the test thread after close.
+        REQUIRE(initial_log.size() == 1);
+        CHECK(initial_log[0] == "p1");
     }
 
     // Now reopen storage and resume with a definition whose p1 fails the test if called
@@ -702,7 +774,11 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
                     std::unexpected(support::make_error(support::ErrorCode::Session, "p1 should not rerun"))};
         });
         def_builder.phase("p2", [&](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
-            const auto* cp = task.state.checkpoint->as_object();
+            const auto* cp = task.state.checkpoint ? task.state.checkpoint->as_object() : nullptr;
+            if (cp == nullptr) {
+                return support::AsyncResult<void>{
+                        std::unexpected(support::make_error(support::ErrorCode::Validation, "No checkpoint"))};
+            }
             const double n = *cp->at("n").as_number();
             reopened_log.push_back("p2:" + std::to_string(static_cast<int>(n)));
             return runtime.commit(
@@ -727,14 +803,29 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
         auto receipt_res = consume(harness->wait_for_task(task_id));
         REQUIRE(receipt_res.has_value());
         const auto& receipt = receipt_res.value();
-        CHECK(receipt.state.status == *scenario->string_member("status"));
+        const auto expected_status = scenario->string_member("status");
+        REQUIRE(expected_status.has_value());
+        CHECK(receipt.state.status == *expected_status);
         REQUIRE(receipt.state.outcome.has_value());
         CHECK(receipt.state.outcome->status == "completed");
-        CHECK(*receipt.state.outcome->result->as_number() == *scenario->number_member("result"));
+        REQUIRE(receipt.state.outcome->result.has_value());
+        const auto* resumed_result = receipt.state.outcome->result->as_number();
+        REQUIRE(resumed_result != nullptr);
+        const auto expected_result = scenario->number_member("result");
+        REQUIRE(expected_result.has_value());
+        CHECK(*resumed_result == *expected_result);
 
         // Discriminating check: p1 must NOT have run after reopen!
         REQUIRE(reopened_log.size() == 1);
         CHECK(reopened_log[0] == "p2:1");
+
+        // The frozen reopen observation is the resumed phase log itself.
+        const auto* expected_reopened = scenario->array_member("reopenedPhasesRan");
+        REQUIRE(expected_reopened != nullptr);
+        REQUIRE(expected_reopened->size() == reopened_log.size());
+        for (std::size_t i = 0; i < reopened_log.size(); ++i) {
+            CHECK(reopened_log[i] == expected_reopened->at(i).get_string());
+        }
 
         REQUIRE(consume(harness->close()).has_value());
     }
@@ -800,7 +891,11 @@ TEST_CASE("TaskExecution: terminal record and receipt are committed in the same 
     REQUIRE(receipt.state.outcome.has_value());
     CHECK(receipt.state.outcome->status == "completed");
     REQUIRE(receipt.state.outcome->result.has_value());
-    CHECK(*receipt.state.outcome->result->as_object()->at("receiptId").as_number() == 999.0);
+    const auto* receipt_result_object = receipt.state.outcome->result->as_object();
+    REQUIRE(receipt_result_object != nullptr);
+    const auto* receipt_id_number = receipt_result_object->at("receiptId").as_number();
+    REQUIRE(receipt_id_number != nullptr);
+    CHECK(*receipt_id_number == 999.0);
 
     // The receipt is the result inside the terminal TaskRecord. Observe the exact
     // batch passed to Storage::commit and require both in that same task write.
@@ -834,6 +929,152 @@ TEST_CASE("TaskExecution: terminal record and receipt are committed in the same 
     REQUIRE((*persisted)->state.outcome->result.has_value());
     CHECK(*(*persisted)->state.outcome->result == expected_json);
     REQUIRE(reopened_storage->close().has_value());
+}
+
+TEST_CASE("TaskExecution: building a task definition twice reports a validation error", "[durable][task][issue1076]") {
+    auto builder = TaskDefinitionBuilder("audit1076.repeat-build", 1);
+    builder.initial([](const chord::Json&) {
+        chord::Json::Object obj;
+        obj.emplace("phase", "run");
+        return chord::Json(std::move(obj));
+    });
+    builder.phase(
+            "run", [](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
+
+    REQUIRE(builder.valid());
+    auto first = builder.build();
+    REQUIRE(first.has_value());
+    CHECK(first->kind() == "audit1076.repeat-build");
+    CHECK(first->version() == 1);
+    CHECK(first->has_phase("run"));
+
+    // `build()` consumed the builder: it owns no definition any more.
+    CHECK_FALSE(builder.valid());
+
+    // Mutators after a successful build are documented no-ops rather than a
+    // null dereference, and the builder stays consumed.
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{}); });
+    builder.phase("late",
+            [](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
+    builder.abort([](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
+    CHECK_FALSE(builder.valid());
+
+    auto second = builder.build();
+    REQUIRE_FALSE(second.has_value());
+    CHECK(second.error().code == support::ErrorCode::Validation);
+    CHECK(second.error().message.find("consumes the builder") != std::string::npos);
+
+    // A third call reports the same validation error rather than crashing.
+    auto third = builder.build();
+    REQUIRE_FALSE(third.has_value());
+    CHECK(third.error().code == support::ErrorCode::Validation);
+}
+
+TEST_CASE("TaskExecution: abort handler error faults the task with the handler message", "[durable][task][issue1076]") {
+    auto def_builder = TaskDefinitionBuilder("audit1076.abort-error", 1);
+    def_builder.initial([](const chord::Json&) {
+        chord::Json::Object obj;
+        obj.emplace("phase", "run");
+        return chord::Json(std::move(obj));
+    });
+    def_builder.phase(
+            "run", [](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
+    def_builder.abort([](const TaskRecord&, TaskRuntime&) {
+        return support::AsyncResult<void>{
+                std::unexpected(support::make_error(support::ErrorCode::Tool, "cleanup handler blew up"))};
+    });
+
+    auto def = def_builder.build();
+    REQUIRE(def.has_value());
+    MemoryStorage storage;
+    std::vector<TaskDefinition> tasks;
+    tasks.push_back(std::move(*def));
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    TaskId task_id;
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created =
+                tx.create_task(*harness->task_definition("audit1076.abort-error"), chord::Json(chord::Json::Object{}));
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    auto abort_res = consume(harness->abort_task(task_id));
+    REQUIRE(abort_res.has_value());
+    CHECK(abort_res.value() == "marked");
+
+    REQUIRE(harness->resume().has_value());
+    auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+    CHECK(receipt.state.status == "terminal");
+    REQUIRE(receipt.state.outcome.has_value());
+    CHECK(receipt.state.outcome->status == "faulted");
+    REQUIRE(receipt.state.outcome->error.has_value());
+    CHECK(receipt.state.outcome->error->message == "cleanup handler blew up");
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: abort handler returning without a terminal outcome faults the task",
+        "[durable][task][issue1076]") {
+    std::atomic_bool abort_handler_ran{false};
+
+    auto def_builder = TaskDefinitionBuilder("audit1076.abort-no-outcome", 1);
+    def_builder.initial([](const chord::Json&) {
+        chord::Json::Object obj;
+        obj.emplace("phase", "run");
+        return chord::Json(std::move(obj));
+    });
+    def_builder.phase(
+            "run", [](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
+    def_builder.abort([&](const TaskRecord&, TaskRuntime&) {
+        abort_handler_ran.store(true);
+        // Returns successfully without committing a terminal outcome.
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    });
+
+    auto def = def_builder.build();
+    REQUIRE(def.has_value());
+    MemoryStorage storage;
+    std::vector<TaskDefinition> tasks;
+    tasks.push_back(std::move(*def));
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    TaskId task_id;
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(
+                *harness->task_definition("audit1076.abort-no-outcome"), chord::Json(chord::Json::Object{}));
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    auto abort_res = consume(harness->abort_task(task_id));
+    REQUIRE(abort_res.has_value());
+    CHECK(abort_res.value() == "marked");
+
+    REQUIRE(harness->resume().has_value());
+    auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+
+    // The abort handler ran on an execution thread; its observation is asserted
+    // here, on the test thread, after the wait returned.
+    CHECK(abort_handler_ran.load());
+    CHECK(receipt.state.status == "terminal");
+    REQUIRE(receipt.state.outcome.has_value());
+    CHECK(receipt.state.outcome->status == "faulted");
+    REQUIRE(receipt.state.outcome->error.has_value());
+    CHECK(receipt.state.outcome->error->message ==
+            "Abort handler of task " + std::to_string(task_id.value) + " returned without a terminal outcome");
+
+    REQUIRE(consume(harness->close()).has_value());
 }
 
 } // namespace cch::tests::durable
