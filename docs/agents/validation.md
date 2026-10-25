@@ -47,6 +47,8 @@ Parallel builds share one host budget. On the measured host in [build-performanc
 
 The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), and a regex that matches other cases passes silently. Measured on this repository: `-R 'message conversion'` selects no case, `-R 'thinking level'` selects 13 of the wrong ones, and `-R 'session'` selects 207. Verify the match set before trusting it — `ctest --preset vcpkg -N -R '<regex>'` prints the case names and the count — and prefer a label (`-L <label>`) or the owning shard. Report the selected count with the result.
 
+A cold or shard-only build tree registers fewer cases than a full one. `catch_discover_tests` registers a target's cases when that target builds, so a label selected in a worktree where only one shard was built silently covers a subset: measured in a fresh worktree after building `cch_tests_durable` alone, `-L architecture` selected 36 cases against the primary checkout's 43, because the 7 `cch_tests_cli_arch` cases were never registered. `noTests: error` does not catch a partial selection, and the run passes on the smaller set. Build the full preset before any label-wide run (`cmake --build --preset vcpkg`), or compare the `ctest -N` count against the primary checkout before trusting a pass.
+
 Run Full Validation once before code delivery on the default Debug preset, as required by `/implement`:
 
 ```bash
