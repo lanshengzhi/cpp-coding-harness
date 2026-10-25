@@ -121,9 +121,10 @@ mapping is recorded in the #1101 report.
 
 Only `cch_mcp:mcp-tools-call-structured` advances from `partial` /
 `upstream-captured` to `implemented` / `verified` in this reconciliation. All
-other statuses retain their existing audit/delivery state. The audit's aggregate implementation counts are not an estimate of final
-project completion: the 858 historical TUI routes and broad composite durable
-rows still need their own current comparison records.
+other statuses retain their existing audit/delivery state. The audit's aggregate
+implementation counts are not an estimate of final project completion: the 858
+historical TUI routes and broad composite durable rows still need their own
+current comparison records.
 
 ## Remaining boundary
 
@@ -133,6 +134,12 @@ Agent/MCP/application behavior, and real emulator evidence remain open under
 #1044. This reconciliation neither broadens capability membership nor accepts
 those remaining obligations through a full-suite pass.
 
-#1101 and #1071 remain open on GitHub with their acceptance checklists untouched.
-These reconciliation artifacts are local until publication; no remote close-out
-or acceptance is claimed. #1044 also remains open.
+The reconciliation artifacts are published on `main` in
+[`8425ff3db04168a8e992e90b2304c65a8e268ff8`](https://github.com/lanshengzhi/cpp-coding-harness/commit/8425ff3db04168a8e992e90b2304c65a8e268ff8).
+[#1101](https://github.com/lanshengzhi/cpp-coding-harness/issues/1101#issuecomment-6398454960)
+and [#1071](https://github.com/lanshengzhi/cpp-coding-harness/issues/1071#issuecomment-6398454965)
+are closed with all four acceptance criteria checked and their in-flight labels
+removed. Their close-out comments map each criterion to the published implementation
+and validation evidence. `scripts/verify-closed-issue.sh 1101` and
+`scripts/verify-closed-issue.sh 1071` both pass. #1044 remains open; closing these
+bounded slices does not accept its remaining obligations.
