@@ -13,6 +13,7 @@
 #include "support/JsonCompare.hpp"
 #include "support/RuntimeFixture.hpp"
 
+#include <cch/mcp/StdioClient.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
@@ -81,6 +82,21 @@ void check_script_result(
     }
 }
 
+[[nodiscard]] support::JsonValue::array_t frozen_scenarios(std::string_view artifact) {
+    std::ifstream input(std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/" + std::string{artifact}, std::ios::binary);
+    REQUIRE(input);
+    const std::string text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
+    auto document = support::read_json(text);
+    REQUIRE(document.has_value());
+    const auto* object = document->get_if<support::JsonValue::object_t>();
+    REQUIRE(object != nullptr);
+    const auto scenarios = object->find("scenarios");
+    REQUIRE(scenarios != object->end());
+    const auto* values = scenarios->second.get_if<support::JsonValue::array_t>();
+    REQUIRE(values != nullptr);
+    return *values;
+}
+
 } // namespace
 
 TEST_CASE("an MCP tools/call object structuredContent survives conversion with content absent",
@@ -108,23 +124,10 @@ TEST_CASE("an MCP tools/call object structuredContent survives conversion with c
 
 TEST_CASE(
         "the frozen review artifact matches every actual fixture observation", "[coding_agent][mcp][issue1101][spec]") {
-    const std::string artifact_path =
-            std::string{CCH_SOURCE_DIR} + "/fixtures/pi-v1.3.0/audit-1101/structured-content-order.json";
-    std::ifstream input(artifact_path, std::ios::binary);
-    REQUIRE(input);
-    const std::string artifact_text{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
-    auto artifact = support::read_json(artifact_text);
-    REQUIRE(artifact.has_value());
-    const auto* root = artifact->get_if<support::JsonValue::object_t>();
-    REQUIRE(root != nullptr);
-    const auto scenarios = root->find("scenarios");
-    REQUIRE(scenarios != root->end());
-    const auto* scenario_list = scenarios->second.get_if<support::JsonValue::array_t>();
-    REQUIRE(scenario_list != nullptr);
-
+    const auto scenarios = frozen_scenarios("audit-1101/structured-content-order.json");
     tests::RuntimeFixture runtime;
     auto tools = load_structured_tools(runtime);
-    for (const auto& scenario : *scenario_list) {
+    for (const auto& scenario : scenarios) {
         const auto* scenario_object = scenario.get_if<support::JsonValue::object_t>();
         REQUIRE(scenario_object != nullptr);
         const auto inputs = scenario_object->find("inputs");
@@ -388,4 +391,82 @@ TEST_CASE("an MCP tools/call rejects wrong content and malformed results at the 
         CHECK(executed.error().context ==
                 std::optional<std::string>{"MCP server 'structured' sent an invalid tools/call result"});
     }
+}
+
+TEST_CASE("MCP structured results match every original frozen audit obligation through real public callers",
+        "[coding_agent][mcp][issue1101][spec]") {
+    tests::RuntimeFixture runtime;
+    auto client = runtime.run(cch::mcp::StdioClient::connect(structured_server_config()));
+    REQUIRE(client.has_value());
+    auto tools = load_structured_tools(runtime);
+
+    for (const auto& scenario : frozen_scenarios("audit-1052/structured-content.json")) {
+        REQUIRE(scenario.holds<support::JsonValue::object_t>());
+        REQUIRE(scenario.get_object().contains("name"));
+        INFO(scenario.at("name").get_string());
+        REQUIRE(scenario.get_object().contains("inputs"));
+        REQUIRE(scenario.get_object().contains("expected"));
+        REQUIRE(scenario.at("inputs").holds<support::JsonValue::object_t>());
+        REQUIRE(scenario.at("expected").holds<support::JsonValue::object_t>());
+        const auto& inputs = scenario.at("inputs").get_object();
+        const auto& expected = scenario.at("expected").get_object();
+        support::JsonValue::object_t wire;
+        for (const auto& [key, value] : inputs) {
+            if (key == "structuredContent" || key == "isError" ||
+                    (key == "content" && value.holds<support::JsonValue::array_t>())) {
+                wire.emplace(key, value);
+            } else if (key == "meta") {
+                wire.emplace("_meta", value);
+            }
+        }
+        const support::JsonValue arguments{support::JsonValue::object_t{{"kind", "replay"}, {"result", wire}}};
+        auto response = runtime.run((*client)->call_tool("structured", arguments));
+        REQUIRE(response.has_value());
+        REQUIRE(response->value.holds<support::JsonValue::object_t>());
+        if (expected.contains("content")) {
+            REQUIRE(expected.at("content").holds<support::JsonValue::array_t>());
+        }
+        const auto client_expected = expected.find("client");
+        const auto conversion_expected = expected.find("converted");
+        const bool conversion_only = conversion_expected == expected.end() && expected.contains("content") &&
+                                     !expected.at("content").get_array().empty();
+        if (client_expected != expected.end()) {
+            auto observed = response->value.get_object();
+            const auto meta = observed.find("_meta");
+            if (meta != observed.end()) {
+                observed.emplace("meta", meta->second);
+                observed.erase(meta);
+            }
+            CHECK_FALSE(tests::json_mismatch(client_expected->second, support::JsonValue{observed}).has_value());
+        } else if (!conversion_only) {
+            auto observed = response->value.get_object();
+            observed.try_emplace("content", support::JsonValue::array_t{});
+            observed.try_emplace("isError", nullptr);
+            CHECK_FALSE(tests::json_mismatch(scenario.at("expected"), support::JsonValue{observed}).has_value());
+        }
+
+        auto converted = runtime.run(tools.front().context_execute(arguments, extensions::ExtensionToolContext{}, {}));
+        REQUIRE(converted.has_value());
+        if (conversion_expected != expected.end() || conversion_only) {
+            support::JsonValue::array_t content;
+            for (const auto& block : converted->content) {
+                const auto* text = std::get_if<ai::TextContent>(&block);
+                REQUIRE(text != nullptr);
+                content.emplace_back(support::JsonValue::object_t{{"type", "text"}, {"text", text->text}});
+            }
+            REQUIRE(converted->details.has_value());
+            const support::JsonValue observed{support::JsonValue::object_t{
+                    {"content", std::move(content)},
+                    {"structuredContent", *converted->details},
+                    // pi's absent isError is recorded as null; the C++ value defaults to false.
+                    {"isError",
+                            wire.contains("isError") ? support::JsonValue{converted->is_error}
+                                                     : support::JsonValue{nullptr}},
+            }};
+            CHECK_FALSE(tests::json_mismatch(
+                    conversion_only ? scenario.at("expected") : conversion_expected->second, observed)
+                            .has_value());
+        }
+    }
+    (*client)->close();
 }

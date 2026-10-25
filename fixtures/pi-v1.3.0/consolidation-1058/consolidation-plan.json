@@ -2253,8 +2253,9 @@
     },
     {
       "id": "limit-no-cpp-parity",
-      "statement": "No audit lane ran a C++ comparison; zero rows are verified and every upstream-captured row still requires an independent C++ comparison.",
-      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[2]"
+      "statement": "The original audits did not run C++ comparisons. Later slices do have comparison tests and reports; only a complete validated record in 1058-deliveries.json promotes a whole row. The source audit verification states remain historical provenance.",
+      "authority": "/tmp/cch-1044-context/1052-merged.json residual_risks[2]",
+      "reconciliation": "docs/research/pi-v1.3.0/1058-delivery-reconciliation.md"
     },
     {
       "id": "limit-1047-symbols",
@@ -2263,8 +2264,9 @@
     },
     {
       "id": "limit-1051-thinking-fixture",
-      "statement": "Thinking-selector availability remains unverified until both harnesses run the same thinkingLevelMap; do not add xhigh/max because C++ already gates seven levels and the frozen fixture lists five.",
-      "authority": "protocol.md '#1051 correction gate' and /tmp/cch-1044-context/1051-thinking-fix.json"
+      "statement": "The original audit used mismatched thinkingLevelMap fixtures. The refreshed #810 implementation slice is now closed; its evidence and comparison boundary are retained without automatically promoting the capability row.",
+      "authority": "protocol.md '#1051 correction gate' and /tmp/cch-1044-context/1051-thinking-fix.json",
+      "reconciliation": "docs/research/pi-v1.3.0/1058-delivery-reconciliation.md"
     },
     {
       "id": "limit-1055-crash",
@@ -2278,13 +2280,15 @@
     },
     {
       "id": "limit-1051-emulator",
-      "statement": "Real emulator/PTY evidence is missing for image/footer/cursor/restoration and program-status captures record terminal-contract calls, not raw protocol acceptance.",
-      "authority": "protocol.md '#1051 parent acceptance note'"
+      "statement": "The original audit lacked raw PTY evidence. #1123 and #1125 now record actual protocol/lifecycle PTY comparisons. Actual emulator rendering and image/cursor/clipboard outcomes remain unverified where dated emulator evidence is missing; see 1124-dated-terminal-evidence.md.",
+      "authority": "protocol.md '#1051 parent acceptance note'",
+      "reconciliation": "docs/research/pi-v1.3.0/1058-delivery-reconciliation.md"
     },
     {
       "id": "limit-808-model-selector",
-      "statement": "The C++ [issue800] model-selector case fails its own post-Enter assertion (17 passed / 1 failed, no artifact); preserve as a #808 verification defect, not green evidence.",
-      "authority": "protocol.md '#1051 parent acceptance note'"
+      "statement": "The original audit recorded a post-Enter model-selector assertion failure (17 passed / 1 failed). The refreshed #808 implementation slice is closed with a dated PTY record in 808-model-selector-pty-2026-10-22.md; the old failure is historical evidence, not a current known failure.",
+      "authority": "protocol.md '#1051 parent acceptance note'",
+      "reconciliation": "docs/research/pi-v1.3.0/1058-delivery-reconciliation.md"
     },
     {
       "id": "limit-registration-integrity",

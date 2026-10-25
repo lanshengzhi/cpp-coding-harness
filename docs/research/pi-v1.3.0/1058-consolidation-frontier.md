@@ -1,17 +1,23 @@
 # pi-v1.3.0 capability consolidation and implementation frontier (#1058)
 
-Status: audit-acceptance deliverable for the #1044 umbrella, at frozen revision
-`71023aec1546d6d677a65669c5665c0927ce0dd0`. This work consolidates the eleven lane audits
-(#1047-#1057) and the #1046 evidence infrastructure into one stable capability ledger, and drafts
-the demoable single-context implementation tickets with real acceptance and failure cases. It does
-not implement, publish, migrate or close anything: umbrella #1044 stays open, no audit row becomes
-verified, and no historical artifact or observation payload is rewritten.
+Status: audit consolidation with subsequent delivery reconciliation for the #1044 umbrella,
+at frozen revision `71023aec1546d6d677a65669c5665c0927ce0dd0`. The eleven source audit
+ledgers remain the historical audit record. The generated ledger now combines those records
+with explicitly validated C++ delivery evidence; an upstream capture alone never verifies a row.
+The 32 drafts describe the original plan, not the live GitHub frontier of 76 implementation
+slices. #1044 remains open.
+
+Current reconciliation and the evidence contract are recorded in
+[1058-delivery-reconciliation.md](./1058-delivery-reconciliation.md). No frozen observation
+payload is rewritten.
 
 Deliverables:
 
 - [1058-consolidated-capability-ledger.json](./1058-consolidated-capability-ledger.json) - the
   stable ledger: 1464 consolidated rows, one alias per source row, evidence routes to real
   registered scenarios or an honest missing observation.
+- [1058-deliveries.json](./1058-deliveries.json) - reviewed whole-row C++ comparisons,
+  selected input digests and actual focused CTest JUnit results, applied after the audit.
 - [1058-implementation-frontier.json](./1058-implementation-frontier.json) - the owner graph, the
   expand/migrate/contract/integrate-verify migration sequence, 32 implementation drafts and the
   residual-tracker reconciliation.
@@ -42,8 +48,8 @@ exactly one consolidated, package-qualified id, and every consolidated row lists
 absorbs. There is no catch-all row, no deferred bucket and no silent skip. The tool refuses to build
 if the alias map is not a bijection over all source rows. Every included row carries an owner, its
 current consumers (`consumer` plus `consumerOwners`), an evidence route to a registered scenario or
-an honest missing observation, and an explicit `remainingWork` statement; excluded rows carry their
-boundary instead.
+an honest missing observation, and an explicit `remainingWork` statement until verified;
+excluded rows carry their boundary instead.
 
 The divergent lane schemas are mapped explicitly in `schemaMappings` rather than assumed uniform:
 1047's `piSymbols`/`piTests` become the source pointer and the frozen-symbol list; the
@@ -60,19 +66,19 @@ folded into membership.
 | By lane | 1047:32, 1048:30, 1049:20, 1050:954, 1051:50, 1052:31, 1053:68, 1054:111, 1055:40, 1056:70, 1057:58 |
 | By owner | cch_tui:925, cch_durable:212, cch_coding_agent:159, cch_chord:65, cch_codemode:51, cch_agent_core:29, cch_mcp:19, cch_ai:4 |
 | Membership | supported:1435, excluded:29, no-decision:0 |
-| Implementation | implemented:983, partial:225, missing:238, not-applicable:18 |
-| Verification | unverified:1028, upstream-captured:408, not-applicable:28, verified:0 |
-| Evidence route | captured:408, related-captured:28, declared-comparison:32, cpp-regression-only:10, unobserved:58, historical-v1.0.4:858, not-audited:42, excluded:28 |
+| Implementation | implemented:1018, missing:214, not-applicable:18, partial:214 |
+| Verification | not-applicable:28, unverified:1019, upstream-captured:416, verified:1 |
+| Evidence route | captured:417, related-captured:23, declared-comparison:31, cpp-regression-only:10, unobserved:55, historical-v1.0.4:858, not-audited:42, excluded:28 |
 
 The three dimensions stay separate. A supported row can be implemented and still unverified, and a
 row with an upstream capture is not promoted because a similar row exists elsewhere: a declared
 comparison scenario that resolves to a registered artifact for a row that does not itself record
 `upstream-captured` is labelled `related-captured` and keeps a `missingObservation` statement. The
-checker fails the ledger if any row claims `verified`, if an `upstream-captured` row has no
-registered artifact, if an excluded row has no boundary, a placeholder boundary or an
-`upstream-captured` status without a registered artifact, if an included row has no consumer text,
-if an included row has no `remainingWork`, or if a supported non-implemented row has no gap, missing
-observation or note.
+checker rejects `verified` without a complete validated delivery, an `upstream-captured` row
+without a registered artifact, an excluded row without a concrete boundary, an included row
+without consumer text, an unverified included row without `remainingWork`, or a supported
+non-implemented row without a gap, missing observation or note. Source audit statuses remain
+visible in `sourceRows`; a delivered row also keeps its previous consolidated `auditStatus`.
 
 No row keeps a `no-decision` membership: `counts.noDecision` is empty. The two rows that were
 `no-decision` are now `excluded` by the owner's #1059 ruling —
@@ -96,22 +102,16 @@ the C++ contract, not pi parity.
 
 ## 3. Evidence routes and bundled scenarios
 
-The twenty-three registered bundles ([baselines.json](../../../fixtures/pi-v1.3.0/baselines.json)) hold 77
-artifacts and 468 scenarios. The consolidation covers all 465 scenarios of the registered families
+The 25 registered bundles ([baselines.json](../../../fixtures/pi-v1.3.0/baselines.json)) hold 79
+artifacts and 477 scenarios. The consolidation covers all 474 non-bootstrap scenarios
 (audit-1046 is the bootstrap evidence-infrastructure bundle):
 
-- 346 scenarios are named directly by at least one consolidated row's comparison list;
+- 347 scenarios are named directly by at least one consolidated row's comparison list;
 - 55 more scenarios are covered because their artifact is referenced by a row (the row records the
   artifact-level capture without listing every scenario name);
-- 64 scenarios are registered as explicit `orphanScenarios` with a reason, related rows and a
-  disposition instead of being silently linked to a different semantics: 3 of
-  `audit-1050/input-standalone.json`, 6 of `audit-1061` (`draft-array-holes.json`,
-  `review-fixes.json`), 21 of `audit-1101` (`structured-content.json`,
-  `structured-content-order.json`), 7 of `audit-1063/session-transactions.json`, 7 of
-  `audit-1124/clipboard-osc52.json`, 3 of `audit-1121/output-pad.json`, 1 of
-  `audit-1123/named-session-program-status.json`, 1 of `audit-810/thinking-selector.json`, 10 of
-  `audit-1032/system-theme-capture.json`, 3 of `audit-1035/placement-span.json` and 2 of
-  `audit-831/dock-footer.json`;
+- 72 scenarios are registered as explicit `orphanScenarios` with a reason, related rows and a
+  disposition instead of being silently linked to different semantics. Their exact identities
+  are listed in the generated ledger and include the later #1076 task observations;
 - 0 scenarios are unrouted: no registered audit scenario is missing a route; the checker fails if any
   registered audit scenario is neither named, artifact-covered nor registered as an orphan.
 
@@ -180,7 +180,7 @@ contracts stay as separate rows with an explicit resolution:
 | `overlap-mcp-application` | The reusable MCP protocol/client/transport rows (1052) stay in cch_mcp; the application config, management, resource and session-tool rows belong to cch_coding_agent. |
 
 The eight capability groups (`capabilityGroups`) are disjoint and each member is a real row; the
-six overlap resolutions and the 91 orphan scenarios are validated for known ids, non-empty
+six overlap resolutions and the registered orphan scenarios are validated for known ids, non-empty
 resolutions and registered scenario names. The toolkit/product resolution additionally requires
 every named counterpart to be a real `1051` row that is not verified, every routed product row to
 stay `not-audited`/`unverified` with a missing-observation statement, and at least one product row
@@ -190,7 +190,11 @@ consolidation cannot report a product behavior as audited by a lane that never o
 
 ## 6. Retained limitations (honest missing observations)
 
-`retainedLimitations` records the ten limits this consolidation must not hide:
+`retainedLimitations` preserves the ten limitations recorded at audit time. Later deliveries
+are tracked separately: #1101 has a whole-row comparison receipt, the TUI residual tickets
+are closed, and #1123/#1125 have actual PTY comparisons. Real emulator rendering and broad
+runtime obligations remain unverified where their evidence is missing. The original audit
+observations were:
 
 1. The application extension seam is a native-hook target; the captured 1051/1049 extension
    scenarios exercised the public extension factory with a minimal host stub, not a full Session.
@@ -286,10 +290,10 @@ the `stop()` clear on a real pseudo-terminal, and
 `tests/coding_agent/tui/ProgramStatusReporterTest.cpp` and
 `ProgramStatusEvidenceTest.cpp` replay the `audit-1051/program-status.json` state sequence.
 
-The fourteen rows stay `upstream-captured`, not `verified`: this consolidation refuses to write
-`verified` for any row (see the checker rule above), so the accepted C++ comparison is recorded by
-the tests and the ticket, and the ledger keeps the honest verification value. Only the
-`implementation` status and the factual seam and consumer text changed.
+The fourteen program-status rows retain `upstream-captured`: their accepted comparisons are
+recorded in tests and the ticket, but no complete per-row delivery receipt has been added here.
+#1101 is the first whole-row receipt in `1058-deliveries.json`. Verification now requires a
+validated receipt rather than being prohibited for every row.
 
 ## 7. Target owner graph
 
@@ -387,39 +391,34 @@ JSONL/SQLite legs (F8) and the SIGKILL-only crash model (F6).
 
 ## 10. Residual tracker reconciliation
 
-Open trackers are re-scoped to pi-v1.3.0 and reused, never duplicated:
+The eight refreshed TUI residual implementation tickets (#808, #810, #812, #831,
+#1035, #1033, #1032 and #1043) are closed. Their issue URLs and bounded delivery
+status are recorded in `residualReconciliation`. The old open-state recommendations
+are superseded. Their closure does not promote capability rows or waive real-emulator
+and persisted-duration obligations under #1044.
 
-| Issue | State | Action | Draft |
-| --- | --- | --- | --- |
-| #808 model selector marker/row layout | open | keep open, pass the failing PTY assertion | F24 |
-| #810 thinking selector layout | open | keep open, compare with matched thinkingLevelMap | F24 |
-| #812 tool-result presentation | open | keep open, re-check with persisted duration | F24 |
-| #831 dock-growth footer frames | open | keep open, require real PTY frame capture | F24 |
-| #1035 image placement-span repaint | open | keep open, require dated Kitty/WezTerm evidence | F24 |
-| #1033 extension-editor dual-runtime capture | open | keep open, close the capture gap | F24 |
-| #1032 generated system theme | open | keep open, re-target to v1.3.0 tokens | F24 |
-| #1043 residual v1.0.4 deltas | open | re-scope the 72-column, scrollback, tool-result-timing and settings-viewport families | F24 |
-| #946, #882, #915, #920, #925, #932 | closed | historical reference only; their alignment claims do not transfer to v1.3.0 | - |
+#946, #882, #915, #920, #925 and #932 remain historical references; their alignment
+claims do not transfer to v1.3.0.
 
 ## 11. Close-out
 
-- Implemented today: the eleven lane audits, their bundles/artifacts and the 969 C++
-  application/toolkit rows the ledgers record as implemented. That total includes 14 rows targeted
-  at the new owners whose behavior currently lives under existing application owners: cch_durable
-  2, cch_mcp 5, cch_codemode 7, cch_chord 0. A further 128 target rows are partial under those
-  existing owners (durable 87, mcp 11, codemode 12, chord 18) and are pending ownership migration,
-  not specified-only.
-- Specified only: the four new Owner packages and manifest targets, the 195 missing target rows
-  (durable 121, mcp 2, codemode 30, chord 42), the durable runtime and storage contracts,
-  bidirectional interchange, native extension lifecycle, tool duration end-to-end, codemode
-  Inline/Remote and the MCP cancellation/transport changes. The 230 partial rows are partial with
-  recorded remaining work, not blanket specified-only. 0 rows are verified.
-- Retained boundaries: Magpie discovery/authentication/inference; XDG Pike state root; all 29
-  excluded surfaces; no historical durable data migration, automatic upgrade, dual read or fallback.
-- Open blockers: umbrella #1044; the honest missing
-  observations (1000 declared/unobserved/historical/not-audited plus 28 related-captured rows); real
-  emulator/PTY evidence; and the SIGKILL-only crash model. The two membership blockers are closed:
-  both former `no-decision` rows are excluded by the owner's #1059 ruling.
+The configured graph contains real Chord, codemode, MCP and durable owners.
+Durable has memory/JSONL/SQLite storage and basic task/checkpoint execution;
+codemode has Inline, deterministic local execution and a Remote Linux host.
+These packages are no longer specified-only shells. The current frontier's
+`closeOut` records delivered slices and remaining work separately.
+
+[#1071](1071-legacy-retirement.md) reconciles the retired legacy SQLite/task
+subsystem. [#1101](1101-structured-content.md) supplies the first whole-row
+comparison receipt. Other delivered slices retain their reports/tests until
+complete per-row receipts accept their broader capability obligations.
+
+The source audit ledgers are not live completion estimates. The generated ledger
+above and its `counts` are authoritative for recorded status; 1019 rows still have
+missing observations, including 858 historical-only TUI routes. Session migration,
+full durable workflows, bidirectional continuation, remaining Agent/application/MCP
+behavior and actual emulator evidence keep #1044 open. Magpie/XDG, the 29 explicit
+exclusions and the no-old-Pike-migration boundary remain unchanged.
 
 ## 12. Validation
 

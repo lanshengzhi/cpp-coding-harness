@@ -691,7 +691,7 @@
     },
     {
       "id": "P7",
-      "title": "Split the legacy SQLite/TaskStore coupling out of cch_agent_core",
+      "title": "Retire the unused agent-side SQLite/task subsystem and narrow core",
       "kind": "prefactor",
       "owner": "cch_durable",
       "frontier": false,
@@ -724,7 +724,7 @@
           "fixtures/pi-v1.3.0/audit-1054/backend-contract.json: the same public operation yields the same records on memory, JSONL and SQLite"
         ],
         "comparison": "The durable SQLite contract is compared through the durable public caller (F7), not through the legacy test-only store.",
-        "missing": "No pi coding-agent equivalent exists for SqliteSessionStore or TaskStore."
+        "missing": "No pi coding-agent equivalent exists for the retired test-only SQLite SessionStore/TaskStore. The new durable backend and runtime obligations are independent; see #1075 and #1085/#1086."
       },
       "coverage": [
         "cch_durable:Session:storage:sqlite-alternative",
@@ -733,12 +733,15 @@
       ],
       "relatedIssues": [
         "#915",
-        "#920"
+        "#920",
+        "#1059",
+        "#1071"
       ],
       "boundaries": [
         "The legacy store is not pi v1.3.0 coding-agent storage and is not migrated; existing user data is not deleted",
         "The legacy store and the leaf marker are excluded (owner's #1059 ruling): the SQLite code was deleted in commit d0844505d and the leaf-marker code is retired in a parallel lane"
-      ]
+      ],
+      "deliveryReport": "docs/research/pi-v1.3.0/1071-legacy-retirement.md"
     },
     {
       "id": "P8",
@@ -1493,8 +1496,8 @@
           "fixtures/pi-v1.3.0/audit-1052/transports.json: HTTPS transport rejects an untrusted certificate",
           "fixtures/pi-v1.3.0/audit-1052/transports.json: cross-origin redirect is followed without Authorization and is rejected"
         ],
-        "comparison": "Run the same fixtures against the C++ client and compare values, request logs, errors and timing bounds; keep certificate validation.",
-        "missing": "The management-UI row has no scenario; retain platform certificate validation."
+        "comparison": "The structured-result obligation has a whole-row C++ receipt in 1058-deliveries.json (#1101). OAuth lifecycle and transport comparisons remain #1102/#1103 work.",
+        "missing": "Cancellation/close and issuer/HTTP/redirect authentication are not accepted by the structured-result receipt. Management UI comparison remains #1104."
       },
       "coverage": [
         "cch_mcp:mcp-tools-call",
@@ -1505,11 +1508,15 @@
         "cch_mcp:mcp-request-cancellation"
       ],
       "relatedIssues": [
-        "#882"
+        "#882",
+        "#1101",
+        "#1102",
+        "#1103"
       ],
       "boundaries": [
         "Retain applicable certificate validation; do not alter the Magpie connection contract"
-      ]
+      ],
+      "deliveryReport": "docs/research/pi-v1.3.0/1101-structured-content.md"
     },
     {
       "id": "F14",
@@ -2147,93 +2154,101 @@
   "residualReconciliation": [
     {
       "issue": "#808",
-      "state": "open",
+      "state": "closed",
       "title": "Align Native TUI model selector marker and row layout with the supported baseline",
-      "recommendation": "Re-scope to pi-v1.3.0; fix the marker/row layout and make the failing C++ post-Enter 'Model:' assertion pass in a real PTY run with an artifact.",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
         "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential model-selector at 100 columns",
-        "protocol.md #1051 note: C++ model-selector FAILS 17 passed/1 failed, no artifact"
+        "protocol.md #1051 note: C++ model-selector FAILS 17 passed/1 failed, no artifact",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/808"
       ],
       "draft": "F24",
-      "action": "keep-open"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#810",
-      "state": "open",
+      "state": "closed",
       "title": "Align Native TUI thinking selector layout with the supported baseline",
-      "recommendation": "Compare with the same thinkingLevelMap on both harnesses; keep the common layout/marker and blank-row residuals; do not add xhigh/max.",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
         "1051-thinking-fix.json: C++ seven levels versus frozen five-level fixture",
-        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential thinking-selector at 100 columns"
+        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential thinking-selector at 100 columns",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/810"
       ],
       "draft": "F24",
-      "action": "keep-open"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#812",
-      "state": "open",
+      "state": "closed",
       "title": "Align Native TUI successful tool-result presentation",
-      "recommendation": "Re-check the v1.3.0 tool-result rendering, including duration from the recorded value (F15), and accept on a refreshed differential.",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
-        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential tool-result at 100 columns"
+        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential tool-result at 100 columns",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/812"
       ],
       "draft": "F24",
-      "action": "keep-open"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#831",
-      "state": "open",
+      "state": "closed",
       "title": "Native TUI dock-growth frames drop footer rows",
-      "recommendation": "Re-run the dock-growth cell against v1.3.0; acceptance needs a real PTY/emulator capture of the growth frames, not a component-only check.",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
-        "/tmp/cch-1044-context/protocol.md #1051 note: real footer/image evidence missing"
+        "/tmp/cch-1044-context/protocol.md #1051 note: real footer/image evidence missing",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/831"
       ],
       "draft": "F24",
-      "action": "keep-open"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#1035",
-      "state": "open",
+      "state": "closed",
       "title": "Repaint fullscreen images on frozen placement-span changes",
-      "recommendation": "Re-target the placement-span repaint to v1.3.0 and require dated Kitty/WezTerm evidence; keep the toolkit image capability rows (F19).",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
-        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential cells at 100/120/72 columns"
+        "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential cells at 100/120/72 columns",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/1035"
       ],
       "draft": "F24",
-      "action": "keep-open"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#1033",
-      "state": "open",
+      "state": "closed",
       "title": "Capture extension-editor behavior in the dual-runtime pi harness",
-      "recommendation": "Close the capture gap with a real Pike-side dual-runtime extension-editor cell using the same factory/callback/text/focus/border values.",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
-        "fixtures/pi-v1.3.0/audit-1051/extension-editor.json: extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls"
+        "fixtures/pi-v1.3.0/audit-1051/extension-editor.json: extension editor installs, transfers text and focus, follows thinking and Bash borders, restores and reinstalls",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/1033"
       ],
       "draft": "F24",
-      "action": "keep-open"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#1032",
-      "state": "open",
+      "state": "closed",
       "title": "Port the generated system theme",
-      "recommendation": "Re-target the generated system theme to v1.3.0 theme tokens; the toolkit token/theme rows in F19/F20 carry the comparison.",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
-        "fixtures/pi-v1.3.0/audit-1051/native-tui-consumers-and-residuals.json: residual-1032-system-theme row"
+        "fixtures/pi-v1.3.0/audit-1051/native-tui-consumers-and-residuals.json: residual-1032-system-theme row",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/1032"
       ],
       "draft": "F24",
-      "action": "keep-open"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#1043",
-      "state": "open",
+      "state": "closed",
       "title": "Residual v1.0.4 product-differential deltas without an open tracker",
-      "recommendation": "Re-run the four residual families (72-column startup wrap, scrollback retained-row delta, tool-result mid-stream capture, settings viewport) against v1.3.0 and either fold them into F20/F24 or close them on refreshed evidence.",
+      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
       "evidence": [
-        "1051 rows residual-1043-startup-wrap, residual-1043-scrollback, residual-1043-tool-result-timing, residual-1043-settings-viewport"
+        "1051 rows residual-1043-startup-wrap, residual-1043-scrollback, residual-1043-tool-result-timing, residual-1043-settings-viewport",
+        "https://github.com/lanshengzhi/cpp-coding-harness/issues/1043"
       ],
       "draft": "F24",
-      "action": "re-scope"
+      "action": "closed-slice-retain-verification-boundary"
     },
     {
       "issue": "#946",
@@ -2306,18 +2321,19 @@
   ],
   "closeOut": {
     "implemented": [
-      "The 11 audit ledgers, 12 registered bundles, 60 artifacts and 373 scenarios exist, verify through the shared verifier and were independently reproduced by their mergers.",
-      "The application runtime and toolkit currently implement the 969 rows the ledgers record as implemented, including 14 rows targeted at the new owners whose behavior today lives under existing application owners: cch_durable 2, cch_mcp 5, cch_codemode 7, cch_chord 0.",
-      "128 further rows targeted at the new owners are partial today under those existing owners and are pending ownership migration, not specified-only: cch_durable 87, cch_mcp 11, cch_codemode 12, cch_chord 18.",
-      "The configured Owner graph adds cch_chord, cch_codemode, cch_mcp and cch_durable as manifest targets beside cch_ai, cch_agent_core, cch_tui, cch_coding_agent and cch_support; legacy application paths remain until their migration slices.",
-      "The C++ toolkit has real rendering/input behavior and the listed focused test selections pass; the C++ [issue800] model-selector assertion is a known failure (#808)."
+      "The 11 source audits and named-evidence infrastructure are complete. The current registry verifies 25 bundles, 79 artifacts and 477 scenarios; registration alone is not a C++ comparison.",
+      "cch_chord, cch_codemode, cch_mcp and cch_durable are configured libraries with real public callers. Durable has memory, transactional JSONL, SQLite and the #1076 task/checkpoint execution slice.",
+      "#1071 reconciles the already merged retirement of the unused agent-side SQLite/TaskStore/TaskScheduler subsystem. The preserved SessionStore and independent transcript export caller have current regression and dependency-closure evidence in 1071-legacy-retirement.md.",
+      "#1101 preserves arbitrary structured JSON through real MCP clients and application conversion. Its whole-row frozen comparison receipt is in 1058-deliveries.json and its delivery report is 1101-structured-content.md.",
+      "Codemode Inline (#1097), deterministic local execution (#1093), worker lifetime (#1096) and the Remote exchange/Linux host (#1098) are implemented. Remote replay (#1099) and durable integration (#1094) remain open.",
+      "The eight historical TUI residual implementation tickets are closed. PTY comparisons exist, including #1123 and #1125; dated real-emulator rendering remains a separate verification obligation."
     ],
     "specifiedOnly": [
-      "The cch_chord, cch_codemode, cch_mcp and cch_durable Owner packages now exist as manifest targets (cmake/targets/Chord.cmake, Codemode.cmake, Mcp.cmake, Durable.cmake). #1060 delivered the cch_chord value surface, #1064 the independently callable cch_codemode owner, #1065 the reusable MCP protocol, transport and OAuth owner, #1063 the durable Session/Storage/memory line, #1074 the transactional JSONL backend, and #1075 the durable SQLite backend. The remaining cch_durable work (tasks, interchange and fsync) stays specified.",
-      "No consolidated-ledger row is promoted to verified: the selected #1074 and #1075 comparisons are not yet recorded in the ledger, and every upstream-captured row still needs a registered comparison.",
-      "The consolidated ledger still records 195 target rows missing (cch_durable 121, cch_mcp 2, cch_codemode 30, cch_chord 42); those counts predate P3 (#1063), F2 (#1074) and F7 (#1075) and need a consolidation regeneration. The 230 partial rows are partial with recorded remaining work, not blanket specified-only.",
-      "Durable bidirectional JSONL/SQLite interchange, power-loss durability and cross-runtime continuation are specified and unproven.",
-      "Native extension lifecycle/run triggering, tool duration end-to-end, codemode Inline/Remote, and the MCP cancellation/transport changes are specified with implementation gaps. OSC 7501 program status is implemented by #1123 and its ledger rows are corrected."
+      "The Session ownership migration #1068 -> #1069 -> #1070 and concrete environment/tool migration remain open. The original 32 drafts are planning records; native dependencies on the 76 implementation issues determine the live frontier.",
+      "Durable definition versioning/hooks (#1077), ownership/join/wait cancellation (#1078), full prompt/tool Harness workflows (#1079), submissions/inbox, document lifecycle and integrations remain incomplete beyond their delivered slices.",
+      "Durable bidirectional JSONL/SQLite continued operation (#1085/#1086), crash/recovery integration (#1084) and additional durability guarantees remain unverified.",
+      "Agent/application tool duration, queue/default/lifecycle/tool-selection behavior, native extensions and MCP cancellation/issuer/transport/management still have open implementation or verification work.",
+      "Other delivered slices, including #1074/#1075/#1076 and TUI program status, retain their delivery reports and tests. Their broader composite capability rows need complete per-row receipts before ledger verification can advance."
     ],
     "retainedBoundaries": [
       "Magpie-only model discovery/authentication/inference; no overall cch_ai baseline advance (cch_ai rows).",
@@ -2327,12 +2343,12 @@
       "No import/migration/automatic upgrade/dual reads/fallback for historical Pike durable data; existing user data is not deleted."
     ],
     "openBlockers": [
-      "Umbrella #1044 remains open: implementation and final validation are not done; this consolidation is an audit acceptance gate only.",
-      "Membership blockers: none. The two former no-decision rows (legacy SQLite SessionStore alternative, application leaf-marker entry) are excluded by the owner's #1059 ruling and keep their boundaries.",
-      "Verification blockers: 1000 rows carry an honest missing observation (32 declared-comparison, 10 cpp-regression-only, 58 unobserved, 858 historical-only, 42 not-audited) plus 28 related-captured rows that keep their own unverified status.",
-      "Terminal blockers: real emulator/PTY evidence is missing for image/footer/cursor/restoration rows. OSC 7501 program status now has PTY evidence of its own: #1123 replays the frozen startup order, the DA sentinel, both PI_PROGRAM_STATUS overrides and the stop() clear on a real pseudo-terminal, with dated raw bytes.",
-      "Crash blockers: SIGKILL/reopen is recorded, but power-loss/fsync-failure/multi-process durability is not proven and must not be claimed."
+      "Umbrella #1044 remains open until every included capability is implemented and verified and final integration evidence is accepted.",
+      "Membership blockers: none. The two former no-decision rows remain excluded under the owner ruling in #1059, with their recorded boundaries.",
+      "The generated ledger remains the count authority: 1019 rows have missing observations, including 858 historical-v1.0.4 routes. The source audit counts are not a current project completion percentage.",
+      "Terminal blockers: dated PTY runs prove protocol bytes and lifecycle state. Actual emulator rendering, image placement, hardware cursor and clipboard outcomes require the appropriate dated emulator evidence; see 1124-dated-terminal-evidence.md.",
+      "Crash blockers: SIGKILL/reopen does not establish power-loss, fsync-failure or multi-process guarantees."
     ],
-    "umbrellaStatus": "#1044 stays open until every included row is implemented and verified; #1058 does not close it or publish draft issues."
+    "umbrellaStatus": "#1044 stays open. Whole-row delivery receipts advance only their named capability; issue closure and a passing full suite do not accept unrelated remaining behavior."
   }
 }

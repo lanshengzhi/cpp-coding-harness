@@ -11,11 +11,15 @@ the checker's printed coverage note are the observable results.
 
 from __future__ import annotations
 
+import copy
+import hashlib
 import importlib.util
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -49,6 +53,148 @@ def orphan_keys(plan: dict) -> list[str]:
         f"{item['family']}/{item['artifact']}:{item['scenario']}"
         for item in plan["orphanScenarios"]
     ]
+
+
+class DeliveryEvidenceTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.directory.cleanup)
+        self.root = Path(self.directory.name)
+        files = {
+            "src/Example.cpp": "implementation\n",
+            "tests/ExampleTest.cpp": "public comparison and negative control\n",
+            "docs/delivery.md": "Reviewed comparison mapping\n",
+            "docs/result.xml": '<testsuite tests="2" failures="0"><testcase name="compare" status="run"/>'
+                               '<testcase name="control" status="run"/></testsuite>',
+        }
+        for relative, value in files.items():
+            path = self.root / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(value)
+        self.pin = lambda relative: {
+            "path": relative, "sha256": hashlib.sha256((self.root / relative).read_bytes()).hexdigest()
+        }
+        self.rows = [{"id": "cch_mcp:example", "membership": "supported", "comparisonScenarios": ["preserves null"]}]
+        self.delivery = {
+            "schema": "pike/pi-v1.3.0-capability-deliveries/1",
+            "baseline": "pi-v1.3.0", "revision": consolidate.REVISION,
+            "records": [{
+                "id": "example", "ticket": "1101", "implementationCommits": ["a" * 40],
+                "report": "docs/delivery.md",
+                "inputs": [self.pin("src/Example.cpp"), self.pin("tests/ExampleTest.cpp")],
+                "validation": {
+                    "command": ["ctest", "--preset", "vcpkg"], "testedRevision": "b" * 40,
+                    "recordedAt": "2026-10-25T00:00:00Z", "selected": 2,
+                    "junit": self.pin("docs/result.xml"),
+                },
+                "rows": [{
+                    "id": "cch_mcp:example", "remainingBoundary": [],
+                    "comparisons": [{"artifact": "audit-1101/example.json", "scenario": "preserves null",
+                                     "test": "compare", "testSource": "tests/ExampleTest.cpp"}],
+                    "discriminatingCase": {"test": "control", "testSource": "tests/ExampleTest.cpp",
+                                           "reason": "An absent field and a JSON null produce distinct results."},
+                }],
+            }],
+        }
+        self.record = self.delivery["records"][0]
+        self.claim = self.record["rows"][0]
+        self.artifacts = {"audit-1101/example.json": json.dumps({"scenarios": [{"name": "preserves null"}]}).encode()}
+        self.root_patch = patch.object(consolidate, "ROOT", self.root)
+        self.root_patch.start()
+        self.addCleanup(self.root_patch.stop)
+        self.verify_patch = patch.object(consolidate.audit, "verify", return_value=(
+            {"revision": consolidate.REVISION}, self.artifacts, "verified upstream"))
+        self.verify_patch.start()
+        self.addCleanup(self.verify_patch.stop)
+
+    def check(self):
+        return consolidate.delivery_updates(self.rows, self.delivery)
+
+    def test_complete_delivery_promotes_only_its_row(self) -> None:
+        self.rows.append({"id": "cch_mcp:unrelated", "membership": "supported", "comparisonScenarios": ["other"]})
+        before = copy.deepcopy(self.rows)
+        updates = self.check()
+        self.assertEqual(set(updates), {"cch_mcp:example"})
+        self.assertEqual(updates["cch_mcp:example"]["verification"], "verified")
+        self.assertEqual(self.rows, before)
+
+    def test_rejects_wrong_baseline_or_revision(self) -> None:
+        for key in ("baseline", "revision"):
+            with self.subTest(key=key):
+                saved = self.delivery[key]
+                self.delivery[key] = "historical"
+                with self.assertRaisesRegex(consolidate.ConsolidationError, "baseline/revision"):
+                    self.check()
+                self.delivery[key] = saved
+
+    def test_changed_source_or_test_invalidates_a_previously_green_result(self) -> None:
+        for relative in ("src/Example.cpp", "tests/ExampleTest.cpp", "docs/result.xml"):
+            with self.subTest(path=relative):
+                path = self.root / relative
+                saved = path.read_bytes()
+                path.write_bytes(saved + b"changed")
+                with self.assertRaisesRegex(consolidate.ConsolidationError, "digest mismatch"):
+                    self.check()
+                path.write_bytes(saved)
+
+    def test_missing_report_or_result_cannot_fall_back(self) -> None:
+        for relative in ("docs/result.xml", "docs/delivery.md"):
+            with self.subTest(path=relative):
+                path = self.root / relative
+                saved = path.read_bytes()
+                path.unlink()
+                with self.assertRaises(consolidate.audit.EvidenceError):
+                    self.check()
+                path.write_bytes(saved)
+
+    def test_skipped_or_failed_case_cannot_verify_a_row_even_with_a_new_digest(self) -> None:
+        for child in ("skipped", "failure", "error"):
+            with self.subTest(child=child):
+                (self.root / "docs/result.xml").write_text(
+                    '<testsuite tests="2"><testcase name="compare" status="run"><' + child + '/></testcase>'
+                    '<testcase name="control" status="run"/></testsuite>')
+                self.record["validation"]["junit"] = self.pin("docs/result.xml")
+                with self.assertRaisesRegex(consolidate.ConsolidationError, "did not pass"):
+                    self.check()
+
+    def test_rejects_partial_selection_or_unrun_comparison(self) -> None:
+        self.record["validation"]["selected"] = 3
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "selected count"):
+            self.check()
+        self.record["validation"]["selected"] = 2
+        self.claim["comparisons"][0]["test"] = "not selected"
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "did not run"):
+            self.check()
+
+    def test_rejects_incomplete_coverage_and_remaining_boundaries(self) -> None:
+        self.rows[0]["comparisonScenarios"].append("uncompared error")
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "audit obligations"):
+            self.check()
+        self.rows[0]["comparisonScenarios"].pop()
+        self.claim["remainingBoundary"] = ["unverified input"]
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "incomplete delivery"):
+            self.check()
+
+    def test_rejects_unregistered_scenario_and_missing_negative_control(self) -> None:
+        self.artifacts.clear()
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "not registered"):
+            self.check()
+        self.artifacts["audit-1101/example.json"] = b'{"scenarios": [{"name": "another"}]}'
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "scenario is missing"):
+            self.check()
+        self.artifacts["audit-1101/example.json"] = b'{"scenarios": [{"name": "preserves null"}]}'
+        self.claim["discriminatingCase"]["test"] = "not selected"
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "discriminating case"):
+            self.check()
+
+    def test_cannot_promote_excluded_or_duplicate_rows(self) -> None:
+        self.rows[0]["membership"] = "excluded"
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "membership"):
+            self.check()
+        self.rows[0]["membership"] = "supported"
+        self.record["rows"].append(copy.deepcopy(self.claim))
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "duplicate delivered row"):
+            self.check()
 
 
 class CorrectionScopeTest(unittest.TestCase):
@@ -174,7 +320,7 @@ class ScenarioCoverageTest(unittest.TestCase):
         self.plan = load(PLAN)
         self.ledger = load(LEDGER)
 
-    def test_build_reads_each_bundle_manifest_once(self) -> None:
+    def test_build_reuses_the_supplied_bundle_scenario_index(self) -> None:
         bundles = consolidate.build_bundle_index()
         scenario_index = consolidate.build_scenario_index(bundles)
         reads: list[str] = []
@@ -306,6 +452,16 @@ class CheckerRejectionTest(unittest.TestCase):
 
     def test_accepts_the_committed_ledger(self) -> None:
         self.check()
+
+    def test_rejects_verification_without_a_whole_row_delivery(self) -> None:
+        row = self.rows()["cch_coding_agent:startup-header-help"]
+        row["verification"] = "verified"
+        row["implementation"] = "implemented"
+        row["remainingWork"] = None
+        row["missingObservation"] = None
+        row["gaps"] = []
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "validated delivery"):
+            self.check()
 
     def test_rejects_a_correction_applied_to_a_row_outside_its_scope(self) -> None:
         row = self.rows()["cch_coding_agent:startup-header-help"]

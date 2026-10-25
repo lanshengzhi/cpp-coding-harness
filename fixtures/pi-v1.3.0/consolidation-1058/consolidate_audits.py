@@ -7,8 +7,8 @@ row, applies the provenance-corrections index (pointer spellings only, never obs
 resolves the named overlaps, and routes every row's evidence to a real registered artifact scenario
 or to an honest missing-observation statement. `build` is deterministic; `check` rebuilds in memory,
 compares bytes and runs the semantic validations, so the committed ledger cannot silently drift from
-its sources, the bundles or the target owner graph. Both commands read each bundle manifest and
-build the bundle/scenario indexes once.
+its sources, the bundles or the target owner graph. Delivery records additionally bind whole-row
+comparisons to pinned C++ inputs and actual CTest results, while preserving source audit status.
 
 A correction rewrites a pointer only in the rows its `appliesTo` scope names and only when the
 recorded pointer matches exactly (the same full pointer, or the same symbol list on a path-tail
@@ -28,10 +28,15 @@ import copy
 import json
 import re
 import sys
+import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(ROOT / "scripts/evidence"))
+import audit_evidence as audit
+
+DELIVERIES_PATH = ROOT / "docs/research/pi-v1.3.0/1058-deliveries.json"
 PLAN_PATH = ROOT / "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json"
 LEDGER_PATH = ROOT / "docs/research/pi-v1.3.0/1058-consolidated-capability-ledger.json"
 FRONTIER_PATH = ROOT / "docs/research/pi-v1.3.0/1058-implementation-frontier.json"
@@ -572,6 +577,124 @@ def gap_matches(gap: dict, raw: dict) -> bool:
     return False
 
 
+def pinned_delivery_file(record: dict) -> Path:
+    path = audit.resolve_repository_file(ROOT, record.get("path"), "delivery evidence")
+    require(audit.sha256_file(path) == record.get("sha256"), f"delivery digest mismatch: {record['path']}")
+    return path
+
+
+def passed_delivery_tests(validation: dict) -> set[str]:
+    require(isinstance(validation.get("command"), list) and validation["command"], "missing validation command")
+    require(re.fullmatch(r"[0-9a-f]{40}", validation.get("testedRevision", "")) is not None,
+            "validation requires a full C++ revision")
+    audit.validate_timestamp(validation.get("recordedAt"), "C++ validation")
+    suite = ET.parse(pinned_delivery_file(validation["junit"])).getroot()
+    require(suite.tag == "testsuite", "delivery result is not a CTest JUnit testsuite")
+    cases = suite.findall("testcase")
+    require(type(validation.get("selected")) is int and validation["selected"] > 0,
+            "delivery selection is empty")
+    require(len(cases) == validation["selected"] == int(suite.get("tests", "-1")),
+            "delivery selected count differs from JUnit cases")
+    names: set[str] = set()
+    for case in cases:
+        name = case.get("name")
+        require(name and name not in names, "delivery has an unnamed or duplicate test")
+        require(case.get("status") == "run" and all(case.find(tag) is None for tag in ("failure", "error", "skipped")),
+                f"delivery test did not pass: {name}")
+        names.add(name)
+    require(all(int(suite.get(key, "0")) == 0 for key in ("failures", "errors", "disabled", "skipped")),
+            "delivery suite contains failed or skipped cases")
+    return names
+
+
+def delivery_updates(rows: list[dict], deliveries: dict) -> dict[str, dict]:
+    """Accept explicit whole-row comparisons; audit bytes and membership stay unchanged.
+
+    Digests bind the selected implementation, test, fixture and JUnit files. Scenario-to-test
+    mappings and the completeness of those selected inputs remain review obligations; a green
+    JUnit result alone cannot establish them. No command stored in a receipt is executed here.
+    """
+    require(deliveries.get("schema") == "pike/pi-v1.3.0-capability-deliveries/1", "delivery schema mismatch")
+    require(deliveries.get("baseline") == "pi-v1.3.0" and deliveries.get("revision") == REVISION,
+            "delivery baseline/revision mismatch")
+    records = deliveries.get("records")
+    require(isinstance(records, list), "delivery records must be a list")
+    if not records:
+        return {}
+    baseline, artifacts, _ = audit.verify(ROOT / "fixtures/pi-v1.3.0", "pi-v1.3.0")
+    require(baseline["revision"] == REVISION, "delivery registry revision mismatch")
+    by_id = {row["id"]: row for row in rows}
+    record_ids: set[str] = set()
+    updates: dict[str, dict] = {}
+    for record in records:
+        identity = record.get("id")
+        require(isinstance(identity, str) and identity and identity not in record_ids, "duplicate or missing delivery id")
+        record_ids.add(identity)
+        require(re.fullmatch(r"[0-9]+", record.get("ticket", "")) is not None, "delivery requires a ticket")
+        commits = record.get("implementationCommits")
+        require(isinstance(commits, list) and commits and all(
+            isinstance(commit, str) and re.fullmatch(r"[0-9a-f]{40}", commit) for commit in commits),
+            f"{identity}: missing full implementation commits")
+        audit.resolve_repository_file(ROOT, record.get("report"), "delivery report")
+        inputs = record.get("inputs")
+        require(isinstance(inputs, list) and inputs, f"{identity}: missing pinned inputs")
+        paths: set[str] = set()
+        for entry in inputs:
+            pinned_delivery_file(entry)
+            require(entry["path"] not in paths, f"{identity}: duplicate pinned input")
+            paths.add(entry["path"])
+        require(any(path.startswith("src/") for path in paths), f"{identity}: no production input")
+        passed = passed_delivery_tests(record["validation"])
+        claims = record.get("rows")
+        require(isinstance(claims, list) and claims, f"{identity}: delivery covers no rows")
+        for claim in claims:
+            row_id = claim["id"]
+            require(row_id in by_id and row_id not in updates, f"{identity}: unknown or duplicate delivered row {row_id}")
+            row = by_id[row_id]
+            require(row["membership"] == "supported", f"{row_id}: delivery cannot change membership")
+            require(claim.get("remainingBoundary") == [], f"{row_id}: incomplete delivery cannot verify a whole row")
+            comparisons = claim.get("comparisons")
+            require(isinstance(comparisons, list) and comparisons, f"{row_id}: missing comparisons")
+            obligations: set[str] = set()
+            for comparison in comparisons:
+                scenario = comparison["scenario"]
+                require(scenario not in obligations, f"{row_id}: duplicate comparison scenario")
+                obligations.add(scenario)
+                artifact = comparison["artifact"]
+                require(artifact in artifacts, f"{row_id}: comparison artifact is not registered: {artifact}")
+                observed = json.loads(artifacts[artifact])["scenarios"]
+                require(any(item["name"] == scenario for item in observed), f"{row_id}: comparison scenario is missing")
+                require(comparison["test"] in passed, f"{row_id}: comparison test did not run")
+                source = comparison["testSource"]
+                require(source in paths and source.startswith("tests/"), f"{row_id}: comparison source is not pinned")
+            require(set(row["comparisonScenarios"]) == obligations,
+                    f"{row_id}: comparisons do not cover exactly the row's audit obligations")
+            control = claim.get("discriminatingCase") or {}
+            require(control.get("test") in passed and control.get("reason", "").strip(),
+                    f"{row_id}: missing passing discriminating case")
+            require(control.get("testSource") in paths and control["testSource"].startswith("tests/"),
+                    f"{row_id}: discriminating source is not pinned")
+            first = comparisons[0]
+            updates[row_id] = {
+                "delivery": identity,
+                "implementation_ticket": f"#{record['ticket']}",
+                "implementation": "implemented",
+                "verification": "verified",
+                "evidence": {
+                    "route": "captured",
+                    "artifact": f"fixtures/pi-v1.3.0/{first['artifact']}",
+                    "scenarioMatch": "direct",
+                    "capturedScenarios": [item["scenario"] for item in comparisons if item["artifact"] == first["artifact"]],
+                    "result": f"C++ comparisons passed; see {record['report']}",
+                },
+                "missingObservation": None,
+                "gaps": [],
+                "remainingWork": None,
+                "notes": f"Delivered by #{record['ticket']}; whole-row comparisons and remaining boundaries: {record['report']}",
+            }
+    return updates
+
+
 def build_ledger(
     plan: dict, bundles: dict[str, dict[str, list[str]]], scenario_index: dict[str, list[tuple[str, str]]]
 ) -> dict:
@@ -695,6 +818,15 @@ def build_ledger(
         }
         rows.append(row)
 
+    deliveries = load_json(DELIVERIES_PATH)
+    updates = delivery_updates(rows, deliveries)
+    for row in rows:
+        if row["id"] not in updates:
+            continue
+        update = updates[row["id"]]
+        row["auditStatus"] = {key: copy.deepcopy(row[key]) for key in update if key != "delivery"}
+        row.update(update)
+
     register = attach_gap_register(plan, raw_rows)
     counts = count_rows(rows)
     counts["scenarioCoverage"] = scenario_coverage(rows, bundles, plan.get("orphanScenarios", []))
@@ -706,12 +838,13 @@ def build_ledger(
         "revision": plan["revision"],
         "platform": "linux-x86_64-glibc",
         "method": {
-            "rule": "Every audit source row keeps its identity through sourceAliases; consolidated ids are owner-qualified; membership, implementation and verification stay separate; every included row states its remaining work; a row is upstream-captured only through a registered artifact.",
+            "rule": "Every audit source row keeps its identity through sourceAliases; membership is unchanged by deliveries. Source status is retained in sourceRows and auditStatus. Only complete, pinned C++ comparison deliveries may verify a supported row; every other included row states remaining work.",
             "sourceRowCount": len(raw_rows),
             "consolidatedRowCount": len(rows),
             "groups": [group["id"] for group in plan["groups"]],
             "overlaps": [overlap["id"] for overlap in plan["overlaps"]],
         },
+        "deliveries": deliveries,
         "sources": [
             {
                 "ticket": source["ticket"],
@@ -926,6 +1059,15 @@ def check_ledger(
     require(len({row["id"] for row in rows}) == len(rows), "consolidated ids are not unique")
     notes.append(f"source coverage: {mapped} source rows aliased into {len(rows)} consolidated rows")
 
+    updates = delivery_updates(rows, ledger["deliveries"])
+    for row in rows:
+        require((row["id"] in updates) == ("delivery" in row), f"{row['id']}: delivery association mismatch")
+        if row["id"] in updates:
+            require(all(row.get(key) == value for key, value in updates[row["id"]].items()),
+                    f"{row['id']}: status differs from its validated delivery")
+            require(row.get("auditStatus"), f"{row['id']}: missing original audit status")
+    notes.append(f"deliveries: {len(updates)} rows backed by pinned C++ comparison results")
+
     # 2. Vocabularies, ownership and remaining work.
     for row in rows:
         require(row["membership"] in MEMBERSHIP, f"{row['id']}: bad membership")
@@ -954,9 +1096,12 @@ def check_ledger(
         else:
             require(row["consumer"] and row["consumer"].strip(), f"{row['id']}: included row has no consumer text")
         if row["verification"] == "verified":
-            raise ConsolidationError(f"{row['id']}: no row may be verified by consolidation; a C++ comparison is required")
-        if row["membership"] == "excluded":
-            require(not row["remainingWork"], f"{row['id']}: excluded row records remaining work")
+            require(row["id"] in updates, f"{row['id']}: verified without a validated delivery")
+            require(row["implementation"] == "implemented" and row["membership"] == "supported",
+                    f"{row['id']}: verified requires an implemented supported capability")
+            require(not row["missingObservation"] and not row["gaps"], f"{row['id']}: verified with unresolved gaps")
+        if row["membership"] == "excluded" or row["verification"] == "verified":
+            require(not row["remainingWork"], f"{row['id']}: excluded/verified row records remaining work")
         else:
             require(row["remainingWork"], f"{row['id']}: no remaining work recorded")
         if row["verification"] == "upstream-captured":
@@ -1332,9 +1477,21 @@ def acyclic(nodes: list[dict], edges: list[dict], label: str) -> None:
             visit(node)
 
 
+def render_status_counts(ledger: dict, report: str) -> str:
+    """Keep the report's three changing status rows derived from the ledger."""
+    for label, field in (("Implementation", "implementation"), ("Verification", "verification"),
+                         ("Evidence route", "evidenceRoute")):
+        values = ", ".join(f"{key}:{value}" for key, value in ledger["counts"][field].items() if value)
+        pattern = rf"(?m)^\| {label} \|.*\|$"
+        require(len(re.findall(pattern, report)) == 1, f"report needs one {label} count row")
+        report = re.sub(pattern, f"| {label} | {values} |", report)
+    return report
+
+
 def check_docs(ledger: dict, frontier: dict) -> list[str]:
     notes: list[str] = []
     report = REPORT_PATH.read_text(encoding="utf-8")
+    require(report == render_status_counts(ledger, report), "report status counts differ from the ledger; run build")
     for path in (LEDGER_PATH.name, FRONTIER_PATH.name):
         require(path in report, f"report does not link {path}")
     links = re.findall(r"\]\(([^)#]+)\)", report)
@@ -1360,7 +1517,9 @@ def main() -> int:
     ledger = build_ledger(plan, bundles, scenario_index)
     payload = json_bytes(ledger)
     if args.command == "build":
+        report = render_status_counts(ledger, REPORT_PATH.read_text(encoding="utf-8"))
         LEDGER_PATH.write_bytes(payload)
+        REPORT_PATH.write_text(report, encoding="utf-8")
         print(f"wrote {LEDGER_PATH.relative_to(ROOT)} ({len(payload)} bytes, {len(ledger['rows'])} rows)")
         return 0
 
@@ -1382,6 +1541,6 @@ def main() -> int:
 if __name__ == "__main__":
     try:
         sys.exit(main())
-    except ConsolidationError as error:
+    except (ConsolidationError, audit.EvidenceError, OSError, ValueError, KeyError, TypeError, ET.ParseError) as error:
         print(f"consolidation check: FAIL: {error}", file=sys.stderr)
         sys.exit(1)

@@ -17,6 +17,7 @@ selected by `arguments.kind`:
   wrong-content  content = "not a list"
   null-content   content = null
   malformed      result = []
+  replay         return arguments.result verbatim for frozen-audit replay
 
 The server never validates the result shape: it is the raw wire fact the owner
 and application layers must preserve or reject themselves.
@@ -101,6 +102,9 @@ def handle_tools_call(rid, params):
         return
     arguments = params.get("arguments") or {}
     kind = arguments.get("kind")
+    if kind == "replay":
+        respond(rid, arguments["result"])
+        return
     if kind == "malformed":
         respond(rid, [])
         return
