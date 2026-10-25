@@ -62,7 +62,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 4.5. Unstructured cross-Owner JSON facts use `cch::support::JsonValue`. Raw Glaze generic values and `boost::json` never appear in Owner Interfaces (ADR 0007; ADR 0039).
 
-4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` and `std::span` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. Coroutines that may suspend (`co_await`) MUST take owned values (`std::string`, `std::vector`), NEVER non-owning views (`std::string_view`, `std::span`), to prevent cross-suspension parameter dangling, unless an explicit declaration-level lifetime contract per §7.5 guarantees the caller outlives the entire coroutine execution.
+4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` and `std::span` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. A coroutine that may suspend (`co_await`) takes owned values (`std::string`, `std::vector`) — never a non-owning view, and never a `T&` / `T&&` parameter — to prevent cross-suspension parameter dangling, unless a declaration-level §7.5 lifetime contract guarantees the caller outlives the entire coroutine. The frozen `run_phase(std::string_view, const TaskRecord&, TaskRuntime&)` contract keeps that exception as a guarantee rather than a check exemption: `cppcoreguidelines-avoid-reference-coroutine-parameters` does not fire on it.
 
 4.7. Fallible or easy-to-ignore return values are `[[nodiscard]]`, including awaitables.
 
@@ -97,6 +97,8 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 6.5. `AsyncResult` is move-only and consumed once by callback start or move-only `co_await`. Duplicate/moved-from/reused consumption, duplicate completion, and controlled completion-callback contract violations terminate in every build mode. The coroutine Owner establishes quiescence before frame destruction; concurrent resume/destroy is forbidden (ADR 0040).
 
 6.6. Agent, Models Runtime, and Agent Session state changes run only in the owning object's serialized execution domain. Cross-Owner events and worker results enter the target object's bounded FIFO mailbox; workers never mutate serialized Owner state directly, and event-loop submission never blocks or falls back to inline worker execution. Ordinary overload returns a typed `Busy` result; persistence, credential, terminal-completion, and Close control work use reserved admission. Queue capacities, batch sizes, worker counts, and timeouts are measured policy, not speculative knobs — the selected values and their regression tests are recorded in `docs/runtime-capacities.md` (ADR 0040).
+
+6.7. A coroutine lambda's closure object is held by something that outlives the coroutine frame (for example the `shared_ptr` inside `make_async_result`), or the lambda captures nothing. Otherwise its captures are explicit and carry a §7.5 lifetime comment. review-only: `cppcoreguidelines-avoid-capturing-lambda-coroutines` stays off until the ownership wording is encoded; today it would report the standard idiom.
 
 ## 7. Classes and ownership
 
