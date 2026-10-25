@@ -136,13 +136,31 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 9.4. Template parameters are declared with `typename` (`template <typename T>`, `template <typename... Ts>`) — never `class`.
 
-9.5. Constrained templates are permitted for local, non-escaping operations when they are clearer than a runtime seam (ADR 0040); keep constraints local rather than publishing generic machinery through Owner Interfaces. Basic range algorithms (`std::ranges::sort`, `std::ranges::find`) are preferred over iterator pairs; avoid complex `std::views` pipelines and never bind views to temporary ranges. Not yet: modules, `<=>`, `std::print`, deducing this, multi-stage view pipelines, and `std::expected` monadic chains (`and_then`/`transform`/`or_else`). Introduce any of those only with an ADR.
+9.5. Constrained templates are permitted for local, non-escaping operations when they are clearer than a runtime seam (ADR 0040); keep constraints local rather than publishing generic machinery through Owner Interfaces. Basic range algorithms (`std::ranges::sort`, `std::ranges::find`) are preferred over iterator pairs; avoid complex `std::views` pipelines and never bind views to temporary ranges. Not yet: modules, `<=>`, `std::print`, deducing this, multi-stage view pipelines, and `std::expected` monadic chains (`and_then`/`transform`/`or_else`). The freeze is a consistency decision, not a capability gap — each compiles on the supported toolchain — so it reopens on a trigger, not on an ADR alone:
 
-9.6. Casts are `static_cast` / `reinterpret_cast`; no C-style casts.
+| Feature | Reopen when |
+| --- | --- |
+| `std::print` | the Clang conformance lane confirms libc++ (the GCC side already passes) |
+| deducing this | clang-format and clang-tidy handle it, and a concrete need appears |
+| `<=>` | a type needs ordering and hand-written comparisons exceed a stated count |
+| `and_then` chains | a measured readability win in two Owners, with lifetime-safe lambdas |
+| `flat_map`, `mdspan`, `generator`, `stacktrace`, `std::unreachable`, `[[assume]]` | a recorded position — not yet, not allowed, or unevaluated — before any use |
+
+Modules stay ADR-only.
+
+9.6. Casts are `static_cast` / `reinterpret_cast`; no C-style casts. `(void)expr` to discard a value is permitted.
 
 9.7. Container sizes and in-memory indices use `std::size_t`. Wire, persisted, or domain integer contracts whose width matters use `std::`-qualified fixed-width types (`std::int64_t`, `std::uint32_t`).
 
 9.8. `auto` when the type is obvious from the right-hand side (factories, expected results); an explicit type otherwise. `const auto&` in range-for.
+
+9.10. Result types carry the attribute at the type level — `struct [[nodiscard]] Error`, `class [[nodiscard]] AsyncResult` — so every function returning one inherits it, including through `std::expected<T, Error>`. Per-function `[[nodiscard]]` remains correct for other fallible returns (§4.7). Check: `-Wunused-result` fires on a discarded result of either type.
+
+9.13. Prefer `std::jthread` to `std::thread`; never use `volatile` for synchronization; a memory order other than `seq_cst` carries an adjacent comment justifying it. review-only: no compiler check exists; a grep gate for `std::thread` cannot distinguish a justified use and would fire on the 21 grandfathered sites.
+
+9.14. Width and signedness conversions use `std::in_range`, `std::cmp_*`, or an equivalent checked narrowing, not a bare `static_cast`; `std::to_underlying` is the enum-underlying form. Check: `-Wfloat-conversion` covers the implicit half only; the explicit-cast half that needs `in_range` is silent by construction and is `review-only`.
+
+9.15. Never store a `std::string_view` built from a temporary `std::string`, and never pass a view's `.data()` where a NUL-terminated C string is required. review-only: GCC 16.2 emits no diagnostic for either clause (`-Wdangling-reference` does not fire; `-Wdangling-gsl` does not exist on GCC), and Clang catches only the return-local case, under `-Wreturn-stack-address`, on the conformance lane.
 
 ## 10. Security invariants
 
