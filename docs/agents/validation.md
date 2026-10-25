@@ -145,6 +145,7 @@ Before deleting ticket branches or removing their worktrees, audit them with `sc
 Use this completion path after implementation; triage and `wontfix` outcomes follow the `/triage` workflow instead. Close-out is ordered:
 
 1. Confirm and tick every acceptance criterion in the issue body (`- [x]`); a tick means the property holds, not that a check for it passed (§Acceptance discipline).
-2. Remove the in-flight state labels (`needs-*`, `ready-for-*`) that admission applied; a closed issue that still reads `ready-for-agent` claims work is available. `docs/agents/triage-labels.md` maps the roles.
-3. Close the issue: `gh issue close <n> --comment "..."` (see `docs/agents/issue-tracker.md`).
-4. Run `scripts/verify-closed-issue.sh <n>` and require exit 0. It is the completion check for steps 1-3: it fails on a non-closed issue, an unticked criterion, or a remaining state label, and names the failing check.
+2. Record the delivery in `docs/research/pi-v1.3.0/<issue>-<slug>.md` for a `pi-v1.3.0` ticket: `## Scope`, `## Delivered behavior` (or the frozen-evidence variant), `## Validation`, `## Capability status`, `## Remaining boundary`. Copy the shape from [`1075-sqlite-storage.md`](../research/pi-v1.3.0/1075-sqlite-storage.md); the validation section carries the measured counts, not estimates.
+3. Remove the in-flight state labels (`needs-*`, `ready-for-*`) that admission applied; a closed issue that still reads `ready-for-agent` claims work is available. `docs/agents/triage-labels.md` maps the roles.
+4. Close the issue: `gh issue close <n> --comment "..."` (see `docs/agents/issue-tracker.md`).
+5. Run `scripts/verify-closed-issue.sh <n>` and require exit 0. It is the completion check for steps 1-4: it fails on a non-closed issue, an unticked criterion, or a remaining state label, and names the failing check.
