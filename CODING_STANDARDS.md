@@ -10,6 +10,8 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 1.3. In review, a documented rule here overrides generic style baselines (such as the Fowler smell baseline used by `/skill:code-review`): where this file endorses something a baseline would flag, the baseline yields.
 
+1.3a. A new rule names its automated check inline, next to the text it justifies, or carries the literal prefix `review-only: <reason>`. Where the check exists only on the Clang conformance lane, or covers only part of the rule, the annotation says so.
+
 1.4. Review every rule applicable to the changed code, using the exact-violation exclusions in §14.
 
 1.5. This file stays small enough to read whole on every implementation and review: a new rule generalizes or displaces an existing one where it can, rather than only accreting. A rule that has never been cited in review and is fully validation-enforced (§14) is a pruning candidate; the removal is recorded in its issue.
