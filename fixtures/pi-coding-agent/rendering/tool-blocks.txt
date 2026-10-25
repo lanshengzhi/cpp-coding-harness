@@ -17,6 +17,7 @@
  bash 10                                                                        
  bash 11                                                                        
  bash 12                                                                        
+ Took 12.3s                                                                     
                                                                                 
                                                                                 
  write generated.txt                                                            
@@ -55,7 +56,6 @@
 ────────────────────────────────────────────────────────────────────────────────
 /tmp/cpp-harness-rendering-tool-blocks                                          
 0.1%/128k (auto)                                                      fake-model
-
 
 
 

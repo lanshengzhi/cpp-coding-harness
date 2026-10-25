@@ -138,7 +138,7 @@
       "cppEvidence": "Pike has no misplaced-line check: `text\\n// @options: {}` is accepted as source. The invalid-JSON message is `@options must be valid JSON ...: <parser detail>` where v1.3.0 emits the generic `@options must be a JSON object with supported fields ...`. No C++ test covers either case.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Scan for a later first-token `// @options:` line and raise the v1.3.0 line-numbered error; align the invalid-JSON text with the captured generic message. Add both cases to a source test.",
@@ -211,7 +211,7 @@
       "status": {
         "membership": "supported",
         "implementation": "implemented",
-        "verification": "unverified"
+        "verification": "upstream-captured"
       },
       "recommendation": "Add the captured identifier table to a focused unit test; keep the routing test for the two-name binding.",
       "blockers": []
@@ -243,7 +243,7 @@
       "status": {
         "membership": "supported",
         "implementation": "implemented",
-        "verification": "unverified"
+        "verification": "upstream-captured"
       },
       "recommendation": "Add a typed unit-test table mirroring the captured declarations artifact before treating this as verified; do not fold it into the end-to-end sandbox test.",
       "blockers": []
@@ -267,7 +267,7 @@
       "cppEvidence": "Pike renders every tool call as `Promise<unknown>`, so a script sees no output type even when the tool declares `outputSchema`. `CodemodeTool.cpp:codemode_description` lists bare property names rather than declarations. There is no public declaration renderer for globals, namespaces, doc comments or output schemas.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add the output-schema-aware declaration/signature renderer and a public `render_declarations` seam before implementing the dynamic catalog. Keep `Promise<string>` as the missing-output default.",
@@ -290,8 +290,8 @@
       "cppEvidence": "The constant and over-budget fallback exist. There is no C++ test for the 16,000-character boundary or for an alternate budget. The output schema is not rendered at all, so half of the captured declaration budget behavior is absent.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
-        "verification": "unverified"
+        "implementation": "implemented",
+        "verification": "upstream-captured"
       },
       "recommendation": "Test the input boundary separately from the output-schema work; both belong in the declaration renderer rather than the sandbox.",
       "blockers": []
@@ -464,7 +464,7 @@
       "cppEvidence": "The stale prelude can render globals, but the C++ host always gives it an empty list. Scripts cannot see `searchTools`, `describeTool`, `describeNamespace` or any application global; the discovery handler in `CodemodeToolSource.cpp` is therefore unreachable. Constructor-time global validation and numbered global calls are absent.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add a `CodemodeGlobalDescriptor`/globals argument to `CodemodeSandbox::run`, pass `CodemodeDiscovery::globals_json()` plus application globals, and test the captured spread/dotted/validation cases. Do not try to fix discovery without this seam.",
@@ -489,7 +489,7 @@
       "cppEvidence": "The library code is substantial but dead: with `globalsJson=[]` no discovery identifier exists in a script. `describeNamespace` is a stub because Pike has no tool namespaces in this seam. There is no C++ test for discovery. The captured v1.3.0 catalog advertises these globals, so the description promises an unavailable API.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Wire `globals_json` into the sandbox first, then implement namespace metadata instead of returning `null`; add scripts that call all three globals to routing tests.",
@@ -515,7 +515,7 @@
       "cppEvidence": "Scripts start from an empty store every run, and even successful writes are discarded. The Application has no branch-read/append path, so the advertised persistence contract is absent end to end. The existing prelude fixture test only proves the prelude text matches the old fixture.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add store input/output to `CodemodeRunResult` and `CodemodeSandbox::run`, then port the Application branch read/append. Test a snapshot, a failed execution that loses writes, and the exit-with-writes case.",
@@ -542,8 +542,8 @@
       "cppEvidence": "`CodemodeSandboxTest.cpp:92` checks text order/value and `:107` checks image MIME/data. `CodemodeOutputPresentationTest.cpp` checks fallback rendering and image sidecars. Neither can distinguish console output from `text()` because the C++ item has no console field. The v1.3.0 `console: true` channel is lost.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
-        "verification": "unverified"
+        "implementation": "implemented",
+        "verification": "upstream-captured"
       },
       "recommendation": "Add a console discriminant to `CodemodeOutputItem` and update the prelude to emit `console`; then use it in the Application output block. Keep text/image ordering tests, but assert console separately.",
       "blockers": []
@@ -591,7 +591,7 @@
       "cppEvidence": "The control-flow exit and prior output work. Store writes from the exit payload are dropped, so the captured `exit()` contract is only partially implemented. No C++ test exercises `exit()`.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Carry the writes through `emit_done` as part of the store work; add an exit-with-output-and-writes test.",
@@ -619,7 +619,7 @@
       "cppEvidence": "Pike preserves the script error text, including a stack, in `message`, but has no typed `name`/`stack` fields. `CodemodeSandboxTest.cpp:122` only checks the message substring for a thrown Error. Captured BigInt, non-Error, syntax, unknown-tool and OOM shapes cannot be represented exactly in the C++ result type.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Extend `CodemodeError` with optional name/stack and parse the prelude payload; test the captured taxonomy through the public result rather than only `message.find`.",
@@ -644,7 +644,7 @@
       "status": {
         "membership": "supported",
         "implementation": "implemented",
-        "verification": "unverified"
+        "verification": "upstream-captured"
       },
       "recommendation": "Pin the prelude to v1.3.0 and add limit tests that cross the boundary; do not expose duplicated C++ constants unless a caller needs them.",
       "blockers": []
@@ -667,8 +667,8 @@
       "cppEvidence": "The sandbox's prelude can abort and `CodemodeSandboxTest.cpp` has a related script case, but the C++ public result has no call records; the Application nested-call status for an interrupted call is `unfinished`. The captured `status: \"cancelled\"` and duration presence are not represented in the C++ result type.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
-        "verification": "unverified"
+        "implementation": "implemented",
+        "verification": "upstream-captured"
       },
       "recommendation": "Map an unfinished nested call to `cancelled` at the codemode result boundary and test the Application details; keep the prelude abort behavior.",
       "blockers": []
@@ -716,7 +716,7 @@
       "cppEvidence": "Pike cannot limit the guest heap. The captured v1.3.0 OOM path (and the Remote cap) is absent. The existing prelude output limit is not a substitute: a script can allocate without emitting output.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "partial",
         "verification": "upstream-captured"
       },
       "recommendation": "Add `memoryLimitBytes` to `CodemodeLimits` and configure the WasmEdge memory limit before instantiation; use 256 MiB in the Application and verify the captured OOM shape.",
@@ -743,7 +743,7 @@
       "cppEvidence": "`CodemodeSandboxTest.cpp:143` only checks the pre-cancelled `Aborted` kind and empty output. Pike drops the caller reason and uses different messages from v1.3.0 (`cancelled`/`early`). Partial output on a mid-run abort is not tested through the public result.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Pass an abort reason alongside the stop token (or a cancellation payload) and preserve partial output; add the captured mid-wait and pre-aborted cases.",
@@ -765,14 +765,14 @@
           "a worker construction failure returns its reserved admission exactly once"
         ]
       },
-      "cppSeam": "No admission API or counter exists in `CodemodeSandbox`; `run` creates a `std::thread` unconditionally (`CodemodeSandbox.cpp:928`).",
-      "cppEvidence": "Pike has no worker cap, no acquire/release hook, and no pre-start denial. A burst of codemode calls creates an unbounded number of WasmEdge worker threads. The captured admission order (wasm load before reserve; denial before worker creation) cannot be represented.",
+      "cppSeam": "`CodemodeSandbox::create` accepts `CodemodeWorkerHost`; the default host enforces a process-wide limit of two, and `run` acquires after the guest module was loaded and before starting the native worker.",
+      "cppEvidence": "The public Owner tests use a real worker host to hold two cancelled workers at exit gates, prove a third admission is denied before start, and prove module-load failure skips admission and a start failure releases once. `ctest --preset vcpkg -L issue1096` passes 4/4. `ctest --preset vcpkg -L codemode` passes 82/82.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Add an `acquireWorker`-shaped admission callback (or an application-owned semaphore) around thread creation, with release on construction failure/exit. Do not use the timeout as a capacity mechanism.",
+      "recommendation": "Keep admission tied to actual worker exit, not result settlement; this is process-local thread accounting and makes no crash- or power-loss recovery claim.",
       "blockers": []
     },
     {
@@ -794,14 +794,14 @@
           "a real Node child reports the result before its worker exits and exits promptly for abort, timeout and close"
         ]
       },
-      "cppSeam": "`CodemodeSandbox.cpp:928` creates a thread and `:967-968` joins it before returning the result; `CodemodeRunResult` has no exit promise and there is no `close()` or `onWorkerStarted`.",
-      "cppEvidence": "Pike only exposes a result after `worker.join()`, so it cannot settle a result while a cancelled worker is still unwinding. There is no lifetime hook, no admission release at exit, and no close-before-exit path. This is a deliberate structural gap, not a missing test.",
+      "cppSeam": "`CodemodeWorkerHost` separates worker task execution from its exit callback; the native host's reaper joins the pthread off the caller executor before invoking that callback. `CodemodeSandbox::close()` interrupts active runs and settles them without awaiting worker exit.",
+      "cppEvidence": "The public tests hold real worker threads at an exit gate and prove cancelled and closed results settle while reservations remain held, then prove each actual exit releases exactly once. `ctest --preset vcpkg -L issue1096` passes 4/4; `ctest --preset vcpkg -L codemode` passes 82/82. Native exit is observed by pthread join; this does not establish recovery after SIGKILL or power loss.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Separate result settlement from thread exit in the host API and add `onWorkerStarted`/`close`; the worker-lifetime scenario family must be rerun against that seam.",
+      "recommendation": "Keep result settlement independent from actual worker exit and retain the real-thread exit-gate tests; do not claim crash- or power-loss recovery.",
       "blockers": []
     },
     {
@@ -817,14 +817,14 @@
           "repeated abort results settle while cancelled workers remain unreleased; exits release every admission"
         ]
       },
-      "cppSeam": "No admission or exit accounting in the C++ host; `run` joins each thread synchronously.",
-      "cppEvidence": "The captured `releasedAtResult`/`acquiredAtResult`/`exits` distinction has no C++ counterpart. Pike cannot observe a released-count lag because it does not return until the thread is joined.",
+      "cppSeam": "The per-run admission release is one-shot; cancellation settles the result independently while the actual worker can remain held before its exit callback.",
+      "cppEvidence": "The repeated-cancellation Owner test creates two cancelled real worker threads and a third attempted run, verifies the third is denied while both reservations remain active, and then confirms each exit releases one reservation exactly once before a later run is admitted. `ctest --preset vcpkg -L issue1096` passes 4/4.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Implement the lifetime seam first; then add the repeated-cancel test with an independent released-at-result probe.",
+      "recommendation": "Retain separate result and actual-exit observations and one-shot release callbacks; this is in-process accounting only.",
       "blockers": []
     },
     {
@@ -843,14 +843,14 @@
           "a worker construction failure returns its reserved admission exactly once"
         ]
       },
-      "cppSeam": "`CodemodeSandbox::create` loads/validates the guest module and returns `Expected`; `run` constructs `std::thread` without a typed construction-failure path; no admission.",
-      "cppEvidence": "The C++ `create` path covers a missing/invalid guest (`CodemodeSandboxTest.cpp:257`), which is analogous to the wasm-load failure but has no reservation. A thread construction failure has no explicit error/release contract. The captured worker-construction case cannot be expressed.",
+      "cppSeam": "`CodemodeSandbox::create` loads and validates the guest before any run admission; `CodemodeWorkerHost::start_worker` returns `Expected<void>` and failed start returns the reservation exactly once.",
+      "cppEvidence": "The public Owner test proves missing guest load performs no acquisition or start, then injects a worker start failure and verifies an explicit sandbox error and exactly one release. `ctest --preset vcpkg -L issue1096` passes 4/4.",
       "status": {
         "membership": "supported",
-        "implementation": "partial",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Keep the eager wasm validation; add a typed worker-start failure path and release semantics with the admission seam.",
+      "recommendation": "Keep eager guest validation and the typed start failure path with one-shot reservation release.",
       "blockers": []
     },
     {
@@ -869,14 +869,14 @@
           "close settles an in-flight run before the worker exit releases admission"
         ]
       },
-      "cppSeam": "`CodemodeSandbox` has no `close()`; the guest is held for the source lifetime in `GuestHolder` and each run joins its thread.",
-      "cppEvidence": "Pike has no explicit close state: a caller cannot abort/reject an in-flight run through a sandbox close, and a subsequent `run` always creates a new thread. The captured `Sandbox closed` contract is absent.",
+      "cppSeam": "`CodemodeSandbox::close()` marks the sandbox closed and interrupts active runs; later `run` calls settle with `Sandbox closed`. Admission is released only from the worker exit callback.",
+      "cppEvidence": "The public Owner test calls close while a real worker is held at its exit gate, confirms the active result settles and a later run is rejected while admission remains acquired, then opens the gate and observes the one release. `ctest --preset vcpkg -L issue1096` passes 4/4.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Add `close()` with a terminal error and idempotent teardown to the host API, then use it in the Application `finally`; do not rely on object destruction for cancellation.",
+      "recommendation": "Keep close idempotent and terminal; callers should close explicitly rather than rely on destruction for cancellation.",
       "blockers": []
     },
     {
@@ -1148,7 +1148,7 @@
       "cppEvidence": "Pike cannot interleave inline execution or cap compute by poll count. A synchronous runaway on the calling thread is not possible because every run gets its own thread; the captured budget semantics are absent.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Add an inline launcher only with a real interrupt-budget implementation (not a timeout alias). Keep it out of the Application default path unless a portable target requires it.",
@@ -1173,7 +1173,7 @@
       "cppEvidence": "The deadline-vs-budget distinction cannot be represented. Pike’s worker path does abort a tool wait and keep prior output, but it starts a thread and reports its own cancellation text.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement deadline and abort semantics together in the inline seam; test the exact message selection and no-VM pre-abort case.",
@@ -1198,7 +1198,7 @@
       "cppEvidence": "The success result is the same core shape as the worker sandbox; only the execution destination is missing. It should be covered by the generic result row once the inline class exists.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Reuse the core result mapping when adding Inline; add one success scenario to prove the destination, not a duplicate result-shape test.",
@@ -1245,11 +1245,11 @@
           "remote output is buffered instead of one exchange per output item"
         ]
       },
-      "cppSeam": "No Remote class, protocol message types, exchange callback or serve function in C++.",
-      "cppEvidence": "The entire Remote contract is absent. There is no way to run a script in another isolate or to route its tool calls back to the caller. This is a structural missing library target, not an application formatting gap.",
+      "cppSeam": "`src/codemode/include/cch/codemode/Remote.hpp`, `src/codemode/Remote.cpp`: `CodemodeRemote`, `RemoteCodemodeSandbox`, `serve_codemode_remote`",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox runs tools in the caller and the script on the remote` asserts caller-side tool execution, argument parsing, output collection and result return across exchanges matching `fixtures/pi-v1.3.0/audit-1053/remote-exchange.json`.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Port the request/message/reply protocol and `serveCodemodeRemote` as a library interface; keep transport serialization JSON-safe and test the captured exchange trace before adding a Durable Object wrapper.",
@@ -1269,11 +1269,11 @@
           "remote output is buffered instead of one exchange per output item"
         ]
       },
-      "cppSeam": "No Remote exchange exists, so no batching policy exists.",
-      "cppEvidence": "A naive future implementation could send one message per line; the captured trace gives the required batching contract. Do not build the transport without it.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `kRemoteFlushItems` (1000) and `kRemoteFlushChars` (1 MiB) output buffer flush policy",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox batches output instead of making one exchange per line` asserts 5000 console lines batched into <= 6 exchanges matching `fixtures/pi-v1.3.0/audit-1053/remote-exchange.json`.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Port batching with the exchange implementation and assert the exchange-size sequence, not only the final output.",
@@ -1293,11 +1293,11 @@
           "the remote caps the requested interrupt budget and memory limit"
         ]
       },
-      "cppSeam": "No Remote or memory limit; the worker timeout exists but no cap negotiation.",
-      "cppEvidence": "The cap negotiation itself depends on missing Inline/Remote and memory-limit seams. Pike cannot report either captured remote cap failure.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `serve_codemode_remote` caps interrupt budget and max memory limit bytes against host serve options",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox caps the interrupt budget and memory at the remote's limits` asserts budget timeout and out of memory script errors matching `fixtures/pi-v1.3.0/audit-1053/remote-exchange.json`.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Implement caps in `serveCodemodeRemote` after the memory and interrupt-budget primitives exist; do not implement a remote-only cap that the local sandbox cannot honor.",
@@ -1318,11 +1318,11 @@
           "caller abort answers the remote's exchange with stop and settles without waiting for remote compute"
         ]
       },
-      "cppSeam": "No Remote protocol or stop reply; worker cancellation stops a local thread and joins it.",
-      "cppEvidence": "The captured non-blocking `stop` behavior is the opposite of Pike’s local join-before-result model. Remote abort cannot be implemented until result/worker settlement is separated.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `RemoteCodemodeSandbox::run` abort handling answers `stop` across exchange, cancels pending calls, and settles immediately without waiting for remote worker exit",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox tells the remote to stop when caller aborts and settles immediately` and discriminating abort check verify immediate local return (< 200 ms and < 150 ms) and stop reply.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Build abort on the exchange/stop protocol and result-vs-exit separation; test that local settlement does not await remote compute.",
@@ -1342,11 +1342,11 @@
           "a failing, silent or unreachable remote is a sandbox error with the transport reason"
         ]
       },
-      "cppSeam": "No Remote class or transport error mapping.",
-      "cppEvidence": "The exact three failure branches and messages are absent. Local sandbox errors have a similar kind but no transport reason contract.",
+      "cppSeam": "`src/codemode/Remote.cpp`: `RemoteCodemodeSandbox::run` error classification for `Remote sandbox failed: <reason>`, `Remote sandbox returned before the script settled`, and `Failed to reach the remote sandbox: <reason>`",
+      "cppEvidence": "`CodemodeRemoteTest.cpp: RemoteCodemodeSandbox reports failing, silent or unreachable remote as sandbox error with transport reason` asserts the exact three sandbox error messages.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
       "recommendation": "Port the three branches with the captured messages; keep transport exceptions out of the VM/script error kind.",
@@ -1390,14 +1390,14 @@
           "a generic remote runs the script and calls the caller's tools across the exchange"
         ]
       },
-      "cppSeam": "No protocol types or JSON serialization seam in C++.",
-      "cppEvidence": "The C++ worker protocol is an in-process `SandboxLink` with C++ structs and a condition variable. It cannot cross a process/isolate boundary and has no versioned wire shape.",
+      "cppSeam": "`src/codemode/include/cch/codemode/Remote.hpp`: aggregate request and message contracts, `CodemodeRemoteMessageVariant`, `CodemodeRemoteReplyVariant`, and the `CodemodeRemoteExchangeHook` interface.",
+      "cppEvidence": "`CodemodeRemoteTest.cpp` exercises the request, call/output/done/failure message variants, result/stop/null replies, and exchange hook through `CodemodeRemote` and `serve_codemode_remote`. The contracts contain values and JSON text only, with transport encoding left to the remote implementation.",
       "status": {
         "membership": "supported",
-        "implementation": "missing",
+        "implementation": "implemented",
         "verification": "upstream-captured"
       },
-      "recommendation": "Port the plain-data protocol separately from the worker implementation; do not reuse `SandboxLink` across a transport boundary.",
+      "recommendation": "Keep transport encoding in the remote implementation; do not reuse the in-process `RemoteServeLink` across a transport boundary.",
       "blockers": []
     },
     {

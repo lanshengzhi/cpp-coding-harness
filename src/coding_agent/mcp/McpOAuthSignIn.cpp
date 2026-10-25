@@ -18,6 +18,7 @@
 #include <cch/mcp/OAuthFlow.hpp>
 #include <cch/mcp/OAuthHttpClient.hpp>
 #include <cch/mcp/OAuthProvider.hpp>
+#include <cch/mcp/OAuthState.hpp>
 #include <cch/mcp/Pkce.hpp>
 #include <cch/mcp/Url.hpp>
 #include <cch/support/Error.hpp>
@@ -45,6 +46,8 @@
 
 namespace cch::coding_agent::mcp {
 namespace {
+
+using cch::mcp::OAuthState;
 
 /// The request-time refresh margin, matching `McpOAuthTokenResolver` (the
 /// Models runtime's `kOAuthMinimumValidity`).
@@ -312,7 +315,7 @@ std::string mcp_oauth_bound_redirect_url(const McpOAuthCallbackSettings& setting
     return "http://" + redirect_authority(settings.redirect_host, bound_port) + settings.path;
 }
 
-std::string mcp_oauth_registered_redirect_url(const std::optional<OAuthState>& state) {
+std::string mcp_oauth_registered_redirect_url(const std::optional<cch::mcp::OAuthState>& state) {
     if (state && state->client_information && !state->client_information->redirect_uris.empty()) {
         return state->client_information->redirect_uris.front();
     }

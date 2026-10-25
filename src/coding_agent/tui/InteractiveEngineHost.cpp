@@ -366,7 +366,7 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
         // destination.
         const auto destination = path_command_argument(invocation.argument);
         if (destination.has_value() && destination->ends_with(".jsonl")) {
-            auto handler = harness::transcript_export_handler(*store, *destination);
+            auto handler = harness::transcript_export_handler(store->metadata(), store->get_branch(), *destination);
             auto exported = handler({});
             if (!exported) return std::unexpected(exported.error());
             if (view_ != nullptr) {

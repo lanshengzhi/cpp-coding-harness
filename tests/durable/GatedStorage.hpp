@@ -120,6 +120,15 @@ public:
         return inner_->document(id);
     }
 
+    [[nodiscard]] support::Expected<std::optional<::cch::durable::TaskRecord>> task(
+            ::cch::durable::TaskId id) override {
+        return inner_->task(id);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<::cch::durable::TaskRecord>> scan_tasks(std::size_t limit) override {
+        return inner_->scan_tasks(limit);
+    }
+
     [[nodiscard]] support::ExpectedVoid close() override {
         close_calls_ += 1;
         return inner_->close();

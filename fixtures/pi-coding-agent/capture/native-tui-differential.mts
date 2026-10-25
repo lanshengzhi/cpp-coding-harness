@@ -139,13 +139,22 @@ const scenarios: Scenario[] = [
 		id: "settings-selector",
 		width: 100,
 		inputs: ["/settings", "\r", "Show hardware cursor", "\r", "\x15", "Terminal progress", "\r", "\x15", "\x1b"],
-		omissions: ["pi-only settings outside the Supported Capability subset are not projected as Pike capabilities"],
+		omissions: [
+			"Retained-omission decision (#1129): every pi-only settings row keeps its explicit omission — Auto-compact, Auto-resize images, Block images, Editor padding, Autocomplete max items and Clear on shrink each name a setting whose capability is outside the Supported Capability subset, so a rendered row without the capability would be a fake control.",
+			"Counter consequence accepted explicitly (#1129): Pike's counter counts its own retained row set and reads (1/13) where frozen pi v1.3.0 reads (1/33) at the differential width, while the counter row position and each description line's position still follow the same rule — counter directly below the last visible row, description two rows below the counter and following its own selected row.",
+		],
 		omissionPatterns: [
+			// keep-omission: Auto-compact is a pi context-management capability Pike does not implement.
 			"Auto-compact",
+			// keep-omission: image auto-resize belongs to pi's image pipeline, outside the supported subset.
 			"Auto-resize images",
+			// keep-omission: image blocking belongs to pi's image pipeline, outside the supported subset.
 			"Block images",
+			// keep-omission: editor padding is a pi editor setting Pike does not expose.
 			"Editor padding",
+			// keep-omission: autocomplete item count is a pi editor setting Pike does not expose.
 			"Autocomplete max items",
+			// keep-omission: clear-on-shrink is a pi viewport setting Pike does not expose.
 			"Clear on shrink",
 			"Automatically compact context when it gets too large",
 			"extension",

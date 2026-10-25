@@ -291,6 +291,18 @@ TEST_CASE("mcp list connects a configured stdio server through the production pr
                                      "\n  tools: echo, fail, crash, hang, slow\n");
 }
 
+TEST_CASE("mcp list exits 1 when a configured stdio server fails to connect through the production probe",
+        "[cli][mcp][issue884][issue1066]") {
+    tests::TempWorkspace agent;
+    tests::TempWorkspace cwd;
+    agent.write("mcp.json", R"({"mcpServers":{"failing":{"command":"nonexistent_mcp_command_xyz"}}})");
+
+    const auto run = run_direct(agent.path(), cwd.path(), {"list"});
+
+    CHECK(run.exit_code == 1);
+    CHECK(run.stdout_text.starts_with("failing: failed (codemode, global)\n  nonexistent_mcp_command_xyz\n"));
+}
+
 TEST_CASE("mcp list exits 1 when an enabled server is not connected", "[cli][mcp][issue884]") {
     tests::TempWorkspace agent;
     tests::TempWorkspace cwd;

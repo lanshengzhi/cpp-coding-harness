@@ -66,6 +66,9 @@ struct ToolExecutionEndEvent {
     std::string tool_name;
     AsyncToolExecutionResult result;
     bool is_error{false};
+    /// pi `ToolExecutionEndEvent.durationMs`: the recorded execution duration
+    /// (`performance.now()` delta in pi), absent when the call never executed.
+    std::optional<std::int64_t> duration_ms{std::nullopt};
     std::optional<std::string> parent_tool_call_id{};
 };
 

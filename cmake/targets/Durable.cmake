@@ -9,20 +9,25 @@ include_guard(GLOBAL)
 # CLI, or frontend integration: the ordinary coding-agent Session stays where
 # it is.
 #
-# This slice ships the Session, the Storage contract and the memory backend
-# only. The JSONL and SQLite backends are later slices, and the durable task
-# graph, submissions, documents-as-a-capability and rewindable history are out
-# of scope here.
+# The durable Storage backends include memory, JSONL and SQLite (#1075). The
+# durable task graph and submissions remain out of scope for this owner slice.
 cch_parity_declare_target(
     TARGET cch_durable
     ROLE owner
     OWNER cch_durable
     SOURCES
-        src/durable/Storage.cpp
+        src/durable/Harness.cpp
+        src/durable/JsonlStorage.cpp
+        src/durable/SqliteStorage.cpp
         src/durable/Session.cpp
+        src/durable/Storage.cpp
+        src/durable/StorageEncoding.cpp
+        src/durable/StorageState.cpp
+        src/durable/Task.cpp
     DEPENDS
         cch_chord
         cch_support
+        unofficial::sqlite3::sqlite3@sqlite3
     INTERFACE_DEPENDS
         cch_chord
         cch_support

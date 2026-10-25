@@ -84,11 +84,14 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
 }
 
 /// Assemble one in-memory session that picks up the persisted `mcp.json`.
-[[nodiscard]] SessionAttempt make_persisted_session(tests::RuntimeFixture& runtime,
+[[nodiscard]] SessionAttempt make_session(tests::RuntimeFixture& runtime,
         const tests::TempWorkspace& workspace,
+        coding_agent::SessionTarget target,
         const std::shared_ptr<tests::ScriptedProvider>& provider) {
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::InMemorySessionTarget{};
+    options.session_target = std::move(target);
+    options.session_facts.no_skills = true;
+    options.session_facts.no_prompt_templates = true;
     options.workspace = workspace.path();
     options.request_model = tests::scripted_request_model("fake", "fake-model");
     options.execution_runtime_target = runtime.make_target();
@@ -103,9 +106,19 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
     };
 }
 
+[[nodiscard]] SessionAttempt make_persisted_session(tests::RuntimeFixture& runtime,
+        const tests::TempWorkspace& workspace,
+        const std::shared_ptr<tests::ScriptedProvider>& provider) {
+    return make_session(runtime, workspace, coding_agent::InMemorySessionTarget{}, provider);
+}
+
 [[nodiscard]] bool exposes_tool(const coding_agent::AgentSession& session, std::string_view name) {
     const auto& names = session.snapshot().agent_state.active_tool_names;
     return std::ranges::find(names, name) != names.end();
+}
+
+[[nodiscard]] std::set<std::string> tool_name_set(const std::vector<std::string>& names) {
+    return {names.begin(), names.end()};
 }
 
 [[nodiscard]] std::optional<std::string> section_text(
@@ -124,6 +137,17 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
     return std::nullopt;
 }
 
+[[nodiscard]] std::optional<bool> tool_result_is_error(
+        const coding_agent::AgentSession& session, std::string_view name) {
+    for (const auto& message : session.snapshot().agent_state.messages) {
+        const auto* result = std::get_if<ai::ToolResultMessage>(&message);
+        if (result != nullptr && result->tool_name == name) {
+            return result->is_error;
+        }
+    }
+    return std::nullopt;
+}
+
 [[nodiscard]] std::optional<std::string> tool_result_text(
         const coding_agent::AgentSession& session, std::string_view name) {
     for (const auto& message : session.snapshot().agent_state.messages) {
@@ -133,6 +157,39 @@ void write_global_mcp_json(const tests::TempWorkspace& workspace, std::string_vi
         }
     }
     return std::nullopt;
+}
+
+/// Every recorded result for `name` in transcript order.
+[[nodiscard]] std::vector<std::string> tool_result_texts(
+        const coding_agent::AgentSession& session, std::string_view name) {
+    std::vector<std::string> texts;
+    for (const auto& message : session.snapshot().agent_state.messages) {
+        const auto* result = std::get_if<ai::ToolResultMessage>(&message);
+        if (result != nullptr && result->tool_name == name) {
+            texts.push_back(ai::text_from_content(result->content));
+        }
+    }
+    return texts;
+}
+
+/// The persisted deferred-MCP loadout records in session-tree order: each
+/// record's added `mcp__` tool names. The initial System Message records the
+/// session's built-in loadout and is out of scope here.
+[[nodiscard]] std::vector<std::vector<std::string>> persisted_loadouts(const coding_agent::AgentSession& session) {
+    std::vector<std::vector<std::string>> loadouts;
+    const auto entries = session.session_entries();
+    if (!entries) return loadouts;
+    for (const auto& entry : *entries) {
+        if (!entry.message) continue;
+        const auto* system = std::get_if<ai::SystemMessage>(&*entry.message);
+        if (system == nullptr) continue;
+        std::vector<std::string> added;
+        for (const auto& tool : system->tools_added) {
+            if (tool.name.starts_with("mcp__")) added.push_back(tool.name);
+        }
+        if (!added.empty()) loadouts.push_back(std::move(added));
+    }
+    return loadouts;
 }
 
 /// A scripted provider that serves plain text turns; it never calls a tool.
@@ -209,7 +266,396 @@ private:
     int request_count_{0};
 };
 
+struct ScriptedToolCall {
+    std::string name;
+    support::JsonValue arguments;
+};
+
+/// One real Agent Session provider response per scripted tool call, then a
+/// terminal answer. Every request records the actual model-facing offered set.
+class ToolSequenceProvider final : public tests::ScriptedProvider {
+public:
+    explicit ToolSequenceProvider(std::vector<ScriptedToolCall> calls)
+        : ScriptedProvider("fake"), calls_(std::move(calls)) {}
+
+    std::vector<std::vector<std::string>> offered_tools;
+
+    [[nodiscard]] ai::ModelStream stream(
+            ai::Model model, ai::AiContext context, coding_agent::ModelRuntimeTestStreamOptions) override {
+        std::vector<std::string> offered;
+        for (const auto& tool : context.tools)
+            offered.push_back(tool.name);
+        offered_tools.push_back(std::move(offered));
+        const std::size_t request = request_count_++;
+        return ai::detail::make_model_stream(
+                [this, model = std::move(model), request](ai::AssistantEventSink sink)
+                        -> boost::asio::awaitable<support::Expected<ai::AssistantMessage>> {
+                    ai::AssistantMessage round;
+                    round.provider = "mcp-fake";
+                    round.api = "fake";
+                    round.model = model.id;
+                    if (request < calls_.size()) {
+                        const auto& call = calls_[request];
+                        round.content = {ai::text_content("calling " + call.name)};
+                        round.stop_reason = ai::AssistantStopReason::ToolUse;
+                        round.content.emplace_back(ai::ToolCallContent{
+                                .id = "sequence_" + std::to_string(request + 1),
+                                .name = call.name,
+                                .arguments = call.arguments,
+                                .raw_arguments = support::write_json(call.arguments).value_or("{}"),
+                                .thought_signature = std::nullopt,
+                                .arguments_valid = true,
+                                .argument_error = std::nullopt,
+                        });
+                    } else {
+                        round.content = {ai::text_content("done")};
+                        round.stop_reason = ai::AssistantStopReason::Stop;
+                    }
+                    if (sink) {
+                        if (auto emitted = sink(ai::AssistantStartEvent{.partial = round}); !emitted) {
+                            co_return std::unexpected(emitted.error());
+                        }
+                    }
+                    co_return round;
+                });
+    }
+
+private:
+    std::vector<ScriptedToolCall> calls_;
+    std::size_t request_count_{0};
+};
+
 } // namespace
+
+TEST_CASE("tool_search ranks a deferred MCP tool, activates only the match, and the next request executes it",
+        "[coding_agent][mcp][tool_search][issue1095][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    write_global_mcp_json(workspace, echo_mcp_json("deferred"));
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{
+            {"tool_search",
+                    support::JsonValue{support::JsonValue::object_t{{"query", "echo incoming text"}, {"limit", 1.0}}}},
+            {"mcp__echo__echo", support::JsonValue{support::JsonValue::object_t{{"text", "loaded and called"}}}},
+    });
+    auto attempt = make_session(runtime, workspace, coding_agent::DefaultPersistedSessionTarget{}, provider);
+
+    const auto initial = attempt.session->snapshot().agent_state.active_tool_names;
+    CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__echo"));
+    CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__fail"));
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("find the echo tool and use it")).has_value());
+    const auto search_result = tool_result_text(*attempt.session, "tool_search");
+    REQUIRE(search_result.has_value());
+    CHECK(*search_result == "Loaded 1 tool. They are available from your next call:\n"
+                            "- mcp__echo__echo: Echo the incoming text back.");
+    CHECK(search_result->find("mcp__echo__fail") == std::string::npos);
+    const auto entries = attempt.session->session_entries();
+    REQUIRE(entries.has_value());
+    const auto loadout = std::ranges::find_if(*entries, [](const auto& entry) {
+        if (!entry.message) return false;
+        const auto* system = std::get_if<ai::SystemMessage>(&*entry.message);
+        return system != nullptr && std::ranges::any_of(system->tools_added,
+                                            [](const ai::Tool& tool) { return tool.name == "mcp__echo__echo"; });
+    });
+    REQUIRE(loadout != entries->end());
+    const auto& system = std::get<ai::SystemMessage>(*loadout->message);
+    CHECK(std::ranges::count(system.tools_added, "mcp__echo__echo", &ai::Tool::name) == 1);
+    CHECK(system.tools_removed.empty());
+    REQUIRE(provider->offered_tools.size() == 3);
+    CHECK(std::ranges::find(provider->offered_tools[0], "mcp__echo__echo") == provider->offered_tools[0].end());
+    CHECK(std::ranges::find(provider->offered_tools[1], "mcp__echo__echo") != provider->offered_tools[1].end());
+    CHECK(std::ranges::find(provider->offered_tools[1], "mcp__echo__fail") == provider->offered_tools[1].end());
+    CHECK(std::ranges::find(provider->offered_tools[2], "mcp__echo__echo") != provider->offered_tools[2].end());
+    CHECK(tool_result_text(*attempt.session, "mcp__echo__echo") == std::optional<std::string>{"loaded and called"});
+    CHECK(exposes_tool(*attempt.session, "mcp__echo__echo"));
+    CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__fail"));
+    CHECK(tool_name_set(initial) == tool_name_set(provider->offered_tools[0]));
+
+    attempt.session->close();
+}
+
+TEST_CASE("a no-match tool_search leaves the offered set unchanged",
+        "[coding_agent][mcp][tool_search][issue1095][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    write_global_mcp_json(workspace, echo_mcp_json("deferred"));
+    tests::RuntimeFixture runtime;
+    auto provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{
+            {"tool_search", support::JsonValue{support::JsonValue::object_t{{"query", "weather forecast"}}}},
+    });
+    auto attempt = make_persisted_session(runtime, workspace, provider);
+    const auto before = attempt.session->snapshot().agent_state.active_tool_names;
+
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("find a weather tool")).has_value());
+    REQUIRE(provider->offered_tools.size() == 2);
+    CHECK(tool_name_set(provider->offered_tools[0]) == tool_name_set(before));
+    CHECK(tool_name_set(provider->offered_tools[1]) == tool_name_set(before));
+    CHECK(tool_result_text(*attempt.session, "tool_search") == std::optional<std::string>{"No matching tools found."});
+    CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__echo"));
+    CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__fail"));
+
+    attempt.session->close();
+}
+
+TEST_CASE("repeated tool_search calls in one run load each ranked match once and keep them declared",
+        "[coding_agent][mcp][tool_search][issue1095][spec]") {
+    // pi's frozen two-search case (`packages/durable/test/tool-search.test.ts`
+    // issues a second `tool_search` in the same run and expects both
+    // declarations) applied to the C++ session: `respond` ranks slow 0.500,
+    // hang 0.408, crash 0.157, so three one-tool searches load those tools in
+    // that order, and each search skips the tools it already loaded instead of
+    // re-announcing them. A catalog that exposed every deferred tool up front
+    // would fail the first offered set; a search that ignored the live loadout
+    // would re-announce `slow` on the second call.
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    write_global_mcp_json(workspace, echo_mcp_json("deferred"));
+    tests::RuntimeFixture runtime;
+    const auto search = [] {
+        return ScriptedToolCall{
+                "tool_search", support::JsonValue{support::JsonValue::object_t{{"query", "respond"}, {"limit", 1.0}}}};
+    };
+    auto provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{
+            search(),
+            search(),
+            search(),
+            {"mcp__echo__slow", support::JsonValue{support::JsonValue::object_t{{"text", "loaded slowly"}}}},
+    });
+    auto attempt = make_session(runtime, workspace, coding_agent::DefaultPersistedSessionTarget{}, provider);
+
+    REQUIRE(tests::run_awaitable(runtime, attempt.session->prompt("load the response tools one at a time"))
+                    .has_value());
+
+    CHECK(tool_result_texts(*attempt.session, "tool_search") ==
+            std::vector<std::string>{
+                    "Loaded 1 tool. They are available from your next call:\n- mcp__echo__slow: Respond after a delay.",
+                    "Loaded 1 tool. They are available from your next call:\n- mcp__echo__hang: Never respond; keep "
+                    "streaming after a cancellation.",
+                    "Loaded 1 tool. They are available from your next call:\n- mcp__echo__crash: Exit the server "
+                    "without "
+                    "responding.",
+            });
+    CHECK(persisted_loadouts(*attempt.session) == std::vector<std::vector<std::string>>{
+                                                          {"mcp__echo__slow"},
+                                                          {"mcp__echo__hang"},
+                                                          {"mcp__echo__crash"},
+                                                  });
+    REQUIRE(provider->offered_tools.size() == 5);
+    const auto offered = [&](std::size_t request, std::string_view name) {
+        return std::ranges::find(provider->offered_tools[request], name) != provider->offered_tools[request].end();
+    };
+    for (const auto name : {"mcp__echo__slow", "mcp__echo__hang", "mcp__echo__crash"}) {
+        CHECK_FALSE(offered(0, name));
+    }
+    CHECK(offered(1, "mcp__echo__slow"));
+    CHECK_FALSE(offered(1, "mcp__echo__hang"));
+    CHECK_FALSE(offered(1, "mcp__echo__crash"));
+    CHECK(offered(2, "mcp__echo__slow"));
+    CHECK(offered(2, "mcp__echo__hang"));
+    CHECK_FALSE(offered(2, "mcp__echo__crash"));
+    CHECK(offered(3, "mcp__echo__slow"));
+    CHECK(offered(3, "mcp__echo__hang"));
+    CHECK(offered(3, "mcp__echo__crash"));
+    // The first loaded tool is callable from the run that loaded it, after two
+    // further searches.
+    CHECK(tool_result_text(*attempt.session, "mcp__echo__slow") == std::optional<std::string>{"loaded slowly"});
+    CHECK(offered(4, "mcp__echo__crash"));
+    // The loadout never widens to the server's other deferred tools.
+    CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__echo"));
+    CHECK_FALSE(exposes_tool(*attempt.session, "mcp__echo__fail"));
+
+    attempt.session->close();
+}
+
+TEST_CASE("reopened sessions load the next-ranked deferred tool and never re-announce an already loaded one",
+        "[coding_agent][mcp][tool_search][session_resume][issue1095][spec]") {
+    // The discriminating ordering case. `respond` matches three deferred tools
+    // with distinct scores (slow 0.500, hang 0.408, crash 0.157), so each
+    // one-tool search must load the best-ranked match that is not already
+    // loaded, in that order, across successive reopens of the same session. A
+    // catalog that exposed every deferred tool up front would fail the first
+    // offered-set check; a search that activated every match would fail the
+    // result texts; a search that ignored the replayed loadout would
+    // re-announce `slow` instead of loading `hang`.
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    write_global_mcp_json(workspace, echo_mcp_json("deferred"));
+    tests::RuntimeFixture runtime;
+    const auto search = [] {
+        return ScriptedToolCall{
+                "tool_search", support::JsonValue{support::JsonValue::object_t{{"query", "respond"}, {"limit", 1.0}}}};
+    };
+    const auto offered = [](const std::shared_ptr<ToolSequenceProvider>& provider,
+                                 std::size_t request,
+                                 std::string_view name) {
+        REQUIRE(provider->offered_tools.size() > request);
+        return std::ranges::find(provider->offered_tools[request], name) != provider->offered_tools[request].end();
+    };
+    const std::string slow_line =
+            "Loaded 1 tool. They are available from your next call:\n- mcp__echo__slow: Respond after a delay.";
+    const std::string hang_line = "Loaded 1 tool. They are available from your next call:\n"
+                                  "- mcp__echo__hang: Never respond; keep streaming after a cancellation.";
+    const std::string crash_line = "Loaded 1 tool. They are available from your next call:\n"
+                                   "- mcp__echo__crash: Exit the server without responding.";
+
+    // The first session starts with no deferred tool declared and loads only
+    // the best-ranked match.
+    auto first_provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{search()});
+    auto first = make_session(runtime, workspace, coding_agent::DefaultPersistedSessionTarget{}, first_provider);
+    REQUIRE(first.session->session_path().has_value());
+    const auto session_path = *first.session->session_path();
+    REQUIRE(tests::run_awaitable(runtime, first.session->prompt("load the best response tool")).has_value());
+    CHECK(tool_result_texts(*first.session, "tool_search") == std::vector<std::string>{slow_line});
+    CHECK(persisted_loadouts(*first.session) == std::vector<std::vector<std::string>>{{"mcp__echo__slow"}});
+    REQUIRE(first_provider->offered_tools.size() == 2);
+    for (const auto name : {"mcp__echo__slow", "mcp__echo__hang", "mcp__echo__crash"}) {
+        CHECK_FALSE(offered(first_provider, 0, name));
+    }
+    CHECK_FALSE(offered(first_provider, 1, "mcp__echo__hang"));
+    first.session->close();
+
+    // The reopened session replays the loadout before the first request, skips
+    // the already loaded tool when ranking, and runs the replayed tool.
+    auto second_provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{
+            search(),
+            {"mcp__echo__slow", support::JsonValue{support::JsonValue::object_t{{"text", "loaded in session one"}}}},
+    });
+    auto second = make_session(
+            runtime, workspace, coding_agent::ExplicitResumeSessionTarget{.path = session_path}, second_provider);
+    CHECK(exposes_tool(*second.session, "mcp__echo__slow"));
+    CHECK_FALSE(exposes_tool(*second.session, "mcp__echo__hang"));
+    REQUIRE(tests::run_awaitable(runtime, second.session->prompt("load the next response tool")).has_value());
+    CHECK(offered(second_provider, 0, "mcp__echo__slow"));
+    CHECK_FALSE(offered(second_provider, 0, "mcp__echo__hang"));
+    CHECK_FALSE(offered(second_provider, 0, "mcp__echo__crash"));
+    CHECK(tool_result_texts(*second.session, "tool_search") == std::vector<std::string>{slow_line, hang_line});
+    CHECK(persisted_loadouts(*second.session) ==
+            std::vector<std::vector<std::string>>{{"mcp__echo__slow"}, {"mcp__echo__hang"}});
+    CHECK(tool_result_text(*second.session, "mcp__echo__slow") == std::optional<std::string>{"loaded in session one"});
+    second.session->close();
+
+    // The third reopen carries both earlier loadouts and loads the last match.
+    auto third_provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{search()});
+    auto third = make_session(
+            runtime, workspace, coding_agent::ExplicitResumeSessionTarget{.path = session_path}, third_provider);
+    REQUIRE(tests::run_awaitable(runtime, third.session->prompt("load the last response tool")).has_value());
+    CHECK(offered(third_provider, 0, "mcp__echo__slow"));
+    CHECK(offered(third_provider, 0, "mcp__echo__hang"));
+    CHECK_FALSE(offered(third_provider, 0, "mcp__echo__crash"));
+    CHECK(tool_result_texts(*third.session, "tool_search") ==
+            std::vector<std::string>{slow_line, hang_line, crash_line});
+    CHECK(persisted_loadouts(*third.session) == std::vector<std::vector<std::string>>{
+                                                        {"mcp__echo__slow"},
+                                                        {"mcp__echo__hang"},
+                                                        {"mcp__echo__crash"},
+                                                });
+    // The loadout never widens to the server's other deferred tools.
+    CHECK(exposes_tool(*third.session, "mcp__echo__slow"));
+    CHECK(exposes_tool(*third.session, "mcp__echo__hang"));
+    CHECK(exposes_tool(*third.session, "mcp__echo__crash"));
+    CHECK_FALSE(exposes_tool(*third.session, "mcp__echo__echo"));
+    CHECK_FALSE(exposes_tool(*third.session, "mcp__echo__fail"));
+
+    third.session->close();
+}
+
+TEST_CASE("forked sessions persist independent deferred MCP loadouts across reopen",
+        "[coding_agent][mcp][tool_search][session_fork][issue1095][spec]") {
+    tests::TempWorkspace workspace;
+    const tests::EnvVarGuard xdg{"XDG_CONFIG_HOME", (workspace.path() / "xdg").string()};
+    write_global_mcp_json(workspace, echo_mcp_json("deferred"));
+    tests::RuntimeFixture runtime;
+
+    auto source = make_session(
+            runtime, workspace, coding_agent::DefaultPersistedSessionTarget{}, std::make_shared<PlainTextProvider>());
+    REQUIRE(source.session->session_path().has_value());
+    REQUIRE(tests::run_awaitable(runtime, source.session->prompt("shared fork point")).has_value());
+    const auto user_messages = source.session->get_user_messages_for_forking();
+    REQUIRE(user_messages.size() == 1);
+    const auto fork_echo =
+            source.session->prepare_fork(user_messages.front().entry_id, coding_agent::runtime::ForkPosition::At);
+    const auto fork_fail =
+            source.session->prepare_fork(user_messages.front().entry_id, coding_agent::runtime::ForkPosition::At);
+    REQUIRE(fork_echo.has_value());
+    REQUIRE(fork_echo->branched_path.has_value());
+    REQUIRE(fork_fail.has_value());
+    REQUIRE(fork_fail->branched_path.has_value());
+    CHECK(*fork_echo->branched_path != *fork_fail->branched_path);
+
+    auto echo_provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{
+            {"tool_search",
+                    support::JsonValue{support::JsonValue::object_t{{"query", "echo incoming text"}, {"limit", 1.0}}}},
+            {"mcp__echo__echo", support::JsonValue{support::JsonValue::object_t{{"text", "branch echo"}}}},
+    });
+    auto fail_provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{
+            {"tool_search",
+                    support::JsonValue{
+                            support::JsonValue::object_t{{"query", "always report error fail"}, {"limit", 1.0}}}},
+            {"mcp__echo__fail", support::JsonValue{support::JsonValue::object_t{}}},
+    });
+    auto echo_branch = make_session(runtime,
+            workspace,
+            coding_agent::ExplicitResumeSessionTarget{.path = *fork_echo->branched_path},
+            echo_provider);
+    auto fail_branch = make_session(runtime,
+            workspace,
+            coding_agent::ExplicitResumeSessionTarget{.path = *fork_fail->branched_path},
+            fail_provider);
+
+    REQUIRE(tests::run_awaitable(runtime, echo_branch.session->prompt("load echo")).has_value());
+    REQUIRE(tests::run_awaitable(runtime, fail_branch.session->prompt("load fail")).has_value());
+    REQUIRE(echo_provider->offered_tools.size() == 3);
+    REQUIRE(fail_provider->offered_tools.size() == 3);
+    CHECK(std::ranges::find(echo_provider->offered_tools[1], "mcp__echo__echo") !=
+            echo_provider->offered_tools[1].end());
+    CHECK(std::ranges::find(echo_provider->offered_tools[1], "mcp__echo__fail") ==
+            echo_provider->offered_tools[1].end());
+    CHECK(std::ranges::find(fail_provider->offered_tools[1], "mcp__echo__fail") !=
+            fail_provider->offered_tools[1].end());
+    CHECK(std::ranges::find(fail_provider->offered_tools[1], "mcp__echo__echo") ==
+            fail_provider->offered_tools[1].end());
+    CHECK(tool_result_text(*echo_branch.session, "mcp__echo__echo") == std::optional<std::string>{"branch echo"});
+    CHECK(tool_result_text(*fail_branch.session, "mcp__echo__fail") ==
+            std::optional<std::string>{"fail: requested failure"});
+    CHECK(tool_result_is_error(*fail_branch.session, "mcp__echo__fail") == std::optional<bool>{true});
+    CHECK(exposes_tool(*echo_branch.session, "mcp__echo__echo"));
+    CHECK_FALSE(exposes_tool(*echo_branch.session, "mcp__echo__fail"));
+    CHECK(exposes_tool(*fail_branch.session, "mcp__echo__fail"));
+    CHECK_FALSE(exposes_tool(*fail_branch.session, "mcp__echo__echo"));
+
+    echo_branch.session->close();
+    fail_branch.session->close();
+    auto reopened_echo_provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{});
+    auto reopened_fail_provider = std::make_shared<ToolSequenceProvider>(std::vector<ScriptedToolCall>{});
+    auto reopened_echo = make_session(runtime,
+            workspace,
+            coding_agent::ExplicitResumeSessionTarget{.path = *fork_echo->branched_path},
+            reopened_echo_provider);
+    auto reopened_fail = make_session(runtime,
+            workspace,
+            coding_agent::ExplicitResumeSessionTarget{.path = *fork_fail->branched_path},
+            reopened_fail_provider);
+    CHECK(exposes_tool(*reopened_echo.session, "mcp__echo__echo"));
+    CHECK_FALSE(exposes_tool(*reopened_echo.session, "mcp__echo__fail"));
+    CHECK(exposes_tool(*reopened_fail.session, "mcp__echo__fail"));
+    CHECK_FALSE(exposes_tool(*reopened_fail.session, "mcp__echo__echo"));
+    REQUIRE(tests::run_awaitable(runtime, reopened_echo.session->prompt("verify echo loadout")).has_value());
+    REQUIRE(tests::run_awaitable(runtime, reopened_fail.session->prompt("verify fail loadout")).has_value());
+    REQUIRE(reopened_echo_provider->offered_tools.size() == 1);
+    REQUIRE(reopened_fail_provider->offered_tools.size() == 1);
+    CHECK(std::ranges::find(reopened_echo_provider->offered_tools[0], "mcp__echo__echo") !=
+            reopened_echo_provider->offered_tools[0].end());
+    CHECK(std::ranges::find(reopened_echo_provider->offered_tools[0], "mcp__echo__fail") ==
+            reopened_echo_provider->offered_tools[0].end());
+    CHECK(std::ranges::find(reopened_fail_provider->offered_tools[0], "mcp__echo__fail") !=
+            reopened_fail_provider->offered_tools[0].end());
+    CHECK(std::ranges::find(reopened_fail_provider->offered_tools[0], "mcp__echo__echo") ==
+            reopened_fail_provider->offered_tools[0].end());
+
+    reopened_echo.session->close();
+    reopened_fail.session->close();
+    source.session->close();
+}
 
 TEST_CASE("a codemode-exposure server registers its tools undeclared, activates codemode, and renders the mcp_servers "
           "section",

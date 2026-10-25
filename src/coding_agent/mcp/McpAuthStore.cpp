@@ -26,6 +26,10 @@
 namespace cch::coding_agent::mcp {
 namespace {
 
+using cch::mcp::OAuthClientInformation;
+using cch::mcp::OAuthState;
+using cch::mcp::OAuthTokens;
+
 using JsonObject = support::JsonValue::object_t;
 
 [[nodiscard]] support::Error store_error(std::string message, std::string detail = {}) {

@@ -102,8 +102,8 @@ TEST_CASE("Compact header hints keep pi's assembled actions at every formal boot
                     " and loaded resources.",
             },
             std::vector<std::string>{
-                    " escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash ·",
-                    " ctrl+o more",
+                    " escape interrupt · ctrl+c/ctrl+d clear/exit · / commands · ! bash",
+                    "  · ctrl+o more",
                     " Press ctrl+o to show full startup help and loaded resources.",
             },
             std::vector<std::string>{

@@ -1,6 +1,11 @@
 #include <cch/codemode/Sandbox.hpp>
 
+#include <cch/codemode/Declarations.hpp>
+
+#include "codemode/Deterministic.hpp"
+#include "codemode/Guest.hpp"
 #include "codemode/Prelude.hpp"
+#include "codemode/Shared.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/Json.hpp"
 
@@ -15,10 +20,12 @@
 #include <boost/asio/this_coro.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <charconv>
 #include <chrono>
 #include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <deque>
@@ -30,6 +37,8 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <pthread.h>
+#include <set>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -42,6 +51,32 @@
 #endif
 
 namespace cch::codemode {
+
+using detail::add_function;
+using detail::gen_i32;
+using detail::globals_json;
+using detail::Guest;
+using detail::Handle;
+using detail::HostClockTimeGet;
+using detail::HostFdFdstatGet;
+using detail::HostFdWrite;
+using detail::HostModuleDenied;
+using detail::HostPromiseRejection;
+using detail::HostRandomGet;
+using detail::HostTimezone;
+using detail::HostWasiStub;
+using detail::kBridgeName;
+using detail::kWasiErnoBadf;
+using detail::kWasiErnoNosys;
+using detail::kWasiErnoSuccess;
+using detail::make_function;
+using detail::make_module;
+using detail::parse_store_writes;
+using detail::sandbox_error;
+using detail::store_json;
+using detail::tools_json;
+using detail::validate_globals;
+using detail::VT;
 
 std::filesystem::path default_codemode_guest_wasm_path() {
     // pi resolves the guest through the packaged module tree
@@ -64,143 +99,13 @@ std::filesystem::path default_codemode_guest_wasm_path() {
 
 namespace {
 
-using Handle = std::int32_t;
-using VT = enum WasmEdge_ValType;
-
-constexpr std::string_view kBridgeName = "bridge";
-constexpr std::int32_t kWasiErnoSuccess = 0;
-constexpr std::int32_t kWasiErnoBadf = 8;
-constexpr std::int32_t kWasiErnoNosys = 52;
-
-WasmEdge_Value gen_i32(std::int32_t value) { return WasmEdge_ValueGenI32(value); }
-
-/// One instantiated guest plus the re-entrant call helpers. The helpers read
-/// and call into the guest from inside a host import (the `host_call` bridge),
-/// where WasmEdge exposes the calling frame's executor and module.
-struct Guest {
-    WasmEdge_ExecutorContext* executor = nullptr;
-    WasmEdge_ModuleInstanceContext* module = nullptr;
-    WasmEdge_MemoryInstanceContext* memory = nullptr;
-
-    [[nodiscard]] WasmEdge_FunctionInstanceContext* find(const char* name) const {
-        WasmEdge_String s = WasmEdge_StringCreateByCString(name);
-        WasmEdge_FunctionInstanceContext* f = WasmEdge_ModuleInstanceFindFunction(module, s);
-        WasmEdge_StringDelete(s);
-        return f;
-    }
-
-    [[nodiscard]] std::int32_t call_i32(
-            WasmEdge_FunctionInstanceContext* fn, std::initializer_list<WasmEdge_Value> params) const {
-        if (fn == nullptr) return 0;
-        std::vector<WasmEdge_Value> in(params);
-        WasmEdge_Value out[1]{};
-        if (!WasmEdge_ResultOK(WasmEdge_ExecutorInvoke(
-                    executor, fn, in.empty() ? nullptr : in.data(), static_cast<std::uint32_t>(in.size()), out, 1))) {
-            return 0;
-        }
-        return WasmEdge_ValueGetI32(out[0]);
-    }
-
-    void call_void(WasmEdge_FunctionInstanceContext* fn, std::initializer_list<WasmEdge_Value> params) const {
-        if (fn == nullptr) return;
-        std::vector<WasmEdge_Value> in(params);
-        (void)WasmEdge_ExecutorInvoke(
-                executor, fn, in.empty() ? nullptr : in.data(), static_cast<std::uint32_t>(in.size()), nullptr, 0);
-    }
-
-    [[nodiscard]] std::uint32_t load_u32(std::uint32_t offset) const {
-        std::uint32_t value = 0;
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, offset, 4)) std::memcpy(&value, p, 4);
-        return value;
-    }
-
-    void store_u32(std::uint32_t offset, std::uint32_t value) const {
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, offset, 4)) std::memcpy(p, &value, 4);
-    }
-
-    void store_u64(std::uint32_t offset, std::uint64_t value) const {
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, offset, 8)) std::memcpy(p, &value, 8);
-    }
-
-    /// Copy a NUL-terminated string into guest memory; returns its pointer (0 on OOM).
-    [[nodiscard]] std::uint32_t write_cstr(std::string_view text) const {
-        const std::int32_t ptr = call_i32(find("wasm_malloc"), {gen_i32(static_cast<std::int32_t>(text.size() + 1))});
-        if (ptr == 0) return 0;
-        std::uint8_t* dst = WasmEdge_MemoryInstanceGetPointer(
-                memory, static_cast<std::uint32_t>(ptr), static_cast<std::uint32_t>(text.size() + 1));
-        if (dst == nullptr) return 0;
-        std::memcpy(dst, text.data(), text.size());
-        dst[text.size()] = '\0';
-        return static_cast<std::uint32_t>(ptr);
-    }
-
-    /// Stringify a guest value the way pi's `JSValueHandle.toString()` does: the
-    /// explicit byte length is read so embedded NULs survive. Any value coerces
-    /// to a string (executing guest `toString`, as pi's bridge does).
-    [[nodiscard]] std::string read_string(Handle handle) const {
-        const std::int32_t len_ptr = call_i32(find("wasm_malloc"), {gen_i32(4)});
-        if (len_ptr == 0) return {};
-        const std::int32_t cstr = call_i32(find("qjs_get_string_len"), {gen_i32(handle), gen_i32(len_ptr)});
-        if (cstr == 0) return {};
-        const std::uint32_t length = load_u32(static_cast<std::uint32_t>(len_ptr));
-        std::string text;
-        if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(memory, static_cast<std::uint32_t>(cstr), length)) {
-            text.assign(reinterpret_cast<char*>(p), length);
-        }
-        call_void(find("qjs_free_cstring"), {gen_i32(cstr)});
-        return text;
-    }
-
-    [[nodiscard]] Handle new_string(std::string_view text) const {
-        const std::uint32_t ptr = write_cstr(text);
-        return call_i32(find("qjs_new_string"),
-                {gen_i32(static_cast<std::int32_t>(ptr)), gen_i32(static_cast<std::int32_t>(text.size()))});
-    }
-
-    [[nodiscard]] Handle undefined() const { return call_i32(find("qjs_get_undefined"), {}); }
-    [[nodiscard]] Handle true_value() const { return call_i32(find("qjs_get_true"), {}); }
-    [[nodiscard]] Handle false_value() const { return call_i32(find("qjs_get_false"), {}); }
-    [[nodiscard]] bool is_undefined(Handle handle) const {
-        return call_i32(find("qjs_is_undefined"), {gen_i32(handle)}) != 0;
-    }
-
-    [[nodiscard]] Handle global() const { return call_i32(find("qjs_get_global"), {}); }
-
-    [[nodiscard]] Handle get_prop(Handle object, std::string_view name) const {
-        const std::uint32_t ptr = write_cstr(name);
-        return call_i32(find("qjs_get_prop_string"), {gen_i32(object), gen_i32(static_cast<std::int32_t>(ptr))});
-    }
-
-    Handle call(Handle function, Handle this_value, const std::vector<Handle>& args) const {
-        std::uint32_t argv = 0;
-        if (!args.empty()) {
-            argv = static_cast<std::uint32_t>(
-                    call_i32(find("wasm_malloc"), {gen_i32(static_cast<std::int32_t>(args.size() * 4))}));
-            for (std::size_t i = 0; i < args.size(); ++i)
-                store_u32(argv + static_cast<std::uint32_t>(i * 4), static_cast<std::uint32_t>(args[i]));
-        }
-        return call_i32(find("qjs_call"),
-                {gen_i32(function),
-                        gen_i32(this_value),
-                        gen_i32(static_cast<std::int32_t>(args.size())),
-                        gen_i32(static_cast<std::int32_t>(argv))});
-    }
-
-    [[nodiscard]] bool is_exception(Handle handle) const {
-        return call_i32(find("qjs_is_exception"), {gen_i32(handle)}) != 0;
-    }
-
-    [[nodiscard]] std::string exception_text() const {
-        const Handle exc = call_i32(find("qjs_get_exception"), {});
-        return read_string(exc);
-    }
-};
-
 /// One queued `tools.*`/global call the script made and is awaiting.
 struct PendingToolCall {
     Handle id = 0;
     std::string name;
     std::string arguments_json;
+    /// Index into `RunState::calls` for this call's public record.
+    std::size_t record = 0;
 };
 
 /// The bridge between the sandbox worker thread and the host executor. The
@@ -209,6 +114,15 @@ struct PendingToolCall {
 /// through the session's asynchronous tool pipeline. This is pi's worker
 /// `parentPort` message pair, realized with a mutex and a condition variable
 /// because the host side is an asio coroutine rather than a JS event loop.
+struct WorkerAdmissionRelease {
+    CodemodeWorkerRelease release;
+    std::atomic<bool> released{false};
+
+    void invoke() {
+        if (!released.exchange(true) && release) release();
+    }
+};
+
 struct SandboxLink {
     struct Request {
         int id{0};
@@ -229,8 +143,28 @@ struct SandboxLink {
     /// Set by the host when the run's deadline or cancellation must stop a
     /// wasm-spinning worker; read by the guest's `host_interrupt` import.
     std::atomic<bool> interrupt{false};
+    /// The run's absolute deadline (nanoseconds since the steady clock's epoch),
+    /// published by the worker when the limits carry a timeout; 0 means none.
+    /// The host's request loop enforces it while a tool call waits.
+    std::atomic<std::int64_t> deadline_nanos{0};
+    /// Set by the worker when the script settled (success, failure, or
+    /// exit()): calls still in flight are unawaited and must be cancelled by
+    /// the host instead of waiting for their handlers.
+    std::atomic<bool> script_settled{false};
+    std::atomic<bool> closed{false};
     /// Wakes the host coroutine when the worker has a request or a result.
     std::function<void()> wake_host;
+
+    /// Worker side: forward one call to the host without parking on it. The
+    /// engine uses this for calls the script left unawaited at settlement: the
+    /// host aborts their handlers so the cancellation is observed.
+    void enqueue(int id, std::string_view name, std::string_view arguments_json) {
+        {
+            std::lock_guard lock(mutex);
+            requests.push_back(Request{id, std::string{name}, std::string{arguments_json}});
+        }
+        if (wake_host) wake_host();
+    }
 
     /// Worker side: enqueue one call and park until the host answers (or the
     /// run is interrupted). Returns nullopt when interrupted without an answer.
@@ -263,6 +197,14 @@ struct SandboxLink {
             std::lock_guard lock(mutex);
             responses.emplace(id, Response{ok, std::move(payload)});
         }
+        cv.notify_all();
+    }
+
+    /// Host side: flag the run interrupted and wake a worker parked on a call.
+    /// The plain `interrupt` store alone cannot end `dispatch`'s wait: only a
+    /// notify re-evaluates its predicate.
+    void interrupt_worker() {
+        interrupt.store(true);
         cv.notify_all();
     }
 
@@ -302,13 +244,38 @@ struct RunState {
     bool finished = false;
     std::optional<std::string> value_json;
     std::optional<CodemodeError> error;
+    std::optional<CodemodeStoreWrites> store_writes;
     std::vector<CodemodeOutputItem> output;
     std::vector<PendingToolCall> pending;
+    /// pi `calls`: one public record per issued call, plus its issue time so
+    /// the record gains a duration when the call settles or is cancelled.
+    std::vector<CodemodeCallRecord> calls;
+    std::vector<std::chrono::steady_clock::time_point> call_issued;
+    std::uint64_t polls{0};
+    bool budget_exhausted{false};
+    /// pi's abort reason text (the AbortSignal reason's message); reported when
+    /// the host cancels the run. Without a reason pi reports "Execution aborted".
+    std::optional<std::string> abort_message;
 
     [[nodiscard]] bool interrupted() {
-        // The script's own deadline is evaluated first so a timeout is reported
-        // as a timeout even when the host's monitor also flagged the worker.
-        if (limits.timeout.count() > 0 && std::chrono::steady_clock::now() - started > limits.timeout) {
+        // pi inline counts every interrupt poll across the whole execution and
+        // stops the VM once the count passes the budget; the budget outranks
+        // the deadline because a computing script reaches the poll count first
+        // (frozen inline-interrupt evidence). An unset budget keeps pi's
+        // worker-thread behavior: polling itself never fails the run.
+        if (limits.interrupt_budget.has_value()) {
+            ++polls;
+            if (*limits.interrupt_budget > 0 && polls > *limits.interrupt_budget) {
+                budget_exhausted = true;
+                return true;
+            }
+        }
+        // The script's own deadline is evaluated so a timeout is reported as a
+        // timeout even when the host's monitor also flagged the worker.
+        if (link != nullptr && link->deadline_nanos.load() > 0 &&
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                                .count() > link->deadline_nanos.load()) {
             timed_out = true;
             return true;
         }
@@ -321,23 +288,48 @@ struct RunState {
         const bool ok = args.size() > 1 && !g.is_undefined(args[1]) && g.read_string(args[1]) == "true";
         if (ok) {
             if (args.size() > 2 && !g.is_undefined(args[2])) value_json = g.read_string(args[2]);
+            // pi reports the write set only on success (including exit());
+            // failed runs carry no storeWrites.
+            if (args.size() > 3 && !g.is_undefined(args[3])) {
+                store_writes = parse_store_writes(g.read_string(args[3]));
+            }
         } else {
-            error = CodemodeError{
-                    CodemodeError::Kind::Script, args.size() > 2 ? message_from(args[2], g) : std::string{}};
+            error = args.size() > 2 ? error_from(args[2], g) : CodemodeError{CodemodeError::Kind::Script, {}};
         }
         finished = true;
+        // The host stops waiting on in-flight handlers: anything still pending
+        // is an unawaited call this run must report as cancelled.
+        if (link != nullptr) {
+            link->script_settled.store(true);
+            if (link->wake_host) link->wake_host();
+        }
     }
 
-    [[nodiscard]] static std::string message_from(Handle payload, const Guest& g) {
+    /// The prelude reports a failed run with `describeError(error)`: a JSON
+    /// object carrying `message` for every throw, plus `name` and `stack` when
+    /// the thrown value was an Error (frozen pi's error taxonomy).
+    [[nodiscard]] static CodemodeError error_from(Handle payload, const Guest& g) {
         const std::string raw = g.read_string(payload);
         auto parsed = support::read_json(raw);
         if (parsed && parsed->holds<support::JsonValue::object_t>()) {
             const auto& object = parsed->get_object();
+            CodemodeError error{CodemodeError::Kind::Script, raw};
+            bool described = false;
             if (const auto it = object.find("message"); it != object.end()) {
-                if (const auto* message = it->second.get_if<std::string>()) return *message;
+                if (const auto* message = it->second.get_if<std::string>()) {
+                    error.message = *message;
+                    described = true;
+                }
             }
+            if (const auto it = object.find("name"); it != object.end()) {
+                if (const auto* name = it->second.get_if<std::string>()) error.name = *name;
+            }
+            if (const auto it = object.find("stack"); it != object.end()) {
+                if (const auto* stack = it->second.get_if<std::string>()) error.stack = *stack;
+            }
+            if (described) return error;
         }
-        return raw;
+        return CodemodeError{CodemodeError::Kind::Script, raw};
     }
 
     void handle_bridge(const Guest& g, const std::vector<Handle>& args) {
@@ -349,6 +341,9 @@ struct RunState {
             item.kind = channel == "image" ? CodemodeOutputItem::Kind::Image : CodemodeOutputItem::Kind::Text;
             item.data = args.size() > 2 ? g.read_string(args[2]) : std::string{};
             item.mime_type = args.size() > 3 ? g.read_string(args[3]) : std::string{};
+            // The frozen prelude routes `console.*` through its own channel;
+            // the result keeps `type: "text"` and marks the item `console`.
+            item.console = channel == "console";
             output.push_back(std::move(item));
             return;
         }
@@ -364,6 +359,10 @@ struct RunState {
             }
             call.name = args.size() > 2 ? g.read_string(args[2]) : std::string{};
             call.arguments_json = args.size() > 3 && !g.is_undefined(args[3]) ? g.read_string(args[3]) : std::string{};
+            calls.push_back(CodemodeCallRecord{
+                    .name = call.name, .status = CodemodeCallRecord::Status::Ok, .duration_ms = std::nullopt});
+            call_issued.push_back(std::chrono::steady_clock::now());
+            call.record = calls.size() - 1;
             pending.push_back(std::move(call));
             return;
         }
@@ -396,165 +395,127 @@ WasmEdge_Result HostInterrupt(
     return WasmEdge_Result_Success;
 }
 
-WasmEdge_Result HostPromiseRejection(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value*) {
-    // The shim frees the two heap-owned values the guest handed over; without a
-    // rejection handler they would leak. #874 has no unhandled-rejection surface.
-    Guest guest{WasmEdge_CallingFrameGetExecutor(frame),
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    guest.call_void(guest.find("qjs_free_value"), {gen_i32(WasmEdge_ValueGetI32(in[0]))});
-    guest.call_void(guest.find("qjs_free_value"), {gen_i32(WasmEdge_ValueGetI32(in[1]))});
-    return WasmEdge_Result_Success;
+} // namespace
+
+namespace {
+
+struct ActiveSandboxRun {
+    std::shared_ptr<SandboxLink> link;
+    std::shared_ptr<std::stop_source> call_stop;
+};
+
+struct NativeWorkerTask {
+    CodemodeWorkerTask task;
+};
+
+struct NativeWorkerTaskState {
+    std::unique_ptr<NativeWorkerTask> task;
+};
+
+struct NativeWorkerJoinState {
+    std::mutex mutex;
+    std::condition_variable condition;
+    pthread_t worker{};
+    CodemodeWorkerExit exited;
+    bool ready{false};
+    bool start_failed{false};
+};
+
+struct NativeWorkerJoinThreadState {
+    std::shared_ptr<NativeWorkerJoinState> state;
+};
+
+void* run_worker_task(void* data) noexcept {
+    std::unique_ptr<NativeWorkerTaskState> state{static_cast<NativeWorkerTaskState*>(data)};
+    state->task->task();
+    return nullptr;
 }
 
-WasmEdge_Result HostTimezone(void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
-    out[0] = gen_i32(0);
-    return WasmEdge_Result_Success;
-}
-
-/// No ESM loader is registered: a `import`/`require` in the script fails closed
-/// rather than reaching any host module.
-WasmEdge_Result HostModuleDenied(
-        void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
-    out[0] = gen_i32(0);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostFdWrite(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    // The guest's engine diagnostics go to fd 1/2; they belong to the host and
-    // are discarded (pi `discardOutput`). Reported as written so libc does not retry.
-    const std::int32_t fd = WasmEdge_ValueGetI32(in[0]);
-    if (fd != 1 && fd != 2) {
-        out[0] = gen_i32(kWasiErnoBadf);
-        return WasmEdge_Result_Success;
+void* join_native_worker(void* data) noexcept {
+    std::unique_ptr<NativeWorkerJoinThreadState> thread_state{static_cast<NativeWorkerJoinThreadState*>(data)};
+    const auto state = std::move(thread_state->state);
+    pthread_t worker;
+    {
+        std::unique_lock lock(state->mutex);
+        state->condition.wait(lock, [&state] { return state->ready; });
+        if (state->start_failed) return nullptr;
+        worker = state->worker;
     }
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t iovs = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
-    const std::uint32_t count = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[2]));
-    const std::uint32_t nwritten = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[3]));
-    std::uint32_t total = 0;
-    for (std::uint32_t i = 0; i < count; ++i)
-        total += guest.load_u32(iovs + i * 8 + 4);
-    guest.store_u32(nwritten, total);
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
+    if (pthread_join(worker, nullptr) != 0) std::terminate();
+    state->exited();
+    return nullptr;
 }
 
-WasmEdge_Result HostFdFdstatGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    const std::int32_t fd = WasmEdge_ValueGetI32(in[0]);
-    if (fd != 1 && fd != 2) {
-        out[0] = gen_i32(kWasiErnoBadf);
-        return WasmEdge_Result_Success;
-    }
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t stat = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
-    if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(guest.memory, stat, 24)) {
-        std::memset(p, 0, 24);
-        p[0] = 2; // fs_filetype = CHARACTER_DEVICE
-    }
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
+[[nodiscard]] std::shared_ptr<std::mutex> default_worker_admission_mutex() {
+    static auto mutex = std::make_shared<std::mutex>();
+    return mutex;
 }
 
-WasmEdge_Result HostClockTimeGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    const std::int32_t clock_id = WasmEdge_ValueGetI32(in[0]);
-    if (clock_id != 0 && clock_id != 1) {
-        out[0] = gen_i32(kWasiErnoNosys);
-        return WasmEdge_Result_Success;
-    }
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t result_ptr = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[2]));
-    const auto now = std::chrono::system_clock::now().time_since_epoch();
-    const auto nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(now).count();
-    guest.store_u64(result_ptr, static_cast<std::uint64_t>(nanos));
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
+[[nodiscard]] std::shared_ptr<std::size_t> default_worker_count() {
+    static auto count = std::make_shared<std::size_t>(0);
+    return count;
 }
 
-WasmEdge_Result HostRandomGet(
-        void*, const WasmEdge_CallingFrameContext* frame, const WasmEdge_Value* in, WasmEdge_Value* out) {
-    Guest guest{nullptr,
-            const_cast<WasmEdge_ModuleInstanceContext*>(WasmEdge_CallingFrameGetModuleInstance(frame)),
-            WasmEdge_CallingFrameGetMemoryInstance(frame, 0)};
-    const std::uint32_t buf = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[0]));
-    const std::uint32_t len = static_cast<std::uint32_t>(WasmEdge_ValueGetI32(in[1]));
-    if (std::uint8_t* p = WasmEdge_MemoryInstanceGetPointer(guest.memory, buf, len)) {
-        // Not a cryptographic boundary: the guest only seeds Math.random and
-        // extension PRNGs, and no host secret crosses it.
-        std::uint64_t seed = static_cast<std::uint64_t>(std::chrono::steady_clock::now().time_since_epoch().count());
-        for (std::uint32_t i = 0; i < len; ++i) {
-            seed = seed * 6364136223846793005ull + 1442695040888963407ull;
-            p[i] = static_cast<std::uint8_t>(seed >> 33);
+[[nodiscard]] support::Expected<void> start_native_worker(CodemodeWorkerTask task, CodemodeWorkerExit exited) {
+    pthread_attr_t joiner_attributes;
+    const int initialized = pthread_attr_init(&joiner_attributes);
+    if (initialized != 0) {
+        return std::unexpected(support::make_error(support::ErrorCode::Process,
+                std::format("could not initialize worker join attributes: {}", initialized)));
+    }
+    const int detached = pthread_attr_setdetachstate(&joiner_attributes, PTHREAD_CREATE_DETACHED);
+    if (detached != 0) {
+        (void)pthread_attr_destroy(&joiner_attributes);
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, std::format("could not configure worker join thread: {}", detached)));
+    }
+
+    auto join_state = std::make_shared<NativeWorkerJoinState>();
+    join_state->exited = std::move(exited);
+    auto joiner_state = std::make_unique<NativeWorkerJoinThreadState>(NativeWorkerJoinThreadState{join_state});
+    pthread_t joiner;
+    const int joiner_created = pthread_create(&joiner, &joiner_attributes, join_native_worker, joiner_state.get());
+    (void)pthread_attr_destroy(&joiner_attributes);
+    if (joiner_created != 0) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, std::format("could not start worker join thread: {}", joiner_created)));
+    }
+    (void)joiner_state.release();
+
+    auto worker_state = std::make_unique<NativeWorkerTaskState>(
+            NativeWorkerTaskState{std::make_unique<NativeWorkerTask>(NativeWorkerTask{std::move(task)})});
+    pthread_t worker;
+    const int worker_created = pthread_create(&worker, nullptr, run_worker_task, worker_state.get());
+    if (worker_created != 0) {
+        {
+            std::lock_guard lock(join_state->mutex);
+            join_state->start_failed = true;
+            join_state->ready = true;
         }
+        join_state->condition.notify_one();
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, std::format("could not start codemode worker: {}", worker_created)));
     }
-    out[0] = gen_i32(kWasiErnoSuccess);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_Result HostWasiStub(void*, const WasmEdge_CallingFrameContext*, const WasmEdge_Value*, WasmEdge_Value* out) {
-    out[0] = gen_i32(kWasiErnoNosys);
-    return WasmEdge_Result_Success;
-}
-
-WasmEdge_FunctionInstanceContext* make_function(
-        WasmEdge_HostFunc_t function, void* data, std::initializer_list<VT> params, std::initializer_list<VT> returns) {
-    std::vector<VT> p(params);
-    std::vector<VT> r(returns);
-    WasmEdge_FunctionTypeContext* type = WasmEdge_FunctionTypeCreate(p.empty() ? nullptr : p.data(),
-            static_cast<std::uint32_t>(p.size()),
-            r.empty() ? nullptr : r.data(),
-            static_cast<std::uint32_t>(r.size()));
-    WasmEdge_FunctionInstanceContext* instance = WasmEdge_FunctionInstanceCreate(type, function, data, 0);
-    WasmEdge_FunctionTypeDelete(type);
-    return instance;
-}
-
-void add_function(WasmEdge_ModuleInstanceContext* module, const char* name, WasmEdge_FunctionInstanceContext* fn) {
-    WasmEdge_String s = WasmEdge_StringCreateByCString(name);
-    WasmEdge_ModuleInstanceAddFunction(module, s, fn);
-    WasmEdge_StringDelete(s);
-}
-
-WasmEdge_ModuleInstanceContext* make_module(const char* name) {
-    WasmEdge_String s = WasmEdge_StringCreateByCString(name);
-    WasmEdge_ModuleInstanceContext* module = WasmEdge_ModuleInstanceCreate(s);
-    WasmEdge_StringDelete(s);
-    return module;
-}
-
-[[nodiscard]] support::Error sandbox_error(std::string message, std::string detail = {}) {
-    return support::make_error(support::ErrorCode::Validation, std::move(message), std::move(detail));
-}
-
-/// pi `toCodemodeIdentifier`-shaped JSON list of the tools the script may call.
-[[nodiscard]] std::string tools_json(const std::vector<CodemodeToolDescriptor>& tools) {
-    support::JsonValue::array_t list;
-    list.reserve(tools.size());
-    for (const auto& tool : tools) {
-        list.push_back(support::JsonValue::object_t{
-                {"name", tool.name},
-                {"jsName", tool.js_name},
-                {"description", tool.description},
-        });
+    (void)worker_state.release();
+    {
+        std::lock_guard lock(join_state->mutex);
+        join_state->worker = worker;
+        join_state->ready = true;
     }
-    auto written = support::write_json(support::JsonValue{std::move(list)});
-    return written ? *written : std::string{"[]"};
+    join_state->condition.notify_one();
+    return {};
 }
 
 } // namespace
 
 struct CodemodeSandbox::Impl {
     std::filesystem::path wasm_path;
+    std::vector<CodemodeGlobal> globals;
+    CodemodeWorkerHost worker_host;
+    std::mutex worker_host_mutex;
+    std::mutex lifecycle_mutex;
+    bool closed{false};
+    std::vector<std::weak_ptr<ActiveSandboxRun>> active_runs;
     WasmEdge_ConfigureContext* configure = nullptr;
     WasmEdge_ASTModuleContext* ast = nullptr;
 
@@ -564,15 +525,28 @@ struct CodemodeSandbox::Impl {
     }
 };
 
-support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(std::filesystem::path wasm_path) {
+support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
+        std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals) {
+    return create(std::move(wasm_path), std::move(globals), {});
+}
+
+support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(
+        std::filesystem::path wasm_path, std::vector<CodemodeGlobal> globals, CodemodeWorkerHost worker_host) {
+    // pi `checkGlobals` rejects a bad surface before the guest module is
+    // considered, so construction fails without touching the filesystem.
+    if (auto valid = validate_globals(globals); !valid) {
+        return std::unexpected(std::move(valid.error()));
+    }
     std::error_code exists_error;
     if (!std::filesystem::exists(wasm_path, exists_error)) {
         return std::unexpected(
                 sandbox_error(std::format("codemode sandbox guest '{}' does not exist", wasm_path.string()),
                         "the codemode guest module (quickjs.wasm) must be present to run declared scripts"));
     }
-    auto impl = std::make_unique<Impl>();
+    auto impl = std::make_shared<Impl>();
     impl->wasm_path = std::move(wasm_path);
+    impl->globals = std::move(globals);
+    impl->worker_host = std::move(worker_host);
     impl->configure = WasmEdge_ConfigureCreate();
     WasmEdge_LoaderContext* loader = WasmEdge_LoaderCreate(impl->configure);
     const WasmEdge_Result loaded = WasmEdge_LoaderParseFromFile(loader, &impl->ast, impl->wasm_path.c_str());
@@ -590,10 +564,52 @@ support::Expected<std::unique_ptr<CodemodeSandbox>> CodemodeSandbox::create(std:
                 std::format("codemode sandbox guest '{}' is not a valid WebAssembly module", impl->wasm_path.string()),
                 WasmEdge_ResultGetMessage(valid)));
     }
+    if (!impl->worker_host.acquire_worker) {
+        const auto admission_mutex = default_worker_admission_mutex();
+        const auto active_workers = default_worker_count();
+        impl->worker_host.acquire_worker = [admission_mutex,
+                                                   active_workers]() -> support::Expected<CodemodeWorkerRelease> {
+            {
+                std::lock_guard lock(*admission_mutex);
+                if (*active_workers >= 2) {
+                    return std::unexpected(support::make_error(support::ErrorCode::Busy, "worker capacity exhausted"));
+                }
+                ++*active_workers;
+            }
+            return CodemodeWorkerRelease{[admission_mutex, active_workers]() {
+                std::lock_guard lock(*admission_mutex);
+                --*active_workers;
+            }};
+        };
+    }
+    if (!impl->worker_host.start_worker) impl->worker_host.start_worker = start_native_worker;
     return std::make_unique<CodemodeSandbox>(ConstructionKey{}, std::move(impl));
 }
 
-CodemodeSandbox::CodemodeSandbox(ConstructionKey, std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+CodemodeSandbox::CodemodeSandbox(ConstructionKey, std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+void CodemodeSandbox::close() {
+    std::vector<std::shared_ptr<ActiveSandboxRun>> active_runs;
+    {
+        std::lock_guard lock(impl_->lifecycle_mutex);
+        if (impl_->closed) return;
+        impl_->closed = true;
+        std::erase_if(impl_->active_runs, [&active_runs](const std::weak_ptr<ActiveSandboxRun>& weak) {
+            if (auto active = weak.lock()) {
+                active_runs.push_back(std::move(active));
+                return false;
+            }
+            return true;
+        });
+    }
+    for (const auto& active : active_runs) {
+        active->link->closed.store(true);
+        active->link->interrupt_worker();
+        active->call_stop->request_stop();
+        if (active->link->wake_host) active->link->wake_host();
+    }
+}
+
 CodemodeSandbox::~CodemodeSandbox() = default;
 CodemodeSandbox::CodemodeSandbox(CodemodeSandbox&&) noexcept = default;
 CodemodeSandbox& CodemodeSandbox::operator=(CodemodeSandbox&&) noexcept = default;
@@ -603,14 +619,10 @@ namespace {
 /// `drain` runs queued guest microtasks. It stops early once the script settled
 /// or the host interrupted it, so a runaway microtask loop cannot spin here.
 bool drain_jobs(const Guest& guest, const RunState& state) {
-    while (guest.call_i32(guest.find("qjs_is_job_pending"), {}) != 0) {
-        if (state.finished || state.timed_out || state.stop_token.stop_requested() ||
-                (state.link != nullptr && state.link->interrupt.load())) {
-            return false;
-        }
-        if (guest.call_i32(guest.find("qjs_execute_pending_job"), {}) < 0) return false;
-    }
-    return true;
+    return detail::drain_jobs(guest, [&state] {
+        return state.finished || state.timed_out || state.stop_token.stop_requested() ||
+               (state.link != nullptr && state.link->interrupt.load());
+    });
 }
 
 } // namespace
@@ -626,31 +638,60 @@ namespace {
         std::stop_token stop_token,
         SandboxLink& link,
         WasmEdge_ASTModuleContext* ast,
-        WasmEdge_ConfigureContext* configure) {
+        const std::string& globals_list_json,
+        const std::string& store_snapshot_json,
+        std::optional<std::string> abort_message) {
     RunState state;
     state.limits = limits;
     state.stop_token = stop_token;
     state.link = &link;
+    state.abort_message = std::move(abort_message);
     state.tools = std::move(tools);
     state.started = std::chrono::steady_clock::now();
     // The interrupt handler is armed only once the script starts (below), so the
     // timeout bounds the script, not the guest's one-time prelude evaluation.
 
     auto finish = [&state]() -> CodemodeRunResult {
+        // Calls that never settled — the script returned or was cancelled with
+        // the call unawaited — are pi `cancelled` records with a duration.
+        const auto settled_at = std::chrono::steady_clock::now();
+        for (std::size_t i = 0; i < state.calls.size(); ++i) {
+            if (state.calls[i].duration_ms.has_value()) continue;
+            state.calls[i].status = CodemodeCallRecord::Status::Cancelled;
+            state.calls[i].duration_ms =
+                    std::chrono::duration<double, std::milli>(settled_at - state.call_issued[i]).count();
+        }
         CodemodeRunResult result;
         result.output = std::move(state.output);
+        result.calls = std::move(state.calls);
         result.value_json = std::move(state.value_json);
         result.error = std::move(state.error);
+        result.store_writes = std::move(state.store_writes);
         return result;
     };
 
     if (stop_token.stop_requested()) {
-        state.error = CodemodeError{CodemodeError::Kind::Aborted, "The script was cancelled before it ran."};
+        // pi settles a pre-aborted execution with the abort reason's message
+        // and never starts a VM for it (frozen inline-interrupt evidence).
+        state.error = CodemodeError{
+                CodemodeError::Kind::Aborted, state.abort_message.value_or(std::string{"Execution aborted"})};
         return finish();
     }
 
+    // Each run gets its own configure: the executor references it for its
+    // whole lifetime and WasmEdge's C API can only overwrite, never unset, a
+    // page limit (a fresh configure defaults to 65536 pages — the 4 GiB
+    // wasm32 ceiling, i.e. uncapped). pi `memoryLimitBytes` caps the guest's
+    // linear memory in 64 KiB pages so an exhausting allocation fails inside
+    // the guest as a catchable `InternalError: out of memory` script error.
+    WasmEdge_ConfigureContext* run_configure = WasmEdge_ConfigureCreate();
+    if (limits.memory_limit_bytes.has_value()) {
+        WasmEdge_ConfigureSetMaxMemoryPage(
+                run_configure, static_cast<std::uint32_t>((*limits.memory_limit_bytes + 65535) / 65536));
+    }
+
     WasmEdge_StoreContext* store = WasmEdge_StoreCreate();
-    WasmEdge_ExecutorContext* executor = WasmEdge_ExecutorCreate(configure, nullptr);
+    WasmEdge_ExecutorContext* executor = WasmEdge_ExecutorCreate(run_configure, nullptr);
 
     auto fail_sandbox = [&](std::string message) {
         state.error = CodemodeError{CodemodeError::Kind::Sandbox, std::move(message)};
@@ -730,6 +771,7 @@ namespace {
         WasmEdge_ModuleInstanceDelete(wasi);
         WasmEdge_ExecutorDelete(executor);
         WasmEdge_StoreDelete(store);
+        WasmEdge_ConfigureDelete(run_configure);
         return finish();
     }
 
@@ -745,6 +787,7 @@ namespace {
         WasmEdge_ModuleInstanceDelete(module);
         WasmEdge_ExecutorDelete(executor);
         WasmEdge_StoreDelete(store);
+        WasmEdge_ConfigureDelete(run_configure);
     };
 
     if (state.guest.memory == nullptr) {
@@ -782,12 +825,10 @@ namespace {
                         gen_i32(static_cast<std::int32_t>(kBridgeName.size())),
                         gen_i32(0)});
         const Handle undefined = g.undefined();
-        const std::string no_globals = "[]";
-        const std::string no_store = "{}";
         const std::string tool_list = tools_json(state.tools);
         const Handle api = g.call(prelude,
                 undefined,
-                {bridge, g.new_string(tool_list), g.new_string(no_globals), g.new_string(no_store)});
+                {bridge, g.new_string(tool_list), g.new_string(globals_list_json), g.new_string(store_snapshot_json)});
         const Handle run_fn = g.get_prop(api, "run");
         const Handle settle_fn = g.get_prop(api, "settle");
         const Handle stalled_fn = g.get_prop(api, "stalled");
@@ -803,17 +844,23 @@ namespace {
                         gen_i32(static_cast<std::int32_t>(script_name_ptr)),
                         gen_i32(0)});
         if (g.is_exception(script_fn)) {
-            state.error = CodemodeError{CodemodeError::Kind::Script, g.exception_text()};
+            state.error = g.exception_error();
             cleanup();
             return finish();
         }
 
-        // Arm the deadline and the interrupt before the script body runs, so the
-        // timeout bounds the script (including a synchronous runaway loop) and
-        // not the fixed prelude evaluation above.
+        // Arm the deadline and interrupt before the script body runs, so the
+        // timeout bounds the script (including a synchronous runaway loop), not
+        // guest startup or fixed prelude evaluation. Publish it for the host
+        // request loop and the run's cancellation monitor.
         state.started = std::chrono::steady_clock::now();
+        if (limits.timeout.count() > 0) {
+            const auto deadline = state.started + limits.timeout;
+            link.deadline_nanos.store(
+                    std::chrono::duration_cast<std::chrono::nanoseconds>(deadline.time_since_epoch()).count());
+        }
         g.call_void(g.find("qjs_set_interrupt_handler"), {gen_i32(1)});
-        g.call(run_fn, api, {script_fn});
+        (void)g.call(run_fn, api, {script_fn});
         drain_jobs(g, state);
 
         // Settle every tool call the script is awaiting, then drain again. A
@@ -822,7 +869,7 @@ namespace {
         while (!state.finished) {
             if (state.interrupted()) break;
             if (state.pending.empty()) {
-                g.call(stalled_fn, api, {});
+                (void)g.call(stalled_fn, api, {});
                 drain_jobs(g, state);
                 if (state.interrupted()) break;
                 if (!state.finished) {
@@ -833,7 +880,8 @@ namespace {
             }
             std::vector<PendingToolCall> calls = std::move(state.pending);
             state.pending.clear();
-            for (const auto& call : calls) {
+            for (std::size_t index = 0; index < calls.size(); ++index) {
+                const auto& call = calls[index];
                 const auto id_handle =
                         g.call_i32(g.find("qjs_new_number"), {WasmEdge_ValueGenF64(static_cast<double>(call.id))});
                 const std::optional<SandboxLink::Response> response =
@@ -841,25 +889,52 @@ namespace {
                 if (!response) {
                     // The run was interrupted while the call was parked; the
                     // workers's `interrupted()` (or the timeout) ends the run.
+                    // Requeue the undispatched remainder so the host aborts
+                    // their handlers too.
+                    state.pending.insert(
+                            state.pending.end(), calls.begin() + static_cast<std::ptrdiff_t>(index + 1), calls.end());
                     break;
                 }
+                auto& record = state.calls[call.record];
+                record.status = response->ok ? CodemodeCallRecord::Status::Ok : CodemodeCallRecord::Status::Error;
+                record.duration_ms = std::chrono::duration<double, std::milli>(
+                        std::chrono::steady_clock::now() - state.call_issued[call.record])
+                                             .count();
                 const Handle payload_handle = g.new_string(response->payload);
-                g.call(settle_fn, api, {id_handle, response->ok ? g.true_value() : g.false_value(), payload_handle});
+                (void)g.call(
+                        settle_fn, api, {id_handle, response->ok ? g.true_value() : g.false_value(), payload_handle});
                 drain_jobs(g, state);
             }
         }
     }
 
+    // Calls still pending when the script settled are unawaited: forward them
+    // to the host so each handler is invoked and aborted (the frozen rule the
+    // tool observes), and so its record reports `cancelled` with a duration.
+    for (const auto& call : state.pending) {
+        state.link->enqueue(call.id, call.name, call.arguments_json);
+    }
+    state.pending.clear();
+
     if (!state.finished) {
-        if (!state.timed_out && state.limits.timeout.count() > 0 &&
-                std::chrono::steady_clock::now() - state.started > state.limits.timeout) {
+        if (!state.timed_out && state.link != nullptr && state.link->deadline_nanos.load() > 0 &&
+                std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                                .count() > state.link->deadline_nanos.load()) {
             state.timed_out = true;
         }
-        if (state.timed_out) {
+        if (state.budget_exhausted) {
+            // The exhausted budget decides the outcome, like pi's inline
+            // launcher: the run fails as a timeout with the budget message.
+            state.error = CodemodeError{CodemodeError::Kind::Timeout,
+                    std::format("Execution exceeded its interrupt budget of {}",
+                            state.limits.interrupt_budget.value_or(0))};
+        } else if (state.timed_out) {
             state.error = CodemodeError{CodemodeError::Kind::Timeout,
                     std::format("Execution timed out after {} ms", state.limits.timeout.count())};
         } else if (state.stop_token.stop_requested()) {
-            state.error = CodemodeError{CodemodeError::Kind::Aborted, "The script was cancelled."};
+            state.error =
+                    CodemodeError{CodemodeError::Kind::Aborted, state.abort_message.value_or("Execution aborted")};
         } else if (!state.error.has_value()) {
             fail_sandbox("The codemode sandbox guest stopped without reporting a result.");
         }
@@ -875,13 +950,18 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         std::vector<CodemodeToolDescriptor> tools,
         CodemodeLimits limits,
         std::stop_token stop_token,
-        CodemodeToolCallHandler handler) {
-    return support::detail::make_async_result([this,
+        CodemodeToolCallHandler handler,
+        std::map<std::string, support::JsonValue> store,
+        std::optional<std::string> abort_message) {
+    return support::detail::make_async_result([impl = impl_,
                                                       script = std::move(script),
                                                       tools = std::move(tools),
                                                       limits,
                                                       stop_token,
-                                                      handler = std::move(handler)]() mutable
+                                                      handler = std::move(handler),
+                                                      globals_list_json = globals_json(impl_->globals),
+                                                      store_snapshot_json = store_json(store),
+                                                      abort_message = std::move(abort_message)]() mutable
                                                       -> boost::asio::awaitable<support::Expected<CodemodeRunResult>> {
         auto executor = co_await boost::asio::this_coro::executor;
         auto link = std::make_shared<SandboxLink>();
@@ -893,30 +973,39 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
         // call in flight aborts instead of pinning the host forever.
         auto call_stop = std::make_shared<std::stop_source>();
         if (stop_token.stop_requested()) call_stop->request_stop();
-        const auto deadline =
-                limits.timeout.count() > 0
-                        ? std::optional<std::chrono::steady_clock::time_point>{std::chrono::steady_clock::now() +
-                                                                               limits.timeout}
-                        : std::nullopt;
+        auto active_run = std::make_shared<ActiveSandboxRun>(ActiveSandboxRun{link, call_stop});
+        {
+            std::lock_guard lock(impl->lifecycle_mutex);
+            if (impl->closed) {
+                CodemodeRunResult closed_result;
+                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                co_return closed_result;
+            }
+            std::erase_if(
+                    impl->active_runs, [](const std::weak_ptr<ActiveSandboxRun>& weak) { return weak.expired(); });
+            impl->active_runs.push_back(active_run);
+        }
         auto monitor_timer = std::make_shared<boost::asio::steady_timer>(executor);
         boost::asio::co_spawn(
                 executor,
-                [stop_token, deadline, call_stop, monitor_timer, link]() -> boost::asio::awaitable<void> {
+                [stop_token, call_stop, monitor_timer, link]() -> boost::asio::awaitable<void> {
                     while (true) {
                         monitor_timer->expires_after(std::chrono::milliseconds{25});
                         const auto [error] =
                                 co_await monitor_timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
                         if (error) co_return; // cancelled: the run finished
-                        const bool expired = deadline.has_value() && std::chrono::steady_clock::now() >= *deadline;
+                        const auto deadline_nanos = link->deadline_nanos.load();
+                        const bool expired =
+                                deadline_nanos > 0 && std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                              std::chrono::steady_clock::now().time_since_epoch())
+                                                                      .count() >= deadline_nanos;
                         if (stop_token.stop_requested() || expired) {
-                            if (stop_token.stop_requested()) {
-                                // Cancellation must stop a wasm-spinning worker.
-                                link->interrupt.store(true);
-                            }
-                            // Abort an in-flight nested call at the deadline or on
-                            // cancellation; the engine's own clock reports the
-                            // timeout once the worker resumes.
+                            // Cancellation and the deadline stop a wasm-spinning
+                            // worker and abort an in-flight nested call. Wake the
+                            // host loop so it can settle without joining the worker.
+                            link->interrupt_worker();
                             call_stop->request_stop();
+                            if (link->wake_host) link->wake_host();
                             co_return;
                         }
                         if (link->done()) co_return;
@@ -924,52 +1013,291 @@ support::AsyncResult<CodemodeRunResult> CodemodeSandbox::run(std::string script,
                 },
                 boost::asio::detached);
 
-        auto worker = std::thread([this,
-                                          link,
-                                          script = std::move(script),
-                                          tools = std::move(tools),
-                                          limits,
-                                          stop_token]() mutable {
-            link->finish(run_engine(
-                    std::move(script), std::move(tools), limits, stop_token, *link, impl_->ast, impl_->configure));
-        });
+        support::Expected<CodemodeWorkerRelease> admission;
+        {
+            std::lock_guard host_lock(impl->worker_host_mutex);
+            admission = impl->worker_host.acquire_worker();
+        }
+        if (!admission) {
+            monitor_timer->cancel();
+            CodemodeRunResult denied;
+            denied.error = CodemodeError{CodemodeError::Kind::Sandbox, admission.error().message};
+            co_return denied;
+        }
+        auto release = std::make_shared<WorkerAdmissionRelease>();
+        release->release = std::move(*admission);
+        support::Expected<void> started;
+        {
+            std::lock_guard lifecycle_lock(impl->lifecycle_mutex);
+            if (impl->closed) {
+                release->invoke();
+                monitor_timer->cancel();
+                CodemodeRunResult closed_result;
+                closed_result.error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                co_return closed_result;
+            }
+            std::lock_guard host_lock(impl->worker_host_mutex);
+            started = impl->worker_host.start_worker(
+                    [impl,
+                            link,
+                            script = std::move(script),
+                            tools = std::move(tools),
+                            limits,
+                            stop_token,
+                            globals_list_json = std::move(globals_list_json),
+                            store_snapshot_json = std::move(store_snapshot_json),
+                            abort_message = std::move(abort_message)]() mutable {
+                        link->finish(run_engine(std::move(script),
+                                std::move(tools),
+                                limits,
+                                stop_token,
+                                *link,
+                                impl->ast,
+                                globals_list_json,
+                                store_snapshot_json,
+                                abort_message));
+                    },
+                    [release]() { release->invoke(); });
+        }
+        if (!started) {
+            release->invoke();
+            monitor_timer->cancel();
+            CodemodeRunResult failed_start;
+            failed_start.error = CodemodeError{CodemodeError::Kind::Sandbox, started.error().message};
+            co_return failed_start;
+        }
 
+        // One handler resolves every call of this run; the shared owner lets
+        // each in-flight call run as its own coroutine below.
+        auto handler_ptr = std::make_shared<CodemodeToolCallHandler>(std::move(handler));
         while (true) {
             auto requests = link->take_requests();
             for (auto& request : requests) {
-                std::string payload;
-                bool ok = false;
-                if (handler) {
-                    auto outcome = co_await support::detail::await_async_result(
-                            handler(request.name, request.arguments_json, call_stop->get_token()));
-                    if (outcome) {
-                        ok = true;
-                        payload = std::move(*outcome);
-                    } else {
-                        payload = outcome.error().message;
+                auto slot = std::make_shared<std::optional<SandboxLink::Response>>();
+                boost::asio::co_spawn(
+                        executor,
+                        [executor, handler_ptr, request, slot, call_stop, timer]() -> boost::asio::awaitable<void> {
+                            std::string payload;
+                            bool ok = false;
+                            if (*handler_ptr) {
+                                auto outcome = co_await support::detail::await_async_result(
+                                        (*handler_ptr)(request.name, request.arguments_json, call_stop->get_token()));
+                                if (outcome) {
+                                    ok = true;
+                                    payload = std::move(*outcome);
+                                } else {
+                                    payload = outcome.error().message;
+                                }
+                            } else {
+                                payload =
+                                        std::format("tool '{}' is not available to the codemode sandbox", request.name);
+                            }
+                            slot->emplace(SandboxLink::Response{ok, std::move(payload)});
+                            // Wake the waiting loop without a full timer tick.
+                            boost::asio::post(executor, [timer]() { timer->cancel(); });
+                        },
+                        boost::asio::detached);
+                // Wait for the resolver. If the script settled first, this call
+                // is unawaited: abort it and let the parked worker finish, then
+                // keep waiting so the tool observes the cancellation before the
+                // run completes (the frozen rule the host contract promises).
+                bool answer_moot = false;
+                while (!slot->has_value()) {
+                    if (link->closed.load() || stop_token.stop_requested()) {
+                        call_stop->request_stop();
+                        link->interrupt_worker();
+                        answer_moot = true;
                     }
-                } else {
-                    payload = std::format("tool '{}' is not available to the codemode sandbox", request.name);
+                    const auto deadline_nanos = link->deadline_nanos.load();
+                    if (deadline_nanos > 0 && std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                                      std::chrono::steady_clock::now().time_since_epoch())
+                                                              .count() >= deadline_nanos) {
+                        call_stop->request_stop();
+                        link->interrupt_worker();
+                        answer_moot = true;
+                    }
+                    if (link->script_settled.load()) {
+                        call_stop->request_stop();
+                        link->interrupt_worker();
+                        answer_moot = true;
+                    }
+                    timer->expires_after(std::chrono::milliseconds{5});
+                    const auto [wait_error] =
+                            co_await timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+                    (void)wait_error;
+                    if (stop_token.stop_requested()) {
+                        link->interrupt_worker();
+                        call_stop->request_stop();
+                    }
                 }
-                link->deliver(request.id, ok, std::move(payload));
+                // The answer is moot when the script has already settled, or
+                // when the host cancelled the run (stop or deadline): pi decides
+                // the result first and later VM messages never reach the guest.
+                const auto now_nanos = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                        std::chrono::steady_clock::now().time_since_epoch())
+                                               .count();
+                const auto run_deadline = link->deadline_nanos.load();
+                const bool cancelled_by_host = link->script_settled.load() || stop_token.stop_requested() ||
+                                               (run_deadline > 0 && now_nanos > run_deadline);
+                if (!answer_moot && !cancelled_by_host) {
+                    link->deliver(request.id, (*slot)->ok, std::move((*slot)->payload));
+                }
             }
-            if (link->done()) break;
+            if (link->done() || link->closed.load() || stop_token.stop_requested()) break;
+            const auto run_deadline = link->deadline_nanos.load();
+            if (run_deadline > 0 && std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                            std::chrono::steady_clock::now().time_since_epoch())
+                                                    .count() >= run_deadline) {
+                link->interrupt_worker();
+                call_stop->request_stop();
+                break;
+            }
             timer->expires_after(std::chrono::milliseconds{50});
             const auto [error] = co_await timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
             (void)error;
             if (stop_token.stop_requested()) {
-                link->interrupt.store(true);
+                link->interrupt_worker();
                 call_stop->request_stop();
             }
         }
 
+        while (!link->done()) {
+            timer->expires_after(std::chrono::milliseconds{5});
+            const auto [error] = co_await timer->async_wait(boost::asio::as_tuple(boost::asio::use_awaitable));
+            (void)error;
+        }
         monitor_timer->cancel();
-        if (worker.joinable()) worker.join();
         auto result = link->take_result();
-        if (result) co_return std::move(*result);
+        if (result) {
+            if (link->closed.load()) {
+                result->error = CodemodeError{CodemodeError::Kind::Aborted, "Sandbox closed"};
+                result->value_json.reset();
+            }
+            co_return std::move(*result);
+        }
         co_return std::unexpected(support::make_error(
                 support::ErrorCode::Validation, "the codemode sandbox worker did not report a result"));
     });
+}
+
+} // namespace cch::codemode
+
+namespace cch::codemode {
+
+/// pi `CodemodeRun`: the caller's handle on one deterministic execution.
+/// `State` owns the VM driver and the single-consumption completion; `deliver`
+/// and `finished` forward to it, and `result` hands out the terminal outcome.
+struct CodemodeSandbox::Run::State {
+    /// Keeps the AST module alive even if the owning sandbox is destroyed.
+    std::shared_ptr<CodemodeSandbox::Impl> owner;
+    /// The run's driver, started when `start` returns.
+    std::unique_ptr<detail::DeterministicRun> driver;
+    /// Guards `taken`: `result()` is a single-consumption operation (§6.2).
+    std::mutex mutex;
+    bool taken{false};
+};
+
+CodemodeSandbox::Run::Run(std::shared_ptr<State> state) : state_(std::move(state)) {}
+CodemodeSandbox::Run::Run(Run&&) noexcept = default;
+CodemodeSandbox::Run& CodemodeSandbox::Run::operator=(Run&&) noexcept = default;
+CodemodeSandbox::Run::~Run() = default;
+
+bool CodemodeSandbox::Run::finished() const { return state_ != nullptr && state_->driver->finished(); }
+
+std::optional<CodemodeDeliveryRejection> CodemodeSandbox::Run::deliver(
+        std::int64_t seq, double now, std::int64_t id, CodemodeOutcome outcome) {
+    if (state_ == nullptr) {
+        return CodemodeDeliveryRejection{
+                CodemodeDeliveryRejection::Reason::UnknownCall, std::format("Call {} is not waiting for a result", id)};
+    }
+    return state_->driver->deliver(seq, now, id, std::move(outcome));
+}
+
+support::AsyncResult<CodemodeRunResult> CodemodeSandbox::Run::result() {
+    // A moved-from handle has no run to report; pi's `CodemodeRun.result` is a
+    // promise that is always present, so a second consumption is a caller bug
+    // the single-consumption contract reports rather than a silent hang.
+    if (state_ == nullptr) {
+        return support::AsyncResult<CodemodeRunResult>{support::Expected<CodemodeRunResult>{std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "the codemode run handle was moved from"))}};
+    }
+    {
+        std::lock_guard lock(state_->mutex);
+        if (state_->taken) {
+            return support::AsyncResult<CodemodeRunResult>{
+                    support::Expected<CodemodeRunResult>{std::unexpected(support::make_error(
+                            support::ErrorCode::Validation, "the codemode run result was already consumed"))}};
+        }
+        state_->taken = true;
+    }
+    // The producer contract is `noexcept` (AsyncResult.hpp): a throwing or
+    // duplicate completion is an invariant violation, and the driver delivers
+    // exactly once.
+    support::AsyncResult<CodemodeRunResult>::producer_type producer =
+            [state = state_](support::AsyncCompletion<CodemodeRunResult, support::Error> complete) noexcept {
+                state->driver->consume(std::move(complete));
+            };
+    return support::AsyncResult<CodemodeRunResult>{std::move(producer)};
+}
+
+support::Expected<CodemodeSandbox::Run> CodemodeSandbox::start(std::string script, CodemodeRunOptions options) {
+    // pi `start`'s validation, in its order, before any VM exists: a rejected
+    // option set never creates a worker.
+    if (options.started_at < 0) {
+        return std::unexpected(
+                sandbox_error("startedAt must be a non-negative number of milliseconds since the epoch"));
+    }
+    if (options.seed > 0xffffffffull) {
+        return std::unexpected(sandbox_error("seed must be a 32-bit unsigned integer"));
+    }
+    if (options.expected_seed.has_value() && *options.expected_seed != options.seed) {
+        return std::unexpected(sandbox_error(std::format(
+                "Deterministic replay seed mismatch: expected {}, got {}", *options.expected_seed, options.seed)));
+    }
+    {
+        std::set<std::string> names;
+        for (const auto& tool : options.tools) {
+            if (!names.insert(tool.name).second) return std::unexpected(sandbox_error("Tool names must be unique"));
+        }
+        std::set<std::string> script_names;
+        for (const auto& tool : options.tools) {
+            const std::string js_name = tool.js_name.empty() ? to_codemode_identifier(tool.name) : tool.js_name;
+            if (!script_names.insert(js_name).second) {
+                return std::unexpected(sandbox_error("Tool script names must be unique"));
+            }
+        }
+    }
+    if (auto valid = validate_globals(options.globals); !valid) {
+        return std::unexpected(std::move(valid.error()));
+    }
+
+    detail::DeterministicStart start;
+    start.script = std::move(script);
+    start.tools = std::move(options.tools);
+    for (auto& tool : start.tools) {
+        if (tool.js_name.empty()) tool.js_name = to_codemode_identifier(tool.name);
+    }
+    start.globals = std::move(options.globals);
+    start.store_json = store_json(options.store);
+    start.started_at_ms = options.started_at;
+    start.seed = static_cast<std::uint32_t>(options.seed);
+    start.memory_limit_bytes = options.memory_limit_bytes;
+    start.expected_fingerprint = options.expected_fingerprint;
+    start.timeout = options.timeout;
+    start.stop_token = options.stop_token;
+    start.abort_message = std::move(options.abort_message);
+
+    detail::DeterministicHost host;
+    // pi `forwardCall`/`onStarted`/`onIdle`: the callbacks run on the run's own
+    // worker thread, so a callback must not block. `deliver` only enqueues.
+    host.on_started = std::move(options.callbacks.on_started);
+    host.on_call = std::move(options.callbacks.on_call);
+    host.on_idle = std::move(options.callbacks.on_idle);
+
+    auto state = std::make_shared<Run::State>();
+    state->owner = impl_;
+    state->driver = std::make_unique<detail::DeterministicRun>(impl_->ast, std::move(start), std::move(host));
+    return Run{std::move(state)};
 }
 
 } // namespace cch::codemode

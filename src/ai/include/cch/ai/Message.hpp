@@ -96,6 +96,13 @@ struct ToolResultMessage {
     std::optional<cch::support::JsonValue> nested_calls{};
     bool is_error{false};
     TimestampMs timestamp{};
+    /// pi `ToolResultMessage.durationMs`: milliseconds the tool's execution
+    /// took, measured with a monotonic clock by the agent loop. Absent for
+    /// results that never executed (legacy entries, preparation rejections)
+    /// and for tool-execution errors raised before execution began. The value
+    /// is part of the persisted transcript, so a resumed session renders the
+    /// recorded duration instead of re-measuring (#812).
+    std::optional<std::int64_t> duration_ms{std::nullopt};
 };
 
 // ── pi extended runtime message types ──

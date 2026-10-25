@@ -93,7 +93,7 @@ constexpr std::size_t kContentWidth = kScreenWidth - 2;
 }
 
 /// A render context the test drives directly, for the states a live component
-/// cannot reach: a chosen argument object, a chosen execution clock, and a
+/// cannot reach: a chosen argument object, a chosen recorded duration, and a
 /// chosen frame width.
 ///
 /// The context's `args` and `expand_hint` are references, so this owns both
@@ -105,9 +105,8 @@ struct Direct {
           expand_hint(theme.foreground(coding_agent::tui::ThemeToken::Dim, "ctrl+o") +
                       theme.foreground(coding_agent::tui::ThemeToken::Muted, " to expand")) {}
 
-    [[nodiscard]] coding_agent::tui::ToolRenderContext context(std::optional<std::int64_t> started_at_ms = std::nullopt,
-            std::optional<std::int64_t> ended_at_ms = std::nullopt,
-            std::size_t width = kContentWidth) const {
+    [[nodiscard]] coding_agent::tui::ToolRenderContext context(
+            std::optional<std::int64_t> duration_ms = std::nullopt, std::size_t width = kContentWidth) const {
         return coding_agent::tui::ToolRenderContext{
                 .args = args,
                 .tool_name = "bash",
@@ -118,12 +117,11 @@ struct Direct {
                 .expand_key = "ctrl+o",
                 .expand_hint = expand_hint,
                 .args_complete = true,
-                .execution_started = started_at_ms.has_value(),
+                .execution_started = true,
                 .is_partial = false,
                 .is_error = false,
                 .expanded = false,
-                .started_at_ms = started_at_ms,
-                .ended_at_ms = ended_at_ms,
+                .duration_ms = duration_ms,
         };
     }
 
@@ -266,7 +264,7 @@ TEST_CASE("the earlier-lines hint counts visual lines and names the resolved exp
                 .details = std::nullopt,
         };
         Direct direct{theme};
-        const auto rendered = rendered_result(result, direct.context(std::nullopt, std::nullopt, 30));
+        const auto rendered = rendered_result(result, direct.context(std::nullopt, 30));
         CHECK(rendered == "\n... (195 earlier lines, ctr...\nline 196\nline 197\nline 198\nline 199\nline 200");
     }
 }
@@ -346,18 +344,19 @@ TEST_CASE("an expanded bash result draws the whole output and no fold hint",
         CHECK(row.find("earlier lines") == std::string::npos);
 }
 
-TEST_CASE("a settled bash result renders pi's Took line from the execution clock",
-        "[coding_agent][tui][tool-renderers][issue826][spec]") {
+TEST_CASE("a settled bash result renders pi's Took line from the recorded duration",
+        "[coding_agent][tui][tool-renderers][issue826][issue812][spec]") {
     auto theme = tests::tool_render_theme();
 
-    SECTION("a live execution renders a duration after the output") {
+    SECTION("a settled result renders the recorded duration after the output") {
         auto keybindings = tests::tool_render_keybindings();
-        auto component = settled(theme, keybindings, R"({"command":"sleep 1"})", bash_result("done"));
+        auto result = bash_result("done");
+        result.duration_ms = 1'234;
+        auto component = settled(theme, keybindings, R"({"command":"sleep 1"})", std::move(result));
         const auto screen = tests::render_tool_screen(*component, kScreenWidth);
         REQUIRE(screen.visible.size() == 6);
         CHECK(screen.visible.at(3) == "done");
-        CHECK(screen.visible.at(4).starts_with("Took "));
-        CHECK(screen.visible.at(4).size() > std::string_view{"Took "}.size());
+        CHECK(screen.visible.at(4) == "Took 1.2s");
     }
 
     SECTION("each of pi's duration shapes is exact, including the rollovers") {
@@ -365,20 +364,30 @@ TEST_CASE("a settled bash result renders pi's Took line from the execution clock
         Direct direct{theme};
         // A cheap check is "the row starts with Took", which a hundred wrong
         // formats pass; each line is asserted whole.
-        CHECK(rendered_result(result, direct.context(1'000'000, 1'000'400)) == "\ndone\nTook 0.4s");
-        CHECK(rendered_result(result, direct.context(1'000'000, 1'012'345)) == "\ndone\nTook 12.3s");
-        CHECK(rendered_result(result, direct.context(1'000'000, 1'125'000)) == "\ndone\nTook 2m 5s");
-        CHECK(rendered_result(result, direct.context(1'000'000, 4'723'000)) == "\ndone\nTook 1h 2m 3s");
+        CHECK(rendered_result(result, direct.context(400)) == "\ndone\nTook 0.4s");
+        CHECK(rendered_result(result, direct.context(12'345)) == "\ndone\nTook 12.3s");
+        CHECK(rendered_result(result, direct.context(125'000)) == "\ndone\nTook 2m 5s");
+        CHECK(rendered_result(result, direct.context(3'723'000)) == "\ndone\nTook 1h 2m 3s");
     }
 
-    SECTION("no start stamp means no duration line, because a snapshot-rebuilt tool never saw the start") {
-        // Fabricating a start would print a plausible but invented number, so
-        // the block carries no duration row at all.
+    SECTION("a partial result never renders a duration line, even with a recorded value on it") {
+        // pi `getRenderContext`: `durationMs: this.isPartial ? undefined :
+        // this.result?.durationMs` — the barrier is the settle transition,
+        // not the value's presence (#812).
+        const coding_agent::tui::ToolRenderedResult result{.output = "done", .details = std::nullopt};
+        Direct direct{theme};
+        auto partial = direct.context(12'345);
+        partial.is_partial = true;
+        CHECK(rendered_result(result, partial) == "\ndone");
+    }
+
+    SECTION("no recorded duration means no duration line, because a legacy result never had one") {
+        // Fabricating a number would print a plausible but invented row, so
+        // the block carries no duration row at all (pi: absent for legacy
+        // results).
         const coding_agent::tui::ToolRenderedResult result{.output = "done", .details = std::nullopt};
         Direct direct{theme};
         CHECK(rendered_result(result, direct.context()) == "\ndone");
-        CHECK(rendered_result(result, direct.context(1'000'000)) == "\ndone");
-        CHECK(rendered_result(result, direct.context(std::nullopt, 2'000'000)) == "\ndone");
     }
 }
 
@@ -455,7 +464,9 @@ TEST_CASE("the truncation warning draws pi's bracketed forms with the path verba
                         bash_details(R"({"truncated":true,"truncatedBy":"bytes","outputLines":812,"maxBytes":51200})",
                                 "/tmp/cch-bash-ab12.log")));
         const auto screen = tests::render_tool_screen(*component, kScreenWidth);
-        REQUIRE(screen.visible.size() == 8);
+        // No duration row: the settled helper result carries no recording, so
+        // the block is one row shorter than the pre-#812 clock-stamped shape.
+        REQUIRE(screen.visible.size() == 7);
         CHECK(screen.visible.at(4) == "[Full output: /tmp/cch-bash-ab12.log. Truncated: 812 lines shown (50.0KB");
         CHECK(screen.visible.at(5) == "limit)]");
     }
@@ -474,7 +485,9 @@ TEST_CASE("the truncation warning draws pi's bracketed forms with the path verba
         // bracketed row is asserted here instead. This spill path is longer
         // than the frame, so pi's `Text` wraps it after the label and the two
         // rows are asserted whole.
-        REQUIRE(screen.visible.size() == 8);
+        // No duration row: the settled helper result carries no recording, so
+        // the block is one row shorter than the pre-#812 clock-stamped shape.
+        REQUIRE(screen.visible.size() == 7);
         CHECK(screen.visible.at(4) == "[Full output:");
         CHECK(screen.visible.at(5) == spill + "]");
         CHECK(screen.raw.at(4).find("\x1b]8;;") == std::string::npos);
@@ -568,7 +581,7 @@ TEST_CASE("a settled result's own spill-path summary is stripped once the warnin
 
     SECTION("a partial result keeps its footer, because the settle condition has not happened") {
         Direct direct{theme};
-        auto context = direct.context(1'000'000);
+        auto context = direct.context(std::nullopt);
         context.is_partial = true;
         const coding_agent::tui::ToolRenderedResult result{.output = baked, .details = result_details};
         const auto rendered = rendered_result(result, context);

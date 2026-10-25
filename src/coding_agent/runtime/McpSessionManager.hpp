@@ -224,6 +224,12 @@ public:
             mcp::McpExposure exposure, std::vector<std::shared_ptr<mcp::McpResourceServer>> servers) = 0;
     /// Replace the active (declared) tool set (pi `pi.setActiveTools`).
     virtual void set_active_tools(std::vector<std::string> names) = 0;
+    /// Persist and expose matching deferred tools. The operation fails without
+    /// changing the active set if the owning session cannot commit its loadout.
+    [[nodiscard]] virtual support::ExpectedVoid activate_tools(std::vector<std::string> names) = 0;
+    /// Restore names from the owning session's persisted loadout after the live
+    /// MCP definitions register.
+    virtual void restore_loaded_tools(std::vector<std::string> names) = 0;
     [[nodiscard]] virtual std::vector<std::string> active_tools() const = 0;
     /// Every tool currently on the surface with its exposure (pi
     /// `pi.getAllTools`).
@@ -313,7 +319,8 @@ public:
     /// arrives here; it must be attached before `start()`.
     void attach_tool_surface(std::shared_ptr<McpToolSurface> surface);
     [[nodiscard]] std::vector<extensions::ToolSearchCandidate> search_tools(std::string_view query, std::size_t limit);
-    void activate_tools(std::vector<std::string> names);
+    [[nodiscard]] support::ExpectedVoid activate_tools(std::vector<std::string> names);
+    void restore_loaded_tools(std::vector<std::string> names);
 
     /// pi `ctx.ui.notify(..., "warning")`: install (or replace) the host's
     /// warning sink. The interactive host installs its notification channel

@@ -165,7 +165,7 @@ TEST_CASE("transcript export writes the session header and every branch entry as
     // non-empty check green.
     REQUIRE(std::count(expected.begin(), expected.end(), '\n') == 3);
 
-    auto exported = harness::transcript_export_handler(store, destination.string())({});
+    auto exported = harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string())({});
     REQUIRE(exported.has_value());
     CHECK(*exported == destination.string());
 
@@ -192,7 +192,7 @@ TEST_CASE("transcript export overwrites the destination instead of appending on 
     REQUIRE(store.append(user_message("first")).has_value());
     REQUIRE(store.append(user_message("second")).has_value());
 
-    auto handler = harness::transcript_export_handler(store, destination.string());
+    auto handler = harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string());
     REQUIRE(handler({}).has_value());
     const auto first_run = read_file(destination);
     REQUIRE(handler({}).has_value());
@@ -202,6 +202,32 @@ TEST_CASE("transcript export overwrites the destination instead of appending on 
     // than carrying the transcript twice.
     CHECK(read_file(destination) == first_run);
     CHECK(read_file(destination) == expected_transcript(store));
+}
+
+TEST_CASE("transcript export owns its session snapshot after the store is gone",
+        "[agent][harness][export][issue1067][spec]") {
+    tests::TempWorkspace workspace;
+    const auto destination = workspace.path() / "exported.jsonl";
+    std::string expected;
+    auto handler = [&] {
+        const auto session_path = workspace.path() / "session.jsonl";
+        auto created = harness::session::SessionStore::create_new(session_path, metadata_for(workspace));
+        REQUIRE(created.has_value());
+        auto store = std::move(*created);
+        REQUIRE(store.append(user_message("first")).has_value());
+        REQUIRE(store.append(user_message("second")).has_value());
+        expected = expected_transcript(store);
+
+        // The factory receives passive values. Returning it destroys the
+        // SessionStore before the export runs.
+        return harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string());
+    }();
+
+    auto exported = handler({});
+
+    REQUIRE(exported.has_value());
+    CHECK(*exported == destination.string());
+    CHECK(read_file(destination) == expected);
 }
 
 TEST_CASE("transcript export refuses a stop-requested run without writing the destination",
@@ -217,7 +243,8 @@ TEST_CASE("transcript export refuses a stop-requested run without writing the de
 
     std::stop_source source;
     source.request_stop();
-    auto exported = harness::transcript_export_handler(store, destination.string())(source.get_token());
+    auto exported = harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string())(
+            source.get_token());
 
     REQUIRE_FALSE(exported.has_value());
     CHECK(exported.error().code == support::ErrorCode::Validation);
@@ -238,7 +265,8 @@ TEST_CASE("transcript export begins with the session header line", "[agent][harn
     REQUIRE(store.append(user_message("first")).has_value());
     REQUIRE(store.append(user_message("second")).has_value());
 
-    REQUIRE(harness::transcript_export_handler(store, destination.string())({}).has_value());
+    REQUIRE(harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string())({})
+                    .has_value());
 
     // pi `serializeSessionBranch` pushes the SessionHeader before any entry, so
     // the first line is the header and not the first transcript entry. A file
@@ -270,7 +298,8 @@ TEST_CASE("transcript export round-trips through Session Store load", "[agent][h
     REQUIRE(store.append(user_message("second")).has_value());
     const auto first_id = store.entries().front().entry_id;
 
-    REQUIRE(harness::transcript_export_handler(store, destination.string())({}).has_value());
+    REQUIRE(harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string())({})
+                    .has_value());
 
     // The exported file is a session file, not just a transcript dump: it must
     // reload through the same reader the resume flow uses.
@@ -326,7 +355,8 @@ TEST_CASE("transcript export writes only the current branch of a branched sessio
     const auto active_id = store.leaf_id();
     REQUIRE(store.entries().size() == 3);
 
-    REQUIRE(harness::transcript_export_handler(store, destination.string())({}).has_value());
+    REQUIRE(harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string())({})
+                    .has_value());
 
     const auto written = read_file(destination);
     // pi exports `getBranch()`, not `getEntries()`: the abandoned sibling is
@@ -366,7 +396,8 @@ TEST_CASE("transcript export rewrites the branch parent chain to start at null",
         CHECK(stored[i].parent_id.entry_id == stored[i - 1].entry_id);
     }
 
-    REQUIRE(harness::transcript_export_handler(store, destination.string())({}).has_value());
+    REQUIRE(harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string())({})
+                    .has_value());
 
     const auto lines = split_lines(read_file(destination));
     REQUIRE(lines.size() == 4);
@@ -427,7 +458,8 @@ TEST_CASE("transcript export over an opened branched session writes the active b
     REQUIRE(branch[2].entry_id == "c946c057");
     REQUIRE(store.entries().size() == 5);
 
-    REQUIRE(harness::transcript_export_handler(store, destination.string())({}).has_value());
+    REQUIRE(harness::transcript_export_handler(store.metadata(), store.get_branch(), destination.string())({})
+                    .has_value());
 
     const auto written = read_file(destination);
     const auto lines = split_lines(written);

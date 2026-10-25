@@ -359,6 +359,12 @@ TEST_CASE("ScopedModelsSelector never emits a line wider than the render width",
     for (const std::size_t width : {8ul, 10ul, 16ul}) {
         const auto rendered = selector.render(width);
         REQUIRE(rendered);
+        std::string line_diagnostics;
+        for (const auto& line : rendered->lines) {
+            const auto visible = tui::visible_width(strip_ansi(line));
+            line_diagnostics += std::to_string(visible) + " |" + strip_ansi(line) + "|\n";
+        }
+        INFO("rendered lines (visible width | text):\n" << line_diagnostics);
         tests::check_all_lines_bounded(*rendered, width);
     }
 }

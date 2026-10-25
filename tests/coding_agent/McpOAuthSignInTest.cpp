@@ -28,6 +28,7 @@
 #include <cch/mcp/OAuthConfig.hpp>
 #include <cch/mcp/OAuthFlow.hpp>
 #include <cch/mcp/OAuthHttpClient.hpp>
+#include <cch/mcp/OAuthState.hpp>
 #include <cch/mcp/Pkce.hpp>
 #include <cch/support/Error.hpp>
 
@@ -239,7 +240,7 @@ struct SignInHarness {
         return future.get();
     }
 
-    [[nodiscard]] std::optional<app_mcp::McpOAuthState> state() {
+    [[nodiscard]] std::optional<cch::mcp::OAuthState> state() {
         auto stored = store->load("echo", kServerUrl);
         REQUIRE(stored.has_value());
         return std::move(*stored);
@@ -395,10 +396,10 @@ TEST_CASE("a pasted redirect URL for another redirect URI does not complete the 
 
 namespace {
 
-[[nodiscard]] app_mcp::McpOAuthState seeded_state(std::string access, std::string refresh, std::int64_t expires) {
-    app_mcp::McpOAuthState state;
+[[nodiscard]] cch::mcp::OAuthState seeded_state(std::string access, std::string refresh, std::int64_t expires) {
+    cch::mcp::OAuthState state;
     state.server_url = kServerUrl;
-    app_mcp::McpOAuthTokens tokens;
+    cch::mcp::OAuthTokens tokens;
     tokens.access_token = std::move(access);
     tokens.token_type = "Bearer";
     if (!refresh.empty()) {

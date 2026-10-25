@@ -39,23 +39,32 @@ struct ExtensionToolContext {
     agent::ToolUpdateSink update_sink{};
 };
 
-/// Move-only execute operation of one extension-provided Tool. `arguments` are
-/// the already-validated call arguments (the Agent's JSON Schema validation
-/// runs before the call reaches here); cancellation is resolved by the
-/// extension into its own terminal outcome (spec #865, ADR 0042).
-using ExtensionToolExecute = std::move_only_function<support::AsyncResult<ExtensionToolResult>(
+/// Execute operation of one extension-provided Tool. `arguments` are the
+/// already-validated call arguments (the Agent's JSON Schema validation runs
+/// before the call reaches here); cancellation is resolved by the extension
+/// into its own terminal outcome (spec #865, ADR 0042).
+///
+/// Unlike the Agent-side `move_only_function` policies, this operation is
+/// copyable: a registered extension Tool is invoked once per model call, not
+/// once per session (pi calls `tool_search` repeatedly in one run, frozen
+/// `packages/durable/test/tool-search.test.ts`), so the registry hands every
+/// call its own copy instead of consuming the stored operation (§6.2's
+/// documented independent-copying contract). Captures therefore hold shared or
+/// immutable state only.
+using ExtensionToolExecute = std::function<support::AsyncResult<ExtensionToolResult>(
         support::JsonValue arguments, std::stop_token stop_token)>;
 
 /// pi `ctx.executeTool`-aware execute form: the same contract as
-/// `ExtensionToolExecute`, plus the run's nested-call dispatcher for tools that
-/// run other tools (codemode scripts). A Tool sets this instead of `execute`
-/// when it needs the context; the registry prefers it.
-using ExtensionToolContextExecute = std::move_only_function<support::AsyncResult<ExtensionToolResult>(
+/// `ExtensionToolExecute` (copyable per call), plus the run's nested-call
+/// dispatcher for tools that run other tools (codemode scripts). A Tool sets
+/// this instead of `execute` when it needs the context; the registry prefers
+/// it.
+using ExtensionToolContextExecute = std::function<support::AsyncResult<ExtensionToolResult>(
         support::JsonValue arguments, ExtensionToolContext context, std::stop_token stop_token)>;
 
 /// One Tool contributed by an Extension Tool Source (spec #865): the passive
 /// model-facing descriptor, the prompt metadata, the concurrency policy, and
-/// the move-only execute operation. The loader's runner converts this value
+/// the execute operation. The loader's runner converts this value
 /// into a `cch::agent::Tool`, so an extension Tool obeys the same Agent
 /// execution semantics (hooks, scheduling, per-call failure isolation) as a
 /// built-in Tool.

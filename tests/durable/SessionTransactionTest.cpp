@@ -87,6 +87,270 @@ constexpr std::string_view kLatestDocumentKind = "audit1063.latest";
 
 } // namespace
 
+// Frozen contract: a kind token narrows entry reads and checks the payload
+// type at append, while the stored record keeps its JSON representation.
+TEST_CASE("typed entry definitions encode payloads and narrow transaction reads",
+        "[durable][session][entry][typed][issue1063][spec]") {
+    struct NotePayload {
+        std::string text;
+        bool operator==(const NotePayload&) const = default;
+    };
+
+    auto definition_result = define_entry<NotePayload>(
+            "audit1063.note",
+            [](const NotePayload& value) -> support::Expected<chord::Json> {
+                return chord::Json{chord::Json::Object{{"text", chord::Json{value.text}}}};
+            },
+            [](const chord::Json& value) -> support::Expected<NotePayload> {
+                const chord::Json::Object* object = value.as_object();
+                if (object == nullptr) {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "Note payload must be an object"));
+                }
+                const auto text = object->find("text");
+                if (text == object->end() || text->second.as_string() == nullptr) {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "Note payload requires text"));
+                }
+                return NotePayload{.text = *text->second.as_string()};
+            });
+    REQUIRE(definition_result.has_value());
+    EntryDefinition<NotePayload> definition = std::move(*definition_result);
+
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    const ConversationId conversation_id = create_conversation(*session);
+    std::optional<EntryId> created_id;
+    REQUIRE(run_commit(*session,
+            [&definition, &conversation_id, &created_id](Transaction& transaction) -> support::Expected<void> {
+                auto created = transaction.append_entry(definition, conversation_id, NotePayload{.text = "typed"});
+                if (!created) {
+                    return std::unexpected(std::move(created.error()));
+                }
+                CHECK(created->kind == "audit1063.note");
+                CHECK(created->data.text == "typed");
+                created_id = created->id;
+                return {};
+            }).has_value());
+    REQUIRE(created_id.has_value());
+
+    std::optional<TypedEntry<NotePayload>> read_entry;
+    REQUIRE(run_commit(
+            *session, [&definition, &created_id, &read_entry](Transaction& transaction) -> support::Expected<void> {
+                auto read = transaction.entry(definition, *created_id);
+                if (!read) {
+                    return std::unexpected(std::move(read.error()));
+                }
+                read_entry = std::move(*read);
+                return {};
+            }).has_value());
+    REQUIRE(read_entry.has_value());
+    CHECK(read_entry->data.text == "typed");
+    CHECK(definition.is(EntryRecord{.id = *created_id,
+            .conversation_id = conversation_id,
+            .kind = "audit1063.note",
+            .data = chord::Json{chord::Json::Object{{"text", chord::Json{"typed"}}}}}));
+    CHECK_FALSE(definition.is(
+            EntryRecord{.id = *created_id, .conversation_id = conversation_id, .kind = "audit1063.other"}));
+
+    auto invalid_definition = define_entry<NotePayload>("", {}, {});
+    CHECK_FALSE(invalid_definition.has_value());
+
+    const auto json_definition_result = define_entry("audit1063.json");
+    REQUIRE(json_definition_result.has_value());
+    EntryDefinition<chord::Json> json_definition = *json_definition_result;
+    std::optional<EntryId> self_head_entry;
+    REQUIRE(run_commit(*session,
+            [&json_definition, &conversation_id, &self_head_entry](
+                    Transaction& transaction) -> support::Expected<void> {
+                auto appended = transaction.append_entry(json_definition,
+                        conversation_id,
+                        chord::Json{chord::Json::Object{{"payload", chord::Json{true}}}},
+                        SelfEntryHead{});
+                if (!appended) {
+                    return std::unexpected(std::move(appended.error()));
+                }
+                self_head_entry = appended->id;
+                CHECK(appended->head == self_head_entry);
+                return {};
+            }).has_value());
+    REQUIRE(self_head_entry.has_value());
+    std::optional<TypedEntry<chord::Json>> read_json_entry;
+    REQUIRE(run_commit(*session,
+            [&json_definition, &self_head_entry, &read_json_entry](
+                    Transaction& transaction) -> support::Expected<void> {
+                auto read = transaction.entry(json_definition, *self_head_entry);
+                if (!read) {
+                    return std::unexpected(std::move(read.error()));
+                }
+                read_json_entry = std::move(*read);
+                return {};
+            }).has_value());
+    REQUIRE(read_json_entry.has_value());
+    CHECK(read_json_entry->data == chord::Json{chord::Json::Object{{"payload", chord::Json{true}}}});
+    CHECK(read_json_entry->head == self_head_entry);
+
+    // An explicit EntryId head selects an existing context head, not the entry
+    // being appended: the returned record and the typed read both keep it. An
+    // implementation that only honours SelfEntryHead leaves the head absent
+    // and fails those checks.
+    std::optional<EntryId> explicit_head_entry;
+    REQUIRE(run_commit(*session,
+            [&json_definition, &conversation_id, &self_head_entry, &explicit_head_entry](
+                    Transaction& transaction) -> support::Expected<void> {
+                auto appended = transaction.append_entry(json_definition,
+                        conversation_id,
+                        chord::Json{chord::Json::Object{{"payload", chord::Json{false}}}},
+                        EntryHeadVariant{*self_head_entry});
+                if (!appended) {
+                    return std::unexpected(std::move(appended.error()));
+                }
+                explicit_head_entry = appended->id;
+                CHECK(appended->id != *self_head_entry);
+                CHECK(appended->head == self_head_entry);
+                return {};
+            }).has_value());
+    REQUIRE(explicit_head_entry.has_value());
+    REQUIRE(run_commit(*session,
+            [&json_definition, &self_head_entry, &explicit_head_entry](
+                    Transaction& transaction) -> support::Expected<void> {
+                auto read = transaction.entry(json_definition, *explicit_head_entry);
+                if (!read) {
+                    return std::unexpected(std::move(read.error()));
+                }
+                CHECK(read->has_value());
+                if (read->has_value()) {
+                    CHECK((*read)->head == self_head_entry);
+                }
+                return {};
+            }).has_value());
+}
+
+// Frozen contract: a document record's `created_at` is the sequence of the
+// commit that created that incarnation. Later changes and a new Session over
+// the same Storage must preserve that original sequence.
+TEST_CASE("a document record keeps its creation sequence across changes and a new session",
+        "[durable][session][document][sequence][issue1063][spec]") {
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    std::vector<CommitPublication> publications;
+    REQUIRE(session->subscribe_commits(
+            [&publications](const CommitPublication& publication) { publications.push_back(publication); }));
+
+    const ConversationId conversation_id = create_conversation(*session);
+    const auto definition = latest_document();
+    const DocumentAddress address = conversation_address(conversation_id);
+
+    REQUIRE(run_commit(*session, [&definition, &address](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, address);
+        if (!draft) {
+            return std::unexpected(std::move(draft.error()));
+        }
+        return draft->set(member_path("text"), chord::Json{std::string{"created"}});
+    }).has_value());
+    REQUIRE(publications.size() == 2);
+    CHECK(publications.back().seq == 2);
+    REQUIRE(publications.back().changes.size() == 1);
+    const auto* created = std::get_if<DocumentCommitChange>(&publications.back().changes.front());
+    REQUIRE(created != nullptr);
+    const DocumentId document_id = created->record.id;
+    CHECK(created->record.created_at == 2);
+
+    const auto update_document = [&](Session& target, std::string text) {
+        return run_commit(target,
+                [&definition, &address, text = std::move(text)](Transaction& transaction) -> support::Expected<void> {
+                    auto draft = transaction.doc(definition, address);
+                    if (!draft) {
+                        return std::unexpected(std::move(draft.error()));
+                    }
+                    return draft->set(member_path("text"), chord::Json{std::move(text)});
+                });
+    };
+
+    REQUIRE(update_document(*session, "updated").has_value());
+    REQUIRE(publications.size() == 3);
+    CHECK(publications.back().seq == 3);
+    REQUIRE(publications.back().changes.size() == 1);
+    const auto* updated = std::get_if<DocumentCommitChange>(&publications.back().changes.front());
+    REQUIRE(updated != nullptr);
+    CHECK(updated->record.id == document_id);
+    CHECK(updated->record.created_at == 2);
+
+    auto reopened = Session::create(storage);
+    std::vector<CommitPublication> reopened_publications;
+    REQUIRE(reopened->subscribe_commits([&reopened_publications](const CommitPublication& publication) {
+        reopened_publications.push_back(publication);
+    }));
+    REQUIRE(update_document(*reopened, "reopened update").has_value());
+    REQUIRE(reopened_publications.size() == 1);
+    CHECK(reopened_publications.front().seq == 4);
+    REQUIRE(reopened_publications.front().changes.size() == 1);
+    const auto* reopened_update = std::get_if<DocumentCommitChange>(&reopened_publications.front().changes.front());
+    REQUIRE(reopened_update != nullptr);
+    CHECK(reopened_update->record.id == document_id);
+    CHECK(reopened_update->record.created_at == 2);
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1063/session-transactions.json
+// "a prepared draft is not observable before Storage settles its commit".
+//
+// Discriminating case: hold the public Storage commit after Session preparation,
+// then read and subscribe through the public Session. Both must still expose the
+// previous committed revision until the backend settles; a Session that adopts
+// or publishes when the callback returns fails this case.
+TEST_CASE("a prepared document draft stays invisible until storage settles its commit",
+        "[durable][session][transaction][visibility][issue1063][spec]") {
+    GatedStorage storage;
+    auto session = Session::create(storage);
+    std::vector<CommitPublication> publications;
+    REQUIRE(session->subscribe_commits(
+            [&publications](const CommitPublication& publication) { publications.push_back(publication); }));
+
+    const auto definition = latest_document();
+    const DocumentAddress address{};
+    REQUIRE(run_commit(*session, [&definition, &address](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, address);
+        if (!draft) {
+            return std::unexpected(std::move(draft.error()));
+        }
+        return draft->set(member_path("text"), chord::Json{std::string{"committed"}});
+    }).has_value());
+    REQUIRE(publications.size() == 1);
+
+    storage.hold_next_commit();
+    std::optional<support::Expected<void>> settled;
+    auto pending_commit = session->commit([&definition, &address](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, address);
+        if (!draft) {
+            return std::unexpected(std::move(draft.error()));
+        }
+        return draft->set(member_path("text"), chord::Json{std::string{"pending"}});
+    });
+    std::move(pending_commit).start([&settled](support::Expected<void> outcome) mutable noexcept {
+        settled = std::move(outcome);
+    });
+    REQUIRE(storage.holds_commit());
+    CHECK_FALSE(settled.has_value());
+
+    auto before_settlement = consume(session->snapshot(definition, address));
+    REQUIRE(before_settlement.has_value());
+    REQUIRE(before_settlement.value().has_value());
+    CHECK(*before_settlement.value() == chord::Json{chord::Json::Object{{"text", chord::Json{std::string{"committed"}}},
+                                                {"revision", chord::Json{0}}}});
+    CHECK(publications.size() == 1);
+
+    storage.release_held_commit();
+    REQUIRE(settled.has_value());
+    CHECK(settled->has_value());
+    CHECK(publications.size() == 2);
+
+    auto after_settlement = consume(session->snapshot(definition, address));
+    REQUIRE(after_settlement.has_value());
+    REQUIRE(after_settlement.value().has_value());
+    CHECK(*after_settlement.value() == chord::Json{chord::Json::Object{{"text", chord::Json{std::string{"pending"}}},
+                                               {"revision", chord::Json{0}}}});
+}
+
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1063/session-transactions.json
 // "a table read after the first table write is rejected and the transaction
 // still commits its document".
@@ -147,34 +411,35 @@ TEST_CASE("a table read after the first table write is rejected and the transact
             {"scanRead", "scanEntries"},
     };
     for (const ReadCase& read_case : kReadCases) {
-        auto outcome = session->commit([&](Transaction& transaction) -> support::Expected<void> {
-            auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{1.0});
-            if (!entry) {
-                return std::unexpected(std::move(entry.error()));
-            }
-            if (read_case.method == "conversation") {
-                auto read = transaction.conversation(conversation_id);
-                if (!read) {
-                    return std::unexpected(std::move(read.error()));
-                }
-            } else if (read_case.method == "entry") {
-                auto read = transaction.entry(entry->id);
-                if (!read) {
-                    return std::unexpected(std::move(read.error()));
-                }
-            } else if (read_case.method == "scanConversations") {
-                auto read = transaction.scan_conversations(10);
-                if (!read) {
-                    return std::unexpected(std::move(read.error()));
-                }
-            } else {
-                auto read = transaction.scan_entries(conversation_id, 10);
-                if (!read) {
-                    return std::unexpected(std::move(read.error()));
-                }
-            }
-            return {};
-        });
+        auto outcome =
+                session->commit([&conversation_id, &read_case](Transaction& transaction) -> support::Expected<void> {
+                    auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{1.0});
+                    if (!entry) {
+                        return std::unexpected(std::move(entry.error()));
+                    }
+                    if (read_case.method == "conversation") {
+                        auto read = transaction.conversation(conversation_id);
+                        if (!read) {
+                            return std::unexpected(std::move(read.error()));
+                        }
+                    } else if (read_case.method == "entry") {
+                        auto read = transaction.entry(entry->id);
+                        if (!read) {
+                            return std::unexpected(std::move(read.error()));
+                        }
+                    } else if (read_case.method == "scanConversations") {
+                        auto read = transaction.scan_conversations(10);
+                        if (!read) {
+                            return std::unexpected(std::move(read.error()));
+                        }
+                    } else {
+                        auto read = transaction.scan_entries(conversation_id, 10);
+                        if (!read) {
+                            return std::unexpected(std::move(read.error()));
+                        }
+                    }
+                    return {};
+                });
         const Outcome<void> terminal = consume(std::move(outcome));
         REQUIRE_FALSE(terminal.has_value());
         const std::string expected_message =
@@ -199,23 +464,24 @@ TEST_CASE("a table read after the first table write is rejected and the transact
 
     // Document access stays available after the table write, and the same
     // commit stores the document value.
-    auto document_commit = run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
-        auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{5.0});
-        if (!entry) {
-            return std::unexpected(std::move(entry.error()));
-        }
-        auto draft = transaction.doc(definition, conversation_address(conversation_id));
-        if (!draft) {
-            return std::unexpected(std::move(draft.error()));
-        }
-        if (auto set = draft->set(member_path("text"), chord::Json{std::string{"after-write"}}); !set) {
-            return std::unexpected(std::move(set.error()));
-        }
-        if (auto set = draft->set(member_path("revision"), chord::Json{1.0}); !set) {
-            return std::unexpected(std::move(set.error()));
-        }
-        return {};
-    });
+    auto document_commit =
+            run_commit(*session, [&conversation_id, &definition](Transaction& transaction) -> support::Expected<void> {
+                auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{5.0});
+                if (!entry) {
+                    return std::unexpected(std::move(entry.error()));
+                }
+                auto draft = transaction.doc(definition, conversation_address(conversation_id));
+                if (!draft) {
+                    return std::unexpected(std::move(draft.error()));
+                }
+                if (auto set = draft->set(member_path("text"), chord::Json{std::string{"after-write"}}); !set) {
+                    return std::unexpected(std::move(set.error()));
+                }
+                if (auto set = draft->set(member_path("revision"), chord::Json{1.0}); !set) {
+                    return std::unexpected(std::move(set.error()));
+                }
+                return {};
+            });
     REQUIRE(document_commit.has_value());
 
     // The frozen snapshot is the committed document value.
@@ -228,7 +494,7 @@ TEST_CASE("a table read after the first table write is rejected and the transact
 
     // The rejected reads rolled their staged entries back: the frozen artifact
     // records exactly one entry, the one of the document commit.
-    auto entries = run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
+    auto entries = run_commit(*session, [&conversation_id](Transaction& transaction) -> support::Expected<void> {
         auto scanned = transaction.scan_entries(conversation_id, 10);
         if (!scanned) {
             return std::unexpected(std::move(scanned.error()));
@@ -242,6 +508,245 @@ TEST_CASE("a table read after the first table write is rejected and the transact
     const auto frozen_publication_count = scenario.number_member("publicationCount");
     REQUIRE(frozen_publication_count.has_value());
     CHECK(static_cast<double>(publications.size()) == *frozen_publication_count);
+}
+
+// Frozen contract: close seals admission, settles an already-admitted storage
+// commit, and only then closes the backend.
+//
+// Discriminating case: hold a commit after admission, request close, and release
+// the storage commit. The existing batch must publish successfully before
+// Storage.close; a close that closes the backend immediately fails this case.
+TEST_CASE("close settles an admitted commit before closing storage",
+        "[durable][session][close][transaction][issue1063][spec]") {
+    GatedStorage storage;
+    auto session = Session::create(storage);
+    std::vector<CommitPublication> publications;
+    REQUIRE(session->subscribe_commits(
+            [&publications](const CommitPublication& publication) { publications.push_back(publication); }));
+    std::size_t close_notifications = 0;
+    REQUIRE(session->subscribe_close([&close_notifications] { close_notifications += 1; }));
+
+    storage.hold_next_commit();
+    std::optional<support::Expected<void>> commit_result;
+    auto pending_commit = session->commit([](Transaction& transaction) -> support::Expected<void> {
+        auto conversation = transaction.create_conversation();
+        if (!conversation) {
+            return std::unexpected(std::move(conversation.error()));
+        }
+        return {};
+    });
+    std::move(pending_commit).start([&commit_result](support::Expected<void> outcome) mutable noexcept {
+        commit_result = std::move(outcome);
+    });
+    REQUIRE(storage.holds_commit());
+    CHECK_FALSE(commit_result.has_value());
+
+    std::optional<support::Expected<void>> close_result;
+    auto closing = session->close();
+    std::move(closing).start(
+            [&close_result](support::Expected<void> outcome) mutable noexcept { close_result = std::move(outcome); });
+    CHECK_FALSE(close_result.has_value());
+    CHECK(storage.close_calls() == 0);
+    CHECK(close_notifications == 1);
+    CHECK(session->closed().reason == SessionEndReason::Open);
+
+    auto rejected = consume(session->commit([](Transaction& transaction) -> support::Expected<void> {
+        auto conversation = transaction.create_conversation();
+        if (!conversation) {
+            return std::unexpected(std::move(conversation.error()));
+        }
+        return {};
+    }));
+    REQUIRE_FALSE(rejected.has_value());
+    CHECK(rejected.error().message == "Session is closed");
+
+    storage.release_held_commit();
+    REQUIRE(commit_result.has_value());
+    CHECK(commit_result->has_value());
+    REQUIRE(close_result.has_value());
+    CHECK(close_result->has_value());
+    CHECK(publications.size() == 1);
+    CHECK(publications.front().seq == 1);
+    CHECK(storage.close_calls() == 1);
+    CHECK(close_notifications == 1);
+    CHECK(session->closed().reason == SessionEndReason::Closed);
+}
+
+// Frozen contract: admitted commit callbacks execute in one serial transaction line.
+//
+// Discriminating case: hold the first Storage commit and start a second
+// transaction. Its callback must wait for the first commit to settle, so it
+// reads and updates the newly committed document revision rather than losing
+// the first update.
+TEST_CASE("commit callbacks run in serial storage settlement order",
+        "[durable][session][transaction][ordering][issue1063][spec]") {
+    GatedStorage storage;
+    auto session = Session::create(storage);
+    const auto definition = latest_document();
+    REQUIRE(run_commit(*session, [&definition](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, DocumentAddress{});
+        if (!draft) {
+            return std::unexpected(std::move(draft.error()));
+        }
+        return draft->set(member_path("text"), chord::Json{std::string{"initial"}});
+    }).has_value());
+
+    storage.hold_next_commit();
+    std::optional<support::Expected<void>> first_result;
+    auto first = session->commit([&definition](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, DocumentAddress{});
+        if (!draft) {
+            return std::unexpected(std::move(draft.error()));
+        }
+        return draft->set(member_path("text"), chord::Json{std::string{"first"}});
+    });
+    std::move(first).start(
+            [&first_result](support::Expected<void> outcome) mutable noexcept { first_result = std::move(outcome); });
+    REQUIRE(storage.holds_commit());
+
+    bool second_callback_ran = false;
+    std::optional<support::Expected<void>> second_result;
+    auto second =
+            session->commit([&definition, &second_callback_ran](Transaction& transaction) -> support::Expected<void> {
+                second_callback_ran = true;
+                auto draft = transaction.doc(definition, DocumentAddress{});
+                if (!draft) {
+                    return std::unexpected(std::move(draft.error()));
+                }
+                return draft->set(member_path("text"), chord::Json{std::string{"second"}});
+            });
+    std::move(second).start(
+            [&second_result](support::Expected<void> outcome) mutable noexcept { second_result = std::move(outcome); });
+    CHECK_FALSE(second_callback_ran);
+    CHECK_FALSE(second_result.has_value());
+
+    storage.release_held_commit();
+    REQUIRE(first_result.has_value());
+    CHECK(first_result->has_value());
+    REQUIRE(second_result.has_value());
+    CHECK(second_result->has_value());
+    CHECK(second_callback_ran);
+    const auto snapshot = consume(session->snapshot(definition, DocumentAddress{}));
+    REQUIRE(snapshot.has_value());
+    REQUIRE(snapshot.value().has_value());
+    const auto* object = (*snapshot.value()).as_object();
+    REQUIRE(object != nullptr);
+    const auto text_member = object->find("text");
+    REQUIRE(text_member != object->end());
+    REQUIRE(text_member->second.as_string() != nullptr);
+    CHECK(*text_member->second.as_string() == "second");
+    CHECK(session->closed().reason == SessionEndReason::Open);
+}
+
+TEST_CASE("close settles queued commits in FIFO order",
+        "[durable][session][close][transaction][ordering][issue1063][spec]") {
+    GatedStorage storage;
+    auto session = Session::create(storage);
+    const auto definition = latest_document();
+    std::size_t publication_count = 0;
+    REQUIRE(session->subscribe_commits([&publication_count](const CommitPublication&) { publication_count += 1; }));
+    REQUIRE(run_commit(*session, [&definition](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, DocumentAddress{});
+        if (!draft) {
+            return std::unexpected(std::move(draft.error()));
+        }
+        return draft->set(member_path("text"), chord::Json{std::string{"initial"}});
+    }).has_value());
+
+    storage.hold_next_commit();
+    std::vector<std::string> callback_order;
+    std::vector<int> completion_order;
+    const auto enqueue_update = [&](std::string value, int ordinal) {
+        auto operation = session->commit([&callback_order, &definition, value = std::move(value)](
+                                                 Transaction& transaction) -> support::Expected<void> {
+            callback_order.push_back(value);
+            auto draft = transaction.doc(definition, DocumentAddress{});
+            if (!draft) {
+                return std::unexpected(std::move(draft.error()));
+            }
+            return draft->set(member_path("text"), chord::Json{value});
+        });
+        std::move(operation).start([&completion_order, ordinal](support::Expected<void> outcome) mutable noexcept {
+            CHECK(outcome.has_value());
+            completion_order.push_back(ordinal);
+        });
+    };
+
+    enqueue_update("first", 1);
+    REQUIRE(storage.holds_commit());
+    enqueue_update("second", 2);
+    enqueue_update("third", 3);
+    std::optional<support::Expected<void>> close_result;
+    auto closing = session->close();
+    std::move(closing).start(
+            [&close_result](support::Expected<void> outcome) mutable noexcept { close_result = std::move(outcome); });
+    CHECK(callback_order == std::vector<std::string>{"first"});
+    CHECK(completion_order.empty());
+    CHECK(publication_count == 1);
+    CHECK(storage.commit_calls() == 2);
+
+    storage.release_held_commit();
+    REQUIRE(close_result.has_value());
+    CHECK(close_result->has_value());
+    CHECK(callback_order == std::vector<std::string>{"first", "second", "third"});
+    CHECK(completion_order == std::vector<int>{1, 2, 3});
+    CHECK(publication_count == 4);
+    CHECK(storage.commit_calls() == 4);
+    CHECK(storage.close_calls() == 1);
+    CHECK(session->closed().reason == SessionEndReason::Closed);
+}
+
+// Discriminating case: a storage failure must not reject the commits admitted
+// after the failing one before the failing commit reports, and it must reject
+// them in admission order. An implementation that rejects the queue from the
+// failure hook, or that skips the queue, fails this case.
+TEST_CASE("a storage failure settles queued commits in admission order",
+        "[durable][session][failure][transaction][ordering][issue1063][spec]") {
+    GatedStorage storage;
+    auto session = Session::create(storage);
+    const ConversationId conversation_id = create_conversation(*session);
+
+    storage.hold_next_commit();
+    std::vector<int> completion_order;
+    std::vector<std::optional<support::Expected<void>>> results(3);
+    const auto enqueue = [&](int ordinal) {
+        auto operation =
+                session->commit([conversation_id, ordinal](Transaction& transaction) -> support::Expected<void> {
+                    auto entry = transaction.append_entry(
+                            conversation_id, "audit1063.note", chord::Json{static_cast<double>(ordinal)});
+                    if (!entry) {
+                        return std::unexpected(std::move(entry.error()));
+                    }
+                    return {};
+                });
+        std::move(operation).start(
+                [&results, &completion_order, ordinal](support::Expected<void> outcome) mutable noexcept {
+                    results[static_cast<std::size_t>(ordinal - 1)] = std::move(outcome);
+                    completion_order.push_back(ordinal);
+                });
+    };
+
+    enqueue(1);
+    REQUIRE(storage.holds_commit());
+    enqueue(2);
+    enqueue(3);
+    CHECK(completion_order.empty());
+
+    // The second commit fails once the first one settles. The third commit was
+    // admitted before that failure, so it must be rejected after the second
+    // completion, not before it.
+    storage.fail_next_commit("storage failed");
+    storage.release_held_commit();
+
+    REQUIRE(results[0].has_value());
+    CHECK(results[0]->has_value());
+    REQUIRE(results[1].has_value());
+    CHECK_FALSE(results[1]->has_value());
+    REQUIRE(results[2].has_value());
+    CHECK_FALSE(results[2]->has_value());
+    CHECK(completion_order == std::vector<int>{1, 2, 3});
+    CHECK(storage.close_calls() == 1);
+    CHECK(session->failed());
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1063/session-transactions.json
@@ -335,14 +840,15 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
 
     const ConversationId conversation_id = create_conversation(*session);
     std::optional<EntryId> committed_entry_id;
-    REQUIRE(run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
-        auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{1.0});
-        if (!entry) {
-            return std::unexpected(std::move(entry.error()));
-        }
-        committed_entry_id = entry->id;
-        return {};
-    }).has_value());
+    REQUIRE(run_commit(
+            *session, [&conversation_id, &committed_entry_id](Transaction& transaction) -> support::Expected<void> {
+                auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{1.0});
+                if (!entry) {
+                    return std::unexpected(std::move(entry.error()));
+                }
+                committed_entry_id = entry->id;
+                return {};
+            }).has_value());
     REQUIRE(committed_entry_id.has_value());
 
     // The frozen artifact records the committed entry's identity.
@@ -354,7 +860,7 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
     const std::size_t publications_before_failure = publications.size();
 
     // The failing callback stages a write and then reports an error.
-    auto failure = session->commit([&](Transaction& transaction) -> support::Expected<void> {
+    auto failure = session->commit([&conversation_id](Transaction& transaction) -> support::Expected<void> {
         auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{2.0});
         if (!entry) {
             return std::unexpected(std::move(entry.error()));
@@ -383,14 +889,15 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
     // The next successful commit takes the sequence the failed one would have
     // taken: the frozen artifact records that sequence.
     std::optional<EntryId> later_entry_id;
-    REQUIRE(run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
-        auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{3.0});
-        if (!entry) {
-            return std::unexpected(std::move(entry.error()));
-        }
-        later_entry_id = entry->id;
-        return {};
-    }).has_value());
+    REQUIRE(run_commit(
+            *session, [&conversation_id, &later_entry_id](Transaction& transaction) -> support::Expected<void> {
+                auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{3.0});
+                if (!entry) {
+                    return std::unexpected(std::move(entry.error()));
+                }
+                later_entry_id = entry->id;
+                return {};
+            }).has_value());
     REQUIRE(later_entry_id.has_value());
 
     // The frozen artifact records the later entry's identity: the failed
@@ -410,24 +917,26 @@ TEST_CASE("a failed commit leaves the storage sequence unchanged and the session
     std::size_t reopened_entry_count = 0;
     std::vector<EntryId> reopened_entry_ids;
     std::optional<ConversationId> reopened_conversation_id;
-    auto reopened_outcome = reopened->commit([&](Transaction& transaction) -> support::Expected<void> {
-        auto conversation = transaction.conversation(conversation_id);
-        if (!conversation) {
-            return std::unexpected(std::move(conversation.error()));
-        }
-        if ((*conversation).has_value()) {
-            reopened_conversation_id = (*conversation)->id;
-        }
-        auto scanned = transaction.scan_entries(conversation_id, 10);
-        if (!scanned) {
-            return std::unexpected(std::move(scanned.error()));
-        }
-        reopened_entry_count = scanned->size();
-        for (const EntryRecord& record : *scanned) {
-            reopened_entry_ids.push_back(record.id);
-        }
-        return {};
-    });
+    auto reopened_outcome =
+            reopened->commit([&conversation_id, &reopened_conversation_id, &reopened_entry_count, &reopened_entry_ids](
+                                     Transaction& transaction) -> support::Expected<void> {
+                auto conversation = transaction.conversation(conversation_id);
+                if (!conversation) {
+                    return std::unexpected(std::move(conversation.error()));
+                }
+                if ((*conversation).has_value()) {
+                    reopened_conversation_id = (*conversation)->id;
+                }
+                auto scanned = transaction.scan_entries(conversation_id, 10);
+                if (!scanned) {
+                    return std::unexpected(std::move(scanned.error()));
+                }
+                reopened_entry_count = scanned->size();
+                for (const EntryRecord& record : *scanned) {
+                    reopened_entry_ids.push_back(record.id);
+                }
+                return {};
+            });
     REQUIRE(consume(std::move(reopened_outcome)).has_value());
 
     const auto* frozen_reopened_ids = scenario.array_member("reopenedEntryIds");
@@ -494,7 +1003,7 @@ TEST_CASE("a failing storage commit fails the session, publishes nothing and clo
     // The storage fails the next commit with its own error.
     storage.fail_next_commit(expected_failure_message);
 
-    auto failing = session->commit([&](Transaction& transaction) -> support::Expected<void> {
+    auto failing = session->commit([&conversation_id](Transaction& transaction) -> support::Expected<void> {
         auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{4.0});
         if (!entry) {
             return std::unexpected(std::move(entry.error()));
@@ -568,7 +1077,7 @@ TEST_CASE("a commit callback that fails after staging writes publishes nothing a
     const auto definition = latest_document();
 
     // The committed baseline the failing callback must not disturb.
-    REQUIRE(run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
+    REQUIRE(run_commit(*session, [&definition, &conversation_id](Transaction& transaction) -> support::Expected<void> {
         auto draft = transaction.doc(definition, conversation_address(conversation_id));
         if (!draft) {
             return std::unexpected(std::move(draft.error()));
@@ -590,24 +1099,25 @@ TEST_CASE("a commit callback that fails after staging writes publishes nothing a
     // The failing callback stages an entry and mutates the committed document,
     // then reports an error.
     std::optional<EntryId> minted_entry_id;
-    auto failure = session->commit([&](Transaction& transaction) -> support::Expected<void> {
-        auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{7.0});
-        if (!entry) {
-            return std::unexpected(std::move(entry.error()));
-        }
-        minted_entry_id = entry->id;
-        auto draft = transaction.doc(definition, conversation_address(conversation_id));
-        if (!draft) {
-            return std::unexpected(std::move(draft.error()));
-        }
-        if (auto set = draft->set(member_path("text"), chord::Json{std::string{"lost"}}); !set) {
-            return std::unexpected(std::move(set.error()));
-        }
-        if (auto set = draft->set(member_path("revision"), chord::Json{2.0}); !set) {
-            return std::unexpected(std::move(set.error()));
-        }
-        return std::unexpected(support::make_error(support::ErrorCode::Session, "callback failed"));
-    });
+    auto failure = session->commit(
+            [&conversation_id, &definition, &minted_entry_id](Transaction& transaction) -> support::Expected<void> {
+                auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{7.0});
+                if (!entry) {
+                    return std::unexpected(std::move(entry.error()));
+                }
+                minted_entry_id = entry->id;
+                auto draft = transaction.doc(definition, conversation_address(conversation_id));
+                if (!draft) {
+                    return std::unexpected(std::move(draft.error()));
+                }
+                if (auto set = draft->set(member_path("text"), chord::Json{std::string{"lost"}}); !set) {
+                    return std::unexpected(std::move(set.error()));
+                }
+                if (auto set = draft->set(member_path("revision"), chord::Json{2.0}); !set) {
+                    return std::unexpected(std::move(set.error()));
+                }
+                return std::unexpected(support::make_error(support::ErrorCode::Session, "callback failed"));
+            });
     const Outcome<void> failure_terminal = consume(std::move(failure));
     REQUIRE_FALSE(failure_terminal.has_value());
     CHECK(failure_terminal.error().message == "callback failed");
@@ -615,14 +1125,15 @@ TEST_CASE("a commit callback that fails after staging writes publishes nothing a
 
     // The staged entry was not persisted.
     std::size_t entries_after_failure = 0;
-    auto scan = session->commit([&](Transaction& transaction) -> support::Expected<void> {
-        auto scanned = transaction.scan_entries(conversation_id, 10);
-        if (!scanned) {
-            return std::unexpected(std::move(scanned.error()));
-        }
-        entries_after_failure = scanned->size();
-        return {};
-    });
+    auto scan = session->commit(
+            [&conversation_id, &entries_after_failure](Transaction& transaction) -> support::Expected<void> {
+                auto scanned = transaction.scan_entries(conversation_id, 10);
+                if (!scanned) {
+                    return std::unexpected(std::move(scanned.error()));
+                }
+                entries_after_failure = scanned->size();
+                return {};
+            });
     REQUIRE(consume(std::move(scan)).has_value());
 
     const auto* frozen_entries = scenario.array_member("entriesAfterFailure");
@@ -646,14 +1157,15 @@ TEST_CASE("a commit callback that fails after staging writes publishes nothing a
     // The session is still usable, and the next commit mints the next ID: the
     // failed callback's ID was consumed but not stored.
     std::optional<EntryId> next_entry_id;
-    auto next = session->commit([&](Transaction& transaction) -> support::Expected<void> {
-        auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{8.0});
-        if (!entry) {
-            return std::unexpected(std::move(entry.error()));
-        }
-        next_entry_id = entry->id;
-        return {};
-    });
+    auto next =
+            session->commit([&conversation_id, &next_entry_id](Transaction& transaction) -> support::Expected<void> {
+                auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{8.0});
+                if (!entry) {
+                    return std::unexpected(std::move(entry.error()));
+                }
+                next_entry_id = entry->id;
+                return {};
+            });
     REQUIRE(consume(std::move(next)).has_value());
     REQUIRE(next_entry_id.has_value());
     CHECK(next_entry_id->value > minted_entry_id->value);
@@ -685,7 +1197,7 @@ TEST_CASE("the same public operation yields the same session and transaction rec
     const auto definition = latest_document();
 
     std::optional<EntryId> entry_id;
-    REQUIRE(run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
+    REQUIRE(run_commit(*session, [&conversation_id, &entry_id](Transaction& transaction) -> support::Expected<void> {
         auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{9.0});
         if (!entry) {
             return std::unexpected(std::move(entry.error()));
@@ -695,7 +1207,7 @@ TEST_CASE("the same public operation yields the same session and transaction rec
     }).has_value());
     REQUIRE(entry_id.has_value());
 
-    REQUIRE(run_commit(*session, [&](Transaction& transaction) -> support::Expected<void> {
+    REQUIRE(run_commit(*session, [&definition, &conversation_id](Transaction& transaction) -> support::Expected<void> {
         auto draft = transaction.doc(definition, conversation_address(conversation_id));
         if (!draft) {
             return std::unexpected(std::move(draft.error()));
@@ -722,28 +1234,30 @@ TEST_CASE("the same public operation yields the same session and transaction rec
     std::optional<EntryRecord> reopened_entry;
     std::optional<ConversationId> reopened_conversation;
     std::size_t reopened_entry_count = 0;
-    auto reopened_outcome = reopened->commit([&](Transaction& transaction) -> support::Expected<void> {
-        auto conversation = transaction.conversation(conversation_id);
-        if (!conversation) {
-            return std::unexpected(std::move(conversation.error()));
-        }
-        if ((*conversation).has_value()) {
-            reopened_conversation = (*conversation)->id;
-        }
-        auto entry = transaction.entry(*entry_id);
-        if (!entry) {
-            return std::unexpected(std::move(entry.error()));
-        }
-        if ((*entry).has_value()) {
-            reopened_entry = *(*entry);
-        }
-        auto scanned = transaction.scan_entries(conversation_id, 10);
-        if (!scanned) {
-            return std::unexpected(std::move(scanned.error()));
-        }
-        reopened_entry_count = scanned->size();
-        return {};
-    });
+    auto reopened_outcome = reopened->commit(
+            [&conversation_id, &entry_id, &reopened_conversation, &reopened_entry, &reopened_entry_count](
+                    Transaction& transaction) -> support::Expected<void> {
+                auto conversation = transaction.conversation(conversation_id);
+                if (!conversation) {
+                    return std::unexpected(std::move(conversation.error()));
+                }
+                if ((*conversation).has_value()) {
+                    reopened_conversation = (*conversation)->id;
+                }
+                auto entry = transaction.entry(*entry_id);
+                if (!entry) {
+                    return std::unexpected(std::move(entry.error()));
+                }
+                if ((*entry).has_value()) {
+                    reopened_entry = *(*entry);
+                }
+                auto scanned = transaction.scan_entries(conversation_id, 10);
+                if (!scanned) {
+                    return std::unexpected(std::move(scanned.error()));
+                }
+                reopened_entry_count = scanned->size();
+                return {};
+            });
     REQUIRE(consume(std::move(reopened_outcome)).has_value());
     REQUIRE(reopened_entry.has_value());
     REQUIRE(reopened_conversation.has_value());
@@ -782,14 +1296,15 @@ TEST_CASE("the same public operation yields the same session and transaction rec
 
     // The ID namespace continues above every previously minted or stored ID.
     std::optional<EntryId> reopened_next_entry_id;
-    auto reopened_next = reopened->commit([&](Transaction& transaction) -> support::Expected<void> {
-        auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{10.0});
-        if (!entry) {
-            return std::unexpected(std::move(entry.error()));
-        }
-        reopened_next_entry_id = entry->id;
-        return {};
-    });
+    auto reopened_next = reopened->commit(
+            [&conversation_id, &reopened_next_entry_id](Transaction& transaction) -> support::Expected<void> {
+                auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{10.0});
+                if (!entry) {
+                    return std::unexpected(std::move(entry.error()));
+                }
+                reopened_next_entry_id = entry->id;
+                return {};
+            });
     REQUIRE(consume(std::move(reopened_next)).has_value());
     REQUIRE(reopened_next_entry_id.has_value());
     CHECK(reopened_next_entry_id->value > entry_id->value);
@@ -820,14 +1335,15 @@ TEST_CASE("a commit publishes one sequence and mints increasing ids",
     std::int64_t previous_id = 0;
     for (int round = 0; round < 3; ++round) {
         std::optional<EntryId> entry_id;
-        auto outcome = session->commit([&](Transaction& transaction) -> support::Expected<void> {
-            auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{round});
-            if (!entry) {
-                return std::unexpected(std::move(entry.error()));
-            }
-            entry_id = entry->id;
-            return {};
-        });
+        auto outcome = session->commit(
+                [&conversation_id, round, &entry_id](Transaction& transaction) -> support::Expected<void> {
+                    auto entry = transaction.append_entry(conversation_id, "audit1063.note", chord::Json{round});
+                    if (!entry) {
+                        return std::unexpected(std::move(entry.error()));
+                    }
+                    entry_id = entry->id;
+                    return {};
+                });
         REQUIRE(consume(std::move(outcome)).has_value());
         REQUIRE(entry_id.has_value());
 

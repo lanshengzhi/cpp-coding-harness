@@ -47,7 +47,7 @@
         },
         "audit-1051": {
           "manifest": "audit-1051/manifest.json",
-          "manifestSha256": "a571c0eb1477f5cd61f022d40b8616855e16d2969198ac3c786c929273968d68"
+          "manifestSha256": "20b80c535858b44e0c9e47f7d253dad254051c3132525c02cdd80a7c7f1cc535"
         },
         "audit-1052": {
           "manifest": "audit-1052/manifest.json",
@@ -75,7 +75,7 @@
         },
         "audit-1061": {
           "manifest": "audit-1061/manifest.json",
-          "manifestSha256": "5fa587a84657ddc2af02770491ab154923cc4326c3aeda8197985768b9af9433"
+          "manifestSha256": "1532caab7462c64e9008195685a55b001f9dc45a8d4d8e86e7603034ddcaf70b"
         },
         "audit-1062": {
           "manifest": "audit-1062/manifest.json",
@@ -84,6 +84,14 @@
         "audit-1063": {
           "manifest": "audit-1063/manifest.json",
           "manifestSha256": "dcf88f4953eda025669692ef1edb251daad0ce6ad3cadd56be4b37e22100a299"
+        },
+        "audit-1075": {
+          "manifest": "audit-1075/manifest.json",
+          "manifestSha256": "35f47d755e4d951f3bea0273e06aac243565be03861207a70a4a500e21f7e2c0"
+        },
+        "audit-1076": {
+          "manifest": "audit-1076/manifest.json",
+          "manifestSha256": "04f47a8aa372759bf3ee2b61fb3bf8374a74e7a8d75b48577b6b9522ae921066"
         },
         "audit-1101": {
           "manifest": "audit-1101/manifest.json",
@@ -103,7 +111,7 @@
         },
         "audit-810": {
           "manifest": "audit-810/manifest.json",
-          "manifestSha256": "1912896e60f3c1208f288db3b88a73749b01b32f1c1d729ccb688fed9653e8ce"
+          "manifestSha256": "3815cac847e63ef4e1a4780682547c4ab0e9158aead7f7a631a8d44d580822ab"
         },
         "audit-831": {
           "manifest": "audit-831/manifest.json",

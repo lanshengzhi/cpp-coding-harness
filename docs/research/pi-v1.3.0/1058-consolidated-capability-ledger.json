@@ -267,21 +267,22 @@
         "not-applicable": 2
       },
       "cch_chord": {
-        "missing": 42,
+        "implemented": 8,
+        "missing": 35,
         "not-applicable": 5,
-        "partial": 18
+        "partial": 17
       },
       "cch_codemode": {
-        "implemented": 7,
-        "missing": 30,
+        "implemented": 32,
+        "missing": 13,
         "not-applicable": 2,
-        "partial": 12
+        "partial": 4
       },
       "cch_coding_agent": {
-        "implemented": 74,
+        "implemented": 75,
         "missing": 21,
         "not-applicable": 6,
-        "partial": 58
+        "partial": 57
       },
       "cch_durable": {
         "implemented": 2,
@@ -306,30 +307,30 @@
       "supported": 1435
     },
     "implementation": {
-      "implemented": 983,
-      "missing": 238,
+      "implemented": 1017,
+      "missing": 214,
       "not-applicable": 18,
-      "partial": 225
+      "partial": 215
     },
     "verification": {
       "not-applicable": 28,
-      "unverified": 1028,
-      "upstream-captured": 408
+      "unverified": 1019,
+      "upstream-captured": 417
     },
     "evidenceRoute": {
-      "captured": 408,
+      "captured": 417,
       "artifact-only": 0,
-      "related-captured": 28,
-      "declared-comparison": 32,
+      "related-captured": 23,
+      "declared-comparison": 31,
       "cpp-regression-only": 10,
-      "unobserved": 58,
+      "unobserved": 55,
       "unobserved-static": 0,
       "historical-v1.0.4": 858,
       "not-audited": 42,
       "not-applicable": 0,
       "excluded": 28
     },
-    "unobservedSupported": 1028,
+    "unobservedSupported": 1019,
     "noDecision": [],
     "excluded": [
       "cch_ai:Retry:additional-matching",
@@ -362,48 +363,29 @@
       "cch_tui:internal.native-modifiers",
       "cch_tui:isAppleTerminalSession"
     ],
-    "missingObservationRows": 1028,
+    "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 458,
-      "scenarioNamed": 320,
-      "artifactCovered": 47,
+      "scenarios": 474,
+      "scenarioNamed": 347,
+      "artifactCovered": 55,
       "orphaned": [
         "audit-1050/input-standalone.json:input-placeholder-reversal-and-custom-styling",
         "audit-1050/input-standalone.json:input-raw-lf-submission-and-rebound-submit",
         "audit-1050/input-standalone.json:input-narrow-unicode-scroll-and-cursor",
-        "audit-1061/prepare-replace.json:a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
-        "audit-1061/prepare-replace.json:a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
-        "audit-1061/prepare-replace.json:an aborted whole-root preparation cannot be adopted",
         "audit-1061/draft-array-holes.json:deleting an array element from a draft rejects the hole and leaves the prepared revision empty",
         "audit-1061/review-fixes.json:a later traversal failure keeps the preceding mutable write",
         "audit-1061/review-fixes.json:draft reads distinguish absent leaves from null and from absent receiver paths",
         "audit-1061/review-fixes.json:adoption immediately revokes competing open drafts while prepared competitors retain normal prepared abort and stale states",
         "audit-1061/review-fixes.json:adding a key and erasing it again normalizes to an empty batch over the unchanged base",
         "audit-1061/review-fixes.json:an existing nested key keeps explicit delete and readd order",
-        "audit-1062/ordered-frames.json:an attached state restores the latest committed revision when subscribing after existing commits",
-        "audit-1062/ordered-frames.json:attachment captures the snapshot before activation and drains buffered frames in commit order",
-        "audit-1062/ordered-frames.json:exact source values are published without applying or re-diffing the frame operations",
-        "audit-1062/ordered-frames.json:a repeated cursor is reported once as a gap and keeps the last good value",
-        "audit-1062/ordered-frames.json:reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
-        "audit-1062/ordered-frames.json:one subscription serializes reentrant hydration and update callbacks in publication order",
-        "audit-1062/ordered-frames.json:independent attachments converge separately and dispose idempotently without affecting each other",
-        "audit-1062/observer-delivery.json:at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
-        "audit-1062/observer-delivery.json:at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
-        "audit-1062/observer-delivery.json:at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)",
-        "audit-1062/observer-delivery.json:a held listener serializes its own updates while another subscription converges independently",
-        "audit-1062/observer-delivery.json:overflow keeps only the newest pending delivery with its exact value context and delivery",
-        "audit-1062/observer-delivery.json:a failing listener is reported through onError in isolation and keeps receiving later deliveries",
-        "audit-1062/observer-delivery.json:a synchronous hydration failure is reported without removing the subscription",
-        "audit-1062/observer-delivery.json:unsubscribe discards queued deliveries without aborting or joining the running callback",
-        "audit-1062/observer-delivery.json:a callback rejection that settles after unsubscribe is still reported",
-        "audit-1062/observer-delivery.json:two subscriptions of the same listener are delivered independently",
-        "audit-1062/review-edges.json:subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
-        "audit-1062/review-edges.json:a retained value reference keeps the revision it was read at across a later commit",
-        "audit-1062/review-edges.json:a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
-        "audit-1062/review-edges.json:a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
-        "audit-1062/review-edges.json:negative safe integer cursors are accepted for the snapshot and later frames",
-        "audit-1062/review-edges.json:a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
-        "audit-1062/review-edges.json:a gap while draining a buffered activation ignores later buffered frames and disposes once",
+        "audit-1076/task-outcomes.json:a multi-phase task advances checkpoints and commits a completed terminal receipt",
+        "audit-1076/task-outcomes.json:a task memo survives checkpoint replacement and is cleared on terminal settlement",
+        "audit-1076/task-outcomes.json:a multi-phase task commits a typed failed outcome with error and partial result",
+        "audit-1076/task-outcomes.json:abortTask marks a running task and runs its abort handler to commit an aborted outcome",
+        "audit-1076/task-outcomes.json:aborting a task with a missing definition commits an orphaned outcome",
+        "audit-1076/task-outcomes.json:a phase returning without durable progress faults the task",
+        "audit-1076/task-outcomes.json:resuming an interrupted task continues from its durable checkpoint without rerunning completed phases",
+        "audit-1076/task-outcomes.json:terminal record and result receipt commit in the same atomic storage batch",
         "audit-1101/structured-content.json:client and conversion preserve an object structuredContent when content is absent",
         "audit-1101/structured-content.json:client and conversion preserve a non-empty array structuredContent when content is absent",
         "audit-1101/structured-content.json:client and conversion preserve an empty-array structuredContent when content is absent",
@@ -2618,36 +2600,6 @@
     },
     {
       "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact; linking it to a member row would silently upgrade that row's recorded verification, so the observation stays explicit here.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement prepared whole-root replacement"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "a deeply equal whole-root replacement emits no operations and still stales a same-base preparation",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement the no-op whole-root replacement"
-    },
-    {
-      "family": "audit-1061",
-      "artifact": "prepare-replace.json",
-      "scenario": "an aborted whole-root preparation cannot be adopted",
-      "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the prepare-replace artifact.",
-      "rows": [
-        "cch_chord:delta:prepare-replace"
-      ],
-      "disposition": "the Chord delta slices must consume this observation when they implement preparation abort"
-    },
-    {
-      "family": "audit-1061",
       "artifact": "draft-array-holes.json",
       "scenario": "deleting an array element from a draft rejects the hole and leaves the prepared revision empty",
       "reason": "Captured by #1061 after the #1058 ledger was committed, but no 1057 ledger row routes to the draft-array-holes artifact.",
@@ -2707,244 +2659,84 @@
       "disposition": "the Chord delta slices must consume this observation when they implement nested key delete and readd"
     },
     {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "an attached state restores the latest committed revision when subscribing after existing commits",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a multi-phase task advances checkpoints and commits a completed terminal receipt",
+      "reason": "Captured by #1076 after the #1058 ledger was committed, but the existing task rows in the 1055 ledger route only to their earlier artifacts; linking this specific execution observation to a row would retroactively upgrade its recorded verification.",
       "rows": [
-        "cch_chord:state:attached-hydration"
+        "cch_durable:task-reservation-checkpoint"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement late attachment"
+      "disposition": "the task checkpoint implementation must consume this observation when extending reservations through multiple durable phases"
     },
     {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "attachment captures the snapshot before activation and drains buffered frames in commit order",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a task memo survives checkpoint replacement and is cleared on terminal settlement",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; keep the new memo lifecycle observation explicit without changing the 1055 verification record.",
       "rows": [
-        "cch_chord:state:attached-hydration"
+        "cch_durable:task-memos"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement attachment activation order"
+      "disposition": "the durable task memo implementation must consume this observation when changing memo persistence"
     },
     {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "exact source values are published without applying or re-diffing the frame operations",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a multi-phase task commits a typed failed outcome with error and partial result",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; this typed error and partial result was not in the 1055 route.",
       "rows": [
-        "cch_chord:Chord:state"
+        "cch_durable:task-observed-outcomes"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement frame publication"
+      "disposition": "the task outcome implementation must consume this observation when changing its typed failure receipt"
     },
     {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "a repeated cursor is reported once as a gap and keeps the last good value",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "abortTask marks a running task and runs its abort handler to commit an aborted outcome",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; this running-task abort handler execution was not explicitly routed by the 1055 rows.",
       "rows": [
-        "cch_chord:state:cursor-gap"
+        "cch_durable:abort-task-protocol"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement repeated-cursor gap reporting"
+      "disposition": "the abort protocol implementation must consume this observation when changing handler invocation or abort signaling"
     },
     {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "aborting a task with a missing definition commits an orphaned outcome",
+      "reason": "Captured by #1076 after the #1058 ledger was committed and supplies the scenario evidence absent from the 1055 scheduler-outcomes row.",
       "rows": [
-        "cch_chord:state:delivery-order"
+        "cch_durable:task-scheduler-outcomes"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement reentrant commit buffering"
+      "disposition": "the scheduler-written orphaned outcome implementation must consume this observation"
     },
     {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "one subscription serializes reentrant hydration and update callbacks in publication order",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "a phase returning without durable progress faults the task",
+      "reason": "Captured by #1076 after the #1058 ledger was committed and supplies a no-progress fault observation absent from the 1055 scheduler-outcomes row.",
       "rows": [
-        "cch_chord:state:delivery-order"
+        "cch_durable:task-scheduler-outcomes"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement per-subscription serialization"
+      "disposition": "the scheduler-written no-progress fault implementation must consume this observation"
     },
     {
-      "family": "audit-1062",
-      "artifact": "ordered-frames.json",
-      "scenario": "independent attachments converge separately and dispose idempotently without affecting each other",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the ordered-frames artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "resuming an interrupted task continues from its durable checkpoint without rerunning completed phases",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; this exact interrupted-phase recovery scenario was not routed by the earlier row.",
       "rows": [
-        "cch_chord:state:dispose"
+        "cch_durable:task-reservation-checkpoint"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement independent attachment disposal"
+      "disposition": "the task recovery implementation must consume this observation when changing checkpoint resume"
     },
     {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
+      "family": "audit-1076",
+      "artifact": "task-outcomes.json",
+      "scenario": "terminal record and result receipt commit in the same atomic storage batch",
+      "reason": "Captured by #1076 after the #1058 ledger was committed; retain the specific atomic record/result observation without altering earlier verification.",
       "rows": [
-        "cch_chord:state:pending-bound"
+        "cch_durable:task-terminal-receipt-atomicity"
       ],
-      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:pending-bound"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:pending-bound"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement the pending-delivery bound"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a held listener serializes its own updates while another subscription converges independently",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement held-listener serialization"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:pending-bound"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement pending-delivery overflow"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a failing listener is reported through onError in isolation and keeps receiving later deliveries",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement listener failure isolation"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a synchronous hydration failure is reported without removing the subscription",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement hydration failure reporting"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "unsubscribe discards queued deliveries without aborting or joining the running callback",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:dispose"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement unsubscribe semantics"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "a callback rejection that settles after unsubscribe is still reported",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement late callback settlement"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "observer-delivery.json",
-      "scenario": "two subscriptions of the same listener are delivered independently",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the observer-delivery artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement independent subscriptions"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:delivery-order"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement subscriber registration order"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a retained value reference keeps the revision it was read at across a later commit",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:Chord:state"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement retained-value revision stability"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:listener-error"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement source contract failure reporting"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:dispose"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement cursor range validation"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "negative safe integer cursors are accepted for the snapshot and later frames",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:attached-hydration"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement negative cursor acceptance"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:cursor-gap"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement frame cursor range validation"
-    },
-    {
-      "family": "audit-1062",
-      "artifact": "review-edges.json",
-      "scenario": "a gap while draining a buffered activation ignores later buffered frames and disposes once",
-      "reason": "Captured by #1062 after the #1058 ledger was committed, but no 1057 ledger row routes to the review-edges artifact.",
-      "rows": [
-        "cch_chord:state:cursor-gap"
-      ],
-      "disposition": "the Chord state slices must consume this observation when they implement buffered-activation gap handling"
+      "disposition": "the task terminal commit implementation must consume this observation when changing atomic receipt persistence"
     },
     {
       "family": "audit-1101",
@@ -6617,32 +6409,32 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/storage/sqlite/storage.ts:654 (revision materialization)",
       "consumerOwners": [
         "cch_durable"
       ],
-      "boundary": null,
-      "implementation_ticket": null,
-      "scenario": "mutable application mutates in place except for a root replacement, which returns a new value",
+      "boundary": "src/chord/Delta.cpp:apply; src/chord/include/cch/chord/Delta.hpp:apply",
+      "implementation_ticket": "#1061",
+      "scenario": "a later empty path keeps the preceding mutable write and reports the empty path",
       "comparisonScenarios": [
-        "mutable application mutates in place except for a root replacement, which returns a new value"
+        "a later empty path keeps the preceding mutable write and reports the empty path"
       ],
       "evidence": {
         "route": "captured",
-        "artifact": "fixtures/pi-v1.3.0/audit-1057/delta-revisions.json",
+        "artifact": "fixtures/pi-v1.3.0/audit-1061/validation-order.json",
         "scenarioMatch": "direct",
         "capturedScenarios": [
-          "mutable application mutates in place except for a root replacement, which returns a new value"
+          "a later empty path keeps the preceding mutable write and reports the empty path"
         ],
-        "result": "Ordinary batch returns the same target and mutates it to {items:['a','b'],value:1}; root replacement returns a distinct {replacement:true}."
+        "result": "Mutable operations execute sequentially and preserve prior writes when a later operation fails; a root replacement remains local until the batch succeeds."
       },
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision.",
+      "notes": "C++ covers the representable typed operation shapes; malformed tuple and string-index inputs are rejected before reaching this API. Recommendation: Use mutable application only on values owned by the materializer, never on a committed/shared revision.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -6651,7 +6443,7 @@
           "ticket": "1057",
           "rowId": "cch_chord:delta:mutable-application",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
@@ -6857,29 +6649,33 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/transaction.ts:planDocument",
       "consumerOwners": [
         "cch_durable"
       ],
-      "boundary": null,
-      "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
-      "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": null
-      },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
-      "gaps": [
-        "The ticket captured root replacements through commits/watchers, not `prepareReplace` directly."
+      "boundary": "src/chord/include/cch/chord/Delta.hpp:Tracker::prepare_replace,Prepared::base,Prepared::value,Tracker::adopt",
+      "implementation_ticket": "#1061",
+      "scenario": "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption",
+      "comparisonScenarios": [
+        "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
       ],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
+      "evidence": {
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1061/prepare-replace.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "a prepared whole-root replacement keeps the prior revision as its base and stales a same-base preparation after adoption"
+        ],
+        "result": "The captured base stays at revision 0 while the owned replacement becomes revision 1; a same-base competitor reports `Prepared change is stale`, and reuse reports `Prepared change has already been used`. The equal-root capture records an empty batch and still advances revision."
+      },
+      "missingObservation": null,
+      "gaps": [
+        "C++ comparison has not been run; upstream capture alone does not establish implementation parity."
+      ],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Let a whole-value replacement take immutable ownership once; do not deep-copy it into a delta.",
       "lane": "1057",
       "frozenSymbolsSource": null,
@@ -6889,8 +6685,8 @@
           "ticket": "1057",
           "rowId": "cch_chord:delta:prepare-replace",
           "membership": "supported",
-          "implementation": "missing",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_chord"
         }
       ]
@@ -7168,7 +6964,7 @@
       },
       "missingObservation": "no frozen capture recorded for this row; source-only audit",
       "gaps": [
-        "No captured checkpoint/base scenario in this ticket; checkpoint cost is deliberately not decided here."
+        "No checkpoint predicate or durable Session policy is implemented in this Chord slice; checkpoint cost remains outside #1061."
       ],
       "remainingWork": "no frozen capture recorded for this row; source-only audit",
       "notes": "Recommendation: Defer checkpoint base economics to a measured implementation probe; first make revision/delta replay correct.",
@@ -8475,7 +8271,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/session/observation.ts:CommittedStateSource",
@@ -8483,10 +8279,15 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1062",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
-        "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
+        "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+        "an attached state restores the latest committed revision when subscribing after existing commits",
+        "attachment captures the snapshot before activation and drains buffered frames in commit order",
+        "exact source values are published without applying or re-diffing the frame operations",
+        "a retained value reference keeps the revision it was read at across a later commit",
+        "negative safe integer cursors are accepted for the snapshot and later frames"
       ],
       "evidence": {
         "route": "captured",
@@ -8498,11 +8299,9 @@
         "result": "Deliveries are hydrate/0/{value:1}, update/1/{value:2}; no error; dispose called once."
       },
       "missingObservation": null,
-      "gaps": [
-        "ProjectionStream does not expose a replicated-state source/attachment API, cursor, or onError."
-      ],
+      "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Use an explicit source attachment with a snapshot cursor; the current projection stream is a base+patch analogue but has no source cursor or hydration contract.",
+      "notes": "Recommendation: The C++ source attachment now hydrates from a snapshot cursor and publishes exact ordered frames; durable document history and retention remain in #1063.",
       "lane": "1057",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -8511,7 +8310,7 @@
           "ticket": "1057",
           "rowId": "cch_chord:state:attached-hydration",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
@@ -8525,7 +8324,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedStateSource; packages/durable/src/session/session.ts:SessionImpl.documentState",
@@ -8533,10 +8332,14 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1062",
       "scenario": "a cursor gap is reported once and leaves the last good replicated value",
       "comparisonScenarios": [
-        "a cursor gap is reported once and leaves the last good replicated value"
+        "a cursor gap is reported once and leaves the last good replicated value",
+        "a repeated cursor is reported once as a gap and keeps the last good value",
+        "a source contract failure without an onError hook is observable asynchronously and keeps the last good value",
+        "a frame cursor outside the safe integer range fails the attachment and keeps the last good value",
+        "a gap while draining a buffered activation ignores later buffered frames and disposes once"
       ],
       "evidence": {
         "route": "captured",
@@ -8559,7 +8362,7 @@
           "ticket": "1057",
           "rowId": "cch_chord:state:cursor-gap",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
@@ -8573,7 +8376,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/harness/view.ts",
@@ -8581,10 +8384,15 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1062",
       "scenario": "a watch acquired before start buffers frames and serializes callbacks",
       "comparisonScenarios": [
-        "a watch acquired before start buffers frames and serializes callbacks"
+        "a watch acquired before start buffers frames and serializes callbacks",
+        "reentrant commits buffer in order and a late subscriber hydrates past them at the latest sequence",
+        "one subscription serializes reentrant hydration and update callbacks in publication order",
+        "a held listener serializes its own updates while another subscription converges independently",
+        "two subscriptions of the same listener are delivered independently",
+        "subscribers are delivered in registration order and a reentrant subscriber hydrates before the next publication"
       ],
       "evidence": {
         "route": "captured",
@@ -8607,7 +8415,7 @@
           "ticket": "1057",
           "rowId": "cch_chord:state:delivery-order",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
@@ -8621,7 +8429,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/view.ts",
@@ -8629,10 +8437,13 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1062",
       "scenario": "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
       "comparisonScenarios": [
-        "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order"
+        "attached replicated state hydrates at cursor zero and then delivers exact frames in sequence order",
+        "independent attachments converge separately and dispose idempotently without affecting each other",
+        "unsubscribe discards queued deliveries without aborting or joining the running callback",
+        "a snapshot cursor outside the safe integer range is rejected and the attachment is disposed once"
       ],
       "evidence": {
         "route": "captured",
@@ -8655,7 +8466,7 @@
           "ticket": "1057",
           "rowId": "cch_chord:state:dispose",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
@@ -8669,7 +8480,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/session.ts:SessionImpl.documentState; packages/durable/src/harness/task-graph.ts:replicatedState(observer,{onError})",
@@ -8677,10 +8488,13 @@
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
+      "implementation_ticket": "#1062",
       "scenario": "a failing state listener is reported through onError without stopping another subscription",
       "comparisonScenarios": [
-        "a failing state listener is reported through onError without stopping another subscription"
+        "a failing state listener is reported through onError without stopping another subscription",
+        "a failing listener is reported through onError in isolation and keeps receiving later deliveries",
+        "a synchronous hydration failure is reported without removing the subscription",
+        "a callback rejection that settles after unsubscribe is still reported"
       ],
       "evidence": {
         "route": "captured",
@@ -8703,7 +8517,7 @@
           "ticket": "1057",
           "rowId": "cch_chord:state:listener-error",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_chord"
         }
@@ -8717,29 +8531,34 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_chord",
       "consumer": "packages/durable/src/session/observation.ts:CommittedWatch; packages/durable/src/session/session.ts:SessionImpl.documentState",
       "consumerOwners": [
         "cch_durable"
       ],
       "boundary": null,
-      "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
-      "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
-        "result": null
-      },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
-      "gaps": [
-        "The watch overflow scenario covers the durable watcher's 100-frame reset; state-subscriber overflow with an in-flight callback is not separately captured."
+      "implementation_ticket": "#1062",
+      "scenario": "overflow keeps only the newest pending delivery with its exact value context and delivery",
+      "comparisonScenarios": [
+        "overflow keeps only the newest pending delivery with its exact value context and delivery",
+        "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)",
+        "at most 100 deliveries pend behind one held listener and overflow keeps the newest (102 commits)",
+        "at most 100 deliveries pend behind one held listener and overflow keeps the newest (202 commits)"
       ],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
+      "evidence": {
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1062/observer-delivery.json",
+        "scenarioMatch": "direct",
+        "capturedScenarios": [
+          "overflow keeps only the newest pending delivery with its exact value context and delivery"
+        ],
+        "result": "The frozen observer delivery capture records a 100-pending limit and coalesces overflow to the newest pending value, context, and delivery."
+      },
+      "missingObservation": null,
+      "gaps": [],
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Declare one bounded pending-observation capacity and make overflow collapse to the newest state without corrupting the running callback.",
       "lane": "1057",
       "frozenSymbolsSource": null,
@@ -8749,8 +8568,8 @@
           "ticket": "1057",
           "rowId": "cch_chord:state:pending-bound",
           "membership": "supported",
-          "implementation": "missing",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_chord"
         }
       ]
@@ -8810,7 +8629,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Codemode tool descriptors, `tools.*` bindings, discovery results, catalog headings and declaration rendering.",
       "consumerOwners": [
@@ -8823,7 +8642,7 @@
         "tool identifiers replace invalid characters and preserve MCP names"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -8831,9 +8650,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Add the captured identifier table to a focused unit test; keep the routing test for the two-name binding.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -8844,7 +8663,7 @@
           "rowId": "codemode-declaration-identifier",
           "membership": "supported",
           "implementation": "implemented",
-          "verification": "unverified",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -8857,8 +8676,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Tool declarations, discovery samples, catalog sections and script signatures.",
       "consumerOwners": [
@@ -8871,7 +8690,7 @@
         "tool signatures and samples use the output schema and input budget"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -8879,9 +8698,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Test the input boundary separately from the output-schema work; both belong in the declaration renderer rather than the sandbox.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -8891,8 +8710,8 @@
           "ticket": "1053",
           "rowId": "codemode-declaration-input-budget",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -9408,7 +9227,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Portable hosts and tests.",
@@ -9444,7 +9263,7 @@
           "ticket": "1053",
           "rowId": "codemode-inline-deadline-abort",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9459,7 +9278,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Cloudflare/portable callers, tests, and any host without worker threads.",
@@ -9494,7 +9313,7 @@
           "ticket": "1053",
           "rowId": "codemode-inline-interrupt-budget",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9510,7 +9329,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Portable hosts and direct callers.",
@@ -9544,7 +9363,7 @@
           "ticket": "1053",
           "rowId": "codemode-inline-success",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9700,7 +9519,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable/remote cancellation and tests.",
@@ -9734,7 +9553,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-abort-stop",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9749,7 +9568,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable Object/remote host policy and tests.",
@@ -9783,7 +9602,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-caps",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9848,7 +9667,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Durable Objects, remote isolates, worker boundaries and tests.",
@@ -9883,7 +9702,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-exchange",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9898,7 +9717,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Remote callers, durable sessions and the TUI.",
@@ -9932,7 +9751,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-failures",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9947,7 +9766,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Remote transport efficiency and tests.",
@@ -9981,7 +9800,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-output-batching",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -9996,7 +9815,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Remote transports, Cloudflare RPC, durable object boundaries and tests.",
@@ -10021,7 +9840,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Port the plain-data protocol separately from the worker implementation; do not reuse `SandboxLink` across a transport boundary.",
+      "notes": "Recommendation: Keep transport encoding in the remote implementation; do not reuse the in-process `RemoteServeLink` across a transport boundary.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -10030,7 +9849,7 @@
           "ticket": "1053",
           "rowId": "codemode-remote-protocol",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10045,7 +9864,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "`toCodemodeDeclaration`, `renderDeclarations`, `ALL_TOOLS` descriptions, discovery samples, and codemode catalog sections.",
@@ -10080,7 +9899,7 @@
           "ticket": "1053",
           "rowId": "codemode-render-tool-signature",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10141,7 +9960,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Tool declarations, `ALL_TOOLS` samples, discovery `searchTools`/`describeTool` output, and the model-facing catalog.",
       "consumerOwners": [
@@ -10162,7 +9981,7 @@
         "local references resolve and recursive or remote references render unknown"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/declarations.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10170,9 +9989,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Add a typed unit-test table mirroring the captured declarations artifact before treating this as verified; do not fold it into the end-to-end sandbox test.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10183,7 +10002,7 @@
           "rowId": "codemode-schema-to-type",
           "membership": "supported",
           "implementation": "implemented",
-          "verification": "unverified",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10198,7 +10017,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application signal handling, direct sandbox callers and the TUI status.",
@@ -10234,7 +10053,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-abort-reason",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10299,7 +10118,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Scripts that need unlisted tools (especially MCP tools), the codemode catalog, and the MCP exposure UI copy.",
@@ -10334,7 +10153,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-discovery",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10350,7 +10169,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application error formatting, model-facing `Script error:` block and the TUI.",
@@ -10387,7 +10206,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-error-taxonomy",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10402,7 +10221,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Scripts and the Application result formatter.",
@@ -10436,7 +10255,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-exit",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10452,7 +10271,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application execute path, discovery globals, model globals, and any host helper attached to a script.",
@@ -10488,7 +10307,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-globals",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10553,7 +10372,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "partial",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`, direct sandbox callers and the Remote cap.",
@@ -10587,7 +10406,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-memory-limit",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "partial",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10603,7 +10422,7 @@
       "frozenSymbols": [],
       "membership": "supported",
       "implementation": "implemented",
-      "verification": "unverified",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Script output collection, store snapshots and the stable prelude fingerprint.",
       "consumerOwners": [
@@ -10616,7 +10435,7 @@
         "the guest prelude is the frozen sandbox prelude with output and store limits"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10624,9 +10443,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Pin the prelude to v1.3.0 and add limit tests that cross the boundary; do not expose duplicated C++ constants unless a caller needs them.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10637,7 +10456,7 @@
           "rowId": "codemode-script-output-limits",
           "membership": "supported",
           "implementation": "implemented",
-          "verification": "unverified",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10652,8 +10471,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application result formatting, TUI/fallback rendering, image sidecars and output spill.",
       "consumerOwners": [
@@ -10668,7 +10487,7 @@
         "invalid image arguments throw a catchable TypeError inside the script"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10676,9 +10495,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Add a console discriminant to `CodemodeOutputItem` and update the prelude to emit `console`; then use it in the Application output block. Keep text/image ordering tests, but assert console separately.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10688,8 +10507,8 @@
           "ticket": "1053",
           "rowId": "codemode-script-output-text-image-console",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10704,7 +10523,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application session store (`codemode-store` entry), scripts that keep small state across calls, and the result details.",
@@ -10739,7 +10558,7 @@
           "ticket": "1053",
           "rowId": "codemode-script-store-load",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -10754,8 +10573,8 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Scripts that fire-and-forget, the Application nested-call record and the TUI status row.",
       "consumerOwners": [
@@ -10768,7 +10587,7 @@
         "an unawaited tool call is aborted when the script returns and its record is cancelled"
       ],
       "evidence": {
-        "route": "related-captured",
+        "route": "captured",
         "artifact": "fixtures/pi-v1.3.0/audit-1053/script-execution.json",
         "scenarioMatch": "direct-global",
         "capturedScenarios": [
@@ -10776,9 +10595,9 @@
         ],
         "result": null
       },
-      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Map an unfinished nested call to `cancelled` at the codemode result boundary and test the Application details; keep the prelude abort behavior.",
       "lane": "1053",
       "frozenSymbolsSource": null,
@@ -10788,8 +10607,8 @@
           "ticket": "1053",
           "rowId": "codemode-script-unawaited-calls",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
       ]
@@ -10949,7 +10768,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "The model-facing tool and every caller that turns a validation failure into a `Script error:` result.",
@@ -10984,7 +10803,7 @@
           "ticket": "1053",
           "rowId": "codemode-source-placement-errors",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -11050,7 +10869,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `executeCodemode`; host concurrency policy; every `CodemodeSandbox.execute()`/`start()`.",
@@ -11077,7 +10896,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add an `acquireWorker`-shaped admission callback (or an application-owned semaphore) around thread creation, with release on construction failure/exit. Do not use the timeout as a capacity mechanism.",
+      "notes": "Recommendation: Keep admission tied to actual worker exit, not result settlement; this is process-local thread accounting and makes no crash- or power-loss recovery claim.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11086,7 +10905,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-admission",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -11102,7 +10921,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application `finally { await sandbox.close() }`, session teardown and reuse tests.",
@@ -11128,7 +10947,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Add `close()` with a terminal error and idempotent teardown to the host API, then use it in the Application `finally`; do not rely on object destruction for cancellation.",
+      "notes": "Recommendation: Keep close idempotent and terminal; callers should close explicitly rather than rely on destruction for cancellation.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11137,7 +10956,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-close",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -11153,7 +10972,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application worker creation and sandbox error reporting.",
@@ -11179,7 +10998,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Keep the eager wasm validation; add a typed worker-start failure path and release semantics with the admission seam.",
+      "notes": "Recommendation: Keep eager guest validation and the typed start failure path with one-shot reservation release.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11188,7 +11007,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-construction-failure",
           "membership": "supported",
-          "implementation": "partial",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -11205,7 +11024,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application concurrency accounting, `CodemodeSandbox.close()`, and tests that distinguish result settlement from process/thread exit.",
@@ -11233,7 +11052,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Separate result settlement from thread exit in the host API and add `onWorkerStarted`/`close`; the worker-lifetime scenario family must be rerun against that seam.",
+      "notes": "Recommendation: Keep result settlement independent from actual worker exit and retain the real-thread exit-gate tests; do not claim crash- or power-loss recovery.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11242,7 +11061,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-lifetime",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -11256,7 +11075,7 @@
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "missing",
+      "implementation": "implemented",
       "verification": "upstream-captured",
       "owner": "cch_codemode",
       "consumer": "Application concurrency accounting and `CodemodeSandbox.close()`.",
@@ -11281,7 +11100,7 @@
       "missingObservation": null,
       "gaps": [],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
-      "notes": "Recommendation: Implement the lifetime seam first; then add the repeated-cancel test with an independent released-at-result probe.",
+      "notes": "Recommendation: Retain separate result and actual-exit observations and one-shot release callbacks; this is in-process accounting only.",
       "lane": "1053",
       "frozenSymbolsSource": null,
       "appliedCorrections": [],
@@ -11290,7 +11109,7 @@
           "ticket": "1053",
           "rowId": "codemode-worker-repeated-cancellation",
           "membership": "supported",
-          "implementation": "missing",
+          "implementation": "implemented",
           "verification": "upstream-captured",
           "owner": "cch_codemode"
         }
@@ -16064,12 +15883,13 @@
       "source": [
         "packages/coding-agent/src/extensions/mcp/index.ts:ensureDiscoveryActive",
         "packages/coding-agent/src/extensions/tool-search/tool.ts:TOOL_SEARCH_TOOL_NAME,createToolSearchTool",
-        "packages/coding-agent/src/core/mcp-servers.ts:MCP_EXPOSURE_ALIASES"
+        "packages/coding-agent/src/core/mcp-servers.ts:MCP_EXPOSURE_ALIASES",
+        "packages/durable/test/tool-search.test.ts:deferred tools and tool_search"
       ],
       "frozenSymbols": [],
       "membership": "supported",
-      "implementation": "partial",
-      "verification": "unverified",
+      "implementation": "implemented",
+      "verification": "upstream-captured",
       "owner": "cch_coding_agent",
       "consumer": "MCP exposure policy, `tool_search`, the `mcp_servers` section and the model tool set.",
       "consumerOwners": [
@@ -16077,19 +15897,24 @@
       ],
       "boundary": null,
       "implementation_ticket": null,
-      "scenario": null,
-      "comparisonScenarios": [],
+      "scenario": "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+      "comparisonScenarios": [
+        "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it",
+        "an unrelated tool_search query loads nothing and leaves the offered set unchanged"
+      ],
       "evidence": {
-        "route": "unobserved",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
+        "route": "captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.json",
+        "scenarioMatch": "direct-global",
+        "capturedScenarios": [
+          "tool_search ranks a deferred tool, loads it through control.addTools, and the next call runs it"
+        ],
         "result": null
       },
-      "missingObservation": "no frozen capture recorded for this row; source-only audit",
+      "missingObservation": null,
       "gaps": [],
-      "remainingWork": "no frozen capture recorded for this row; source-only audit",
-      "notes": "Recommendation: Either add the `tool_search` owner surface or record deferred as unreachable in the membership ledger. Do not silently treat deferred as direct or codemode.",
+      "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
+      "notes": "C++ covers the two captured scenarios, the frozen two-search ordering case and the durable loadout. `ExtensionToolRegistry::convert_extension_tool` now copies the extension execute per model call, so a registered `tool_search`, `codemode` or MCP tool stays callable for the whole session (it previously consumed the move-only operation on the first call). Recommendation: Keep deferred tools undeclared until `tool_search` loads them, keep the loadout in the session transcript so forks and resumes replay their own set, and keep an extension tool's execute copyable per call because a model searches and calls tools more than once.",
       "lane": "1052",
       "frozenSymbolsSource": null,
       "appliedCorrections": [
@@ -16100,8 +15925,8 @@
           "ticket": "1052",
           "rowId": "mcp-deferred-tool-search",
           "membership": "supported",
-          "implementation": "partial",
-          "verification": "unverified",
+          "implementation": "implemented",
+          "verification": "upstream-captured",
           "owner": "cch_coding_agent"
         }
       ]
@@ -23047,22 +22872,25 @@
       "implementation_ticket": "#1058-draft",
       "scenario": "C++ SQLite open with non-default WAL checkpoint and busy timeout",
       "comparisonScenarios": [
-        "C++ SQLite open with non-default WAL checkpoint and busy timeout"
+        "C++ SQLite open with non-default WAL checkpoint and busy timeout",
+        "SQLite applies entry ID bounds and stores document revisions with configured busy and WAL options"
       ],
       "evidence": {
-        "route": "declared-comparison",
-        "artifact": null,
-        "scenarioMatch": null,
-        "capturedScenarios": [],
+        "route": "related-captured",
+        "artifact": "fixtures/pi-v1.3.0/audit-1075/sqlite-transaction-options.json",
+        "scenarioMatch": "direct-global",
+        "capturedScenarios": [
+          "SQLite applies entry ID bounds and stores document revisions with configured busy and WAL options"
+        ],
         "result": "Not captured; the capture uses adapter defaults and records the resulting WAL journal mode."
       },
-      "missingObservation": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "missingObservation": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "gaps": [
         "No configurable SQLite connection options exist.",
         "No cch_durable target or C++ implementation exists; this audit records upstream behavior only.",
         "No C++ comparison can run until the durable owner exists; the row stays upstream-captured or unverified."
       ],
-      "remainingWork": "recorded comparison scenario has no captured artifact pairing; C++ comparison not run",
+      "remainingWork": "declared comparison scenario resolves to a registered artifact, but this row records its own status; no cross-row promotion",
       "notes": "",
       "lane": "1054",
       "frozenSymbolsSource": null,

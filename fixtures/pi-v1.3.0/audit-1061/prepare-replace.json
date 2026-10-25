@@ -4,13 +4,13 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1061",
   "family": "audit-1061",
-  "capturedAt": "2026-10-20T07:52:46.206Z",
+  "capturedAt": "2026-10-23T16:13:12.396Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
     "libc": "glibc",
     "glibcVersion": "2.44",
-    "node": "v26.12.0",
+    "node": "v26.12.1",
     "tsx": "4.22.1"
   },
   "sourceEndpoints": [

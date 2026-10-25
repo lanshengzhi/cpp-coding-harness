@@ -481,6 +481,38 @@ TEST_CASE("a repeated cursor is reported once as a gap and keeps the last good v
     unsubscribe();
 }
 
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/ordered-frames.json
+// A strictly backward cursor after a good frame must fail just like a skipped cursor.
+TEST_CASE("a backward cursor reports one ordering gap and retains the last good value",
+        "[chord][replicated_state][issue1062][spec]") {
+    TestSource source{revision(1), 0};
+    std::vector<std::string> errors;
+    auto attached = AttachedReplicatedState::attach(source,
+            ReplicatedStateSourceOptions{
+                    .onError = [&errors](const support::Error& error) { errors.push_back(error.message); }});
+    REQUIRE(attached.has_value());
+
+    std::vector<DeliveryEvent> deliveries;
+    auto unsubscribe = attached->subscribe([&deliveries](Json value, Context, ReplicatedStateDelivery delivery) {
+        record_delivery(deliveries, delivery.kind, delivery.sequence, number_of(value));
+        return ready();
+    });
+    source.commit_at(revision(2), 1);
+    source.commit_at(revision(3), 0);
+    source.commit_at(revision(4), 2);
+
+    CHECK((errors == std::vector<std::string>{"Replicated state source cursor has a gap: expected 2, received 0"}));
+    REQUIRE(deliveries.size() == 2);
+    CHECK(deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
+    CHECK(deliveries[0].value == 1.0);
+    CHECK(deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(deliveries[1].sequence == 1);
+    CHECK(deliveries[1].value == 2.0);
+    CHECK(number_of(attached->value()) == 2.0);
+    CHECK(source.dispose_calls() == 1);
+    unsubscribe();
+}
+
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
 // "at most 100 deliveries pend behind one held listener and overflow keeps the newest (100 commits)".
 TEST_CASE("at most 100 deliveries pend behind one held listener while a commit fits the bound",
@@ -592,6 +624,64 @@ TEST_CASE("overflow keeps only the newest pending delivery with its exact value 
     CHECK(deliveries[2].sequence == 102);
     CHECK(markers[2] == std::optional<int>{102});
     unsubscribe();
+}
+
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json
+// "overflow keeps only the newest pending delivery with its exact value context and delivery" and
+// "a held listener serializes its own updates while another subscription converges independently".
+TEST_CASE("pending overflow keeps the newest frame while fast observers follow every publication",
+        "[chord][replicated_state][issue1062][spec]") {
+    TestSource source{revision(0)};
+    auto attached = AttachedReplicatedState::attach(source);
+    REQUIRE(attached.has_value());
+
+    std::optional<Completion> held_update;
+    std::vector<DeliveryEvent> held_deliveries;
+    std::vector<DeliveryEvent> fast_deliveries;
+    auto held_unsubscribe = attached->subscribe(
+            [&held_deliveries, &held_update](Json value, Context, ReplicatedStateDelivery delivery) {
+                record_delivery(held_deliveries, delivery.kind, delivery.sequence, number_of(value));
+                if (delivery.kind == ReplicatedStateDeliveryKind::Update && delivery.sequence == 1)
+                    return hold(held_update);
+                return ready();
+            });
+    auto fast_unsubscribe =
+            attached->subscribe([&fast_deliveries](Json value, Context, ReplicatedStateDelivery delivery) {
+                record_delivery(fast_deliveries, delivery.kind, delivery.sequence, number_of(value));
+                return ready();
+            });
+
+    source.commit(revision(1));
+    for (int value = 2; value <= 102; value += 1)
+        source.commit(revision(value));
+    source.commit(revision(103));
+
+    REQUIRE(held_deliveries.size() == 2);
+    CHECK(held_deliveries[0].kind == ReplicatedStateDeliveryKind::Hydrate);
+    CHECK(held_deliveries[0].sequence == 0);
+    CHECK(held_deliveries[1].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(held_deliveries[1].sequence == 1);
+    REQUIRE(fast_deliveries.size() == 104);
+    for (std::size_t index = 0; index < fast_deliveries.size(); index += 1) {
+        CHECK(fast_deliveries[index].sequence == static_cast<std::int64_t>(index));
+        CHECK(fast_deliveries[index].value == static_cast<double>(index));
+        CHECK(fast_deliveries[index].kind ==
+                (index == 0 ? ReplicatedStateDeliveryKind::Hydrate : ReplicatedStateDeliveryKind::Update));
+    }
+    CHECK(number_of(attached->value()) == 103.0);
+
+    settle(held_update);
+    REQUIRE(held_deliveries.size() == 4);
+    CHECK(held_deliveries[2].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(held_deliveries[2].sequence == 102);
+    CHECK(held_deliveries[2].value == 102.0);
+    CHECK(held_deliveries[3].kind == ReplicatedStateDeliveryKind::Update);
+    CHECK(held_deliveries[3].sequence == 103);
+    CHECK(held_deliveries[3].value == 103.0);
+    CHECK(number_of(attached->value()) == 103.0);
+
+    held_unsubscribe();
+    fast_unsubscribe();
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1062/observer-delivery.json

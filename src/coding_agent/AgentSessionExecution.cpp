@@ -354,6 +354,35 @@ boost::asio::awaitable<support::ExpectedVoid> AgentSession::Impl::persist_initia
     co_return support::ExpectedVoid{};
 }
 
+support::ExpectedVoid AgentSession::Impl::queue_tool_loadout(ai::SystemMessage message) {
+    if (!session_.store) return {};
+    const ai::MessageVariant persisted_message{message};
+    support::ExpectedVoid persisted;
+    if (persistence_) {
+        persisted = persistence_->submit_message_append(persisted_message);
+    } else {
+        persisted = session_.store->append(persisted_message);
+    }
+    if (!persisted) return persisted;
+    session_.history.push_back(ai::MessageVariant{std::move(message)});
+    return {};
+}
+
+void AgentSession::Impl::replay_loaded_tools() {
+    if (!services_.mcp_manager || !agent_) return;
+    std::vector<std::string> names;
+    for (const auto& message : agent_->state().messages) {
+        const auto* system = std::get_if<ai::SystemMessage>(&message);
+        if (!system) continue;
+        for (const auto& tool : system->tools_added) {
+            if (std::ranges::find(names, tool.name) == names.end()) names.push_back(tool.name);
+        }
+        for (const auto& tool : system->tools_removed)
+            std::erase(names, tool.name);
+    }
+    services_.mcp_manager->restore_loaded_tools(std::move(names));
+}
+
 std::string AgentSession::Impl::rebuild_system_prompt() const {
     const auto history = agent_ ? agent_->state().messages : session_.history;
     std::vector<ai::SystemMessage> system_messages;

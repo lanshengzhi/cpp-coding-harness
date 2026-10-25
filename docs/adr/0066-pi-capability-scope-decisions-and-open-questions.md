@@ -269,7 +269,6 @@ next revision; every row that remains carries its exact pi pointer.
 
 | Gap | pi pointer and the blocking seam |
 |---|---|
-| `deferred` exposure is unreachable (tool_search Deferred) | pi's `tool_search` tool (`packages/coding-agent/src/extensions/tool-search/tool.ts` `TOOL_SEARCH_TOOL_NAME`, BM25 over deferred tool metadata, registered `defaultActive: false`) has no Pike counterpart; the row is recorded below — a membership ruling, not a seam |
 | stdio stderr tail on failed servers | pi keeps the last 2000 chars of a failed stdio server's stderr (`packages/coding-agent/src/extensions/mcp/runtime.ts` `stderrTail`, fed by the 64 KB ring in `packages/mcp/src/transports/stdio.ts`). The manager seam carries `stderr_tail` (`McpSessionManager` snapshot-tested); the production stdio source still drains stderr to `/dev/null` (`McpStdioClient`), so the tail is always absent |
 | External sign-in pickup (`turn_start` `reconnectSignedIn`) | pi compares the stored OAuth tokens at every turn start to notice a `pi mcp login` run by another process (`packages/coding-agent/src/extensions/mcp/index.ts` `turn_start` handler, `tokensAtSignIn` snapshot). Pike's manager reconnects on its own sign-in action only; closing this needs a per-turn token-snapshot hook in the session lifecycle |
 | pi's background connect + first-prompt wait | pi connects in the background and lets the first prompt wait up to `DEFAULT_STARTUP_WAIT_MS` (10 s) for `direct` servers (`packages/coding-agent/src/extensions/mcp/index.ts` `session_start`). Pike awaits the connect phase at assembly, which keeps the #876 creation-result contract synchronous — a deliberate architecture trade, not an oversight |
@@ -292,7 +291,8 @@ action (pi `runAction`), exactly like pi:
   recorded once: `MCP tools are only reachable from the codemode or tool_search tool, but neither is
   active (autoEnableCodemode is false); they cannot be called.` (without the parenthesized reason when
   `autoEnableCodemode` is not the cause).
-- exposure `deferred` maps to pi's `tool_search` activation — recorded Deferred below; no activation.
+- exposure `deferred` maps to pi's `tool_search` activation (landed with #1095, see the revision
+  below); nothing else is declared.
 - exposure `direct` declares the server's tools like built-ins on registration (pi
   `_isActivatedOnRegistration`); exposure `hidden` registers them never declared. pi never unregisters
   a tool: a withdrawn tool re-registers as `hidden`, and the resource tools re-register at the widest
@@ -312,7 +312,17 @@ and declares it. `7f03d3409`'s test expectations revert to the four-tool declare
 
 | Capability | pi source at `7c10bd43` | Pike status |
 |---|---|---|
-| `tool_search`: the deferred-tool discovery tool (`TOOL_SEARCH_TOOL_NAME`, BM25 search over deferred tool metadata, declares the matches for the next model call) | `packages/coding-agent/src/extensions/tool-search/tool.ts` (`TOOL_SEARCH_TOOL_NAME`, `TOOL_SEARCH_DESCRIPTION`), `index.ts` (registered `defaultActive: false`) | **Deferred.** Pike has no `tool_search` tool, so a server configured `exposure: "deferred"` registers its tools but nothing can declare them: the manager activates nothing, and pi's verbatim reachability warning fires when `codemode` is inactive too (exact pi semantics with `hasToolSearch` false). The `mcp_servers` section still lists a deferred server with pi's `(tool_search)` spelling — the renderer is the landed, bundle-diffed pi port; the tools remain unreachable until a membership ruling promotes this row. Not decided against: a later proposal starts from this row. |
+| `tool_search`: the deferred-tool discovery tool (`TOOL_SEARCH_TOOL_NAME`, BM25 search over deferred tool metadata, declares the matches for the next model call) | `packages/coding-agent/src/extensions/tool-search/tool.ts` (`TOOL_SEARCH_TOOL_NAME`, `TOOL_SEARCH_DESCRIPTION`), `index.ts` (registered `defaultActive: false`) | **Supported** (#1095). `ToolSearchToolSource` registers the tool inactive and ranks the owner-registered `deferred`/`codemode` MCP candidates with pi's BM25 field weights; the manager activates only the matches and the session commits the loadout before declaring them, so the deferred tools stay unreachable until a search loads them. See the #1095 revision below for the evidence. |
+
+**`tool_search` revision (#1095, 2026-10-24).** The former Deferred row is implemented: pi's
+verbatim result text, the no-match outcome, and the branch-durable loadout are all in place
+(`fixtures/pi-v1.3.0/audit-1056/codemode-toolsearch.json`). The loadout is a persisted
+`SystemMessage.tools_added` record committed before activation, so a fork keeps its own set, a
+reopen replays it after MCP re-registers, and an already-loaded tool is never re-announced. C++
+evidence: `McpSessionIntegrationTest.cpp` `[issue1095]`, whose cases reproduce both captured
+scenarios, pi's in-run repeated-search ordering (`packages/durable/test/tool-search.test.ts`), the
+no-match stability check and the fork/reopen loadouts. Deferred tools are reachable from the run
+that loads them; no membership decision remains open here.
 
 ### MCP `/mcp` panel and slash wiring (2026-10-08, #884 slash-wiring slice)
 
@@ -381,7 +391,7 @@ notes. **Fixed in the sweep** (small, focused):
 **Recorded as Deferred** (each row above carries its exact pi pointer): the ACTIVATION-REPORT
 residuals stdio stderr tail, external sign-in pickup, and the background-connect nuance; the
 slash-wiring multi-candidate selection and TUI sign-in timeout classification; the MCP result
-conversion presentation; the `tool_search` membership row; the dynamic codemode description catalog;
+conversion presentation; the dynamic codemode description catalog;
 and the settings keys below. No unrecorded MCP/codemode behaviour difference remains against the
 `pi-v1.0.4` notes and frozen bundle.
 
@@ -474,7 +484,7 @@ Pike's counterpart is therefore `src/agent/harness/`, not that path.
 
 | pi package or capability | Size | Status |
 |---|---|---|
-| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, **OAuth credential semantics**, **server management/persistence**, the **server-to-client GET stream**, **resource tools**, and **exposure policy** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, #875, #876; spec #882, #884 for the last three). pi's separate **`tool_search`** discovery tool, which the exposure policy's `deferred` mode activates, is **Deferred** — the row is recorded in the activation-model revision above. |
+| `packages/mcp` (whole package) | 20 files / 3,179 LOC (`client.ts` 21KB, `protocol/`, `transports/`, `oauth/`) | **Decided in part.** The **stdio** and **streamable-HTTP** transports, the `initialize`/`tools/list`/`tools/call` client, MCP-tool-to-extension-Tool conversion, **OAuth credential semantics**, **server management/persistence**, the **server-to-client GET stream**, **resource tools**, and **exposure policy** are an owner decision — see the Owner decisions section above (spec #865, #869, #873, #875, #876; spec #882, #884 for the last three). pi's separate **`tool_search`** discovery tool, which the exposure policy's `deferred` mode activates, is **Supported** (#1095) — see the activation-model revision and the #1095 revision above. |
 | `packages/codemode` (whole package) | 11 files / 1,655 LOC (`declarations.ts` 13KB, `runtime/`) | **Decided in part.** Project-local codemode declarations and source loading (#870 — **superseded and physically removed by #885**), the sandboxed `runtime/` + `wasm.ts` execution path (#874, reshaped to pi's worker model by #885), and output presentation through the existing tool-renderer registry (#877) are owner decisions — see the Owner decisions section above (spec #865). Routing a script's `tools.*` calls to the session's tools, recorded as a follow-up by the #865 close-out (#879), was **absorbed by spec #882 and delivered by #885** — see the #885 implementation record above. The remaining recorded gaps are the dynamic codemode description catalog and the `models.*` globals (both pi-pointered in the #885 record). |
 | Image generation (in-package capability, `packages/ai`) | `packages/ai/src/image-models.ts` (50 lines), `images-api-registry.ts` (53), `images.ts` (26) | **No decision.** Pike has image *input* handling (`ImageInput.cpp`); upstream image *generation* is a separate outbound API surface. |
 | Classifier models (in-package capability) | `packages/ai/src/types.ts:1161` (`ModelTypeMap.classifier: ClassifierModel<ClassifierApi>`), `models.ts` (`classify()` declarations at :228/:348/:966), `api/llama-cpp-classify.ts` (458 lines) + `.lazy.ts` (6), `coding-agent/src/core/model-registry.ts:77` (`findOfType("classifier", …)`) | **No decision.** Scope is the classifier model kind only: at this baseline `ModelTypeMap` has exactly `chat`, `image`, and `classifier`. Pike has no `ClassifierModel`, `classify()`, or `findOfType` equivalent. |
@@ -526,8 +536,8 @@ All pi sizes above are measured at the pi baseline; all Pike sizes at the Pike c
   `/mcp` actions, exposure-aware re-registration, the resource tools, RFC 9728 discovery, the
   `mcp-auth.json` store, the server→client GET stream, and the OAuth flow) is in the subset too —
   the `/mcp` panel and slash wiring (including the OAuth sign-in screen) shipped in the 2026-10-08
-  slash-wiring slice; the recorded gaps after the #886 close-out sweep are the `tool_search`
-  membership row and the pi-pointered rows in the #884/#885 records above (stdio stderr tail,
+  slash-wiring slice; the recorded gaps after the #886 close-out sweep are the pi-pointered rows in
+  the #884/#885 records above (stdio stderr tail,
   external sign-in pickup, background connect, multi-candidate selection, TUI sign-in timeout
   classification, MCP result conversion presentation, dynamic codemode description catalog,
   `codemode.mode`/`inlineBudget` consumers, `defaultTools`).

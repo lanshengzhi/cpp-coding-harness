@@ -8,6 +8,7 @@ include_guard(GLOBAL)
     add_executable(cch_tests_codemode
         tests/Catch2Main.cpp
         tests/codemode/CodemodeOwnerTest.cpp
+        tests/codemode/CodemodeRemoteTest.cpp
 )
     target_include_directories(cch_tests_codemode PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_codemode

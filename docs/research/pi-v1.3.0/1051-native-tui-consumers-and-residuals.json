@@ -10,7 +10,7 @@
  "evidence": {
   "family": "audit-1051",
   "manifest": "fixtures/pi-v1.3.0/audit-1051/manifest.json",
-  "manifestSha256": "a571c0eb1477f5cd61f022d40b8616855e16d2969198ac3c786c929273968d68",
+  "manifestSha256": "20b80c535858b44e0c9e47f7d253dad254051c3132525c02cdd80a7c7f1cc535",
   "report": "docs/research/pi-v1.3.0/1051-native-tui-consumers-and-residuals.md",
   "artifacts": [
    "product-differential.json",

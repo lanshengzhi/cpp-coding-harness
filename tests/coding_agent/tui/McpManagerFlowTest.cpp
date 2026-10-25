@@ -204,6 +204,8 @@ public:
     void register_resource_tools(
             McpExposure, std::vector<std::shared_ptr<coding_agent::mcp::McpResourceServer>>) override {}
     void set_active_tools(std::vector<std::string>) override {}
+    [[nodiscard]] support::ExpectedVoid activate_tools(std::vector<std::string>) override { return {}; }
+    void restore_loaded_tools(std::vector<std::string>) override {}
     [[nodiscard]] std::vector<std::string> active_tools() const override { return {}; }
     [[nodiscard]] std::vector<McpSurfaceTool> all_tools() const override {
         if (!codemode_registered) {

@@ -12,6 +12,7 @@
 #include "support/Json.hpp"
 #include "support/TempWorkspace.hpp"
 
+#include <cch/mcp/OAuthState.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <catch2/catch_test_macros.hpp>
@@ -49,10 +50,10 @@ using JsonObject = support::JsonValue::object_t;
     return std::move(*parsed);
 }
 
-[[nodiscard]] coding_agent::mcp::McpOAuthState sample_state(const std::string& url) {
-    coding_agent::mcp::McpOAuthState state;
+[[nodiscard]] cch::mcp::OAuthState sample_state(const std::string& url) {
+    cch::mcp::OAuthState state;
     state.server_url = url;
-    coding_agent::mcp::McpOAuthTokens tokens;
+    cch::mcp::OAuthTokens tokens;
     tokens.access_token = "dummy-access-token";
     tokens.token_type = "Bearer";
     tokens.refresh_token = "dummy-refresh-token";

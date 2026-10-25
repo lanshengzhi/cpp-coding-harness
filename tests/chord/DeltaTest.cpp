@@ -113,8 +113,8 @@ TEST_CASE("ordered immutable batches produce one final revision without changing
     CHECK(*created == object({{"created", Json{true}}}));
 }
 
-// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
-// "mutable application mutates in place except for a root replacement, which returns a new value".
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
+// "a root replacement adopted before a failing operation leaves the caller object unchanged".
 TEST_CASE("mutable application exposes the replacement result and batch classifications",
         "[chord][delta][apply][issue1061][spec]") {
     Json target = object({{"items", array({Json{"a"}})}, {"value", Json{0}}});
@@ -136,11 +136,10 @@ TEST_CASE("mutable application exposes the replacement result and batch classifi
     CHECK_FALSE(is_base(OpBatch{SetOp{.path = keys({"value"}), .value = Json{1}}}));
 }
 
-// Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json
-// "unsafe prototype segments and malformed operation tuples are rejected before mutation".
-// The malformed-tuple and string-index spellings are unrepresentable in the
-// typed C++ operation variant; the emitted errors below cover the representable cases.
-TEST_CASE("unsafe paths and malformed operations are rejected before target access",
+// Frozen evidence: fixtures/pi-v1.3.0/audit-1061/validation-order.json
+// records per-operation validation; typed C++ operations cannot represent the
+// malformed-tuple and string-index cases, so checks below cover representable cases.
+TEST_CASE("application follows frozen sequential validation and replacement semantics",
         "[chord][delta][validation][issue1061][spec]") {
     Json target = object({{"value", Json{1}}, {"items", array({Json{"a"}})}});
     const Json before = target;
@@ -163,7 +162,18 @@ TEST_CASE("unsafe paths and malformed operations are rejected before target acce
     REQUIRE_FALSE(missing_array_element);
     CHECK(missing_array_element.error().message.starts_with("unresolvable path"));
 
-    // Upfront syntax validation rejects the complete batch before any access.
+    auto immutable_failure = apply_immutable(target,
+            OpBatch{
+                    SetOp{.path = keys({"value"}), .value = Json{2}},
+                    SpliceOp{.path = keys({"items"}), .index = 0, .remove = 0, .items = {Json{"x"}}},
+                    MoveOp{.path = keys({"items"}), .permutation = {0, 0}},
+            });
+    REQUIRE_FALSE(immutable_failure);
+    CHECK(immutable_failure.error().message == "m permutation is not a bijection");
+    CHECK(target == before);
+
+    // Frozen validates operations in sequence; an earlier mutable write remains
+    // applied when a later operation has an invalid path.
     const auto syntax_invalid = apply(target,
             OpBatch{
                     SetOp{.path = keys({"value"}), .value = Json{2}},
@@ -171,7 +181,17 @@ TEST_CASE("unsafe paths and malformed operations are rejected before target acce
             });
     REQUIRE_FALSE(syntax_invalid);
     CHECK(syntax_invalid.error().message == "unsafe path segment: __proto__");
-    CHECK(target == before);
+    CHECK(target == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
+
+    Json permutation_target = object({{"value", Json{1}}, {"items", array({Json{"a"}, Json{"b"}})}});
+    const auto invalid_permutation = apply(permutation_target,
+            OpBatch{
+                    SetOp{.path = keys({"value"}), .value = Json{2}},
+                    MoveOp{.path = keys({"items"}), .permutation = {0, 0}},
+            });
+    REQUIRE_FALSE(invalid_permutation);
+    CHECK(invalid_permutation.error().message == "m permutation is not a bijection");
+    CHECK(permutation_target == object({{"value", Json{2}}, {"items", array({Json{"a"}, Json{"b"}})}}));
 
     // Frozen evidence: fixtures/pi-v1.3.0/audit-1061/review-fixes.json
     // "a later traversal failure keeps the preceding mutable write".
@@ -185,6 +205,25 @@ TEST_CASE("unsafe paths and malformed operations are rejected before target acce
     REQUIRE_FALSE(partially_valid);
     CHECK(partially_valid.error().message.starts_with("unresolvable path"));
     CHECK(target == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
+
+    const auto replaced_then_failed = apply(target,
+            OpBatch{
+                    ReplaceOp{.value = object({{"replacement", Json{true}}})},
+                    SetOp{.path = keys({"missing", "value"}), .value = Json{3}},
+            });
+    REQUIRE_FALSE(replaced_then_failed);
+    CHECK(replaced_then_failed.error().message.starts_with("unresolvable path"));
+    CHECK(target == object({{"value", Json{2}}, {"items", array({Json{"a"}})}}));
+
+    const Json before_root_replace = target;
+    const auto replaced_then_empty = apply(target,
+            OpBatch{
+                    ReplaceOp{.value = object({{"replacement", Json{true}}})},
+                    SetOp{.path = Path{}, .value = Json{3}},
+            });
+    REQUIRE_FALSE(replaced_then_empty);
+    CHECK(replaced_then_empty.error().message == "path is empty");
+    CHECK(target == before_root_replace);
 }
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1057/delta-revisions.json

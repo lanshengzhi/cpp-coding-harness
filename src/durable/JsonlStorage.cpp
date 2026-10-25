@@ -1,0 +1,1087 @@
+#include <cch/durable/JsonlStorage.hpp>
+
+#include <cch/chord/Delta.hpp>
+#include <cch/chord/Json.hpp>
+#include <cch/support/JsonAccess.hpp>
+
+#include "StorageEncoding.hpp"
+#include "StorageState.hpp"
+#include "support/Json.hpp"
+
+#include <algorithm>
+#include <array>
+#include <charconv>
+#include <cmath>
+#include <cstddef>
+#include <cstdint>
+#include <filesystem>
+#include <fstream>
+#include <limits>
+#include <map>
+#include <memory>
+#include <optional>
+#include <set>
+#include <span>
+#include <string>
+#include <string_view>
+#include <system_error>
+#include <utility>
+#include <variant>
+#include <vector>
+
+namespace cch::durable {
+
+namespace {
+
+constexpr double kFormatVersion = 1.0;
+constexpr std::string_view kMainFile = "main.jsonl";
+constexpr std::string_view kReclaimSuffix = ".reclaim";
+constexpr std::string_view kPoisonMessage = "JSONL storage is poisoned and must be reopened";
+constexpr std::string_view kClosedMessage = "JSONL storage is closed";
+
+[[nodiscard]] support::Error corruption(std::string message) {
+    return support::make_error(support::ErrorCode::Validation, std::move(message));
+}
+
+[[nodiscard]] bool is_format(const support::JsonValue& value) {
+    const auto* number = value.get_if<double>();
+    return number != nullptr && *number == kFormatVersion;
+}
+
+[[nodiscard]] support::JsonValue object(
+        std::initializer_list<std::pair<const std::string, support::JsonValue>> members) {
+    support::JsonValue::object_t result;
+    for (const auto& [key, value] : members) {
+        result.emplace(key, value);
+    }
+    return support::JsonValue{std::move(result)};
+}
+
+[[nodiscard]] support::JsonValue entry_value(const EntryRecord& entry) {
+    support::JsonValue::object_t value;
+    value.emplace("id", number(entry.id.value));
+    value.emplace("conversationId", number(entry.conversation_id.value));
+    value.emplace("kind", support::JsonValue{entry.kind});
+    value.emplace("data", entry.data.to_support());
+    if (entry.head.has_value()) {
+        value.emplace("head", number(entry.head->value));
+    }
+    return support::JsonValue{std::move(value)};
+}
+
+[[nodiscard]] support::JsonValue document_scope(const StorageWrite& write) {
+    if (!write.document_conversation_id.has_value()) {
+        return object({{"kind", support::JsonValue{"session"}}});
+    }
+    return object({{"kind", support::JsonValue{"conversation"}},
+            {"conversationId", number(write.document_conversation_id->value)}});
+}
+
+[[nodiscard]] support::JsonValue document_create_record(const StorageWrite& write) {
+    const DocumentRecord& record = *write.document_record;
+    support::JsonValue::object_t value;
+    value.emplace("id", number(record.id.value));
+    value.emplace("kind", support::JsonValue{record.kind});
+    value.emplace("scope", document_scope(write));
+    if (write.document_conversation_id.has_value()) {
+        // The C++ DocumentRecord has no history/fork fields; every persisted
+        // conversation document is current-only, matching the definition
+        // token's single current value.
+        value.emplace("history", support::JsonValue{"latest"});
+        value.emplace("fork", support::JsonValue{"current"});
+    }
+    return support::JsonValue{std::move(value)};
+}
+
+[[nodiscard]] std::string document_file(DocumentId id) { return "doc-" + std::to_string(id.value) + ".jsonl"; }
+
+[[nodiscard]] std::optional<DocumentId> document_id_from_file(std::string_view name) {
+    if (!name.starts_with("doc-") || !name.ends_with(".jsonl")) {
+        return std::nullopt;
+    }
+    const std::string_view digits = name.substr(4, name.size() - 4 - 6);
+    if (digits.empty() || (digits.size() > 1 && digits.front() == '0')) {
+        return std::nullopt;
+    }
+    std::int64_t value = 0;
+    const auto parsed = std::from_chars(digits.data(), digits.data() + digits.size(), value);
+    if (parsed.ec != std::errc{} || parsed.ptr != digits.data() + digits.size() || value < 0) {
+        return std::nullopt;
+    }
+    return DocumentId{.value = value};
+}
+
+[[nodiscard]] bool is_reclaim_file(std::string_view name) {
+    return name.ends_with(kReclaimSuffix) &&
+           document_id_from_file(name.substr(0, name.size() - kReclaimSuffix.size())).has_value();
+}
+
+[[nodiscard]] std::string sidecar_key(std::string_view file, Seq seq, std::int64_t ordinal) {
+    std::string key{file};
+    key.push_back('\n');
+    key += std::to_string(seq);
+    key.push_back('\n');
+    key += std::to_string(ordinal);
+    return key;
+}
+
+[[nodiscard]] bool valid_utf8(std::string_view text) {
+    std::size_t index = 0;
+    while (index < text.size()) {
+        const auto byte = static_cast<unsigned char>(text[index]);
+        if (byte < 0x80U) {
+            ++index;
+            continue;
+        }
+        std::size_t length = 0;
+        std::uint32_t code_point = 0;
+        if ((byte & 0xE0U) == 0xC0U) {
+            length = 2;
+            code_point = byte & 0x1FU;
+        } else if ((byte & 0xF0U) == 0xE0U) {
+            length = 3;
+            code_point = byte & 0x0FU;
+        } else if ((byte & 0xF8U) == 0xF0U) {
+            length = 4;
+            code_point = byte & 0x07U;
+        } else {
+            return false;
+        }
+        if (index + length > text.size()) {
+            return false;
+        }
+        for (std::size_t offset = 1; offset < length; ++offset) {
+            const auto continuation = static_cast<unsigned char>(text[index + offset]);
+            if ((continuation & 0xC0U) != 0x80U) {
+                return false;
+            }
+            code_point = (code_point << 6U) | (continuation & 0x3FU);
+        }
+        const std::uint32_t minimum = length == 2 ? 0x80U : length == 3 ? 0x800U : 0x10000U;
+        if (code_point < minimum || code_point > 0x10FFFFU || (code_point >= 0xD800U && code_point <= 0xDFFFU)) {
+            return false;
+        }
+        index += length;
+    }
+    return true;
+}
+
+struct RawLine {
+    std::string text;
+    std::size_t start{0};
+};
+
+[[nodiscard]] support::Expected<std::vector<RawLine>> read_complete_lines(
+        const std::filesystem::path& path, std::string_view name) {
+    std::error_code error;
+    const bool exists = std::filesystem::exists(path, error);
+    if (error) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+    if (!exists) {
+        return std::vector<RawLine>{};
+    }
+    if (!std::filesystem::is_regular_file(path, error) || error) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+
+    std::ifstream stream(path, std::ios::binary);
+    if (!stream) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+    std::string bytes((std::istreambuf_iterator<char>(stream)), std::istreambuf_iterator<char>());
+    if (stream.bad()) {
+        return std::unexpected(corruption("JSONL read of " + std::string{name} + " failed"));
+    }
+
+    if (!bytes.empty() && bytes.back() != '\n') {
+        const std::size_t last_newline = bytes.rfind('\n');
+        const std::size_t complete_size = last_newline == std::string::npos ? 0 : last_newline + 1;
+        std::filesystem::resize_file(path, complete_size, error);
+        if (error) {
+            return std::unexpected(corruption("JSONL torn-line truncation of " + std::string{name} + " failed"));
+        }
+        bytes.resize(complete_size);
+    }
+
+    std::vector<RawLine> lines;
+    std::size_t start = 0;
+    std::size_t number = 1;
+    while (start < bytes.size()) {
+        const std::size_t end = bytes.find('\n', start);
+        if (end == std::string::npos) {
+            break;
+        }
+        std::string text = bytes.substr(start, end - start);
+        if (!valid_utf8(text)) {
+            return std::unexpected(
+                    corruption("Invalid UTF-8 in complete " + std::string{name} + " line " + std::to_string(number)));
+        }
+        lines.push_back(RawLine{.text = std::move(text), .start = start});
+        start = end + 1;
+        ++number;
+    }
+    return lines;
+}
+
+[[nodiscard]] support::ExpectedVoid append_file(const std::filesystem::path& path, std::string_view content) {
+    std::error_code error;
+    // A missing target is the normal first-append case; only an existing
+    // directory (the injected I/O failure) must not be opened as a file.
+    if (std::filesystem::is_directory(path, error)) {
+        return std::unexpected(corruption("JSONL append failed"));
+    }
+    std::ofstream stream(path, std::ios::binary | std::ios::app);
+    if (!stream) {
+        return std::unexpected(corruption("JSONL append failed"));
+    }
+    stream.write(content.data(), static_cast<std::streamsize>(content.size()));
+    stream.flush();
+    if (!stream.good()) {
+        return std::unexpected(corruption("JSONL append failed"));
+    }
+    return {};
+}
+
+[[nodiscard]] support::ExpectedVoid replace_file(
+        const std::filesystem::path& directory, std::string_view name, std::string_view content) {
+    const std::filesystem::path temporary = directory / (std::string{name} + std::string{kReclaimSuffix});
+    {
+        std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
+        if (!stream) {
+            return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+        }
+        stream.write(content.data(), static_cast<std::streamsize>(content.size()));
+        stream.flush();
+        if (!stream.good()) {
+            return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+        }
+    }
+    std::error_code error;
+    std::filesystem::rename(temporary, directory / name, error);
+    if (error) {
+        std::filesystem::remove(temporary, error);
+        return std::unexpected(corruption("JSONL sidecar reclamation failed"));
+    }
+    return {};
+}
+
+[[nodiscard]] support::Expected<chord::Json> decode_json(const support::JsonValue& value) {
+    return chord::Json::from_support(value);
+}
+
+struct DocumentContent {
+    bool base{true};
+    chord::Json value{};
+    chord::OpBatch ops{};
+};
+
+struct SidecarPayload {
+    DocumentId id{};
+    DocumentContent content{};
+};
+
+struct SidecarRecord {
+    Seq seq{0};
+    std::int64_t ordinal{0};
+    SidecarPayload payload{};
+};
+
+struct ParsedSidecar {
+    SidecarRecord record;
+    std::size_t start{0};
+};
+
+enum class MainKind { Conversation, Entry, Task, DocumentCreate, DocumentChange, DocumentRetire };
+
+struct MainOperation {
+    MainKind kind{MainKind::Conversation};
+    ConversationRecord conversation{};
+    EntryRecord entry{};
+    TaskRecord task{};
+    DocumentRecord document_record{};
+    std::optional<ConversationId> document_conversation_id{};
+    DocumentId document_id{};
+    std::int64_t ordinal{0};
+};
+
+struct MainMarker {
+    Seq seq{0};
+    std::vector<MainOperation> writes{};
+};
+
+[[nodiscard]] support::Expected<DocumentContent> parse_content(const support::JsonValue& value) {
+    const auto* content = value.get_if<support::JsonValue::object_t>();
+    if (content == nullptr) {
+        return std::unexpected(corruption("Invalid document content"));
+    }
+    const auto version = support::json_integer_member(*content, "version");
+    const auto kind = support::json_string_member(*content, "kind");
+    if (!version || *version < 1 || !kind) {
+        return std::unexpected(corruption("Invalid document content"));
+    }
+    if (*kind == "base") {
+        const auto* base = support::json_member(*content, "value");
+        if (base == nullptr) {
+            return std::unexpected(corruption("Invalid document content"));
+        }
+        auto decoded = decode_json(*base);
+        if (!decoded) {
+            return std::unexpected(std::move(decoded.error()));
+        }
+        return DocumentContent{.base = true, .value = std::move(*decoded), .ops = {}};
+    }
+    if (*kind == "delta") {
+        const auto* ops = support::json_member(*content, "ops");
+        if (ops == nullptr) {
+            return std::unexpected(corruption("Invalid document content"));
+        }
+        auto decoded = decode_ops(*ops);
+        if (!decoded) {
+            return std::unexpected(std::move(decoded.error()));
+        }
+        return DocumentContent{.base = false, .value = {}, .ops = std::move(*decoded)};
+    }
+    return std::unexpected(corruption("Invalid document content"));
+}
+
+[[nodiscard]] support::Expected<SidecarRecord> parse_sidecar(
+        std::string_view text, std::string_view file, std::size_t line) {
+    auto parsed = support::read_json(text);
+    if (!parsed) {
+        return std::unexpected(corruption("Malformed complete " + std::string{file} + " line " + std::to_string(line)));
+    }
+    const auto* root = parsed->get_if<support::JsonValue::object_t>();
+    const auto* format = root == nullptr ? nullptr : support::json_member(*root, "format");
+    if (root == nullptr || format == nullptr || !is_format(*format) ||
+            support::json_string_member(*root, "type") != std::optional<std::string_view>{"record"}) {
+        return std::unexpected(
+                corruption("Invalid sidecar record in " + std::string{file} + " line " + std::to_string(line)));
+    }
+    const auto seq = support::json_integer_member(*root, "seq");
+    const auto ordinal = support::json_integer_member(*root, "ordinal");
+    const auto* payload = support::json_object_member(*root, "payload");
+    if (!seq || *seq < 1 || !ordinal || *ordinal < 0 || !payload ||
+            support::json_string_member(*payload, "type") != std::optional<std::string_view>{"document"}) {
+        return std::unexpected(
+                corruption("Invalid sidecar record in " + std::string{file} + " line " + std::to_string(line)));
+    }
+    const auto id = support::json_integer_member(*payload, "id");
+    const auto* content = support::json_member(*payload, "content");
+    if (!id || content == nullptr) {
+        return std::unexpected(
+                corruption("Invalid document record in " + std::string{file} + " line " + std::to_string(line)));
+    }
+    auto decoded_content = parse_content(*content);
+    if (!decoded_content) {
+        return std::unexpected(std::move(decoded_content.error()));
+    }
+    return SidecarRecord{.seq = *seq,
+            .ordinal = *ordinal,
+            .payload = SidecarPayload{.id = DocumentId{.value = *id}, .content = std::move(*decoded_content)}};
+}
+
+[[nodiscard]] support::Expected<EntryRecord> parse_entry(
+        const support::JsonValue& value, std::string_view description) {
+    const auto* entry = value.get_if<support::JsonValue::object_t>();
+    if (entry == nullptr) {
+        return std::unexpected(corruption("Invalid entry write in " + std::string{description}));
+    }
+    const auto id = support::json_integer_member(*entry, "id");
+    const auto conversation_id = support::json_integer_member(*entry, "conversationId");
+    const auto kind = support::json_string_member(*entry, "kind");
+    const auto* data = support::json_member(*entry, "data");
+    if (!id || !conversation_id || !kind) {
+        return std::unexpected(corruption("Invalid entry write in " + std::string{description}));
+    }
+    chord::Json decoded_data{};
+    if (data != nullptr) {
+        auto decoded = decode_json(*data);
+        if (!decoded) {
+            return std::unexpected(std::move(decoded.error()));
+        }
+        decoded_data = std::move(*decoded);
+    }
+    std::optional<EntryId> head;
+    if (const auto* raw_head = support::json_member(*entry, "head");
+            raw_head != nullptr && !raw_head->holds<support::JsonValue::null_t>()) {
+        const auto parsed_head = nonnegative_integer(*raw_head);
+        if (!parsed_head) {
+            return std::unexpected(corruption("Invalid entry write in " + std::string{description}));
+        }
+        head = EntryId{.value = *parsed_head};
+    }
+    return EntryRecord{.id = EntryId{.value = *id},
+            .conversation_id = ConversationId{.value = *conversation_id},
+            .kind = std::string{*kind},
+            .data = std::move(decoded_data),
+            .head = head};
+}
+
+[[nodiscard]] support::Expected<MainOperation> parse_main_operation(
+        const support::JsonValue& value, std::string_view description) {
+    const auto* operation = value.get_if<support::JsonValue::object_t>();
+    if (operation == nullptr) {
+        return std::unexpected(corruption("Invalid write in " + std::string{description}));
+    }
+    const auto type = support::json_string_member(*operation, "type");
+    if (!type) {
+        return std::unexpected(corruption("Invalid write in " + std::string{description}));
+    }
+    if (*type == "conversation") {
+        const auto* record = support::json_object_member(*operation, "value");
+        const auto id = record == nullptr ? std::nullopt : support::json_integer_member(*record, "id");
+        if (!id) {
+            return std::unexpected(corruption("Invalid conversation write in " + std::string{description}));
+        }
+        return MainOperation{
+                .kind = MainKind::Conversation, .conversation = ConversationRecord{.id = ConversationId{.value = *id}}};
+    }
+    if (*type == "entry") {
+        const auto* record = support::json_member(*operation, "value");
+        if (record == nullptr) {
+            return std::unexpected(corruption("Invalid entry write in " + std::string{description}));
+        }
+        auto entry = parse_entry(*record, description);
+        if (!entry) {
+            return std::unexpected(std::move(entry.error()));
+        }
+        return MainOperation{.kind = MainKind::Entry, .entry = std::move(*entry)};
+    }
+    if (*type == "task") {
+        const auto* record = support::json_member(*operation, "value");
+        if (record == nullptr) {
+            return std::unexpected(corruption("Invalid task write in " + std::string{description}));
+        }
+        auto json = chord::Json::from_support(*record);
+        if (!json) {
+            return std::unexpected(std::move(json.error()));
+        }
+        auto decoded = decode_task_record(*json);
+        if (!decoded) {
+            return std::unexpected(std::move(decoded.error()));
+        }
+        return MainOperation{.kind = MainKind::Task, .task = std::move(*decoded)};
+    }
+    if (*type == "document.retire") {
+        const auto id = support::json_integer_member(*operation, "id");
+        if (!id) {
+            return std::unexpected(corruption("Invalid document retirement in " + std::string{description}));
+        }
+        return MainOperation{.kind = MainKind::DocumentRetire, .document_id = DocumentId{.value = *id}};
+    }
+    if (*type == "document.create") {
+        const auto* record = support::json_object_member(*operation, "record");
+        const auto id = record == nullptr ? std::nullopt : support::json_integer_member(*record, "id");
+        const auto kind = record == nullptr ? std::nullopt : support::json_string_member(*record, "kind");
+        const auto ordinal = support::json_integer_member(*operation, "ordinal");
+        const auto* scope = record == nullptr ? nullptr : support::json_object_member(*record, "scope");
+        const auto scope_kind = scope == nullptr ? std::nullopt : support::json_string_member(*scope, "kind");
+        std::optional<ConversationId> conversation_id;
+        if (scope_kind == std::optional<std::string_view>{"conversation"}) {
+            const auto parsed = support::json_integer_member(*scope, "conversationId");
+            if (!parsed) {
+                return std::unexpected(corruption("Invalid document creation in " + std::string{description}));
+            }
+            conversation_id = ConversationId{.value = *parsed};
+        } else if (scope_kind != std::optional<std::string_view>{"session"}) {
+            return std::unexpected(corruption("Invalid document creation in " + std::string{description}));
+        }
+        if (!id || !kind || !ordinal || *ordinal < 0) {
+            return std::unexpected(corruption("Invalid document creation in " + std::string{description}));
+        }
+        return MainOperation{.kind = MainKind::DocumentCreate,
+                .document_record = DocumentRecord{.id = DocumentId{.value = *id}, .kind = std::string{*kind}},
+                .document_conversation_id = conversation_id,
+                .ordinal = *ordinal};
+    }
+    if (*type == "document.change") {
+        const auto id = support::json_integer_member(*operation, "id");
+        const auto ordinal = support::json_integer_member(*operation, "ordinal");
+        if (!id || !ordinal || *ordinal < 0) {
+            return std::unexpected(corruption("Invalid document change in " + std::string{description}));
+        }
+        return MainOperation{
+                .kind = MainKind::DocumentChange, .document_id = DocumentId{.value = *id}, .ordinal = *ordinal};
+    }
+    return std::unexpected(corruption("Unknown write type in " + std::string{description}));
+}
+
+[[nodiscard]] support::Expected<MainMarker> parse_main_marker(std::string_view text, std::size_t line) {
+    auto parsed = support::read_json(text);
+    const std::string description = std::string{kMainFile} + " line " + std::to_string(line);
+    if (!parsed) {
+        return std::unexpected(corruption("Malformed complete " + description));
+    }
+    const auto* marker = parsed->get_if<support::JsonValue::object_t>();
+    if (marker == nullptr) {
+        return std::unexpected(corruption("Invalid commit marker in " + description));
+    }
+    const auto* format = support::json_member(*marker, "format");
+    const auto seq = support::json_integer_member(*marker, "seq");
+    const auto* writes = support::json_array_member(*marker, "writes");
+    if (format == nullptr || !is_format(*format) ||
+            support::json_string_member(*marker, "type") != std::optional<std::string_view>{"commit"} || !seq ||
+            *seq < 1 || writes == nullptr) {
+        return std::unexpected(corruption("Invalid commit marker in " + description));
+    }
+    MainMarker result{.seq = *seq, .writes = {}};
+    result.writes.reserve(writes->size());
+    for (const support::JsonValue& write : *writes) {
+        auto operation = parse_main_operation(write, description);
+        if (!operation) {
+            return std::unexpected(std::move(operation.error()));
+        }
+        result.writes.push_back(std::move(*operation));
+    }
+    return result;
+}
+
+[[nodiscard]] std::string sidecar_line(const SidecarRecord& record) {
+    const support::JsonValue value = object({
+            {"format", support::JsonValue{1}},
+            {"type", support::JsonValue{"record"}},
+            {"seq", number(record.seq)},
+            {"ordinal", number(record.ordinal)},
+            {"payload",
+                    object({
+                            {"type", support::JsonValue{"document"}},
+                            {"id", number(record.payload.id.value)},
+                            {"content",
+                                    object({
+                                            {"version", support::JsonValue{1}},
+                                            {"kind",
+                                                    support::JsonValue{record.payload.content.base ? "base" : "delta"}},
+                                            {record.payload.content.base ? "value" : "ops",
+                                                    record.payload.content.base
+                                                            ? record.payload.content.value.to_support()
+                                                            : ops_value(record.payload.content.ops)},
+                                    })},
+                    })},
+    });
+    auto text = support::write_json(value);
+    return text ? *text : std::string{};
+}
+
+struct EncodedCommit {
+    std::string marker;
+    std::map<std::string, std::string> sidecars;
+    std::map<std::string, std::string> reclamations;
+};
+
+[[nodiscard]] EncodedCommit encode_commit(Seq seq, std::span<const StorageWrite> writes) {
+    std::vector<support::JsonValue> main_writes;
+    std::map<std::string, std::string> sidecars;
+    std::set<std::int64_t> retired;
+    std::map<std::string, std::size_t> base_offsets;
+    std::int64_t next_ordinal = 0;
+
+    const auto add_sidecar = [&](std::string file, SidecarRecord record) {
+        record.ordinal = next_ordinal++;
+        sidecars[file] += sidecar_line(record) + "\n";
+        return record.ordinal;
+    };
+
+    for (const StorageWrite& write : writes) {
+        if (write.type == "conversation") {
+            main_writes.push_back(object({{"type", support::JsonValue{"conversation"}},
+                    {"value", object({{"id", number(write.conversation->id.value)}})}}));
+        } else if (write.type == "entry") {
+            main_writes.push_back(
+                    object({{"type", support::JsonValue{"entry"}}, {"value", entry_value(*write.entry)}}));
+        } else if (write.type == "task") {
+            if (write.task.has_value()) {
+                main_writes.push_back(object({
+                        {"type", support::JsonValue{"task"}},
+                        {"value", encode_task_record(*write.task).to_support()},
+                }));
+            }
+        } else if (write.type == "document.create") {
+            const std::string file = document_file(write.document_record->id);
+            const std::int64_t ordinal = add_sidecar(file,
+                    SidecarRecord{.seq = seq,
+                            .ordinal = 0,
+                            .payload = SidecarPayload{.id = write.document_record->id,
+                                    .content =
+                                            DocumentContent{.base = true, .value = *write.document_value, .ops = {}}}});
+            main_writes.push_back(object({{"type", support::JsonValue{"document.create"}},
+                    {"record", document_create_record(write)},
+                    {"ordinal", number(ordinal)}}));
+        } else if (write.type == "document.change") {
+            const std::string file = document_file(*write.document_id);
+            const bool base = write.document_ops.empty();
+            const std::size_t base_offset = sidecars[file].size();
+            const std::int64_t ordinal = add_sidecar(file,
+                    SidecarRecord{.seq = seq,
+                            .ordinal = 0,
+                            .payload = SidecarPayload{.id = *write.document_id,
+                                    .content = DocumentContent{.base = base,
+                                            .value = write.document_value.value_or(chord::Json{}),
+                                            .ops = write.document_ops}}});
+            if (base) {
+                base_offsets[file] = base_offset;
+            }
+            main_writes.push_back(object({{"type", support::JsonValue{"document.change"}},
+                    {"id", number(write.document_id->value)},
+                    {"ordinal", number(ordinal)}}));
+        } else if (write.type == "document.retire") {
+            retired.insert(write.document_id->value);
+            main_writes.push_back(object(
+                    {{"type", support::JsonValue{"document.retire"}}, {"id", number(write.document_id->value)}}));
+        }
+    }
+
+    support::JsonValue::array_t encoded_writes;
+    encoded_writes.reserve(main_writes.size());
+    for (support::JsonValue& write : main_writes) {
+        encoded_writes.push_back(std::move(write));
+    }
+    const support::JsonValue marker = object({{"format", support::JsonValue{1}},
+            {"type", support::JsonValue{"commit"}},
+            {"seq", number(seq)},
+            {"writes", support::JsonValue{std::move(encoded_writes)}}});
+    auto marker_text = support::write_json(marker);
+    EncodedCommit encoded{.marker = marker_text ? *marker_text + "\n" : std::string{},
+            .sidecars = std::move(sidecars),
+            .reclamations = {}};
+    for (const std::int64_t id : retired) {
+        encoded.reclamations[document_file(DocumentId{.value = id})] = {};
+    }
+    for (const auto& [file, offset] : base_offsets) {
+        const auto id = document_id_from_file(file);
+        if (id && !retired.contains(id->value)) {
+            encoded.reclamations[file] = encoded.sidecars[file].substr(offset);
+        }
+    }
+    return encoded;
+}
+
+} // namespace
+
+struct JsonlStorage::Impl {
+    explicit Impl(std::filesystem::path directory) : directory(std::move(directory)) {}
+
+    std::filesystem::path directory;
+    StorageState state{std::string{kClosedMessage}};
+    bool poisoned{false};
+
+    [[nodiscard]] support::Error poison_error() const {
+        return support::make_error(support::ErrorCode::Validation, std::string{kPoisonMessage});
+    }
+
+    [[nodiscard]] std::optional<support::Error> unusable() const {
+        if (poisoned) {
+            return poison_error();
+        }
+        if (state.closed()) {
+            return support::make_error(support::ErrorCode::Session, std::string{kClosedMessage});
+        }
+        return std::nullopt;
+    }
+
+    [[nodiscard]] support::ExpectedVoid recover() {
+        std::error_code error;
+        std::filesystem::create_directories(directory, error);
+        if (error || !std::filesystem::is_directory(directory, error) || error) {
+            return std::unexpected(corruption("JSONL directory creation failed"));
+        }
+
+        auto main_lines = read_complete_lines(directory / kMainFile, kMainFile);
+        if (!main_lines) {
+            return std::unexpected(std::move(main_lines.error()));
+        }
+        std::vector<MainMarker> markers;
+        markers.reserve(main_lines->size());
+        Seq previous_seq = 0;
+        for (std::size_t index = 0; index < main_lines->size(); ++index) {
+            auto marker = parse_main_marker((*main_lines)[index].text, index + 1);
+            if (!marker) {
+                return std::unexpected(std::move(marker.error()));
+            }
+            if (marker->seq <= previous_seq) {
+                return std::unexpected(corruption("Commit sequence does not strictly increase in main.jsonl"));
+            }
+            previous_seq = marker->seq;
+            markers.push_back(std::move(*marker));
+        }
+
+        std::vector<std::string> sidecar_files;
+        std::filesystem::directory_iterator iterator(directory, error);
+        if (error) {
+            return std::unexpected(corruption("JSONL directory listing failed"));
+        }
+        for (const std::filesystem::directory_entry& entry : iterator) {
+            std::error_code entry_error;
+            if (!entry.is_regular_file(entry_error) || entry_error) {
+                continue;
+            }
+            const std::string name = entry.path().filename().string();
+            if (is_reclaim_file(name)) {
+                std::filesystem::remove(entry.path(), error);
+                error.clear();
+                continue;
+            }
+            if (document_id_from_file(name).has_value()) {
+                sidecar_files.push_back(name);
+            }
+        }
+        std::sort(sidecar_files.begin(), sidecar_files.end());
+
+        std::map<std::string, std::vector<ParsedSidecar>> parsed_files;
+        std::map<std::string, const SidecarRecord*> record_by_key;
+        for (const std::string& file : sidecar_files) {
+            auto lines = read_complete_lines(directory / file, file);
+            if (!lines) {
+                return std::unexpected(std::move(lines.error()));
+            }
+            std::vector<ParsedSidecar> parsed;
+            parsed.reserve(lines->size());
+            const SidecarRecord* previous = nullptr;
+            for (std::size_t index = 0; index < lines->size(); ++index) {
+                auto record = parse_sidecar((*lines)[index].text, file, index + 1);
+                if (!record) {
+                    return std::unexpected(std::move(record.error()));
+                }
+                if (previous != nullptr &&
+                        (record->seq < previous->seq ||
+                                (record->seq == previous->seq && record->ordinal <= previous->ordinal))) {
+                    return std::unexpected(corruption("Sidecar records are out of order in " + file));
+                }
+                parsed.push_back(ParsedSidecar{.record = *record, .start = (*lines)[index].start});
+                previous = &parsed.back().record;
+            }
+            parsed_files.emplace(file, std::move(parsed));
+        }
+        for (const auto& [file, lines] : parsed_files) {
+            for (const ParsedSidecar& line : lines) {
+                record_by_key.emplace(sidecar_key(file, line.record.seq, line.record.ordinal), &line.record);
+            }
+        }
+
+        std::set<std::int64_t> retired;
+        std::map<std::int64_t, std::pair<Seq, std::int64_t>> latest_bases;
+        for (const MainMarker& marker : markers) {
+            for (const MainOperation& operation : marker.writes) {
+                if (operation.kind == MainKind::DocumentRetire) {
+                    retired.insert(operation.document_id.value);
+                } else if (operation.kind == MainKind::DocumentCreate || operation.kind == MainKind::DocumentChange) {
+                    const std::int64_t id = operation.kind == MainKind::DocumentCreate
+                                                    ? operation.document_record.id.value
+                                                    : operation.document_id.value;
+                    const std::string file = document_file(DocumentId{.value = id});
+                    const auto found = record_by_key.find(sidecar_key(file, marker.seq, operation.ordinal));
+                    if (found == record_by_key.end()) {
+                        continue;
+                    }
+                    const SidecarRecord& record = *found->second;
+                    if (record.payload.id.value != id || !record.payload.content.base) {
+                        continue;
+                    }
+                    const auto previous = latest_bases.find(id);
+                    if (previous == latest_bases.end() || marker.seq > previous->second.first ||
+                            (marker.seq == previous->second.first && operation.ordinal > previous->second.second)) {
+                        latest_bases[id] = {marker.seq, operation.ordinal};
+                    }
+                }
+            }
+        }
+        const auto before_latest_base = [&](std::int64_t id, Seq seq, std::int64_t ordinal) {
+            const auto found = latest_bases.find(id);
+            return found != latest_bases.end() &&
+                   (seq < found->second.first || (seq == found->second.first && ordinal < found->second.second));
+        };
+
+        std::set<std::string> confirmed;
+        for (const MainMarker& marker : markers) {
+            std::vector<StorageWrite> writes;
+            for (const MainOperation& operation : marker.writes) {
+                if (operation.kind == MainKind::Conversation) {
+                    writes.push_back(StorageWrite{.type = "conversation", .conversation = operation.conversation});
+                } else if (operation.kind == MainKind::Entry) {
+                    writes.push_back(StorageWrite{.type = "entry", .entry = operation.entry});
+                } else if (operation.kind == MainKind::Task) {
+                    writes.push_back(StorageWrite{.type = "task", .task = operation.task});
+                } else if (operation.kind == MainKind::DocumentRetire) {
+                    writes.push_back(StorageWrite{.type = "document.retire", .document_id = operation.document_id});
+                } else {
+                    const std::int64_t id = operation.kind == MainKind::DocumentCreate
+                                                    ? operation.document_record.id.value
+                                                    : operation.document_id.value;
+                    const std::string file = document_file(DocumentId{.value = id});
+                    const bool reclaimed =
+                            retired.contains(id) || before_latest_base(id, marker.seq, operation.ordinal);
+                    const std::string key = sidecar_key(file, marker.seq, operation.ordinal);
+                    if (confirmed.contains(key)) {
+                        return std::unexpected(corruption("Sidecar record is confirmed more than once"));
+                    }
+                    const auto found = record_by_key.find(key);
+                    if (found == record_by_key.end()) {
+                        if (!reclaimed) {
+                            return std::unexpected(corruption("Missing confirmed sidecar record " + file +
+                                                              " at sequence " + std::to_string(marker.seq)));
+                        }
+                    } else {
+                        confirmed.insert(key);
+                    }
+                    const SidecarRecord* record = found == record_by_key.end() ? nullptr : found->second;
+                    if (record != nullptr &&
+                            (record->payload.id.value != id ||
+                                    (operation.kind == MainKind::DocumentCreate && !record->payload.content.base))) {
+                        return std::unexpected(corruption(
+                                "Confirmed document sidecar data does not match commit " + std::to_string(marker.seq)));
+                    }
+                    if (operation.kind == MainKind::DocumentCreate) {
+                        const DocumentContent content =
+                                record != nullptr
+                                        ? record->payload.content
+                                        : DocumentContent{
+                                                  .base = true, .value = chord::Json{chord::Json::Object{}}, .ops = {}};
+                        if (!content.base) {
+                            return std::unexpected(corruption("Document creation lacks a confirmed base in commit " +
+                                                              std::to_string(marker.seq)));
+                        }
+                        writes.push_back(StorageWrite{.type = "document.create",
+                                .document_record = operation.document_record,
+                                .document_conversation_id = operation.document_conversation_id,
+                                .document_value = content.value});
+                    } else if (!reclaimed && record != nullptr) {
+                        if (record->payload.content.base) {
+                            writes.push_back(StorageWrite{.type = "document.change",
+                                    .document_id = operation.document_id,
+                                    .document_value = record->payload.content.value});
+                        } else {
+                            auto current = state.document(operation.document_id);
+                            if (!current || !current->has_value()) {
+                                return std::unexpected(corruption(
+                                        "Invalid committed state at sequence " + std::to_string(marker.seq)));
+                            }
+                            auto applied = chord::apply_immutable(**current, record->payload.content.ops);
+                            if (!applied) {
+                                return std::unexpected(corruption(
+                                        "Invalid committed state at sequence " + std::to_string(marker.seq)));
+                            }
+                            writes.push_back(StorageWrite{.type = "document.change",
+                                    .document_id = operation.document_id,
+                                    .document_value = std::move(*applied),
+                                    .document_ops = record->payload.content.ops});
+                        }
+                    }
+                }
+            }
+            if (auto restored = state.restore(writes, marker.seq); !restored) {
+                return std::unexpected(corruption("Invalid committed state at sequence " + std::to_string(marker.seq)));
+            }
+        }
+
+        for (auto& [file, lines] : parsed_files) {
+            std::optional<std::size_t> unconfirmed_start;
+            for (const ParsedSidecar& line : lines) {
+                if (!confirmed.contains(sidecar_key(file, line.record.seq, line.record.ordinal))) {
+                    unconfirmed_start = line.start;
+                    break;
+                }
+            }
+            if (unconfirmed_start.has_value()) {
+                bool confirmed_after = false;
+                for (const ParsedSidecar& line : lines) {
+                    if (line.start > *unconfirmed_start &&
+                            confirmed.contains(sidecar_key(file, line.record.seq, line.record.ordinal))) {
+                        confirmed_after = true;
+                        break;
+                    }
+                }
+                if (confirmed_after) {
+                    return std::unexpected(corruption("Confirmed record follows an unconfirmed tail in " + file));
+                }
+                for (const ParsedSidecar& line : lines) {
+                    if (line.start >= *unconfirmed_start && line.record.seq <= previous_seq) {
+                        return std::unexpected(
+                                corruption("Unconfirmed sidecar record has a closed sequence in " + file));
+                    }
+                }
+                std::filesystem::resize_file(directory / file, *unconfirmed_start, error);
+                if (error) {
+                    return std::unexpected(corruption("JSONL tail truncation of " + file + " failed"));
+                }
+                lines.erase(std::remove_if(lines.begin(),
+                                    lines.end(),
+                                    [&](const ParsedSidecar& line) { return line.start >= *unconfirmed_start; }),
+                        lines.end());
+            }
+
+            const auto id = document_id_from_file(file);
+            if (!id) {
+                continue;
+            }
+            if (lines.empty()) {
+                std::filesystem::remove(directory / file, error);
+                error.clear();
+                continue;
+            }
+            if (retired.contains(id->value)) {
+                std::filesystem::remove(directory / file, error);
+                error.clear();
+                continue;
+            }
+            const auto base = latest_bases.find(id->value);
+            if (base == latest_bases.end()) {
+                continue;
+            }
+            std::vector<ParsedSidecar> retained;
+            for (const ParsedSidecar& line : lines) {
+                if (line.record.seq > base->second.first ||
+                        (line.record.seq == base->second.first && line.record.ordinal >= base->second.second)) {
+                    retained.push_back(line);
+                }
+            }
+            if (retained.size() == lines.size()) {
+                continue;
+            }
+            if (retained.empty()) {
+                std::filesystem::remove(directory / file, error);
+                error.clear();
+                continue;
+            }
+            std::string content;
+            for (const ParsedSidecar& line : retained) {
+                content += sidecar_line(line.record) + "\n";
+            }
+            if (auto replaced = replace_file(directory, file, content); !replaced) {
+                return std::unexpected(std::move(replaced.error()));
+            }
+        }
+        return {};
+    }
+
+    [[nodiscard]] support::Expected<Seq> commit(std::span<const StorageWrite> writes) {
+        if (const auto error = unusable(); error.has_value()) {
+            return std::unexpected(*error);
+        }
+        const Seq seq = state.next_seq();
+        if (auto valid = state.validate(writes, seq); !valid) {
+            return std::unexpected(std::move(valid.error()));
+        }
+        if (writes.empty()) {
+            return seq;
+        }
+
+        EncodedCommit encoded = encode_commit(seq, writes);
+        for (const auto& [file, content] : encoded.sidecars) {
+            if (auto appended = append_file(directory / file, content); !appended) {
+                poisoned = true;
+                return std::unexpected(poison_error());
+            }
+        }
+        if (auto appended = append_file(directory / kMainFile, encoded.marker); !appended) {
+            poisoned = true;
+            return std::unexpected(poison_error());
+        }
+        if (auto applied = state.apply(writes, seq); !applied) {
+            poisoned = true;
+            return std::unexpected(std::move(applied.error()));
+        }
+
+        // The marker already published this state. Reclamation is retryable
+        // maintenance and a failure here does not change the commit outcome.
+        for (const auto& [file, content] : encoded.reclamations) {
+            std::error_code error;
+            if (content.empty()) {
+                std::filesystem::remove(directory / file, error);
+            } else {
+                (void)replace_file(directory, file, content);
+            }
+        }
+        return seq;
+    }
+};
+
+JsonlStorage::JsonlStorage(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
+
+JsonlStorage::~JsonlStorage() = default;
+
+support::Expected<std::unique_ptr<JsonlStorage>> JsonlStorage::open(const std::filesystem::path& directory) {
+    auto impl = std::make_unique<Impl>(directory);
+    if (auto recovered = impl->recover(); !recovered) {
+        return std::unexpected(std::move(recovered.error()));
+    }
+    return std::unique_ptr<JsonlStorage>{new JsonlStorage{std::move(impl)}};
+}
+
+support::AsyncResult<Seq> JsonlStorage::commit(std::span<const StorageWrite> writes) {
+    return support::AsyncResult<Seq>{impl_->commit(writes)};
+}
+
+support::Expected<std::int64_t> JsonlStorage::mint_id() {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.reserve_id();
+}
+
+support::Expected<std::optional<ConversationRecord>> JsonlStorage::conversation(ConversationId id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.conversation(id);
+}
+
+support::Expected<std::optional<StoredEntry>> JsonlStorage::entry(EntryId id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.entry(id);
+}
+
+support::Expected<std::vector<ConversationRecord>> JsonlStorage::scan_conversations(std::size_t limit) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.scan_conversations(limit);
+}
+
+support::Expected<std::vector<EntryRecord>> JsonlStorage::scan_entries(
+        ConversationId conversation_id, std::size_t limit) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.scan_entries(conversation_id, limit);
+}
+
+support::Expected<std::optional<DocumentRecord>> JsonlStorage::find_document(
+        std::string_view kind, std::optional<ConversationId> conversation_id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.find_document(kind, conversation_id);
+}
+
+support::Expected<std::optional<chord::Json>> JsonlStorage::document(DocumentId id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.document(id);
+}
+
+support::Expected<std::optional<TaskRecord>> JsonlStorage::task(TaskId id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.task(id);
+}
+
+support::Expected<std::vector<TaskRecord>> JsonlStorage::scan_tasks(std::size_t limit) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.scan_tasks(limit);
+}
+
+support::ExpectedVoid JsonlStorage::close() {
+    if (impl_->poisoned) {
+        return {};
+    }
+    impl_->state.close();
+    return {};
+}
+
+} // namespace cch::durable

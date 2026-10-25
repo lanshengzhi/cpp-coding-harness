@@ -879,12 +879,14 @@
           "fixtures/pi-v1.3.0/audit-1054/jsonl-store.json: a JSONL checkpoint replaces a current-only sidecar and retirement removes it"
         ],
         "comparison": "Compare commit sequences, sidecar files, recovery outcomes and refusal errors with the frozen JSONL capture.",
-        "missing": "Fsync-failure and power-loss behavior are not proven by the frozen capture; the row stays partial until an equivalent observation exists."
+        "missing": "Implemented by #1074 in commits 77b6b0415 and fc868c939 up to the captured behavior: JsonlStorage commits, recovers, poisons and reopens through the public Storage/Session caller, and tests compare torn-tail truncation, confirmed-sidecar refusal, marker poisoning and checkpoint/retirement against the frozen JSONL capture. The optional fsync path and fsync-failure/power-loss behavior remain unimplemented and unproven; the row stays partial until an equivalent observation exists."
       },
       "coverage": [
         "cch_durable:Storage:jsonl"
       ],
-      "relatedIssues": [],
+      "relatedIssues": [
+        "#1074"
+      ],
       "boundaries": [
         "No historical Pike durable format import or dual read"
       ]
@@ -936,7 +938,7 @@
           "fixtures/pi-v1.3.0/audit-1056/workflow.json: tool hooks rewrite arguments before execution and observe the committed result"
         ],
         "comparison": "Compare phase logs, checkpoint state, version outcomes, hook order and terminal receipts with the frozen durable task captures.",
-        "missing": "Scheduler-written orphaned/faulted outcomes were not observed in a scenario (1055 residual gap) and stay unverified."
+        "missing": "The #1076 F3a slice verifies multi-phase checkpoint progression and resume, typed completed/failed/aborted outcomes, abort-mark rejection for phase writes, abort-handler memo and terminal-outcome writes, missing-definition orphaning, no-progress faulting, and the terminal task write at Storage::commit. Definition version migration/replacement, task phase hooks and hook isolation remain unverified in C++; scheduler-written orphaned/faulted outcomes are observed for this slice, while broader F3 acceptance remains incomplete."
       },
       "coverage": [
         "cch_durable:task-definition",
@@ -948,7 +950,8 @@
       ],
       "relatedIssues": [
         "#925",
-        "#932"
+        "#932",
+        "#1076"
       ],
       "boundaries": []
     },
@@ -1159,17 +1162,19 @@
         "captures": [
           "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: the SQLite schema prefix renames every durable table and isolates an unprefixed schema",
           "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: a failing SQLite batch rolls back every write and leaves the sequence unchanged",
-          "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: SQLite refuses a store written by a newer durable schema version"
+          "fixtures/pi-v1.3.0/audit-1054/sqlite-store.json: SQLite refuses a store written by a newer durable schema version",
+          "fixtures/pi-v1.3.0/audit-1075/sqlite-transaction-options.json: SQLite applies entry ID bounds and stores document revisions with configured busy and WAL options"
         ],
         "comparison": "Compare schema identifiers, constraints, rows, recovery observations and errors with the frozen SQLite capture; page layout is not a contract.",
-        "missing": "Non-default busyTimeout/WAL auto-checkpoint thresholds, filtered scans and document version migration were not captured."
+        "missing": "Implemented by #1075: SqliteStorage commits, recovers and reopens through the public Storage/Session caller, and tests compare transaction rollback, prefixed schemas, version refusal, entry conversation scans, allocator recovery, empty-commit sequences, and configured busy timeout and WAL options against frozen audit-1054/audit-1075 captures. Bidirectional interchange (#1076) and Cloudflare SQLite hosting remain excluded/specified."
       },
       "coverage": [
         "cch_durable:Storage:sqlite"
       ],
       "relatedIssues": [
         "#915",
-        "#920"
+        "#920",
+        "#1075"
       ],
       "boundaries": [
         "Cloudflare SQLite hosting stays excluded"
@@ -2304,13 +2309,13 @@
       "The 11 audit ledgers, 12 registered bundles, 60 artifacts and 373 scenarios exist, verify through the shared verifier and were independently reproduced by their mergers.",
       "The application runtime and toolkit currently implement the 969 rows the ledgers record as implemented, including 14 rows targeted at the new owners whose behavior today lives under existing application owners: cch_durable 2, cch_mcp 5, cch_codemode 7, cch_chord 0.",
       "128 further rows targeted at the new owners are partial today under those existing owners and are pending ownership migration, not specified-only: cch_durable 87, cch_mcp 11, cch_codemode 12, cch_chord 18.",
-      "The current configured Owner graph is the pre-migration graph: cch_ai, cch_agent_core, cch_tui, cch_coding_agent, cch_support; MCP and codemode live inside cch_coding_agent.",
+      "The configured Owner graph adds cch_chord, cch_codemode, cch_mcp and cch_durable as manifest targets beside cch_ai, cch_agent_core, cch_tui, cch_coding_agent and cch_support; legacy application paths remain until their migration slices.",
       "The C++ toolkit has real rendering/input behavior and the listed focused test selections pass; the C++ [issue800] model-selector assertion is a known failure (#808)."
     ],
     "specifiedOnly": [
-      "The cch_chord, cch_codemode and cch_mcp Owner packages now exist as manifest targets (cmake/targets/Chord.cmake, Codemode.cmake, Mcp.cmake) and their slices have been implemented and merged: #1060 delivered the cch_chord value surface, #1064 the independently callable cch_codemode owner, and #1065 the reusable MCP protocol, transport and OAuth owner. cch_durable does not exist yet and its rows remain the specified work.",
-      "No C++ parity comparison exists for any audit row: 0 rows are verified and every upstream-captured row still needs one.",
-      "195 target rows are missing and are the specified work: cch_durable 121, cch_mcp 2, cch_codemode 30, cch_chord 42. The 230 partial rows are partial with recorded remaining work, not blanket specified-only.",
+      "The cch_chord, cch_codemode, cch_mcp and cch_durable Owner packages now exist as manifest targets (cmake/targets/Chord.cmake, Codemode.cmake, Mcp.cmake, Durable.cmake). #1060 delivered the cch_chord value surface, #1064 the independently callable cch_codemode owner, #1065 the reusable MCP protocol, transport and OAuth owner, #1063 the durable Session/Storage/memory line, #1074 the transactional JSONL backend, and #1075 the durable SQLite backend. The remaining cch_durable work (tasks, interchange and fsync) stays specified.",
+      "No consolidated-ledger row is promoted to verified: the selected #1074 and #1075 comparisons are not yet recorded in the ledger, and every upstream-captured row still needs a registered comparison.",
+      "The consolidated ledger still records 195 target rows missing (cch_durable 121, cch_mcp 2, cch_codemode 30, cch_chord 42); those counts predate P3 (#1063), F2 (#1074) and F7 (#1075) and need a consolidation regeneration. The 230 partial rows are partial with recorded remaining work, not blanket specified-only.",
       "Durable bidirectional JSONL/SQLite interchange, power-loss durability and cross-runtime continuation are specified and unproven.",
       "Native extension lifecycle/run triggering, tool duration end-to-end, codemode Inline/Remote, and the MCP cancellation/transport changes are specified with implementation gaps. OSC 7501 program status is implemented by #1123 and its ledger rows are corrected."
     ],

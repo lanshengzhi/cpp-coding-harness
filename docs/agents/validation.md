@@ -47,6 +47,8 @@ Parallel builds share one host budget. On the measured host in [build-performanc
 
 The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), and a regex that matches other cases passes silently. Measured on this repository: `-R 'message conversion'` selects no case, `-R 'thinking level'` selects 13 of the wrong ones, and `-R 'session'` selects 207. Verify the match set before trusting it — `ctest --preset vcpkg -N -R '<regex>'` prints the case names and the count — and prefer a label (`-L <label>`) or the owning shard. Report the selected count with the result.
 
+A cold or shard-only build tree registers fewer cases than a full one. `catch_discover_tests` registers a target's cases when that target builds, so a label selected in a worktree where only one shard was built silently covers a subset: measured in a fresh worktree after building `cch_tests_durable` alone, `-L architecture` selected 36 cases against the primary checkout's 43, because the 7 `cch_tests_cli_arch` cases were never registered. `noTests: error` does not catch a partial selection, and the run passes on the smaller set. Build the full preset before any label-wide run (`cmake --build --preset vcpkg`), or compare the `ctest -N` count against the primary checkout before trusting a pass.
+
 Run Full Validation once before code delivery on the default Debug preset, as required by `/implement`:
 
 ```bash
@@ -143,4 +145,7 @@ Before deleting ticket branches or removing their worktrees, audit them with `sc
 Use this completion path after implementation; triage and `wontfix` outcomes follow the `/triage` workflow instead. Close-out is ordered:
 
 1. Confirm and tick every acceptance criterion in the issue body (`- [x]`); a tick means the property holds, not that a check for it passed (§Acceptance discipline).
-2. Close the issue: `gh issue close <n> --comment "..."` (see `docs/agents/issue-tracker.md`).
+2. When the change advances a capability row in `1058-consolidated-capability-ledger.json` or `1058-implementation-frontier.json`, its delivery evidence lands under `docs/research/<baseline>/`, where `<baseline>` is the named baseline the work was verified against — either a new `<issue>-<slug>.md` or a section merged into that ticket's existing owning record (the chord slices live in `1057-chord-durable-dependency-subset.md`). A new record uses `## Scope`, `## Delivered behavior` (or the frozen-evidence section it uses), `## Validation`, `## Capability status`, `## Remaining boundary`; copy the shape from the most recent delivery record in that directory. The `## Validation` section carries measured counts, not estimates. A change that makes no capability claim — an internal refactor, a module decoupling, a wiring change — needs no record.
+3. Remove the in-flight state labels (`needs-*`, `ready-for-*`) that admission applied; a closed issue that still reads `ready-for-agent` claims work is available. `docs/agents/triage-labels.md` maps the roles.
+4. Close the issue: `gh issue close <n> --comment "..."` (see `docs/agents/issue-tracker.md`).
+5. Run `scripts/verify-closed-issue.sh <n>` and require exit 0. It is the completion check for steps 1-4: it fails on a non-closed issue, an unticked criterion, or a remaining state label, and names the failing check.
