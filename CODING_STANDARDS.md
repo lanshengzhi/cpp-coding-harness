@@ -10,6 +10,8 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 1.3. In review, a documented rule here overrides generic style baselines (such as the Fowler smell baseline used by `/skill:code-review`): where this file endorses something a baseline would flag, the baseline yields.
 
+1.3a. A new rule names its automated check inline, next to the text it justifies, or carries the literal prefix `review-only: <reason>`. Where the check exists only on the Clang conformance lane, or covers only part of the rule, the annotation says so. review-only: no tool checks it; a reviewer confirms the named check exists and covers what the rule claims.
+
 1.4. Review every rule applicable to the changed code, using the exact-violation exclusions in §14.
 
 1.5. This file stays small enough to read whole on every implementation and review: a new rule generalizes or displaces an existing one where it can, rather than only accreting. A rule that has never been cited in review and is fully validation-enforced (§14) is a pruning candidate; the removal is recorded in its issue.
@@ -62,7 +64,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 4.5. Unstructured cross-Owner JSON facts use `cch::support::JsonValue`. Raw Glaze generic values and `boost::json` never appear in Owner Interfaces (ADR 0007; ADR 0039).
 
-4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` and `std::span` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. Coroutines that may suspend (`co_await`) MUST take owned values (`std::string`, `std::vector`), NEVER non-owning views (`std::string_view`, `std::span`), to prevent cross-suspension parameter dangling, unless an explicit declaration-level lifetime contract per §7.5 guarantees the caller outlives the entire coroutine execution.
+4.6. Parameters: cheap scalars, enums, and non-owning views such as `std::string_view` and `std::span` by value; non-trivial borrowed inputs by `const&`; owned values (strings, vectors, messages, callbacks) by value and moved from. A coroutine that may suspend (`co_await`) takes owned values (`std::string`, `std::vector`) — never a non-owning view, and never a `T&` / `T&&` parameter — to prevent cross-suspension parameter dangling, unless a declaration-level §7.5 lifetime contract guarantees the caller outlives the entire coroutine. The frozen `run_phase(std::string_view, const TaskRecord&, TaskRuntime&)` signature is itself that §7.5 contract: the declaration is the contract of record for those callers, so the exception is a guarantee rather than a check exemption — `cppcoreguidelines-avoid-reference-coroutine-parameters` does not fire on it.
 
 4.7. Fallible or easy-to-ignore return values are `[[nodiscard]]`, including awaitables.
 
@@ -96,7 +98,9 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 6.5. `AsyncResult` is move-only and consumed once by callback start or move-only `co_await`. Duplicate/moved-from/reused consumption, duplicate completion, and controlled completion-callback contract violations terminate in every build mode. The coroutine Owner establishes quiescence before frame destruction; concurrent resume/destroy is forbidden (ADR 0040).
 
-6.6. Agent, Models Runtime, and Agent Session state changes run only in the owning object's serialized execution domain. Cross-Owner events and worker results enter the target object's bounded FIFO mailbox; workers never mutate serialized Owner state directly, and event-loop submission never blocks or falls back to inline worker execution. Ordinary overload returns a typed `Busy` result; persistence, credential, terminal-completion, and Close control work use reserved admission. Queue capacities, batch sizes, worker counts, and timeouts are measured policy, not speculative knobs — the selected values and their regression tests are recorded in `docs/runtime-capacities.md` (ADR 0040).
+6.6. Agent, Models Runtime, and Agent Session state changes run only in the owning object's serialized execution domain. Cross-Owner events and worker results enter the target's bounded FIFO mailbox; workers never mutate serialized Owner state directly, and event-loop submission never blocks or runs inline. Ordinary overload returns a typed `Busy` result; persistence, credential, terminal-completion, and Close work use reserved admission. Capacities, batch sizes, worker counts, and timeouts are measured policy; their values and regression tests are recorded in `docs/runtime-capacities.md` (ADR 0040).
+
+6.7. A coroutine lambda's closure object is held by something that outlives the coroutine frame (for example the `shared_ptr` inside `make_async_result`), or the lambda captures nothing. Otherwise its captures are explicit and carry a §7.5 lifetime comment. review-only: `cppcoreguidelines-avoid-capturing-lambda-coroutines` stays off until the ownership wording is encoded; today it would report the standard idiom.
 
 ## 7. Classes and ownership
 
@@ -136,13 +140,31 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 9.4. Template parameters are declared with `typename` (`template <typename T>`, `template <typename... Ts>`) — never `class`.
 
-9.5. Constrained templates are permitted for local, non-escaping operations when they are clearer than a runtime seam (ADR 0040); keep constraints local rather than publishing generic machinery through Owner Interfaces. Basic range algorithms (`std::ranges::sort`, `std::ranges::find`) are preferred over iterator pairs; avoid complex `std::views` pipelines and never bind views to temporary ranges. Not yet: modules, `<=>`, `std::print`, deducing this, multi-stage view pipelines, and `std::expected` monadic chains (`and_then`/`transform`/`or_else`). Introduce any of those only with an ADR.
+9.5. Constrained templates are permitted for local, non-escaping operations when they are clearer than a runtime seam (ADR 0040); keep constraints local rather than publishing generic machinery through Owner Interfaces. Basic range algorithms (`std::ranges::sort`, `std::ranges::find`) are preferred over iterator pairs; avoid complex `std::views` pipelines and never bind views to temporary ranges. Not yet: modules, `<=>`, `std::print`, deducing this, multi-stage view pipelines, and `std::expected` monadic chains (`and_then`/`transform`/`or_else`). The freeze is a consistency decision, not a capability gap — each compiles on the supported toolchain — so it reopens on a trigger, not on an ADR alone:
 
-9.6. Casts are `static_cast` / `reinterpret_cast`; no C-style casts.
+| Feature | Reopen when |
+| --- | --- |
+| `std::print` | the Clang conformance lane confirms libc++ (the GCC side already passes) |
+| deducing this | clang-format and clang-tidy handle it, and a concrete need appears |
+| `<=>` | a type needs ordering and hand-written comparisons exceed a stated count |
+| `and_then` chains | a measured readability win in two Owners, with lifetime-safe lambdas |
+| `flat_map`, `mdspan`, `generator`, `stacktrace`, `std::unreachable`, `[[assume]]` | a recorded position — not yet, not allowed, or unevaluated — before any use |
+
+Modules stay ADR-only.
+
+9.6. Casts are `static_cast` / `reinterpret_cast`; no C-style casts. `(void)expr` to discard a value is permitted. review-only: `-Wold-style-cast` is not enabled in this project's profile (`-Wall -Wextra -Wpedantic`), and `(void)expr` is not a C-style cast in any case.
 
 9.7. Container sizes and in-memory indices use `std::size_t`. Wire, persisted, or domain integer contracts whose width matters use `std::`-qualified fixed-width types (`std::int64_t`, `std::uint32_t`).
 
 9.8. `auto` when the type is obvious from the right-hand side (factories, expected results); an explicit type otherwise. `const auto&` in range-for.
+
+9.10. Result types are declared with the attribute at the type level — `struct [[nodiscard]] Error`, `class [[nodiscard]] AsyncResult` — so every function returning one inherits it, including through `std::expected<T, Error>`. Per-function `[[nodiscard]]` remains correct for other fallible returns (§4.7). review-only: `Error` and `AsyncResult` do not carry the attribute yet, so `-Wunused-result` stays silent on a discarded result of either type; it reports `std::expected` results only because libstdc++ declares `expected` itself `[[nodiscard]]`.
+
+9.13. Prefer `std::jthread` to `std::thread`; never use `volatile` for synchronization; a memory order other than `seq_cst` carries an adjacent comment justifying it. review-only: no compiler check exists; a grep gate for `std::thread` cannot distinguish a justified use and would fire on the 16 existing `std::thread` sites that predate this rule.
+
+9.14. Width and signedness conversions use `std::in_range`, `std::cmp_*`, or an equivalent checked narrowing, not a bare `static_cast`; `std::to_underlying` is the enum-underlying form. review-only: `-Wfloat-conversion` is not enabled in this project's profile (`-Wall -Wextra -Wpedantic`); if it were enabled it would cover the implicit half, and the explicit-cast half that needs `in_range` is silent by construction.
+
+9.15. Never store a `std::string_view` built from a temporary `std::string`, and never pass a view's `.data()` where a NUL-terminated C string is required. review-only: GCC 16.2 emits no diagnostic for either clause (`-Wdangling-reference` does not fire; `-Wdangling-gsl` does not exist on GCC), and Clang catches only the return-local case, under `-Wreturn-stack-address`, on the conformance lane.
 
 ## 10. Security invariants
 
@@ -154,7 +176,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 10.3. Bounded output goes through the owning package's declared output/presentation budgets. No ad hoc `substr` truncation of model- or user-visible text, and process pipes continue draining after retained output reaches its bound (ADR 0040).
 
-10.4. Filesystem path resolution lives in `src/agent/harness/WorkspaceFileSystem.hpp`. Every operation resolves uniformly through pi `resolveToCwd` semantics (ADR 0057): unicode-space normalization, leading-`@` stripping, and `~` expansion against `$HOME`, then absolute paths are honored anywhere after lexical normalization and relative paths resolve against the workspace root with `..` resolved by normalization rather than rejected. Filesystem access authority matches the host user process — there is no workspace containment, path allowlist, or resolution-scope split. The no-follow symlink policy and atomic writes apply uniformly. File tools route through it; flag a file-tool path that bypasses its resolution or duplicates its path checks elsewhere. Path handling for unrelated capabilities is outside this rule (`docs/agents/architecture.md` §Security and containment).
+10.4. Filesystem path resolution lives in `src/agent/harness/WorkspaceFileSystem.hpp`; file tools route through it, so flag a path that bypasses or duplicates it. Operations resolve through pi `resolveToCwd` semantics (ADR 0057): unicode-space normalization, leading-`@` stripping, `~` expansion against `$HOME`, absolute paths honored after lexical normalization, relative paths resolved against the workspace root with `..` normalized, not rejected. Authority matches the host process — no containment, allowlist, or scope split — and no-follow and atomic writes are uniform. Unrelated paths are out of scope.
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 
@@ -180,7 +202,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 11.8. Hold-and-release test doubles gate on the counted, latched `tests::ReleaseGate` (`tests/support/ReleaseGate.hpp`) — never a hand-rolled max-expiry `steady_timer` cancel. A `release()` that arrives before the double arms the gate is stored and consumed by the next wait, so release/arm ordering races cannot hang a test; one permit releases one waiter, preserving per-operation re-arming. Cancellation wake-ups use `interrupt()`, which records no permit, and the wait is guarded by a `stop_requested()` check.
 
-11.9. Functional assertions run on every lane; wall-clock performance assertions run only on non-instrumented lanes. A performance assertion compares elapsed time against a tight bound to enforce speed. Generous completion or hang-freedom backstops (second-scale timeouts, prompt shutdown, PTY drain completion) are liveness checks, not performance assertions, and stay on every lane. Guard only the performance assertion, keeping behavior and functional assertions outside the guard; see `docs/agents/validation.md` §Sanitizer timing checks for the pattern. Threshold changes cite measured evidence; runner-resourcing failures use that document's §Test quarantine, with owner and rationale, rather than retuned bounds.
+11.9. Functional assertions run on every lane; wall-clock performance assertions run only on non-instrumented lanes, comparing elapsed time against a tight bound. Generous completion or hang-freedom backstops (second-scale timeouts, prompt shutdown, PTY drain completion) are liveness checks that stay on every lane. Guard only the performance assertion, keeping behavior and functional assertions outside the guard (`docs/agents/validation.md` §Sanitizer timing checks). Threshold changes cite measured evidence; runner-resourcing failures use that document's §Test quarantine with owner and rationale, not retuned bounds.
 
 ## 12. CMake
 
@@ -210,7 +232,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 - Skip a finding only when required validation necessarily rejects that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader code-rule conformance (ADR 0039), and a pass is never acceptance of the property the rule is named for (`docs/agents/validation.md` §Acceptance discipline).
 - A non-failing compiler diagnostic remains a review finding.
-- For §2.1, the required formatting gate is `scripts/format-check.sh`; skip findings that duplicate its patch. Invocation and repair instructions live in `docs/agents/validation.md` §Formatting gate.
+- For §2.1 and §2.2, the required formatting gate is `scripts/format-check.sh`; skip findings that duplicate its patch. Invocation and repair instructions live in `docs/agents/validation.md` §Formatting gate.
 - Report every applicable code-rule violation in the changed scope that is not excluded above. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
 
 ## 15. Known exceptions and migrations
