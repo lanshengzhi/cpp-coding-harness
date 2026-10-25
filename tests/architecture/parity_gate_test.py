@@ -1026,6 +1026,100 @@ class LexerTest(unittest.TestCase):
         self.assertEqual(pg.lex_includes(text, "x.cpp"), ())
 
 
+class InterfaceForwarderTest(unittest.TestCase):
+    """#1068: forwarding preserves callers without granting a reverse core edge."""
+
+    def setUp(self):
+        self.workspace = tempfile.TemporaryDirectory()
+        self.addCleanup(self.workspace.cleanup)
+        self.root = Path(self.workspace.name)
+        self.source = self.root / "include/cch/agent/legacy/Session.hpp"
+        self.source.parent.mkdir(parents=True)
+        self.source.write_text("#pragma once\n// Remove in #1070.\n#include <cch/coding_agent/session/Session.hpp>\n")
+        self.target = self.root / "include/cch/coding_agent/session/Session.hpp"
+        self.target.parent.mkdir(parents=True)
+        self.target.write_text("#pragma once\nstruct Session {};\n")
+        self.data = json.loads(json.dumps(VALID_MANIFEST))
+        self.record = {
+            "source": "include/cch/agent/legacy/Session.hpp",
+            "target": "cch/coding_agent/session/Session.hpp",
+            "owner": "cch_coding_agent",
+            "removal_ticket": "#1070",
+            "expires": "9999-12-31",
+        }
+        self.data["interface_forwarders"] = [self.record]
+
+    def check_forwarders(self):
+        return pg.check(pg.parse_manifest(self.data), make_index([]), "d" * 64,
+                        project_root=str(self.root))
+
+    def test_application_caller_can_use_the_legacy_forward(self):
+        diagnostics = run_include_case(
+            self.root, "cch_coding_agent", "coding_agent/consumer.cpp",
+            "cch/agent/legacy/Session.hpp", manifest=pg.parse_manifest(self.data),
+        )
+        self.assertEqual(diagnostics, [])
+
+    def test_core_cannot_use_the_forward_or_the_new_application_header(self):
+        for include in ("cch/agent/legacy/Session.hpp", self.record["target"]):
+            with self.subTest(include=include):
+                diagnostics = run_include_case(
+                    self.root, "cch_agent_core", "agent/consumer.cpp", include,
+                    manifest=pg.parse_manifest(self.data),
+                )
+                self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+                self.assertEqual(diagnostics[0].dependency, "cch_coding_agent")
+
+    def test_forward_cannot_hide_declarations_or_a_different_include(self):
+        for body in ("struct Hidden {};", "#include <cch/ai/Model.hpp>"):
+            with self.subTest(body=body):
+                self.source.write_text(f"#pragma once\n#include <{self.record['target']}>\n{body}\n")
+                self.assertEqual(rule_ids(self.check_forwarders()), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+
+    def test_forward_requires_the_destination_to_exist(self):
+        self.target.unlink()
+        self.assertEqual(rule_ids(self.check_forwarders()), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+
+    def test_expired_forward_is_rejected(self):
+        self.record["expires"] = "2000-01-01"
+        self.assertEqual(rule_ids(self.check_forwarders()), [pg.RULE_EXPIRED_ARCHITECTURE_EXCEPTION])
+
+    def test_private_forward_is_checked_with_the_same_removal_contract(self):
+        self.source = self.root / "src/agent/harness/session/Session.hpp"
+        self.source.parent.mkdir(parents=True)
+        self.target = self.root / "src/coding_agent/session/Session.hpp"
+        self.target.parent.mkdir(parents=True)
+        self.target.write_text("#pragma once\n")
+        self.record["source"] = "src/agent/harness/session/Session.hpp"
+        self.record["target"] = "coding_agent/session/Session.hpp"
+        self.source.write_text('#pragma once\n#include "coding_agent/session/Session.hpp"\n')
+        self.data["interface_forwarders"] = []
+        self.data["private_forwarders"] = [self.record]
+        self.assertEqual(self.check_forwarders(), [])
+        self.source.write_text(self.source.read_text() + "struct Hidden {};\n")
+        self.assertEqual(rule_ids(self.check_forwarders()), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
+        del self.record["removal_ticket"]
+        with self.assertRaises(pg.SchemaViolation):
+            pg.parse_manifest(self.data)
+
+    def test_forward_requires_removal_authority_and_unique_safe_paths(self):
+        for field, value in (("source", "../outside.hpp"), ("target", "cch/ai/Model.hpp"),
+                             ("owner", "missing"), ("removal_ticket", "later"), ("expires", "later")):
+            with self.subTest(field=field):
+                original = self.record[field]
+                self.record[field] = value
+                with self.assertRaises(pg.SchemaViolation):
+                    pg.parse_manifest(self.data)
+                self.record[field] = original
+        del self.record["removal_ticket"]
+        with self.assertRaises(pg.SchemaViolation):
+            pg.parse_manifest(self.data)
+        self.record["removal_ticket"] = "#1070"
+        self.data["interface_forwarders"].append(dict(self.record))
+        with self.assertRaises(pg.SchemaViolation):
+            pg.parse_manifest(self.data)
+
+
 class IncludeResolutionTest(unittest.TestCase):
     def test_quote_spelling_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1069,6 +1163,35 @@ class IncludeResolutionTest(unittest.TestCase):
         self.assertEqual(rule_ids(diagnostics), [pg.RULE_ILLEGAL_DIRECT_INCLUDE])
         self.assertEqual(diagnostics[0].target, "cch_ai")
         self.assertEqual(diagnostics[0].dependency, "cch_tui")
+
+    def test_core_cannot_reach_application_session_through_private_or_legacy_paths(self):
+        data = json.loads((REPO_ROOT / "cmake/parity/manifest.json").read_text())
+        data["interface_forwarders"] = []
+        data["private_forwarders"] = []
+        manifest = pg.parse_manifest(data)
+        for path in ("coding_agent/session/EntrySerializer.hpp",
+                     "coding_agent/compaction/Compaction.hpp",
+                     "agent/harness/session/SessionJournal.hpp",
+                     "agent/harness/TranscriptExport.hpp"):
+            with self.subTest(path=path), tempfile.TemporaryDirectory() as tmp:
+                diagnostics = run_include_case(tmp, "cch_agent_core", "agent/consumer.cpp", path,
+                                               spelling="quote", manifest=manifest)
+                self.assertEqual(rule_ids(diagnostics), [pg.RULE_AGENT_APPLICATION_SESSION_INCLUDE])
+
+    def test_session_core_helper_exceptions_apply_only_to_the_named_sources(self):
+        data = json.loads((REPO_ROOT / "cmake/parity/manifest.json").read_text())
+        data["interface_forwarders"] = []
+        data["private_forwarders"] = []
+        manifest = pg.parse_manifest(data)
+        for name, header in (("SessionJournal", "PosixWrite"), ("TranscriptExport", "WorkspaceFileSystem")):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                path = f"agent/harness/{header}.hpp"
+                allowed = run_include_case(tmp, "cch_coding_agent", f"coding_agent/session/{name}.cpp",
+                                           path, spelling="quote", manifest=manifest)
+                self.assertEqual(allowed, [])
+                rejected = run_include_case(tmp, "cch_coding_agent", "coding_agent/session/Other.cpp",
+                                            path, spelling="quote", manifest=manifest)
+                self.assertEqual(rule_ids(rejected), [pg.RULE_SESSION_CORE_PRIVATE_INCLUDE])
 
     def test_support_include_owner_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -1337,7 +1460,11 @@ class ArchitectureContractTest(unittest.TestCase):
         # The migration records are gone; a source still cannot reach through
         # the private root, while a canonical Owner Interface include is legal.
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
-        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        data = json.loads(manifest_path.read_text())
+        # This synthetic tree exercises the AI rule, not the repository's Session redirects.
+        data["interface_forwarders"] = []
+        data["private_forwarders"] = []
+        manifest = pg.parse_manifest(data)
         with tempfile.TemporaryDirectory() as tmp:
             diagnostics = run_include_case(
                 tmp,

@@ -101,7 +101,19 @@ def main() -> int:
         prefix = "/".join(root.replace(os.sep, "/").split("/")[-2:])
         for rel in interface_headers(os.path.join(args.project_root, root)):
             spelling = f"{prefix}/{rel.replace(os.sep, '/')}"
-            jobs.append((spelling, allowed))
+            source = f"{root}/{rel.replace(os.sep, '/')}"
+            forwarder = next((item for item in manifest.get("interface_forwarders", [])
+                              if item["source"] == source), None)
+            header_allowed = allowed
+            if forwarder:
+                # #1068: the legacy spelling belongs to the application, not core.
+                # The Gate validates the exact redirect and its removal/expiry record.
+                target_owner = owners[forwarder["owner"]]
+                header_allowed = [include_dir_for(root), include_dir_for(target_owner["interface_root"])]
+                for other, other_entry in owners.items():
+                    if other_entry["role"] == "support" or other in target_owner["legal_owner_dependencies"]:
+                        header_allowed.append(include_dir_for(other_entry["interface_root"]))
+            jobs.append((spelling, header_allowed))
 
     if not jobs:
         print("no Owner Interface headers found", file=sys.stderr)

@@ -1,8 +1,8 @@
 #include "EntrySerializer.hpp"
 
-#include "agent/harness/session/EntryRedaction.hpp"
-#include "agent/harness/session/RandomHex.hpp"
-#include "agent/harness/session/SessionMessageJson.hpp"
+#include "coding_agent/session/EntryRedaction.hpp"
+#include "support/RandomHex.hpp"
+#include "coding_agent/session/SessionMessageJson.hpp"
 #include "support/Json.hpp"
 
 #include <algorithm>
@@ -156,8 +156,7 @@ namespace {
     return support::make_error(support::ErrorCode::Session, std::move(message), std::move(detail));
 }
 
-template <typename Dto>
-[[nodiscard]] support::Expected<std::string> serialize_tree_entry(const Dto& dto) {
+template <typename Dto> [[nodiscard]] support::Expected<std::string> serialize_tree_entry(const Dto& dto) {
     auto json = support::write_json(dto);
     if (!json) {
         return std::unexpected(session_error("failed to serialize tree entry"));
@@ -171,20 +170,17 @@ template <typename Dto>
     const auto* object = parsed.get_if<glz::generic::object_t>();
     if (object == nullptr) {
         return std::unexpected(session_error(
-            "session entry missing type",
-            "session entry missing type at line " + std::to_string(line_number)));
+                "session entry missing type", "session entry missing type at line " + std::to_string(line_number)));
     }
     const auto found = object->find("type");
     if (found == object->end()) {
         return std::unexpected(session_error(
-            "session entry missing type",
-            "session entry missing type at line " + std::to_string(line_number)));
+                "session entry missing type", "session entry missing type at line " + std::to_string(line_number)));
     }
     const auto* type = found->second.get_if<std::string>();
     if (type == nullptr) {
         return std::unexpected(session_error(
-            "session entry missing type",
-            "session entry missing type at line " + std::to_string(line_number)));
+                "session entry missing type", "session entry missing type at line " + std::to_string(line_number)));
     }
     return *type;
 }
@@ -204,12 +200,11 @@ template <typename T>
     return std::move(*parsed);
 }
 
-[[nodiscard]] std::string generate_entry_id() { return random_hex_id(8); }
+[[nodiscard]] std::string generate_entry_id() { return support::random_hex_id(8); }
 
 [[nodiscard]] std::int64_t ms_since_epoch() {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-               std::chrono::system_clock::now().time_since_epoch())
-        .count();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
 }
 
 /// Inverse of `parse_iso_timestamp_ms`: render an epoch-millisecond timestamp
@@ -232,9 +227,8 @@ template <typename T>
     const unsigned second = static_cast<unsigned>((day_ms / 1000) % 60);
     const unsigned millis = static_cast<unsigned>(day_ms % 1000);
     std::ostringstream oss;
-    oss << std::setfill('0') << std::setw(4) << year << '-' << std::setw(2) << month
-        << '-' << std::setw(2) << day << 'T' << std::setw(2) << hour << ':'
-        << std::setw(2) << minute << ':' << std::setw(2) << second << '.'
+    oss << std::setfill('0') << std::setw(4) << year << '-' << std::setw(2) << month << '-' << std::setw(2) << day
+        << 'T' << std::setw(2) << hour << ':' << std::setw(2) << minute << ':' << std::setw(2) << second << '.'
         << std::setw(3) << millis << 'Z';
     return oss.str();
 }
@@ -262,17 +256,14 @@ struct RoundTripBase {
 [[nodiscard]] EntryBaseResult fresh_entry_base(const std::optional<std::string>& parent_id) {
     const auto now = ms_since_epoch();
     return EntryBaseResult{
-        .id = generate_entry_id(),
-        .parent_id = parent_id,
-        .timestamp_ms = static_cast<ai::TimestampMs>(now),
-        .timestamp_text = format_iso_timestamp_ms(now),
+            .id = generate_entry_id(),
+            .parent_id = parent_id,
+            .timestamp_ms = static_cast<ai::TimestampMs>(now),
+            .timestamp_text = format_iso_timestamp_ms(now),
     };
 }
 
-[[nodiscard]] SessionEntry make_entry(
-    EntryBaseResult base,
-    SessionEntryKind kind,
-    SessionEntryValue value) {
+[[nodiscard]] SessionEntry make_entry(EntryBaseResult base, SessionEntryKind kind, SessionEntryValue value) {
     SessionEntry entry;
     entry.kind = kind;
     entry.entry_id = std::move(base.id);
@@ -294,14 +285,13 @@ struct RoundTripBase {
 }
 
 [[nodiscard]] support::Expected<EntrySerializer::SerializationResult> finish_entry(
-    support::Expected<std::string> line,
-    SessionEntry entry) {
+        support::Expected<std::string> line, SessionEntry entry) {
     if (!line) {
         return std::unexpected(line.error());
     }
     return EntrySerializer::SerializationResult{
-        .line = std::move(*line),
-        .entry = std::move(entry),
+            .line = std::move(*line),
+            .entry = std::move(entry),
     };
 }
 
@@ -388,12 +378,8 @@ template <typename Dto>
 }
 
 [[nodiscard]] ai::TimestampMs parse_iso_timestamp_ms(std::string_view timestamp) {
-    if (timestamp.size() < 20 ||
-        timestamp[4] != '-' ||
-        timestamp[7] != '-' ||
-        (timestamp[10] != 'T' && timestamp[10] != ' ') ||
-        timestamp[13] != ':' ||
-        timestamp[16] != ':') {
+    if (timestamp.size() < 20 || timestamp[4] != '-' || timestamp[7] != '-' ||
+            (timestamp[10] != 'T' && timestamp[10] != ' ') || timestamp[13] != ':' || timestamp[16] != ':') {
         return 0;
     }
 
@@ -427,25 +413,21 @@ template <typename Dto>
         return 0;
     }
 
-    const auto days = days_from_civil(
-        *year,
-        static_cast<unsigned>(*month),
-        static_cast<unsigned>(*day));
-    const auto total_seconds =
-        (((days * 24 + *hour) * 60 + *minute) * 60 + *second);
+    const auto days = days_from_civil(*year, static_cast<unsigned>(*month), static_cast<unsigned>(*day));
+    const auto total_seconds = (((days * 24 + *hour) * 60 + *minute) * 60 + *second);
     return total_seconds * 1000 + millis;
 }
 
 [[nodiscard]] detail::WriteHeaderDto to_dto(const SessionMetadata& metadata) {
     detail::WriteHeaderDto dto{
-        "session",
-        3,
-        metadata.session_id,
-        metadata.created_at,
-        metadata.workspace.string(),
-        std::nullopt,
-        metadata.provider,
-        metadata.model,
+            "session",
+            3,
+            metadata.session_id,
+            metadata.created_at,
+            metadata.workspace.string(),
+            std::nullopt,
+            metadata.provider,
+            metadata.model,
     };
     if (metadata.parent_session) {
         dto.parentSession = metadata.parent_session->string();
@@ -455,23 +437,21 @@ template <typename Dto>
 
 [[nodiscard]] SessionMetadata from_dto(const detail::ReadHeaderDto& dto) {
     if (dto.type == "session") {
-        SessionMetadata metadata{
-            dto.id.value_or(std::string{}),
-            dto.timestamp.value_or(std::string{}),
-            dto.cwd.value_or(std::string{}),
-            dto.provider.value_or(std::string{}),
-            dto.model.value_or(std::string{})};
+        SessionMetadata metadata{dto.id.value_or(std::string{}),
+                dto.timestamp.value_or(std::string{}),
+                dto.cwd.value_or(std::string{}),
+                dto.provider.value_or(std::string{}),
+                dto.model.value_or(std::string{})};
         if (dto.parentSession && !dto.parentSession->empty()) {
             metadata.parent_session = *dto.parentSession;
         }
         return metadata;
     }
-    SessionMetadata metadata{
-        dto.sessionId.value_or(std::string{}),
-        dto.createdAt.value_or(std::string{}),
-        dto.workspace.value_or(std::string{}),
-        dto.provider.value_or(std::string{}),
-        dto.model.value_or(std::string{})};
+    SessionMetadata metadata{dto.sessionId.value_or(std::string{}),
+            dto.createdAt.value_or(std::string{}),
+            dto.workspace.value_or(std::string{}),
+            dto.provider.value_or(std::string{}),
+            dto.model.value_or(std::string{})};
     if (dto.parentSession && !dto.parentSession->empty()) {
         metadata.parent_session = *dto.parentSession;
     }
@@ -525,8 +505,7 @@ template <typename Dto>
 }
 
 [[nodiscard]] std::optional<std::string> optional_string_field(
-    const support::JsonValue::object_t& object,
-    const std::string& key) {
+        const support::JsonValue::object_t& object, const std::string& key) {
     const auto found = object.find(key);
     if (found == object.end()) {
         return std::nullopt;
@@ -571,8 +550,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto, const su
 }
 
 [[nodiscard]] std::optional<support::JsonValue> optional_json_field(
-    const support::JsonValue& value,
-    const std::string& key) {
+        const support::JsonValue& value, const std::string& key) {
     const auto* object = value.get_if<support::JsonValue::object_t>();
     if (object == nullptr) {
         return std::nullopt;
@@ -587,8 +565,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto, const su
 }
 
 [[nodiscard]] support::Expected<CustomMessageEntryContent> custom_message_content_from_dto(
-    const detail::CustomMessageContentDto& content,
-    std::string_view context) {
+        const detail::CustomMessageContentDto& content, std::string_view context) {
     if (const auto* text = std::get_if<std::string>(&content)) {
         return CustomMessageEntryContent{*text};
     }
@@ -614,8 +591,7 @@ void populate_tree_fields_from_dto(SessionEntry& entry, const Dto& dto, const su
     return CustomMessageEntryContent{std::move(converted)};
 }
 
-[[nodiscard]] detail::CustomMessageContentDto custom_message_content_to_dto(
-    CustomMessageEntryContent content) {
+[[nodiscard]] detail::CustomMessageContentDto custom_message_content_to_dto(CustomMessageEntryContent content) {
     if (auto* text = std::get_if<std::string>(&content)) {
         return detail::CustomMessageContentDto{std::move(*text)};
     }
@@ -790,10 +766,9 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
         if (line_number == 1) {
             auto generic = glz::read_json<glz::generic>(stored_line);
             if (!generic) {
-                return std::unexpected(session_error(
-                    "malformed JSONL",
-                    "malformed JSONL at line " + std::to_string(line_number) + ": " +
-                        glz::format_error(generic.error(), stored_line)));
+                return std::unexpected(session_error("malformed JSONL",
+                        "malformed JSONL at line " + std::to_string(line_number) + ": " +
+                                glz::format_error(generic.error(), stored_line)));
             }
 
             auto type = entry_type(*generic, line_number);
@@ -843,15 +818,12 @@ support::Expected<LoadedSession> EntrySerializer::parse_lines(const std::vector<
 [[nodiscard]] support::Expected<SessionEntry> parse_typed_tree_entry(
         std::string_view line, std::size_t line_number, SessionEntryKind kind, support::JsonValue payload);
 
-support::Expected<SessionEntry> EntrySerializer::parse_entry(
-    std::string_view line,
-    std::size_t line_number) const {
+support::Expected<SessionEntry> EntrySerializer::parse_entry(std::string_view line, std::size_t line_number) const {
     auto generic = glz::read_json<glz::generic>(line);
     if (!generic) {
-        return std::unexpected(session_error(
-            "malformed JSONL",
-            "malformed JSONL at line " + std::to_string(line_number) + ": " +
-                glz::format_error(generic.error(), line)));
+        return std::unexpected(session_error("malformed JSONL",
+                "malformed JSONL at line " + std::to_string(line_number) + ": " +
+                        glz::format_error(generic.error(), line)));
     }
 
     auto type = entry_type(*generic, line_number);
@@ -1014,8 +986,7 @@ support::Expected<std::string> EntrySerializer::serialize_message(const ai::Mess
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_message_entry(
-    const ai::MessageVariant& message,
-    std::optional<std::string> parent_id) const {
+        const ai::MessageVariant& message, std::optional<std::string> parent_id) const {
     auto redacted = redacted_message(message);
     auto base = fresh_entry_base(parent_id);
     auto entry_dto = to_dto(base.id, redacted, base.parent_id, base.timestamp_ms);
@@ -1033,15 +1004,13 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
     entry.timestamp = base.timestamp_ms;
     entry.message = std::move(redacted);
     return SerializationResult{
-        .line = *entry_json + '\n',
-        .entry = std::move(entry),
+            .line = *entry_json + '\n',
+            .entry = std::move(entry),
     };
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_model_change(
-    std::optional<std::string> parent_id,
-    std::string provider,
-    std::string model_id) const {
+        std::optional<std::string> parent_id, std::string provider, std::string model_id) const {
     auto base = fresh_entry_base(parent_id);
     detail::ModelChangeDto dto;
     attach_entry_header(base, dto);
@@ -1054,8 +1023,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_thinking_level_change(
-    std::optional<std::string> parent_id,
-    std::string thinking_level) const {
+        std::optional<std::string> parent_id, std::string thinking_level) const {
     auto base = fresh_entry_base(parent_id);
     detail::ThinkingLevelChangeDto dto;
     attach_entry_header(base, dto);
@@ -1067,9 +1035,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_custom_entry(
-    std::optional<std::string> parent_id,
-    std::string custom_type,
-    std::optional<support::JsonValue> data) const {
+        std::optional<std::string> parent_id, std::string custom_type, std::optional<support::JsonValue> data) const {
     auto base = fresh_entry_base(parent_id);
     detail::CustomDto dto;
     attach_entry_header(base, dto);
@@ -1087,11 +1053,11 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_custom_message_entry(
-    std::optional<std::string> parent_id,
-    std::string custom_type,
-    CustomMessageEntryContent content,
-    bool display,
-    std::optional<support::JsonValue> details) const {
+        std::optional<std::string> parent_id,
+        std::string custom_type,
+        CustomMessageEntryContent content,
+        bool display,
+        std::optional<support::JsonValue> details) const {
     redact_custom_message_entry_content(content);
     if (details) {
         details = redact_json_value(*details);
@@ -1118,9 +1084,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_label_change(
-    std::optional<std::string> parent_id,
-    std::string target_id,
-    std::optional<std::string> label) const {
+        std::optional<std::string> parent_id, std::string target_id, std::optional<std::string> label) const {
     auto base = fresh_entry_base(parent_id);
     detail::LabelDto dto;
     attach_entry_header(base, dto);
@@ -1133,8 +1097,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_compaction(
-    std::optional<std::string> parent_id,
-    CompactionEntryValue value) const {
+        std::optional<std::string> parent_id, CompactionEntryValue value) const {
     auto base = fresh_entry_base(parent_id);
     value = normalize_retained_tail(std::move(value));
     // Redact before the value is mirrored into the DTO and the live entry, so
@@ -1169,12 +1132,12 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_branch_summary(
-    std::optional<std::string> parent_id,
-    std::string from_id,
-    std::string summary,
-    std::optional<support::JsonValue> details,
-    std::optional<bool> from_hook,
-    std::optional<ai::Usage> usage) const {
+        std::optional<std::string> parent_id,
+        std::string from_id,
+        std::string summary,
+        std::optional<support::JsonValue> details,
+        std::optional<bool> from_hook,
+        std::optional<ai::Usage> usage) const {
     redact_summary_entry_text(summary, details);
     // Deliberately raw, one reason per field: `from_id` is an entry identifier
     // (the exemption recorded for `BranchSummaryMessage.from_id`), and `usage`
@@ -1202,8 +1165,7 @@ support::Expected<EntrySerializer::SerializationResult> EntrySerializer::seriali
 }
 
 support::Expected<EntrySerializer::SerializationResult> EntrySerializer::serialize_session_info(
-    std::optional<std::string> parent_id,
-    std::optional<std::string> name) const {
+        std::optional<std::string> parent_id, std::optional<std::string> name) const {
     auto base = fresh_entry_base(parent_id);
     detail::SessionInfoDto dto;
     attach_entry_header(base, dto);
@@ -1384,9 +1346,7 @@ support::Expected<std::string> EntrySerializer::serialize_entry(const SessionEnt
     }
     case SessionEntryKind::Header:
     case SessionEntryKind::Unknown:
-        return std::unexpected(session_error(
-            "cannot round-trip entry",
-            "kind does not serialize as a tree entry"));
+        return std::unexpected(session_error("cannot round-trip entry", "kind does not serialize as a tree entry"));
     }
     return std::unexpected(session_error("unreachable"));
 }

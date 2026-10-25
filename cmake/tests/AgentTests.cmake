@@ -18,6 +18,8 @@ include_guard(GLOBAL)
     target_link_libraries(cch_tests_agent
         PRIVATE
             cch_agent_core
+            # #1068: legacy Session tests use the application until #1069 moves them.
+            cch_coding_agent
             Boost::headers
             Catch2::Catch2
 )

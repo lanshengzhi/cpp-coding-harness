@@ -49,6 +49,15 @@ cch_parity_declare_target(
         src/coding_agent/prompt/PromptExpansion.cpp
         src/coding_agent/prompt/PromptTemplateExpander.cpp
         src/coding_agent/prompt/SystemPromptBuilder.cpp
+        src/coding_agent/compaction/Compaction.cpp
+        src/coding_agent/session/EntryRedaction.cpp
+        src/coding_agent/session/EntrySerializer.cpp
+        src/coding_agent/session/JsonlSessionStore.cpp
+        src/coding_agent/session/SessionJournal.cpp
+        src/coding_agent/session/SessionResume.cpp
+        src/coding_agent/session/SessionStore.cpp
+        src/coding_agent/session/SessionTree.cpp
+        src/coding_agent/session/TranscriptExport.cpp
         src/coding_agent/runtime/LocalUserShell.cpp
         src/coding_agent/runtime/McpProductionAdapters.cpp
         src/coding_agent/runtime/McpSessionManager.cpp
@@ -69,6 +78,7 @@ cch_parity_declare_target(
         Threads::Threads@threads
         WebP::webpdecoder@webp
         wasmedge@wasmedge
+        glaze::glaze@glaze
         OpenSSL::Crypto@openssl
     INTERFACE_DEPENDS
         cch_agent_core

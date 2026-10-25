@@ -60,7 +60,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "3bdfdadb4492c896d263dd6e7f63684a8d93ea59b40338beb3b97729de3fca7b"
+            "sha256": "dfc23b3507d7750e84853393415ebd1d1e59a5dd784495eb6cbf56346c48c90b"
           },
           {
             "path": "cmake/targets/Support.cmake",
@@ -76,7 +76,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "8f012713f407f395f68c33f30302e3616dbb1b1e9f247a05ade65ef19dca42c6"
+            "sha256": "380d63375a3746fda3448298c7e02ee61ee73694cf16f962eafadaf9b4ecc18c"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -255,14 +255,15 @@
             "-L",
             "issue1101",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/1101-validation.xml"
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/1101-validation.xml",
+            "--output-on-failure"
           ],
-          "testedRevision": "2c6c4b9401051ac1d8cb59e17e443d74e0627318",
-          "recordedAt": "2026-10-25T13:36:58Z",
+          "testedRevision": "ccaf891c99068d4d8531010f3b2cb2d74ba8f2ad",
+          "recordedAt": "2026-10-25T14:31:58Z",
           "selected": 14,
           "junit": {
             "path": "docs/research/pi-v1.3.0/1101-validation.xml",
-            "sha256": "da7d79ea1015670a5b89bf044653505c2b83060d11b1a2a900e987a5b90628b3"
+            "sha256": "a92762be110aad698db397507c2b81d676c900a04564e7988310ec82ec9279eb"
           }
         },
         "rows": [

@@ -1,8 +1,8 @@
 #include "JsonlSessionStore.hpp"
 
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/SessionJournal.hpp"
-#include "agent/harness/session/SessionLeaf.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
+#include "coding_agent/session/SessionJournal.hpp"
+#include "coding_agent/session/SessionLeaf.hpp"
 
 #include <algorithm>
 #include <filesystem>
@@ -69,8 +69,7 @@ namespace {
 /// back through the stricter reader. pi `_appendEntry` advances the leaf to
 /// every appended entry, so the next append hangs off this one.
 [[nodiscard]] support::Expected<std::vector<SessionEntry>> append_mirrored_line(
-    JsonlSessionStore::Impl& impl,
-    support::Expected<EntrySerializer::SerializationResult> serialized) {
+        JsonlSessionStore::Impl& impl, support::Expected<EntrySerializer::SerializationResult> serialized) {
     if (!serialized) {
         return std::unexpected(serialized.error());
     }
@@ -93,7 +92,7 @@ std::optional<std::filesystem::path> JsonlSessionStore::path() const { return im
 const SessionMetadata& JsonlSessionStore::metadata() const { return impl_->metadata; }
 
 support::Expected<JsonlSessionStore> JsonlSessionStore::create_new(
-    const std::filesystem::path& path, SessionMetadata metadata) {
+        const std::filesystem::path& path, SessionMetadata metadata) {
     EntrySerializer serializer;
     auto header_json = serializer.serialize_header(metadata);
     if (!header_json) {
@@ -180,8 +179,7 @@ support::Expected<JsonlSessionStore> JsonlSessionStore::open_existing(const std:
 }
 
 support::Expected<JsonlSessionStore> JsonlSessionStore::open_loaded(
-    const std::filesystem::path& path,
-    const LoadedSession& loaded) {
+        const std::filesystem::path& path, const LoadedSession& loaded) {
     auto journal = SessionJournal::open_existing(path);
     if (!journal) {
         return std::unexpected(journal.error());
@@ -226,23 +224,23 @@ AppendResult JsonlSessionStore::append(const ai::MessageVariant& message) {
     auto serialized = serializer.serialize_message_entry(message, std::move(parent_id));
     if (!serialized) {
         return AppendResult{
-            .entries = {},
-            .status = std::unexpected(serialized.error()),
+                .entries = {},
+                .status = std::unexpected(serialized.error()),
         };
     }
 
     // pi's delayed first flush verbatim (v0.99.1 `_hasConversation`): the
     // first user or assistant message append creates the file, so a provider
     // failure never costs the completed user history (ADR 0064, pi #10000).
-    const auto triggers_flush = std::holds_alternative<ai::UserMessage>(message)
-        || std::holds_alternative<ai::AssistantMessage>(message);
+    const auto triggers_flush =
+            std::holds_alternative<ai::UserMessage>(message) || std::holds_alternative<ai::AssistantMessage>(message);
     auto persisted = impl_->journal.deferred() && triggers_flush
-        ? impl_->flush_with_trigger_line(std::move(serialized->line))
-        : impl_->buffer_line(std::move(serialized->line));
+                             ? impl_->flush_with_trigger_line(std::move(serialized->line))
+                             : impl_->buffer_line(std::move(serialized->line));
     if (!persisted) {
         return AppendResult{
-            .entries = {},
-            .status = std::unexpected(persisted.error()),
+                .entries = {},
+                .status = std::unexpected(persisted.error()),
         };
     }
 
@@ -286,9 +284,7 @@ namespace {
 } // namespace
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_model_change(
-    std::optional<std::string> parent_id,
-    std::string provider,
-    std::string model_id) {
+        std::optional<std::string> parent_id, std::string provider, std::string model_id) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_model_change(
@@ -296,8 +292,7 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_model_cha
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_thinking_level_change(
-    std::optional<std::string> parent_id,
-    std::string thinking_level) {
+        std::optional<std::string> parent_id, std::string thinking_level) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_thinking_level_change(
@@ -305,9 +300,7 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_thinking_
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_entry(
-    std::optional<std::string> parent_id,
-    std::string custom_type,
-    support::JsonValue data) {
+        std::optional<std::string> parent_id, std::string custom_type, support::JsonValue data) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_custom_entry(
@@ -315,11 +308,11 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_en
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_message_entry(
-    std::optional<std::string> parent_id,
-    std::string custom_type,
-    CustomMessageEntryContent content,
-    bool display,
-    std::optional<support::JsonValue> details) {
+        std::optional<std::string> parent_id,
+        std::string custom_type,
+        CustomMessageEntryContent content,
+        bool display,
+        std::optional<support::JsonValue> details) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_custom_message_entry(typed_append_parent(*impl_, std::move(parent_id)),
@@ -330,9 +323,7 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_custom_me
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_label_change(
-    std::optional<std::string> parent_id,
-    std::string target_id,
-    std::optional<std::string> label) {
+        std::optional<std::string> parent_id, std::string target_id, std::optional<std::string> label) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_label_change(
@@ -340,8 +331,7 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_label_cha
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_compaction(
-    std::optional<std::string> parent_id,
-    CompactionEntryValue value) {
+        std::optional<std::string> parent_id, CompactionEntryValue value) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_compaction(typed_append_parent(*impl_, std::move(parent_id)), std::move(value)));
@@ -365,8 +355,7 @@ support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_branch_su
 }
 
 support::Expected<std::vector<SessionEntry>> JsonlSessionStore::append_session_info(
-    std::optional<std::string> parent_id,
-    std::string name) {
+        std::optional<std::string> parent_id, std::string name) {
     EntrySerializer serializer;
     return append_mirrored_line(*impl_,
             serializer.serialize_session_info(typed_append_parent(*impl_, std::move(parent_id)), std::move(name)));

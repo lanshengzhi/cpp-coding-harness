@@ -1,4 +1,4 @@
-#include "agent/harness/session/EntryRedaction.hpp"
+#include "EntryRedaction.hpp"
 
 #include "support/Json.hpp"
 #include <cch/support/Redactor.hpp>

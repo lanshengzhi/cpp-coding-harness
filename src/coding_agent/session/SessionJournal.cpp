@@ -1,5 +1,5 @@
 #include "SessionJournal.hpp"
-#include "SessionJournalTestHooks.hpp"
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
 
 #include "agent/harness/PosixWrite.hpp"
 #include "support/UniqueFd.hpp"
@@ -28,8 +28,7 @@ namespace {
 }
 
 [[nodiscard]] support::Expected<support::UniqueFd> open_parent_directory(
-    const std::filesystem::path& path,
-    bool create_missing) {
+        const std::filesystem::path& path, bool create_missing) {
     int open_flags = O_RDONLY | O_DIRECTORY;
 #ifdef O_CLOEXEC
     open_flags |= O_CLOEXEC;
@@ -38,14 +37,11 @@ namespace {
     open_flags |= O_NOFOLLOW;
 #endif
 
-    const auto parent = path.parent_path().empty()
-        ? std::filesystem::path{"."}
-        : path.parent_path();
+    const auto parent = path.parent_path().empty() ? std::filesystem::path{"."} : path.parent_path();
     const auto start = parent.is_absolute() ? parent.root_path() : std::filesystem::path{"."};
     support::UniqueFd current(::open(start.c_str(), open_flags));
     if (!current) {
-        return std::unexpected(session_error(
-            "could not open session directory root", std::strerror(errno)));
+        return std::unexpected(session_error("could not open session directory root", std::strerror(errno)));
     }
 
     const auto relative = parent.is_absolute() ? parent.relative_path() : parent;
@@ -55,12 +51,10 @@ namespace {
         }
         if (component == "..") {
             return std::unexpected(session_error(
-                "session parent path contains parent traversal",
-                "refusing to open a session through '..'"));
+                    "session parent path contains parent traversal", "refusing to open a session through '..'"));
         }
-        if (create_missing &&
-            ::mkdirat(current.get(), component.c_str(), S_IRWXU | S_IRWXG | S_IRWXO) != 0 &&
-            errno != EEXIST) {
+        if (create_missing && ::mkdirat(current.get(), component.c_str(), S_IRWXU | S_IRWXG | S_IRWXO) != 0 &&
+                errno != EEXIST) {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error("could not create session directory", reason));
         }
@@ -68,8 +62,7 @@ namespace {
         if (!next) {
             const auto reason = std::string{std::strerror(errno)};
             return std::unexpected(session_error(
-                "session parent path contains a symlink or non-directory",
-                component.string() + ": " + reason));
+                    "session parent path contains a symlink or non-directory", component.string() + ": " + reason));
         }
         current = std::move(next);
     }
@@ -77,10 +70,7 @@ namespace {
 }
 
 [[nodiscard]] support::Expected<support::UniqueFd> open_session_path(
-    const std::filesystem::path& path,
-    int flags,
-    int mode = 0,
-    bool create_parent_directories = false) {
+        const std::filesystem::path& path, int flags, int mode = 0, bool create_parent_directories = false) {
     auto parent = open_parent_directory(path, create_parent_directories);
     if (!parent) {
         return std::unexpected(parent.error());
@@ -125,13 +115,13 @@ void remove_session_file(const std::filesystem::path& path) {
 }
 
 [[nodiscard]] support::ExpectedVoid set_fd_private_permissions(int fd) {
-    struct stat st {};
+    struct stat st{};
     if (::fstat(fd, &st) != 0) {
         return std::unexpected(session_error("could not inspect session permissions", std::strerror(errno)));
     }
     if ((st.st_mode & (S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH)) != 0) {
-        return std::unexpected(session_error(
-            "session file is readable by group/others", "refusing to load sensitive transcript"));
+        return std::unexpected(
+                session_error("session file is readable by group/others", "refusing to load sensitive transcript"));
     }
     if (::fchmod(fd, S_IRUSR | S_IWUSR) != 0) {
         return std::unexpected(session_error("could not set owner-only session permissions", std::strerror(errno)));
@@ -169,16 +159,14 @@ std::optional<RecordedAppendThreads> recorded_append_threads;
 void apply_append_test_hooks(const std::filesystem::path& path) {
     {
         std::scoped_lock lock{recorded_append_threads_mutex};
-        if (recorded_append_threads &&
-            recorded_append_threads->path == path.lexically_normal()) {
+        if (recorded_append_threads && recorded_append_threads->path == path.lexically_normal()) {
             recorded_append_threads->threads.push_back(std::this_thread::get_id());
         }
     }
     std::optional<std::chrono::milliseconds> delay;
     {
         std::scoped_lock lock{injected_append_delay_mutex};
-        if (injected_append_delay &&
-            injected_append_delay->path == path.lexically_normal()) {
+        if (injected_append_delay && injected_append_delay->path == path.lexically_normal()) {
             delay = injected_append_delay->delay;
         }
     }
@@ -189,8 +177,7 @@ void apply_append_test_hooks(const std::filesystem::path& path) {
 
 [[nodiscard]] bool consume_injected_append_failure(const std::filesystem::path& path) {
     std::scoped_lock lock{injected_append_failure_mutex};
-    if (!injected_append_failure ||
-        injected_append_failure->path != path.lexically_normal()) {
+    if (!injected_append_failure || injected_append_failure->path != path.lexically_normal()) {
         return false;
     }
     if (--injected_append_failure->attempts_remaining != 0) {
@@ -207,25 +194,22 @@ namespace testing {
 void fail_nth_append_for_test(const std::filesystem::path& path, std::size_t attempt) {
     std::scoped_lock lock{injected_append_failure_mutex};
     injected_append_failure = InjectedAppendFailure{
-        .path = path.lexically_normal(),
-        .attempts_remaining = attempt == 0 ? 1 : attempt,
+            .path = path.lexically_normal(),
+            .attempts_remaining = attempt == 0 ? 1 : attempt,
     };
 }
 
-void delay_appends_for_test(
-    const std::filesystem::path& path,
-    std::chrono::milliseconds delay) {
+void delay_appends_for_test(const std::filesystem::path& path, std::chrono::milliseconds delay) {
     std::scoped_lock lock{injected_append_delay_mutex};
     injected_append_delay = InjectedAppendDelay{
-        .path = path.lexically_normal(),
-        .delay = delay,
+            .path = path.lexically_normal(),
+            .delay = delay,
     };
 }
 
 void clear_append_delay_for_test(const std::filesystem::path& path) {
     std::scoped_lock lock{injected_append_delay_mutex};
-    if (injected_append_delay &&
-        injected_append_delay->path == path.lexically_normal()) {
+    if (injected_append_delay && injected_append_delay->path == path.lexically_normal()) {
         injected_append_delay.reset();
     }
 }
@@ -233,16 +217,14 @@ void clear_append_delay_for_test(const std::filesystem::path& path) {
 void record_append_threads_for_test(const std::filesystem::path& path) {
     std::scoped_lock lock{recorded_append_threads_mutex};
     recorded_append_threads = RecordedAppendThreads{
-        .path = path.lexically_normal(),
-        .threads = {},
+            .path = path.lexically_normal(),
+            .threads = {},
     };
 }
 
-std::vector<std::thread::id> recorded_append_threads_for_test(
-    const std::filesystem::path& path) {
+std::vector<std::thread::id> recorded_append_threads_for_test(const std::filesystem::path& path) {
     std::scoped_lock lock{recorded_append_threads_mutex};
-    if (!recorded_append_threads ||
-        recorded_append_threads->path != path.lexically_normal()) {
+    if (!recorded_append_threads || recorded_append_threads->path != path.lexically_normal()) {
         return {};
     }
     auto threads = std::move(recorded_append_threads->threads);
@@ -252,8 +234,7 @@ std::vector<std::thread::id> recorded_append_threads_for_test(
 
 } // namespace testing
 
-support::ExpectedVoid SessionJournal::validate_new_session_path(
-    const std::filesystem::path& path) {
+support::ExpectedVoid SessionJournal::validate_new_session_path(const std::filesystem::path& path) {
     if (auto validation = validate_session_path_for_open(path, false); !validation) {
         return std::unexpected(validation.error());
     }
@@ -265,7 +246,7 @@ support::ExpectedVoid SessionJournal::validate_new_session_path(
 }
 
 support::Expected<SessionJournal> SessionJournal::create_new(
-    const std::filesystem::path& path, std::string_view header_line) {
+        const std::filesystem::path& path, std::string_view header_line) {
     if (auto validation = validate_new_session_path(path); !validation) {
         return std::unexpected(validation.error());
     }
@@ -285,8 +266,7 @@ support::Expected<SessionJournal> SessionJournal::create_new(
     return journal;
 }
 
-support::Expected<SessionJournal> SessionJournal::create_deferred(
-    const std::filesystem::path& path) {
+support::Expected<SessionJournal> SessionJournal::create_deferred(const std::filesystem::path& path) {
     if (auto validation = validate_new_session_path(path); !validation) {
         return std::unexpected(validation.error());
     }
@@ -305,11 +285,10 @@ support::Expected<SessionJournal> SessionJournal::create_deferred(
     return journal;
 }
 
-support::ExpectedVoid SessionJournal::flush_new(
-    std::string_view header_line, const std::vector<std::string>& lines) {
+support::ExpectedVoid SessionJournal::flush_new(std::string_view header_line, const std::vector<std::string>& lines) {
     if (!deferred_) {
-        return std::unexpected(session_error(
-            "session journal is not deferred", "flush_new applies only before the first write"));
+        return std::unexpected(
+                session_error("session journal is not deferred", "flush_new applies only before the first write"));
     }
 
     apply_append_test_hooks(path_);
@@ -327,8 +306,7 @@ support::ExpectedVoid SessionJournal::flush_new(
     // exercise the same partial-file removal as a post-write failure.
     if (consume_injected_append_failure(path_)) {
         remove_session_file(path_);
-        return std::unexpected(session_error(
-            "could not persist session entry", "injected append failure"));
+        return std::unexpected(session_error("could not persist session entry", "injected append failure"));
     }
 
     if (auto perms = ensure_private_permissions(path_, false); !perms) {
@@ -357,19 +335,17 @@ support::Expected<SessionJournal> SessionJournal::open_existing(const std::files
 
 support::ExpectedVoid SessionJournal::append_line(std::string_view line) const {
     if (deferred_) {
-        return std::unexpected(session_error(
-            "could not append to session file", "session journal awaits its first flush"));
+        return std::unexpected(
+                session_error("could not append to session file", "session journal awaits its first flush"));
     }
     apply_append_test_hooks(path_);
     if (consume_injected_append_failure(path_)) {
-        return std::unexpected(session_error(
-            "could not persist session entry", "injected append failure"));
+        return std::unexpected(session_error("could not persist session entry", "injected append failure"));
     }
     auto opened = open_session_path(path_, O_WRONLY | O_APPEND);
     if (!opened) {
         return std::unexpected(session_error(
-            "could not append to session file",
-            opened.error().message + ": " + opened.error().detail));
+                "could not append to session file", opened.error().message + ": " + opened.error().detail));
     }
 
     if (auto persisted = write_all_fsync(opened->get(), line); !persisted) {
@@ -408,7 +384,7 @@ support::Expected<std::vector<std::string>> SessionJournal::read_lines() const {
 }
 
 support::ExpectedVoid SessionJournal::validate_session_path_for_open(
-    const std::filesystem::path& path, bool must_exist) {
+        const std::filesystem::path& path, bool must_exist) {
     std::error_code ec;
     if (path.empty()) {
         return std::unexpected(session_error("session path is required"));
@@ -416,27 +392,23 @@ support::ExpectedVoid SessionJournal::validate_session_path_for_open(
     if (must_exist && !std::filesystem::exists(path, ec)) {
         return std::unexpected(session_error("session file does not exist"));
     }
-    if (std::filesystem::exists(path, ec) &&
-        std::filesystem::is_symlink(std::filesystem::symlink_status(path, ec))) {
+    if (std::filesystem::exists(path, ec) && std::filesystem::is_symlink(std::filesystem::symlink_status(path, ec))) {
         return std::unexpected(session_error("refusing to follow symlink session path"));
     }
     return {};
 }
 
-support::ExpectedVoid SessionJournal::ensure_private_permissions(
-    const std::filesystem::path& path, bool existing) {
+support::ExpectedVoid SessionJournal::ensure_private_permissions(const std::filesystem::path& path, bool existing) {
     auto opened = open_session_path(path, O_RDONLY);
     if (!opened) {
-        return std::unexpected(session_error(
-            "could not open session file for permission check",
-            opened.error().message + ": " + opened.error().detail));
+        return std::unexpected(session_error("could not open session file for permission check",
+                opened.error().message + ": " + opened.error().detail));
     }
 
     if (auto perms = set_fd_private_permissions(opened->get()); !perms) {
         if (!existing) {
-            auto detail = perms.error().detail.empty()
-                ? "could not set owner-only session permissions"
-                : perms.error().detail;
+            auto detail = perms.error().detail.empty() ? "could not set owner-only session permissions"
+                                                       : perms.error().detail;
             return std::unexpected(session_error("could not set owner-only session permissions", detail));
         }
         return std::unexpected(perms.error());
@@ -445,16 +417,11 @@ support::ExpectedVoid SessionJournal::ensure_private_permissions(
 }
 
 support::ExpectedVoid SessionJournal::write_new_file_exclusive(
-    const std::filesystem::path& path, std::string_view content) {
-    auto opened = open_session_path(
-        path,
-        O_WRONLY | O_CREAT | O_EXCL,
-        S_IRUSR | S_IWUSR,
-        true);
+        const std::filesystem::path& path, std::string_view content) {
+    auto opened = open_session_path(path, O_WRONLY | O_CREAT | O_EXCL, S_IRUSR | S_IWUSR, true);
     if (!opened) {
-        return std::unexpected(session_error(
-            "could not create session file",
-            opened.error().message + ": " + opened.error().detail));
+        return std::unexpected(
+                session_error("could not create session file", opened.error().message + ": " + opened.error().detail));
     }
 
     if (auto persisted = write_all_fsync(opened->get(), content); !persisted) {

@@ -1,7 +1,7 @@
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/JsonlSessionStore.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
+#include "coding_agent/session/JsonlSessionStore.hpp"
 
 #include <mutex>
 #include <utility>
@@ -54,9 +54,7 @@ struct SessionStore::Impl {
 
 SessionStore::SessionStore(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
-support::Expected<SessionStore> SessionStore::create_new(
-    const std::filesystem::path& path,
-    SessionMetadata metadata) {
+support::Expected<SessionStore> SessionStore::create_new(const std::filesystem::path& path, SessionMetadata metadata) {
     auto jsonl = JsonlSessionStore::create_new(path, metadata);
     if (!jsonl) {
         return std::unexpected(jsonl.error());
@@ -125,9 +123,7 @@ support::ExpectedVoid SessionStore::append(const ai::MessageVariant& message) {
 }
 
 support::ExpectedVoid SessionStore::append_model_change(
-    std::optional<std::string> parent_id,
-    std::string provider,
-    std::string model_id) {
+        std::optional<std::string> parent_id, std::string provider, std::string model_id) {
     std::lock_guard lock(impl_->mutex);
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(
@@ -139,8 +135,7 @@ support::ExpectedVoid SessionStore::append_model_change(
 }
 
 support::ExpectedVoid SessionStore::append_thinking_level_change(
-    std::optional<std::string> parent_id,
-    std::string thinking_level) {
+        std::optional<std::string> parent_id, std::string thinking_level) {
     std::lock_guard lock(impl_->mutex);
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(
@@ -152,9 +147,7 @@ support::ExpectedVoid SessionStore::append_thinking_level_change(
 }
 
 support::ExpectedVoid SessionStore::append_label_change(
-    std::optional<std::string> parent_id,
-    std::string target_id,
-    std::optional<std::string> label) {
+        std::optional<std::string> parent_id, std::string target_id, std::optional<std::string> label) {
     std::lock_guard lock(impl_->mutex);
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(
@@ -166,8 +159,7 @@ support::ExpectedVoid SessionStore::append_label_change(
 }
 
 support::ExpectedVoid SessionStore::append_compaction(
-    std::optional<std::string> parent_id,
-    CompactionEntryValue value) {
+        std::optional<std::string> parent_id, CompactionEntryValue value) {
     std::lock_guard lock(impl_->mutex);
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_compaction(std::move(parent_id), std::move(value)));
@@ -200,9 +192,7 @@ support::ExpectedVoid SessionStore::append_branch_summary(std::optional<std::str
     return {};
 }
 
-support::ExpectedVoid SessionStore::append_session_info(
-    std::optional<std::string> parent_id,
-    std::string name) {
+support::ExpectedVoid SessionStore::append_session_info(std::optional<std::string> parent_id, std::string name) {
     std::lock_guard lock(impl_->mutex);
     if (auto& jsonl = impl_->persistence) {
         return impl_->record_persisted(jsonl->append_session_info(std::move(parent_id), std::move(name)));
@@ -210,7 +200,6 @@ support::ExpectedVoid SessionStore::append_session_info(
     impl_->record(EntrySerializer::new_session_info_entry(impl_->typed_parent(std::move(parent_id)), std::move(name)));
     return {};
 }
-
 
 // --- Live tree queries (snapshots taken under the append lock) ---
 

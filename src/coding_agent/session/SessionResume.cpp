@@ -1,7 +1,7 @@
-#include <cch/agent/harness/session/SessionResume.hpp>
+#include <cch/coding_agent/session/SessionResume.hpp>
 
-#include "agent/harness/session/JsonlSessionStore.hpp"
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include "coding_agent/session/JsonlSessionStore.hpp"
+#include <cch/coding_agent/session/SessionTree.hpp>
 
 #include <algorithm>
 #include <limits>
@@ -29,18 +29,14 @@ namespace {
     return false;
 }
 
-[[nodiscard]] std::size_t entry_index(
-    const std::vector<SessionEntry>& entries,
-    const SessionEntry* entry) {
+[[nodiscard]] std::size_t entry_index(const std::vector<SessionEntry>& entries, const SessionEntry* entry) {
     if (entries.empty() || entry == nullptr) {
         return std::numeric_limits<std::size_t>::max();
     }
     return static_cast<std::size_t>(entry - entries.data());
 }
 
-[[nodiscard]] const SessionEntry* primary_topology_child(
-    const SessionTree& tree,
-    const SessionEntry& parent) {
+[[nodiscard]] const SessionEntry* primary_topology_child(const SessionTree& tree, const SessionEntry& parent) {
     const auto& entries = tree.entries();
     const SessionEntry* primary = nullptr;
     auto primary_index = std::numeric_limits<std::size_t>::max();
@@ -104,13 +100,13 @@ support::Expected<SessionResumeResult> resume_session(const std::filesystem::pat
     auto context = tree.buildSessionContext();
 
     return SessionResumeResult{
-        .metadata = tree.metadata(),
-        .history = std::move(context.messages),
-        .provider = std::move(context.provider),
-        .model = std::move(context.model),
-        .thinking_level = std::move(context.thinking_level),
-        .has_thinking_level_entry = context.has_thinking_level_entry,
-        .topology = classify_active_topology(tree),
+            .metadata = tree.metadata(),
+            .history = std::move(context.messages),
+            .provider = std::move(context.provider),
+            .model = std::move(context.model),
+            .thinking_level = std::move(context.thinking_level),
+            .has_thinking_level_entry = context.has_thinking_level_entry,
+            .topology = classify_active_topology(tree),
     };
 }
 

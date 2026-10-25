@@ -6,7 +6,7 @@
 #include "support/Json.hpp"
 #include "support/JsonGlaze.hpp"
 #include <cch/support/OutputLimiter.hpp>
-#include "agent/harness/session/RandomHex.hpp"
+#include "support/RandomHex.hpp"
 #include "agent/tools/TerminalText.hpp"
 
 #include <boost/asio/co_spawn.hpp>
@@ -180,7 +180,7 @@ struct BashOutput {
     if (error) {
         return std::nullopt;
     }
-    return (directory / ("cch-bash-" + harness::session::random_hex_id(8) + ".log")).string();
+    return (directory / ("cch-bash-" + support::random_hex_id(8) + ".log")).string();
 }
 
 /// pi `formatOutput` (`bash.ts:321-339`): the truncated tail plus one

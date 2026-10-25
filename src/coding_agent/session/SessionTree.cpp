@@ -1,8 +1,8 @@
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
-#include "agent/harness/session/SessionLeaf.hpp"
+#include "coding_agent/session/SessionLeaf.hpp"
 
 #include <algorithm>
 #include <set>
@@ -12,13 +12,11 @@
 
 namespace cch::harness::session {
 
-SessionTree::SessionTree(LoadedSession session)
-    : metadata_(std::move(session.metadata)) {
+SessionTree::SessionTree(LoadedSession session) : metadata_(std::move(session.metadata)) {
     // Filter out the session header entry (kind == Header) and any Unknown entries.
     // The tree only tracks non-header, non-unknown entries.
     for (auto& entry : session.entries) {
-        if (entry.kind == SessionEntryKind::Header ||
-            entry.kind == SessionEntryKind::Unknown) {
+        if (entry.kind == SessionEntryKind::Header || entry.kind == SessionEntryKind::Unknown) {
             continue;
         }
         entries_.push_back(std::move(entry));
@@ -68,8 +66,7 @@ void SessionTree::index_appended_entry(std::size_t index) {
 void SessionTree::append_entry(SessionEntry entry) {
     // Mirror the construction-time filter: the tree never tracks header or
     // unknown entries.
-    if (entry.kind == SessionEntryKind::Header ||
-        entry.kind == SessionEntryKind::Unknown) {
+    if (entry.kind == SessionEntryKind::Header || entry.kind == SessionEntryKind::Unknown) {
         return;
     }
 
@@ -141,8 +138,7 @@ const SessionEntry* SessionTree::leaf_entry() const {
 support::ExpectedVoid SessionTree::branch(std::string_view entry_id) {
     if (!getEntry(entry_id)) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Session,
-            std::string("entry not found: ") + std::string{entry_id}));
+                support::ErrorCode::Session, std::string("entry not found: ") + std::string{entry_id}));
     }
     leaf_id_ = std::string{entry_id};
     return {};
@@ -163,8 +159,7 @@ std::vector<SessionTreeNode> SessionTree::get_tree() const {
     // maintained by `_buildIndex`: later label entries win; an empty or
     // absent label clears the target and its timestamp).
     std::unordered_map<std::string, std::optional<std::string>> labels;
-    std::unordered_map<std::string, std::optional<ai::TimestampMs>>
-        label_timestamps;
+    std::unordered_map<std::string, std::optional<ai::TimestampMs>> label_timestamps;
     for (const auto& entry : entries_) {
         if (entry.kind != SessionEntryKind::Label) {
             continue;
@@ -275,25 +270,26 @@ std::vector<SessionTreeNode> SessionTree::get_tree() const {
     // so deep trees cannot overflow the stack (pi getTree).
     std::vector<SessionTreeNode*> stack;
     stack.reserve(nodes.size());
-    for (auto& root : roots) stack.push_back(&root);
+    for (auto& root : roots)
+        stack.push_back(&root);
     while (!stack.empty()) {
         auto* node = stack.back();
         stack.pop_back();
-        std::sort(
-            node->children.begin(),
-            node->children.end(),
-            [](const SessionTreeNode& first, const SessionTreeNode& second) {
-                return first.entry.timestamp < second.entry.timestamp;
-            });
-        for (auto& child : node->children) stack.push_back(&child);
+        std::sort(node->children.begin(),
+                node->children.end(),
+                [](const SessionTreeNode& first, const SessionTreeNode& second) {
+                    return first.entry.timestamp < second.entry.timestamp;
+                });
+        for (auto& child : node->children)
+            stack.push_back(&child);
     }
     return roots;
 }
 
 SessionTreeSnapshot SessionTree::topology() const {
     return SessionTreeSnapshot{
-        .roots = get_tree(),
-        .leaf_id = leaf_id_,
+            .roots = get_tree(),
+            .leaf_id = leaf_id_,
     };
 }
 
@@ -366,13 +362,11 @@ void emitEntryMessage(SessionContext& ctx, const SessionEntry* entry) {
             if (const auto* text = std::get_if<std::string>(&value->content)) {
                 cm.content = {ai::TextContent{.text = *text, .text_signature = std::nullopt}};
             } else {
-                const auto& blocks =
-                    std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);
+                const auto& blocks = std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);
                 cm.content.reserve(blocks.size());
                 for (const auto& block : blocks) {
-                    cm.content.push_back(std::visit(
-                        [](const auto& concrete) -> ai::Content { return concrete; },
-                        block));
+                    cm.content.push_back(
+                            std::visit([](const auto& concrete) -> ai::Content { return concrete; }, block));
                 }
             }
             cm.display = value->display;
@@ -437,23 +431,20 @@ SessionContext buildSessionContext(const std::vector<const SessionEntry*>& path)
     for (const auto* entry : path) {
         switch (entry->kind) {
         case SessionEntryKind::ThinkingLevelChange:
-            if (const auto* thinking =
-                    std::get_if<ThinkingLevelChangeValue>(&entry->value)) {
+            if (const auto* thinking = std::get_if<ThinkingLevelChangeValue>(&entry->value)) {
                 ctx.thinking_level = thinking->thinking_level;
                 ctx.has_thinking_level_entry = true;
             }
             break;
         case SessionEntryKind::ModelChange:
-            if (const auto* model =
-                    std::get_if<ModelChangeValue>(&entry->value)) {
+            if (const auto* model = std::get_if<ModelChangeValue>(&entry->value)) {
                 ctx.provider = model->provider;
                 ctx.model = model->model_id;
             }
             break;
         case SessionEntryKind::Message:
             if (entry->message.has_value()) {
-                if (const auto* assistant =
-                        std::get_if<ai::AssistantMessage>(&*entry->message)) {
+                if (const auto* assistant = std::get_if<ai::AssistantMessage>(&*entry->message)) {
                     ctx.provider = assistant->provider;
                     ctx.model = assistant->model;
                 }
@@ -481,15 +472,15 @@ SessionContext buildSessionContext(const std::vector<const SessionEntry*>& path)
         return ctx;
     }
 
-    const auto compaction_index = static_cast<std::size_t>(
-        std::find(path.begin(), path.end(), compaction) - path.begin());
+    const auto compaction_index =
+            static_cast<std::size_t>(std::find(path.begin(), path.end(), compaction) - path.begin());
 
     // pi `defaultContextEntryTransform`: the compaction entry plus whatever
     // follows it on the path. With `retainedTail` present the retained
     // messages live on the entry itself; without it, the pre-compaction
     // entries from `firstKeptEntryId` onward are kept in the file and emitted.
     const bool has_retained_tail = std::get_if<CompactionEntryValue>(&compaction->value) != nullptr &&
-        std::get<CompactionEntryValue>(compaction->value).retained_tail.has_value();
+                                   std::get<CompactionEntryValue>(compaction->value).retained_tail.has_value();
 
     const auto* compaction_value = std::get_if<CompactionEntryValue>(&compaction->value);
     const bool retained_tail_has_system_messages =
@@ -613,15 +604,13 @@ std::optional<std::string> SessionTree::get_session_name() const {
 
 // ── Branch summary hook ──
 
-support::ExpectedVoid SessionTree::branchWithSummary(
-    std::string_view entry_id,
-    BranchSummaryHook& hook,
-    std::move_only_function<support::ExpectedVoid(const SessionEntry&)> append_writer) {
+support::ExpectedVoid SessionTree::branchWithSummary(std::string_view entry_id,
+        BranchSummaryHook& hook,
+        std::move_only_function<support::ExpectedVoid(const SessionEntry&)> append_writer) {
 
     if (!getEntry(entry_id)) {
         return std::unexpected(support::make_error(
-            support::ErrorCode::Session,
-            std::string("target entry not found: ") + std::string{entry_id}));
+                support::ErrorCode::Session, std::string("target entry not found: ") + std::string{entry_id}));
     }
 
     // Collect the abandoned branch.

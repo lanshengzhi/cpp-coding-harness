@@ -1,0 +1,183 @@
+#pragma once
+
+#include <cch/coding_agent/session/SessionEntry.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
+#include <cch/ai/Message.hpp>
+#include <cch/support/Error.hpp>
+#include <cch/support/JsonValue.hpp>
+
+#include <cstddef>
+#include <filesystem>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace cch::harness::session {
+
+/// The Runtime-facing Session Store: a closed concrete facade over the two
+/// supported persistence alternatives — a JSONL session file and an
+/// in-memory no-persistence store (ADR 0040) — and the authoritative owner
+/// of the session's live tree state. The seam is closed to extension and
+/// exposes no generic serialization machinery; encoding and journal I/O stay
+/// private behind the typed append operations.
+///
+/// Every store caches a live SessionTree built exactly once at
+/// create/open time; a successful append both persists (JSONL sessions) and
+/// incrementally updates the cached tree, so topology queries and context
+/// reconstruction never re-read or re-parse the session file (pi
+/// SessionManager, which keeps `fileEntries`/`byId` in memory and advances
+/// them in `_appendEntry`). In-memory sessions mint the same entries through
+/// the same value normalizations without disk I/O and without append-time
+/// redaction, which is persistence policy.
+///
+/// Mutating appends and tree queries are internally synchronized so the
+/// serialized Session Event Commitment channel can execute appends on
+/// Runtime worker threads while rare session-assembly appends (model change,
+/// compaction, …) and tree queries run on the Session's loop. Every query
+/// returns owned snapshot values — no borrowed view of the live tree escapes
+/// the lock, so a concurrent append can never invalidate a result. Entry
+/// order across the two append paths is the caller's responsibility (the
+/// commitment channel drains before a mid-run typed append).
+/// pi wire-form session snapshot for the `/export` HTML lane
+/// (`SessionManager.getHeader`/`getEntries`/`getLeafId`): the header object
+/// and every tracked entry object, each as one JSON object without its line
+/// terminator, in store order.
+/// The wire snapshot is a typed value contract, not an unstructured JSON
+/// fact: every member is a standard-library type, and the JSON text is the
+/// product of a private serializer that `cch_coding_agent` does not expose
+/// (ADR 0039 keeps serialization DTOs private). The caller needs the exact
+/// bytes, not a JSON tree, because pi's `JSON.stringify` observes JavaScript
+/// member order and `support::JsonValue` stores objects in a `std::map`.
+struct SessionWireSnapshot {
+    std::string header{};
+    std::vector<std::string> entries{};
+    /// pi `getLeafId`: the active leaf entry id; empty at the root position
+    /// (the caller maps that to JSON null).
+    std::string leaf_id{};
+};
+
+class SessionStore final {
+public:
+    /// Create a new JSONL session file (header written durably) with an
+    /// empty live tree (pi `SessionManager.create`).
+    [[nodiscard]] static support::Expected<SessionStore> create_new(
+            const std::filesystem::path& path, SessionMetadata metadata);
+    /// Open an existing JSONL session file; the persisted entries are parsed
+    /// exactly once here to build the live tree (pi `SessionManager.open`).
+    [[nodiscard]] static support::Expected<SessionStore> open_existing(const std::filesystem::path& path);
+    /// The in-memory alternative: appends update the live tree without disk
+    /// I/O and path() is empty (in-memory sessions are not resumable, #409).
+    [[nodiscard]] static SessionStore in_memory(SessionMetadata metadata = {});
+    /// One-shot read of a session file that is NOT the live session (the
+    /// fork flows parse foreign files). Never use it to query the live
+    /// session — the cached tree already answers those queries.
+    [[nodiscard]] static support::Expected<LoadedSession> load(const std::filesystem::path& path);
+    /// Create a new JSONL session file holding exactly `metadata` plus
+    /// `entries`, in order (pi `createBranchedSession`'s file write). The
+    /// fork flow supplies an already re-chained entry list rather than
+    /// replaying appends; entry encoding, redaction, the header line, and
+    /// the journal stay private, so no caller outside this package ever
+    /// handles a wire line. A `Header` entry is rejected; an `Unknown`
+    /// entry is re-emitted from its stored wire line, so foreign entry
+    /// kinds survive a fork byte-identically.
+    [[nodiscard]] static support::ExpectedVoid create_from_entries(
+            const std::filesystem::path& path, SessionMetadata metadata, std::vector<SessionEntry> entries);
+
+    SessionStore(SessionStore&&) noexcept;
+    SessionStore& operator=(SessionStore&&) noexcept;
+    ~SessionStore();
+    SessionStore(const SessionStore&) = delete;
+    SessionStore& operator=(const SessionStore&) = delete;
+
+    /// Append one completed Session Entry message (pi `appendEntry`).
+    [[nodiscard]] support::ExpectedVoid append(const ai::MessageVariant& message);
+
+    // --- v3 tree entry appends; they persist (JSONL sessions) and advance
+    // the live tree in one locked step ---
+
+    [[nodiscard]] support::ExpectedVoid append_model_change(
+            std::optional<std::string> parent_id, std::string provider, std::string model_id);
+    [[nodiscard]] support::ExpectedVoid append_thinking_level_change(
+            std::optional<std::string> parent_id, std::string thinking_level);
+    [[nodiscard]] support::ExpectedVoid append_label_change(
+            std::optional<std::string> parent_id, std::string target_id, std::optional<std::string> label);
+    /// Append one Compaction entry (pi `appendCompaction`); the entry value
+    /// carries pi's full field set (`summary`, `firstKeptEntryId`,
+    /// `tokensBefore`, `retainedTail`, `details`, `usage`, `fromHook`).
+    [[nodiscard]] support::ExpectedVoid append_compaction(
+            std::optional<std::string> parent_id, CompactionEntryValue value);
+    /// pi `appendBranchSummary`: record the summary and summarizer usage of
+    /// an abandoned branch (`from_id` is the abandoned leaf).
+    [[nodiscard]] support::ExpectedVoid append_branch_summary(std::optional<std::string> parent_id,
+            std::string from_id,
+            std::string summary,
+            std::optional<support::JsonValue> details,
+            std::optional<bool> from_hook,
+            std::optional<ai::Usage> usage = std::nullopt);
+    [[nodiscard]] support::ExpectedVoid append_session_info(std::optional<std::string> parent_id, std::string name);
+
+    // --- Live tree queries (snapshots taken under the append lock) ---
+
+    /// pi `getTree`: root nodes with children sorted by timestamp (oldest
+    /// first, newest at bottom) and resolved labels/label timestamps.
+    [[nodiscard]] std::vector<SessionTreeNode> tree() const;
+    /// One self-consistent topology snapshot: the root nodes and the active
+    /// leaf id under the same append lock, so a concurrent append can never
+    /// yield a roots/leaf pair from two different points in time.
+    [[nodiscard]] SessionTreeSnapshot tree_snapshot() const;
+    /// pi `buildSessionContext`: the compaction-aware LLM context of the
+    /// active leaf path.
+    [[nodiscard]] SessionContext build_context() const;
+    /// pi `branch`: move the live tree's active leaf to an existing entry.
+    /// The move is live-tree state only, exactly like pi: the active leaf
+    /// is runtime state and is never written to the session file. The
+    /// persistence side only learns where the NEXT append hangs.
+    [[nodiscard]] support::ExpectedVoid branch(std::string_view target_id);
+    /// pi `resetLeaf`: move the live tree's active leaf to the root
+    /// position (before any entries) and break the linear chain, so the next
+    /// append starts a new root. Runtime-only, like pi's leaf pointer; the
+    /// persistence side only learns where the next append hangs.
+    void reset_leaf();
+    /// pi `getLeafId`: the active leaf entry id; empty at the root position.
+    /// Runtime-only state: pi keeps it in memory and never persists it.
+    [[nodiscard]] std::string leaf_id() const;
+    /// pi `getEntry`: a snapshot copy of one entry, nullopt when absent.
+    [[nodiscard]] std::optional<SessionEntry> get_entry(std::string_view entry_id) const;
+    /// The effective parent id for leaf-to-root traversal: the explicit
+    /// wire parent, or the inferred linear-chain parent when the entry
+    /// carries none (the SessionTree reading shared by `get_branch`).
+    [[nodiscard]] std::optional<std::string> effective_parent_id(std::string_view entry_id) const;
+    /// pi `getBranch`: the entries from `from_id` (default: the active
+    /// leaf) up to the root, in leaf-to-root order, as snapshot copies.
+    [[nodiscard]] std::vector<SessionEntry> get_branch(std::string_view from_id = {}) const;
+    /// pi `getEntries`: every tracked entry in store order (excluding the
+    /// session header), as snapshot copies.
+    [[nodiscard]] std::vector<SessionEntry> entries() const;
+    /// The `/export` HTML lane's payload inputs, taken under one append
+    /// lock: the session header and every tracked entry as their pi wire
+    /// JSON objects, plus the active leaf id. The wire encoding stays
+    /// private to this package — like `create_from_entries`, this is a
+    /// typed export surface, not generic serialization machinery.
+    [[nodiscard]] support::Expected<SessionWireSnapshot> export_wire_snapshot() const;
+    /// pi `getLabel`: the entry's latest label, nullopt when unset/cleared.
+    [[nodiscard]] std::optional<std::string> get_label(std::string_view entry_id) const;
+    /// pi `getSessionName`: the trimmed name of the last `session_info`
+    /// entry, or nullopt when absent or blank.
+    [[nodiscard]] std::optional<std::string> get_session_name() const;
+
+    /// The JSONL session file path; empty for in-memory sessions.
+    [[nodiscard]] std::optional<std::filesystem::path> path() const;
+    /// The session header metadata, fixed at create/open time.
+    [[nodiscard]] const SessionMetadata& metadata() const;
+
+private:
+    struct Impl;
+
+    explicit SessionStore(std::unique_ptr<Impl> impl);
+
+    std::unique_ptr<Impl> impl_;
+};
+
+} // namespace cch::harness::session

@@ -21,20 +21,11 @@ cch_parity_declare_target(
         src/agent/harness/AsyncLocalShell.cpp
         src/agent/harness/Process.cpp
         src/agent/harness/RuntimeRoot.cpp
-        src/agent/harness/TranscriptExport.cpp
         src/agent/harness/ShellResolver.cpp
         src/agent/harness/WorkspaceFileSystemFdWalk.cpp
         src/agent/harness/WorkspaceFileOperations.cpp
         src/agent/harness/WorkspacePathResolution.cpp
         src/agent/harness/WorkspaceFileSystemTemp.cpp
-        src/agent/harness/compaction/Compaction.cpp
-        src/agent/harness/session/SessionJournal.cpp
-        src/agent/harness/session/EntryRedaction.cpp
-        src/agent/harness/session/EntrySerializer.cpp
-        src/agent/harness/session/JsonlSessionStore.cpp
-        src/agent/harness/session/SessionStore.cpp
-        src/agent/harness/session/SessionResume.cpp
-        src/agent/harness/session/SessionTree.cpp
         src/agent/tools/AsyncToolFactories.cpp
         src/agent/tools/EditDiff.cpp
     DEPENDS

@@ -1,9 +1,9 @@
-#include <cch/agent/harness/session/Compaction.hpp>
+#include <cch/coding_agent/session/Compaction.hpp>
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
-#include "agent/harness/session/RandomHex.hpp"
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include "support/RandomHex.hpp"
+#include <cch/coding_agent/session/SessionTree.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/JsonValue.hpp>
 #include "support/AsyncResultBridge.hpp"
@@ -163,22 +163,18 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
 /// below; `make_summarization_call` uses it.
 [[nodiscard]] std::string serialize_conversation(const std::vector<ai::MessageVariant>& messages);
 
-[[nodiscard]] support::Error compaction_error(
-    support::ErrorCode code,
-    std::string message) {
+[[nodiscard]] support::Error compaction_error(support::ErrorCode code, std::string message) {
     return support::make_error(code, std::move(message));
 }
 
 [[nodiscard]] bool is_assistant_usage_valid(const ai::AssistantMessage& message) {
     return message.stop_reason != ai::AssistantStopReason::Aborted &&
-        message.stop_reason != ai::AssistantStopReason::Error &&
-        calculate_context_tokens(message.usage) > 0;
+           message.stop_reason != ai::AssistantStopReason::Error && calculate_context_tokens(message.usage) > 0;
 }
 
 /// pi `estimateTextAndImageContentChars`: string content counts raw chars;
 /// block content counts text chars plus the fixed image estimate.
-[[nodiscard]] std::size_t estimate_text_and_image_chars(
-    const ai::UserMessage& message) {
+[[nodiscard]] std::size_t estimate_text_and_image_chars(const ai::UserMessage& message) {
     if (const auto* text = std::get_if<std::string>(&message.content)) {
         return text->size();
     }
@@ -224,8 +220,7 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
 /// contributes to a summarization/retention range; compaction entries
 /// contribute nothing. The C++ branch_summary projection (T07) guards on a
 /// non-empty summary, matching `sessionEntryToContextMessages` semantics.
-[[nodiscard]] std::optional<ai::MessageVariant> message_from_entry_for_compaction(
-    const SessionEntry* entry) {
+[[nodiscard]] std::optional<ai::MessageVariant> message_from_entry_for_compaction(const SessionEntry* entry) {
     if (entry->kind == SessionEntryKind::Compaction) {
         return std::nullopt;
     }
@@ -242,13 +237,11 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
         if (const auto* text = std::get_if<std::string>(&value->content)) {
             message.content = {ai::TextContent{.text = *text, .text_signature = std::nullopt}};
         } else {
-            const auto& blocks =
-                std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);
+            const auto& blocks = std::get<std::vector<CustomMessageEntryContentBlock>>(value->content);
             message.content.reserve(blocks.size());
             for (const auto& block : blocks) {
-                message.content.push_back(std::visit(
-                    [](const auto& concrete) -> ai::Content { return concrete; },
-                    block));
+                message.content.push_back(
+                        std::visit([](const auto& concrete) -> ai::Content { return concrete; }, block));
             }
         }
         message.display = value->display;
@@ -270,8 +263,7 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
     return std::nullopt;
 }
 
-[[nodiscard]] std::optional<std::string> role_of_message(
-    const std::optional<ai::MessageVariant>& message) {
+[[nodiscard]] std::optional<std::string> role_of_message(const std::optional<ai::MessageVariant>& message) {
     if (!message) {
         return std::nullopt;
     }
@@ -300,19 +292,16 @@ constexpr std::string_view kTurnPrefixSummarizationPrompt =
 }
 
 [[nodiscard]] bool is_cut_point_role(std::string_view role) {
-    return role == "user" || role == "assistant" || role == "bashExecution" ||
-        role == "custom" || role == "branchSummary" || role == "compactionSummary";
+    return role == "user" || role == "assistant" || role == "bashExecution" || role == "custom" ||
+           role == "branchSummary" || role == "compactionSummary";
 }
 
-[[nodiscard]] bool is_turn_start_role(std::string_view role) {
-    return role == "user" || role == "bashExecution";
-}
+[[nodiscard]] bool is_turn_start_role(std::string_view role) { return role == "user" || role == "bashExecution"; }
 
 /// pi `convertToLlm` applied to compaction messages: extended roles become
 /// user messages (bashExecution excluded from context dropped), system
 /// messages and unknown roles contribute nothing.
-[[nodiscard]] std::vector<ai::MessageVariant> convert_to_llm(
-    const std::vector<ai::MessageVariant>& messages) {
+[[nodiscard]] std::vector<ai::MessageVariant> convert_to_llm(const std::vector<ai::MessageVariant>& messages) {
     std::vector<ai::MessageVariant> converted;
     converted.reserve(messages.size());
     for (const auto& message : messages) {
@@ -372,16 +361,15 @@ struct SummarizationCall {
     ai::SimpleStreamOptions options;
 };
 
-[[nodiscard]] SummarizationCall make_summarization_call(
-    const std::vector<ai::MessageVariant>& current_messages,
-    const ai::Model& model,
-    std::string_view base_prompt,
-    std::string_view system_prompt,
-    const std::optional<std::string>& custom_instructions,
-    const std::optional<std::string>& previous_summary,
-    std::string_view thinking_level,
-    std::size_t max_tokens,
-    std::stop_token stop_token) {
+[[nodiscard]] SummarizationCall make_summarization_call(const std::vector<ai::MessageVariant>& current_messages,
+        const ai::Model& model,
+        std::string_view base_prompt,
+        std::string_view system_prompt,
+        const std::optional<std::string>& custom_instructions,
+        const std::optional<std::string>& previous_summary,
+        std::string_view thinking_level,
+        std::size_t max_tokens,
+        std::stop_token stop_token) {
     std::string prompt{base_prompt};
     if (custom_instructions) {
         prompt += "\n\nAdditional focus: ";
@@ -402,8 +390,7 @@ struct SummarizationCall {
 
     SummarizationCall call;
     call.context.system_prompt = std::string{system_prompt};
-    call.context.messages.push_back(
-        ai::user_text_message(std::move(prompt_text), 0));
+    call.context.messages.push_back(ai::user_text_message(std::move(prompt_text), 0));
     call.options.max_tokens = max_tokens;
     call.options.stop_token = std::move(stop_token);
     if (model.reasoning) {
@@ -421,33 +408,25 @@ struct SummarizationOutcome {
     ai::Usage usage;
 };
 
-[[nodiscard]] support::Error summarization_failure(
-    ai::AssistantStopReason reason,
-    const std::optional<std::string>& error_message,
-    std::string_view aborted_fallback,
-    std::string_view failed_prefix) {
+[[nodiscard]] support::Error summarization_failure(ai::AssistantStopReason reason,
+        const std::optional<std::string>& error_message,
+        std::string_view aborted_fallback,
+        std::string_view failed_prefix) {
     if (reason == ai::AssistantStopReason::Aborted) {
-        return compaction_error(
-            support::ErrorCode::Cancelled,
-            error_message.value_or(std::string{aborted_fallback}));
+        return compaction_error(support::ErrorCode::Cancelled, error_message.value_or(std::string{aborted_fallback}));
     }
-    return compaction_error(
-        support::ErrorCode::Stream,
-        std::string{failed_prefix} +
-            (error_message.value_or(std::string{"Unknown error"})));
+    return compaction_error(support::ErrorCode::Stream,
+            std::string{failed_prefix} + (error_message.value_or(std::string{"Unknown error"})));
 }
 
-[[nodiscard]] ai::Usage combine_usage(
-    const ai::Usage& first,
-    const ai::Usage& second) {
+[[nodiscard]] ai::Usage combine_usage(const ai::Usage& first, const ai::Usage& second) {
     ai::Usage combined;
     combined.input = first.input + second.input;
     combined.output = first.output + second.output;
     combined.cache_read = first.cache_read + second.cache_read;
     combined.cache_write = first.cache_write + second.cache_write;
     if (first.cache_write_1h || second.cache_write_1h) {
-        combined.cache_write_1h =
-            first.cache_write_1h.value_or(0) + second.cache_write_1h.value_or(0);
+        combined.cache_write_1h = first.cache_write_1h.value_or(0) + second.cache_write_1h.value_or(0);
     }
     if (first.reasoning || second.reasoning) {
         combined.reasoning = first.reasoning.value_or(0) + second.reasoning.value_or(0);
@@ -463,7 +442,7 @@ struct SummarizationOutcome {
 
 /// Fresh session id for one summarization request: isolation only, so
 /// compaction never pollutes the session's cache affinity (pi `uuidv7()`).
-[[nodiscard]] std::string fresh_summarization_session_id() { return random_hex_id(32); }
+[[nodiscard]] std::string fresh_summarization_session_id() { return support::random_hex_id(32); }
 
 } // namespace
 
@@ -471,8 +450,7 @@ std::size_t calculate_context_tokens(const ai::Usage& usage) {
     if (usage.total_tokens != 0) {
         return static_cast<std::size_t>(usage.total_tokens);
     }
-    return static_cast<std::size_t>(
-        usage.input + usage.output + usage.cache_read + usage.cache_write);
+    return static_cast<std::size_t>(usage.input + usage.output + usage.cache_read + usage.cache_write);
 }
 
 namespace {
@@ -482,31 +460,35 @@ namespace {
 /// `std::regex` ECMAScript syntax).
 [[nodiscard]] const std::vector<std::regex>& overflow_patterns() {
     static const std::vector<std::regex> patterns{
-        std::regex{R"(prompt is too long)", std::regex_constants::icase},
-        std::regex{R"(request_too_large)", std::regex_constants::icase},
-        std::regex{R"(input is too long for requested model)", std::regex_constants::icase},
-        std::regex{R"(exceeds the context window)", std::regex_constants::icase},
-        std::regex{R"(exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\)))", std::regex_constants::icase},
-        std::regex{R"(input token count.*exceeds the maximum)", std::regex_constants::icase},
-        std::regex{R"(maximum prompt length is \d+)", std::regex_constants::icase},
-        std::regex{R"(reduce the length of the messages)", std::regex_constants::icase},
-        std::regex{R"(maximum context length is \d+ tokens)", std::regex_constants::icase},
-        std::regex{R"(exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?)", std::regex_constants::icase},
-        std::regex{R"(input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\))", std::regex_constants::icase},
-        std::regex{R"(exceeds the limit of \d+)", std::regex_constants::icase},
-        std::regex{R"(exceeds the available context size)", std::regex_constants::icase},
-        std::regex{R"(greater than the context length)", std::regex_constants::icase},
-        std::regex{R"(context window exceeds limit)", std::regex_constants::icase},
-        std::regex{R"(exceeded model token limit)", std::regex_constants::icase},
-        std::regex{R"(too large for model with \d+ maximum context length)", std::regex_constants::icase},
-        std::regex{R"(prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?)", std::regex_constants::icase},
-        std::regex{R"(model_context_window_exceeded)", std::regex_constants::icase},
-        std::regex{R"(prompt too long; exceeded (?:max )?context length)", std::regex_constants::icase},
-        std::regex{R"(range of input length should be)", std::regex_constants::icase},
-        std::regex{R"(context[_ ]length[_ ]exceeded)", std::regex_constants::icase},
-        std::regex{R"(too many tokens)", std::regex_constants::icase},
-        std::regex{R"(token limit exceeded)", std::regex_constants::icase},
-        std::regex{R"(^4(?:00|13)\s*(?:status code)?\s*\(no body\))", std::regex_constants::icase},
+            std::regex{R"(prompt is too long)", std::regex_constants::icase},
+            std::regex{R"(request_too_large)", std::regex_constants::icase},
+            std::regex{R"(input is too long for requested model)", std::regex_constants::icase},
+            std::regex{R"(exceeds the context window)", std::regex_constants::icase},
+            std::regex{R"(exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\)))",
+                    std::regex_constants::icase},
+            std::regex{R"(input token count.*exceeds the maximum)", std::regex_constants::icase},
+            std::regex{R"(maximum prompt length is \d+)", std::regex_constants::icase},
+            std::regex{R"(reduce the length of the messages)", std::regex_constants::icase},
+            std::regex{R"(maximum context length is \d+ tokens)", std::regex_constants::icase},
+            std::regex{
+                    R"(exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?)", std::regex_constants::icase},
+            std::regex{R"(input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\))",
+                    std::regex_constants::icase},
+            std::regex{R"(exceeds the limit of \d+)", std::regex_constants::icase},
+            std::regex{R"(exceeds the available context size)", std::regex_constants::icase},
+            std::regex{R"(greater than the context length)", std::regex_constants::icase},
+            std::regex{R"(context window exceeds limit)", std::regex_constants::icase},
+            std::regex{R"(exceeded model token limit)", std::regex_constants::icase},
+            std::regex{R"(too large for model with \d+ maximum context length)", std::regex_constants::icase},
+            std::regex{R"(prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?)",
+                    std::regex_constants::icase},
+            std::regex{R"(model_context_window_exceeded)", std::regex_constants::icase},
+            std::regex{R"(prompt too long; exceeded (?:max )?context length)", std::regex_constants::icase},
+            std::regex{R"(range of input length should be)", std::regex_constants::icase},
+            std::regex{R"(context[_ ]length[_ ]exceeded)", std::regex_constants::icase},
+            std::regex{R"(too many tokens)", std::regex_constants::icase},
+            std::regex{R"(token limit exceeded)", std::regex_constants::icase},
+            std::regex{R"(^4(?:00|13)\s*(?:status code)?\s*\(no body\))", std::regex_constants::icase},
     };
     return patterns;
 }
@@ -516,16 +498,14 @@ namespace {
 /// containing "too many tokens").
 [[nodiscard]] const std::vector<std::regex>& non_overflow_patterns() {
     static const std::vector<std::regex> patterns{
-        std::regex{R"(^(Throttling error|Service unavailable):)", std::regex_constants::icase},
-        std::regex{R"(rate limit)", std::regex_constants::icase},
-        std::regex{R"(too many requests)", std::regex_constants::icase},
+            std::regex{R"(^(Throttling error|Service unavailable):)", std::regex_constants::icase},
+            std::regex{R"(rate limit)", std::regex_constants::icase},
+            std::regex{R"(too many requests)", std::regex_constants::icase},
     };
     return patterns;
 }
 
-[[nodiscard]] bool matches_any(
-    const std::vector<std::regex>& patterns,
-    const std::string& text) {
+[[nodiscard]] bool matches_any(const std::vector<std::regex>& patterns, const std::string& text) {
     for (const auto& pattern : patterns) {
         if (std::regex_search(text, pattern)) {
             return true;
@@ -536,10 +516,7 @@ namespace {
 
 } // namespace
 
-bool should_compact(
-    std::size_t context_tokens,
-    std::size_t context_window,
-    const CompactionSettings& settings) {
+bool should_compact(std::size_t context_tokens, std::size_t context_window, const CompactionSettings& settings) {
     if (!settings.enabled) {
         return false;
     }
@@ -547,20 +524,15 @@ bool should_compact(
     // context window behaves like pi's `contextWindow ?? 0` (any non-empty
     // context exceeds `0 - reserveTokens`), and a small window never underflows.
     return static_cast<std::int64_t>(context_tokens) >
-        static_cast<std::int64_t>(context_window) -
-        static_cast<std::int64_t>(settings.reserve_tokens);
+           static_cast<std::int64_t>(context_window) - static_cast<std::int64_t>(settings.reserve_tokens);
 }
 
-bool is_context_overflow(
-    const ai::AssistantMessage& message,
-    std::size_t context_window) {
+bool is_context_overflow(const ai::AssistantMessage& message, std::size_t context_window) {
     // Case 1: error-based overflow — a provider error message matching an
     // overflow pattern that is not also a known non-overflow pattern.
-    if (message.stop_reason == ai::AssistantStopReason::Error &&
-        message.error_message) {
+    if (message.stop_reason == ai::AssistantStopReason::Error && message.error_message) {
         const std::string text = *message.error_message;
-        if (!matches_any(non_overflow_patterns(), text) &&
-            matches_any(overflow_patterns(), text)) {
+        if (!matches_any(non_overflow_patterns(), text) && matches_any(overflow_patterns(), text)) {
             return true;
         }
     }
@@ -568,10 +540,8 @@ bool is_context_overflow(
     // Case 2: silent overflow (z.ai style) — a successful response whose
     // input usage already exceeds the context window. A zero window disables
     // the usage-based cases (pi's truthiness gate on `contextWindow`).
-    if (context_window != 0 &&
-        message.stop_reason == ai::AssistantStopReason::Stop) {
-        const std::int64_t input_tokens =
-            message.usage.input + message.usage.cache_read;
+    if (context_window != 0 && message.stop_reason == ai::AssistantStopReason::Stop) {
+        const std::int64_t input_tokens = message.usage.input + message.usage.cache_read;
         if (input_tokens > static_cast<std::int64_t>(context_window)) {
             return true;
         }
@@ -579,11 +549,8 @@ bool is_context_overflow(
 
     // Case 3: length-stop overflow (Xiaomi MiMo style) — the server truncated
     // the oversized input to fill the window, leaving no room for output.
-    if (context_window != 0 &&
-        message.stop_reason == ai::AssistantStopReason::Length &&
-        message.usage.output == 0) {
-        const std::int64_t input_tokens =
-            message.usage.input + message.usage.cache_read;
+    if (context_window != 0 && message.stop_reason == ai::AssistantStopReason::Length && message.usage.output == 0) {
+        const std::int64_t input_tokens = message.usage.input + message.usage.cache_read;
         if (input_tokens * 100 >= static_cast<std::int64_t>(context_window) * 99) {
             return true;
         }
@@ -628,8 +595,7 @@ std::size_t estimate_tokens(const ai::MessageVariant& message) {
     return (chars + 3) / 4;
 }
 
-ContextUsageEstimate estimate_context_tokens(
-    const std::vector<ai::MessageVariant>& messages) {
+ContextUsageEstimate estimate_context_tokens(const std::vector<ai::MessageVariant>& messages) {
     std::optional<std::pair<ai::Usage, std::size_t>> usage_info;
     for (std::size_t i = messages.size(); i > 0; --i) {
         const auto& message = messages[i - 1];
@@ -647,10 +613,10 @@ ContextUsageEstimate estimate_context_tokens(
             estimated += estimate_tokens(message);
         }
         return ContextUsageEstimate{
-            .tokens = estimated,
-            .usage_tokens = 0,
-            .trailing_tokens = estimated,
-            .last_usage_index = std::nullopt,
+                .tokens = estimated,
+                .usage_tokens = 0,
+                .trailing_tokens = estimated,
+                .last_usage_index = std::nullopt,
         };
     }
 
@@ -660,19 +626,17 @@ ContextUsageEstimate estimate_context_tokens(
         trailing_tokens += estimate_tokens(messages[i]);
     }
     return ContextUsageEstimate{
-        .tokens = usage_tokens + trailing_tokens,
-        .usage_tokens = usage_tokens,
-        .trailing_tokens = trailing_tokens,
-        .last_usage_index = usage_info->second,
+            .tokens = usage_tokens + trailing_tokens,
+            .usage_tokens = usage_tokens,
+            .trailing_tokens = trailing_tokens,
+            .last_usage_index = usage_info->second,
     };
 }
 
 namespace {
 
 [[nodiscard]] std::vector<std::size_t> find_valid_cut_points(
-    const std::vector<const SessionEntry*>& path,
-    std::size_t start_index,
-    std::size_t end_index) {
+        const std::vector<const SessionEntry*>& path, std::size_t start_index, std::size_t end_index) {
     std::vector<std::size_t> cut_points;
     for (std::size_t i = start_index; i < end_index; ++i) {
         const auto* entry = path[i];
@@ -681,8 +645,7 @@ namespace {
             if (role && is_cut_point_role(*role)) {
                 cut_points.push_back(i);
             }
-        } else if (entry->kind == SessionEntryKind::BranchSummary ||
-                   entry->kind == SessionEntryKind::CustomMessage) {
+        } else if (entry->kind == SessionEntryKind::BranchSummary || entry->kind == SessionEntryKind::CustomMessage) {
             cut_points.push_back(i);
         }
     }
@@ -694,8 +657,7 @@ namespace {
         const std::vector<const SessionEntry*>& path, std::size_t entry_index, std::size_t start_index) {
     for (std::size_t i = entry_index + 1; i > start_index; --i) {
         const auto* entry = path[i - 1];
-        if (entry->kind == SessionEntryKind::BranchSummary ||
-            entry->kind == SessionEntryKind::CustomMessage) {
+        if (entry->kind == SessionEntryKind::BranchSummary || entry->kind == SessionEntryKind::CustomMessage) {
             return i - 1;
         }
         if (entry->kind == SessionEntryKind::Message) {
@@ -755,8 +717,8 @@ namespace {
     }
 
     const auto* cut_entry = path[cut_index];
-    const bool is_user_message = cut_entry->kind == SessionEntryKind::Message &&
-        role_of_message(cut_entry->message) == "user";
+    const bool is_user_message =
+            cut_entry->kind == SessionEntryKind::Message && role_of_message(cut_entry->message) == "user";
     const std::optional<std::size_t> turn_start_index =
             is_user_message ? std::nullopt : find_turn_start_index(path, cut_index, start_index);
 
@@ -767,9 +729,7 @@ namespace {
     };
 }
 
-void extract_file_ops_from_message(
-    const ai::MessageVariant& message,
-    FileOperations& file_ops) {
+void extract_file_ops_from_message(const ai::MessageVariant& message, FileOperations& file_ops) {
     const auto* assistant = std::get_if<ai::AssistantMessage>(&message);
     if (assistant == nullptr) {
         return;
@@ -816,8 +776,8 @@ void extract_file_ops_from_message(
 
     std::vector<std::string> modified_files{modified.begin(), modified.end()};
     return FileLists{
-        .read_files = std::move(read_only),
-        .modified_files = std::move(modified_files),
+            .read_files = std::move(read_only),
+            .modified_files = std::move(modified_files),
     };
 }
 
@@ -875,8 +835,7 @@ void extract_file_ops_from_message(
                 if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block)) {
                     thinking_parts.push_back(thinking->thinking);
                 } else if (const auto* call = std::get_if<ai::ToolCallContent>(&block)) {
-                    tool_calls.push_back(
-                        call->name + "(" + tool_call_arguments_text(*call) + ")");
+                    tool_calls.push_back(call->name + "(" + tool_call_arguments_text(*call) + ")");
                 } else if (std::holds_alternative<ai::TextContent>(block)) {
                     has_text = true;
                 }
@@ -892,8 +851,7 @@ void extract_file_ops_from_message(
                 parts.push_back(std::move(thinking));
             }
             if (has_text) {
-                parts.push_back(
-                    "[Assistant]: " + ai::text_from_assistant_content(assistant->content));
+                parts.push_back("[Assistant]: " + ai::text_from_assistant_content(assistant->content));
             }
             if (!tool_calls.empty()) {
                 std::string calls;
@@ -905,8 +863,7 @@ void extract_file_ops_from_message(
                 }
                 parts.push_back("[Assistant tool calls]: " + std::move(calls));
             }
-        } else if (const auto* tool_result =
-                       std::get_if<ai::ToolResultMessage>(&message)) {
+        } else if (const auto* tool_result = std::get_if<ai::ToolResultMessage>(&message)) {
             const std::string content = ai::text_from_content(tool_result->content);
             if (!content.empty()) {
                 parts.push_back("[Tool result]: " + truncate_for_summary(content));
@@ -960,16 +917,13 @@ void extract_file_ops_from_message(
     const std::size_t boundary_end = path.size();
 
     const auto context = buildSessionContext(path);
-    const std::size_t tokens_before =
-        estimate_context_tokens(context.messages).tokens;
+    const std::size_t tokens_before = estimate_context_tokens(context.messages).tokens;
 
-    const auto cut_point = find_cut_point(
-        path, boundary_start, boundary_end, settings.keep_recent_tokens);
+    const auto cut_point = find_cut_point(path, boundary_start, boundary_end, settings.keep_recent_tokens);
     const auto* first_kept_entry = path[cut_point.first_kept_entry_index];
     if (first_kept_entry == nullptr || first_kept_entry->entry_id.empty()) {
         return std::unexpected(compaction_error(
-            support::ErrorCode::Session,
-            "First kept entry has no UUID - session may need migration"));
+                support::ErrorCode::Session, "First kept entry has no UUID - session may need migration"));
     }
     const std::string first_kept_entry_id = first_kept_entry->entry_id;
 
@@ -1023,13 +977,10 @@ void extract_file_ops_from_message(
     if (prev_compaction_index.has_value()) {
         const auto* prev_compaction = path[*prev_compaction_index];
         const auto* value = std::get_if<CompactionEntryValue>(&prev_compaction->value);
-        if (value != nullptr && !value->from_hook.value_or(false) &&
-            value->details.has_value()) {
-            const auto* details =
-                value->details->get_if<support::JsonValue::object_t>();
+        if (value != nullptr && !value->from_hook.value_or(false) && value->details.has_value()) {
+            const auto* details = value->details->get_if<support::JsonValue::object_t>();
             if (details != nullptr) {
-                if (const auto read_it = details->find("readFiles");
-                    read_it != details->end()) {
+                if (const auto read_it = details->find("readFiles"); read_it != details->end()) {
                     if (const auto* files = read_it->second.get_if<support::JsonValue::array_t>()) {
                         for (const auto& file : *files) {
                             if (const auto* name = file.get_if<std::string>()) {
@@ -1038,10 +989,8 @@ void extract_file_ops_from_message(
                         }
                     }
                 }
-                if (const auto modified_it = details->find("modifiedFiles");
-                    modified_it != details->end()) {
-                    if (const auto* files =
-                            modified_it->second.get_if<support::JsonValue::array_t>()) {
+                if (const auto modified_it = details->find("modifiedFiles"); modified_it != details->end()) {
+                    if (const auto* files = modified_it->second.get_if<support::JsonValue::array_t>()) {
                         for (const auto& file : *files) {
                             if (const auto* name = file.get_if<std::string>()) {
                                 file_ops.edited.insert(*name);
@@ -1098,13 +1047,13 @@ void extract_file_ops_from_message(
         co_return std::unexpected(response.error());
     }
     if (response->stop_reason == ai::AssistantStopReason::Aborted ||
-        response->stop_reason == ai::AssistantStopReason::Error) {
+            response->stop_reason == ai::AssistantStopReason::Error) {
         co_return std::unexpected(
                 summarization_failure(response->stop_reason, response->error_message, aborted_fallback, failed_prefix));
     }
     co_return SummarizationOutcome{
-        .text = ai::text_from_assistant_content(response->content),
-        .usage = response->usage,
+            .text = ai::text_from_assistant_content(response->content),
+            .usage = response->usage,
     };
 }
 
@@ -1136,15 +1085,14 @@ void extract_file_ops_from_message(
 
 /// pi `generateTurnPrefixSummary`: a separate smaller-budget summarization
 /// for the prefix of a split turn.
-[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>>
-generate_turn_prefix_summary(
-    const std::vector<ai::MessageVariant>& turn_prefix_messages,
-    const ai::Model& model,
-    std::string_view thinking_level,
-    std::size_t max_tokens,
-    std::stop_token stop_token,
-    SummarizationStreamFn& stream_fn,
-    SummarizationSessionIdFactory& session_id_factory) {
+[[nodiscard]] boost::asio::awaitable<support::Expected<SummarizationOutcome>> generate_turn_prefix_summary(
+        const std::vector<ai::MessageVariant>& turn_prefix_messages,
+        const ai::Model& model,
+        std::string_view thinking_level,
+        std::size_t max_tokens,
+        std::stop_token stop_token,
+        SummarizationStreamFn& stream_fn,
+        SummarizationSessionIdFactory& session_id_factory) {
     return run_summarization_request(turn_prefix_messages,
             model,
             kTurnPrefixSummarizationPrompt,
@@ -1159,12 +1107,8 @@ generate_turn_prefix_summary(
             session_id_factory);
 }
 
-[[nodiscard]] std::size_t summary_max_tokens(
-    const ai::Model& model,
-    std::size_t reserve_tokens,
-    double fraction) {
-    const auto capped = static_cast<std::size_t>(
-        std::floor(static_cast<double>(reserve_tokens) * fraction));
+[[nodiscard]] std::size_t summary_max_tokens(const ai::Model& model, std::size_t reserve_tokens, double fraction) {
+    const auto capped = static_cast<std::size_t>(std::floor(static_cast<double>(reserve_tokens) * fraction));
     if (model.max_tokens > 0) {
         return std::min(capped, static_cast<std::size_t>(model.max_tokens));
     }
@@ -1178,9 +1122,8 @@ generate_turn_prefix_summary(
 [[nodiscard]] boost::asio::awaitable<support::Expected<CompactionResult>> summarize_compaction(
         const CompactionPreparation& preparation, const ai::Model& model, CompactionRunOptions& run_options) {
     SummarizationSessionIdFactory session_id_factory =
-        run_options.session_id_factory
-            ? std::move(run_options.session_id_factory)
-            : SummarizationSessionIdFactory{fresh_summarization_session_id};
+            run_options.session_id_factory ? std::move(run_options.session_id_factory)
+                                           : SummarizationSessionIdFactory{fresh_summarization_session_id};
 
     CompactionResult result;
     result.first_kept_entry_id = preparation.first_kept_entry_id;
@@ -1191,10 +1134,38 @@ generate_turn_prefix_summary(
         std::string history_text = "No prior history.";
         std::optional<ai::Usage> history_usage;
         if (!preparation.messages_to_summarize.empty()) {
-            const std::size_t max_tokens = summary_max_tokens(
-                model, preparation.settings.reserve_tokens, 0.8);
-            auto history = co_await generate_summary_with_usage(
-                preparation.messages_to_summarize,
+            const std::size_t max_tokens = summary_max_tokens(model, preparation.settings.reserve_tokens, 0.8);
+            auto history = co_await generate_summary_with_usage(preparation.messages_to_summarize,
+                    model,
+                    run_options.custom_instructions,
+                    preparation.previous_summary,
+                    run_options.thinking_level,
+                    max_tokens,
+                    run_options.stop_token,
+                    run_options.summarization_stream,
+                    session_id_factory);
+            if (!history) {
+                co_return std::unexpected(history.error());
+            }
+            history_text = std::move(history->text);
+            history_usage = history->usage;
+        }
+        const std::size_t prefix_max_tokens = summary_max_tokens(model, preparation.settings.reserve_tokens, 0.5);
+        auto prefix = co_await generate_turn_prefix_summary(preparation.turn_prefix_messages,
+                model,
+                run_options.thinking_level,
+                prefix_max_tokens,
+                run_options.stop_token,
+                run_options.summarization_stream,
+                session_id_factory);
+        if (!prefix) {
+            co_return std::unexpected(prefix.error());
+        }
+        result.summary = history_text + "\n\n---\n\n**Turn Context (split turn):**\n\n" + prefix->text;
+        result.usage = history_usage ? combine_usage(*history_usage, prefix->usage) : prefix->usage;
+    } else {
+        const std::size_t max_tokens = summary_max_tokens(model, preparation.settings.reserve_tokens, 0.8);
+        auto summary = co_await generate_summary_with_usage(preparation.messages_to_summarize,
                 model,
                 run_options.custom_instructions,
                 preparation.previous_summary,
@@ -1203,43 +1174,6 @@ generate_turn_prefix_summary(
                 run_options.stop_token,
                 run_options.summarization_stream,
                 session_id_factory);
-            if (!history) {
-                co_return std::unexpected(history.error());
-            }
-            history_text = std::move(history->text);
-            history_usage = history->usage;
-        }
-        const std::size_t prefix_max_tokens = summary_max_tokens(
-            model, preparation.settings.reserve_tokens, 0.5);
-        auto prefix = co_await generate_turn_prefix_summary(
-            preparation.turn_prefix_messages,
-            model,
-            run_options.thinking_level,
-            prefix_max_tokens,
-            run_options.stop_token,
-            run_options.summarization_stream,
-            session_id_factory);
-        if (!prefix) {
-            co_return std::unexpected(prefix.error());
-        }
-        result.summary = history_text + "\n\n---\n\n**Turn Context (split turn):**\n\n" +
-            prefix->text;
-        result.usage = history_usage
-            ? combine_usage(*history_usage, prefix->usage)
-            : prefix->usage;
-    } else {
-        const std::size_t max_tokens = summary_max_tokens(
-            model, preparation.settings.reserve_tokens, 0.8);
-        auto summary = co_await generate_summary_with_usage(
-            preparation.messages_to_summarize,
-            model,
-            run_options.custom_instructions,
-            preparation.previous_summary,
-            run_options.thinking_level,
-            max_tokens,
-            run_options.stop_token,
-            run_options.summarization_stream,
-            session_id_factory);
         if (!summary) {
             co_return std::unexpected(summary.error());
         }

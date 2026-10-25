@@ -2,6 +2,7 @@
 
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "support/Json.hpp"
+#include "support/RandomHex.hpp"
 
 #include <cch/ai/Message.hpp>
 #include <cch/agent/harness/session/SessionStore.hpp>
@@ -12,7 +13,6 @@
 #include <fstream>
 #include <iterator>
 #include <map>
-#include <random>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -107,17 +107,7 @@ namespace {
 }
 
 /// Fresh 8-char hex entry id (pi `generateId`, the C++ store's id scheme).
-[[nodiscard]] std::string generate_entry_id() {
-    thread_local std::random_device rd;
-    thread_local std::mt19937_64 gen(rd());
-    thread_local std::uniform_int_distribution<unsigned> dist(0, 15);
-    const char hex_chars[] = "0123456789abcdef";
-    std::string id(8, '0');
-    for (auto& character : id) {
-        character = hex_chars[dist(gen)];
-    }
-    return id;
-}
+[[nodiscard]] std::string generate_entry_id() { return support::random_hex_id(8); }
 
 /// pi `extractUserMessageText`: the string content, or the text blocks
 /// concatenated with no separator.

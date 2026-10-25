@@ -31,6 +31,13 @@ The first contract rules establish these boundaries:
   cross-Owner include edges must follow the declared Owner graph through
   authoritative Owner targets; the gate enforces those checks rather than a
   blanket ban on private includes.
+- Agent core cannot include application Session/history/compaction, through either
+  the new application paths or the legacy Session paths (`agent-no-application-session-includes`,
+  `PARITY-8007`, #1068). The manifest's exact `interface_forwarders` are temporary
+  application-owned public redirects with a removal ticket and expiry, not new core dependencies.
+  `private_forwarders` applies the same exact-body/removal checks to legacy private headers.
+- `session-no-core-private-includes` (`PARITY-8008`) checks the two residual journal/export
+  helper includes, with source-specific exceptions expiring at the #1073 migration.
 - Strict builds keep their no-exception and evidence requirements.
 
 The contract is intentionally machine-readable and fail-closed. A rule change

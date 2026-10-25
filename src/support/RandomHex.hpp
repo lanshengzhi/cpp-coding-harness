@@ -1,13 +1,12 @@
 #pragma once
 
+#include <cstddef>
 #include <random>
 #include <string>
 
-namespace cch::harness::session {
+namespace cch::support {
 
-/// `count` lowercase hex characters from the thread-local generator: the
-/// pi-shaped isolation ids (compaction's fresh summarization session id
-/// takes 32, entry ids 8; pi `uuidv7()` shapes the purpose, not the format).
+/// Generate `count` lowercase hexadecimal characters using a thread-local PRNG.
 [[nodiscard]] inline std::string random_hex_id(std::size_t count) {
     thread_local std::random_device rd;
     thread_local std::mt19937_64 gen(rd());
@@ -20,4 +19,4 @@ namespace cch::harness::session {
     return id;
 }
 
-} // namespace cch::harness::session
+} // namespace cch::support

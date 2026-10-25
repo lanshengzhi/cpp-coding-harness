@@ -1,6 +1,6 @@
-#include "agent/harness/TranscriptExport.hpp"
+#include "TranscriptExport.hpp"
 
-#include "agent/harness/session/EntrySerializer.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
 #include "agent/harness/WorkspaceFileSystem.hpp"
 
 #include <optional>
