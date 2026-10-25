@@ -116,6 +116,8 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 7.8. POSIX file descriptors are owned by `UniqueFd` (`src/support/UniqueFd.hpp`) — never `unique_ptr<int>` guards or manual `::close` cleanup paths.
 
+7.9. A public method that moves a member out states the post-condition in its doc comment and either rejects later calls with a typed error or makes them unreachable; it never leaves the object in a state where another public method is undefined. The consuming method names what it consumes (`build()` consumes its builder), and the remaining public methods stay callable and well-defined afterwards.
+
 ## 8. Owner Interface headers
 
 8.1. Owner Interface headers live under Owner-local roots and have one canonical `<cch/...>` angle-include spelling. They are repository-internal and are not installed, exported, or ABI-promised. Private implementation roots are not visible across Owners. The Parity Architecture Gate enforces roots, ownership, visibility, canonical spelling, and legal cross-Owner relationships (ADR 0039).
