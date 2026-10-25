@@ -28,7 +28,7 @@
 #include <cch/coding_agent/Settings.hpp>
 #include "coding_agent/tui/ChatViewport.hpp"
 #include "support/ProtocolRecordingTerminal.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/tui/AltScreen.hpp>
 #include <cch/tui/Container.hpp>
 #include <cch/tui/Editor.hpp>

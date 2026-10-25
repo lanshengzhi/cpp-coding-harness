@@ -1,34 +1,10 @@
 include_guard(GLOBAL)
 
-# #1068: both real-Gate fixtures use a private miniature tree carrying the
-# manifest's exact redirects. #1070 removes the redirect records.
-function(cch_prepare_parity_fixture_source destination template_root manifest_path)
+# Both real-Gate fixtures configure a private miniature tree rather than the
+# repository, and each needs its own generated state so their parallel runs
+# cannot race. Since #1070 removed the temporary Session redirects the tree is
+# the checked-in template verbatim.
+function(cch_prepare_parity_fixture_source destination template_root)
     file(REMOVE_RECURSE "${destination}")
     file(COPY "${template_root}/src" DESTINATION "${destination}")
-    file(READ "${manifest_path}" manifest_text)
-    foreach(kind interface_forwarders private_forwarders)
-        string(JSON count ERROR_VARIABLE missing LENGTH "${manifest_text}" ${kind})
-        if(missing OR count EQUAL 0)
-            continue()
-        endif()
-        math(EXPR last "${count} - 1")
-        foreach(index RANGE 0 ${last})
-            string(JSON source GET "${manifest_text}" ${kind} ${index} source)
-            string(JSON target GET "${manifest_text}" ${kind} ${index} target)
-            string(JSON owner GET "${manifest_text}" ${kind} ${index} owner)
-            if(kind STREQUAL "interface_forwarders")
-                string(JSON interface_root GET "${manifest_text}" owners ${owner} interface_root)
-                string(REGEX REPLACE "^cch/[^/]+/" "" relative "${target}")
-                set(target_path "${interface_root}/${relative}")
-                set(include "<${target}>")
-            else()
-                set(target_path "src/${target}")
-                set(include "\"${target}\"")
-            endif()
-            file(WRITE "${destination}/${source}" "#pragma once\n#include ${include}\n")
-            if(NOT EXISTS "${destination}/${target_path}")
-                file(WRITE "${destination}/${target_path}" "#pragma once\n")
-            endif()
-        endforeach()
-    endforeach()
 endfunction()

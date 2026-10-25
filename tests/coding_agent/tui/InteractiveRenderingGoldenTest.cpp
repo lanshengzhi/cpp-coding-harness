@@ -40,7 +40,7 @@
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "support/ExpectedMacros.hpp"

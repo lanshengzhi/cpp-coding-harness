@@ -17,7 +17,7 @@
 #include "coding_agent/tui/UserMessageSelector.hpp"
 #include "support/AsyncResultBridge.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/Settings.hpp>

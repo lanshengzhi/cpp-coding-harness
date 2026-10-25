@@ -19,10 +19,10 @@
 #include "coding_agent/tui/SettingsFlowController.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/SlashCommandEffects.hpp"
-#include "agent/harness/TranscriptExport.hpp"
+#include "coding_agent/session/TranscriptExport.hpp"
 #include "support/AsyncResultBridge.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
 #include <cctype>
 #include <csignal>

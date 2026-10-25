@@ -35,9 +35,7 @@
         "excluded_source_prefixes": [],
         "forbidden_include_prefixes": [
           "agent/harness/OutputLimiter.hpp",
-          "agent/harness/compaction",
-          "agent/harness/session/EntrySerializer.hpp",
-          "agent/harness/session/SessionJournal.hpp"
+          "agent/harness/compaction"
         ]
       },
       {
@@ -89,10 +87,7 @@
         "source_prefixes": [
           "src/coding_agent/"
         ],
-        "excluded_source_prefixes": [
-          "src/coding_agent/tui/",
-          "src/coding_agent/cli/"
-        ],
+        "excluded_source_prefixes": [],
         "forbidden_include_prefixes": [
           "cch/agent/harness/session/",
           "agent/harness/session/",
@@ -134,101 +129,6 @@
       }
     ]
   },
-  "interface_forwarders": [
-    {
-      "source": "src/agent/include/cch/agent/harness/session/Compaction.hpp",
-      "target": "cch/coding_agent/session/Compaction.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/include/cch/agent/harness/session/SessionEntry.hpp",
-      "target": "cch/coding_agent/session/SessionEntry.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/include/cch/agent/harness/session/SessionResume.hpp",
-      "target": "cch/coding_agent/session/SessionResume.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/include/cch/agent/harness/session/SessionStore.hpp",
-      "target": "cch/coding_agent/session/SessionStore.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/include/cch/agent/harness/session/SessionTree.hpp",
-      "target": "cch/coding_agent/session/SessionTree.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    }
-  ],
-  "private_forwarders": [
-    {
-      "source": "src/agent/harness/session/EntryRedaction.hpp",
-      "target": "coding_agent/session/EntryRedaction.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/harness/session/EntrySerializer.hpp",
-      "target": "coding_agent/session/EntrySerializer.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/harness/session/JsonlSessionStore.hpp",
-      "target": "coding_agent/session/JsonlSessionStore.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/harness/session/SessionJournal.hpp",
-      "target": "coding_agent/session/SessionJournal.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/harness/session/SessionJournalTestHooks.hpp",
-      "target": "coding_agent/session/SessionJournalTestHooks.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/harness/session/SessionLeaf.hpp",
-      "target": "coding_agent/session/SessionLeaf.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/harness/session/SessionMessageJson.hpp",
-      "target": "coding_agent/session/SessionMessageJson.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    },
-    {
-      "source": "src/agent/harness/TranscriptExport.hpp",
-      "target": "coding_agent/session/TranscriptExport.hpp",
-      "owner": "cch_coding_agent",
-      "removal_ticket": "#1070",
-      "expires": "2026-12-31"
-    }
-  ],
   "exception_policy": {
     "schema_version": 1,
     "required_compile_flags": ["-fno-exceptions"],

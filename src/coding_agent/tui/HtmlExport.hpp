@@ -3,7 +3,7 @@
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/ThemeColorMath.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/ai/Tool.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/tui/TerminalColors.hpp>

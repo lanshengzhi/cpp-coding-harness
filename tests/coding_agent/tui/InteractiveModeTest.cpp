@@ -16,7 +16,7 @@
 #include "support/AgentRootFixture.hpp"
 
 #include <cch/ai/Content.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/tui/NativeClipboard.hpp>
 #include <cch/tui/Text.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
@@ -24,7 +24,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
 
 #include <cch/support/Error.hpp>
 #include <catch2/catch_test_macros.hpp>

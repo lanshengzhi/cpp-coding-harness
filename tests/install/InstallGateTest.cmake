@@ -51,12 +51,12 @@ endfunction()
 file(REMOVE_RECURSE "${work_dir}")
 file(COPY "${fixture_dir}/" DESTINATION "${fixture_copy}")
 
-# #1068: the install fixture uses the same checked redirects as the architecture
+# The install fixture uses the same miniature source tree as the architecture
 # fixture, with independent generated state so their parallel runs cannot race.
 include("${CCH_SOURCE_DIR}/tests/support/ParityFixture.cmake")
 set(fixture_template "${fixture_root}")
 set(fixture_root "${CCH_SOURCE_DIR}/build/install-parity-source")
-cch_prepare_parity_fixture_source("${fixture_root}" "${fixture_template}" "${manifest}")
+cch_prepare_parity_fixture_source("${fixture_root}" "${fixture_template}")
 set(fixture_src "${fixture_root}/src")
 
 # 1. Configure.

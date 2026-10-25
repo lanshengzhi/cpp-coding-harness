@@ -25,7 +25,7 @@
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"

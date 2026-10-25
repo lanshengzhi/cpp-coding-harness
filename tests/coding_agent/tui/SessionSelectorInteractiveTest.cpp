@@ -19,7 +19,7 @@
 #include "support/TempWorkspace.hpp"
 
 #include "agent/harness/RuntimeRoot.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include <cch/support/Error.hpp>
@@ -630,6 +630,119 @@ TEST_CASE("app.session.new starts a fresh session with the pi chat line",
     CHECK(screen.find("New session started") != std::string::npos);
     CHECK(screen.find("old turn") == std::string::npos);
 
+    REQUIRE(running.terminal.inject_input("\x04"));
+    drain_ready(running.io);
+    REQUIRE(running.run_result);
+    CHECK(*running.run_result);
+}
+
+TEST_CASE("a frontend resume, fork and tree navigation reach the migrated application Session",
+        "[coding_agent][tui][session-selector][e2e][issue1070][spec]") {
+    // Acceptance for #1070: the frontend consumers reach Session through the
+    // application Owner Interface, and the three frontend Session flows keep
+    // working through the real public seams. The boot session is a persisted
+    // transcript written by the application store; the resume flow reopens it
+    // through `ExplicitResumeSessionTarget`, the fork flow branches it through
+    // `ExplicitOpenOrCreateSessionTarget`, and the tree overlay navigates the
+    // live session in place.
+    Fixture fixture;
+    fixture.write_session(fixture.session_file, {"user-0", "user-1", "user-2"}, std::nullopt, "boot-session");
+    Running running;
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
+    CHECK(session->message_count() == 5);
+
+    // Normal outcome 1 — resume: the selector's Enter reopens the recorded
+    // transcript through the application store, and the restored history is
+    // what the resumed session reports.
+    REQUIRE(running.terminal.inject_input("\x1b[17~"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\r"));
+    wait_replacement(running, actions, 1);
+    REQUIRE(actions->replace_sessions.size() == 1);
+    CHECK(actions->replace_sessions[0].target == "explicit-resume");
+    wait_for_screen(running, "Resumed session");
+    CHECK(visible_screen(running.terminal).find("Resumed session") != std::string::npos);
+
+    // Normal outcome 2 — tree navigation on the resumed session: the overlay
+    // reads the application Session tree and navigates the live session in
+    // place, which only works while the frontend holds the application type.
+    for (const char* sequence : {"\x1b", "", "\x1b", ""}) {
+        REQUIRE(running.terminal.inject_input(sequence));
+        drain_ready(running.io);
+    }
+    for (int step = 0; step < 4; ++step) {
+        REQUIRE(running.terminal.inject_input("\x1b[A"));
+        drain_ready(running.io);
+    }
+    REQUIRE(running.terminal.inject_input("\r"));
+    drain_ready(running.io);
+    const auto screen = visible_screen(running.terminal);
+    CHECK(screen.find("Navigated to selected point") != std::string::npos);
+    CHECK(screen.find("user-0") != std::string::npos);
+    CHECK(actions->replace_sessions.size() == 1); // navigation is in place, not a replacement
+    REQUIRE(running.terminal.inject_input("\x03"));
+    drain_ready(running.io);
+
+    // Normal outcome 3 — fork: the branched file is written by the application
+    // store and carries the parent pointer and the prefix history.
+    REQUIRE(running.terminal.inject_input("\x1b[18~"));
+    drain_ready(running.io);
+    const auto fork_screen = visible_screen(running.terminal);
+    CHECK(fork_screen.find("Fork from Message") != std::string::npos);
+    REQUIRE(running.terminal.inject_input("\r"));
+    wait_replacement(running, actions, 2);
+    REQUIRE(actions->replace_sessions.size() == 2);
+    CHECK(actions->replace_sessions[1].target == "explicit-open-or-create");
+    wait_for_screen(running, "Forked to new session");
+
+    std::filesystem::path branched;
+    for (const auto& entry : std::filesystem::directory_iterator(fixture.workspace.path())) {
+        if (entry.is_regular_file() && entry.path().extension() == ".jsonl" && entry.path() != fixture.session_file) {
+            branched = entry.path();
+        }
+    }
+    REQUIRE(!branched.empty());
+    auto loaded = harness::session::SessionStore::load(branched);
+    REQUIRE(loaded.has_value());
+    REQUIRE(loaded->metadata.parent_session.has_value());
+    CHECK(*loaded->metadata.parent_session == fixture.session_file);
+    auto resumed_branch = harness::session::resume_session(branched);
+    REQUIRE(resumed_branch.has_value());
+    CHECK(resumed_branch->history.size() == 4);
+
+    // Discriminating failure case — the selector lists a session whose file
+    // vanishes before Enter: the frontend still hands the missing path to the
+    // application assembly door (the request reaches the seam as an explicit
+    // resume), the application store reports the file unopenable, and the
+    // flow presents that error instead of replacing the live session. A pure
+    // include-spelling migration cannot distinguish this outcome from a
+    // working resume.
+    const auto ghost = fixture.workspace.path() / "ghost.jsonl";
+    fixture.write_session(ghost, {"phantom transcript"}, std::nullopt, "ghost-session");
+    REQUIRE(running.terminal.inject_input("\x1b[17~"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("phantom"));
+    drain_ready(running.io);
+    REQUIRE(std::filesystem::remove(ghost));
+    const std::size_t completions_before = actions->replacement_completions.load(std::memory_order_acquire);
+    REQUIRE(running.terminal.inject_input("\r"));
+    REQUIRE(tests::pump_until(running.io,
+            [&] { return actions->replacement_completions.load(std::memory_order_acquire) > completions_before; }));
+    drain_ready(running.io);
+    wait_for_screen(running, "session file does not exist");
+    // The request reached the seam as a resume, but it settled as an error.
+    REQUIRE(actions->replace_sessions.size() == 3);
+    CHECK(actions->replace_sessions[2].target == "explicit-resume");
+    const auto failure_screen = visible_screen(running.terminal);
+    CHECK(failure_screen.find("session file does not exist") != std::string::npos);
+    // The forked session is still live: no "Resumed session" status and its
+    // transcript is still rendered.
+    CHECK(failure_screen.find("user-1") != std::string::npos);
+    CHECK(failure_screen.find("Resumed session") == std::string::npos);
+
+    REQUIRE(running.terminal.inject_input("\x03"));
+    drain_ready(running.io);
     REQUIRE(running.terminal.inject_input("\x04"));
     drain_ready(running.io);
     REQUIRE(running.run_result);

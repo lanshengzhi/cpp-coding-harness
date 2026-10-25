@@ -3,8 +3,8 @@
 #include <cch/ai/Content.hpp>
 #include <cch/agent/AgentTool.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include <cch/agent/harness/session/SessionResume.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionResume.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 #include "coding_agent/BoundedText.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"

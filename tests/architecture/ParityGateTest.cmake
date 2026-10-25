@@ -36,12 +36,12 @@ endif()
 
 find_package(Python3 3.12 COMPONENTS Interpreter REQUIRED)
 
-# #1068: keep the checked-in manifest intact and mirror its redirects in a
-# private miniature source tree, shared with the install-Gate fixture.
+# The fixture configures a private miniature source tree generated from the
+# checked-in template, shared with the install-Gate fixture.
 include("${CCH_SOURCE_DIR}/tests/support/ParityFixture.cmake")
 set(fixture_template "${CCH_PARITY_FIXTURE_ROOT}")
 set(CCH_PARITY_FIXTURE_ROOT "${CCH_SOURCE_DIR}/build/parity-gate-fixtures/source")
-cch_prepare_parity_fixture_source("${CCH_PARITY_FIXTURE_ROOT}" "${fixture_template}" "${CCH_PARITY_MANIFEST}")
+cch_prepare_parity_fixture_source("${CCH_PARITY_FIXTURE_ROOT}" "${fixture_template}")
 set(CCH_PARITY_FIXTURE_SRC "${CCH_PARITY_FIXTURE_ROOT}/src")
 
 function(cch_parity_configure_case fixture_dir build_dir should_pass diagnostic_pattern case_name)

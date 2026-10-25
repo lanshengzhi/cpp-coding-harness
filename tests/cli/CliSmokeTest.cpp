@@ -17,7 +17,7 @@
 #include "support/Json.hpp"
 #include "support/AgentRootFixture.hpp"
 #include "support/SessionSeeding.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
 #include <algorithm>
 #include <array>

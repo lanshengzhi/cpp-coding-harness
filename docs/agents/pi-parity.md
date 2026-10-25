@@ -33,15 +33,16 @@ The first contract rules establish these boundaries:
   blanket ban on private includes.
 - Agent core cannot include application Session/history/compaction, through either
   the new application paths or the legacy Session paths (`agent-no-application-session-includes`,
-  `PARITY-8007`, #1068). The manifest's exact `interface_forwarders` are temporary
-  application-owned public redirects with a removal ticket and expiry, not new core dependencies.
-  `private_forwarders` applies the same exact-body/removal checks to legacy private headers.
+  `PARITY-8007`, #1068). The temporary redirect headers and their `interface_forwarders` /
+  `private_forwarders` manifest records were removed by #1070; they were migration records,
+  not core dependencies.
 - `session-no-core-private-includes` (`PARITY-8008`) checks the two residual journal/export
   helper includes, with source-specific exceptions expiring at the #1073 migration.
-- Headless application Session consumers cannot reach the legacy core Session paths
-  (`application-session-no-legacy-core-session-includes`, `PARITY-8009`, #1069). `src/coding_agent/`
-  sources use `<cch/coding_agent/session/...>`; the `tui/` and `cli/` frontends stay excluded until
-  #1070 migrates them and removes the forwards.
+- Every application Session consumer — headless sources and the `tui/`/`cli/`
+  frontends alike — reaches Session only through `<cch/coding_agent/session/...>`
+  (`application-session-no-legacy-core-session-includes`, `PARITY-8009`, #1069/#1070).
+  The temporary redirect headers and their manifest records are removed; the rule has
+  no exclusion, so a legacy spelling in any application source is a contract violation.
 - Strict builds keep their no-exception and evidence requirements.
 
 The contract is intentionally machine-readable and fail-closed. A rule change

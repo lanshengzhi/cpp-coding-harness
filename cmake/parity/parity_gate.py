@@ -245,9 +245,6 @@ class Manifest:
     external_families: frozenset[str]
     evidence: tuple[dict[str, Any], ...]
     exception_policy: ExceptionPolicy
-    # Exact application-owned redirects retained only during the ADR 0075 migration.
-    interface_forwarders: tuple[dict[str, str], ...] = ()
-    private_forwarders: tuple[dict[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -434,8 +431,6 @@ def parse_manifest(data: Any) -> Manifest:
                 "external_families",
                 "evidence",
                 "exception_policy",
-                "interface_forwarders",
-                "private_forwarders",
             }
         ),
         "manifest",
@@ -1081,53 +1076,6 @@ def parse_manifest(data: Any) -> Manifest:
             }
         )
 
-    forwarders: dict[str, tuple[dict[str, str], ...]] = {}
-    seen_sources: set[str] = set()
-    for kind in ("interface_forwarders", "private_forwarders"):
-        raw_records = data.get(kind, [])
-        if not isinstance(raw_records, list):
-            _fail(RULE_INVALID_MANIFEST_VALUE, f"{kind} must be a list")
-        records: list[dict[str, str]] = []
-        for raw in raw_records:
-            context = f"manifest.{kind}"
-            _require_object(raw, context, RULE_INVALID_MANIFEST_VALUE)
-            fields = frozenset({"source", "target", "owner", "removal_ticket", "expires"})
-            _check_unknown_keys(raw, fields, context, RULE_UNKNOWN_MANIFEST_FIELD)
-            entry = {
-                field: _require_string(
-                    _require_member(raw, field, context, RULE_MISSING_MANIFEST_FIELD),
-                    field, context, RULE_INVALID_MANIFEST_VALUE,
-                )
-                for field in sorted(fields)
-            }
-            source, target = entry["source"], entry["target"]
-            owner = owners.get(entry["owner"])
-            public = kind == "interface_forwarders"
-            roots = [value.interface_root if public else value.root for value in owners.values()]
-            if (source in seen_sources or os.path.isabs(source) or os.path.normpath(source) != source
-                    or "\\" in source or ".." in source.split("/") or not source.endswith(".hpp")
-                    or not any(source.startswith(root + "/") for root in roots)
-                    or owner is None or owner.role != "owner"
-                    or source.startswith(owner.root + "/") or source.startswith(owner.interface_root + "/")
-                    or (not public and any(source.startswith(value.interface_root + "/") for value in owners.values()))):
-                _fail(RULE_INVALID_MANIFEST_VALUE, f"invalid {kind} source/owner: {source}")
-            prefix = "/".join(owner.interface_root.split("/")[-2:]) if public else owner.root.removeprefix("src/")
-            if (not target.startswith(prefix + "/") or ".." in target.split("/")
-                    or "\\" in target or os.path.normpath(target) != target or not target.endswith(".hpp")):
-                _fail(RULE_INVALID_MANIFEST_VALUE, f"invalid {kind} target: {target}")
-            ticket = entry["removal_ticket"]
-            if not ticket.startswith("#") or not ticket[1:].isdigit():
-                _fail(RULE_INVALID_MANIFEST_VALUE, "header forwarder requires a removal ticket")
-            try:
-                expiry = datetime.date.fromisoformat(entry["expires"])
-            except ValueError:
-                _fail(RULE_INVALID_MANIFEST_VALUE, "header forwarder requires an ISO expiry date")
-            if expiry.isoformat() != entry["expires"]:
-                _fail(RULE_INVALID_MANIFEST_VALUE, "header forwarder requires an ISO expiry date")
-            seen_sources.add(source)
-            records.append(entry)
-        forwarders[kind] = tuple(records)
-
     return Manifest(
         schema_version,
         architecture_contract,
@@ -1136,8 +1084,6 @@ def parse_manifest(data: Any) -> Manifest:
         frozenset(families),
         tuple(evidence),
         exception_policy,
-        forwarders["interface_forwarders"],
-        forwarders["private_forwarders"],
     )
 
 
@@ -1730,8 +1676,7 @@ def _resolve_include(
         owner = manifest.owners[owner_name]
         rel = "/".join(parts[1:])
         source = f"{owner.interface_root}/{rel}"
-        effective_owner = next((item["owner"] for item in manifest.interface_forwarders
-                                if item["source"] == source), owner_name)
+        effective_owner = owner_name
         if project_root is None:
             return effective_owner, None
         header_abs = os.path.join(project_root, owner.interface_root, rel.replace("/", os.sep))
@@ -2242,41 +2187,6 @@ def _check_includes(
                         diagnostics.append(edge)
 
 
-def _check_interface_forwarders(
-    manifest: Manifest, project_root: Optional[str], diagnostics: list[Diagnostic]
-) -> None:
-    """Accept only named, unexpired pure redirects; never widen core's legal edges."""
-    for forwarder in (*manifest.interface_forwarders, *manifest.private_forwarders):
-        source = forwarder["source"]
-        if datetime.date.fromisoformat(forwarder["expires"]) < datetime.date.today():
-            diagnostics.append(Diagnostic(
-                RULE_EXPIRED_ARCHITECTURE_EXCEPTION,
-                f"interface forwarder '{source}' expired; remove in {forwarder['removal_ticket']}",
-                path=source,
-            ))
-        if project_root is None:
-            continue
-        path = os.path.join(project_root, source)
-        text = _read_bytes(path).decode("utf-8") if os.path.isfile(path) else ""
-        # Only comments, a pragma and the one declared include may survive.
-        body = re.sub(r"/\*.*?\*/|//[^\n]*", "", text, flags=re.DOTALL)
-        lines = [line.strip() for line in body.splitlines() if line.strip()]
-        owner = manifest.owners[forwarder["owner"]]
-        if forwarder in manifest.interface_forwarders:
-            expected = ["#pragma once", f"#include <{forwarder['target']}>"]
-            prefix = "/".join(owner.interface_root.split("/")[-2:])
-            target = os.path.join(project_root, owner.interface_root, forwarder["target"][len(prefix) + 1:])
-        else:
-            expected = ["#pragma once", f"#include \"{forwarder['target']}\""]
-            target = os.path.join(project_root, "src", forwarder["target"])
-        if lines != expected or not os.path.isfile(target) or os.path.islink(path) or os.path.islink(target):
-            diagnostics.append(Diagnostic(
-                RULE_ILLEGAL_DIRECT_INCLUDE,
-                f"interface forwarder '{source}' must only redirect to existing <{forwarder['target']}>",
-                path=source,
-            ))
-
-
 def _check_exception_sources(
     manifest: Manifest,
     project_root: Optional[str],
@@ -2696,7 +2606,6 @@ def check(
     if depfiles is not None:
         _check_evidence_reference(manifest, depfiles.producer, depfiles.schema_version, diagnostics)
 
-    _check_interface_forwarders(manifest, project_root, diagnostics)
     _check_includes(manifest, index, direct_includes, project_root, diagnostics)
     _check_compile_commands(
         manifest,
