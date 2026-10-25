@@ -8,10 +8,10 @@
 // then the current branch in root-to-leaf order with every parentId rewritten
 // to the previous written entry's id, joined by "\n" with one trailing "\n".
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
-#include "agent/harness/TranscriptExport.hpp"
-#include "agent/harness/session/EntrySerializer.hpp"
+#include "coding_agent/session/TranscriptExport.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
 #include "support/Json.hpp"
 #include "support/TempWorkspace.hpp"
 
@@ -148,7 +148,7 @@ std::vector<std::string> split_lines(std::string_view text) {
 } // namespace
 
 TEST_CASE("transcript export writes the session header and every branch entry as one wire line per entry",
-        "[agent][harness][export][issue1044][spec]") {
+        "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
     const auto destination = workspace.path() / "exported.jsonl";
@@ -181,7 +181,7 @@ TEST_CASE("transcript export writes the session header and every branch entry as
 }
 
 TEST_CASE("transcript export overwrites the destination instead of appending on a second run",
-        "[agent][harness][export][issue1044][spec]") {
+        "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
     const auto destination = workspace.path() / "exported.jsonl";
@@ -205,7 +205,7 @@ TEST_CASE("transcript export overwrites the destination instead of appending on 
 }
 
 TEST_CASE("transcript export owns its session snapshot after the store is gone",
-        "[agent][harness][export][issue1067][spec]") {
+        "[coding_agent][export][issue1067][spec]") {
     tests::TempWorkspace workspace;
     const auto destination = workspace.path() / "exported.jsonl";
     std::string expected;
@@ -231,7 +231,7 @@ TEST_CASE("transcript export owns its session snapshot after the store is gone",
 }
 
 TEST_CASE("transcript export refuses a stop-requested run without writing the destination",
-        "[agent][harness][export][issue1044][spec]") {
+        "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
     const auto destination = workspace.path() / "exported.jsonl";
@@ -253,7 +253,7 @@ TEST_CASE("transcript export refuses a stop-requested run without writing the de
     CHECK_FALSE(std::filesystem::exists(destination, exists_ec));
 }
 
-TEST_CASE("transcript export begins with the session header line", "[agent][harness][export][issue1044][spec]") {
+TEST_CASE("transcript export begins with the session header line", "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
     const auto destination = workspace.path() / "exported.jsonl";
@@ -286,7 +286,7 @@ TEST_CASE("transcript export begins with the session header line", "[agent][harn
     CHECK(string_member(parse_object(lines[1]), "type") == "message");
 }
 
-TEST_CASE("transcript export round-trips through Session Store load", "[agent][harness][export][issue1044][spec]") {
+TEST_CASE("transcript export round-trips through Session Store load", "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
     const auto destination = workspace.path() / "exported.jsonl";
@@ -334,7 +334,7 @@ TEST_CASE("transcript export round-trips through Session Store load", "[agent][h
 }
 
 TEST_CASE("transcript export writes only the current branch of a branched session",
-        "[agent][harness][export][issue1044][spec]") {
+        "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
     const auto destination = workspace.path() / "exported.jsonl";
@@ -372,7 +372,7 @@ TEST_CASE("transcript export writes only the current branch of a branched sessio
 }
 
 TEST_CASE("transcript export rewrites the branch parent chain to start at null",
-        "[agent][harness][export][issue1044][spec]") {
+        "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto session_path = workspace.path() / "session.jsonl";
     const auto destination = workspace.path() / "exported.jsonl";
@@ -424,7 +424,7 @@ TEST_CASE("transcript export rewrites the branch parent chain to start at null",
 }
 
 TEST_CASE("transcript export over an opened branched session writes the active branch in root-to-leaf order",
-        "[agent][harness][export][issue1044][spec]") {
+        "[coding_agent][export][issue1044][spec]") {
     tests::TempWorkspace workspace;
     const auto destination = workspace.path() / "exported.jsonl";
 

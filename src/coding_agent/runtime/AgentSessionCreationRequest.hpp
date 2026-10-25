@@ -4,7 +4,7 @@
 #include <cch/agent/AgentTool.hpp>
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"

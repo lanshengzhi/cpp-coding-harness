@@ -9,11 +9,12 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/FakeTool.hpp"
+#include "support/Json.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/StreamAdapterFixture.hpp"
@@ -165,16 +166,16 @@ struct SessionUnderTest {
     CompactionScriptedProvider* client{nullptr};
 };
 
-[[nodiscard]] SessionUnderTest make_big_session(const TestPaths& paths, tests::RuntimeFixture& runtime) {
-    const std::string big(20000, 'x');
-    auto client = std::make_shared<CompactionScriptedProvider>();
+/// Open or resume `target` through the public creation seam — the path the
+/// TUI/CLI take — with the scripted client as the request model's provider.
+[[nodiscard]] SessionUnderTest open_session(const TestPaths& paths,
+        tests::RuntimeFixture& runtime,
+        coding_agent::SessionTarget target,
+        std::shared_ptr<CompactionScriptedProvider> client) {
     auto* client_ptr = client.get();
-    client_ptr->responses.push_back(big_assistant("a1 " + big));
-    client_ptr->responses.push_back(big_assistant("a2 " + big));
-    client_ptr->responses.push_back(big_assistant("a3 " + big));
 
     tests::ModelsSessionOptions options;
-    options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file};
+    options.session_target = std::move(target);
     options.workspace = paths.workspace.path();
     options.models = cch::tests::models_from_provider(std::move(client));
 
@@ -184,15 +185,27 @@ struct SessionUnderTest {
     auto created = runtime.run(coding_agent::create_agent_session_async(
             std::move(request), std::nullopt, cch::tests::cli_fake_overrides(std::move(models))));
     REQUIRE(created.has_value());
-    auto* session = created->session.get();
+    return SessionUnderTest{
+            std::move(created->session),
+            client_ptr,
+    };
+}
+
+[[nodiscard]] SessionUnderTest make_big_session(const TestPaths& paths, tests::RuntimeFixture& runtime) {
+    const std::string big(20000, 'x');
+    auto client = std::make_shared<CompactionScriptedProvider>();
+    client->responses.push_back(big_assistant("a1 " + big));
+    client->responses.push_back(big_assistant("a2 " + big));
+    client->responses.push_back(big_assistant("a3 " + big));
+
+    auto under_test = open_session(
+            paths, runtime, coding_agent::ExplicitOpenOrCreateSessionTarget{paths.session_file}, std::move(client));
+    auto* session = under_test.session.get();
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u1")).has_value());
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u2")).has_value());
     REQUIRE(run_awaitable(runtime, session->prompt(big + " u3")).has_value());
     CHECK(session->message_count() == 7);
-    return SessionUnderTest{
-        std::move(created->session),
-        client_ptr,
-    };
+    return under_test;
 }
 
 [[nodiscard]] std::optional<harness::session::CompactionEntryValue> find_compaction_entry(
@@ -205,6 +218,29 @@ struct SessionUnderTest {
         }
     }
     return std::nullopt;
+}
+
+/// Every wire line of the session file, in file order. Used to prove that a
+/// compaction appends a checkpoint without rewriting the transcript lines
+/// already on disk (pi `SessionManager.appendCompaction`).
+[[nodiscard]] std::vector<std::string> session_file_lines(const TestPaths& paths) {
+    std::ifstream in(paths.session_file, std::ios::binary);
+    REQUIRE(in);
+    std::vector<std::string> lines;
+    for (std::string line; std::getline(in, line);) {
+        lines.push_back(std::move(line));
+    }
+    return lines;
+}
+
+/// Check that `after` keeps every line of `before` byte-identical and in
+/// place, appending `appended` new lines past them.
+void check_prefix_lines_unchanged(
+        const std::vector<std::string>& before, const std::vector<std::string>& after, std::size_t appended) {
+    REQUIRE(after.size() == before.size() + appended);
+    for (std::size_t index = 0; index < before.size(); ++index) {
+        CHECK(after[index] == before[index]);
+    }
 }
 
 } // namespace
@@ -277,6 +313,109 @@ TEST_CASE("manual compaction on an idle session persists a CompactionEntry and r
     const auto* seen_summary = std::get_if<ai::CompactionSummaryMessage>(&next_request.context.messages[1]);
     REQUIRE(seen_summary != nullptr);
     CHECK(seen_summary->summary == result->summary);
+
+    session->close();
+}
+
+TEST_CASE("a persisted session reopened through the frontend seam compacts without rewriting its transcript",
+        "[coding_agent][compaction][session][issue1069][spec]") {
+    // Acceptance for #1069: the behavior is observed through the public
+    // creation seam after the Session sources moved to the application owner —
+    // a real session is persisted, closed, reopened as a frontend resume, and
+    // compacted. pi `SessionManager.appendCompaction` appends the checkpoint
+    // and leaves the earlier transcript lines untouched.
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    {
+        auto first = make_big_session(paths, runtime);
+        REQUIRE(first.session->message_count() == 7);
+        first.session->close();
+    }
+    const auto lines_before = session_file_lines(paths);
+    REQUIRE(lines_before.size() >= 7); // header, settings entries and three user/assistant pairs
+
+    auto client = std::make_shared<CompactionScriptedProvider>();
+    client->responses.push_back(summarization_response());
+    auto resumed = open_session(
+            paths, runtime, coding_agent::ExplicitResumeSessionTarget{paths.session_file}, std::move(client));
+    auto* session = resumed.session.get();
+
+    // Reopening restored the persisted transcript as live history.
+    CHECK(session->message_count() == 7);
+
+    auto result = run_awaitable(runtime, session->compact());
+    REQUIRE(result.has_value());
+    CHECK_FALSE(result->first_kept_entry_id.empty());
+    CHECK(result->tokens_before > 0);
+
+    // Normal outcome: the compaction entry is persisted, and every line that
+    // was already on disk is byte-identical and still in place; exactly one
+    // checkpoint line was appended.
+    const auto lines_after = session_file_lines(paths);
+    check_prefix_lines_unchanged(lines_before, lines_after, 1);
+    const auto appended = support::read_json(lines_after.back());
+    REQUIRE(appended.has_value());
+    CHECK(appended->get_object().at("type").get_string() == "compaction");
+
+    const auto value = find_compaction_entry(paths);
+    REQUIRE(value.has_value());
+    CHECK(value->summary == result->summary);
+    CHECK(value->tokens_before == result->tokens_before);
+
+    // The reopened session's live context is the rebuilt projection: the
+    // summary leads the retained tail.
+    const auto snapshot = session->snapshot();
+    REQUIRE(snapshot.agent_state.messages.size() >= 2);
+    CHECK(std::holds_alternative<ai::SystemMessage>(snapshot.agent_state.messages[0]));
+    const auto* summary_message = std::get_if<ai::CompactionSummaryMessage>(&snapshot.agent_state.messages[1]);
+    REQUIRE(summary_message != nullptr);
+    CHECK(summary_message->summary == result->summary);
+
+    session->close();
+}
+
+TEST_CASE("a resumed session whose summarization fails leaves the transcript untouched",
+        "[coding_agent][compaction][session][issue1069][spec]") {
+    // Discriminating failure case for #1069: the same reopened-session path,
+    // but the summarization request ends in a provider error terminal. pi
+    // persists the checkpoint only after the summary succeeds, so a failed
+    // compaction must leave the transcript byte-identical, append nothing, and
+    // leave the session usable.
+    TestPaths paths;
+    tests::RuntimeFixture runtime;
+    {
+        auto first = make_big_session(paths, runtime);
+        first.session->close();
+    }
+    const auto lines_before = session_file_lines(paths);
+
+    auto client = std::make_shared<CompactionScriptedProvider>();
+    auto terminal = ai::assistant_text_message("");
+    terminal.stop_reason = ai::AssistantStopReason::Error;
+    terminal.error_message = "summarizer overloaded";
+    client->responses.push_back(std::move(terminal));
+    auto resumed = open_session(
+            paths, runtime, coding_agent::ExplicitResumeSessionTarget{paths.session_file}, std::move(client));
+    auto* session = resumed.session.get();
+
+    auto result = run_awaitable(runtime, session->compact());
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == support::ErrorCode::Stream);
+    CHECK(result.error().message == "Summarization failed: summarizer overloaded");
+
+    // No checkpoint was appended and no earlier line changed.
+    const auto lines_after = session_file_lines(paths);
+    check_prefix_lines_unchanged(lines_before, lines_after, 0);
+    CHECK_FALSE(find_compaction_entry(paths).has_value());
+
+    // The session is still usable: history is unchanged and a later compaction
+    // succeeds over the same reopened transcript.
+    CHECK(session->message_count() == 7);
+    auto* client_ptr = resumed.client;
+    client_ptr->responses.push_back(summarization_response());
+    auto retried = run_awaitable(runtime, session->compact());
+    REQUIRE(retried.has_value());
+    check_prefix_lines_unchanged(lines_before, session_file_lines(paths), 1);
 
     session->close();
 }

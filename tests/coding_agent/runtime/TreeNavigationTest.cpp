@@ -19,8 +19,8 @@
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 #include "support/SessionSeeding.hpp"
 
 #include <catch2/catch_test_macros.hpp>

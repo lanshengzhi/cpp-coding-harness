@@ -1398,8 +1398,8 @@
      "the exported file is pi's session header followed by the current branch with a null-anchored parent chain"
     ]
    },
-   "cppSeam": "`src/agent/harness/TranscriptExport.cpp` (harness::transcript_export_handler); `src/coding_agent/tui/InteractiveEngineHost.cpp` selects the JSONL lane when the destination ends in `.jsonl`; `tests/agent/TranscriptExportTest.cpp` is the regression surface.",
-   "cppEvidence": "C++ implements pi's rule: the header line comes from EntrySerializer::serialize_header, the branch is store.get_branch() reversed to root-to-leaf, and every written line's parentId is the previous written entry's id starting at null. tests/agent/TranscriptExportTest.cpp covers the header, the branch-only scope of a branched tree, the null-anchored parent chain, the one-trailing-newline shape, and that SessionStore::load() accepts the result. These are C++ regression checks only: no frozen pi capture covers the export output, so no value comparison against pi exists.",
+   "cppSeam": "`src/agent/harness/TranscriptExport.cpp` (harness::transcript_export_handler); `src/coding_agent/tui/InteractiveEngineHost.cpp` selects the JSONL lane when the destination ends in `.jsonl`; `tests/coding_agent/session/TranscriptExportTest.cpp` is the regression surface.",
+   "cppEvidence": "C++ implements pi's rule: the header line comes from EntrySerializer::serialize_header, the branch is store.get_branch() reversed to root-to-leaf, and every written line's parentId is the previous written entry's id starting at null. tests/coding_agent/session/TranscriptExportTest.cpp covers the header, the branch-only scope of a branched tree, the null-anchored parent chain, the one-trailing-newline shape, and that SessionStore::load() accepts the result. These are C++ regression checks only: no frozen pi capture covers the export output, so no value comparison against pi exists.",
    "status": {
     "membership": "supported",
     "implementation": "implemented",

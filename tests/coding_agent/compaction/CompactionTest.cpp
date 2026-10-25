@@ -15,13 +15,13 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/ai/Model.hpp>
-#include "agent/harness/session/JsonlSessionStore.hpp"
-#include <cch/agent/harness/session/SessionEntry.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include "coding_agent/session/JsonlSessionStore.hpp"
+#include <cch/coding_agent/session/SessionEntry.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 #include <cch/support/Error.hpp>
-#include "agent/harness/session/SessionMessageJson.hpp"
-#include <cch/agent/harness/session/Compaction.hpp>
+#include "coding_agent/session/SessionMessageJson.hpp"
+#include <cch/coding_agent/session/Compaction.hpp>
 #include <cch/ai/Models.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "support/FakeModelStream.hpp"
@@ -51,24 +51,17 @@ using namespace cch;
 namespace {
 
 [[nodiscard]] std::string read_fixture_text(std::string_view name) {
-    const std::string path = std::string{CCH_SOURCE_DIR} +
-                             "/fixtures/pi-agent-core/" +
-                             std::string{name};
+    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-agent-core/" + std::string{name};
     std::ifstream input(path, std::ios::binary);
-    return std::string{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
+    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
 }
 
-void expect_json_equal(
-    const support::JsonValue& actual,
-    std::string_view fixture_name) {
+void expect_json_equal(const support::JsonValue& actual, std::string_view fixture_name) {
     auto serialized = support::write_json(actual);
     REQUIRE(serialized);
     const auto expected = read_fixture_text(fixture_name);
     if (*serialized != expected) {
-        std::cerr << "\n[CompactionTest] fixture mismatch: "
-                  << fixture_name << "\n--- expected ---\n"
+        std::cerr << "\n[CompactionTest] fixture mismatch: " << fixture_name << "\n--- expected ---\n"
                   << expected << "\n--- actual ---\n"
                   << *serialized << "\n--- end ---\n";
     }
@@ -76,10 +69,7 @@ void expect_json_equal(
 }
 
 [[nodiscard]] ai::Usage mock_usage(
-    std::int64_t input,
-    std::int64_t output,
-    std::int64_t cache_read = 0,
-    std::int64_t cache_write = 0) {
+        std::int64_t input, std::int64_t output, std::int64_t cache_read = 0, std::int64_t cache_write = 0) {
     ai::Usage usage;
     usage.input = input;
     usage.output = output;
@@ -234,14 +224,12 @@ template <typename T> [[nodiscard]] support::Expected<T> run_operation(support::
 /// The model-visible side of one recorded summarization request at the fake
 /// ModelRuntime seam: the options prove `cacheRetention: "none"` plus the
 /// fresh session id, and the context proves the prompt construction.
-[[nodiscard]] support::JsonValue summarization_request_to_json(
-    const tests::RecordedStreamSimpleCall& call) {
+[[nodiscard]] support::JsonValue summarization_request_to_json(const tests::RecordedStreamSimpleCall& call) {
     support::JsonValue object{support::JsonValue::object_t{}};
     auto& o = object.get_object();
     support::JsonValue model_object{support::JsonValue::object_t{}};
     model_object.get_object().emplace("id", support::JsonValue(call.model.id));
-    model_object.get_object().emplace(
-        "provider", support::JsonValue(call.model.provider));
+    model_object.get_object().emplace("provider", support::JsonValue(call.model.provider));
     o.emplace("model", std::move(model_object));
 
     if (call.context.system_prompt) {
@@ -261,8 +249,7 @@ template <typename T> [[nodiscard]] support::Expected<T> run_operation(support::
 
     support::JsonValue options{support::JsonValue::object_t{}};
     if (call.options.max_tokens) {
-        options.get_object().emplace(
-            "maxTokens", support::JsonValue(static_cast<int>(*call.options.max_tokens)));
+        options.get_object().emplace("maxTokens", support::JsonValue(static_cast<int>(*call.options.max_tokens)));
     }
     if (call.options.cache_retention) {
         std::string retention;
@@ -280,8 +267,7 @@ template <typename T> [[nodiscard]] support::Expected<T> run_operation(support::
         options.get_object().emplace("cacheRetention", support::JsonValue(retention));
     }
     if (call.options.session_id) {
-        options.get_object().emplace(
-            "sessionId", support::JsonValue(*call.options.session_id));
+        options.get_object().emplace("sessionId", support::JsonValue(*call.options.session_id));
     }
     if (call.options.reasoning) {
         std::string reasoning;
@@ -314,18 +300,15 @@ template <typename T> [[nodiscard]] support::Expected<T> run_operation(support::
 /// A deterministic fresh-session-id factory for goldens: sequential
 /// distinguishable dummy values, proving each summarization request carries
 /// its own id (pi `uuidv7()` is nondeterministic by design).
-[[nodiscard]] harness::session::SummarizationSessionIdFactory
-sequential_session_ids() {
+[[nodiscard]] harness::session::SummarizationSessionIdFactory sequential_session_ids() {
     auto counter = std::make_shared<int>(0);
-    return [counter]() mutable {
-        return "summarization-session-" + std::to_string(++(*counter));
-    };
+    return [counter]() mutable { return "summarization-session-" + std::to_string(++(*counter)); };
 }
 
 } // namespace
 
 TEST_CASE("compaction token estimation matches pi's conservative char/4 heuristic",
-        "[harness][compaction][issue358][spec]") {
+        "[coding_agent][compaction][issue358][spec]") {
     using harness::session::calculate_context_tokens;
     using harness::session::estimate_tokens;
 
@@ -338,8 +321,7 @@ TEST_CASE("compaction token estimation matches pi's conservative char/4 heuristi
     ai::AssistantMessage assistant;
     assistant.content.push_back(ai::text_content("assistant"));
     assistant.content.push_back(ai::thinking_content("thinking"));
-    assistant.content.push_back(ai::tool_call_content(
-        "call-1", "read", R"({"path":"file.ts"})"));
+    assistant.content.push_back(ai::tool_call_content("call-1", "read", R"({"path":"file.ts"})"));
     // 9 + 8 + 4 + 18 = 39 chars → ceil(39/4) = 10.
     CHECK(estimate_tokens(ai::MessageVariant{assistant}) == 10);
     // custom content (blocks).
@@ -371,21 +353,19 @@ TEST_CASE("compaction token estimation matches pi's conservative char/4 heuristi
 }
 
 TEST_CASE("estimateContextTokens uses the last assistant usage plus trailing estimate",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     using harness::session::estimate_context_tokens;
 
-    auto no_usage = estimate_context_tokens(
-        {ai::MessageVariant{ai::user_text_message("no usage")}});
+    auto no_usage = estimate_context_tokens({ai::MessageVariant{ai::user_text_message("no usage")}});
     CHECK(no_usage.last_usage_index == std::nullopt);
     CHECK(no_usage.usage_tokens == 0);
     CHECK(no_usage.tokens == no_usage.trailing_tokens);
 
     ai::AssistantMessage assistant = ai::assistant_text_message("assistant");
     assistant.usage = mock_usage(10, 5, 3, 2);
-    auto with_usage = estimate_context_tokens(
-        {ai::MessageVariant{ai::user_text_message("Hello")},
-         ai::MessageVariant{assistant},
-         ai::MessageVariant{ai::user_text_message("tail")}});
+    auto with_usage = estimate_context_tokens({ai::MessageVariant{ai::user_text_message("Hello")},
+            ai::MessageVariant{assistant},
+            ai::MessageVariant{ai::user_text_message("tail")}});
     CHECK(with_usage.usage_tokens == 20);
     CHECK(with_usage.last_usage_index == 1);
     CHECK(with_usage.trailing_tokens > 0);
@@ -411,8 +391,8 @@ TEST_CASE("estimateContextTokens uses the last assistant usage plus trailing est
     CHECK(anchored.usage_tokens == 20);
 }
 
-TEST_CASE(
-        "the compaction door skips inapplicable branches with typed reasons", "[harness][compaction][issue541][spec]") {
+TEST_CASE("the compaction door skips inapplicable branches with typed reasons",
+        "[coding_agent][compaction][issue541][spec]") {
     const auto model = tests::make_model("gpt-test");
 
     auto run_with_probes = [&](harness::session::SessionStore& store) {
@@ -467,7 +447,7 @@ TEST_CASE(
 }
 
 TEST_CASE("the compaction door keeps the recent-token budget and never cuts before the boundary",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     const auto model = tests::make_model("gpt-test");
 
     // Ten user/assistant pairs of 100 characters (25 estimated tokens each);
@@ -547,7 +527,7 @@ TEST_CASE("the compaction door keeps the recent-token budget and never cuts befo
 }
 
 TEST_CASE("the compaction door retains every system-message update before the recent tail",
-        "[harness][compaction][session-resume][spec]") {
+        "[coding_agent][compaction][session-resume][spec]") {
     const auto model = tests::make_model("gpt-test");
     auto store = harness::session::SessionStore::in_memory();
 
@@ -583,7 +563,7 @@ TEST_CASE("the compaction door retains every system-message update before the re
 }
 
 TEST_CASE("the compaction door never splits a turn when the cut lands on a user message",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     auto store = harness::session::SessionStore::in_memory();
     append_user(store, "large turn");
     append_assistant(store, "large assistant message", mock_usage(300, 100));
@@ -615,7 +595,7 @@ TEST_CASE("the compaction door never splits a turn when the cut lands on a user 
 }
 
 TEST_CASE("split-turn compaction issues two requests with distinct fresh session ids",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     auto history_response = ai::assistant_text_message("history summary");
     history_response.usage = mock_usage(1000, 200);
@@ -687,7 +667,7 @@ TEST_CASE("split-turn compaction issues two requests with distinct fresh session
 }
 
 TEST_CASE("the compaction door carries the latest compaction summary into the update prompt",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     auto store = harness::session::SessionStore::in_memory();
     append_user(store, "user msg 1");
     append_assistant(store, "assistant msg 1", mock_usage(5000, 1000));
@@ -729,7 +709,7 @@ TEST_CASE("the compaction door carries the latest compaction summary into the up
 }
 
 TEST_CASE("the compaction door summarizes custom and branch summary entries",
-        "[harness][compaction][fixture][issue358][issue541][spec]") {
+        "[coding_agent][compaction][fixture][issue358][issue541][spec]") {
     // custom_message entries only enter a session through the interoperable
     // wire format (their producers are extensions, a Deferred Capability), so
     // this scenario opens a fixture session instead of appending.
@@ -775,7 +755,7 @@ TEST_CASE("the compaction door summarizes custom and branch summary entries",
 }
 
 TEST_CASE("summarization requests carry cacheRetention none and a fresh session id",
-        "[harness][compaction][fixture][issue358][issue541][spec]") {
+        "[coding_agent][compaction][fixture][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     auto summary_response = ai::assistant_text_message("## Goal\nTest summary");
     summary_response.usage = mock_usage(1000, 200);
@@ -810,7 +790,7 @@ TEST_CASE("summarization requests carry cacheRetention none and a fresh session 
 }
 
 TEST_CASE("the compaction door surfaces summarization-failed, aborted, and missing-stream errors",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     const auto model = tests::make_model("gpt-test");
 
     // Error terminal → summarization failure with pi's message.
@@ -860,7 +840,7 @@ TEST_CASE("the compaction door surfaces summarization-failed, aborted, and missi
 }
 
 TEST_CASE("the compaction door appends pi's file-operation tags and details to the summary",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("## Goal\nTest summary"));
 
@@ -868,8 +848,7 @@ TEST_CASE("the compaction door appends pi's file-operation tags and details to t
     append_user(store, "read a file");
     ai::AssistantMessage tool_message;
     tool_message.content.push_back(ai::tool_call_content(
-        "tool-1", "read", R"({"path":"src/index.ts"})",
-        *support::read_json(R"({"path":"src/index.ts"})")));
+            "tool-1", "read", R"({"path":"src/index.ts"})", *support::read_json(R"({"path":"src/index.ts"})")));
     tool_message.usage = mock_usage(1000, 200);
     REQUIRE(store.append(std::move(tool_message)).has_value());
     append_user(store, "continue");
@@ -890,8 +869,7 @@ TEST_CASE("the compaction door appends pi's file-operation tags and details to t
     REQUIRE(outcome.has_value());
     const auto* result = std::get_if<harness::session::CompactionResult>(&*outcome);
     REQUIRE(result != nullptr);
-    CHECK(result->summary.find("<read-files>\nsrc/index.ts\n</read-files>") !=
-          std::string::npos);
+    CHECK(result->summary.find("<read-files>\nsrc/index.ts\n</read-files>") != std::string::npos);
     REQUIRE(result->details.has_value());
     const auto* details = result->details->get_if<support::JsonValue::object_t>();
     REQUIRE(details != nullptr);
@@ -906,7 +884,7 @@ TEST_CASE("the compaction door appends pi's file-operation tags and details to t
 }
 
 TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry wire fields",
-        "[harness][compaction][fixture][issue358][issue541][compat-pi]") {
+        "[coding_agent][compaction][fixture][issue358][issue541][compat-pi]") {
     // Deterministic session history with fixed message timestamps: the cut
     // keeps the last two pairs and summarizes the first (keepRecentTokens
     // 30). Entry ids/timestamps are store-generated; the goldens normalize
@@ -959,12 +937,13 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
     {
         std::ofstream out(session_path, std::ios::binary);
         out << cch::tests::session_header_line(harness::session::SessionMetadata{
-                    .session_id = "compaction-golden",
-                    .created_at = "2026-08-05T00:00:00Z",
-                    .workspace = workspace.path(),
-                    .provider = "fake",
-                    .model = "gpt-test",
-            }) << '\n';
+                       .session_id = "compaction-golden",
+                       .created_at = "2026-08-05T00:00:00Z",
+                       .workspace = workspace.path(),
+                       .provider = "fake",
+                       .model = "gpt-test",
+               })
+            << '\n';
     }
     cch::tests::make_session_file_private(session_path);
     auto jsonl = harness::session::JsonlSessionStore::open_existing(session_path);
@@ -985,7 +964,7 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
     // entry id/timestamp/first-kept id normalized (store-generated values).
     auto loaded = harness::session::JsonlSessionStore::load(session_path);
     REQUIRE(loaded.has_value());
-    REQUIRE(loaded->entries.size() == 2);  // header + compaction
+    REQUIRE(loaded->entries.size() == 2); // header + compaction
     const auto& persisted_entry = loaded->entries[1];
     CHECK(persisted_entry.kind == harness::session::SessionEntryKind::Compaction);
     auto line_json = support::read_json(persisted_entry.raw_line);
@@ -1010,8 +989,7 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
         auto parsed = support::read_json(*serialized);
         REQUIRE(parsed);
         if (std::holds_alternative<ai::CompactionSummaryMessage>(message)) {
-            parsed->get_object().at("timestamp") =
-                support::JsonValue("<compaction-entry-timestamp>");
+            parsed->get_object().at("timestamp") = support::JsonValue("<compaction-entry-timestamp>");
         }
         rebuild.get_array().push_back(std::move(*parsed));
     }
@@ -1019,7 +997,7 @@ TEST_CASE("compaction persistence and rebuild goldens match pi's CompactionEntry
 }
 
 TEST_CASE("the compaction door serializes pi's verbatim conversation text",
-        "[harness][compaction][issue358][issue541][spec]") {
+        "[coding_agent][compaction][issue358][issue541][spec]") {
     auto runtime = std::make_shared<tests::FakeModelStream>();
     runtime->responses.push_back(ai::assistant_text_message("## Summary"));
 
@@ -1053,7 +1031,7 @@ TEST_CASE("the compaction door serializes pi's verbatim conversation text",
 
 // ── T10 trigger-policy machinery (#359): shouldCompact + isContextOverflow ──
 
-TEST_CASE("shouldCompact mirrors pi's threshold arithmetic", "[harness][compaction][issue359][spec]") {
+TEST_CASE("shouldCompact mirrors pi's threshold arithmetic", "[coding_agent][compaction][issue359][spec]") {
     using harness::session::CompactionSettings;
     using harness::session::should_compact;
 
@@ -1083,7 +1061,7 @@ TEST_CASE("shouldCompact mirrors pi's threshold arithmetic", "[harness][compacti
 }
 
 TEST_CASE("isContextOverflow detects provider overflow errors, silent usage overflow, and length-stop overflow",
-        "[harness][compaction][issue359][spec]") {
+        "[coding_agent][compaction][issue359][spec]") {
     using harness::session::is_context_overflow;
 
     constexpr std::size_t kWindow = 128000;
@@ -1098,21 +1076,37 @@ TEST_CASE("isContextOverflow detects provider overflow errors, silent usage over
     CHECK(is_context_overflow(overflow_error("prompt is too long: 213462 tokens > 200000 maximum"), kWindow));
     CHECK(is_context_overflow(overflow_error("413 {\"error\":{\"type\":\"request_too_large\"}}"), kWindow));
     CHECK(is_context_overflow(overflow_error("Your input exceeds the context window of this model"), kWindow));
-    CHECK(is_context_overflow(overflow_error("Requested token count exceeds the model's maximum context length of 131072 tokens"), kWindow));
-    CHECK(is_context_overflow(overflow_error("Input length (265330) exceeds model's maximum context length (262144)."), kWindow));
-    CHECK(is_context_overflow(overflow_error("The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)"), kWindow));
-    CHECK(is_context_overflow(overflow_error("This model's maximum prompt length is 131072 but the request contains 537812 tokens"), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("Requested token count exceeds the model's maximum context length of 131072 tokens"),
+            kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("Input length (265330) exceeds model's maximum context length (262144)."), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)"),
+            kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("This model's maximum prompt length is 131072 but the request contains 537812 tokens"),
+            kWindow));
     CHECK(is_context_overflow(overflow_error("Please reduce the length of the messages or completion"), kWindow));
     CHECK(is_context_overflow(overflow_error("This endpoint's maximum context length is 200000 tokens"), kWindow));
-    CHECK(is_context_overflow(overflow_error("Input length 265330 exceeds the maximum allowed input length of 262144 tokens."), kWindow));
-    CHECK(is_context_overflow(overflow_error("The input (265330 tokens) is longer than the model's context length (262144 tokens)."), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("Input length 265330 exceeds the maximum allowed input length of 262144 tokens."), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("The input (265330 tokens) is longer than the model's context length (262144 tokens)."),
+            kWindow));
     CHECK(is_context_overflow(overflow_error("prompt token count of 1000 exceeds the limit of 500"), kWindow));
-    CHECK(is_context_overflow(overflow_error("the request exceeds the available context size, try increasing it"), kWindow));
-    CHECK(is_context_overflow(overflow_error("tokens to keep from the initial prompt is greater than the context length"), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("the request exceeds the available context size, try increasing it"), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("tokens to keep from the initial prompt is greater than the context length"), kWindow));
     CHECK(is_context_overflow(overflow_error("invalid params, context window exceeds limit"), kWindow));
-    CHECK(is_context_overflow(overflow_error("Your request exceeded model token limit: 1000 (requested: 500)"), kWindow));
-    CHECK(is_context_overflow(overflow_error("Prompt contains 1000 tokens ... too large for model with 500 maximum context length"), kWindow));
-    CHECK(is_context_overflow(overflow_error("Prompt has 1,000 tokens, but the configured context size is 500 tokens"), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("Your request exceeded model token limit: 1000 (requested: 500)"), kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("Prompt contains 1000 tokens ... too large for model with 500 maximum context length"),
+            kWindow));
+    CHECK(is_context_overflow(
+            overflow_error("Prompt has 1,000 tokens, but the configured context size is 500 tokens"), kWindow));
     CHECK(is_context_overflow(overflow_error("model_context_window_exceeded"), kWindow));
     CHECK(is_context_overflow(overflow_error("prompt too long; exceeded max context length by 100 tokens"), kWindow));
     CHECK(is_context_overflow(overflow_error("Range of input length should be [1, 1000]"), kWindow));
@@ -1124,7 +1118,8 @@ TEST_CASE("isContextOverflow detects provider overflow errors, silent usage over
 
     // Non-overflow errors must not match, even when an overflow pattern would
     // (e.g. Bedrock throttling carrying "Too many tokens").
-    CHECK_FALSE(is_context_overflow(overflow_error("Throttling error: Too many tokens, please wait before trying again."), kWindow));
+    CHECK_FALSE(is_context_overflow(
+            overflow_error("Throttling error: Too many tokens, please wait before trying again."), kWindow));
     CHECK_FALSE(is_context_overflow(overflow_error("Service unavailable: too many requests"), kWindow));
     CHECK_FALSE(is_context_overflow(overflow_error("Rate limit exceeded: too many tokens"), kWindow));
     CHECK_FALSE(is_context_overflow(overflow_error("a generic stream failure"), kWindow));

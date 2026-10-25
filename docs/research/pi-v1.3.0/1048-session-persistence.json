@@ -668,7 +668,7 @@
       "scenario": "v3 session header writes and loads correctly",
       "evidence": {
         "artifact": null,
-        "scenario": "tests/harness/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
+        "scenario": "tests/coding_agent/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
         "result": "C++ test passes its own header; pi v1.3.0 header has no provider/model fields"
       },
       "gaps": [
@@ -695,7 +695,7 @@
       "scenario": "redaction remains at the persistence seam",
       "evidence": {
         "artifact": null,
-        "scenario": "tests/harness/session/JsonlSessionStoreTest.cpp:Glaze JSONL session redacts sensitive message fields at persistence",
+        "scenario": "tests/coding_agent/session/JsonlSessionStoreTest.cpp:Glaze JSONL session redacts sensitive message fields at persistence",
         "result": "C++ test source only; no frozen pi comparison"
       },
       "gaps": [
@@ -707,9 +707,9 @@
       "id": "cch_durable:Session:storage:sqlite-alternative",
       "capability": "Legacy SQLite SessionStore alternative used by tests and mirrored from pi-durable's relational backing",
       "source": [
-        "src/agent/harness/session/SqliteSessionStore.hpp:17-20",
-        "src/agent/harness/session/SessionStore.cpp:76-116",
-        "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically"
+        "d0844505d (deleted): src/agent/harness/session/SqliteSessionStore.hpp",
+        "d0844505d (deleted): src/agent/harness/session/SessionStore.cpp:76-116",
+        "d0844505d (deleted): tests/harness/session/SessionStoreTest.cpp — \"SQLite Session Store factory appends and commits batches atomically\""
       ],
       "membership": "excluded",
       "implementation": "missing",

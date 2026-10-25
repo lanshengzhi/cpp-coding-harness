@@ -85,6 +85,21 @@
         ]
       },
       {
+        "id": "application-session-no-legacy-core-session-includes",
+        "source_prefixes": [
+          "src/coding_agent/"
+        ],
+        "excluded_source_prefixes": [
+          "src/coding_agent/tui/",
+          "src/coding_agent/cli/"
+        ],
+        "forbidden_include_prefixes": [
+          "cch/agent/harness/session/",
+          "agent/harness/session/",
+          "agent/harness/TranscriptExport.hpp"
+        ]
+      },
+      {
         "id": "extension-tool-source-no-agent-execution-reach-through",
         "source_prefixes": [
           "src/coding_agent/extensions/"

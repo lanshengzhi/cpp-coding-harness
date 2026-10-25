@@ -5,8 +5,8 @@
 #include "support/RandomHex.hpp"
 
 #include <cch/ai/Message.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 
 #include <algorithm>
 #include <filesystem>

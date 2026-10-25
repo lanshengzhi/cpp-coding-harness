@@ -239,6 +239,20 @@ def rule_ids(diagnostics):
     return [diagnostic.rule_id for diagnostic in diagnostics]
 
 
+def checked_in_manifest_without_forwarders():
+    """The repository manifest with its temporary Session redirects removed.
+
+    The redirects are checked by InterfaceForwarderTest; the include-rule cases
+    below build a synthetic tree that exercises one include rule at a time, so
+    the redirects would otherwise give a legacy spelling the application owner
+    and mask the rule under test.
+    """
+    data = json.loads((REPO_ROOT / "cmake/parity/manifest.json").read_text())
+    data["interface_forwarders"] = []
+    data["private_forwarders"] = []
+    return pg.parse_manifest(data)
+
+
 class ManifestSchemaTest(unittest.TestCase):
     def test_checked_in_manifest_parses(self):
         manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
@@ -288,6 +302,29 @@ class ManifestSchemaTest(unittest.TestCase):
                 "agent/harness/compaction",
                 "agent/harness/session/EntrySerializer.hpp",
                 "agent/harness/session/SessionJournal.hpp",
+            ),
+        )
+
+    def test_checked_in_manifest_keeps_application_session_sources_on_their_own_owner(self):
+        # #1069: the Session sources and their headless callers live in the
+        # application Owner. The same source prefixes are judged for reaching
+        # back to the legacy core-private paths, so a retained forward cannot
+        # become a second policy source.
+        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
+        manifest = pg.parse_manifest(json.loads(manifest_path.read_text()))
+        rules = {rule.rule_id: rule for rule in manifest.architecture_contract.rules}
+        clause = rules["application-session-no-legacy-core-session-includes"]
+        self.assertEqual(clause.source_prefixes, ("src/coding_agent/",))
+        self.assertEqual(
+            clause.excluded_source_prefixes,
+            ("src/coding_agent/tui/", "src/coding_agent/cli/"),
+        )
+        self.assertEqual(
+            clause.forbidden_include_prefixes,
+            (
+                "cch/agent/harness/session/",
+                "agent/harness/session/",
+                "agent/harness/TranscriptExport.hpp",
             ),
         )
 
@@ -921,6 +958,25 @@ def make_project_tree(root):
     return root
 
 
+# The legacy core Session spellings #1069 migrates away from. A fixture tree
+# that exercises the include rules for them declares the headers on disk, so a
+# rejection names the rule rather than an unresolved include.
+LEGACY_SESSION_HEADERS = (
+    "src/agent/include/cch/agent/harness/session/SessionStore.hpp",
+    "src/agent/include/cch/agent/harness/session/SessionTree.hpp",
+    "src/agent/harness/session/SessionStore.hpp",
+)
+
+
+def make_project_tree_with_legacy_session(root):
+    root = make_project_tree(root)
+    for rel in LEGACY_SESSION_HEADERS:
+        path = Path(root) / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#pragma once\n")
+    return root
+
+
 @dataclass(frozen=True)
 class DeclaredTarget:
     """The target a fixture source is declared by: its role and target name.
@@ -968,8 +1024,9 @@ def run_include_case(
     macro=False,
     manifest=None,
     declared=None,
+    project_tree=None,
 ):
-    project_root = make_project_tree(root)
+    project_root = (project_tree or make_project_tree)(root)
     source = write_fixture_source(
         project_root,
         source_name,
@@ -1165,10 +1222,7 @@ class IncludeResolutionTest(unittest.TestCase):
         self.assertEqual(diagnostics[0].dependency, "cch_tui")
 
     def test_core_cannot_reach_application_session_through_private_or_legacy_paths(self):
-        data = json.loads((REPO_ROOT / "cmake/parity/manifest.json").read_text())
-        data["interface_forwarders"] = []
-        data["private_forwarders"] = []
-        manifest = pg.parse_manifest(data)
+        manifest = checked_in_manifest_without_forwarders()
         for path in ("coding_agent/session/EntrySerializer.hpp",
                      "coding_agent/compaction/Compaction.hpp",
                      "agent/harness/session/SessionJournal.hpp",
@@ -1178,11 +1232,44 @@ class IncludeResolutionTest(unittest.TestCase):
                                                spelling="quote", manifest=manifest)
                 self.assertEqual(rule_ids(diagnostics), [pg.RULE_AGENT_APPLICATION_SESSION_INCLUDE])
 
+    def test_application_session_sources_cannot_reach_the_legacy_core_session_paths(self):
+        # #1069: the migrated Session sources and their headless callers use the
+        # application Owner Interface. The rule keeps a retained forward from
+        # becoming a second policy source for the same code, and it is scoped to
+        # the migrated sources alone so the frontend targets (#1070) still build.
+        manifest = checked_in_manifest_without_forwarders()
+        for source, include_path in (
+            ("coding_agent/AgentSessionExecution.cpp", "cch/agent/harness/session/SessionStore.hpp"),
+            ("coding_agent/runtime/SessionFactory.cpp", "cch/agent/harness/session/SessionStore.hpp"),
+            ("coding_agent/session/SessionStore.cpp", "cch/agent/harness/session/SessionStore.hpp"),
+            ("coding_agent/include/cch/coding_agent/session/SessionTree.hpp",
+             "cch/agent/harness/session/SessionTree.hpp"),
+        ):
+            with self.subTest(source=source), tempfile.TemporaryDirectory() as tmp:
+                diagnostics = run_include_case(
+                    tmp, "cch_coding_agent", source, include_path,
+                    manifest=manifest,
+                    project_tree=make_project_tree_with_legacy_session)
+                self.assertEqual(
+                    rule_ids(diagnostics), [pg.RULE_APPLICATION_LEGACY_SESSION_INCLUDE])
+                self.assertIn(
+                    "application-session-no-legacy-core-session-includes",
+                    diagnostics[0].message)
+                self.assertEqual(diagnostics[0].dependency, include_path)
+
+    def test_frontend_sources_may_still_use_the_retained_legacy_spelling(self):
+        # #1069 keeps the qualified forwards for the not-yet-migrated frontends;
+        # #1070 removes both the forwards and this allowance.
+        manifest = checked_in_manifest_without_forwarders()
+        with tempfile.TemporaryDirectory() as tmp:
+            diagnostics = run_include_case(
+                tmp, "cch_coding_agent", "coding_agent/tui/SessionFlowController.cpp",
+                "cch/agent/harness/session/SessionStore.hpp", manifest=manifest,
+                project_tree=make_project_tree_with_legacy_session)
+        self.assertEqual(diagnostics, [])
+
     def test_session_core_helper_exceptions_apply_only_to_the_named_sources(self):
-        data = json.loads((REPO_ROOT / "cmake/parity/manifest.json").read_text())
-        data["interface_forwarders"] = []
-        data["private_forwarders"] = []
-        manifest = pg.parse_manifest(data)
+        manifest = checked_in_manifest_without_forwarders()
         for name, header in (("SessionJournal", "PosixWrite"), ("TranscriptExport", "WorkspaceFileSystem")):
             with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
                 path = f"agent/harness/{header}.hpp"
@@ -1459,12 +1546,7 @@ class ArchitectureContractTest(unittest.TestCase):
     def test_coding_agent_ai_private_reach_through_is_rejected_and_owner_interface_is_allowed(self):
         # The migration records are gone; a source still cannot reach through
         # the private root, while a canonical Owner Interface include is legal.
-        manifest_path = REPO_ROOT / "cmake" / "parity" / "manifest.json"
-        data = json.loads(manifest_path.read_text())
-        # This synthetic tree exercises the AI rule, not the repository's Session redirects.
-        data["interface_forwarders"] = []
-        data["private_forwarders"] = []
-        manifest = pg.parse_manifest(data)
+        manifest = checked_in_manifest_without_forwarders()
         with tempfile.TemporaryDirectory() as tmp:
             diagnostics = run_include_case(
                 tmp,

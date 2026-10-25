@@ -1,6 +1,6 @@
 // AI message-model contract cases: passive value shapes and the LLM message
 // conversion helpers, none of which touch a JSON surface. The pi message JSON
-// cases moved to `tests/harness/session/SessionMessageJsonTest.cpp` when the
+// cases moved to `tests/coding_agent/session/SessionMessageJsonTest.cpp` when the
 // session module took ownership of that wire shape (ADR 0056).
 
 #include <cch/ai/Context.hpp>

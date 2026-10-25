@@ -15,9 +15,9 @@
 #include <cch/agent/Agent.hpp>
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
-#include "agent/harness/session/EntrySerializer.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/ModelCatalogFixture.hpp"

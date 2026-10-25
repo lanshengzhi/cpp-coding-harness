@@ -1,6 +1,6 @@
 #include "coding_agent/AgentSessionImpl.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/ai/Timestamps.hpp>
 
 #include "agent/AgentMessageAccess.hpp"

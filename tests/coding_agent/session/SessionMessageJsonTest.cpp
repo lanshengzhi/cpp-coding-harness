@@ -1,12 +1,12 @@
 // The pi message JSON wire shape is session-owned (ADR 0056): these cases pin
-// the mapping in `agent/harness/session/SessionMessageJson.hpp` between
+// the mapping in `coding_agent/session/SessionMessageJson.hpp` between
 // `cch::ai::Message` values and the pi v3 Session Format message DTOs. Moved
 // here from `tests/ai/GlazeRoundTripTest.cpp` and
 // `tests/ai/MessageContractTest.cpp` when the session module took ownership of
 // the wire shape; the session goldens remain its byte-identity guard.
 
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/SessionMessageJson.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
+#include "coding_agent/session/SessionMessageJson.hpp"
 #include "support/Json.hpp"
 #include "support/JsonGlaze.hpp"
 
@@ -146,8 +146,8 @@ void check_system_message_round_trip(const ai::SystemMessage& round_tripped, con
 
 } // namespace
 
-TEST_CASE(
-        "tool-result message round-trips linkage details and error state", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE("tool-result message round-trips linkage details and error state",
+        "[coding_agent][session][u2][glaze][compat-pi]") {
     auto details = support::read_json(R"({"exitCode":2,"stderr":"denied"})");
     REQUIRE(details);
 
@@ -192,7 +192,7 @@ TEST_CASE(
 }
 
 TEST_CASE("tool-result message round-trips the recorded execution duration",
-        "[harness][session][u2][glaze][compat-pi][issue812]") {
+        "[coding_agent][session][u2][glaze][compat-pi][issue812]") {
     // pi `ToolResultMessage.durationMs` persists in the session record, so a
     // resumed session renders the same recorded duration instead of
     // re-measuring (#812).
@@ -225,7 +225,7 @@ TEST_CASE("tool-result message round-trips the recorded execution duration",
 }
 
 TEST_CASE("assistant content round-trips text, thinking, and tool-call variants",
-        "[harness][session][u2][glaze][compat-pi]") {
+        "[coding_agent][session][u2][glaze][compat-pi]") {
     ai::AssistantMessage msg;
     msg.content.emplace_back(ai::TextContent{
             .text = "hello",
@@ -267,7 +267,8 @@ TEST_CASE("assistant content round-trips text, thinking, and tool-call variants"
     REQUIRE(std::holds_alternative<ai::ToolCallContent>(round_trip.content[2]));
 }
 
-TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE(
+        "assistant message round-trips diagnostics and cacheWrite1h", "[coding_agent][session][u2][glaze][compat-pi]") {
     ai::AssistantMessage msg;
     msg.content.emplace_back(ai::TextContent{
             .text = "test",
@@ -320,7 +321,7 @@ TEST_CASE("assistant message round-trips diagnostics and cacheWrite1h", "[harnes
     CHECK(round_trip.usage.reasoning == 12);
 }
 
-TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[coding_agent][session][u2][glaze][compat-pi]") {
     harness::session::detail::ContentDto dto;
     dto.type = "toolCall";
     dto.id = "call-1";
@@ -338,7 +339,7 @@ TEST_CASE("ContentDto rejects toolCall for non-assistant context", "[harness][se
     REQUIRE(std::holds_alternative<ai::ToolCallContent>(*assistant_result));
 }
 
-TEST_CASE("assistant_content_from_dto rejects image content", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE("assistant_content_from_dto rejects image content", "[coding_agent][session][u2][glaze][compat-pi]") {
     harness::session::detail::ContentDto dto;
     dto.type = "image";
     dto.data = "ZmFrZQ==";
@@ -349,7 +350,7 @@ TEST_CASE("assistant_content_from_dto rejects image content", "[harness][session
     CHECK(result.error().message.find("image") != std::string::npos);
 }
 
-TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[coding_agent][session][u2][glaze][compat-pi]") {
     auto json = write_message_json(ai::MessageVariant{ai::user_text_message("valid text")});
     REQUIRE(json);
     const auto text_offset = json->find("valid text");
@@ -361,7 +362,7 @@ TEST_CASE("Glaze rejects invalid UTF-8 in message JSON", "[harness][session][u2]
     CHECK(parsed.error().code == support::ErrorCode::JsonParse);
 }
 
-TEST_CASE("Glaze rejects out-of-range message integers", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE("Glaze rejects out-of-range message integers", "[coding_agent][session][u2][glaze][compat-pi]") {
     auto json = write_message_json(ai::MessageVariant{ai::user_text_message("hello")});
     REQUIRE(json);
     const std::string marker = R"("timestamp":)";
@@ -378,7 +379,7 @@ TEST_CASE("Glaze rejects out-of-range message integers", "[harness][session][u2]
 }
 
 TEST_CASE("UserMessage string and block-array alternatives round-trip with four-way distinction",
-        "[harness][session][glaze][issue365][compat-pi]") {
+        "[coding_agent][session][glaze][issue365][compat-pi]") {
     const auto round_trip = [](ai::UserMessage message) -> ai::UserMessage {
         auto json = write_message_json(ai::MessageVariant{message});
         REQUIRE(json);
@@ -443,7 +444,7 @@ TEST_CASE("UserMessage string and block-array alternatives round-trip with four-
 }
 
 TEST_CASE("session-style user message JSON with string content loads the string alternative",
-        "[harness][session][glaze][issue365][compat-pi]") {
+        "[coding_agent][session][glaze][issue365][compat-pi]") {
     const auto parsed =
             read_message_json(R"({"role":"user","content":"resumed string message","timestamp":1718000000000})");
     REQUIRE(parsed);
@@ -454,7 +455,7 @@ TEST_CASE("session-style user message JSON with string content loads the string 
 }
 
 TEST_CASE("user text message serializes through explicit Glaze content tags",
-        "[harness][session][u2][glaze][compat-pi]") {
+        "[coding_agent][session][u2][glaze][compat-pi]") {
     ai::MessageVariant original = ai::UserMessage{
             .content = std::vector<ai::Content>{ai::TextContent{
                     .text = "hello model",
@@ -483,7 +484,7 @@ TEST_CASE("user text message serializes through explicit Glaze content tags",
 }
 
 TEST_CASE("assistant text and tool-call content round-trip in order with metadata",
-        "[harness][session][u2][ae2][compat-pi]") {
+        "[coding_agent][session][u2][ae2][compat-pi]") {
     auto arguments = support::read_json(R"({"path":"README.md","limit":20})");
     REQUIRE(arguments);
 
@@ -569,7 +570,7 @@ TEST_CASE("assistant text and tool-call content round-trip in order with metadat
 }
 
 TEST_CASE("assistant pending stop reason and raw stop reason round-trip",
-        "[harness][session][glaze][issue374][compat-pi]") {
+        "[coding_agent][session][glaze][issue374][compat-pi]") {
     const auto parsed = read_message_json(
             R"({"role":"assistant","content":[{"type":"text","text":"in flight"}],"api":"anthropic-messages","provider":"kimi-coding","model":"kimi-for-coding","usage":{"input":1,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":1,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"stopReason":"pending","rawStopReason":"pause_turn","timestamp":1718000000000})");
     REQUIRE(parsed);
@@ -594,7 +595,7 @@ TEST_CASE("assistant pending stop reason and raw stop reason round-trip",
 }
 
 TEST_CASE("assistant message without rawStopReason round-trips as absence",
-        "[harness][session][glaze][issue374][compat-pi]") {
+        "[coding_agent][session][glaze][issue374][compat-pi]") {
     ai::AssistantMessage assistant;
     assistant.content.emplace_back(ai::TextContent{
             .text = "answer",
@@ -616,7 +617,7 @@ TEST_CASE("assistant message without rawStopReason round-trips as absence",
     CHECK(std::get<ai::AssistantMessage>(*parsed).raw_stop_reason == std::nullopt);
 }
 
-TEST_CASE("assistant JSON requires a supported stop reason", "[harness][session][u2][glaze][issue18][compat-pi]") {
+TEST_CASE("assistant JSON requires a supported stop reason", "[coding_agent][session][u2][glaze][issue18][compat-pi]") {
     const auto missing = read_message_json(
             R"({"role":"assistant","content":[{"type":"text","text":"answer"}],"api":"openai-completions","provider":"openai","model":"gpt-test","usage":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"totalTokens":0,"cost":{"input":0,"output":0,"cacheRead":0,"cacheWrite":0,"total":0}},"timestamp":1718000000000})");
     REQUIRE_FALSE(missing);
@@ -634,7 +635,7 @@ TEST_CASE("assistant JSON requires a supported stop reason", "[harness][session]
 // read-side check: a record the serializer emits must be one the parser
 // accepts, so both boundaries reject the same input (#665).
 TEST_CASE("assistant message write and read reject an empty response identity",
-        "[harness][session][u2][glaze][issue665][compat-pi]") {
+        "[coding_agent][session][u2][glaze][issue665][compat-pi]") {
     const auto check_rejected_by_both =
             [](const ai::AssistantMessage& message, const std::string& json, std::string_view field) {
                 const auto written = write_message_json(ai::MessageVariant{message});
@@ -664,7 +665,7 @@ TEST_CASE("assistant message write and read reject an empty response identity",
 }
 
 TEST_CASE("assistant message write and read reject a non-real timestamp",
-        "[harness][session][u2][glaze][issue665][compat-pi]") {
+        "[coding_agent][session][u2][glaze][issue665][compat-pi]") {
     auto assistant = assistant_with_identity();
     assistant.timestamp = 0;
 
@@ -680,7 +681,7 @@ TEST_CASE("assistant message write and read reject a non-real timestamp",
 }
 
 TEST_CASE("assistant stop reason vocabulary round-trips through the session wire",
-        "[harness][session][u2][glaze][issue665][compat-pi]") {
+        "[coding_agent][session][u2][glaze][issue665][compat-pi]") {
     for (const auto reason : {ai::AssistantStopReason::Pending,
                  ai::AssistantStopReason::Stop,
                  ai::AssistantStopReason::ToolUse,
@@ -699,7 +700,7 @@ TEST_CASE("assistant stop reason vocabulary round-trips through the session wire
     }
 }
 
-TEST_CASE("unknown content discriminator returns a typed JSON error", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE("unknown content discriminator returns a typed JSON error", "[coding_agent][session][u2][glaze][compat-pi]") {
     auto parsed = read_message_json(
             R"({"role":"user","content":[{"type":"audio","data":"AAAA"}],"timestamp":1718000000000})");
 
@@ -710,7 +711,7 @@ TEST_CASE("unknown content discriminator returns a typed JSON error", "[harness]
 }
 
 TEST_CASE("missing required content payload fields return typed JSON errors",
-        "[harness][session][u2][glaze][compat-pi]") {
+        "[coding_agent][session][u2][glaze][compat-pi]") {
     auto missing_text = read_message_json(R"({"role":"user","content":[{"type":"text"}],"timestamp":1718000000000})");
     REQUIRE_FALSE(missing_text);
     CHECK(missing_text.error().code == support::ErrorCode::JsonParse);
@@ -732,7 +733,7 @@ TEST_CASE("missing required content payload fields return typed JSON errors",
 // ── Extended message type round-trip tests ──
 
 TEST_CASE("BashExecutionMessage serializes and deserializes round-trip",
-        "[harness][session][extended][glaze][compat-pi]") {
+        "[coding_agent][session][extended][glaze][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "echo hello";
     bash.output = "hello\n";
@@ -761,7 +762,7 @@ TEST_CASE("BashExecutionMessage serializes and deserializes round-trip",
 }
 
 TEST_CASE("BashExecutionMessage with optional fields null round-trips",
-        "[harness][session][extended][glaze][compat-pi]") {
+        "[coding_agent][session][extended][glaze][compat-pi]") {
     ai::BashExecutionMessage bash;
     bash.command = "ls";
     bash.output = "";
@@ -780,7 +781,7 @@ TEST_CASE("BashExecutionMessage with optional fields null round-trips",
 }
 
 TEST_CASE("CompactionSummaryMessage serializes and deserializes round-trip",
-        "[harness][session][extended][glaze][compat-pi]") {
+        "[coding_agent][session][extended][glaze][compat-pi]") {
     ai::CompactionSummaryMessage compaction;
     compaction.summary = "Compacted 10 messages";
     compaction.tokens_before = 5000;
@@ -801,7 +802,7 @@ TEST_CASE("CompactionSummaryMessage serializes and deserializes round-trip",
 }
 
 TEST_CASE("BranchSummaryMessage serializes and deserializes round-trip",
-        "[harness][session][extended][glaze][compat-pi]") {
+        "[coding_agent][session][extended][glaze][compat-pi]") {
     ai::BranchSummaryMessage branch;
     branch.summary = "Branch resolved";
     branch.from_id = "abc12345";
@@ -821,7 +822,8 @@ TEST_CASE("BranchSummaryMessage serializes and deserializes round-trip",
     CHECK(rt.timestamp == 1718000000004);
 }
 
-TEST_CASE("CustomMessage serializes and deserializes round-trip", "[harness][session][extended][glaze][compat-pi]") {
+TEST_CASE(
+        "CustomMessage serializes and deserializes round-trip", "[coding_agent][session][extended][glaze][compat-pi]") {
     ai::CustomMessage custom;
     custom.custom_type = "my-extension";
     custom.content.emplace_back(ai::TextContent{
@@ -847,7 +849,7 @@ TEST_CASE("CustomMessage serializes and deserializes round-trip", "[harness][ses
     CHECK(rt.timestamp == 1718000000005);
 }
 
-TEST_CASE("CustomMessage with display false round-trips", "[harness][session][extended][glaze][compat-pi]") {
+TEST_CASE("CustomMessage with display false round-trips", "[coding_agent][session][extended][glaze][compat-pi]") {
     ai::CustomMessage custom;
     custom.custom_type = "hidden-ext";
     custom.display = false;
@@ -862,7 +864,8 @@ TEST_CASE("CustomMessage with display false round-trips", "[harness][session][ex
     CHECK(std::get<ai::CustomMessage>(*parsed).display == false);
 }
 
-TEST_CASE("system message round-trips ordered sections and tool loadouts", "[harness][session][u2][glaze][compat-pi]") {
+TEST_CASE("system message round-trips ordered sections and tool loadouts",
+        "[coding_agent][session][u2][glaze][compat-pi]") {
     const ai::SystemMessage original = sectioned_system_message();
 
     auto json = write_message_json(ai::MessageVariant{original});
@@ -884,7 +887,7 @@ TEST_CASE("system message round-trips ordered sections and tool loadouts", "[har
 }
 
 TEST_CASE("pi-shaped sectioned system message JSON loads ordered sections and tool loadouts",
-        "[harness][session][u2][compat-pi]") {
+        "[coding_agent][session][u2][compat-pi]") {
     // Read-side counterexample: a mapping that writes these fields but ignores
     // them when reading would pass a write-only check; this case fails it.
     const std::string json =
@@ -910,7 +913,7 @@ TEST_CASE("pi-shaped sectioned system message JSON loads ordered sections and to
     CHECK(system->timestamp == 1718000000123);
 }
 
-TEST_CASE("session entry round-trips a sectioned system message losslessly", "[harness][session][u2][compat-pi]") {
+TEST_CASE("session entry round-trips a sectioned system message losslessly", "[coding_agent][session][u2][compat-pi]") {
     harness::session::EntrySerializer serializer;
     const ai::SystemMessage original = sectioned_system_message();
 

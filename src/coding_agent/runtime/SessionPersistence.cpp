@@ -1,6 +1,6 @@
 #include "SessionPersistence.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/ai/Content.hpp>
 #include <cch/support/AsyncResult.hpp>
 

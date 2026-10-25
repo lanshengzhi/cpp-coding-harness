@@ -459,7 +459,7 @@
         ]
       },
       "cppSeam": "`AgentSession::compact` plus `harness::session::compact` implement application compaction and persist a CompactionEntry. There is no durable compaction task, marker entry, placement submission or document-aware retained tail.",
-      "cppEvidence": "`AgentSessionCompactionTest.cpp` and `tests/harness/compaction/CompactionTest.cpp` cover manual compaction and context rebuild. They use application session entries, not the durable compaction task/submission contract.",
+      "cppEvidence": "`AgentSessionCompactionTest.cpp` and `tests/coding_agent/compaction/CompactionTest.cpp` cover manual compaction and context rebuild. They use application session entries, not the durable compaction task/submission contract.",
       "recommendation": "Build a durable CompactionTask over the durable context/entry model; place its marker as a submission and keep the raw entries. Reuse the summarization stream seam, not the application entry schema.",
       "blockers": [
         "no durable compaction task"
@@ -594,7 +594,7 @@
         ]
       },
       "cppSeam": "`harness::session::compact` returns CompactionSkipped with Empty/AlreadyCompacted/NothingToSummarize; `AgentSession::compact` surfaces application errors/results. Durable no-cut completion is absent.",
-      "cppEvidence": "`tests/harness/compaction/CompactionTest.cpp` covers skip reasons at the application door.",
+      "cppEvidence": "`tests/coding_agent/compaction/CompactionTest.cpp` covers skip reasons at the application door.",
       "recommendation": "Return the typed skip outcome through the durable task terminal result without writing a compaction entry; keep it distinct from a failed task.",
       "blockers": [
         "no durable no-cut task result"

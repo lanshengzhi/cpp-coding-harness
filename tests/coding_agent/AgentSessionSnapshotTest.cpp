@@ -6,11 +6,11 @@
 #include <cch/ai/Content.hpp>
 #include <cch/ai/Message.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <catch2/catch_test_macros.hpp>

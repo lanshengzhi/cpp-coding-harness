@@ -10,7 +10,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/ModelCatalogFixture.hpp"
 #include "support/EnvVarGuard.hpp"

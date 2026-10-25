@@ -15,7 +15,7 @@
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
-#include <cch/agent/harness/session/SessionEntry.hpp>
+#include <cch/coding_agent/session/SessionEntry.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>

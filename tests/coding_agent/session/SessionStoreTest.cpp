@@ -1,4 +1,4 @@
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
 #include "support/Json.hpp"
 #include "support/SessionSeeding.hpp"
@@ -24,11 +24,11 @@ namespace {
 
 harness::session::SessionMetadata metadata_for(const tests::TempWorkspace& workspace) {
     return harness::session::SessionMetadata{
-        .session_id = "session-store-test",
-        .created_at = "2026-07-05T00:00:00Z",
-        .workspace = workspace.path(),
-        .provider = "fake",
-        .model = "fake-model",
+            .session_id = "session-store-test",
+            .created_at = "2026-07-05T00:00:00Z",
+            .workspace = workspace.path(),
+            .provider = "fake",
+            .model = "fake-model",
     };
 }
 
@@ -42,7 +42,8 @@ std::string user_text(const ai::MessageVariant& message) {
 
 } // namespace
 
-TEST_CASE("Session Store facade is a closed concrete move-only value", "[harness][session][store][issue464][spec]") {
+TEST_CASE(
+        "Session Store facade is a closed concrete move-only value", "[coding_agent][session][store][issue464][spec]") {
     using Store = harness::session::SessionStore;
     static_assert(!std::is_abstract_v<Store>);
     static_assert(std::is_final_v<Store>);
@@ -53,7 +54,7 @@ TEST_CASE("Session Store facade is a closed concrete move-only value", "[harness
     SUCCEED();
 }
 
-TEST_CASE("in-memory Session Store defaults the session metadata", "[harness][session][store][issue494][spec]") {
+TEST_CASE("in-memory Session Store defaults the session metadata", "[coding_agent][session][store][issue494][spec]") {
     // The zero-argument form mints an empty SessionMetadata header.
     auto store = harness::session::SessionStore::in_memory();
     CHECK(store.metadata().session_id.empty());
@@ -64,13 +65,12 @@ TEST_CASE("in-memory Session Store defaults the session metadata", "[harness][se
     CHECK_FALSE(store.metadata().parent_session.has_value());
 
     // The accessor contract is a borrowed const reference (spec #493).
-    static_assert(std::is_same_v<
-                  decltype(std::declval<const harness::session::SessionStore&>().metadata()),
-                  const harness::session::SessionMetadata&>);
+    static_assert(std::is_same_v<decltype(std::declval<const harness::session::SessionStore&>().metadata()),
+            const harness::session::SessionMetadata&>);
 }
 
 TEST_CASE("Session Store metadata returns the construction header for both alternatives",
-        "[harness][session][store][issue494][spec]") {
+        "[coding_agent][session][store][issue494][spec]") {
     tests::TempWorkspace workspace;
 
     auto memory = harness::session::SessionStore::in_memory(metadata_for(workspace));
@@ -81,8 +81,7 @@ TEST_CASE("Session Store metadata returns the construction header for both alter
     CHECK(memory.metadata().model == "fake-model");
 
     const auto path = workspace.path() / "meta.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     CHECK(created->metadata().session_id == "session-store-test");
     CHECK(created->metadata().model == "fake-model");
@@ -100,7 +99,7 @@ TEST_CASE("Session Store metadata returns the construction header for both alter
 }
 
 TEST_CASE("in-memory Session Store maintains a live tree without a session file",
-        "[harness][session][store][issue464][issue490][spec]") {
+        "[coding_agent][session][store][issue464][issue490][spec]") {
     tests::TempWorkspace workspace;
     auto store = harness::session::SessionStore::in_memory(metadata_for(workspace));
 
@@ -131,15 +130,13 @@ TEST_CASE("in-memory Session Store maintains a live tree without a session file"
     CHECK(context.model == "fake-model");
     CHECK(context.thinking_level == "high");
 
-    CHECK(store
-              .append_compaction(
-                  std::nullopt,
-                  harness::session::CompactionEntryValue{
-                      .summary = "summary",
-                      .first_kept_entry_id = "first-kept",
-                      .tokens_before = 1000,
-                  })
-              .has_value());
+    CHECK(store.append_compaction(std::nullopt,
+                       harness::session::CompactionEntryValue{
+                               .summary = "summary",
+                               .first_kept_entry_id = "first-kept",
+                               .tokens_before = 1000,
+                       })
+                    .has_value());
 
     // `reset_leaf` moves the live leaf to the root position; the next
     // append starts a new root (pi `resetLeaf`).
@@ -151,7 +148,7 @@ TEST_CASE("in-memory Session Store maintains a live tree without a session file"
 }
 
 TEST_CASE("the in-memory alternative keeps entries the JSONL alternative refuses or redacts",
-        "[harness][session][store][issue464][issue665][spec]") {
+        "[coding_agent][session][store][issue464][issue665][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "alternative-divergence.jsonl";
     auto persisted = harness::session::SessionStore::create_new(path, metadata_for(workspace));
@@ -210,7 +207,7 @@ TEST_CASE("the in-memory alternative keeps entries the JSONL alternative refuses
 }
 
 TEST_CASE("an engaged but empty compaction tail is dropped by both persistence alternatives",
-        "[harness][session][store][issue464][spec]") {
+        "[coding_agent][session][store][issue464][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "empty-retained-tail.jsonl";
     auto persisted = harness::session::SessionStore::create_new(path, metadata_for(workspace));
@@ -251,11 +248,10 @@ TEST_CASE("an engaged but empty compaction tail is dropped by both persistence a
 }
 
 TEST_CASE("JSONL Session Store writes typed entries and mirrors them into the live tree",
-        "[harness][session][store][issue464][issue490][spec]") {
+        "[coding_agent][session][store][issue464][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "facade.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     auto store = std::move(*created);
 
@@ -289,25 +285,23 @@ TEST_CASE("JSONL Session Store writes typed entries and mirrors them into the li
     for (const auto& entry : loaded->entries) {
         kinds.push_back(entry.kind);
     }
-    CHECK(
-        kinds ==
-        std::vector<harness::session::SessionEntryKind>{
-            harness::session::SessionEntryKind::Header,
-            harness::session::SessionEntryKind::Message,
-            harness::session::SessionEntryKind::ModelChange,
-            harness::session::SessionEntryKind::ThinkingLevelChange,
-            harness::session::SessionEntryKind::SessionInfo,
-            harness::session::SessionEntryKind::Label,
-        });
+    CHECK(kinds == std::vector<harness::session::SessionEntryKind>{
+                           harness::session::SessionEntryKind::Header,
+                           harness::session::SessionEntryKind::Message,
+                           harness::session::SessionEntryKind::ModelChange,
+                           harness::session::SessionEntryKind::ThinkingLevelChange,
+                           harness::session::SessionEntryKind::SessionInfo,
+                           harness::session::SessionEntryKind::Label,
+                   });
     REQUIRE(loaded->messages.size() == 1);
     CHECK(user_text(loaded->messages[0]) == "first");
 }
 
-TEST_CASE("live tree queries answer without re-reading the session file", "[harness][session][store][issue490][spec]") {
+TEST_CASE("live tree queries answer without re-reading the session file",
+        "[coding_agent][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "cached.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     auto store = std::move(*created);
 
@@ -338,7 +332,8 @@ TEST_CASE("live tree queries answer without re-reading the session file", "[harn
     CHECK(branch.front().entry_id == leaf);
 }
 
-TEST_CASE("tree_snapshot returns a self-consistent roots and leaf pair", "[harness][session][store][issue491][spec]") {
+TEST_CASE("tree_snapshot returns a self-consistent roots and leaf pair",
+        "[coding_agent][session][store][issue491][spec]") {
     tests::TempWorkspace workspace;
     auto store = harness::session::SessionStore::in_memory(metadata_for(workspace));
     REQUIRE(store.append(user_message("first")).has_value());
@@ -350,38 +345,34 @@ TEST_CASE("tree_snapshot returns a self-consistent roots and leaf pair", "[harne
     CHECK(snapshot.leaf_id == store.leaf_id());
     bool found_leaf = false;
     std::vector<const harness::session::SessionTreeNode*> stack;
-    for (const auto& root : snapshot.roots) stack.push_back(&root);
+    for (const auto& root : snapshot.roots)
+        stack.push_back(&root);
     while (!stack.empty()) {
         const auto* node = stack.back();
         stack.pop_back();
         if (node->entry.entry_id == snapshot.leaf_id) {
             found_leaf = true;
         }
-        for (const auto& child : node->children) stack.push_back(&child);
+        for (const auto& child : node->children)
+            stack.push_back(&child);
     }
     CHECK(found_leaf);
 }
 
 TEST_CASE("Session Store branch summary persists and joins the active-path context",
-        "[harness][session][store][issue494][spec]") {
+        "[coding_agent][session][store][issue494][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "branch-summary.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     auto store = std::move(*created);
 
     REQUIRE(store.append(user_message("branch root")).has_value());
     // pi `appendBranchSummary`: the summary of the abandoned branch hangs
     // on the active path and becomes the leaf.
-    REQUIRE(store
-                .append_branch_summary(
-                    std::nullopt,
-                    "abandoned-leaf",
-                    "summary of abandoned branch",
-                    std::nullopt,
-                    std::nullopt)
-                .has_value());
+    REQUIRE(store.append_branch_summary(
+                         std::nullopt, "abandoned-leaf", "summary of abandoned branch", std::nullopt, std::nullopt)
+                    .has_value());
 
     // The live tree mirrors the append without re-reading the file.
     const auto context = store.build_context();
@@ -397,25 +388,19 @@ TEST_CASE("Session Store branch summary persists and joins the active-path conte
     REQUIRE(loaded->entries.size() == 3);
     const auto& persisted = loaded->entries[2];
     CHECK(persisted.kind == harness::session::SessionEntryKind::BranchSummary);
-    const auto* value =
-        std::get_if<harness::session::BranchSummaryEntryValue>(&persisted.value);
+    const auto* value = std::get_if<harness::session::BranchSummaryEntryValue>(&persisted.value);
     REQUIRE(value != nullptr);
     CHECK(value->from_id == "abandoned-leaf");
     CHECK(value->summary == "summary of abandoned branch");
 }
 
 TEST_CASE("in-memory Session Store branch summary joins the live tree without disk I/O",
-        "[harness][session][store][issue494][spec]") {
+        "[coding_agent][session][store][issue494][spec]") {
     auto store = harness::session::SessionStore::in_memory();
     REQUIRE(store.append(user_message("branch root")).has_value());
-    REQUIRE(store
-                .append_branch_summary(
-                    std::nullopt,
-                    "abandoned-leaf",
-                    "in-memory branch summary",
-                    std::nullopt,
-                    std::nullopt)
-                .has_value());
+    REQUIRE(store.append_branch_summary(
+                         std::nullopt, "abandoned-leaf", "in-memory branch summary", std::nullopt, std::nullopt)
+                    .has_value());
 
     CHECK_FALSE(store.path().has_value());
     const auto context = store.build_context();
@@ -425,11 +410,10 @@ TEST_CASE("in-memory Session Store branch summary joins the live tree without di
     CHECK(summary->summary == "in-memory branch summary");
 }
 
-TEST_CASE("branch and reset_leaf move the live leaf", "[harness][session][store][issue490][spec]") {
+TEST_CASE("branch and reset_leaf move the live leaf", "[coding_agent][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "branch.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     auto store = std::move(*created);
 
@@ -476,11 +460,10 @@ TEST_CASE("branch and reset_leaf move the live leaf", "[harness][session][store]
     // test deliberately asserts no context size for the reopened store.
 }
 
-TEST_CASE("a branch moves the live leaf and parents later messages", "[harness][session][store][issue490][spec]") {
+TEST_CASE("a branch moves the live leaf and parents later messages", "[coding_agent][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "marker.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     auto store = std::move(*created);
 
@@ -516,11 +499,10 @@ TEST_CASE("a branch moves the live leaf and parents later messages", "[harness][
 }
 
 TEST_CASE("the live tree matches a fresh load after a branch, typed, and message appends",
-        "[harness][session][store][issue490][spec]") {
+        "[coding_agent][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "consistency.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     auto store = std::move(*created);
 
@@ -553,20 +535,18 @@ TEST_CASE("the live tree matches a fresh load after a branch, typed, and message
     const auto loaded_context = reopened->build_context();
     REQUIRE(live_context.messages.size() == loaded_context.messages.size());
     for (std::size_t index = 0; index < live_context.messages.size(); ++index) {
-        CHECK(user_text(live_context.messages[index]) ==
-              user_text(loaded_context.messages[index]));
+        CHECK(user_text(live_context.messages[index]) == user_text(loaded_context.messages[index]));
     }
     CHECK(live_context.thinking_level == loaded_context.thinking_level);
 }
 
 TEST_CASE("open_existing builds the live tree from the persisted entries exactly once",
-        "[harness][session][store][issue490][spec]") {
+        "[coding_agent][session][store][issue490][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "reopen.jsonl";
     std::string last_entry;
     {
-        auto created = harness::session::SessionStore::create_new(
-            path, metadata_for(workspace));
+        auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
         REQUIRE(created.has_value());
         auto store = std::move(*created);
         REQUIRE(store.append(user_message("first")).has_value());
@@ -592,11 +572,11 @@ TEST_CASE("open_existing builds the live tree from the persisted entries exactly
     CHECK(user_text(context.messages[1]) == "second");
 }
 
-TEST_CASE("moved Session Store keeps appending to the same session file", "[harness][session][store][issue464][spec]") {
+TEST_CASE("moved Session Store keeps appending to the same session file",
+        "[coding_agent][session][store][issue464][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "moved.jsonl";
-    auto created = harness::session::SessionStore::create_new(
-        path, metadata_for(workspace));
+    auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(created.has_value());
     auto store = std::move(*created);
 
@@ -613,7 +593,7 @@ TEST_CASE("moved Session Store keeps appending to the same session file", "[harn
 }
 
 TEST_CASE("create_from_entries writes a re-chained branch file the loader reads back",
-        "[harness][session][store][issue540][spec]") {
+        "[coding_agent][session][store][issue540][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "branched.jsonl";
 
@@ -656,7 +636,7 @@ TEST_CASE("create_from_entries writes a re-chained branch file the loader reads 
 }
 
 TEST_CASE("create_from_entries preserves a foreign entry line and refuses a nested header",
-        "[harness][session][store][issue540][spec]") {
+        "[coding_agent][session][store][issue540][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "foreign.jsonl";
 
@@ -757,7 +737,7 @@ namespace {
 } // namespace
 
 TEST_CASE("a linear session writes one root and a real parent chain",
-        "[harness][session][store][issue1044][compat-pi][spec]") {
+        "[coding_agent][session][store][issue1044][compat-pi][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "pi-chain.jsonl";
     auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
@@ -792,7 +772,7 @@ TEST_CASE("a linear session writes one root and a real parent chain",
 }
 
 TEST_CASE("a second root after reset_leaf is a root on the wire and on reload",
-        "[harness][session][store][issue1044][compat-pi][spec]") {
+        "[coding_agent][session][store][issue1044][compat-pi][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "pi-second-root.jsonl";
     auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
@@ -825,7 +805,8 @@ TEST_CASE("a second root after reset_leaf is a root on the wire and on reload",
     CHECK(reopened->tree_snapshot().roots.size() == 2);
 }
 
-TEST_CASE("a branch target is the next append's wire parent", "[harness][session][store][issue1044][compat-pi][spec]") {
+TEST_CASE("a branch target is the next append's wire parent",
+        "[coding_agent][session][store][issue1044][compat-pi][spec]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "pi-branch-parent.jsonl";
     auto created = harness::session::SessionStore::create_new(path, metadata_for(workspace));
@@ -849,7 +830,7 @@ TEST_CASE("a branch target is the next append's wire parent", "[harness][session
 }
 
 TEST_CASE("an explicit parentId null is a root and an absent field still infers the chain",
-        "[harness][session][tree][issue1044][compat-pi][spec]") {
+        "[coding_agent][session][tree][issue1044][compat-pi][spec]") {
     // The reader's two shapes, hand-written so the writer cannot decide the
     // answer: a missing `parentId` is the legacy flat file whose chain comes
     // from the entry order; an explicit null is pi's root.

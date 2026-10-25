@@ -2193,7 +2193,7 @@
         "cch_coding_agent:Session:wire:redaction"
       ],
       "authority": "/tmp/cch-1044-context/1048-merged.json reviewFindings[4]",
-      "rationale": "Cosmetic quotation fix for tests/harness/session/JsonlSessionStoreTest.cpp:131."
+      "rationale": "Cosmetic quotation fix for tests/coding_agent/session/JsonlSessionStoreTest.cpp:131."
     }
   ],
   "boundaryOverrides": [

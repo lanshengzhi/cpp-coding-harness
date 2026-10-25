@@ -1,7 +1,7 @@
 #include "SessionLifecycle.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 #include "coding_agent/SessionDiscovery.hpp"
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "support/UniqueFd.hpp"

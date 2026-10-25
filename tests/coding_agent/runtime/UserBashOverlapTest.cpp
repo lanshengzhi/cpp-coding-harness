@@ -1,10 +1,10 @@
 #include "ai/ModelStreamBridge.hpp"
 #include <cch/ai/Content.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/SessionResume.hpp>
+#include <cch/coding_agent/session/SessionResume.hpp>
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/FakeUserShell.hpp"
 #include "support/GatedChatProvider.hpp"

@@ -8,14 +8,14 @@
 // the fake-ModelRuntime seam so the model sees exactly what pi's model sees.
 
 #include <cch/agent/Agent.hpp>
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 #include <cch/ai/Message.hpp>
 #include <cch/support/Error.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include "support/AsyncResultBridge.hpp"
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/SessionMessageJson.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
+#include "coding_agent/session/SessionMessageJson.hpp"
 #include "support/FakeModelStream.hpp"
 #include "support/ModelFixture.hpp"
 #include "support/ExpectedMacros.hpp"
@@ -43,13 +43,9 @@ using namespace cch;
 namespace {
 
 [[nodiscard]] std::string read_fixture_text(std::string_view name) {
-    const std::string path = std::string{CCH_SOURCE_DIR} +
-                             "/fixtures/pi-agent-core/" +
-                             std::string{name};
+    const std::string path = std::string{CCH_SOURCE_DIR} + "/fixtures/pi-agent-core/" + std::string{name};
     std::ifstream input(path, std::ios::binary);
-    return std::string{
-        std::istreambuf_iterator<char>{input},
-        std::istreambuf_iterator<char>{}};
+    return std::string{std::istreambuf_iterator<char>{input}, std::istreambuf_iterator<char>{}};
 }
 
 [[nodiscard]] std::vector<std::string> fixture_lines(std::string_view name) {
@@ -93,8 +89,8 @@ namespace {
         support::JsonValue::array_t blocks;
         if (const auto* text = it->second.get_if<std::string>()) {
             blocks.push_back(support::JsonValue{support::JsonValue::object_t{
-                {"type", support::JsonValue{"text"}},
-                {"text", support::JsonValue{*text}},
+                    {"type", support::JsonValue{"text"}},
+                    {"text", support::JsonValue{*text}},
             }});
         } else if (const auto* array = it->second.get_if<support::JsonValue::array_t>()) {
             for (const auto& block : *array) {
@@ -102,8 +98,7 @@ namespace {
                 REQUIRE(block_object != nullptr);
                 support::JsonValue::object_t normalized;
                 for (const char* key : {"type", "text", "data", "mimeType"}) {
-                    if (const auto found = block_object->find(key);
-                        found != block_object->end()) {
+                    if (const auto found = block_object->find(key); found != block_object->end()) {
                         normalized.emplace(key, found->second);
                     }
                 }
@@ -152,8 +147,7 @@ namespace {
 /// pi `convertToLlm`-equivalent applied to C++ context messages — the exact
 /// per-role conversion the adapter runs (ai/api/MessageNormalization.cpp uses
 /// these same Message.hpp helpers), producing what the model sees.
-[[nodiscard]] std::vector<ai::MessageVariant> to_llm_messages(
-    const std::vector<ai::MessageVariant>& messages) {
+[[nodiscard]] std::vector<ai::MessageVariant> to_llm_messages(const std::vector<ai::MessageVariant>& messages) {
     std::vector<ai::MessageVariant> converted;
     converted.reserve(messages.size());
     for (const auto& message : messages) {
@@ -186,9 +180,8 @@ support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
             boost::asio::detached);
     io.run();
     if (!result) {
-        return std::unexpected(support::make_error(
-            support::ErrorCode::Unknown,
-            "agent prompt coroutine did not complete"));
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Unknown, "agent prompt coroutine did not complete"));
     }
     return std::move(*result);
 }
@@ -196,7 +189,7 @@ support::ExpectedVoid run_prompt(agent::Agent& subject, std::string prompt) {
 } // namespace
 
 TEST_CASE("pi v3 session golden round-trips known entries and preserves retired tools as unknown",
-        "[harness][session][issue356][golden][compat-pi]") {
+        "[coding_agent][session][issue356][golden][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto lines = fixture_lines("session-roundtrip.jsonl");
     REQUIRE(lines.size() > 1);
@@ -240,7 +233,7 @@ TEST_CASE("pi v3 session golden round-trips known entries and preserves retired 
     CHECK(kinds == expected_kinds);
 }
 
-TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][session][issue356][compat-pi]") {
+TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[coding_agent][session][issue356][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("session-roundtrip.jsonl"));
     REQUIRE(loaded);
@@ -295,8 +288,7 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
             continue;
         }
         const auto& custom = std::get<harness::session::CustomEntryValue>(entry.value);
-        if (custom.data.has_value() &&
-            custom.data->get_if<support::JsonValue::null_t>() != nullptr) {
+        if (custom.data.has_value() && custom.data->get_if<support::JsonValue::null_t>() != nullptr) {
             null_data_custom = &entry;
             break;
         }
@@ -306,7 +298,7 @@ TEST_CASE("pi v3 golden parses field/null/active-path semantics", "[harness][ses
 }
 
 TEST_CASE("session entry reader accepts the control-character escapes its writer emits",
-        "[harness][session][issue724][compat-pi]") {
+        "[coding_agent][session][issue724][compat-pi]") {
     // pi escapes control characters in message text as \uXXXX. The decoded
     // value must not then be re-validated as though it were raw JSON input:
     // an escaped control character is legal, a raw one is not (#724).
@@ -344,7 +336,7 @@ TEST_CASE("session entry reader accepts the control-character escapes its writer
 }
 
 TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custom_message",
-        "[harness][session][issue356][projection][compat-pi]") {
+        "[coding_agent][session][issue356][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-session.jsonl"));
     REQUIRE(loaded);
@@ -352,8 +344,7 @@ TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custo
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    const auto expected = support::read_json(
-        read_fixture_text("projection-context.json"));
+    const auto expected = support::read_json(read_fixture_text("projection-context.json"));
     REQUIRE(expected);
     const auto actual = cpp_messages_canonical(context.messages);
     const auto expected_canonical = canonical_messages(*expected);
@@ -362,13 +353,14 @@ TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custo
     auto expected_json = canonical_json(expected_canonical);
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] projection mismatch\n--- expected ---\n"
-                  << expected_json << "\n--- actual ---\n" << actual_json << "\n--- end ---\n";
+                  << expected_json << "\n--- actual ---\n"
+                  << actual_json << "\n--- end ---\n";
     }
     CHECK(actual_json == expected_json);
 }
 
 TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message",
-        "[harness][session][issue356][projection][compat-pi]") {
+        "[coding_agent][session][issue356][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-branch-session.jsonl"));
     REQUIRE(loaded);
@@ -376,8 +368,7 @@ TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message
     harness::session::SessionTree tree(std::move(*loaded));
     auto context = tree.buildSessionContext();
 
-    const auto expected = support::read_json(
-        read_fixture_text("projection-branch-context.json"));
+    const auto expected = support::read_json(read_fixture_text("projection-branch-context.json"));
     REQUIRE(expected);
     const auto actual = cpp_messages_canonical(context.messages);
     const auto expected_canonical = canonical_messages(*expected);
@@ -386,12 +377,13 @@ TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message
     auto expected_json = canonical_json(expected_canonical);
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] branch projection mismatch\n--- expected ---\n"
-                  << expected_json << "\n--- actual ---\n" << actual_json << "\n--- end ---\n";
+                  << expected_json << "\n--- actual ---\n"
+                  << actual_json << "\n--- end ---\n";
     }
     CHECK(actual_json == expected_json);
 }
 
-TEST_CASE("pi session projection: getLabel and getSessionName", "[harness][session][issue356][compat-pi]") {
+TEST_CASE("pi session projection: getLabel and getSessionName", "[coding_agent][session][issue356][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("session-roundtrip.jsonl"));
     REQUIRE(loaded);
@@ -414,7 +406,7 @@ TEST_CASE("pi session projection: getLabel and getSessionName", "[harness][sessi
 }
 
 TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-ModelRuntime seam",
-        "[harness][session][issue356][agent][projection][compat-pi]") {
+        "[coding_agent][session][issue356][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-session.jsonl"));
     REQUIRE(loaded);
@@ -428,8 +420,10 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
     options.session_id = "session-1";
-    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options),
-        agent::AgentInitialState{.messages = context.messages});
+    agent::Agent subject(runtime->factory(),
+            std::move(tools),
+            std::move(options),
+            agent::AgentInitialState{.messages = context.messages});
 
     REQUIRE(run_prompt(subject, "hi"));
 
@@ -440,36 +434,35 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
     // The session context arrives at the seam exactly as pi's buildContext
     // projects it: compactionSummary + retained tail, custom omitted,
     // custom_message → CustomMessage, then the prompt.
-    std::vector<ai::MessageVariant> session_messages(
-        recorded.begin(), recorded.end() - 1);
-    const auto expected = support::read_json(
-        read_fixture_text("projection-context.json"));
+    std::vector<ai::MessageVariant> session_messages(recorded.begin(), recorded.end() - 1);
+    const auto expected = support::read_json(read_fixture_text("projection-context.json"));
     REQUIRE(expected);
     auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
     auto expected_json = canonical_json(canonical_messages(*expected));
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] seam projection mismatch\n--- expected ---\n"
-                  << expected_json << "\n--- actual ---\n" << actual_json << "\n--- end ---\n";
+                  << expected_json << "\n--- actual ---\n"
+                  << actual_json << "\n--- end ---\n";
     }
     CHECK(actual_json == expected_json);
 
     // The model-visible messages (pi convertToLlm semantics, the same
     // conversion the provider adapters run) match pi's captured LLM view.
-    const auto expected_llm = support::read_json(
-        read_fixture_text("projection-context-llm.json"));
+    const auto expected_llm = support::read_json(read_fixture_text("projection-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);
     auto llm_json = canonical_json(cpp_messages_canonical(llm_messages));
     auto expected_llm_json = canonical_json(canonical_messages(*expected_llm));
     if (llm_json != expected_llm_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] LLM projection mismatch\n--- expected ---\n"
-                  << expected_llm_json << "\n--- actual ---\n" << llm_json << "\n--- end ---\n";
+                  << expected_llm_json << "\n--- actual ---\n"
+                  << llm_json << "\n--- end ---\n";
     }
     CHECK(llm_json == expected_llm_json);
 }
 
 TEST_CASE("pi branch projection drives rebuilt context into the Agent",
-        "[harness][session][issue356][agent][projection][compat-pi]") {
+        "[coding_agent][session][issue356][projection][compat-pi]") {
     harness::session::EntrySerializer serializer;
     auto loaded = serializer.parse_lines(fixture_lines("projection-branch-session.jsonl"));
     REQUIRE(loaded);
@@ -482,37 +475,38 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     agent::AsyncAgentOptions options;
     options.max_turns = 3;
     options.model = tests::make_model("gpt-test");
-    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options),
-        agent::AgentInitialState{.messages = context.messages});
+    agent::Agent subject(runtime->factory(),
+            std::move(tools),
+            std::move(options),
+            agent::AgentInitialState{.messages = context.messages});
 
     REQUIRE(run_prompt(subject, "hi"));
 
     REQUIRE(runtime->calls.size() == 1);
     const auto& recorded = runtime->calls[0].context.messages;
     REQUIRE(recorded.size() == context.messages.size() + 1);
-    std::vector<ai::MessageVariant> session_messages(
-        recorded.begin(), recorded.end() - 1);
+    std::vector<ai::MessageVariant> session_messages(recorded.begin(), recorded.end() - 1);
 
-    const auto expected = support::read_json(
-        read_fixture_text("projection-branch-context.json"));
+    const auto expected = support::read_json(read_fixture_text("projection-branch-context.json"));
     REQUIRE(expected);
     auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
     auto expected_json = canonical_json(canonical_messages(*expected));
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] branch seam mismatch\n--- expected ---\n"
-                  << expected_json << "\n--- actual ---\n" << actual_json << "\n--- end ---\n";
+                  << expected_json << "\n--- actual ---\n"
+                  << actual_json << "\n--- end ---\n";
     }
     CHECK(actual_json == expected_json);
 
-    const auto expected_llm = support::read_json(
-        read_fixture_text("projection-branch-context-llm.json"));
+    const auto expected_llm = support::read_json(read_fixture_text("projection-branch-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);
     auto llm_json = canonical_json(cpp_messages_canonical(llm_messages));
     auto expected_llm_json = canonical_json(canonical_messages(*expected_llm));
     if (llm_json != expected_llm_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] branch LLM mismatch\n--- expected ---\n"
-                  << expected_llm_json << "\n--- actual ---\n" << llm_json << "\n--- end ---\n";
+                  << expected_llm_json << "\n--- actual ---\n"
+                  << llm_json << "\n--- end ---\n";
     }
     CHECK(llm_json == expected_llm_json);
 }
@@ -524,11 +518,11 @@ namespace {
 [[nodiscard]] harness::session::SessionContext derived_state_full_branch() {
     harness::session::LoadedSession loaded;
     loaded.metadata = harness::session::SessionMetadata{
-        .session_id = "derived-state",
-        .created_at = "2026-08-05T00:00:00Z",
-        .workspace = "/workspace",
-        .provider = "fake",
-        .model = "fake-model",
+            .session_id = "derived-state",
+            .created_at = "2026-08-05T00:00:00Z",
+            .workspace = "/workspace",
+            .provider = "fake",
+            .model = "fake-model",
     };
 
     harness::session::SessionEntry user;
@@ -572,7 +566,7 @@ namespace {
 } // namespace
 
 TEST_CASE("derived session state tracks thinking level and model, not retired tool entries",
-        "[harness][session][issue357]") {
+        "[coding_agent][session][issue357]") {
     const auto context = derived_state_full_branch();
     CHECK(context.thinking_level == "high");
     REQUIRE(context.provider.has_value());
@@ -582,7 +576,7 @@ TEST_CASE("derived session state tracks thinking level and model, not retired to
 }
 
 TEST_CASE("derived thinking level and model flow into the Agent's turn options at the fake-ModelRuntime seam",
-        "[harness][session][issue357][agent][projection][compat-pi]") {
+        "[coding_agent][session][issue357][projection][compat-pi]") {
     // The derived state of a resumed branch feeds the Agent construction: the
     // derived model identity becomes the per-turn model and the derived
     // thinking level becomes the per-turn `reasoning` stream option.
@@ -602,11 +596,13 @@ TEST_CASE("derived thinking level and model flow into the Agent's turn options a
     resolved_model.provider = *context.provider;
     options.model = std::move(resolved_model);
     options.session_id = "session-derived";
-    agent::Agent subject(runtime->factory(), std::move(tools), std::move(options),
-        agent::AgentInitialState{
-            .messages = context.messages,
-            .thinking_level = context.thinking_level,
-        });
+    agent::Agent subject(runtime->factory(),
+            std::move(tools),
+            std::move(options),
+            agent::AgentInitialState{
+                    .messages = context.messages,
+                    .thinking_level = context.thinking_level,
+            });
 
     REQUIRE(run_prompt(subject, "hi"));
 

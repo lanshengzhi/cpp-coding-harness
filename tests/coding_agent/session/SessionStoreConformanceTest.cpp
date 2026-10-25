@@ -16,7 +16,7 @@
 // - file existence and re-open durability are the persisting half
 //   (`JsonlSessionStoreTest.cpp`).
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
 #include "support/TempWorkspace.hpp"
 
@@ -371,7 +371,7 @@ constexpr std::array<NamedCase, 15> kCases{
 /// cannot ship with a gap that the two existing alternatives happen to share
 /// by accident of who wrote them.
 TEST_CASE("every persistence alternative satisfies the storage conformance cases",
-        "[harness][session][store][conformance][issue464][spec]") {
+        "[coding_agent][session][store][conformance][issue464][spec]") {
     for (const auto& alternative : kAlternatives) {
         for (const auto& conformance_case : kCases) {
             DYNAMIC_SECTION(std::string{alternative.name} + " / " + std::string{conformance_case.name}) {
@@ -387,7 +387,7 @@ TEST_CASE("every persistence alternative satisfies the storage conformance cases
 /// Move semantics are part of the contract every alternative inherits through
 /// the facade, and they are cheap to state once for all of them.
 TEST_CASE("every persistence alternative yields a move-only store",
-        "[harness][session][store][conformance][issue464][spec]") {
+        "[coding_agent][session][store][conformance][issue464][spec]") {
     static_assert(!std::is_abstract_v<SessionStore>);
     static_assert(std::is_final_v<SessionStore>);
     static_assert(std::is_move_constructible_v<SessionStore>);

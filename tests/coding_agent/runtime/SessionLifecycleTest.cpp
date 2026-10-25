@@ -1,8 +1,8 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/ModelsFixture.hpp"
 #include "support/RuntimeFixture.hpp"

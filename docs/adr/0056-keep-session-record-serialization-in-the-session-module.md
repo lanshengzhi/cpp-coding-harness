@@ -43,7 +43,7 @@ similar machinery ... in serialization or implementation layers rather than Owne
   evolve independently; the pi wire contract, not structural identity with the AI message model, is
   what must be preserved.
 - **The pi v3 wire contract stays pinned by the existing byte-stable golden tests.**
-  `tests/harness/session/SessionRoundTripGoldenTest.cpp` and
+  `tests/coding_agent/session/SessionRoundTripGoldenTest.cpp` and
   `tests/coding_agent/runtime/SessionSuiteGoldenTest.cpp` are the guard for the accepted
   duplication, matching [ADR 0054](0054-make-client-transports-tls-only-with-concrete-executor-beast-streams.md)'s
   "session-record JSON stays byte-stable under golden tests". The moved DTOs reproduce the current

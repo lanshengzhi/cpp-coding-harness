@@ -11,8 +11,8 @@
 #include <cch/ai/Message.hpp>
 #include <cch/coding_agent/AgentSessionEvent.hpp>
 #include "coding_agent/AgentSession.hpp"
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
 #include <cch/support/Error.hpp>
 #include "support/GatedChatProvider.hpp"
 #include "support/ModelsFixture.hpp"

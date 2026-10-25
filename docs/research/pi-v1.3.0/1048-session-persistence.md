@@ -79,7 +79,7 @@ C++ is therefore a hybrid: tool loadout uses the v1.3.0 coding-agent system-mess
 (`AgentSessionExecution.cpp:55-85`), while compaction and branch position use the old
 pi-agent-core wire (`retainedTail`, `leaf`). The committed golden
 `fixtures/pi-agent-core/compaction-persistence.jsonl` contains `retainedTail` and no
-`systemMessage`, although `CompactionTest.cpp:908` calls it “pi's CompactionEntry wire fields” and
+`systemMessage`, although `tests/coding_agent/compaction/CompactionTest.cpp:886` calls it “pi's CompactionEntry wire fields” and
 carries the `compat-pi` tag. That test and its README are older-baseline evidence, not v1.3.0
 parity proof. Re-basing them is part of the migration; adding `systemMessage` while keeping the
 old golden would leave two incompatible “pi” contracts in the tree.
@@ -291,10 +291,10 @@ C++ implementation is `harness::session::compact` and `AgentSession::Impl::compa
 (`src/coding_agent/AgentSessionCompaction.cpp:17-196`). It preserves cache retention, fresh summarization
 ids, thinking-level routing, split-turn handling, file-operation details and usage. The C++ compaction
 tests cover preparation, split turns, cache-retention options, summary text, retry errors and persistence
-(`tests/harness/compaction/CompactionTest.cpp`).
+(`tests/coding_agent/compaction/CompactionTest.cpp`).
 
 One of those tests is a provenance trap: `compaction persistence and rebuild goldens match pi's
-CompactionEntry wire fields` (`CompactionTest.cpp:908`) compares against
+CompactionEntry wire fields` (`tests/coding_agent/compaction/CompactionTest.cpp:886`) compares against
 `fixtures/pi-agent-core/compaction-persistence.jsonl`, which has `retainedTail` and no
 `systemMessage`. The test name and `compat-pi` tag therefore assert v1.3.0 parity for the older
 pi-agent-core shape. It must be re-based or renamed when the wire decision lands; it cannot be cited

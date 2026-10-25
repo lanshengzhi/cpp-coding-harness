@@ -1,6 +1,6 @@
-#include "agent/harness/session/JsonlSessionStore.hpp"
-#include "agent/harness/session/SessionJournalTestHooks.hpp"
-#include <cch/agent/harness/session/SessionResume.hpp>
+#include "coding_agent/session/JsonlSessionStore.hpp"
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
+#include <cch/coding_agent/session/SessionResume.hpp>
 #include "support/Json.hpp"
 #include "support/SessionSeeding.hpp"
 #include "support/TempWorkspace.hpp"
@@ -38,8 +38,7 @@ std::string read_all(const std::filesystem::path& path) {
 
 std::string text_from_message(const ai::MessageVariant& message) {
     if (const auto* user = std::get_if<ai::UserMessage>(&message)) {
-        const auto& text = std::get<ai::TextContent>(
-            std::get<std::vector<ai::Content>>(user->content).front());
+        const auto& text = std::get<ai::TextContent>(std::get<std::vector<ai::Content>>(user->content).front());
         return text.text;
     }
     if (const auto* assistant = std::get_if<ai::AssistantMessage>(&message)) {
@@ -51,47 +50,48 @@ std::string text_from_message(const ai::MessageVariant& message) {
 
 support::JsonValue complete_assistant_value() {
     return support::JsonValue{support::JsonValue::object_t{
-        {"role", support::JsonValue{"assistant"}},
-        {"content", support::JsonValue{support::JsonValue::array_t{
-            support::JsonValue{support::JsonValue::object_t{
-                {"type", support::JsonValue{"text"}},
-                {"text", support::JsonValue{"persisted answer"}},
-            }},
-        }}},
-        {"api", support::JsonValue{"openai-completions"}},
-        {"provider", support::JsonValue{"openai-compatible"}},
-        {"model", support::JsonValue{"gpt-test"}},
-        {"usage", support::JsonValue{support::JsonValue::object_t{
-            {"input", support::JsonValue{11}},
-            {"output", support::JsonValue{7}},
-            {"cacheRead", support::JsonValue{3}},
-            {"cacheWrite", support::JsonValue{2}},
-            {"reasoning", support::JsonValue{5}},
-            {"totalTokens", support::JsonValue{23}},
-            {"cost", support::JsonValue{support::JsonValue::object_t{
-                {"input", support::JsonValue{0.11}},
-                {"output", support::JsonValue{0.07}},
-                {"cacheRead", support::JsonValue{0.03}},
-                {"cacheWrite", support::JsonValue{0.02}},
-                {"total", support::JsonValue{0.23}},
-            }}},
-        }}},
-        {"stopReason", support::JsonValue{"stop"}},
-        {"timestamp", support::JsonValue{1718000000123.0}},
+            {"role", support::JsonValue{"assistant"}},
+            {"content",
+                    support::JsonValue{support::JsonValue::array_t{
+                            support::JsonValue{support::JsonValue::object_t{
+                                    {"type", support::JsonValue{"text"}},
+                                    {"text", support::JsonValue{"persisted answer"}},
+                            }},
+                    }}},
+            {"api", support::JsonValue{"openai-completions"}},
+            {"provider", support::JsonValue{"openai-compatible"}},
+            {"model", support::JsonValue{"gpt-test"}},
+            {"usage",
+                    support::JsonValue{support::JsonValue::object_t{
+                            {"input", support::JsonValue{11}},
+                            {"output", support::JsonValue{7}},
+                            {"cacheRead", support::JsonValue{3}},
+                            {"cacheWrite", support::JsonValue{2}},
+                            {"reasoning", support::JsonValue{5}},
+                            {"totalTokens", support::JsonValue{23}},
+                            {"cost",
+                                    support::JsonValue{support::JsonValue::object_t{
+                                            {"input", support::JsonValue{0.11}},
+                                            {"output", support::JsonValue{0.07}},
+                                            {"cacheRead", support::JsonValue{0.03}},
+                                            {"cacheWrite", support::JsonValue{0.02}},
+                                            {"total", support::JsonValue{0.23}},
+                                    }}},
+                    }}},
+            {"stopReason", support::JsonValue{"stop"}},
+            {"timestamp", support::JsonValue{1718000000123.0}},
     }};
 }
 
-void write_resume_fixture(
-    const std::filesystem::path& path,
-    support::JsonValue assistant) {
+void write_resume_fixture(const std::filesystem::path& path, support::JsonValue assistant) {
     support::JsonValue header{support::JsonValue::object_t{
-        {"type", support::JsonValue{"session"}},
-        {"version", support::JsonValue{3}},
-        {"id", support::JsonValue{"session-usage"}},
-        {"timestamp", support::JsonValue{"2026-06-10T00:00:00.000Z"}},
-        {"cwd", support::JsonValue{path.parent_path().string()}},
-        {"provider", support::JsonValue{"openai-compatible"}},
-        {"model", support::JsonValue{"gpt-test"}},
+            {"type", support::JsonValue{"session"}},
+            {"version", support::JsonValue{3}},
+            {"id", support::JsonValue{"session-usage"}},
+            {"timestamp", support::JsonValue{"2026-06-10T00:00:00.000Z"}},
+            {"cwd", support::JsonValue{path.parent_path().string()}},
+            {"provider", support::JsonValue{"openai-compatible"}},
+            {"model", support::JsonValue{"gpt-test"}},
     }};
     support::JsonValue entry{support::JsonValue::object_t{
             {"type", support::JsonValue{"message"}},
@@ -110,7 +110,7 @@ void write_resume_fixture(
 }
 } // namespace
 
-TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harness][session][u7][compat-pi]") {
+TEST_CASE("Glaze JSONL session writes header and typed message entries", "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "new.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -129,7 +129,7 @@ TEST_CASE("Glaze JSONL session writes header and typed message entries", "[harne
 }
 
 TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence boundary",
-        "[harness][session][u7][compat-pi]") {
+        "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "redacted.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -140,18 +140,19 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     REQUIRE(store->append(user_message("user api_key=sk-secret12345 KIMI_API_KEY=kimi-user-secret")).status);
 
     auto arguments = support::read_json(
-        R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","nested":{"kimi_api_key":"kimi-nested-argument"},"path":"secret.txt"})");
+            R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","nested":{"kimi_api_key":"kimi-nested-argument"},"path":"secret.txt"})");
     REQUIRE(arguments);
     ai::AssistantMessage assistant;
-    assistant.content.emplace_back(ai::TextContent{"assistant password=hunter2 kimi_api_key=kimi-text-secret", std::nullopt});
+    assistant.content.emplace_back(
+            ai::TextContent{"assistant password=hunter2 kimi_api_key=kimi-text-secret", std::nullopt});
     assistant.content.emplace_back(ai::ToolCallContent{
-        "call-1",
-        "write_file",
-        *arguments,
-        R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","path":"secret.txt"})",
-        std::nullopt,
-        true,
-        std::nullopt,
+            "call-1",
+            "write_file",
+            *arguments,
+            R"({"api_key":"sk-toolsecret123","KIMI_API_KEY":"kimi-secret-value","path":"secret.txt"})",
+            std::nullopt,
+            true,
+            std::nullopt,
     });
     assistant.api = "openai-completions";
     assistant.provider = "openai-compatible";
@@ -161,7 +162,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     REQUIRE(store->append(ai::MessageVariant{assistant}).status);
 
     auto details = support::read_json(
-        R"({"token":"sk-detailsecret123","safe":"kept","nested":{"KIMI_API_KEY":"kimi-detail-secret","array":[{"kimi_api_key":"kimi-array-secret"}]}})");
+            R"({"token":"sk-detailsecret123","safe":"kept","nested":{"KIMI_API_KEY":"kimi-detail-secret","array":[{"kimi_api_key":"kimi-array-secret"}]}})");
     REQUIRE(details);
     ai::ToolResultMessage tool;
     tool.tool_call_id = "call-1";
@@ -174,11 +175,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
     custom_content.emplace_back(ai::text_content("custom token=custom-secret"));
     custom_content.emplace_back(ai::ImageContent{"aW1hZ2UtYnl0ZXM=", "image/png"});
     REQUIRE(store->append_custom_message_entry(
-        std::nullopt,
-        "redaction-test",
-        std::move(custom_content),
-        true,
-        std::nullopt));
+            std::nullopt, "redaction-test", std::move(custom_content), true, std::nullopt));
 
     const auto raw = read_all(path);
     CHECK(raw.find("sk-secret12345") == std::string::npos);
@@ -204,7 +201,7 @@ TEST_CASE("Glaze JSONL session redacts sensitive message fields at persistence b
 }
 
 TEST_CASE("Session Resume restores complete assistant identity and usage",
-        "[harness][session][resume][issue17][issue19][compat-pi]") {
+        "[coding_agent][session][resume][issue17][issue19][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "complete-usage.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -218,20 +215,21 @@ TEST_CASE("Session Resume restores complete assistant identity and usage",
     assistant.response_model = "routed-model";
     assistant.response_id = "response-123";
     assistant.usage = ai::Usage{
-        .input = 11,
-        .output = 7,
-        .cache_read = 3,
-        .cache_write = 2,
-        .cache_write_1h = 1,
-        .reasoning = 5,
-        .total_tokens = 23,
-        .cost = ai::UsageCost{
-            .input = 0.11,
-            .output = 0.07,
-            .cache_read = 0.03,
-            .cache_write = 0.02,
-            .total = 0.23,
-        },
+            .input = 11,
+            .output = 7,
+            .cache_read = 3,
+            .cache_write = 2,
+            .cache_write_1h = 1,
+            .reasoning = 5,
+            .total_tokens = 23,
+            .cost =
+                    ai::UsageCost{
+                            .input = 0.11,
+                            .output = 0.07,
+                            .cache_read = 0.03,
+                            .cache_write = 0.02,
+                            .total = 0.23,
+                    },
     };
     assistant.stop_reason = ai::AssistantStopReason::Stop;
     assistant.timestamp = 1718000000123;
@@ -284,12 +282,11 @@ TEST_CASE("Session Resume restores complete assistant identity and usage",
 }
 
 TEST_CASE("Session Resume rejects incomplete assistant identity and non-real timestamps",
-        "[harness][session][resume][issue19][compat-pi]") {
+        "[coding_agent][session][resume][issue19][compat-pi]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
     const auto rejected = [&](support::JsonValue message, std::string expected_detail) {
-        const auto path = workspace.path() /
-            ("incomplete-identity-" + std::to_string(fixture_index++) + ".jsonl");
+        const auto path = workspace.path() / ("incomplete-identity-" + std::to_string(fixture_index++) + ".jsonl");
         write_resume_fixture(path, std::move(message));
         auto resumed = harness::session::resume_session(path);
         REQUIRE_FALSE(resumed);
@@ -319,12 +316,11 @@ TEST_CASE("Session Resume rejects incomplete assistant identity and non-real tim
 }
 
 TEST_CASE("Session Resume rejects missing required assistant usage fields",
-        "[harness][session][resume][issue17][compat-pi]") {
+        "[coding_agent][session][resume][issue17][compat-pi]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
     const auto rejected = [&](support::JsonValue message, std::string expected_field) {
-        const auto path = workspace.path() /
-            ("incomplete-usage-" + std::to_string(fixture_index++) + ".jsonl");
+        const auto path = workspace.path() / ("incomplete-usage-" + std::to_string(fixture_index++) + ".jsonl");
         write_resume_fixture(path, std::move(message));
         auto resumed = harness::session::resume_session(path);
         REQUIRE_FALSE(resumed);
@@ -354,12 +350,11 @@ TEST_CASE("Session Resume rejects missing required assistant usage fields",
 }
 
 TEST_CASE("Session Resume propagates missing and unsupported assistant stop reasons",
-        "[harness][session][resume][issue18][compat-pi]") {
+        "[coding_agent][session][resume][issue18][compat-pi]") {
     tests::TempWorkspace workspace;
     int fixture_index = 0;
     const auto rejected = [&](support::JsonValue message, std::string expected_detail) {
-        const auto path = workspace.path() /
-            ("invalid-stop-reason-" + std::to_string(fixture_index++) + ".jsonl");
+        const auto path = workspace.path() / ("invalid-stop-reason-" + std::to_string(fixture_index++) + ".jsonl");
         write_resume_fixture(path, std::move(message));
         auto resumed = harness::session::resume_session(path);
         REQUIRE_FALSE(resumed);
@@ -376,7 +371,7 @@ TEST_CASE("Session Resume propagates missing and unsupported assistant stop reas
     rejected(std::move(unsupported), "future_reason");
 }
 
-TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session][u7][compat-pi]") {
+TEST_CASE("Glaze JSONL session keeps unknown future entries", "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "future.jsonl";
     {
@@ -401,15 +396,18 @@ TEST_CASE("Glaze JSONL session keeps unknown future entries", "[harness][session
     CHECK(text_from_message(loaded->messages[0]) == "known");
 }
 
-TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][session][u8][compat-pi]") {
+TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[coding_agent][session][u8][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "v3-tree.jsonl";
     {
         std::ofstream output(path);
-        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-06-16T00:00:00.000Z\",\"cwd\":\""
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-06-16T00:00:00.000Z\","
+                  "\"cwd\":\""
                << workspace.path().string() << "\"}\n";
-        output << "{\"type\":\"model_change\",\"id\":\"model001\",\"parentId\":null,\"timestamp\":\"2026-06-16T00:00:01.000Z\",\"provider\":\"openai\",\"modelId\":\"gpt-4o\"}\n";
-        output << "{\"type\":\"thinking_level_change\",\"id\":\"think001\",\"parentId\":\"model001\",\"timestamp\":\"2026-06-16T00:00:02.000Z\",\"thinkingLevel\":\"high\"}\n";
+        output << "{\"type\":\"model_change\",\"id\":\"model001\",\"parentId\":null,\"timestamp\":\"2026-06-16T00:00:"
+                  "01.000Z\",\"provider\":\"openai\",\"modelId\":\"gpt-4o\"}\n";
+        output << "{\"type\":\"thinking_level_change\",\"id\":\"think001\",\"parentId\":\"model001\",\"timestamp\":"
+                  "\"2026-06-16T00:00:02.000Z\",\"thinkingLevel\":\"high\"}\n";
     }
     tests::make_session_file_private(path);
 
@@ -445,12 +443,12 @@ TEST_CASE("Glaze JSONL session parses v3 tree metadata entries", "[harness][sess
     REQUIRE(opened->append(user_message("resumed after tree entries")).status);
     auto reloaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(reloaded);
-    CHECK(reloaded->entries.size() == 4);  // header + model_change + thinking_level_change + message
+    CHECK(reloaded->entries.size() == 4); // header + model_change + thinking_level_change + message
     REQUIRE(reloaded->messages.size() == 1);
     CHECK(text_from_message(reloaded->messages[0]) == "resumed after tree entries");
 }
 
-TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][session][u7][compat-pi]") {
+TEST_CASE("Glaze JSONL session reports malformed line context", "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "bad.jsonl";
     {
@@ -467,7 +465,7 @@ TEST_CASE("Glaze JSONL session reports malformed line context", "[harness][sessi
     CHECK(loaded.error().detail.find("line 2") != std::string::npos);
 }
 
-TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[harness][session][u3][compat-pi]") {
+TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[coding_agent][session][u3][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "missing-type.jsonl";
     {
@@ -486,7 +484,7 @@ TEST_CASE("Glaze JSONL session reports missing entry discriminator", "[harness][
 }
 
 TEST_CASE("Glaze JSONL session rejects an absolute parent path containing a symlink",
-        "[harness][session][u7][compat-pi]") {
+        "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto real_directory = workspace.path() / "real";
     const auto linked_directory = workspace.path() / "linked";
@@ -501,7 +499,7 @@ TEST_CASE("Glaze JSONL session rejects an absolute parent path containing a syml
     CHECK_FALSE(std::filesystem::exists(real_directory / "nested"));
 }
 
-TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness][session][u7][compat-pi]") {
+TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto original_directory = workspace.path() / "sessions";
     const auto moved_directory = workspace.path() / "moved-sessions";
@@ -528,7 +526,7 @@ TEST_CASE("Glaze JSONL append rejects a parent replaced by a symlink", "[harness
     CHECK(read_all(outside_file) == "outside");
 }
 
-TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[harness][session][u7][compat-pi]") {
+TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     auto real = workspace.path() / "real.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(real, metadata_for(workspace));
@@ -547,7 +545,7 @@ TEST_CASE("Glaze JSONL session rejects symlink and public readable files", "[har
     CHECK(public_load.error().message.find("readable") != std::string::npos);
 }
 
-TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[harness][session][u7][compat-pi]") {
+TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "session.jsonl";
 
@@ -572,7 +570,8 @@ TEST_CASE("Glaze JSONL session create_new retains exclusive file creation", "[ha
     CHECK(lost.status.error().message.find("could not create session file") != std::string::npos);
 }
 
-TEST_CASE("Glaze JSONL session create_new rejects a symbolic link final target", "[harness][session][u7][compat-pi]") {
+TEST_CASE("Glaze JSONL session create_new rejects a symbolic link final target",
+        "[coding_agent][session][u7][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto outside = workspace.path() / "outside.jsonl";
     {
@@ -599,14 +598,13 @@ bool is_hex8(const std::string& s) {
     return true;
 }
 
-template <typename Value>
-const Value& require_entry_value(const harness::session::SessionEntry& entry) {
+template <typename Value> const Value& require_entry_value(const harness::session::SessionEntry& entry) {
     REQUIRE(std::holds_alternative<Value>(entry.value));
     return std::get<Value>(entry.value);
 }
 } // namespace
 
-TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9][compat-pi]") {
+TEST_CASE("v3 session header writes and loads correctly", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "v3-header.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -631,7 +629,7 @@ TEST_CASE("v3 session header writes and loads correctly", "[harness][session][u9
 }
 
 TEST_CASE("a new session writes no file until the first user or assistant message flushes it",
-        "[harness][session][u9][spec]") {
+        "[coding_agent][session][u9][spec]") {
     // ADR 0064: publication reserves and validates the path, but the file
     // appears only when the first user or assistant message flushes the
     // header and every buffered entry in append order (pi v0.99.1
@@ -696,7 +694,7 @@ TEST_CASE("a new session writes no file until the first user or assistant messag
 }
 
 TEST_CASE("a failed first flush rejects the triggering message and keeps the buffered entries",
-        "[harness][session][u9][persistence-failure][spec]") {
+        "[coding_agent][session][u9][persistence-failure][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "deferred-failure.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -723,7 +721,7 @@ TEST_CASE("a failed first flush rejects the triggering message and keeps the buf
     CHECK(text_from_message(loaded->messages[0]) == "kept");
 }
 
-TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session][wire][compat-pi]") {
+TEST_CASE("serializer wire test keeps pi JSONL field names", "[coding_agent][session][wire][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "wire-fields.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -733,14 +731,13 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", support::JsonValue{nullptr}));
     REQUIRE(store->append_custom_message_entry(std::nullopt, "my-ext", "context", true, std::nullopt));
     REQUIRE(store->append_label_change(std::nullopt, "target-entry", std::string{"checkpoint"}));
-    REQUIRE(store->append_compaction(
-        std::nullopt,
-        harness::session::CompactionEntryValue{
-            .summary = "summary",
-            .first_kept_entry_id = "first-kept",
-            .tokens_before = 123,
-            .from_hook = true,
-        }));
+    REQUIRE(store->append_compaction(std::nullopt,
+            harness::session::CompactionEntryValue{
+                    .summary = "summary",
+                    .first_kept_entry_id = "first-kept",
+                    .tokens_before = 123,
+                    .from_hook = true,
+            }));
     REQUIRE(store->append_branch_summary(std::nullopt, "from-entry", "branch summary", std::nullopt, false));
     REQUIRE(store->append_session_info(std::nullopt, "Session name"));
     tests::flush_session_store(*store);
@@ -766,7 +763,7 @@ TEST_CASE("serializer wire test keeps pi JSONL field names", "[harness][session]
     CHECK_FALSE(std::get<harness::session::BranchSummaryEntryValue>(summary_entry->value).usage.has_value());
 }
 
-TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9][compat-pi]") {
+TEST_CASE("entry IDs are 8-char random hex", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "id-format.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -779,7 +776,7 @@ TEST_CASE("entry IDs are 8-char random hex", "[harness][session][u9][compat-pi]"
     CHECK(is_hex8(loaded->entries[1].entry_id));
 }
 
-TEST_CASE("model_change entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("model_change entry round-trips", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "model-change.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -808,7 +805,7 @@ TEST_CASE("model_change entry round-trips", "[harness][session][u9][compat-pi]")
     REQUIRE(loaded->messages.size() == 1);
 }
 
-TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("thinking_level_change entry round-trips", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "thinking-change.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -826,15 +823,17 @@ TEST_CASE("thinking_level_change entry round-trips", "[harness][session][u9][com
     CHECK(value.thinking_level == "high");
 }
 
-TEST_CASE("legacy active_tools_change is not read by the native session format", "[harness][session][wire]") {
+TEST_CASE("legacy active_tools_change is not read by the native session format", "[coding_agent][session][wire]") {
     // This old entry kind is retired; tool-loadout state is now carried by system messages.
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "retired-tools-change.jsonl";
     {
         std::ofstream output(path);
-        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-06-16T00:00:00.000Z\",\"cwd\":\""
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-06-16T00:00:00.000Z\","
+                  "\"cwd\":\""
                << workspace.path().string() << "\"}\n";
-        output << "{\"type\":\"active_tools_change\",\"id\":\"tools001\",\"parentId\":null,\"timestamp\":\"2026-06-16T00:00:01.000Z\",\"activeToolNames\":[\"read\",\"bash\"]}\n";
+        output << "{\"type\":\"active_tools_change\",\"id\":\"tools001\",\"parentId\":null,\"timestamp\":\"2026-06-"
+                  "16T00:00:01.000Z\",\"activeToolNames\":[\"read\",\"bash\"]}\n";
     }
     tests::make_session_file_private(path);
 
@@ -847,12 +846,13 @@ TEST_CASE("legacy active_tools_change is not read by the native session format",
     REQUIRE(loaded->unknown_lines.size() == 1);
 }
 
-TEST_CASE("custom entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("custom entry round-trips", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    auto data = support::JsonValue{support::JsonValue::object_t{{"count", support::JsonValue{42}}, {"name", support::JsonValue{"test"}}}};
+    auto data = support::JsonValue{
+            support::JsonValue::object_t{{"count", support::JsonValue{42}}, {"name", support::JsonValue{"test"}}}};
     REQUIRE(store->append_custom_entry(std::nullopt, "my-ext", std::move(data)));
     tests::flush_session_store(*store);
 
@@ -868,7 +868,7 @@ TEST_CASE("custom entry round-trips", "[harness][session][u9][compat-pi]") {
     CHECK(read_all(path).find(R"("data":{"count":42,"name":"test"})") != std::string::npos);
 }
 
-TEST_CASE("custom_message entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("custom_message entry round-trips", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom-msg.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -894,12 +894,13 @@ TEST_CASE("custom_message entry round-trips", "[harness][session][u9][compat-pi]
 }
 
 TEST_CASE("Session Resume preserves ordered custom_message text and image content",
-        "[harness][session][wire][issue28][compat-pi]") {
+        "[coding_agent][session][wire][issue28][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom-msg-images.jsonl";
     {
         std::ofstream output(path);
-        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-07-22T00:00:00.000Z\",\"cwd\":\""
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-07-22T00:00:00.000Z\","
+                  "\"cwd\":\""
                << workspace.path().string() << "\"}\n";
         output << R"json({"type":"custom_message","id":"custom01","parentId":null,"timestamp":"2026-07-22T00:00:01.234Z","customType":"extension-image","content":[{"type":"text","text":"before"},{"type":"image","data":"cG5nLWJ5dGVz","mimeType":"image/png"},{"type":"text","text":"after"},{"type":"image","data":"d2VicC1ieXRlcw==","mimeType":"image/webp"}],"display":true})json"
                << '\n';
@@ -924,12 +925,13 @@ TEST_CASE("Session Resume preserves ordered custom_message text and image conten
 }
 
 TEST_CASE("pi v3 custom_message rejects content blocks outside text and image",
-        "[harness][session][wire][issue28][compat-pi]") {
+        "[coding_agent][session][wire][issue28][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "custom-msg-thinking.jsonl";
     {
         std::ofstream output(path);
-        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-07-22T00:00:00.000Z\",\"cwd\":\""
+        output << "{\"type\":\"session\",\"version\":3,\"id\":\"sess-v3\",\"timestamp\":\"2026-07-22T00:00:00.000Z\","
+                  "\"cwd\":\""
                << workspace.path().string() << "\"}\n";
         output << R"json({"type":"custom_message","id":"custom01","parentId":null,"timestamp":"2026-07-22T00:00:01.234Z","customType":"extension-thinking","content":[{"type":"thinking","thinking":"not valid custom content"}],"display":true})json"
                << '\n';
@@ -941,7 +943,7 @@ TEST_CASE("pi v3 custom_message rejects content blocks outside text and image",
     CHECK_FALSE(resumed.has_value());
 }
 
-TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9][compat-pi]") {
+TEST_CASE("label entry round-trips with set and clear", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "label.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -954,7 +956,7 @@ TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9][
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
-    REQUIRE(loaded->entries.size() == 4);  // header + 2 labels + flush message
+    REQUIRE(loaded->entries.size() == 4); // header + 2 labels + flush message
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::Label);
     const auto& set_value = require_entry_value<harness::session::LabelEntryValue>(loaded->entries[1]);
     CHECK(set_value.target_id == "target-entry");
@@ -969,21 +971,21 @@ TEST_CASE("label entry round-trips with set and clear", "[harness][session][u9][
     CHECK_FALSE(clear_value.label.has_value());
 }
 
-TEST_CASE("compaction entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("compaction entry round-trips", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "compaction.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    auto details = support::JsonValue{support::JsonValue::object_t{{"readFiles", support::JsonValue{support::JsonValue::array_t{support::JsonValue{"a.txt"}}}}}};
-    REQUIRE(store->append_compaction(
-        std::nullopt,
-        harness::session::CompactionEntryValue{
-            .summary = "summary text",
-            .first_kept_entry_id = "first-kept",
-            .tokens_before = 50000,
-            .details = std::move(details),
-            .from_hook = true,
-        }));
+    auto details = support::JsonValue{support::JsonValue::object_t{
+            {"readFiles", support::JsonValue{support::JsonValue::array_t{support::JsonValue{"a.txt"}}}}}};
+    REQUIRE(store->append_compaction(std::nullopt,
+            harness::session::CompactionEntryValue{
+                    .summary = "summary text",
+                    .first_kept_entry_id = "first-kept",
+                    .tokens_before = 50000,
+                    .details = std::move(details),
+                    .from_hook = true,
+            }));
     tests::flush_session_store(*store);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -998,22 +1000,23 @@ TEST_CASE("compaction entry round-trips", "[harness][session][u9][compat-pi]") {
     CHECK_FALSE(value.retained_tail.has_value());
     CHECK_FALSE(value.usage.has_value());
     REQUIRE(value.details.has_value());
-    const auto& read_files = value.details->get<support::JsonValue::object_t>()
-        .at("readFiles")
-        .get<support::JsonValue::array_t>();
+    const auto& read_files =
+            value.details->get<support::JsonValue::object_t>().at("readFiles").get<support::JsonValue::array_t>();
     REQUIRE(read_files.size() == 1);
     CHECK(read_files[0].get<std::string>() == "a.txt");
     REQUIRE(value.from_hook.has_value());
     CHECK(*value.from_hook == true);
 }
 
-TEST_CASE("branch_summary entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("branch_summary entry round-trips", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "branch-summary.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
     REQUIRE(store);
-    auto details = support::JsonValue{support::JsonValue::object_t{{"modifiedFiles", support::JsonValue{support::JsonValue::array_t{support::JsonValue{"b.txt"}}}}}};
-    REQUIRE(store->append_branch_summary("from-branch", "branch-id", "branch explored X", std::move(details), std::nullopt));
+    auto details = support::JsonValue{support::JsonValue::object_t{
+            {"modifiedFiles", support::JsonValue{support::JsonValue::array_t{support::JsonValue{"b.txt"}}}}}};
+    REQUIRE(store->append_branch_summary(
+            "from-branch", "branch-id", "branch explored X", std::move(details), std::nullopt));
     tests::flush_session_store(*store);
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
@@ -1025,15 +1028,14 @@ TEST_CASE("branch_summary entry round-trips", "[harness][session][u9][compat-pi]
     CHECK(value.summary == "branch explored X");
     CHECK_FALSE(value.usage.has_value());
     REQUIRE(value.details.has_value());
-    const auto& modified_files = value.details->get<support::JsonValue::object_t>()
-        .at("modifiedFiles")
-        .get<support::JsonValue::array_t>();
+    const auto& modified_files =
+            value.details->get<support::JsonValue::object_t>().at("modifiedFiles").get<support::JsonValue::array_t>();
     REQUIRE(modified_files.size() == 1);
     CHECK(modified_files[0].get<std::string>() == "b.txt");
     CHECK_FALSE(value.from_hook.has_value());
 }
 
-TEST_CASE("session_info entry round-trips", "[harness][session][u9][compat-pi]") {
+TEST_CASE("session_info entry round-trips", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "session-info.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1051,7 +1053,7 @@ TEST_CASE("session_info entry round-trips", "[harness][session][u9][compat-pi]")
 }
 
 TEST_CASE("the store never writes a leaf entry and the active leaf stays runtime-only",
-        "[harness][session][u9][compat-pi][issue1044][spec]") {
+        "[coding_agent][session][u9][compat-pi][issue1044][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "leaf-entry.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1086,7 +1088,7 @@ TEST_CASE("the store never writes a leaf entry and the active leaf stays runtime
     CHECK(*cch::harness::session::parent_entry_id(loaded->entries[3].parent_id) == first_id);
 }
 
-TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][session][u9][compat-pi]") {
+TEST_CASE("mixed tree entries and messages round-trip in order", "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "mixed.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1105,7 +1107,7 @@ TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][sess
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
-    REQUIRE(loaded->entries.size() == 5);  // header + 4 entries
+    REQUIRE(loaded->entries.size() == 5); // header + 4 entries
     CHECK(loaded->entries[1].kind == harness::session::SessionEntryKind::ModelChange);
     CHECK(loaded->entries[2].kind == harness::session::SessionEntryKind::ThinkingLevelChange);
     CHECK(loaded->entries[3].kind == harness::session::SessionEntryKind::Message);
@@ -1114,8 +1116,8 @@ TEST_CASE("mixed tree entries and messages round-trip in order", "[harness][sess
     CHECK(text_from_message(loaded->messages[0]) == "hello");
 }
 
-TEST_CASE(
-        "open_existing succeeds and allows append on session with tree entries", "[harness][session][u9][compat-pi]") {
+TEST_CASE("open_existing succeeds and allows append on session with tree entries",
+        "[coding_agent][session][u9][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "resume-tree.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1130,14 +1132,14 @@ TEST_CASE(
 
     auto loaded = harness::session::JsonlSessionStore::load(path);
     REQUIRE(loaded);
-    REQUIRE(loaded->entries.size() == 4);  // header + model_change + 2 messages
+    REQUIRE(loaded->entries.size() == 4); // header + model_change + 2 messages
     REQUIRE(loaded->messages.size() == 2);
     CHECK(text_from_message(loaded->messages[0]) == "first message");
     CHECK(text_from_message(loaded->messages[1]) == "second message");
 }
 
 TEST_CASE("open_existing appends under the last file entry after a reopened session",
-        "[harness][session][u9][compat-pi][issue1044][spec]") {
+        "[coding_agent][session][u9][compat-pi][issue1044][spec]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "stale-leaf-append.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1182,7 +1184,7 @@ TEST_CASE("open_existing appends under the last file entry after a reopened sess
     CHECK(third_id != appended->entry_id);
 }
 
-TEST_CASE("extended message types survive session append and load", "[harness][session][extended][compat-pi]") {
+TEST_CASE("extended message types survive session append and load", "[coding_agent][session][extended][compat-pi]") {
     tests::TempWorkspace workspace;
     auto path = workspace.path() / "extended-messages.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1217,7 +1219,7 @@ TEST_CASE("extended message types survive session append and load", "[harness][s
 }
 
 TEST_CASE("a session append the parser could not read back writes no record",
-        "[harness][session][store][issue665][compat-pi]") {
+        "[coding_agent][session][store][issue665][compat-pi]") {
     tests::TempWorkspace workspace;
     const auto path = workspace.path() / "unreadable-append.jsonl";
     auto store = harness::session::JsonlSessionStore::create_new(path, metadata_for(workspace));
@@ -1248,7 +1250,7 @@ TEST_CASE("a session append the parser could not read back writes no record",
 }
 
 TEST_CASE("Compaction and branch-summary entries redact secret-shaped text at the persistence boundary",
-        "[harness][session][u9][issue675][spec]") {
+        "[coding_agent][session][u9][issue675][spec]") {
     // #675: `serialize_compaction` and `serialize_branch_summary` built their
     // DTOs from the entry value directly instead of through `redacted_message`,
     // so `summary`, `details`, and the compaction retained tail reached the pi

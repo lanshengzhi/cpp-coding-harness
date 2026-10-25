@@ -129,6 +129,7 @@ RULE_EXTENSION_TOOL_SOURCE_REACH_THROUGH = "PARITY-8005"
 RULE_CODING_AGENT_AI_PRIVATE_INCLUDE = "PARITY-8006"
 RULE_AGENT_APPLICATION_SESSION_INCLUDE = "PARITY-8007"
 RULE_SESSION_CORE_PRIVATE_INCLUDE = "PARITY-8008"
+RULE_APPLICATION_LEGACY_SESSION_INCLUDE = "PARITY-8009"
 
 # One stable diagnostic id per Product Architecture Contract rule (ADR 0039),
 # keyed by the manifest rule id whose clause the violation names. A rule that has
@@ -140,6 +141,7 @@ _ARCHITECTURE_RULE_DIAGNOSTIC_IDS = {
     "coding-agent-no-ai-private-includes": RULE_CODING_AGENT_AI_PRIVATE_INCLUDE,
     "agent-no-application-session-includes": RULE_AGENT_APPLICATION_SESSION_INCLUDE,
     "session-no-core-private-includes": RULE_SESSION_CORE_PRIVATE_INCLUDE,
+    "application-session-no-legacy-core-session-includes": RULE_APPLICATION_LEGACY_SESSION_INCLUDE,
     "extension-tool-source-no-agent-execution-reach-through": RULE_EXTENSION_TOOL_SOURCE_REACH_THROUGH,
 }
 

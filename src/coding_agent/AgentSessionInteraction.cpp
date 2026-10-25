@@ -6,8 +6,8 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/agent/harness/FileSystem.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include <cch/agent/harness/session/SessionTree.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionTree.hpp>
 
 #include <cch/support/OutputLimiter.hpp>
 #include "agent/AgentMessageAccess.hpp"

@@ -10,13 +10,13 @@
 // session-family flows).
 
 #include <cch/ai/Message.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include "coding_agent/SessionDiscovery.hpp"
 
 #include "ai/ModelStreamBridge.hpp"
-#include "agent/harness/session/SessionMessageJson.hpp"
+#include "coding_agent/session/SessionMessageJson.hpp"
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "support/EnvVarGuard.hpp"

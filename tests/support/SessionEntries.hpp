@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/agent/harness/session/SessionEntry.hpp>
+#include <cch/coding_agent/session/SessionEntry.hpp>
 
 #include <vector>
 

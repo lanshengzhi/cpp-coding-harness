@@ -8,7 +8,6 @@ include_guard(GLOBAL)
         tests/agent/AgentCoreEvidenceTest.cpp
         tests/agent/AgentTest.cpp
         tests/agent/AgentBehaviorTest.cpp
-        tests/agent/TranscriptExportTest.cpp
         tests/agent/ModelRuntimeSeamTest.cpp
         tests/agent/ToolCallExecutorTest.cpp
         tests/agent/NestedToolCallsTest.cpp
@@ -18,8 +17,6 @@ include_guard(GLOBAL)
     target_link_libraries(cch_tests_agent
         PRIVATE
             cch_agent_core
-            # #1068: legacy Session tests use the application until #1069 moves them.
-            cch_coding_agent
             Boost::headers
             Catch2::Catch2
 )

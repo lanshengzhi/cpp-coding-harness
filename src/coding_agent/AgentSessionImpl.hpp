@@ -17,7 +17,7 @@
 #include "coding_agent/runtime/AgentSessionAssembly.hpp"
 #include "coding_agent/runtime/SessionPersistence.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
-#include <cch/agent/harness/session/Compaction.hpp>
+#include <cch/coding_agent/session/Compaction.hpp>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/steady_timer.hpp>

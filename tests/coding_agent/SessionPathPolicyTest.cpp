@@ -1,7 +1,7 @@
 #include "coding_agent/SessionPathPolicy.hpp"
 #include "coding_agent/runtime/SessionLifecycle.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include "support/EnvVarGuard.hpp"
 #include "support/SessionSeeding.hpp"
 #include "support/TempWorkspace.hpp"

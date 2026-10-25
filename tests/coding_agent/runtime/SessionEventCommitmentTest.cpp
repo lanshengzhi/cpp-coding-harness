@@ -2,9 +2,9 @@
 
 #include "coding_agent/runtime/SessionPersistence.hpp"
 
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include "agent/harness/RuntimeRoot.hpp"
-#include "agent/harness/session/SessionJournalTestHooks.hpp"
+#include "coding_agent/session/SessionJournalTestHooks.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/TempWorkspace.hpp"
 

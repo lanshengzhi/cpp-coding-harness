@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cch/agent/AgentContext.hpp>
-#include <cch/agent/harness/session/SessionEntry.hpp>
-#include <cch/agent/harness/session/SessionResume.hpp>
+#include <cch/coding_agent/session/SessionEntry.hpp>
+#include <cch/coding_agent/session/SessionResume.hpp>
 #include <cch/support/Error.hpp>
 
 #include <cstddef>

@@ -17,8 +17,8 @@
 // them into the pi wire DTOs (redaction happens on the AI value, before
 // conversion). The DTO's own field names are not what the list enumerates.
 
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/SessionMessageJson.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
+#include "coding_agent/session/SessionMessageJson.hpp"
 #include "support/JsonGlaze.hpp"
 
 #include <cch/ai/Message.hpp>
@@ -270,7 +270,7 @@ static_assert(std::variant_size_v<decltype(ai::UserMessage::content)> == 2,
         "#666: UserMessage::content gained or lost an alternative; extend the redaction coverage test.");
 
 TEST_CASE("Session write-path redaction covers every AI string field of every role",
-        "[harness][session][issue666][spec]") {
+        "[coding_agent][session][issue666][spec]") {
     for_each_role([](const ai::MessageVariant& message, const std::string& root) {
         const auto poisoned = poison_message(message, root);
         // An unhandled leaf type means the reflection walk would silently skip
@@ -280,7 +280,7 @@ TEST_CASE("Session write-path redaction covers every AI string field of every ro
     });
 }
 
-TEST_CASE("Session write-path redaction list has no stale exemptions", "[harness][session][issue666][spec]") {
+TEST_CASE("Session write-path redaction list has no stale exemptions", "[coding_agent][session][issue666][spec]") {
     // Collect every write-side string leaf exactly as the coverage case does,
     // then require each exemption to name a real leaf. A renamed or removed
     // field would otherwise leave a dead exemption behind that silently
@@ -298,8 +298,8 @@ TEST_CASE("Session write-path redaction list has no stale exemptions", "[harness
     }
 }
 
-TEST_CASE(
-        "Session redaction, not the DTO mapping, removes a diagnostic sentinel", "[harness][session][issue666][spec]") {
+TEST_CASE("Session redaction, not the DTO mapping, removes a diagnostic sentinel",
+        "[coding_agent][session][issue666][spec]") {
     // The counterexample #666 asks for, stated the other way round: the same
     // real value leaks its secret through the wire when the redaction step is
     // skipped. If a redaction were omitted from `redacted_message`, the

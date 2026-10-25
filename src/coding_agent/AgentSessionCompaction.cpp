@@ -2,7 +2,7 @@
 
 #include "agent/AgentMessageAccess.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include <cch/agent/harness/session/Compaction.hpp>
+#include <cch/coding_agent/session/Compaction.hpp>
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/redirect_error.hpp>

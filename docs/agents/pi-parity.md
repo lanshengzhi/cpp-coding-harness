@@ -38,6 +38,10 @@ The first contract rules establish these boundaries:
   `private_forwarders` applies the same exact-body/removal checks to legacy private headers.
 - `session-no-core-private-includes` (`PARITY-8008`) checks the two residual journal/export
   helper includes, with source-specific exceptions expiring at the #1073 migration.
+- Headless application Session consumers cannot reach the legacy core Session paths
+  (`application-session-no-legacy-core-session-includes`, `PARITY-8009`, #1069). `src/coding_agent/`
+  sources use `<cch/coding_agent/session/...>`; the `tui/` and `cli/` frontends stay excluded until
+  #1070 migrates them and removes the forwards.
 - Strict builds keep their no-exception and evidence requirements.
 
 The contract is intentionally machine-readable and fail-closed. A rule change

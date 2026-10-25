@@ -11,7 +11,9 @@ include_guard(GLOBAL)
     set_tests_properties(cch_user_visible_identity PROPERTIES
         LABELS "coding_agent;tui;issue790;spec")
 
-    # harness and tools
+    # harness and tools. Session persistence, compaction and transcript export
+    # are application-owned (#1069), so their cases live in
+    # cch_tests_coding_agent; this shard keeps the agent-core capabilities alone.
     add_executable(cch_tests_harness_tools
         tests/Catch2Main.cpp
         tests/harness/AsyncFileSystemTest.cpp
@@ -19,24 +21,13 @@ include_guard(GLOBAL)
         tests/harness/ProcessTest.cpp
         tests/harness/RuntimeRootTest.cpp
         tests/harness/WorkspaceFileSystemTest.cpp
-        tests/harness/compaction/CompactionTest.cpp
-        tests/harness/session/JsonlSessionStoreTest.cpp
-        tests/harness/session/SessionMessageJsonTest.cpp
-        tests/harness/session/SessionRedactionCoverageTest.cpp
-        tests/harness/session/SessionRoundTripGoldenTest.cpp
-        tests/harness/session/SessionStoreConformanceTest.cpp
-        tests/harness/session/SessionStoreTest.cpp
-        tests/harness/session/SessionTreeTest.cpp
         tests/tools/AsyncToolsTest.cpp
 )
     target_include_directories(cch_tests_harness_tools PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_harness_tools
         PRIVATE
             cch_agent_core
-            # #1068: legacy Session tests use the application until #1069 moves them.
-            cch_coding_agent
             Boost::headers
-            glaze::glaze
             Catch2::Catch2
 )
     target_compile_definitions(cch_tests_harness_tools PRIVATE
@@ -65,6 +56,15 @@ include_guard(GLOBAL)
         tests/coding_agent/tui/tool_renderers/ToolRendererFallbackTest.cpp
         tests/coding_agent/tui/tool_renderers/ToolRendererSeamTest.cpp
         tests/coding_agent/tui/tool_renderers/WriteRendererTest.cpp
+        tests/coding_agent/compaction/CompactionTest.cpp
+        tests/coding_agent/session/JsonlSessionStoreTest.cpp
+        tests/coding_agent/session/SessionMessageJsonTest.cpp
+        tests/coding_agent/session/SessionRedactionCoverageTest.cpp
+        tests/coding_agent/session/SessionRoundTripGoldenTest.cpp
+        tests/coding_agent/session/SessionStoreConformanceTest.cpp
+        tests/coding_agent/session/SessionStoreTest.cpp
+        tests/coding_agent/session/SessionTreeTest.cpp
+        tests/coding_agent/session/TranscriptExportTest.cpp
         tests/coding_agent/AgentConfigDirTest.cpp
         tests/coding_agent/PiImportTest.cpp
         tests/coding_agent/ExtensionToolSourceTest.cpp

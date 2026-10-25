@@ -1,8 +1,8 @@
 #pragma once
 
 #include <cch/ai/Message.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
-#include <cch/agent/harness/session/SessionResume.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionResume.hpp>
 #include <cch/support/Error.hpp>
 
 #include <filesystem>

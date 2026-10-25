@@ -76,7 +76,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "380d63375a3746fda3448298c7e02ee61ee73694cf16f962eafadaf9b4ecc18c"
+            "sha256": "efe69ffb1a1af6eec579be06f2fb696d2a944bc6cb4ccecad503604d0d6f00d2"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "c168bd4fdeabf2c0d61de62c026de08224f07087629e6be88c46b0c533143c3c"
+            "sha256": "47d649203c6021508a58ea8f48c38b3dccd37dd0124ee615bc69529ac2e7d943"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -258,12 +258,12 @@
             "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/1101-validation.xml",
             "--output-on-failure"
           ],
-          "testedRevision": "ccaf891c99068d4d8531010f3b2cb2d74ba8f2ad",
-          "recordedAt": "2026-10-25T14:31:58Z",
+          "testedRevision": "79edeafeee86677482d00dd69639732343e5c3f1",
+          "recordedAt": "2026-10-25T17:00:30Z",
           "selected": 14,
           "junit": {
             "path": "docs/research/pi-v1.3.0/1101-validation.xml",
-            "sha256": "a92762be110aad698db397507c2b81d676c900a04564e7988310ec82ec9279eb"
+            "sha256": "95c604d272a6797e4f361b4dc3fe5491e42ff4479535afeb898570129a9d5e8e"
           }
         },
         "rows": [
@@ -4037,7 +4037,7 @@
         "cch_coding_agent:Session:wire:redaction"
       ],
       "authority": "/tmp/cch-1044-context/1048-merged.json reviewFindings[4]",
-      "rationale": "Cosmetic quotation fix for tests/harness/session/JsonlSessionStoreTest.cpp:131."
+      "rationale": "Cosmetic quotation fix for tests/coding_agent/session/JsonlSessionStoreTest.cpp:131."
     }
   ],
   "rows": [
@@ -13811,9 +13811,9 @@
       ],
       "boundary": null,
       "implementation_ticket": "#1058-draft",
-      "scenario": "tests/harness/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
+      "scenario": "tests/coding_agent/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
       "comparisonScenarios": [
-        "tests/harness/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
+        "tests/coding_agent/session/JsonlSessionStoreTest.cpp:v3 session header writes and loads correctly",
         "v3 session header writes and loads correctly"
       ],
       "evidence": {
@@ -13914,9 +13914,9 @@
       ],
       "boundary": "intentional security divergence: C++ redacts secret-like content before persistence; pi does not",
       "implementation_ticket": null,
-      "scenario": "tests/harness/session/JsonlSessionStoreTest.cpp:Glaze JSONL session redacts sensitive message fields at persistence",
+      "scenario": "tests/coding_agent/session/JsonlSessionStoreTest.cpp:Glaze JSONL session redacts sensitive message fields at persistence",
       "comparisonScenarios": [
-        "tests/harness/session/JsonlSessionStoreTest.cpp:Glaze JSONL session redacts sensitive message fields at persistence",
+        "tests/coding_agent/session/JsonlSessionStoreTest.cpp:Glaze JSONL session redacts sensitive message fields at persistence",
         "redaction remains at the persistence seam"
       ],
       "evidence": {
@@ -21245,9 +21245,9 @@
       "id": "cch_durable:Session:storage:sqlite-alternative",
       "capability": "Legacy SQLite SessionStore alternative used by tests and mirrored from pi-durable's relational backing",
       "source": [
-        "src/agent/harness/session/SqliteSessionStore.hpp:17-20",
-        "src/agent/harness/session/SessionStore.cpp:76-116",
-        "tests/harness/session/SessionStoreTest.cpp:SQLite Session Store factory appends and commits batches atomically"
+        "d0844505d (deleted): src/agent/harness/session/SqliteSessionStore.hpp",
+        "d0844505d (deleted): src/agent/harness/session/SessionStore.cpp:76-116",
+        "d0844505d (deleted): tests/harness/session/SessionStoreTest.cpp — \"SQLite Session Store factory appends and commits batches atomically\""
       ],
       "frozenSymbols": [],
       "membership": "excluded",

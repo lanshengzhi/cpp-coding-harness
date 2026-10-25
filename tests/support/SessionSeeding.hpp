@@ -1,10 +1,10 @@
 #pragma once
 
-#include "agent/harness/session/EntrySerializer.hpp"
-#include "agent/harness/session/JsonlSessionStore.hpp"
+#include "coding_agent/session/EntrySerializer.hpp"
+#include "coding_agent/session/JsonlSessionStore.hpp"
 
 #include <cch/ai/Message.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 

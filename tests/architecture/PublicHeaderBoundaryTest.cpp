@@ -19,8 +19,8 @@
 #include <cch/agent/harness/LocalFileSystem.hpp>
 #include <cch/agent/harness/LocalShell.hpp>
 #include <cch/agent/harness/Shell.hpp>
-#include <cch/agent/harness/session/SessionEntry.hpp>
-#include <cch/agent/harness/session/SessionStore.hpp>
+#include <cch/coding_agent/session/SessionEntry.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/agent/tools/ToolFactories.hpp>
 #include <cch/tui/CancellableLoader.hpp>
 #include <cch/tui/Autocomplete.hpp>
