@@ -89,6 +89,11 @@ ai::ModelStream echo_response(int turn) {
             }}};
 }
 
+SubmissionDraft text_input(std::string text, std::optional<WhenBusy> when_busy = std::nullopt) {
+    return SubmissionDraft{
+            .body = InputSubmissionDraft{.content = chord::Json{std::move(text)}, .when_busy = when_busy}};
+}
+
 } // namespace
 
 TEST_CASE("Harness runs an admitted prompt through a real injected tool and settles committed entries",
@@ -124,9 +129,9 @@ TEST_CASE("Harness runs an admitted prompt through a real injected tool and sett
     auto harness = std::move(opened.value());
     auto root = consume(harness->root());
     REQUIRE(root.has_value());
-    auto admitted = consume(harness->submit(root.value(), "run the echo tool"));
+    auto admitted = consume(harness->submit(root.value(), text_input("run the echo tool")));
     REQUIRE(admitted.has_value());
-    auto settled = consume(harness->wait_for_submission(admitted.value()));
+    auto settled = consume(admitted.value().wait());
     REQUIRE(settled.has_value());
     CHECK(settled.value().id == admitted.value().id);
     CHECK(settled.value().conversation_id == root.value());
@@ -211,12 +216,12 @@ TEST_CASE("Harness waits for the real tool before requesting an answer and settl
         }
         if (terminal) terminal_has_final = final_entry;
     }).has_value());
-    auto admitted = consume(harness->submit(root.value(), "run the echo tool"));
+    auto admitted = consume(harness->submit(root.value(), text_input("run the echo tool")));
     REQUIRE(admitted.has_value());
     std::mutex mutex;
     std::condition_variable done;
     std::optional<support::Expected<SettledSubmission>> settlement;
-    harness->wait_for_submission(admitted.value()).start([&mutex, &done, &settlement](auto result) noexcept {
+    admitted.value().wait().start([&mutex, &done, &settlement](auto result) noexcept {
         std::lock_guard lock(mutex);
         settlement.emplace(std::move(result));
         done.notify_one();
@@ -236,7 +241,7 @@ TEST_CASE("Harness waits for the real tool before requesting an answer and settl
         }
         CHECK(executions == before->at("executions").get_number());
         CHECK(requests == before->at("requests").get_number());
-        const auto busy = consume(harness->submit(root.value(), "must not append"));
+        const auto busy = consume(harness->submit(root.value(), text_input("must not append", WhenBusy::Reject)));
         CHECK_FALSE(busy.has_value());
     }
     release.release();
@@ -294,7 +299,10 @@ TEST_CASE("Harness creates its root atomically and resolves late registry instal
         ++root_commits;
         for (const auto& change : publication.changes) {
             if (const auto* document = std::get_if<DocumentCommitChange>(&change)) root_changes.push_back("document:" + document->record.kind);
-            else root_changes.push_back(std::get<TableCommitChange>(change).type);
+            else if (const auto* table = std::get_if<TableCommitChange>(&change))
+                root_changes.push_back(table->type);
+            else if (const auto* sub = std::get_if<SubmissionCommitChange>(&change))
+                root_changes.push_back("submission:" + std::string{sub->type});
         }
     }).has_value());
     auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "test-model"}, .thinking_level = ai::ThinkingLevel::High}));
@@ -323,9 +331,9 @@ TEST_CASE("Harness creates its root atomically and resolves late registry instal
             }});
     second.sections.push_back(PromptSection{.key = "late-section", .text = "registered after creation"});
     REQUIRE(registry.install(std::move(second)).has_value());
-    auto admitted = consume(harness->submit(root.value(), "what tools do you have"));
+    auto admitted = consume(harness->submit(root.value(), text_input("what tools do you have")));
     REQUIRE(admitted.has_value());
-    REQUIRE(consume(harness->wait_for_submission(admitted.value())).has_value());
+    REQUIRE(consume(admitted.value().wait()).has_value());
     auto entries = storage.scan_entries(root.value(), 100);
     REQUIRE(entries.has_value());
     std::ranges::reverse(*entries);
@@ -355,9 +363,9 @@ TEST_CASE("Harness receipt reports a final storage failure instead of hanging or
     auto harness = std::move(opened.value());
     auto root = consume(harness->root());
     REQUIRE(root.has_value());
-    auto admitted = consume(harness->submit(root.value(), "do not lose the answer"));
+    auto admitted = consume(harness->submit(root.value(), text_input("do not lose the answer")));
     REQUIRE(admitted.has_value());
-    auto receipt = consume(harness->wait_for_submission(admitted.value()));
+    auto receipt = consume(admitted.value().wait());
     CHECK_FALSE(receipt.has_value());
     if (!receipt.has_value()) CHECK(receipt.error().message == "Session failed after a storage error; close and reopen it");
     CHECK(harness->session().failed());
@@ -409,9 +417,9 @@ TEST_CASE("Workflow entries persist model messages and byTaskId through JSONL an
         auto harness = std::move(opened.value());
         auto root = consume(harness->root());
         REQUIRE(root.has_value());
-        auto admitted = consume(harness->submit(root.value(), "run the echo tool"));
+        auto admitted = consume(harness->submit(root.value(), text_input("run the echo tool")));
         REQUIRE(admitted.has_value());
-        auto settled = consume(harness->wait_for_submission(admitted.value()));
+        auto settled = consume(admitted.value().wait());
         REQUIRE(settled.has_value());
         CHECK_FALSE(harness->session().failed());
         auto entries = storage->scan_entries(root.value(), 100);

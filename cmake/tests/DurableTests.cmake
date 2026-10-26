@@ -17,6 +17,7 @@ include_guard(GLOBAL)
         tests/durable/SubmissionStorageTest.cpp
         tests/durable/TaskExecutionTest.cpp
         tests/durable/HarnessWorkflowTest.cpp
+        tests/durable/HarnessSubmissionsTest.cpp
 )
     target_include_directories(cch_tests_durable PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_durable

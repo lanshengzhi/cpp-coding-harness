@@ -134,6 +134,11 @@ struct Session::Impl {
         std::vector<StorageWrite> writes{};
         std::vector<StagedDocument> documents{};
         std::vector<chord::Prepared> prepared{};
+        /// Whether each staged document produced a storage write, aligned
+        /// with `documents`: a creation always writes; a loaded incarnation
+        /// writes only when its prepared delta is non-empty (frozen pi
+        /// `Transaction.#assemble`: only a change stores a delta).
+        std::vector<bool> document_written{};
 
         /// Settle the admitted commit: adopt the prepared revisions, publish
         /// the commit, and deliver its document frames. A storage failure
@@ -154,6 +159,10 @@ struct Session::Impl {
             std::vector<DocumentCommitChange> document_changes;
             document_changes.reserve(documents.size());
             for (std::size_t index = 0; index < documents.size(); ++index) {
+                // An acquired-but-unchanged document prepared no delta and
+                // writes nothing: it is not adopted, published, or cached
+                // (frozen pi `Transaction.#assemble`).
+                if (!this->document_written[index]) continue;
                 StagedDocument& document = documents[index];
                 const chord::Prepared& prepared = this->prepared[index];
                 auto adopted = document.tracker.adopt(prepared);
@@ -174,11 +183,13 @@ struct Session::Impl {
             }
 
             // The committed document incarnations become observable now.
-            for (std::size_t index = 0; index < documents.size(); ++index) {
+            for (std::size_t index = 0, change_index = 0; index < documents.size(); ++index) {
+                if (!this->document_written[index]) continue;
                 const StagedDocument& document = documents[index];
                 const std::string key = address_key(document.kind, document.address.conversation_id);
                 session->cached_documents[key] = CachedDocument{
-                        .record = document_changes[index].record, .value = document_changes[index].value};
+                        .record = document_changes[change_index].record, .value = document_changes[change_index].value};
+                ++change_index;
             }
 
             // The publication carries every committed change.
@@ -932,10 +943,15 @@ support::AsyncResult<void> Session::Impl::commit_now(
 
     // The document writes join the batch. A creation carries the record and
     // the base value; a change carries the incarnation and the exact
-    // operations.
+    // operations. A loaded incarnation that prepared no operations writes
+    // nothing, so acquiring a document without modifying it adds no write to
+    // the batch (frozen pi `Transaction.#assemble`).
     for (std::size_t index = 0; index < state->documents.size(); ++index) {
         const StagedDocument& document = state->documents[index];
         const chord::Prepared& prepared = state->prepared[index];
+        const bool written = document.created || !prepared.ops().empty();
+        state->document_written.push_back(written);
+        if (!written) continue;
         StorageWrite write{.type = document.created ? "document.create" : "document.change"};
         write.document_conversation_id = document.address.conversation_id;
         if (document.created) {
