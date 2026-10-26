@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -54,7 +55,16 @@ struct StoredEntryState {
 } // namespace
 
 struct StorageState::Impl {
+    mutable std::recursive_mutex mutex;
+
     explicit Impl(std::string message) : closed_message(std::move(message)) {}
+
+    Impl(const Impl& other)
+        : conversations(other.conversations), conversation_ids(other.conversation_ids), entries(other.entries),
+          entry_ids_by_conversation(other.entry_ids_by_conversation), documents(other.documents),
+          document_id_by_address(other.document_id_by_address), tasks(other.tasks), task_ids(other.task_ids),
+          submissions(other.submissions), submission_ids(other.submission_ids), next_id(other.next_id),
+          next_seq(other.next_seq), closed_message(other.closed_message), closed(other.closed) {}
 
     std::map<std::int64_t, ConversationRecord> conversations;
     std::vector<std::int64_t> conversation_ids;
@@ -244,10 +254,17 @@ StorageState::StorageState(std::string closed_message) : impl_(std::make_unique<
 StorageState::~StorageState() = default;
 
 support::Expected<Seq> StorageState::apply(std::span<const StorageWrite> writes, Seq seq) {
+    std::lock_guard lock(impl_->mutex);
     return impl_->apply(writes, seq, true);
 }
 
+support::Expected<Seq> StorageState::apply_next(std::span<const StorageWrite> writes) {
+    std::lock_guard lock(impl_->mutex);
+    return impl_->apply(writes, impl_->next_seq, true);
+}
+
 support::ExpectedVoid StorageState::validate(std::span<const StorageWrite> writes, Seq seq) {
+    std::lock_guard lock(impl_->mutex);
     Impl trial(*impl_);
     auto applied = trial.apply(writes, seq, true);
     if (!applied) {
@@ -257,6 +274,7 @@ support::ExpectedVoid StorageState::validate(std::span<const StorageWrite> write
 }
 
 support::ExpectedVoid StorageState::restore(std::span<const StorageWrite> writes, Seq seq) {
+    std::lock_guard lock(impl_->mutex);
     auto applied = impl_->apply(writes, seq, false);
     if (!applied) {
         return std::unexpected(std::move(applied.error()));
@@ -265,14 +283,19 @@ support::ExpectedVoid StorageState::restore(std::span<const StorageWrite> writes
 }
 
 std::int64_t StorageState::reserve_id() {
+    std::lock_guard lock(impl_->mutex);
     const std::int64_t id = impl_->next_id;
     impl_->next_id += 1;
     return id;
 }
 
-Seq StorageState::next_seq() const { return impl_->next_seq; }
+Seq StorageState::next_seq() const {
+    std::lock_guard lock(impl_->mutex);
+    return impl_->next_seq;
+}
 
 support::ExpectedVoid StorageState::restore_high_water_marks(std::int64_t next_id, Seq next_seq) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -282,6 +305,7 @@ support::ExpectedVoid StorageState::restore_high_water_marks(std::int64_t next_i
 }
 
 support::Expected<std::optional<ConversationRecord>> StorageState::conversation(ConversationId id) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -293,6 +317,7 @@ support::Expected<std::optional<ConversationRecord>> StorageState::conversation(
 }
 
 support::Expected<std::optional<StoredEntry>> StorageState::entry(EntryId id) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -305,6 +330,7 @@ support::Expected<std::optional<StoredEntry>> StorageState::entry(EntryId id) {
 }
 
 support::Expected<std::vector<ConversationRecord>> StorageState::scan_conversations(std::size_t limit) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -323,6 +349,7 @@ support::Expected<std::vector<ConversationRecord>> StorageState::scan_conversati
 
 support::Expected<std::vector<EntryRecord>> StorageState::scan_entries(
         ConversationId conversation_id, std::size_t limit) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -346,6 +373,7 @@ support::Expected<std::vector<EntryRecord>> StorageState::scan_entries(
 
 support::Expected<std::optional<DocumentRecord>> StorageState::find_document(
         std::string_view kind, std::optional<ConversationId> conversation_id) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -361,6 +389,7 @@ support::Expected<std::optional<DocumentRecord>> StorageState::find_document(
 }
 
 support::Expected<std::optional<chord::Json>> StorageState::document(DocumentId id) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -372,6 +401,7 @@ support::Expected<std::optional<chord::Json>> StorageState::document(DocumentId 
 }
 
 support::Expected<std::optional<TaskRecord>> StorageState::task(TaskId id) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -383,6 +413,7 @@ support::Expected<std::optional<TaskRecord>> StorageState::task(TaskId id) {
 }
 
 support::Expected<std::vector<TaskRecord>> StorageState::scan_tasks(std::size_t limit) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -398,6 +429,7 @@ support::Expected<std::vector<TaskRecord>> StorageState::scan_tasks(std::size_t 
 }
 
 support::Expected<std::optional<SubmissionRecord>> StorageState::submission(SubmissionId id) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -410,6 +442,7 @@ support::Expected<std::optional<SubmissionRecord>> StorageState::submission(Subm
 
 support::Expected<std::optional<SubmissionRecord>> StorageState::submission_by_request(
         ConversationId conversation_id, std::string_view request_id) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -427,6 +460,7 @@ support::Expected<std::optional<SubmissionRecord>> StorageState::submission_by_r
 }
 
 support::Expected<std::vector<SubmissionRecord>> StorageState::scan_submissions(std::size_t limit) {
+    std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
@@ -441,8 +475,14 @@ support::Expected<std::vector<SubmissionRecord>> StorageState::scan_submissions(
     return records;
 }
 
-bool StorageState::closed() const { return impl_->closed; }
+bool StorageState::closed() const {
+    std::lock_guard lock(impl_->mutex);
+    return impl_->closed;
+}
 
-void StorageState::close() { impl_->closed = true; }
+void StorageState::close() {
+    std::lock_guard lock(impl_->mutex);
+    impl_->closed = true;
+}
 
 } // namespace cch::durable

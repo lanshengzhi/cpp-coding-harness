@@ -8,6 +8,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -120,6 +121,14 @@ struct DocumentWatch::Impl {
 // ── Session ─────────────────────────────────────────────────────────────────
 
 struct Session::Impl {
+    // Harness callers, task workers and storage completions can enter from
+    // different threads. Hold one mutation line across queue changes,
+    // preparation, adoption and publication. Reentrancy lets observers enqueue
+    // their next commit on this same line; commit_active preserves FIFO order
+    // while asynchronous storage is outstanding. No thread or scheduler is
+    // owned here, and the lock is not held across an asynchronous wait.
+    mutable std::recursive_mutex mutation_line;
+
     struct PendingCommit {
         std::move_only_function<support::Expected<void>(Transaction&)> change{};
         support::AsyncCompletion<void, support::Error> completion{};
@@ -339,6 +348,7 @@ struct Session::Impl {
             std::move(commit_now(std::move(pending.change)))
                     .start([this, completion = std::move(pending.completion)](
                                    std::expected<void, support::Error> outcome) mutable noexcept {
+                        std::lock_guard lock(mutation_line);
                         completion(std::move(outcome));
                         commit_active = false;
                         pump_requested = true;
@@ -822,11 +832,15 @@ std::unique_ptr<Session> Session::create(Storage& storage) {
     return std::unique_ptr<Session>(new Session(std::move(impl)));
 }
 
-bool Session::failed() const noexcept { return impl_->failed; }
+bool Session::failed() const noexcept {
+    std::lock_guard lock(impl_->mutation_line);
+    return impl_->failed;
+}
 
 const std::optional<std::string>& Session::failure_message() const noexcept { return impl_->failure_message; }
 
 SessionEnd Session::closed() const noexcept {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return SessionEnd{.reason = SessionEndReason::Failed, .failed = true, .error_message = impl_->failure_message};
     }
@@ -837,6 +851,7 @@ SessionEnd Session::closed() const noexcept {
 }
 
 support::AsyncResult<void> Session::commit(std::move_only_function<support::Expected<void>(Transaction&)> change) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(session_failed_error())}};
     }
@@ -846,6 +861,7 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
             [session = this, change = std::move(change)](
                     support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                std::lock_guard lock(session->impl_->mutation_line);
                 if (session->impl_->failed) {
                     completion(std::unexpected(session_failed_error()));
                     return;
@@ -973,6 +989,7 @@ support::AsyncResult<void> Session::Impl::commit_now(
                 state->storage->commit(state->writes)
                         .start([state, completion = std::move(completion)](
                                        std::expected<Seq, support::Error> outcome) mutable noexcept {
+                            std::lock_guard lock(state->session->mutation_line);
                             support::ExpectedVoid settled = state->settle(std::move(outcome));
                             completion(std::move(settled));
                         });
@@ -980,6 +997,7 @@ support::AsyncResult<void> Session::Impl::commit_now(
 }
 
 support::AsyncResult<void> Session::close() {
+    std::lock_guard lock(impl_->mutation_line);
     impl_->closed = true;
     impl_->notify_close();
     impl_->run_next_commit();
@@ -989,6 +1007,7 @@ support::AsyncResult<void> Session::close() {
     }
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
             [session = this](support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                std::lock_guard lock(session->impl_->mutation_line);
                 if (session->impl_->storage_closed) {
                     completion(support::ExpectedVoid{});
                     return;
@@ -998,6 +1017,7 @@ support::AsyncResult<void> Session::close() {
 }
 
 support::ExpectedVoid Session::subscribe_commits(CommitListener listener) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return std::unexpected(session_failed_error());
     }
@@ -1009,6 +1029,7 @@ support::ExpectedVoid Session::subscribe_commits(CommitListener listener) {
 }
 
 support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->closed) {
         return std::unexpected(session_closed_error());
     }
@@ -1018,6 +1039,7 @@ support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
 
 support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
         const DocumentDefinition& definition, DocumentAddress address) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(session_failed_error())};
     }
@@ -1033,6 +1055,7 @@ support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
 
 support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
         const DocumentDefinition& definition, DocumentAddress address) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(session_failed_error())};
     }

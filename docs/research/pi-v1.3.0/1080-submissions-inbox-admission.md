@@ -56,6 +56,51 @@ accepting two successful final reads as evidence of atomicity. Storage tests in
 [SubmissionStorageTest.cpp](../../../tests/durable/SubmissionStorageTest.cpp)
 cover staged resolution and backend persistence separately from Harness policy.
 
+### Review corrections
+
+The final review-fix merge is `1ed33cf66` (implementation commit `dff0672e1`).
+
+- Submission abort reads the record, chooses its outcome and withdraws the
+  inbox item in one Session transaction. The regression constructs an abort
+  while the input is queued, lets the real postTools boundary place it, then
+  initiates the abort transaction and observes `already_placed`.
+- Conversation abort withdraws queued inputs and reads the live run in one
+  transaction, waits for that task, and checks again for a rollover. Task-wait
+  failures propagate to the caller. The follow-up-run case checks that abort
+  leaves the conversation idle.
+- Missing or malformed persisted inbox fields return typed validation errors;
+  rejected operations leave records unchanged and the Session remains usable.
+- Head lookup grows beyond its initial 4,096-entry window. A regression buries
+  the head behind 4,100 newer headless entries and checks stale/current pins.
+  The O(n) scan and upgrade trigger are documented in
+  [runtime-capacities.md](../../runtime-capacities.md).
+- Reset detection records the reset placed at a boundary before removing it
+  from the inbox. PostTools, final and admission reset paths clear the old
+  replay cache before starting the next run.
+- Wait cancellation uses a move-only callback with a weak waiter reference,
+  removing the callback/Waiter ownership cycle. Exactly-once claims use the
+  default sequentially consistent atomic ordering.
+- Harness callers, task worker scheduling, and storage completions can enter
+  from different threads. `Session` protects commit enqueueing, settlement,
+  and publication across threads on its `mutation_line` recursive mutex without
+  holding locks across asynchronous waits. `StorageState` locks all queries,
+  scans, and updates with an internal recursive mutex and provides atomic
+  `apply_next` batch application for `MemoryStorage::commit`, eliminating
+  concurrent iteration data races against background task scheduling.
+  `concurrent Harness admissions serialize every submission on the Session mutation line`
+  verifies multithreaded admission and settlement.
+
+The review's initial assertion that the stale check preceded numeric parsing
+was incorrect: parsing already preceded it. The final code nevertheless uses
+an already decoded `WriteEntry` directly, avoiding redundant JSON conversion.
+
+The recovery worker timed out with uncommitted changes. Its claim that all
+11 selected regressions passed was not accepted: the log contained only ten
+completions. The remaining test misused a same-domain storage gate across
+threads. Replacing that gate with the existing held-model/tool handshakes
+made the ordering deterministic and completed the test. No timeout or assertion
+was relaxed to obtain a pass.
+
 ## Validation
 
 Initial integration revision: `b2714debc`.
@@ -78,8 +123,20 @@ Initial integration revision: `b2714debc`.
 - Existing #1101 receipt refresh: inspected `ctest -N -L issue1101`, then
   **14/14 passed** in 1.01 seconds. The result is pinned in
   [1080-registration-1101.xml](deliveries/1080-registration-1101.xml).
-- Final review fixes and validation are pending; this record does not yet
-  claim a successful final Full Validation run.
+- Final review-fix selection: `ctest --preset vcpkg -N -L 'issue1080|issue1079'`
+  selected **40**; the matching run passed **40/40** (35 #1080 and 5 #1079),
+  with a 15-second per-test liveness backstop. The formerly hanging abort
+  regression passed separately in **0.01 seconds**.
+- Final integration configure/build and branch-format check: passed.
+- Crash investigation on queue-mode test #253: Helgrind identified concurrent
+  access between background task scanning and Session/StorageState mutations.
+  Synchronizing the Session mutation line and StorageState brought Helgrind
+  reports from 1,296 errors to 0 data races. 100 consecutive runs of both
+  `queue modes decide whether all follow-ups or one are placed at the final boundary`
+  and the new concurrent admissions test passed with zero failures.
+- Final unfiltered Full Validation selected **3,777** tests: **3,776 passed,
+  0 failed, 1 skipped**, 158.80 seconds. All architecture tests (**43/43**)
+  passed. Format check `scripts/format-check.sh` is clean.
 
 The expected Native TUI differential skip requires its separately selected
 capture environment and supplies no new terminal acceptance evidence.

@@ -21,7 +21,7 @@ MemoryStorage::MemoryStorage() : impl_(std::make_unique<Impl>()) {}
 MemoryStorage::~MemoryStorage() = default;
 
 support::AsyncResult<Seq> MemoryStorage::commit(std::span<const StorageWrite> writes) {
-    return support::AsyncResult<Seq>{impl_->apply(writes, impl_->next_seq())};
+    return support::AsyncResult<Seq>{impl_->apply_next(writes)};
 }
 
 support::Expected<std::int64_t> MemoryStorage::mint_id() {

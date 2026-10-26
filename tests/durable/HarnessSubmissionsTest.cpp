@@ -10,6 +10,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <latch>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -17,6 +18,7 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <type_traits>
 #include <variant>
 #include <vector>
@@ -2100,6 +2102,47 @@ TEST_CASE("cancelling a submission wait leaves the submission placed until it se
     REQUIRE(settled.has_value());
     CHECK(settled.value().status == expected.at("settled").get_string());
 
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("concurrent Harness admissions serialize every submission on the Session mutation line",
+        "[durable][workflow][issue1080]") {
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    constexpr int kCallers = 4;
+    constexpr int kPerCaller = 32;
+    std::latch start{kCallers};
+    std::atomic<int> failures{0};
+    std::vector<std::jthread> callers;
+    for (int caller = 0; caller < kCallers; ++caller) {
+        // Joining every caller below keeps the Harness and synchronization
+        // objects alive until all admissions and completions have returned.
+        callers.emplace_back([&start, &failures, owner = harness.get(), id = root.value()] {
+            start.arrive_and_wait();
+            for (int index = 0; index < kPerCaller; ++index) {
+                auto admitted = consume(owner->submit(id, write_submission("note")));
+                if (!admitted.has_value()) {
+                    ++failures;
+                    continue;
+                }
+                auto settled = consume(admitted.value().wait());
+                if (!settled.has_value() || settled.value().status != "done") ++failures;
+            }
+        });
+    }
+    callers.clear();
+    CHECK(failures.load() == 0);
+    auto submissions = storage.scan_submissions(kCallers * kPerCaller + 1);
+    REQUIRE(submissions.has_value());
+    REQUIRE(submissions->size() == kCallers * kPerCaller);
+    auto entries = storage.scan_entries(root.value(), kCallers * kPerCaller + 1);
+    REQUIRE(entries.has_value());
+    CHECK(entries->size() == submissions->size());
     REQUIRE(consume(harness->close()).has_value());
 }
 
