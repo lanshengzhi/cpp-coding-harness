@@ -1,0 +1,280 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1080",
+  "family": "audit-1080",
+  "capturedAt": "2026-10-26T08:51:19.956Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/submissions.ts:Submissions,admitSubmission,submissionByRequest",
+    "packages/durable/src/harness/inbox.ts:InboxDoc,prepareBoundary,applyBoundary,withdrawQueuedInputs",
+    "packages/durable/src/harness/generation.ts:finishToolRound,answer,endRun",
+    "packages/durable/src/session/transaction.ts:createSubmission",
+    "packages/durable/test/harness-inbox.test.ts:postTools boundary",
+    "packages/durable/test/harness-submissions.test.ts:request id"
+  ],
+  "scenarios": [
+    {
+      "name": "a busy steer input is placed at the postTools boundary and a busy follow-up is held to the final boundary",
+      "inputs": {
+        "submissions": [
+          {
+            "type": "input",
+            "content": "a"
+          },
+          {
+            "type": "input",
+            "content": "s",
+            "whenBusy": "steer"
+          },
+          {
+            "type": "input",
+            "content": "f"
+          }
+        ],
+        "tool": "hold",
+        "turns": [
+          "toolUse hold",
+          "after tools",
+          "follow-up"
+        ]
+      },
+      "expected": {
+        "before": {
+          "first": "placed",
+          "steer": "queued",
+          "followUp": "queued",
+          "inbox": [
+            {
+              "mode": "steer",
+              "isSteer": true,
+              "isFollowUp": false
+            },
+            {
+              "mode": "followUp",
+              "isSteer": false,
+              "isFollowUp": true
+            }
+          ]
+        },
+        "busyTranscript": [
+          "pi.user:a",
+          "pi.assistant"
+        ],
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant",
+          "pi.tool-result",
+          "pi.user:s",
+          "pi.assistant:after tools",
+          "pi.user:f",
+          "pi.assistant:follow-up"
+        ],
+        "assistantAnswers": [
+          null,
+          "after tools",
+          "follow-up"
+        ],
+        "answers": [
+          11,
+          18,
+          21
+        ],
+        "first": {
+          "status": "done",
+          "answer": 18,
+          "answerIndex": 1
+        },
+        "steer": {
+          "status": "done",
+          "answer": 18,
+          "answerIndex": 1
+        },
+        "followUp": {
+          "status": "done",
+          "answer": 21,
+          "answerIndex": 2
+        }
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task, conversation, entry and submission IDs are compared only where the identity relation is the observation; answer identity is also recorded as the ordinal of the answering assistant entry",
+        "the faux provider table and the recording storage hold no durable state beyond the recorded batches"
+      ]
+    },
+    {
+      "name": "a duplicate request ID with a different payload returns the existing submission with zero new storage batches",
+      "inputs": {
+        "requestId": "req-1080",
+        "firstPayload": "a",
+        "secondPayload": "a different payload",
+        "storage": "recording MemoryStorage"
+      },
+      "expected": {
+        "sameId": true,
+        "duplicateBatches": 0,
+        "originalStatus": "placed",
+        "duplicateStatus": "placed",
+        "inboxBefore": 0,
+        "inboxAfter": 0
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task, conversation, entry and submission IDs are compared only where the identity relation is the observation; answer identity is also recorded as the ordinal of the answering assistant entry",
+        "the faux provider table and the recording storage hold no durable state beyond the recorded batches"
+      ]
+    },
+    {
+      "name": "a conversation abort settles the queued input unanswered and aborted, keeps the queued write queued and settles the placed input unanswered and aborted",
+      "inputs": {
+        "submissions": [
+          "placed input",
+          "queued input",
+          {
+            "type": "write",
+            "entry": {
+              "kind": "note",
+              "model": [
+                {
+                  "role": "user",
+                  "content": "n",
+                  "timestamp": 0
+                }
+              ]
+            }
+          }
+        ],
+        "abort": "conversation abort"
+      },
+      "expected": {
+        "before": [
+          "placed",
+          "queued",
+          "queued"
+        ],
+        "after": [
+          {
+            "status": "unanswered",
+            "reason": "aborted"
+          },
+          {
+            "status": "unanswered",
+            "reason": "aborted"
+          },
+          {
+            "status": "queued",
+            "reason": null
+          }
+        ],
+        "inbox": [
+          {
+            "mode": "write",
+            "isQueuedWrite": true,
+            "isQueuedInput": false
+          }
+        ],
+        "live": {}
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task, conversation, entry and submission IDs are compared only where the identity relation is the observation; answer identity is also recorded as the ordinal of the answering assistant entry",
+        "the faux provider table and the recording storage hold no durable state beyond the recorded batches"
+      ]
+    },
+    {
+      "name": "a busy follow-up is placed at the final boundary and answered by a second run",
+      "inputs": {
+        "submissions": [
+          {
+            "type": "input",
+            "content": "a"
+          },
+          {
+            "type": "input",
+            "content": "f"
+          }
+        ],
+        "turns": [
+          "held first response answers first",
+          "second"
+        ]
+      },
+      "expected": {
+        "before": {
+          "first": "placed",
+          "followUp": "queued",
+          "inbox": [
+            {
+              "mode": "followUp",
+              "isFollowUp": true
+            }
+          ]
+        },
+        "transcript": [
+          "pi.user:a",
+          "pi.assistant:first",
+          "pi.user:f",
+          "pi.assistant:second"
+        ],
+        "assistantAnswers": [
+          "first",
+          "second"
+        ],
+        "answers": [
+          11,
+          14
+        ],
+        "first": {
+          "status": "done",
+          "answer": 11,
+          "answerIndex": 0
+        },
+        "followUp": {
+          "status": "done",
+          "answer": 14,
+          "answerIndex": 1
+        }
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task, conversation, entry and submission IDs are compared only where the identity relation is the observation; answer identity is also recorded as the ordinal of the answering assistant entry",
+        "the faux provider table and the recording storage hold no durable state beyond the recorded batches"
+      ]
+    },
+    {
+      "name": "a busy queued admission commits one batch with the submission and the pi.inbox items change",
+      "inputs": {
+        "storage": "recording MemoryStorage",
+        "submissions": [
+          "busy input",
+          "queued input"
+        ]
+      },
+      "expected": {
+        "batchTypes": [
+          "submission",
+          "document.change"
+        ],
+        "submissionStatus": "queued",
+        "submissionType": "input",
+        "documentKind": "pi.inbox:v1",
+        "contentKind": "delta",
+        "documentVersion": 1,
+        "inboxPath": "items"
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task, conversation, entry and submission IDs are compared only where the identity relation is the observation; answer identity is also recorded as the ordinal of the answering assistant entry",
+        "the faux provider table and the recording storage hold no durable state beyond the recorded batches"
+      ]
+    }
+  ]
+}
