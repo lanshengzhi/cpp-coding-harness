@@ -213,35 +213,69 @@ support::Expected<Array> read_inbox_items(chord::Draft& inbox) {
 /// (presence counts, even when empty; frozen `isDisplayOnly`).
 bool is_display_only(const WriteEntry& entry) { return !entry.model.has_value() && !entry.head.has_value(); }
 
+/// The validated mode of one persisted inbox item. The mode string is frozen
+/// wire vocabulary; anything else fails the commit with a typed error instead
+/// of being skipped or throwing (the document survived persistence, so
+/// corruption must surface as a rejected commit, not a crash).
+support::Expected<std::string_view> inbox_item_mode(const Json& item) {
+    const auto* object = item.as_object();
+    if (object == nullptr) return std::unexpected(validation("An inbox item must be an object"));
+    const auto found = object->find("mode");
+    if (found == object->end() || found->second.as_string() == nullptr) {
+        return std::unexpected(validation("An inbox item must have a mode"));
+    }
+    const std::string_view mode{*found->second.as_string()};
+    if (mode != "write" && mode != "steer" && mode != "followUp") {
+        return std::unexpected(validation("An inbox item mode must be \"write\", \"steer\" or \"followUp\""));
+    }
+    return mode;
+}
+
+/// One required member of a persisted inbox item, without the throwing
+/// `std::map::at` (typed error under `-fno-exceptions` parity builds).
+support::Expected<const Json*> inbox_item_member(const Object& item, std::string_view name) {
+    const auto found = item.find(std::string{name});
+    if (found == item.end()) {
+        return std::unexpected(validation("An inbox item must have a " + std::string{name}));
+    }
+    return &found->second;
+}
+
+/// The submission id of one persisted inbox item.
+support::Expected<std::int64_t> inbox_item_id(const Object& item) {
+    auto id = inbox_item_member(item, "id");
+    if (!id) return std::unexpected(id.error());
+    return as_integer(*id.value());
+}
+
 /// Whether a `head: "self"` write waits in the queue (frozen
 /// `hasQueuedReset`).
-bool has_queued_reset(const Array& items) {
-    return std::ranges::any_of(items, [](const Json& item) {
-        const auto* value = item.as_object();
-        if (value == nullptr) return false;
-        if (const auto mode = value->find("mode");
-                mode == value->end() || mode->second.as_string() == nullptr || *mode->second.as_string() != "write") {
-            return false;
-        }
-        const auto entry = value->find("entry");
-        if (entry == value->end()) return false;
-        const auto* draft = entry->second.as_object();
-        if (draft == nullptr) return false;
+support::Expected<bool> has_queued_reset(const Array& items) {
+    for (const Json& item : items) {
+        auto mode = inbox_item_mode(item);
+        if (!mode) return std::unexpected(mode.error());
+        if (*mode != "write") continue;
+        const auto* object = item.as_object();
+        auto entry = inbox_item_member(*object, "entry");
+        if (!entry) return std::unexpected(entry.error());
+        const auto* draft = entry.value()->as_object();
+        if (draft == nullptr) return std::unexpected(validation("An inbox write item entry must be an object"));
         const auto head = draft->find("head");
-        return head != draft->end() && head->second.as_string() != nullptr && *head->second.as_string() == "self";
-    });
+        if (head != draft->end() && head->second.as_string() != nullptr && *head->second.as_string() == "self") {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// A write whose pinned head targets an entry before the active range is
-/// stale (frozen `isStale`: strictly before the newest head marker).
-bool is_stale(const Boundary& boundary, const Json& entry_json) {
-    const auto* entry = entry_json.as_object();
-    if (entry == nullptr) return false;
-    const auto head = entry->find("head");
-    if (head == entry->end()) return false;
-    const double* pinned = head->second.as_number();
-    if (pinned == nullptr || !boundary.head.has_value()) return false;
-    return static_cast<std::int64_t>(*pinned) < boundary.head->value;
+/// stale (frozen `isStale`: strictly before the newest head marker). The
+/// typed draft's pin was already validated by `write_entry_from_json`, so no
+/// persisted number is cast here.
+bool is_stale(const Boundary& boundary, const WriteEntry& draft) {
+    if (!draft.head.has_value() || !boundary.head.has_value()) return false;
+    const auto* pinned = std::get_if<EntryId>(&*draft.head);
+    return pinned != nullptr && pinned->value < boundary.head->value;
 }
 
 Json input_entry_json(const InputEntry& entry) {
@@ -407,14 +441,6 @@ support::Expected<std::optional<LiveRunState>> parse_live_run(const Json& run) {
     return std::optional<LiveRunState>{std::move(state)};
 }
 
-/// The live-run marker staged in a live document draft, if any.
-support::Expected<std::optional<LiveRunState>> staged_live_run(chord::Draft& live) {
-    auto run = live.get(live_run_path());
-    if (!run) return std::unexpected(run.error());
-    if (!run->has_value()) return std::optional<LiveRunState>{};
-    return parse_live_run(**run);
-}
-
 /// Append the users to the continuing run's input list (frozen pi
 /// `live.run.inputs.push(...users)`).
 support::ExpectedVoid join_run_inputs(chord::Draft& live, TaskId task, const std::vector<SubmissionId>& users) {
@@ -470,14 +496,16 @@ enum class BoundaryPoint { PostTools, Final };
 /// steers, and at `final` the first or all follow-ups (frozen `applyBoundary`).
 support::Expected<BoundaryResult> apply_boundary(
         Transaction& tx, Boundary& boundary, BoundaryPoint point, std::int64_t now) {
-    const bool final_point = point == BoundaryPoint::Final || has_queued_reset(boundary.items);
-    const auto pick = [&boundary](std::string_view mode, QueueMode queue_mode) {
+    const auto reset = has_queued_reset(boundary.items);
+    if (!reset) return std::unexpected(reset.error());
+    const bool final_point = point == BoundaryPoint::Final || *reset;
+    const auto pick = [&boundary](std::string_view mode,
+                              QueueMode queue_mode) -> support::Expected<std::vector<std::size_t>> {
         std::vector<std::size_t> indexes;
         for (std::size_t index = 0; index < boundary.items.size(); ++index) {
-            const auto* item = boundary.items[index].as_object();
-            if (item == nullptr) continue;
-            const auto found = item->find("mode");
-            if (found != item->end() && found->second.as_string() != nullptr && *found->second.as_string() == mode) {
+            auto item_mode = inbox_item_mode(boundary.items[index]);
+            if (!item_mode) return std::unexpected(item_mode.error());
+            if (*item_mode == mode) {
                 indexes.push_back(index);
             }
         }
@@ -486,22 +514,27 @@ support::Expected<BoundaryResult> apply_boundary(
         }
         return indexes;
     };
-    const std::vector<std::size_t> writes = pick("write", QueueMode::All);
-    std::vector<std::size_t> users = pick("steer", boundary.steering_mode);
+    const auto writes = pick("write", QueueMode::All);
+    if (!writes) return std::unexpected(writes.error());
+    auto users = pick("steer", boundary.steering_mode);
+    if (!users) return std::unexpected(users.error());
     if (final_point) {
-        std::vector<std::size_t> follow_ups = pick("followUp", boundary.follow_up_mode);
-        users.insert(users.end(), follow_ups.begin(), follow_ups.end());
+        auto follow_ups = pick("followUp", boundary.follow_up_mode);
+        if (!follow_ups) return std::unexpected(follow_ups.error());
+        users->insert(users->end(), follow_ups->begin(), follow_ups->end());
     }
-    std::ranges::sort(users);
+    std::ranges::sort(*users);
 
     BoundaryResult result;
-    for (const std::size_t index : writes) {
+    for (const std::size_t index : *writes) {
         const auto* item = boundary.items[index].as_object();
-        auto id = as_integer(item->at("id"));
+        auto id = inbox_item_id(*item);
         if (!id) return std::unexpected(id.error());
-        auto draft = write_entry_from_json(item->at("entry"));
+        auto entry_json = inbox_item_member(*item, "entry");
+        if (!entry_json) return std::unexpected(entry_json.error());
+        auto draft = write_entry_from_json(*entry_json.value());
         if (!draft) return std::unexpected(draft.error());
-        if (is_stale(boundary, item->at("entry"))) {
+        if (is_stale(boundary, *draft)) {
             auto settled = tx.settle_submission(SubmissionId{.value = *id},
                     SubmissionSettlement{.status = "unanswered", .reason = std::string{"stale"}});
             if (!settled) return std::unexpected(settled.error());
@@ -515,36 +548,51 @@ support::Expected<BoundaryResult> apply_boundary(
             boundary.head = appended->head;
         }
     }
-    for (const std::size_t index : users) {
+    for (const std::size_t index : *users) {
         const auto* item = boundary.items[index].as_object();
-        auto id = as_integer(item->at("id"));
+        auto id = inbox_item_id(*item);
         if (!id) return std::unexpected(id.error());
+        auto content = inbox_item_member(*item, "content");
+        if (!content) return std::unexpected(content.error());
         std::optional<InputEntry> entry;
         if (const auto it = item->find("entry"); it != item->end()) {
             auto parsed = input_entry_from_json(it->second);
             if (!parsed) return std::unexpected(parsed.error());
             entry = std::move(*parsed);
         }
-        auto appended = append_input_entry(tx, boundary.conversation_id, item->at("content"), entry, now);
+        auto appended = append_input_entry(tx, boundary.conversation_id, *content.value(), entry, now);
         if (!appended) return std::unexpected(appended.error());
         auto placed = tx.place_submission(SubmissionId{.value = *id}, appended->id);
         if (!placed) return std::unexpected(placed.error());
         result.users.push_back(SubmissionId{.value = *id});
         result.user_entries.push_back(*appended);
     }
-    std::vector<std::size_t> removed = writes;
-    removed.insert(removed.end(), users.begin(), users.end());
+    std::vector<std::size_t> removed = *writes;
+    removed.insert(removed.end(), users->begin(), users->end());
     std::ranges::sort(removed, std::greater<>{});
     for (const std::size_t index : removed) {
         boundary.items.erase(boundary.items.begin() + static_cast<std::ptrdiff_t>(index));
     }
     auto written = boundary.inbox.set(inbox_items_path(), Json{boundary.items});
     if (!written) return std::unexpected(written.error());
-    result.reset = has_queued_reset(boundary.items);
+    // The reset flag reports the reset this boundary placed, not what remains
+    // queued: every write is picked at every boundary, so a queued reset was
+    // necessarily placed here, and it is this placement that ends the run
+    // (frozen pi `BoundaryResult.reset`).
+    result.reset = *reset;
     return result;
 }
 
 } // namespace
+
+/// The live-run marker staged in a live document draft, if any (frozen pi
+/// live-document read inside a transaction).
+support::Expected<std::optional<LiveRunState>> staged_live_run(chord::Draft& live) {
+    auto run = live.get(live_run_path());
+    if (!run) return std::unexpected(run.error());
+    if (!run->has_value()) return std::optional<LiveRunState>{};
+    return parse_live_run(**run);
+}
 
 TaskHookRegistration task_hook(std::string task_kind, std::string hook_name, TaskHook handler) {
     TaskHookRegistration reg{.task = std::move(task_kind)};
@@ -895,7 +943,9 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
         if (!items) {
             return std::unexpected(items.error());
         }
-        if (!has_queued_reset(*items)) {
+        auto queued_reset = has_queued_reset(*items);
+        if (!queued_reset) return std::unexpected(queued_reset.error());
+        if (!*queued_reset) {
             auto appended = append_write_entry(tx, conversation_id, write->entry);
             if (!appended) {
                 return std::unexpected(appended.error());
@@ -994,6 +1044,12 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
         if (!applied) {
             return std::unexpected(applied.error());
         }
+        if (applied->reset) {
+            // The queued reset reached the final boundary through admission
+            // (the previous run ended without a boundary): the next run's
+            // replay starts from the reset head, not the stale transcript.
+            messages_.clear();
+        }
         if (!applied->users.empty()) {
             auto started = start_run(tx, conversation_id, *live, applied->users, *generation_);
             if (!started) {
@@ -1003,8 +1059,7 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
         return created->id;
     }
     if (write != nullptr) {
-        const Json entry_json = write_entry_json(write->entry);
-        if (is_stale(*boundary, entry_json)) {
+        if (is_stale(*boundary, write->entry)) {
             auto created = tx.create_submission(SubmissionRecord{.id = {},
                     .conversation_id = conversation_id,
                     .request_id = draft.request_id,
@@ -1053,20 +1108,34 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
 
 support::Expected<Boundary> WorkflowRuntime::prepare_boundary(
         Transaction& tx, ConversationId conversation_id, chord::Draft inbox, std::vector<chord::Json> items) {
-    // The head marker is the newest placed entry that carries a head; the
-    // bounded runtime scans a window instead of replaying the whole log.
-    // Table reads precede the commit's first table write.
-    constexpr std::size_t kHeadScanLimit = 4096;
-    auto entries = tx.scan_entries(conversation_id, kHeadScanLimit);
-    if (!entries) {
-        return std::unexpected(entries.error());
-    }
+    // The head marker is the newest placed entry that carries a head. Frozen
+    // pi resolves it through an indexed `latestHeadMarker` storage primitive;
+    // the bounded C++ runtime has no index, so it scans the log newest first
+    // and doubles the page until the page proves complete (fewer entries than
+    // requested). The head can therefore never be silently missed past a
+    // fixed window. Table reads precede the commit's first table write.
+    // debt: head lookup scans O(n) entries; add an indexed latest-head query
+    // when admission profiling shows this scan dominates large conversations.
+    std::size_t limit = 4096;
     std::optional<EntryId> head;
-    for (const EntryRecord& entry : *entries) {
-        if (entry.head.has_value()) {
-            head = *entry.head;
+    while (!head.has_value()) {
+        auto entries = tx.scan_entries(conversation_id, limit);
+        if (!entries) {
+            return std::unexpected(entries.error());
+        }
+        for (const EntryRecord& entry : *entries) {
+            if (entry.head.has_value()) {
+                head = *entry.head;
+                break;
+            }
+        }
+        if (head.has_value() || entries->size() < limit) {
             break;
         }
+        if (limit > std::numeric_limits<std::size_t>::max() / 2) {
+            return std::unexpected(validation("Conversation head scan exceeds the supported entry count"));
+        }
+        limit *= 2;
     }
     return Boundary{.conversation_id = conversation_id,
             .inbox = std::move(inbox),
@@ -1130,7 +1199,11 @@ support::AsyncResult<bool> WorkflowRuntime::apply_post_tools_boundary(const Task
         if (applied->reset) {
             // The queued reset cut the run's context before an
             // answer: the run ends unanswered and the placed users
-            // start the next run.
+            // start the next run. The replay cache clears with the reset:
+            // the next run's request carries only its own placed users
+            // (frozen pi walks the entry chain back to the reset head), not
+            // this run's transcript.
+            messages_.clear();
             auto ended_run = end_run(
                     tx, *live, task.id, SubmissionSettlement{.status = "unanswered", .reason = std::string{"reset"}});
             if (!ended_run) {
@@ -1409,6 +1482,12 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
                     if (!applied) {
                         return std::unexpected(applied.error());
                     }
+                    if (applied->reset) {
+                        // A queued reset reached the final boundary: the
+                        // answered run still ends, and the next run's replay
+                        // starts from the reset head, not this transcript.
+                        messages_.clear();
+                    }
                     auto ended =
                             end_run(tx, *live, task.id, SubmissionSettlement{.status = "done", .answer = entry->id});
                     if (!ended) {
@@ -1492,18 +1571,14 @@ support::ExpectedVoid withdraw_queued_inputs(Transaction& tx, chord::Draft& inbo
         return std::unexpected(items.error());
     }
     for (std::size_t index = items->size(); index-- > 0;) {
-        const auto* item = (*items)[index].as_object();
-        if (item == nullptr) {
-            return std::unexpected(validation("An inbox item must be an object"));
+        auto mode = inbox_item_mode((*items)[index]);
+        if (!mode) {
+            return std::unexpected(mode.error());
         }
-        const auto mode = item->find("mode");
-        if (mode == item->end() || mode->second.as_string() == nullptr) {
-            return std::unexpected(validation("An inbox item must have a mode"));
-        }
-        if (*mode->second.as_string() == "write") {
+        if (*mode == "write") {
             continue;
         }
-        auto id = as_integer(item->at("id"));
+        auto id = inbox_item_id(*(*items)[index].as_object());
         if (!id) {
             return std::unexpected(id.error());
         }
@@ -1531,8 +1606,11 @@ support::ExpectedVoid remove_inbox_item(chord::Draft& inbox, SubmissionId id) {
         if (item == nullptr) {
             return std::unexpected(validation("An inbox item must be an object"));
         }
-        auto item_id = as_integer(item->at("id"));
-        if (item_id && *item_id == id.value) {
+        auto item_id = inbox_item_id(*item);
+        if (!item_id) {
+            return std::unexpected(item_id.error());
+        }
+        if (*item_id == id.value) {
             items->erase(items->begin() + static_cast<std::ptrdiff_t>(index));
             return inbox.set(inbox_items_path(), Json{*items});
         }
