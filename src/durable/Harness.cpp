@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <format>
 #include <functional>
 #include <map>
 #include <memory>
@@ -57,6 +58,234 @@ inline support::Expected<chord::Json> await_async_json(support::AsyncResult<chor
     cv.wait(l, [&] { return done; });
     return outcome;
 }
+
+} // namespace
+
+// ── Submission::Registry ────────────────────────────────────────────────────
+//
+// Resolves settled submissions from commit publications (frozen pi
+// `Submissions.#observe`) and owns every `Submission::wait` waiter. Session
+// close or failure rejects every waiter with the frozen close error;
+// cancelling one wait settles only that waiter with a "stop waiting" error
+// while the submission itself stays placed.
+
+class Submission::Registry {
+public:
+    Registry(Session& session, Storage& storage);
+
+    /// Deliver the settled submission changes of one commit publication to
+    /// their waiters (frozen pi `Submissions.#observe`).
+    void observe(const CommitPublication& publication);
+
+    /// Reject every registered waiter (Session close or failure).
+    void reject_all(const support::Error& error);
+
+    [[nodiscard]] support::AsyncResult<SubmissionRecord> status(SubmissionId id);
+    [[nodiscard]] support::AsyncResult<SettledSubmission> wait(SubmissionId id, std::stop_token stop);
+    [[nodiscard]] support::AsyncResult<std::string> abort_submission(
+            SubmissionId id, std::optional<ConversationId> conversation_id);
+
+private:
+    struct Waiter;
+
+    [[nodiscard]] support::Error missing(SubmissionId id) const;
+
+    Session& session_; // outlives every operation (Harness::open contract)
+    Storage& storage_; // outlives every operation (Harness::open contract)
+    std::mutex mutex_;
+    std::optional<support::Error> wait_error_{};
+    std::map<std::int64_t, std::vector<std::shared_ptr<Waiter>>> waiters_{};
+};
+
+/// Shared state of one registered wait: the completion and the atomic
+/// claim that makes the resolve, reject-all, and cancellation paths meet
+/// exactly once. Waiter nodes stay alive through their shared state, so a
+/// cancellation racing a resolution never touches freed memory.
+struct Submission::Registry::Waiter {
+    std::atomic<unsigned> outcome{0}; ///< 0 pending, 1 resolved, 2 cancelled
+    std::optional<support::AsyncCompletion<SettledSubmission, support::Error>> completion{};
+    std::unique_ptr<std::stop_callback<std::function<void()>>> cancellation{};
+};
+
+Submission::Registry::Registry(Session& session, Storage& storage) : session_(session), storage_(storage) {}
+
+support::AsyncResult<SubmissionRecord> Submission::status() const { return registry_->status(id); }
+
+support::AsyncResult<SettledSubmission> Submission::wait(std::stop_token stop) const {
+    return registry_->wait(id, std::move(stop));
+}
+
+support::AsyncResult<std::string> Submission::abort() const { return registry_->abort_submission(id, conversation_id); }
+
+void Submission::Registry::observe(const CommitPublication& publication) {
+    std::vector<std::pair<std::shared_ptr<Waiter>, SettledSubmission>> resolved;
+    {
+        std::lock_guard lock(mutex_);
+        for (const CommitChange& change : publication.changes) {
+            const auto* submission = std::get_if<SubmissionCommitChange>(&change);
+            if (submission == nullptr || !submission_settled(submission->value.status)) {
+                continue;
+            }
+            const SettledSubmission settled = settled_submission(submission->value);
+            auto bucket = waiters_.find(submission->value.id.value);
+            if (bucket == waiters_.end()) {
+                continue;
+            }
+            for (const std::shared_ptr<Waiter>& waiter : bucket->second) {
+                if (waiter->outcome.exchange(1, std::memory_order_acq_rel) == 0) {
+                    resolved.emplace_back(waiter, settled);
+                }
+            }
+            waiters_.erase(bucket);
+        }
+    }
+    for (auto& [waiter, settled] : resolved) {
+        auto completion = std::move(waiter->completion);
+        if (completion.has_value()) {
+            (*completion)(std::move(settled));
+        }
+    }
+}
+
+void Submission::Registry::reject_all(const support::Error& error) {
+    std::vector<std::shared_ptr<Waiter>> rejected;
+    {
+        std::lock_guard lock(mutex_);
+        wait_error_ = error;
+        for (auto& [_, bucket] : waiters_) {
+            for (const std::shared_ptr<Waiter>& waiter : bucket) {
+                if (waiter->outcome.exchange(1, std::memory_order_acq_rel) == 0) {
+                    rejected.push_back(waiter);
+                }
+            }
+        }
+        waiters_.clear();
+    }
+    for (const std::shared_ptr<Waiter>& waiter : rejected) {
+        auto completion = std::move(waiter->completion);
+        if (completion.has_value()) {
+            (*completion)(std::unexpected(error));
+        }
+    }
+}
+
+support::Error Submission::Registry::missing(SubmissionId id) const {
+    return support::make_error(support::ErrorCode::Validation, std::format("Submission {} does not exist", id.value));
+}
+
+support::AsyncResult<SubmissionRecord> Submission::Registry::status(SubmissionId id) {
+    auto record = storage_.submission(id);
+    if (!record) {
+        return support::AsyncResult<SubmissionRecord>{std::unexpected(record.error())};
+    }
+    if (!record->has_value()) {
+        return support::AsyncResult<SubmissionRecord>{std::unexpected(missing(id))};
+    }
+    return support::AsyncResult<SubmissionRecord>{std::move(*(*record))};
+}
+
+support::AsyncResult<SettledSubmission> Submission::Registry::wait(SubmissionId id, std::stop_token stop) {
+    return support::AsyncResult<SettledSubmission>{support::AsyncProducer<SettledSubmission, support::Error>{
+            [this, id, stop = std::move(stop)](
+                    support::AsyncCompletion<SettledSubmission, support::Error> done) mutable noexcept {
+                std::optional<support::Error> immediate_error;
+                std::optional<SettledSubmission> immediate_value;
+                std::shared_ptr<Waiter> waiter;
+                {
+                    std::lock_guard lock(mutex_);
+                    if (wait_error_.has_value()) {
+                        immediate_error = *wait_error_;
+                    } else if (auto record = storage_.submission(id); !record) {
+                        immediate_error = record.error();
+                    } else if (!record->has_value()) {
+                        immediate_error = missing(id);
+                    } else if (submission_settled((**record).status)) {
+                        immediate_value = settled_submission(**record);
+                    } else if (stop.stop_requested()) {
+                        immediate_error = support::make_error(support::ErrorCode::Cancelled, "stop waiting");
+                    } else {
+                        waiter = std::make_shared<Waiter>();
+                        waiter->completion = std::move(done);
+                        waiters_[id.value].push_back(waiter);
+                    }
+                }
+                if (immediate_value.has_value()) {
+                    done(std::move(*immediate_value));
+                    return;
+                }
+                if (immediate_error.has_value()) {
+                    done(std::unexpected(*immediate_error));
+                    return;
+                }
+                // Arm the cancellation outside the lock. The callback only
+                // touches the shared waiter state (one claim wins), so it
+                // never needs the registry mutex; a stop that raced the
+                // registration fires it immediately.
+                waiter->cancellation = std::make_unique<std::stop_callback<std::function<void()>>>(stop, [waiter] {
+                    if (waiter->outcome.exchange(2, std::memory_order_acq_rel) != 0) {
+                        return;
+                    }
+                    auto completion = std::move(waiter->completion);
+                    if (completion.has_value()) {
+                        (*completion)(
+                                std::unexpected(support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
+                    }
+                });
+            }}};
+}
+
+support::AsyncResult<std::string> Submission::Registry::abort_submission(
+        SubmissionId id, std::optional<ConversationId> conversation_id) {
+    // Withdraw a queued submission and remove its inbox item; placed inputs
+    // and settled submissions are only reported (frozen pi `Submissions.abort`).
+    auto submission = storage_.submission(id);
+    if (!submission) {
+        return support::AsyncResult<std::string>{std::unexpected(submission.error())};
+    }
+    if (!submission->has_value() ||
+            (conversation_id.has_value() && (**submission).conversation_id != *conversation_id)) {
+        return support::AsyncResult<std::string>{std::string{"not_found"}};
+    }
+    const SubmissionRecord record = **submission;
+    if (record.status == "queued") {
+        auto result = std::make_shared<std::string>();
+        return support::AsyncResult<std::string>{support::AsyncProducer<std::string, support::Error>{
+                [this, id, record, result](
+                        support::AsyncCompletion<std::string, support::Error> done) mutable noexcept {
+                    session_.commit([id, conversation = record.conversation_id, result](
+                                            Transaction& tx) -> support::ExpectedVoid {
+                                auto inbox = tx.doc(inbox_document(), DocumentAddress{.conversation_id = conversation});
+                                if (!inbox) {
+                                    return std::unexpected(inbox.error());
+                                }
+                                auto removed = remove_inbox_item(*inbox, id);
+                                if (!removed) {
+                                    return std::unexpected(removed.error());
+                                }
+                                auto settled = tx.settle_submission(id,
+                                        SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+                                if (!settled) {
+                                    return std::unexpected(settled.error());
+                                }
+                                *result = "aborted";
+                                return {};
+                            })
+                            .start([done = std::move(done), result](support::ExpectedVoid outcome) mutable noexcept {
+                                if (!outcome) {
+                                    done(std::unexpected(outcome.error()));
+                                } else {
+                                    done(std::move(*result));
+                                }
+                            });
+                }}};
+    }
+    if (record.status == "placed") {
+        return support::AsyncResult<std::string>{std::string{"already_placed"}};
+    }
+    return support::AsyncResult<std::string>{std::string{"settled"}};
+}
+
+namespace {
 
 [[nodiscard]] std::int64_t current_time(const std::shared_ptr<std::move_only_function<std::int64_t()>>& clock) {
     return (*clock)();
@@ -246,6 +475,7 @@ struct Harness::Impl {
     std::shared_ptr<std::move_only_function<std::int64_t()>> clock;
     std::unique_ptr<WorkflowRuntime> workflow;
     std::shared_ptr<TaskDefinition> builtin_generation_task;
+    std::unique_ptr<Submission::Registry> submissions;
 
     struct ExecutionThread {
         std::thread thread;
@@ -466,7 +696,8 @@ struct Harness::Impl {
             }
         }
         workflow = std::make_unique<WorkflowRuntime>(*session, *storage, options, clock);
-        builtin_generation_task = std::make_shared<TaskDefinition>(workflow->definition());
+        builtin_generation_task = workflow->generation();
+        submissions = std::make_unique<Submission::Registry>(*session, *storage);
         registry_sub_id = registry.subscribe([this] {
             std::lock_guard lock(mutex);
             dirty = true;
@@ -482,12 +713,14 @@ struct Harness::Impl {
                 pending = std::move(waiters);
                 waiters.clear();
             }
+            submissions->reject_all(error);
             for (auto& [id, completions] : pending) {
                 (void)id;
                 for (auto& completion : completions) completion(std::unexpected(error));
             }
         });
         (void)session->subscribe_commits([this](const CommitPublication& pub) {
+            submissions->observe(pub);
             for (const auto& change : pub.changes) {
                 if (const auto* tc = std::get_if<TableCommitChange>(&change)) {
                     if (tc->type == "task" && tc->task.has_value()) {
@@ -669,6 +902,36 @@ struct Harness::Impl {
         bool reported_replacement = false;
         std::shared_ptr<const TaskDefinition> reported_def;
 
+        // The abort invocation: the abort handler commits the terminal
+        // outcome with the abort-marked commit allowed (frozen pi task
+        // `abort`).
+        auto run_abort_handler = [&](const TaskRecord& task) {
+            HarnessTaskRuntime runtime(
+                    *session,
+                    tid,
+                    task.conversation_id,
+                    *def,
+                    phase_snapshot.hooks,
+                    stop_src.get_token(),
+                    clock,
+                    [this](const support::Error& err) { report(err); },
+                    true);
+            auto abort_result = await_async_void(def->run_abort(task, runtime));
+            if (closed) {
+                return;
+            }
+            auto after_opt = storage->task(tid);
+            if (after_opt && after_opt->has_value()) {
+                TaskRecord after = *after_opt.value();
+                if (after.state.status != "terminal") {
+                    const std::string message = abort_result ? "Abort handler of task " + std::to_string(tid.value) +
+                                                                       " returned without a terminal outcome"
+                                                             : abort_result.error().message;
+                    settle_faulted(tid, message);
+                }
+            }
+        };
+
         while (!closed) {
             auto task_opt = storage->task(tid);
             if (!task_opt || !task_opt->has_value()) {
@@ -683,32 +946,7 @@ struct Harness::Impl {
             }
 
             if (task.abort_requested) {
-                HarnessTaskRuntime runtime(
-                        *session,
-                        tid,
-                        task.conversation_id,
-                        *def,
-                        phase_snapshot.hooks,
-                        stop_src.get_token(),
-                        clock,
-                        [this](const support::Error& err) { report(err); },
-                        true);
-                auto abort_result = await_async_void(def->run_abort(task, runtime));
-                if (closed) {
-                    cleanup();
-                    return;
-                }
-                auto after_opt = storage->task(tid);
-                if (after_opt && after_opt->has_value()) {
-                    TaskRecord after = *after_opt.value();
-                    if (after.state.status != "terminal") {
-                        const std::string message = abort_result
-                                                            ? "Abort handler of task " + std::to_string(tid.value) +
-                                                                      " returned without a terminal outcome"
-                                                            : abort_result.error().message;
-                        settle_faulted(tid, message);
-                    }
-                }
+                run_abort_handler(task);
                 cleanup();
                 return;
             }
@@ -779,7 +1017,14 @@ struct Harness::Impl {
             }
 
             if (!phase_res) {
-                settle_faulted(tid, phase_res.error().message);
+                if (after.abort_requested) {
+                    // The phase unwound on the abort mark (its commits reject
+                    // while marked); the abort handler settles the run instead
+                    // of faulting the task.
+                    run_abort_handler(after);
+                } else {
+                    settle_faulted(tid, phase_res.error().message);
+                }
                 cleanup();
                 return;
             }
@@ -1032,31 +1277,95 @@ support::AsyncResult<ConversationId> Harness::root(RootOptions options) {
     return impl_->workflow->root(std::move(options));
 }
 
-support::AsyncResult<Submission> Harness::submit(ConversationId conversation_id, std::string text) {
-    auto operation = impl_->workflow->submit(conversation_id, std::move(text), *task_definition("pi.generation"));
+support::AsyncResult<Submission> Harness::submit(ConversationId conversation_id, SubmissionDraft draft) {
+    auto operation = impl_->workflow->submit(conversation_id, std::move(draft));
     // Harness outlives the producer and its completion (submit's declaration).
     return support::AsyncResult<Submission>{support::AsyncProducer<Submission, support::Error>{
-            [this, operation = std::move(operation)](support::AsyncCompletion<Submission, support::Error> done) mutable noexcept {
-                std::move(operation).start([this, done = std::move(done)](support::Expected<Submission> result) mutable noexcept {
-                    if (result) {
-                        if (auto resumed = resume(); !resumed) {
-                            done(std::unexpected(resumed.error()));
-                            return;
-                        }
+            [this, conversation_id, operation = std::move(operation)](
+                    support::AsyncCompletion<Submission, support::Error> done) mutable noexcept {
+                std::move(operation).start([this, conversation_id, done = std::move(done)](
+                                                   support::Expected<SubmissionId> result) mutable noexcept {
+                    if (!result) {
+                        done(std::unexpected(result.error()));
+                        return;
                     }
-                    done(std::move(result));
+                    if (auto resumed = resume(); !resumed) {
+                        done(std::unexpected(resumed.error()));
+                        return;
+                    }
+                    done(Submission{*result, conversation_id, *impl_->submissions});
                 });
             }}};
 }
 
-support::AsyncResult<SettledSubmission> Harness::wait_for_submission(Submission submission) {
-    auto operation = wait_for_task(submission.id);
-    return support::AsyncResult<SettledSubmission>{support::AsyncProducer<SettledSubmission, support::Error>{
-            [operation = std::move(operation)](support::AsyncCompletion<SettledSubmission, support::Error> done) mutable noexcept {
-                std::move(operation).start([done = std::move(done)](support::Expected<TaskRecord> result) mutable noexcept {
-                    if (!result) done(std::unexpected(result.error()));
-                    else done(WorkflowRuntime::receipt(*result));
-                });
+support::AsyncResult<std::string> Harness::abort_submission(
+        SubmissionId id, std::optional<ConversationId> conversation_id) {
+    auto operation = impl_->submissions->abort_submission(id, conversation_id);
+    return support::AsyncResult<std::string>{support::AsyncProducer<std::string, support::Error>{
+            [this, operation = std::move(operation)](
+                    support::AsyncCompletion<std::string, support::Error> done) mutable noexcept {
+                std::move(operation).start(
+                        [this, done = std::move(done)](support::Expected<std::string> result) mutable noexcept {
+                            if (!result) {
+                                done(std::unexpected(result.error()));
+                                return;
+                            }
+                            // Withdrawing a queued item settles a submission; nothing
+                            // new becomes schedulable.
+                            if (*result == "aborted") {
+                                if (auto resumed = resume(); !resumed) {
+                                    done(std::unexpected(resumed.error()));
+                                    return;
+                                }
+                            }
+                            done(std::move(result));
+                        });
+            }}};
+}
+
+support::AsyncResult<void> Harness::abort_conversation(ConversationId conversation_id) {
+    // Withdraw every queued input, keep queued writes queued, and abort the
+    // running run's task, whose abort handler settles the placed inputs
+    // `unanswered/aborted` (frozen pi `Conversation.abort`). Resolves once
+    // the conversation is idle again.
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [this, conversation_id](support::AsyncCompletion<void, support::Error> done) mutable noexcept {
+                auto run = committed_live_run(*impl_->storage, conversation_id);
+                if (!run) {
+                    done(std::unexpected(run.error()));
+                    return;
+                }
+                std::move(impl_->session->commit([conversation_id](Transaction& tx) -> support::ExpectedVoid {
+                    auto inbox = tx.doc(inbox_document(), DocumentAddress{.conversation_id = conversation_id});
+                    if (!inbox) {
+                        return std::unexpected(inbox.error());
+                    }
+                    return withdraw_queued_inputs(tx, *inbox);
+                }))
+                        .start([this, run = std::move(*run), done = std::move(done)](
+                                       support::ExpectedVoid withdrawn) mutable noexcept {
+                            if (!withdrawn) {
+                                done(std::unexpected(withdrawn.error()));
+                                return;
+                            }
+                            if (!run.has_value()) {
+                                done(support::ExpectedVoid{});
+                                return;
+                            }
+                            std::move(abort_task(run->task))
+                                    .start([this, task = run->task, done = std::move(done)](
+                                                   support::Expected<std::string> marked) mutable noexcept {
+                                        if (!marked) {
+                                            done(std::unexpected(marked.error()));
+                                            return;
+                                        }
+                                        std::move(wait_for_task(task))
+                                                .start([done = std::move(done)](
+                                                               support::Expected<TaskRecord>) mutable noexcept {
+                                                    done(support::ExpectedVoid{});
+                                                });
+                                    });
+                        });
             }}};
 }
 
