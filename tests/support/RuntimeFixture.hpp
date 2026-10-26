@@ -1,6 +1,6 @@
 #pragma once
 
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/PumpUntil.hpp"
 

@@ -1,5 +1,5 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
+#include "coding_agent/environment/WorkspaceFileSystem.hpp"
 #include "coding_agent/SkillFormatting.hpp"
 #include "support/LegacyAsyncLoader.hpp"
 #include "support/EnvVarGuard.hpp"

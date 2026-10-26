@@ -80,7 +80,7 @@ test_shard_for() {
 		tests/tui/*) echo cch_tests_tui ;;
 		tests/ai/*) echo cch_tests_ai ;;
 		tests/agent/*) echo cch_tests_agent ;;
-		tests/harness/* | tests/tools/*) echo cch_tests_harness_tools ;;
+		tests/coding_agent/environment/* | tests/coding_agent/tools/*) echo cch_tests_harness_tools ;;
 		tests/coding_agent/tui/*) echo cch_tests_coding_agent_interactive ;;
 		tests/coding_agent/*) echo cch_tests_coding_agent ;;
 		tests/cli/* | tests/architecture/*) echo cch_tests_cli_arch ;;

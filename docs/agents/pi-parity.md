@@ -31,13 +31,14 @@ The first contract rules establish these boundaries:
   cross-Owner include edges must follow the declared Owner graph through
   authoritative Owner targets; the gate enforces those checks rather than a
   blanket ban on private includes.
-- Agent core cannot include application Session/history/compaction, through either
-  the new application paths or the legacy Session paths (`agent-no-application-session-includes`,
-  `PARITY-8007`, #1068). The temporary redirect headers and their `interface_forwarders` /
-  `private_forwarders` manifest records were removed by #1070; they were migration records,
-  not core dependencies.
-- `session-no-core-private-includes` (`PARITY-8008`) checks the two residual journal/export
-  helper includes, with source-specific exceptions expiring at the #1073 migration.
+- Agent core cannot include application headers, including Session/history/compaction,
+  concrete environment and built-in tools (`agent-no-application-session-includes`,
+  `PARITY-8007`, #1068/#1073). The rule covers private and Owner Interface paths.
+  The temporary redirect headers and their `interface_forwarders` /
+  `private_forwarders` records were removed by #1070.
+- `session-no-core-private-includes` (`PARITY-8008`) rejects the retired core helper
+  paths. #1073 moved journal/export helpers into the application and removed both
+  source-specific exceptions.
 - Every application Session consumer — headless sources and the `tui/`/`cli/`
   frontends alike — reaches Session only through `<cch/coding_agent/session/...>`
   (`application-session-no-legacy-core-session-includes`, `PARITY-8009`, #1069/#1070).

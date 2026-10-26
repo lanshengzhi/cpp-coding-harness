@@ -12,7 +12,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include <cch/ai/Message.hpp>
 #include <cch/ai/StreamEvent.hpp>
 #include <cch/tui/Editor.hpp>

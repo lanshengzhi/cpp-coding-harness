@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/agent/harness/Shell.hpp>
+#include <cch/coding_agent/environment/Shell.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 
 #include <filesystem>

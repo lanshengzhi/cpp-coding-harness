@@ -1,12 +1,12 @@
 #include "coding_agent/SkillLoader.hpp"
 #include "support/LegacyAsyncLoader.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
+#include "coding_agent/environment/WorkspaceFileSystem.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/FakeAsyncFileSystem.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/LocalFileSystem.hpp>
+#include <cch/coding_agent/environment/LocalFileSystem.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 #include <boost/asio/co_spawn.hpp>

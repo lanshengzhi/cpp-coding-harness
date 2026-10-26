@@ -9,7 +9,7 @@
 #include "coding_agent/PromptTemplateLoader.hpp"
 #include "coding_agent/SkillLoader.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
-#include "agent/harness/WorkspaceFileSystem.hpp"
+#include "coding_agent/environment/WorkspaceFileSystem.hpp"
 
 #include <expected>
 #include <exception>

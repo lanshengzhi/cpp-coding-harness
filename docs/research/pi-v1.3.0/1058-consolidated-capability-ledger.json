@@ -60,7 +60,7 @@
           },
           {
             "path": "cmake/targets/CodingAgent.cmake",
-            "sha256": "dfc23b3507d7750e84853393415ebd1d1e59a5dd784495eb6cbf56346c48c90b"
+            "sha256": "cb10e310289020b91f5060836cad25ce0b5d3f46b53dede8f2800579e14fb4f3"
           },
           {
             "path": "cmake/targets/Support.cmake",
@@ -76,7 +76,7 @@
           },
           {
             "path": "cmake/tests/CodingAgentTests.cmake",
-            "sha256": "efe69ffb1a1af6eec579be06f2fb696d2a944bc6cb4ccecad503604d0d6f00d2"
+            "sha256": "a3f5681b1d9eb49f18ba33e10a1d927d8e26afbe281efc7a1755de30eef7edb8"
           },
           {
             "path": "src/mcp/Client.cpp",
@@ -84,7 +84,7 @@
           },
           {
             "path": "src/mcp/StdioClient.cpp",
-            "sha256": "5b9797d6732057925c44c7978c732b615ed4afdffceb7b1872e255765e5996de"
+            "sha256": "45c8dd9a5c63c5badd598c92f09bceb89584e3df2a6e5bdaeccd2e74ee1815e3"
           },
           {
             "path": "src/mcp/StdioClientImpl.hpp",
@@ -240,7 +240,7 @@
           },
           {
             "path": "tests/support/RuntimeFixture.hpp",
-            "sha256": "855fe691440a78af9aadb9bc44f92fb7061d3c327d179d2c28cd156b0730da17"
+            "sha256": "bd441349fa9473da544f544b9edc451fc8fb548ea14d3b5bf11a3d3b16aba1c0"
           },
           {
             "path": "tests/support/McpTestKit.hpp",
@@ -255,15 +255,15 @@
             "-L",
             "issue1101",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/1101-validation.xml",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/1073-1101-validation.xml",
             "--output-on-failure"
           ],
-          "testedRevision": "79edeafeee86677482d00dd69639732343e5c3f1",
-          "recordedAt": "2026-10-25T17:00:30Z",
+          "testedRevision": "c454477cc2a9a11c980b949ddf601b660308abf0",
+          "recordedAt": "2026-10-26T01:16:23Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/1101-validation.xml",
-            "sha256": "95c604d272a6797e4f361b4dc3fe5491e42ff4479535afeb898570129a9d5e8e"
+            "path": "docs/research/pi-v1.3.0/1073-1101-validation.xml",
+            "sha256": "be1daf8bd8bc1f09dac257fd34cdedf80bcdb19cdfea2fa35d953fbe25ab3050"
           }
         },
         "rows": [

@@ -7,7 +7,7 @@
 
 #include "ai/ModelStreamBridge.hpp"
 #include "support/AsyncResultBridge.hpp"
-#include <cch/agent/harness/LocalShell.hpp>
+#include <cch/coding_agent/environment/LocalShell.hpp>
 #include <cch/coding_agent/ProjectResources.hpp>
 #include <cch/coding_agent/Skill.hpp>
 #include "coding_agent/AgentSession.hpp"

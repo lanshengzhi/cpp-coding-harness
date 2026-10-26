@@ -3,8 +3,8 @@
 #include <cch/agent/ToolRegistry.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/FileSystem.hpp>
-#include <cch/agent/tools/ToolFactories.hpp>
+#include <cch/coding_agent/environment/FileSystem.hpp>
+#include <cch/coding_agent/tools/ToolFactories.hpp>
 #include "coding_agent/runtime/AsyncUserShell.hpp"
 #include "coding_agent/runtime/McpSessionManager.hpp"
 

@@ -5,7 +5,7 @@
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
-#include <cch/agent/harness/FileSystem.hpp>
+#include <cch/coding_agent/environment/FileSystem.hpp>
 #include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/coding_agent/session/SessionTree.hpp>
 

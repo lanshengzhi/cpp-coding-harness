@@ -1,8 +1,8 @@
 #include <cch/coding_agent/ProjectResources.hpp>
 #include "support/LegacyAsyncLoader.hpp"
-#include <cch/agent/harness/LocalFileSystem.hpp>
-#include "agent/harness/RuntimeRoot.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
+#include <cch/coding_agent/environment/LocalFileSystem.hpp>
+#include "coding_agent/environment/RuntimeRoot.hpp"
+#include "coding_agent/environment/WorkspaceFileSystem.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/FakeAsyncFileSystem.hpp"
 #include "support/TempWorkspace.hpp"

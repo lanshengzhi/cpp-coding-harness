@@ -5,7 +5,7 @@
 #include <cch/support/AsyncResult.hpp>
 
 #include "support/AsyncResultBridge.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 
 #include <cstddef>
 #include <deque>

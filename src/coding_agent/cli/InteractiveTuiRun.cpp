@@ -1,6 +1,6 @@
 #include "InteractiveTuiRun.hpp"
 
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include "coding_agent/tui/LinuxClipboard.hpp"
 
 #include <cch/coding_agent/AgentConfigDir.hpp>

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <cch/agent/harness/FileSystem.hpp>
+#include <cch/coding_agent/environment/FileSystem.hpp>
 
 #include <filesystem>
 #include <memory>

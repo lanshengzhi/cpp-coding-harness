@@ -965,6 +965,15 @@ LEGACY_SESSION_HEADERS = (
 )
 
 
+def make_project_tree_with_application_environment(root):
+    root = make_project_tree(root)
+    for header in ("environment/LocalFileSystem.hpp", "environment/LocalShell.hpp", "tools/ToolFactories.hpp"):
+        path = root / "src/coding_agent/include/cch/coding_agent" / header
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("#pragma once\n")
+    return root
+
+
 def make_project_tree_with_legacy_session(root):
     root = make_project_tree(root)
     for rel in LEGACY_SESSION_HEADERS:
@@ -1124,16 +1133,27 @@ class IncludeResolutionTest(unittest.TestCase):
         self.assertEqual(diagnostics[0].target, "cch_ai")
         self.assertEqual(diagnostics[0].dependency, "cch_tui")
 
-    def test_core_cannot_reach_application_session_through_private_or_legacy_paths(self):
+    def test_core_cannot_reach_application_session_or_environment_tools(self):
         manifest = checked_in_manifest()
-        for path in ("coding_agent/session/EntrySerializer.hpp",
+        for path in ("coding_agent/environment/Process.hpp",
+                     "coding_agent/environment/RuntimeRoot.hpp",
+                     "coding_agent/tools/EditDiff.hpp",
+                     "cch/coding_agent/environment/LocalFileSystem.hpp",
+                     "cch/coding_agent/environment/LocalShell.hpp",
+                     "cch/coding_agent/tools/ToolFactories.hpp",
+                     "coding_agent/session/EntrySerializer.hpp",
                      "coding_agent/compaction/Compaction.hpp",
                      "agent/harness/session/SessionJournal.hpp",
                      "agent/harness/TranscriptExport.hpp"):
             with self.subTest(path=path), tempfile.TemporaryDirectory() as tmp:
-                diagnostics = run_include_case(tmp, "cch_agent_core", "agent/consumer.cpp", path,
-                                               spelling="quote", manifest=manifest)
-                self.assertEqual(rule_ids(diagnostics), [pg.RULE_AGENT_APPLICATION_SESSION_INCLUDE])
+                diagnostics = run_include_case(
+                    tmp, "cch_agent_core", "agent/consumer.cpp", path,
+                    spelling="angle" if path.startswith("cch/") else "quote", manifest=manifest,
+                    project_tree=make_project_tree_with_application_environment)
+                expected = [pg.RULE_AGENT_APPLICATION_SESSION_INCLUDE]
+                if path.startswith("cch/"):
+                    expected.insert(0, pg.RULE_ILLEGAL_DIRECT_INCLUDE)
+                self.assertEqual(rule_ids(diagnostics), expected)
 
     def test_application_session_sources_cannot_reach_the_legacy_core_session_paths(self):
         # #1069 / #1070: every application Session consumer — headless units,
@@ -1181,17 +1201,16 @@ class IncludeResolutionTest(unittest.TestCase):
                     source, "cch/agent/harness/session/SessionStore.hpp", manifest=manifest)
                 self.assertEqual(rule_ids(diagnostics), [pg.RULE_UNRESOLVED_PROJECT_INCLUDE])
 
-    def test_session_core_helper_exceptions_apply_only_to_the_named_sources(self):
+    def test_session_core_helpers_have_no_remaining_exceptions(self):
         manifest = checked_in_manifest()
+        self.assertEqual(manifest.architecture_contract.exceptions, ())
         for name, header in (("SessionJournal", "PosixWrite"), ("TranscriptExport", "WorkspaceFileSystem")):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
-                path = f"agent/harness/{header}.hpp"
-                allowed = run_include_case(tmp, "cch_coding_agent", f"coding_agent/session/{name}.cpp",
-                                           path, spelling="quote", manifest=manifest)
-                self.assertEqual(allowed, [])
-                rejected = run_include_case(tmp, "cch_coding_agent", "coding_agent/session/Other.cpp",
-                                            path, spelling="quote", manifest=manifest)
-                self.assertEqual(rule_ids(rejected), [pg.RULE_SESSION_CORE_PRIVATE_INCLUDE])
+            for source in (name, "Other"):
+                with self.subTest(source=source, header=header), tempfile.TemporaryDirectory() as tmp:
+                    diagnostics = run_include_case(
+                        tmp, "cch_coding_agent", f"coding_agent/session/{source}.cpp",
+                        f"agent/harness/{header}.hpp", spelling="quote", manifest=manifest)
+                    self.assertEqual(rule_ids(diagnostics), [pg.RULE_SESSION_CORE_PRIVATE_INCLUDE])
 
     def test_support_include_owner_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:

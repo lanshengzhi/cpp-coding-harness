@@ -12,7 +12,7 @@
 #include "coding_agent/prompt/PromptExpansion.hpp"
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 #include "coding_agent/runtime/SessionEventCommitment.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/co_spawn.hpp>

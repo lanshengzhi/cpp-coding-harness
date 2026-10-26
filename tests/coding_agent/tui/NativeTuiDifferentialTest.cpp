@@ -15,7 +15,7 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/Theme.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include "support/EnvVarGuard.hpp"
 #include "support/ExpectedMacros.hpp"
 #include "support/PumpUntil.hpp"

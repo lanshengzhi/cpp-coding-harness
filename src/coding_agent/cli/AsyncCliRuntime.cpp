@@ -13,7 +13,7 @@
 #include "coding_agent/SessionCwd.hpp"
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/coding_agent/ProjectTrust.hpp>
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/OpenBrowser.hpp"
 #include "coding_agent/cli/InteractiveTuiRun.hpp"

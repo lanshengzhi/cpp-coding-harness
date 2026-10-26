@@ -5,7 +5,7 @@
 #include <cch/ai/Model.hpp>
 #include <cch/coding_agent/ModelRuntime.hpp>
 #include <cch/coding_agent/session/SessionTree.hpp>
-#include <cch/agent/tools/ToolFactories.hpp>
+#include <cch/coding_agent/tools/ToolFactories.hpp>
 #include "coding_agent/SessionTarget.hpp"
 #include "coding_agent/extensions/ExtensionToolSource.hpp"
 #include "coding_agent/mcp/McpHttpServerConfig.hpp"

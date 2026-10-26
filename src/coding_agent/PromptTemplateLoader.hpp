@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cch/coding_agent/PromptTemplate.hpp>
-#include <cch/agent/harness/FileSystem.hpp>
+#include <cch/coding_agent/environment/FileSystem.hpp>
 
 #include <optional>
 #include <stop_token>

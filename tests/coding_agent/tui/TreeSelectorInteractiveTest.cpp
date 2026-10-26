@@ -24,7 +24,7 @@
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/coding_agent/session/SessionTree.hpp>
 #include <cch/ai/Content.hpp>

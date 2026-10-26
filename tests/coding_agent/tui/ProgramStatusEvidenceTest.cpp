@@ -26,7 +26,7 @@
 #include "support/ScriptedRuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 
 #include <cch/ai/Content.hpp>
 #include <cch/ai/InferenceFailure.hpp>

@@ -176,7 +176,7 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 10.3. Bounded output goes through the owning package's declared output/presentation budgets. No ad hoc `substr` truncation of model- or user-visible text, and process pipes continue draining after retained output reaches its bound (ADR 0040).
 
-10.4. Filesystem path resolution lives in `src/agent/harness/WorkspaceFileSystem.hpp`; file tools route through it, so flag a path that bypasses or duplicates it. Operations resolve through pi `resolveToCwd` semantics (ADR 0057): unicode-space normalization, leading-`@` stripping, `~` expansion against `$HOME`, absolute paths honored after lexical normalization, relative paths resolved against the workspace root with `..` normalized, not rejected. Authority matches the host process — no containment, allowlist, or scope split — and no-follow and atomic writes are uniform. Unrelated paths are out of scope.
+10.4. Filesystem path resolution lives in `src/coding_agent/environment/WorkspaceFileSystem.hpp`; file tools route through it, so flag a path that bypasses or duplicates it. Operations resolve through pi `resolveToCwd` semantics (ADR 0057): unicode-space normalization, leading-`@` stripping, `~` expansion against `$HOME`, absolute paths honored after lexical normalization, relative paths resolved against the workspace root with `..` normalized, not rejected. Authority matches the host process — no containment, allowlist, or scope split — and no-follow and atomic writes are uniform. Unrelated paths are out of scope.
 
 10.5. `bash` runs with a sanitized environment that omits API-key, token, secret, password, and OpenAI-looking variables. Extend the filter; never bypass it.
 

@@ -16,13 +16,13 @@
 #include "support/ThemeFixture.hpp"
 #include "support/TempWorkspace.hpp"
 
-#include <cch/agent/harness/FileSystem.hpp>
+#include <cch/coding_agent/environment/FileSystem.hpp>
 #include <cch/coding_agent/AgentConfigDir.hpp>
 #include <cch/tui/VirtualTerminal.hpp>
 
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include "support/FakeAsyncFileSystem.hpp"
 
 #include <cch/support/Error.hpp>

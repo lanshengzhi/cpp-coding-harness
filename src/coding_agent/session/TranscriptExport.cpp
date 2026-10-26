@@ -1,7 +1,7 @@
 #include "TranscriptExport.hpp"
 
 #include "coding_agent/session/EntrySerializer.hpp"
-#include "agent/harness/WorkspaceFileSystem.hpp"
+#include "coding_agent/environment/WorkspaceFileSystem.hpp"
 
 #include <optional>
 #include <utility>

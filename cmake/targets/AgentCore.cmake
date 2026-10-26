@@ -17,24 +17,12 @@ cch_parity_declare_target(
         src/agent/ToolSchemaValidate.cpp
         src/agent/ToolCallExecutor.cpp
         src/agent/ToolRegistry.cpp
-        src/agent/harness/AsyncLocalFileSystem.cpp
-        src/agent/harness/AsyncLocalShell.cpp
-        src/agent/harness/Process.cpp
-        src/agent/harness/RuntimeRoot.cpp
-        src/agent/harness/ShellResolver.cpp
-        src/agent/harness/WorkspaceFileSystemFdWalk.cpp
-        src/agent/harness/WorkspaceFileOperations.cpp
-        src/agent/harness/WorkspacePathResolution.cpp
-        src/agent/harness/WorkspaceFileSystemTemp.cpp
-        src/agent/tools/AsyncToolFactories.cpp
-        src/agent/tools/EditDiff.cpp
     DEPENDS
         cch_ai
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
         glaze::glaze@glaze
-        utf8proc::utf8proc@utf8proc
     INTERFACE_DEPENDS
         cch_ai
         cch_support

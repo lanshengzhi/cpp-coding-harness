@@ -1,7 +1,7 @@
 // MCP stdio transport client (spec #865, ticket #869). Newline-delimited
 // compact JSON framing and the close handshake mirror pi v1.0.4
 // `packages/mcp/src/transports/stdio.ts`; the launch mechanics mirror the
-// in-repo `src/agent/harness/Process.cpp` (pipe2 + fork + setpgid + exec), with
+// in-repo `src/coding_agent/environment/Process.cpp` (pipe2 + fork + setpgid + exec), with
 // the one delta a long-lived server needs: a parent-held writable stdin pipe
 // and line-by-line delivery instead of a drain to EOF.
 //

@@ -54,9 +54,8 @@
         "source_prefixes": ["src/agent/"],
         "excluded_source_prefixes": [],
         "forbidden_include_prefixes": [
-          "coding_agent/session/",
-          "coding_agent/compaction/",
-          "cch/coding_agent/session/",
+          "coding_agent/",
+          "cch/coding_agent/",
           "cch/agent/harness/session/",
           "agent/harness/session/",
           "agent/harness/TranscriptExport.hpp"
@@ -108,26 +107,7 @@
         ]
       }
     ],
-    "exceptions": [
-      {
-        "id": "session-journal-core-helper",
-        "rule_id": "session-no-core-private-includes",
-        "source": "src/coding_agent/session/SessionJournal.cpp",
-        "owner": "cch_coding_agent",
-        "removal_ticket": "#1073",
-        "expires": "2026-12-31",
-        "reason": "#1068/ADR 0075 relocates Session before #1073 relocates concrete environment and shared filesystem mechanics; preserve the existing helper until that slice."
-      },
-      {
-        "id": "session-export-core-helper",
-        "rule_id": "session-no-core-private-includes",
-        "source": "src/coding_agent/session/TranscriptExport.cpp",
-        "owner": "cch_coding_agent",
-        "removal_ticket": "#1073",
-        "expires": "2026-12-31",
-        "reason": "#1068/ADR 0075 relocates Session before #1073 relocates concrete environment and shared filesystem mechanics; preserve the existing helper until that slice."
-      }
-    ]
+    "exceptions": []
   },
   "exception_policy": {
     "schema_version": 1,

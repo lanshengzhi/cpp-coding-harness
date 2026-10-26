@@ -8,7 +8,7 @@
 #include "coding_agent/AgentSession.hpp"
 #include "coding_agent/runtime/SessionFactory.hpp"
 #include "coding_agent/ModelRuntimeTestSupport.hpp"
-#include "agent/harness/RuntimeRoot.hpp"
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include <cch/coding_agent/ModelRuntime.hpp>
 
 #include <catch2/catch_test_macros.hpp>

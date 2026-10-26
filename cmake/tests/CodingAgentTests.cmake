@@ -11,22 +11,21 @@ include_guard(GLOBAL)
     set_tests_properties(cch_user_visible_identity PROPERTIES
         LABELS "coding_agent;tui;issue790;spec")
 
-    # harness and tools. Session persistence, compaction and transcript export
-    # are application-owned (#1069), so their cases live in
-    # cch_tests_coding_agent; this shard keeps the agent-core capabilities alone.
+    # Application-owned local environment and built-in tools (#1073).
+    # Keep this focused shard separate from Session composition tests.
     add_executable(cch_tests_harness_tools
         tests/Catch2Main.cpp
-        tests/harness/AsyncFileSystemTest.cpp
-        tests/harness/AsyncLocalShellTest.cpp
-        tests/harness/ProcessTest.cpp
-        tests/harness/RuntimeRootTest.cpp
-        tests/harness/WorkspaceFileSystemTest.cpp
-        tests/tools/AsyncToolsTest.cpp
+        tests/coding_agent/environment/AsyncFileSystemTest.cpp
+        tests/coding_agent/environment/AsyncLocalShellTest.cpp
+        tests/coding_agent/environment/ProcessTest.cpp
+        tests/coding_agent/environment/RuntimeRootTest.cpp
+        tests/coding_agent/environment/WorkspaceFileSystemTest.cpp
+        tests/coding_agent/tools/AsyncToolsTest.cpp
 )
     target_include_directories(cch_tests_harness_tools PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})
     target_link_libraries(cch_tests_harness_tools
         PRIVATE
-            cch_agent_core
+            cch_coding_agent
             Boost::headers
             Catch2::Catch2
 )
@@ -129,6 +128,7 @@ include_guard(GLOBAL)
         tests/coding_agent/runtime/SessionCloseTest.cpp
         tests/coding_agent/runtime/SessionCommitmentAsyncTest.cpp
         tests/coding_agent/runtime/SessionEventCommitmentTest.cpp
+        tests/coding_agent/runtime/ApplicationToolsTest.cpp
         tests/coding_agent/runtime/SessionFactoryUserShellTest.cpp
         tests/coding_agent/runtime/SessionAssemblyContractTest.cpp
         tests/coding_agent/runtime/RuntimeFixtureTest.cpp

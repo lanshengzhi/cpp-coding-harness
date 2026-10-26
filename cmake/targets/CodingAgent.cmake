@@ -10,6 +10,17 @@ cch_parity_declare_target(
     ROLE owner
     OWNER cch_coding_agent
     SOURCES
+        src/coding_agent/environment/AsyncLocalFileSystem.cpp
+        src/coding_agent/environment/AsyncLocalShell.cpp
+        src/coding_agent/environment/Process.cpp
+        src/coding_agent/environment/RuntimeRoot.cpp
+        src/coding_agent/environment/ShellResolver.cpp
+        src/coding_agent/environment/WorkspaceFileSystemFdWalk.cpp
+        src/coding_agent/environment/WorkspaceFileOperations.cpp
+        src/coding_agent/environment/WorkspacePathResolution.cpp
+        src/coding_agent/environment/WorkspaceFileSystemTemp.cpp
+        src/coding_agent/tools/AsyncToolFactories.cpp
+        src/coding_agent/tools/EditDiff.cpp
         src/coding_agent/AgentConfigDir.cpp
         src/coding_agent/AgentSession.cpp
         src/coding_agent/AgentSessionCompaction.cpp
@@ -76,6 +87,7 @@ cch_parity_declare_target(
         cch_support
         Boost::headers@boost
         Threads::Threads@threads
+        utf8proc::utf8proc@utf8proc
         WebP::webpdecoder@webp
         wasmedge@wasmedge
         glaze::glaze@glaze

@@ -9,10 +9,10 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/Settings.hpp>
 #include <cch/coding_agent/session/SessionStore.hpp>
-#include <cch/agent/tools/ToolFactories.hpp>
-#include <cch/agent/harness/LocalFileSystem.hpp>
-#include <cch/agent/harness/LocalShell.hpp>
-#include "agent/harness/RuntimeRoot.hpp"
+#include <cch/coding_agent/tools/ToolFactories.hpp>
+#include <cch/coding_agent/environment/LocalFileSystem.hpp>
+#include <cch/coding_agent/environment/LocalShell.hpp>
+#include "coding_agent/environment/RuntimeRoot.hpp"
 #include <cch/support/Error.hpp>
 #include "support/AsyncResultBridge.hpp"
 #include "coding_agent/ProjectResourceLoader.hpp"

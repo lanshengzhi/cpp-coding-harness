@@ -4,7 +4,7 @@
 #include <cch/coding_agent/ProjectTrust.hpp>
 #include <cch/coding_agent/PromptTemplate.hpp>
 #include <cch/coding_agent/Skill.hpp>
-#include <cch/agent/harness/FileSystem.hpp>
+#include <cch/coding_agent/environment/FileSystem.hpp>
 #include "coding_agent/prompt/SystemPromptBuilder.hpp"
 
 #include <filesystem>

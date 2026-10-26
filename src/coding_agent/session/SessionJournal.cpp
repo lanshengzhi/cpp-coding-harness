@@ -1,7 +1,7 @@
 #include "SessionJournal.hpp"
 #include "coding_agent/session/SessionJournalTestHooks.hpp"
 
-#include "agent/harness/PosixWrite.hpp"
+#include "coding_agent/environment/PosixWrite.hpp"
 #include "support/UniqueFd.hpp"
 
 #include <algorithm>
