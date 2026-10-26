@@ -61,6 +61,10 @@ public:
     [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id);
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id);
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit);
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id);
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id);
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit);
 
     [[nodiscard]] bool closed() const;
     void close();

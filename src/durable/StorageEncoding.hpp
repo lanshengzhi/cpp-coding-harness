@@ -26,6 +26,9 @@ namespace cch::durable {
 [[nodiscard]] chord::Json encode_task_record(const TaskRecord& task);
 [[nodiscard]] support::Expected<TaskRecord> decode_task_record(const chord::Json& json);
 
+[[nodiscard]] chord::Json encode_submission_record(const SubmissionRecord& submission);
+[[nodiscard]] support::Expected<SubmissionRecord> decode_submission_record(const chord::Json& json);
+
 [[nodiscard]] support::JsonValue encode_json(const chord::Json& json);
 [[nodiscard]] support::Expected<chord::Json> decode_json(const support::JsonValue& json);
 

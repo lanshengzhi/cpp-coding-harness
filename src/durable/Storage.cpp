@@ -59,6 +59,19 @@ support::Expected<std::vector<TaskRecord>> MemoryStorage::scan_tasks(std::size_t
     return impl_->scan_tasks(limit);
 }
 
+support::Expected<std::optional<SubmissionRecord>> MemoryStorage::submission(SubmissionId id) {
+    return impl_->submission(id);
+}
+
+support::Expected<std::optional<SubmissionRecord>> MemoryStorage::submission_by_request(
+        ConversationId conversation_id, std::string_view request_id) {
+    return impl_->submission_by_request(conversation_id, request_id);
+}
+
+support::Expected<std::vector<SubmissionRecord>> MemoryStorage::scan_submissions(std::size_t limit) {
+    return impl_->scan_submissions(limit);
+}
+
 support::ExpectedVoid MemoryStorage::close() {
     impl_->close();
     return {};

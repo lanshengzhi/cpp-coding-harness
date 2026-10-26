@@ -64,6 +64,8 @@ struct StorageState::Impl {
     std::map<std::string, std::int64_t> document_id_by_address;
     std::map<std::int64_t, TaskRecord> tasks;
     std::vector<std::int64_t> task_ids;
+    std::map<std::int64_t, SubmissionRecord> submissions;
+    std::vector<std::int64_t> submission_ids;
     std::int64_t next_id{kFirstId};
     Seq next_seq{kFirstSeq};
     std::string closed_message;
@@ -94,6 +96,8 @@ struct StorageState::Impl {
         std::map<std::string, std::int64_t> next_document_ids = document_id_by_address;
         std::map<std::int64_t, TaskRecord> next_tasks = tasks;
         std::vector<std::int64_t> next_task_ids = task_ids;
+        std::map<std::int64_t, SubmissionRecord> next_submissions = submissions;
+        std::vector<std::int64_t> next_submission_ids = submission_ids;
         std::int64_t next_id = this->next_id;
 
         for (const StorageWrite& write : detached) {
@@ -201,6 +205,19 @@ struct StorageState::Impl {
                     next_task_ids.push_back(record.id.value);
                 }
                 next_id = std::max(next_id, record.id.value + 1);
+            } else if (write.type == "submission") {
+                if (!write.submission.has_value()) {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Validation, "Submission write has no record"));
+                }
+                const SubmissionRecord& record = *write.submission;
+                // Every submission write replaces the record (frozen pi
+                // `MemoryStorage` submission case).
+                if (!next_submissions.contains(record.id.value)) {
+                    next_submission_ids.push_back(record.id.value);
+                }
+                next_submissions.insert_or_assign(record.id.value, record);
+                next_id = std::max(next_id, record.id.value + 1);
             } else {
                 return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown storage write"));
             }
@@ -214,6 +231,8 @@ struct StorageState::Impl {
         document_id_by_address = std::move(next_document_ids);
         tasks = std::move(next_tasks);
         task_ids = std::move(next_task_ids);
+        submissions = std::move(next_submissions);
+        submission_ids = std::move(next_submission_ids);
         this->next_id = next_id;
         next_seq = std::max(next_seq, seq + 1);
         return consume_seq ? seq : next_seq;
@@ -370,6 +389,50 @@ support::Expected<std::vector<TaskRecord>> StorageState::scan_tasks(std::size_t 
     std::vector<TaskRecord> records;
     records.reserve(std::min(limit, impl_->tasks.size()));
     for (const auto& [id, record] : impl_->tasks) {
+        if (records.size() >= limit) {
+            break;
+        }
+        records.push_back(record);
+    }
+    return records;
+}
+
+support::Expected<std::optional<SubmissionRecord>> StorageState::submission(SubmissionId id) {
+    if (impl_->closed) {
+        return std::unexpected(impl_->closed_error());
+    }
+    const auto found = impl_->submissions.find(id.value);
+    if (found == impl_->submissions.end()) {
+        return std::optional<SubmissionRecord>{};
+    }
+    return std::optional<SubmissionRecord>{found->second};
+}
+
+support::Expected<std::optional<SubmissionRecord>> StorageState::submission_by_request(
+        ConversationId conversation_id, std::string_view request_id) {
+    if (impl_->closed) {
+        return std::unexpected(impl_->closed_error());
+    }
+    // The map iterates in ascending ID order, so the last match is the newest
+    // holder of one conversation-scoped key (frozen pi
+    // `MemoryStorage.submissionIdsByRequest`).
+    std::optional<SubmissionRecord> latest;
+    for (const auto& [id, record] : impl_->submissions) {
+        if (record.conversation_id == conversation_id && record.request_id.has_value() &&
+                *record.request_id == request_id) {
+            latest = record;
+        }
+    }
+    return latest;
+}
+
+support::Expected<std::vector<SubmissionRecord>> StorageState::scan_submissions(std::size_t limit) {
+    if (impl_->closed) {
+        return std::unexpected(impl_->closed_error());
+    }
+    std::vector<SubmissionRecord> records;
+    records.reserve(std::min(limit, impl_->submissions.size()));
+    for (const auto& [id, record] : impl_->submissions) {
         if (records.size() >= limit) {
             break;
         }

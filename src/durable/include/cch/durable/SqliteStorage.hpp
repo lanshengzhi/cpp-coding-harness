@@ -44,6 +44,10 @@ public:
     [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override;
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override;
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override;
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override;
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id) override;
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) override;
     [[nodiscard]] support::ExpectedVoid close() override;
 
 private:

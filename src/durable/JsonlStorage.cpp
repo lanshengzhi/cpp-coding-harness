@@ -302,13 +302,14 @@ struct ParsedSidecar {
     std::size_t start{0};
 };
 
-enum class MainKind { Conversation, Entry, Task, DocumentCreate, DocumentChange, DocumentRetire };
+enum class MainKind { Conversation, Entry, Task, Submission, DocumentCreate, DocumentChange, DocumentRetire };
 
 struct MainOperation {
     MainKind kind{MainKind::Conversation};
     ConversationRecord conversation{};
     EntryRecord entry{};
     TaskRecord task{};
+    SubmissionRecord submission{};
     DocumentRecord document_record{};
     std::optional<ConversationId> document_conversation_id{};
     DocumentId document_id{};
@@ -490,6 +491,21 @@ struct MainMarker {
         }
         return MainOperation{.kind = MainKind::Task, .task = std::move(*decoded)};
     }
+    if (*type == "submission") {
+        const auto* record = support::json_member(*operation, "value");
+        if (record == nullptr) {
+            return std::unexpected(corruption("Invalid submission write in " + std::string{description}));
+        }
+        auto json = chord::Json::from_support(*record);
+        if (!json) {
+            return std::unexpected(std::move(json.error()));
+        }
+        auto decoded = decode_submission_record(*json);
+        if (!decoded) {
+            return std::unexpected(std::move(decoded.error()));
+        }
+        return MainOperation{.kind = MainKind::Submission, .submission = std::move(*decoded)};
+    }
     if (*type == "document.retire") {
         const auto id = support::json_integer_member(*operation, "id");
         if (!id) {
@@ -621,6 +637,13 @@ struct EncodedCommit {
                 main_writes.push_back(object({
                         {"type", support::JsonValue{"task"}},
                         {"value", encode_task_record(*write.task).to_support()},
+                }));
+            }
+        } else if (write.type == "submission") {
+            if (write.submission.has_value()) {
+                main_writes.push_back(object({
+                        {"type", support::JsonValue{"submission"}},
+                        {"value", encode_submission_record(*write.submission).to_support()},
                 }));
             }
         } else if (write.type == "document.create") {
@@ -828,6 +851,8 @@ struct JsonlStorage::Impl {
                     writes.push_back(StorageWrite{.type = "entry", .entry = operation.entry});
                 } else if (operation.kind == MainKind::Task) {
                     writes.push_back(StorageWrite{.type = "task", .task = operation.task});
+                } else if (operation.kind == MainKind::Submission) {
+                    writes.push_back(StorageWrite{.type = "submission", .submission = operation.submission});
                 } else if (operation.kind == MainKind::DocumentRetire) {
                     writes.push_back(StorageWrite{.type = "document.retire", .document_id = operation.document_id});
                 } else {
@@ -1101,6 +1126,28 @@ support::Expected<std::vector<TaskRecord>> JsonlStorage::scan_tasks(std::size_t 
         return std::unexpected(*error);
     }
     return impl_->state.scan_tasks(limit);
+}
+
+support::Expected<std::optional<SubmissionRecord>> JsonlStorage::submission(SubmissionId id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.submission(id);
+}
+
+support::Expected<std::optional<SubmissionRecord>> JsonlStorage::submission_by_request(
+        ConversationId conversation_id, std::string_view request_id) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.submission_by_request(conversation_id, request_id);
+}
+
+support::Expected<std::vector<SubmissionRecord>> JsonlStorage::scan_submissions(std::size_t limit) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.scan_submissions(limit);
 }
 
 support::ExpectedVoid JsonlStorage::close() {
