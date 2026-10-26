@@ -75,6 +75,19 @@ public:
         return inner_.scan_tasks(limit);
     }
 
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override {
+        return inner_.submission(id);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id) override {
+        return inner_.submission_by_request(conversation_id, request_id);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) override {
+        return inner_.scan_submissions(limit);
+    }
+
     [[nodiscard]] support::ExpectedVoid close() override { return inner_.close(); }
 
     [[nodiscard]] const std::vector<std::vector<StorageWrite>>& commit_batches() const noexcept {

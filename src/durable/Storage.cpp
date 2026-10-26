@@ -21,7 +21,7 @@ MemoryStorage::MemoryStorage() : impl_(std::make_unique<Impl>()) {}
 MemoryStorage::~MemoryStorage() = default;
 
 support::AsyncResult<Seq> MemoryStorage::commit(std::span<const StorageWrite> writes) {
-    return support::AsyncResult<Seq>{impl_->apply(writes, impl_->next_seq())};
+    return support::AsyncResult<Seq>{impl_->apply_next(writes)};
 }
 
 support::Expected<std::int64_t> MemoryStorage::mint_id() {
@@ -57,6 +57,19 @@ support::Expected<std::optional<TaskRecord>> MemoryStorage::task(TaskId id) { re
 
 support::Expected<std::vector<TaskRecord>> MemoryStorage::scan_tasks(std::size_t limit) {
     return impl_->scan_tasks(limit);
+}
+
+support::Expected<std::optional<SubmissionRecord>> MemoryStorage::submission(SubmissionId id) {
+    return impl_->submission(id);
+}
+
+support::Expected<std::optional<SubmissionRecord>> MemoryStorage::submission_by_request(
+        ConversationId conversation_id, std::string_view request_id) {
+    return impl_->submission_by_request(conversation_id, request_id);
+}
+
+support::Expected<std::vector<SubmissionRecord>> MemoryStorage::scan_submissions(std::size_t limit) {
+    return impl_->scan_submissions(limit);
 }
 
 support::ExpectedVoid MemoryStorage::close() {

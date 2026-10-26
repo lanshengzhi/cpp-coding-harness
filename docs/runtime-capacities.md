@@ -91,6 +91,20 @@ Separate from the `RuntimeRoot` admission limits above, the Headless Core's Proj
 
 `chord::kReplicatedStatePendingLimit = 100` (`src/chord/include/cch/chord/ReplicatedState.hpp`) bounds how many deliveries wait behind one running replicated-state listener. This is **not** a measured Runtime capacity and was not tuned here: it is fixed upstream pi authority (`packages/chord/src/state.ts`, `StateSubscriber.push`, pi v1.3.0 at `71023aec1546d6d677a65669c5665c0927ce0dd0`), and the frozen observation records that overflow keeps only the newest pending value/context/delivery while cold hydration is retained until the subscription starts. It is exempt from this document's measurement procedure because changing the value would diverge from the ported contract, not select a bounded policy. The regression property is pinned by `overflow at the 100-pending bound keeps the newest pending delivery` (`[chord][replicated_state][issue1062]`) and the frozen `fixtures/pi-v1.3.0/audit-1062/observer-delivery.json` scenarios.
 
+## Durable admission head lookup (#1080)
+
+The independent durable Harness starts its newest-first head lookup with 4,096
+entries and doubles the requested count until it finds a marker or reaches the
+end of the conversation. This is an initial scan size, not an admission capacity
+or a maximum history length. The former fixed window silently missed an older
+head; the regression `a write pinned before a head marker buried behind more
+than 4096 newer headless entries settles stale` creates 4,100 newer headless
+entries and checks both stale and current pins. The native GCC 16 Debug focused
+run completed that test in 0.07 seconds; this is a functional observation, not a
+throughput selection or a timing assertion. Lookup remains O(n) in conversation
+size. An indexed latest-head query is the recorded upgrade if profiling shows
+this scan dominates admission on large conversations.
+
 ## Update procedure
 
 A limit changes only through the same evidence path: record the representative workload and environment, repeated samples and variance, the selection rule, the chosen value, and the regression property that protects it. When a limit changes, update this table, the `harness::RuntimeLimits` defaults, and — if the production value is no longer the default — the explicit set in `src/coding_agent/cli/AsyncCliRuntime.cpp`. The regression tests above must pass at the new values before the change is accepted.

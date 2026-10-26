@@ -76,13 +76,26 @@ public:
     /// transaction. Later calls preserve the existing root's configuration.
     [[nodiscard]] support::AsyncResult<ConversationId> root(RootOptions options = {});
 
-    /// Admit one input and start durable generation. Rejects a busy conversation
-    /// before appending the input. The Harness must outlive all returned work.
-    [[nodiscard]] support::AsyncResult<Submission> submit(ConversationId conversation_id, std::string text);
+    /// Admit one submission in one commit (frozen pi `Harness.submit` /
+    /// `admitSubmission`): a known request ID returns its existing submission
+    /// without writing, a display-only write settles at once, a busy
+    /// conversation queues (or rejects `WhenBusy::Reject` with
+    /// `ConversationBusy`), and an idle conversation places the input and
+    /// starts a run. The Harness must outlive all returned work.
+    [[nodiscard]] support::AsyncResult<Submission> submit(ConversationId conversation_id, SubmissionDraft draft);
 
-    /// Wait for the generation task's committed receipt. No final answer is
-    /// exposed until the transaction containing it has been adopted.
-    [[nodiscard]] support::AsyncResult<SettledSubmission> wait_for_submission(Submission submission);
+    /// Withdraw a queued submission and remove its inbox item (frozen pi
+    /// `Harness.abortSubmission`): `"aborted"`, `"already_placed"`,
+    /// `"settled"` or `"not_found"`. The optional conversation narrows the
+    /// lookup, mirroring the frozen conversation-scoped abort.
+    [[nodiscard]] support::AsyncResult<std::string> abort_submission(
+            SubmissionId id, std::optional<ConversationId> conversation_id = std::nullopt);
+
+    /// Withdraw every queued input of the conversation, keep queued writes,
+    /// and settle the running run's inputs `unanswered/aborted` (frozen pi
+    /// `Conversation.abort`, admitted-behavior slice; background crossing
+    /// stays out of scope). Resolves once the conversation is idle.
+    [[nodiscard]] support::AsyncResult<void> abort_conversation(ConversationId conversation_id);
 
     /// Close the harness.
     [[nodiscard]] support::AsyncResult<void> close();
@@ -90,6 +103,10 @@ public:
 private:
     struct Impl;
     explicit Harness(std::unique_ptr<Impl> impl);
+    /// One abort pass: withdraw queued inputs and read the staged live run in
+    /// one commit, abort the marked run, then re-run until the conversation
+    /// is idle (frozen pi `Conversation.abort`).
+    void abort_conversation_pass(ConversationId conversation_id, support::AsyncCompletion<void, support::Error> done);
     std::unique_ptr<Impl> impl_;
 };
 

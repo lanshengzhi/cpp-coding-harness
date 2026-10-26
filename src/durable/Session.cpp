@@ -8,6 +8,7 @@
 #include <deque>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -62,6 +63,15 @@ struct StagedDocument {
     bool created{false};
 };
 
+/// One staged submission change: a settlement, or the placement of a queued
+/// submission at its transcript entry (frozen pi `SubmissionChange`).
+struct SubmissionChange {
+    SubmissionId id{};
+    SubmissionSettlement settlement{};
+    /// The placement entry; absent for a settlement.
+    std::optional<EntryId> placed_entry{std::nullopt};
+};
+
 /// One committed document incarnation the Session knows, by address key.
 struct CachedDocument {
     DocumentRecord record{};
@@ -111,6 +121,14 @@ struct DocumentWatch::Impl {
 // ── Session ─────────────────────────────────────────────────────────────────
 
 struct Session::Impl {
+    // Harness callers, task workers and storage completions can enter from
+    // different threads. Hold one mutation line across queue changes,
+    // preparation, adoption and publication. Reentrancy lets observers enqueue
+    // their next commit on this same line; commit_active preserves FIFO order
+    // while asynchronous storage is outstanding. No thread or scheduler is
+    // owned here, and the lock is not held across an asynchronous wait.
+    mutable std::recursive_mutex mutation_line;
+
     struct PendingCommit {
         std::move_only_function<support::Expected<void>(Transaction&)> change{};
         support::AsyncCompletion<void, support::Error> completion{};
@@ -125,6 +143,11 @@ struct Session::Impl {
         std::vector<StorageWrite> writes{};
         std::vector<StagedDocument> documents{};
         std::vector<chord::Prepared> prepared{};
+        /// Whether each staged document produced a storage write, aligned
+        /// with `documents`: a creation always writes; a loaded incarnation
+        /// writes only when its prepared delta is non-empty (frozen pi
+        /// `Transaction.#assemble`: only a change stores a delta).
+        std::vector<bool> document_written{};
 
         /// Settle the admitted commit: adopt the prepared revisions, publish
         /// the commit, and deliver its document frames. A storage failure
@@ -145,6 +168,10 @@ struct Session::Impl {
             std::vector<DocumentCommitChange> document_changes;
             document_changes.reserve(documents.size());
             for (std::size_t index = 0; index < documents.size(); ++index) {
+                // An acquired-but-unchanged document prepared no delta and
+                // writes nothing: it is not adopted, published, or cached
+                // (frozen pi `Transaction.#assemble`).
+                if (!this->document_written[index]) continue;
                 StagedDocument& document = documents[index];
                 const chord::Prepared& prepared = this->prepared[index];
                 auto adopted = document.tracker.adopt(prepared);
@@ -165,11 +192,13 @@ struct Session::Impl {
             }
 
             // The committed document incarnations become observable now.
-            for (std::size_t index = 0; index < documents.size(); ++index) {
+            for (std::size_t index = 0, change_index = 0; index < documents.size(); ++index) {
+                if (!this->document_written[index]) continue;
                 const StagedDocument& document = documents[index];
                 const std::string key = address_key(document.kind, document.address.conversation_id);
                 session->cached_documents[key] = CachedDocument{
-                        .record = document_changes[index].record, .value = document_changes[index].value};
+                        .record = document_changes[change_index].record, .value = document_changes[change_index].value};
+                ++change_index;
             }
 
             // The publication carries every committed change.
@@ -189,6 +218,9 @@ struct Session::Impl {
                             .entry_id = std::nullopt,
                             .task_id = write.task->id,
                             .task = write.task});
+                } else if (write.type == "submission" && write.submission.has_value()) {
+                    publication.changes.push_back(
+                            SubmissionCommitChange{.type = "submission", .value = *write.submission});
                 }
             }
             for (const DocumentCommitChange& change : document_changes) {
@@ -316,6 +348,7 @@ struct Session::Impl {
             std::move(commit_now(std::move(pending.change)))
                     .start([this, completion = std::move(pending.completion)](
                                    std::expected<void, support::Error> outcome) mutable noexcept {
+                        std::lock_guard lock(mutation_line);
                         completion(std::move(outcome));
                         commit_active = false;
                         pump_requested = true;
@@ -397,6 +430,12 @@ struct Transaction::Impl {
     bool sealed{false};
     std::vector<StorageWrite> writes{};
     std::vector<StagedDocument> documents{};
+    /// The submission candidates this transaction created or replaced so far,
+    /// by ID (frozen pi `Tx.#submissions`).
+    std::map<std::int64_t, SubmissionRecord> staged_submissions{};
+    /// The staged submission changes resolved at assembly (frozen pi
+    /// `Tx.#submissionChanges`).
+    std::vector<SubmissionChange> submission_changes{};
 
     [[nodiscard]] support::ExpectedVoid reject_read(std::string_view method) const {
         if (sealed) {
@@ -414,7 +453,51 @@ struct Transaction::Impl {
         }
         return {};
     }
+
+    /// Whether one conversation is visible to this transaction: one it staged
+    /// or one committed state holds (frozen pi `Tx.#requireConversation`).
+    [[nodiscard]] bool has_conversation(ConversationId id) const {
+        for (const StorageWrite& write : writes) {
+            if (write.type == "conversation" && write.conversation.has_value() && write.conversation->id == id) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
+
+/// Apply one staged change to the current candidate record (frozen pi
+/// `applySubmissionChange`). Placement turns a queued input placed and a
+/// queued write done; only a placed input can be answered; a terminal record
+/// stays unchanged.
+[[nodiscard]] support::Expected<SubmissionRecord> apply_submission_change(
+        const SubmissionRecord& current, const SubmissionChange& change) {
+    if (current.status == "done" || current.status == "unanswered") {
+        return current;
+    }
+    if (change.placed_entry.has_value()) {
+        if (current.status != "queued") {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    std::string{"Submission "} + std::to_string(current.id.value) + " is not queued"));
+        }
+        SubmissionRecord placed = current;
+        placed.status = current.type == "input" ? "placed" : "done";
+        placed.entry = *change.placed_entry;
+        return placed;
+    }
+    if (change.settlement.status == "done" && current.status != "placed") {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                std::string{"Submission "} + std::to_string(current.id.value) + " is not a placed input"));
+    }
+    // Queued and placed records carry no answer, reason, or detail; an
+    // unanswered input keeps its entry.
+    SubmissionRecord settled = current;
+    settled.status = change.settlement.status;
+    settled.answer = change.settlement.answer;
+    settled.reason = change.settlement.reason;
+    settled.detail = change.settlement.detail;
+    return settled;
+}
 
 Transaction::Transaction(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
@@ -633,6 +716,66 @@ support::Expected<std::vector<TaskRecord>> Transaction::scan_tasks(std::size_t l
     return impl_->storage->scan_tasks(limit);
 }
 
+support::Expected<std::optional<SubmissionRecord>> Transaction::submission(SubmissionId id) {
+    if (auto rejected = impl_->reject_read("submission"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->submission(id);
+}
+
+support::Expected<std::optional<SubmissionRecord>> Transaction::submission_by_request(
+        ConversationId conversation_id, std::string_view request_id) {
+    if (auto rejected = impl_->reject_read("submissionByRequest"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->submission_by_request(conversation_id, request_id);
+}
+
+support::Expected<SubmissionRecord> Transaction::create_submission(SubmissionRecord record) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    impl_->has_table_write = true;
+    if (!impl_->has_conversation(record.conversation_id)) {
+        auto conversation = impl_->storage->conversation(record.conversation_id);
+        if (!conversation) {
+            return std::unexpected(std::move(conversation.error()));
+        }
+        if (!(*conversation).has_value()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    std::string{"Conversation "} + std::to_string(record.conversation_id.value) + " does not exist"));
+        }
+    }
+    auto id = impl_->storage->mint_id();
+    if (!id) {
+        return std::unexpected(std::move(id.error()));
+    }
+    record.id = SubmissionId{.value = *id};
+    impl_->staged_submissions.emplace(record.id.value, record);
+    return record;
+}
+
+support::ExpectedVoid Transaction::settle_submission(SubmissionId id, SubmissionSettlement settlement) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    // The change stages and resolves at assembly; it is not a caller table
+    // read and works after the first table write.
+    impl_->has_table_write = true;
+    impl_->submission_changes.push_back(
+            SubmissionChange{.id = id, .settlement = std::move(settlement), .placed_entry = std::nullopt});
+    return {};
+}
+
+support::ExpectedVoid Transaction::place_submission(SubmissionId id, EntryId entry) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    impl_->has_table_write = true;
+    impl_->submission_changes.push_back(SubmissionChange{.id = id, .settlement = {}, .placed_entry = entry});
+    return {};
+}
+
 // ── DocumentWatch ───────────────────────────────────────────────────────────
 
 DocumentWatch::DocumentWatch(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
@@ -689,11 +832,15 @@ std::unique_ptr<Session> Session::create(Storage& storage) {
     return std::unique_ptr<Session>(new Session(std::move(impl)));
 }
 
-bool Session::failed() const noexcept { return impl_->failed; }
+bool Session::failed() const noexcept {
+    std::lock_guard lock(impl_->mutation_line);
+    return impl_->failed;
+}
 
 const std::optional<std::string>& Session::failure_message() const noexcept { return impl_->failure_message; }
 
 SessionEnd Session::closed() const noexcept {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return SessionEnd{.reason = SessionEndReason::Failed, .failed = true, .error_message = impl_->failure_message};
     }
@@ -704,6 +851,7 @@ SessionEnd Session::closed() const noexcept {
 }
 
 support::AsyncResult<void> Session::commit(std::move_only_function<support::Expected<void>(Transaction&)> change) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(session_failed_error())}};
     }
@@ -713,6 +861,7 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
             [session = this, change = std::move(change)](
                     support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                std::lock_guard lock(session->impl_->mutation_line);
                 if (session->impl_->failed) {
                     completion(std::unexpected(session_failed_error()));
                     return;
@@ -745,6 +894,52 @@ support::AsyncResult<void> Session::Impl::commit_now(
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(outcome.error()))}};
     }
 
+    // Resolve the staged submission changes at assembly, against this
+    // transaction's staged candidates first, then committed state (frozen pi
+    // `Tx.#assemble`). A failure rejects the commit and publishes nothing,
+    // like a failed callback.
+    const auto reject_assembly = [&transaction](support::Error error) {
+        transaction.impl_->sealed = true;
+        for (StagedDocument& document : transaction.impl_->documents) {
+            document.change.abort();
+        }
+        return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(error))}};
+    };
+    for (const SubmissionChange& change : transaction.impl_->submission_changes) {
+        std::optional<SubmissionRecord> committed;
+        SubmissionRecord* current = nullptr;
+        if (auto staged = transaction.impl_->staged_submissions.find(change.id.value);
+                staged != transaction.impl_->staged_submissions.end()) {
+            current = &staged->second;
+        } else {
+            auto stored = storage->submission(change.id);
+            if (!stored) {
+                return reject_assembly(std::move(stored.error()));
+            }
+            if (!(*stored).has_value()) {
+                return reject_assembly(support::make_error(support::ErrorCode::Validation,
+                        std::string{"Submission "} + std::to_string(change.id.value) + " does not exist"));
+            }
+            committed = **stored;
+            current = &*committed;
+        }
+        auto next = apply_submission_change(*current, change);
+        if (!next) {
+            return reject_assembly(std::move(next.error()));
+        }
+        // A change that leaves a committed record unchanged publishes no write
+        // (frozen pi `Tx.#assemble` replaces the candidate only when the
+        // resolved record differs); a staged candidate was already part of
+        // the batch.
+        if (!committed.has_value() || *next != *current) {
+            transaction.impl_->staged_submissions.insert_or_assign(change.id.value, *next);
+        }
+    }
+    // Every resolved candidate joins the batch as a submission write.
+    for (const auto& [id, record] : transaction.impl_->staged_submissions) {
+        transaction.impl_->writes.push_back(StorageWrite{.type = "submission", .submission = record});
+    }
+
     auto state = std::make_shared<Session::Impl::CommitState>();
     state->session = this;
     state->storage = storage;
@@ -764,10 +959,15 @@ support::AsyncResult<void> Session::Impl::commit_now(
 
     // The document writes join the batch. A creation carries the record and
     // the base value; a change carries the incarnation and the exact
-    // operations.
+    // operations. A loaded incarnation that prepared no operations writes
+    // nothing, so acquiring a document without modifying it adds no write to
+    // the batch (frozen pi `Transaction.#assemble`).
     for (std::size_t index = 0; index < state->documents.size(); ++index) {
         const StagedDocument& document = state->documents[index];
         const chord::Prepared& prepared = state->prepared[index];
+        const bool written = document.created || !prepared.ops().empty();
+        state->document_written.push_back(written);
+        if (!written) continue;
         StorageWrite write{.type = document.created ? "document.create" : "document.change"};
         write.document_conversation_id = document.address.conversation_id;
         if (document.created) {
@@ -789,6 +989,7 @@ support::AsyncResult<void> Session::Impl::commit_now(
                 state->storage->commit(state->writes)
                         .start([state, completion = std::move(completion)](
                                        std::expected<Seq, support::Error> outcome) mutable noexcept {
+                            std::lock_guard lock(state->session->mutation_line);
                             support::ExpectedVoid settled = state->settle(std::move(outcome));
                             completion(std::move(settled));
                         });
@@ -796,6 +997,7 @@ support::AsyncResult<void> Session::Impl::commit_now(
 }
 
 support::AsyncResult<void> Session::close() {
+    std::lock_guard lock(impl_->mutation_line);
     impl_->closed = true;
     impl_->notify_close();
     impl_->run_next_commit();
@@ -805,6 +1007,7 @@ support::AsyncResult<void> Session::close() {
     }
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
             [session = this](support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                std::lock_guard lock(session->impl_->mutation_line);
                 if (session->impl_->storage_closed) {
                     completion(support::ExpectedVoid{});
                     return;
@@ -814,6 +1017,7 @@ support::AsyncResult<void> Session::close() {
 }
 
 support::ExpectedVoid Session::subscribe_commits(CommitListener listener) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return std::unexpected(session_failed_error());
     }
@@ -825,6 +1029,7 @@ support::ExpectedVoid Session::subscribe_commits(CommitListener listener) {
 }
 
 support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->closed) {
         return std::unexpected(session_closed_error());
     }
@@ -834,6 +1039,7 @@ support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
 
 support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
         const DocumentDefinition& definition, DocumentAddress address) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(session_failed_error())};
     }
@@ -849,6 +1055,7 @@ support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
 
 support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
         const DocumentDefinition& definition, DocumentAddress address) {
+    std::lock_guard lock(impl_->mutation_line);
     if (impl_->failed) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(session_failed_error())};
     }

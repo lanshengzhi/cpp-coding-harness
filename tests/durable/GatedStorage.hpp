@@ -129,6 +129,21 @@ public:
         return inner_->scan_tasks(limit);
     }
 
+    [[nodiscard]] support::Expected<std::optional<::cch::durable::SubmissionRecord>> submission(
+            ::cch::durable::SubmissionId id) override {
+        return inner_->submission(id);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<::cch::durable::SubmissionRecord>> submission_by_request(
+            ::cch::durable::ConversationId conversation_id, std::string_view request_id) override {
+        return inner_->submission_by_request(conversation_id, request_id);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<::cch::durable::SubmissionRecord>> scan_submissions(
+            std::size_t limit) override {
+        return inner_->scan_submissions(limit);
+    }
+
     [[nodiscard]] support::ExpectedVoid close() override {
         close_calls_ += 1;
         return inner_->close();

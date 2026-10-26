@@ -80,13 +80,6 @@ template <typename Blocks> Json blocks_json(const Blocks& blocks) {
     return Json{std::move(result)};
 }
 
-Json user_json(const ai::UserMessage& message) {
-    Json content;
-    if (const auto* text = std::get_if<std::string>(&message.content)) content = Json{*text};
-    else content = blocks_json(std::get<std::vector<ai::Content>>(message.content));
-    return Json{Object{{"role", "user"}, {"content", std::move(content)}, {"timestamp", numeric(message.timestamp)}}};
-}
-
 Json system_json(const ai::SystemMessage& message) {
     Object result{{"role", "system"}, {"content", message.content}, {"timestamp", numeric(message.timestamp)}};
     Object sections;
@@ -151,16 +144,21 @@ support::Error validation(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
 }
 
-support::Expected<std::int64_t> integer_field(const Json& json, std::string_view field) {
-    const auto* object = json.as_object();
-    if (object == nullptr) return std::unexpected(validation("Expected an object"));
-    const auto found = object->find(std::string{field});
-    const auto* number = found == object->end() ? nullptr : found->second.as_number();
+support::Expected<std::int64_t> as_integer(const Json& json) {
+    const auto* number = json.as_number();
     // The strict bounds avoid double rounding INT64_MAX up to 2^63.
     if (number == nullptr || !(*number >= -0x1p63 && *number < 0x1p63) || std::trunc(*number) != *number) {
         return std::unexpected(validation("Expected an integer field"));
     }
     return static_cast<std::int64_t>(*number);
+}
+
+support::Expected<std::int64_t> integer_field(const Json& json, std::string_view field) {
+    const auto* object = json.as_object();
+    if (object == nullptr) return std::unexpected(validation("Expected an object"));
+    const auto found = object->find(std::string{field});
+    if (found == object->end()) return std::unexpected(validation("Expected an integer field"));
+    return as_integer(found->second);
 }
 
 support::Expected<ai::UserMessage> input_user(const EntryRecord& entry) {
@@ -185,7 +183,416 @@ support::Expected<ai::UserMessage> input_user(const EntryRecord& entry) {
     return ai::user_text_message(*text->second.as_string(), *timestamp);
 }
 
+// ── Lane C admission helpers (frozen pi inbox.ts, live.ts, submissions.ts) ──
+
+constexpr std::string_view kInboxDocKind{"pi.inbox:v1"};
+constexpr std::string_view kLiveDocKind{"pi.live:v1"};
+
+chord::Path inbox_items_path() { return chord::Path{chord::path_key("items")}; }
+
+chord::Path live_run_path() { return chord::Path{chord::path_key("run")}; }
+
+/// The starting inbox of every conversation; `root()` creates the same
+/// incarnation lazily (frozen pi `InboxDoc.initial`).
+Json initial_inbox_value() { return Json{Object{{"items", Json{Array{}}}}}; }
+
+/// The starting live document of every conversation (frozen pi
+/// `LiveDoc.initial`).
+Json initial_live_value() { return Json{Object{}}; }
+
+/// Working copy of the staged inbox's item array (frozen `readInboxItems`).
+support::Expected<Array> read_inbox_items(chord::Draft& inbox) {
+    auto items = inbox.get(inbox_items_path());
+    if (!items) return std::unexpected(items.error());
+    auto* array = items->has_value() ? (**items).as_array() : nullptr;
+    if (array == nullptr) return std::unexpected(validation("Inbox items must be an array"));
+    return *array;
+}
+
+/// A write is display-only when it pins neither model messages nor a head
+/// (presence counts, even when empty; frozen `isDisplayOnly`).
+bool is_display_only(const WriteEntry& entry) { return !entry.model.has_value() && !entry.head.has_value(); }
+
+/// The validated mode of one persisted inbox item. The mode string is frozen
+/// wire vocabulary; anything else fails the commit with a typed error instead
+/// of being skipped or throwing (the document survived persistence, so
+/// corruption must surface as a rejected commit, not a crash).
+support::Expected<std::string_view> inbox_item_mode(const Json& item) {
+    const auto* object = item.as_object();
+    if (object == nullptr) return std::unexpected(validation("An inbox item must be an object"));
+    const auto found = object->find("mode");
+    if (found == object->end() || found->second.as_string() == nullptr) {
+        return std::unexpected(validation("An inbox item must have a mode"));
+    }
+    const std::string_view mode{*found->second.as_string()};
+    if (mode != "write" && mode != "steer" && mode != "followUp") {
+        return std::unexpected(validation("An inbox item mode must be \"write\", \"steer\" or \"followUp\""));
+    }
+    return mode;
+}
+
+/// One required member of a persisted inbox item, without the throwing
+/// `std::map::at` (typed error under `-fno-exceptions` parity builds).
+support::Expected<const Json*> inbox_item_member(const Object& item, std::string_view name) {
+    const auto found = item.find(std::string{name});
+    if (found == item.end()) {
+        return std::unexpected(validation("An inbox item must have a " + std::string{name}));
+    }
+    return &found->second;
+}
+
+/// The submission id of one persisted inbox item.
+support::Expected<std::int64_t> inbox_item_id(const Object& item) {
+    auto id = inbox_item_member(item, "id");
+    if (!id) return std::unexpected(id.error());
+    return as_integer(*id.value());
+}
+
+/// Whether a `head: "self"` write waits in the queue (frozen
+/// `hasQueuedReset`).
+support::Expected<bool> has_queued_reset(const Array& items) {
+    for (const Json& item : items) {
+        auto mode = inbox_item_mode(item);
+        if (!mode) return std::unexpected(mode.error());
+        if (*mode != "write") continue;
+        const auto* object = item.as_object();
+        auto entry = inbox_item_member(*object, "entry");
+        if (!entry) return std::unexpected(entry.error());
+        const auto* draft = entry.value()->as_object();
+        if (draft == nullptr) return std::unexpected(validation("An inbox write item entry must be an object"));
+        const auto head = draft->find("head");
+        if (head != draft->end() && head->second.as_string() != nullptr && *head->second.as_string() == "self") {
+            return true;
+        }
+    }
+    return false;
+}
+
+/// A write whose pinned head targets an entry before the active range is
+/// stale (frozen `isStale`: strictly before the newest head marker). The
+/// typed draft's pin was already validated by `write_entry_from_json`, so no
+/// persisted number is cast here.
+bool is_stale(const Boundary& boundary, const WriteEntry& draft) {
+    if (!draft.head.has_value() || !boundary.head.has_value()) return false;
+    const auto* pinned = std::get_if<EntryId>(&*draft.head);
+    return pinned != nullptr && pinned->value < boundary.head->value;
+}
+
+Json input_entry_json(const InputEntry& entry) {
+    Object value;
+    value.emplace("kind", Json{entry.kind});
+    if (entry.data.has_value()) {
+        value.emplace("data", *entry.data);
+    }
+    return Json{std::move(value)};
+}
+
+support::Expected<std::optional<InputEntry>> input_entry_from_json(const Json& json) {
+    const auto* value = json.as_object();
+    if (value == nullptr) return std::unexpected(validation("Invalid input entry"));
+    InputEntry entry;
+    const auto kind = value->find("kind");
+    if (kind == value->end() || kind->second.as_string() == nullptr) {
+        return std::unexpected(validation("An input entry must have a kind"));
+    }
+    entry.kind = *kind->second.as_string();
+    if (const auto it = value->find("data"); it != value->end()) {
+        entry.data = it->second;
+    }
+    return std::optional<InputEntry>{std::move(entry)};
+}
+
+Json write_entry_json(const WriteEntry& entry) {
+    Object value;
+    value.emplace("kind", Json{entry.kind});
+    if (entry.data.has_value()) {
+        value.emplace("data", *entry.data);
+    }
+    if (entry.model.has_value()) {
+        Array model;
+        model.reserve(entry.model->size());
+        for (const Json& message : *entry.model) {
+            model.push_back(message);
+        }
+        value.emplace("model", Json{std::move(model)});
+    }
+    if (entry.head.has_value()) {
+        if (std::holds_alternative<SelfEntryHead>(*entry.head)) {
+            value.emplace("head", Json{std::string{"self"}});
+        } else {
+            value.emplace("head", numeric(std::get<EntryId>(*entry.head).value));
+        }
+    }
+    return Json{std::move(value)};
+}
+
+support::Expected<WriteEntry> write_entry_from_json(const Json& json) {
+    const auto* value = json.as_object();
+    if (value == nullptr) return std::unexpected(validation("Invalid write entry"));
+    WriteEntry entry;
+    const auto kind = value->find("kind");
+    if (kind == value->end() || kind->second.as_string() == nullptr) {
+        return std::unexpected(validation("A write entry must have a kind"));
+    }
+    entry.kind = *kind->second.as_string();
+    if (const auto it = value->find("data"); it != value->end()) {
+        entry.data = it->second;
+    }
+    if (const auto it = value->find("model"); it != value->end()) {
+        const auto* model = it->second.as_array();
+        if (model == nullptr) return std::unexpected(validation("A write entry model must be an array"));
+        entry.model = std::vector<Json>{};
+        entry.model->reserve(model->size());
+        for (const Json& message : *model) {
+            entry.model->push_back(message);
+        }
+    }
+    if (const auto it = value->find("head"); it != value->end()) {
+        if (const std::string* marker = it->second.as_string()) {
+            if (*marker != "self") {
+                return std::unexpected(validation("A write entry head must be \"self\" or an entry id"));
+            }
+            entry.head = EntryHeadVariant{SelfEntryHead{}};
+        } else {
+            auto pinned = as_integer(it->second);
+            if (!pinned) return std::unexpected(pinned.error());
+            entry.head = EntryHeadVariant{EntryId{.value = *pinned}};
+        }
+    }
+    return entry;
+}
+
+/// The user message JSON of one input's content: text stays a single text
+/// block, other content passes through (frozen pi `appendInput`).
+Json user_message_json(const Json& content, std::int64_t timestamp) {
+    Json body = content;
+    if (const std::string* text = content.as_string()) {
+        body = Json{Array{Json{Object{{"type", Json{"text"}}, {"text", Json{*text}}}}}};
+    }
+    return Json{Object{
+            {"role", Json{"user"}},
+            {"content", std::move(body)},
+            {"timestamp", numeric(timestamp)},
+    }};
+}
+
+/// Append the entry an input is placed as: the input entry's kind and data,
+/// or `pi.user`, with the user message of the content (frozen `appendInput`).
+support::Expected<EntryRecord> append_input_entry(Transaction& tx,
+        ConversationId conversation_id,
+        const Json& content,
+        const std::optional<InputEntry>& entry,
+        std::int64_t now) {
+    const Json message = user_message_json(content, now);
+    if (!entry.has_value()) {
+        return tx.append_entry(conversation_id,
+                "pi.user",
+                Json{Object{{"model", Json{Array{message}}}}},
+                std::nullopt,
+                std::vector<chord::Json>{as_chord(message)});
+    }
+    Object data;
+    if (entry->data.has_value()) {
+        if (const auto* object = entry->data->as_object()) {
+            data = *object;
+        }
+    }
+    data["kind"] = Json{entry->kind};
+    data["model"] = Json{Array{message}};
+    return tx.append_entry(conversation_id,
+            entry->kind,
+            Json{std::move(data)},
+            std::nullopt,
+            std::vector<chord::Json>{as_chord(message)});
+}
+
+/// Append the entry a write carries: its kind and data, its model messages
+/// and its head selection (frozen `Tx.appendEntry` of an `EntryDraft`).
+support::Expected<EntryRecord> append_write_entry(
+        Transaction& tx, ConversationId conversation_id, const WriteEntry& entry) {
+    Json data = entry.data.has_value() ? *entry.data : Json{Object{}};
+    std::optional<EntryHeadVariant> head;
+    if (entry.head.has_value()) {
+        head = *entry.head;
+    }
+    return tx.append_entry(
+            conversation_id, entry.kind, std::move(data), head, entry.model.value_or(std::vector<Json>{}));
+}
+
+/// The run control marker of one live document value (frozen pi `LiveRun`).
+support::Expected<std::optional<LiveRunState>> parse_live_run(const Json& run) {
+    if (run.is_null()) return std::optional<LiveRunState>{};
+    const auto* value = run.as_object();
+    if (value == nullptr) return std::unexpected(validation("A live run must be an object"));
+    const auto task = value->find("task");
+    if (task == value->end()) return std::unexpected(validation("A live run must name its task"));
+    auto task_id = as_integer(task->second);
+    if (!task_id) return std::unexpected(task_id.error());
+    LiveRunState state{.task = TaskId{.value = *task_id}, .inputs = {}};
+    const auto inputs = value->find("inputs");
+    if (inputs == value->end()) return std::unexpected(validation("A live run must list its inputs"));
+    const auto* array = inputs->second.as_array();
+    if (array == nullptr) return std::unexpected(validation("A live run's inputs must be an array"));
+    for (const Json& item : *array) {
+        auto id = as_integer(item);
+        if (!id) return std::unexpected(id.error());
+        state.inputs.push_back(SubmissionId{.value = *id});
+    }
+    return std::optional<LiveRunState>{std::move(state)};
+}
+
+/// Append the users to the continuing run's input list (frozen pi
+/// `live.run.inputs.push(...users)`).
+support::ExpectedVoid join_run_inputs(chord::Draft& live, TaskId task, const std::vector<SubmissionId>& users) {
+    if (users.empty()) return {};
+    auto run = live.get(live_run_path());
+    if (!run) return std::unexpected(run.error());
+    if (!run->has_value()) return {};
+    auto state = parse_live_run(**run);
+    if (!state) return std::unexpected(state.error());
+    if (!state->has_value() || (*state)->task != task) return {};
+    const auto* value = (**run).as_object();
+    if (value == nullptr) return {};
+    const auto it = value->find("inputs");
+    if (it == value->end()) return std::unexpected(validation("A live run must list its inputs"));
+    const auto* array = it->second.as_array();
+    if (array == nullptr) return std::unexpected(validation("A live run's inputs must be an array"));
+    Array inputs = *array;
+    for (const SubmissionId user : users) {
+        inputs.push_back(numeric(user.value));
+    }
+    Object updated = *value;
+    updated["inputs"] = Json{std::move(inputs)};
+    return live.set(live_run_path(), Json{std::move(updated)});
+}
+
+/// Mint the generation task and publish the live run for `inputs` (frozen pi
+/// `startRun`).
+support::ExpectedVoid start_run(Transaction& tx,
+        ConversationId conversation_id,
+        chord::Draft& live,
+        const std::vector<SubmissionId>& inputs,
+        const TaskDefinition& definition) {
+    auto task = tx.create_task(definition, Json{Object{}}, TaskOptions{.conversation_id = conversation_id});
+    if (!task) {
+        return std::unexpected(task.error());
+    }
+    Array input_ids;
+    input_ids.reserve(inputs.size());
+    for (const SubmissionId input : inputs) {
+        input_ids.push_back(numeric(input.value));
+    }
+    auto set = live.set(
+            live_run_path(), Json{Object{{"task", numeric(task->value)}, {"inputs", Json{std::move(input_ids)}}}});
+    if (!set) {
+        return std::unexpected(set.error());
+    }
+    return {};
+}
+
+enum class BoundaryPoint { PostTools, Final };
+
+/// Place the queued items a boundary selects: every write, the first or all
+/// steers, and at `final` the first or all follow-ups (frozen `applyBoundary`).
+support::Expected<BoundaryResult> apply_boundary(
+        Transaction& tx, Boundary& boundary, BoundaryPoint point, std::int64_t now) {
+    const auto reset = has_queued_reset(boundary.items);
+    if (!reset) return std::unexpected(reset.error());
+    const bool final_point = point == BoundaryPoint::Final || *reset;
+    const auto pick = [&boundary](std::string_view mode,
+                              QueueMode queue_mode) -> support::Expected<std::vector<std::size_t>> {
+        std::vector<std::size_t> indexes;
+        for (std::size_t index = 0; index < boundary.items.size(); ++index) {
+            auto item_mode = inbox_item_mode(boundary.items[index]);
+            if (!item_mode) return std::unexpected(item_mode.error());
+            if (*item_mode == mode) {
+                indexes.push_back(index);
+            }
+        }
+        if (queue_mode == QueueMode::OneAtATime && indexes.size() > 1) {
+            indexes.resize(1);
+        }
+        return indexes;
+    };
+    const auto writes = pick("write", QueueMode::All);
+    if (!writes) return std::unexpected(writes.error());
+    auto users = pick("steer", boundary.steering_mode);
+    if (!users) return std::unexpected(users.error());
+    if (final_point) {
+        auto follow_ups = pick("followUp", boundary.follow_up_mode);
+        if (!follow_ups) return std::unexpected(follow_ups.error());
+        users->insert(users->end(), follow_ups->begin(), follow_ups->end());
+    }
+    std::ranges::sort(*users);
+
+    BoundaryResult result;
+    for (const std::size_t index : *writes) {
+        const auto* item = boundary.items[index].as_object();
+        auto id = inbox_item_id(*item);
+        if (!id) return std::unexpected(id.error());
+        auto entry_json = inbox_item_member(*item, "entry");
+        if (!entry_json) return std::unexpected(entry_json.error());
+        auto draft = write_entry_from_json(*entry_json.value());
+        if (!draft) return std::unexpected(draft.error());
+        if (is_stale(boundary, *draft)) {
+            auto settled = tx.settle_submission(SubmissionId{.value = *id},
+                    SubmissionSettlement{.status = "unanswered", .reason = std::string{"stale"}});
+            if (!settled) return std::unexpected(settled.error());
+            continue;
+        }
+        auto appended = append_write_entry(tx, boundary.conversation_id, *draft);
+        if (!appended) return std::unexpected(appended.error());
+        auto placed = tx.place_submission(SubmissionId{.value = *id}, appended->id);
+        if (!placed) return std::unexpected(placed.error());
+        if (appended->head.has_value()) {
+            boundary.head = appended->head;
+        }
+    }
+    for (const std::size_t index : *users) {
+        const auto* item = boundary.items[index].as_object();
+        auto id = inbox_item_id(*item);
+        if (!id) return std::unexpected(id.error());
+        auto content = inbox_item_member(*item, "content");
+        if (!content) return std::unexpected(content.error());
+        std::optional<InputEntry> entry;
+        if (const auto it = item->find("entry"); it != item->end()) {
+            auto parsed = input_entry_from_json(it->second);
+            if (!parsed) return std::unexpected(parsed.error());
+            entry = std::move(*parsed);
+        }
+        auto appended = append_input_entry(tx, boundary.conversation_id, *content.value(), entry, now);
+        if (!appended) return std::unexpected(appended.error());
+        auto placed = tx.place_submission(SubmissionId{.value = *id}, appended->id);
+        if (!placed) return std::unexpected(placed.error());
+        result.users.push_back(SubmissionId{.value = *id});
+        result.user_entries.push_back(*appended);
+    }
+    std::vector<std::size_t> removed = *writes;
+    removed.insert(removed.end(), users->begin(), users->end());
+    std::ranges::sort(removed, std::greater<>{});
+    for (const std::size_t index : removed) {
+        boundary.items.erase(boundary.items.begin() + static_cast<std::ptrdiff_t>(index));
+    }
+    auto written = boundary.inbox.set(inbox_items_path(), Json{boundary.items});
+    if (!written) return std::unexpected(written.error());
+    // The reset flag reports the reset this boundary placed, not what remains
+    // queued: every write is picked at every boundary, so a queued reset was
+    // necessarily placed here, and it is this placement that ends the run
+    // (frozen pi `BoundaryResult.reset`).
+    result.reset = *reset;
+    return result;
+}
+
 } // namespace
+
+/// The live-run marker staged in a live document draft, if any (frozen pi
+/// live-document read inside a transaction).
+support::Expected<std::optional<LiveRunState>> staged_live_run(chord::Draft& live) {
+    auto run = live.get(live_run_path());
+    if (!run) return std::unexpected(run.error());
+    if (!run->has_value()) return std::optional<LiveRunState>{};
+    return parse_live_run(**run);
+}
 
 TaskHookRegistration task_hook(std::string task_kind, std::string hook_name, TaskHook handler) {
     TaskHookRegistration reg{.task = std::move(task_kind)};
@@ -403,22 +810,29 @@ void Registry::unsubscribe(std::uint64_t id) {
     impl_->subscribers.erase(id);
 }
 
-WorkflowRuntime::WorkflowRuntime(Session& session, Storage& storage, HarnessOptions& options,
+WorkflowRuntime::WorkflowRuntime(Session& session,
+        Storage& storage,
+        HarnessOptions& options,
         std::shared_ptr<std::move_only_function<std::int64_t()>> clock)
     : session_(session), storage_(storage), registry_(options.registry ? *options.registry : empty_registry_),
-      stream_(std::move(options.stream)), settings_(std::move(options.settings)), clock_(std::move(clock)) {}
+      stream_(std::move(options.stream)), settings_(std::move(options.settings)), clock_(std::move(clock)) {
+    auto definition = build_definition();
+    if (!definition) std::terminate(); // fixed, valid built-in definition
+    generation_ = std::make_shared<TaskDefinition>(std::move(*definition));
+}
 
 std::int64_t WorkflowRuntime::now() const { return (*clock_)(); }
 
-TaskDefinition WorkflowRuntime::definition() {
+std::shared_ptr<TaskDefinition> WorkflowRuntime::generation() const noexcept { return generation_; }
+
+support::Expected<TaskDefinition> WorkflowRuntime::build_definition() {
     TaskDefinitionBuilder builder{"pi.generation", 1};
     builder.initial([](const Json&) { return Json{Object{{"phase", "generate"}}}; });
     // This runtime is owned by Harness::Impl, which joins every execution
     // before releasing the definition or this callback's borrowed pointer.
     builder.phase("generate", [this](const TaskRecord& task, TaskRuntime& runtime) { return generate(task, runtime); });
-    auto result = builder.build();
-    if (!result) std::terminate(); // fixed, valid built-in definition
-    return std::move(*result);
+    builder.abort([this](const TaskRecord& task, TaskRuntime& runtime) { return abort_run(task, runtime); });
+    return builder.build();
 }
 
 support::AsyncResult<ConversationId> WorkflowRuntime::root(RootOptions options) {
@@ -454,43 +868,373 @@ support::AsyncResult<ConversationId> WorkflowRuntime::root(RootOptions options) 
             }}};
 }
 
-support::AsyncResult<Submission> WorkflowRuntime::submit(
-        ConversationId conversation_id, std::string text, const TaskDefinition& definition) {
-    auto admission = std::make_shared<Submission>();
-    return support::AsyncResult<Submission>{support::AsyncProducer<Submission, support::Error>{
-            [this, conversation_id, text = std::move(text), definition = &definition, admission](
-                    support::AsyncCompletion<Submission, support::Error> done) mutable noexcept {
-                if (!stream_) {
-                    done(std::unexpected(validation("Harness has no model stream factory")));
-                    return;
+support::AsyncResult<SubmissionId> WorkflowRuntime::submit(ConversationId conversation_id, SubmissionDraft draft) {
+    const std::int64_t admitted_at = now();
+    auto admission = std::make_shared<SubmissionId>();
+    return support::AsyncResult<SubmissionId>{support::AsyncProducer<SubmissionId, support::Error>{
+            [this, conversation_id, draft = std::move(draft), admitted_at, admission](
+                    support::AsyncCompletion<SubmissionId, support::Error> done) mutable noexcept {
+                session_.commit([this, conversation_id, draft = std::move(draft), admitted_at, admission](
+                                        Transaction& tx) -> support::ExpectedVoid {
+                            auto admitted = admit_submission(tx, conversation_id, draft, admitted_at);
+                            if (!admitted) return std::unexpected(admitted.error());
+                            *admission = *admitted;
+                            return {};
+                        })
+                        .start([done = std::move(done), admission](support::ExpectedVoid result) mutable noexcept {
+                            if (!result)
+                                done(std::unexpected(result.error()));
+                            else
+                                done(*admission);
+                        });
+            }}};
+}
+
+support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
+        Transaction& tx, ConversationId conversation_id, const SubmissionDraft& draft, std::int64_t now) {
+    const auto* input = std::get_if<InputSubmissionDraft>(&draft.body);
+    const auto* write = std::get_if<WriteSubmissionDraft>(&draft.body);
+    if (input == nullptr && write == nullptr) {
+        return std::unexpected(validation("A submission draft must be an input or a write"));
+    }
+    // The input entry kind is a caller-owned namespace outside the reserved
+    // `pi.` prefix (frozen pi `checkInputEntry`).
+    if (input != nullptr && input->entry.has_value()) {
+        const std::string& kind = input->entry->kind;
+        if (kind.empty() || kind.starts_with("pi.")) {
+            return std::unexpected(validation(std::format(
+                    "An input entry's kind must be a non-empty string not starting with \"pi.\", got {}", kind)));
+        }
+    }
+    // One request id admits one submission of one type per conversation
+    // (frozen pi `submissionByRequest`): a duplicate returns the existing
+    // handle without a write.
+    if (draft.request_id.has_value()) {
+        auto existing = tx.submission_by_request(conversation_id, *draft.request_id);
+        if (!existing) {
+            return std::unexpected(existing.error());
+        }
+        if (existing->has_value()) {
+            const std::string_view wanted = input != nullptr ? "input" : "write";
+            if ((**existing).type != wanted) {
+                return std::unexpected(validation(std::format("Request {} already identifies a submission of type {}",
+                        *draft.request_id,
+                        (**existing).type)));
+            }
+            return (**existing).id;
+        }
+    }
+    auto conversation = tx.conversation(conversation_id);
+    if (!conversation) {
+        return std::unexpected(conversation.error());
+    }
+    if (!conversation->has_value() || conversation_id.value != 1) {
+        return std::unexpected(validation("The workflow requires the root conversation"));
+    }
+    const DocumentAddress address{.conversation_id = conversation_id};
+    // A display-only write appends and settles at once, busy or not; only
+    // behind a queued reset it queues (frozen pi `admitSubmission`).
+    if (write != nullptr && is_display_only(write->entry)) {
+        auto inbox = tx.doc(inbox_document(), address);
+        if (!inbox) {
+            return std::unexpected(inbox.error());
+        }
+        auto items = read_inbox_items(*inbox);
+        if (!items) {
+            return std::unexpected(items.error());
+        }
+        auto queued_reset = has_queued_reset(*items);
+        if (!queued_reset) return std::unexpected(queued_reset.error());
+        if (!*queued_reset) {
+            auto appended = append_write_entry(tx, conversation_id, write->entry);
+            if (!appended) {
+                return std::unexpected(appended.error());
+            }
+            auto created = tx.create_submission(SubmissionRecord{.id = {},
+                    .conversation_id = conversation_id,
+                    .request_id = draft.request_id,
+                    .type = "write",
+                    .status = "done",
+                    .entry = appended->id});
+            if (!created) {
+                return std::unexpected(created.error());
+            }
+            return created->id;
+        }
+    }
+    auto live = tx.doc(live_document(), address);
+    if (!live) {
+        return std::unexpected(live.error());
+    }
+    const bool busy = [&] {
+        auto run = staged_live_run(*live);
+        return run.has_value() && run->has_value();
+    }();
+    // A busy conversation admits new work only into the queue, and rejects a
+    // `whenBusy: reject` input (frozen pi `ConversationBusy`).
+    if (busy && input != nullptr && input->when_busy.has_value() && *input->when_busy == WhenBusy::Reject) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Busy, std::format("Conversation {} is busy", conversation_id.value)));
+    }
+    // A boundary reads the table, so it is prepared before the first table
+    // write; a busy conversation needs none (frozen pi `prepareBoundary`).
+    std::optional<Boundary> boundary;
+    if (!busy) {
+        auto inbox = tx.doc(inbox_document(), address);
+        if (!inbox) {
+            return std::unexpected(inbox.error());
+        }
+        auto items = read_inbox_items(*inbox);
+        if (!items) {
+            return std::unexpected(items.error());
+        }
+        auto prepared = prepare_boundary(tx, conversation_id, std::move(*inbox), std::move(*items));
+        if (!prepared) {
+            return std::unexpected(prepared.error());
+        }
+        boundary = std::move(*prepared);
+    }
+    if (!boundary.has_value() || !boundary->items.empty()) {
+        auto created = tx.create_submission(SubmissionRecord{.id = {},
+                .conversation_id = conversation_id,
+                .request_id = draft.request_id,
+                .type = input != nullptr ? "input" : "write",
+                .status = "queued"});
+        if (!created) {
+            return std::unexpected(created.error());
+        }
+        std::string mode_str = "write";
+        if (input != nullptr) {
+            mode_str = (input->when_busy.has_value() && *input->when_busy == WhenBusy::Steer) ? "steer" : "followUp";
+        }
+        Object item_obj{
+                {"id", numeric(created->id.value)},
+                {"mode", Json{std::move(mode_str)}},
+        };
+        if (input != nullptr) {
+            item_obj.emplace("content", input->content);
+            if (input->entry.has_value()) {
+                item_obj.emplace("entry", input_entry_json(*input->entry));
+            }
+        } else {
+            item_obj.emplace("entry", write_entry_json(write->entry));
+        }
+        Json item{std::move(item_obj)};
+        if (!boundary.has_value()) {
+            // Busy: the item waits for the running run's next boundary.
+            auto inbox = tx.doc(inbox_document(), address);
+            if (!inbox) {
+                return std::unexpected(inbox.error());
+            }
+            auto items = read_inbox_items(*inbox);
+            if (!items) {
+                return std::unexpected(items.error());
+            }
+            items->push_back(item);
+            auto set = inbox->set(inbox_items_path(), Json{*items});
+            if (!set) {
+                return std::unexpected(set.error());
+            }
+            return created->id;
+        }
+        // Idle behind queued items: queue behind them and run a final
+        // boundary now.
+        boundary->items.push_back(item);
+        auto applied = apply_boundary(tx, *boundary, BoundaryPoint::Final, now);
+        if (!applied) {
+            return std::unexpected(applied.error());
+        }
+        if (applied->reset) {
+            // The queued reset reached the final boundary through admission
+            // (the previous run ended without a boundary): the next run's
+            // replay starts from the reset head, not the stale transcript.
+            messages_.clear();
+        }
+        if (!applied->users.empty()) {
+            auto started = start_run(tx, conversation_id, *live, applied->users, *generation_);
+            if (!started) {
+                return std::unexpected(started.error());
+            }
+        }
+        return created->id;
+    }
+    if (write != nullptr) {
+        if (is_stale(*boundary, write->entry)) {
+            auto created = tx.create_submission(SubmissionRecord{.id = {},
+                    .conversation_id = conversation_id,
+                    .request_id = draft.request_id,
+                    .type = "write",
+                    .status = "unanswered",
+                    .reason = "stale"});
+            if (!created) {
+                return std::unexpected(created.error());
+            }
+            return created->id;
+        }
+        auto appended = append_write_entry(tx, conversation_id, write->entry);
+        if (!appended) {
+            return std::unexpected(appended.error());
+        }
+        auto created = tx.create_submission(SubmissionRecord{.id = {},
+                .conversation_id = conversation_id,
+                .request_id = draft.request_id,
+                .type = "write",
+                .status = "done",
+                .entry = appended->id});
+        if (!created) {
+            return std::unexpected(created.error());
+        }
+        return created->id;
+    }
+    auto appended = append_input_entry(tx, conversation_id, input->content, input->entry, now);
+    if (!appended) {
+        return std::unexpected(appended.error());
+    }
+    auto created = tx.create_submission(SubmissionRecord{.id = {},
+            .conversation_id = conversation_id,
+            .request_id = draft.request_id,
+            .type = "input",
+            .status = "placed",
+            .entry = appended->id});
+    if (!created) {
+        return std::unexpected(created.error());
+    }
+    auto started = start_run(tx, conversation_id, *live, {created->id}, *generation_);
+    if (!started) {
+        return std::unexpected(started.error());
+    }
+    return created->id;
+}
+
+support::Expected<Boundary> WorkflowRuntime::prepare_boundary(
+        Transaction& tx, ConversationId conversation_id, chord::Draft inbox, std::vector<chord::Json> items) {
+    // The head marker is the newest placed entry that carries a head. Frozen
+    // pi resolves it through an indexed `latestHeadMarker` storage primitive;
+    // the bounded C++ runtime has no index, so it scans the log newest first
+    // and doubles the page until the page proves complete (fewer entries than
+    // requested). The head can therefore never be silently missed past a
+    // fixed window. Table reads precede the commit's first table write.
+    // debt: head lookup scans O(n) entries; add an indexed latest-head query
+    // when admission profiling shows this scan dominates large conversations.
+    std::size_t limit = 4096;
+    std::optional<EntryId> head;
+    while (!head.has_value()) {
+        auto entries = tx.scan_entries(conversation_id, limit);
+        if (!entries) {
+            return std::unexpected(entries.error());
+        }
+        for (const EntryRecord& entry : *entries) {
+            if (entry.head.has_value()) {
+                head = *entry.head;
+                break;
+            }
+        }
+        if (head.has_value() || entries->size() < limit) {
+            break;
+        }
+        if (limit > std::numeric_limits<std::size_t>::max() / 2) {
+            return std::unexpected(validation("Conversation head scan exceeds the supported entry count"));
+        }
+        limit *= 2;
+    }
+    return Boundary{.conversation_id = conversation_id,
+            .inbox = std::move(inbox),
+            .items = std::move(items),
+            .steering_mode = settings_.steering_mode,
+            .follow_up_mode = settings_.follow_up_mode,
+            .head = head};
+}
+
+support::AsyncResult<void> WorkflowRuntime::abort_run(const TaskRecord& task, TaskRuntime& runtime) {
+    return runtime.commit([task](Transaction& tx,
+                                  const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+        auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+        if (!live) {
+            return std::unexpected(live.error());
+        }
+        auto ended = end_run(
+                tx, *live, task.id, SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+        if (!ended) {
+            return std::unexpected(ended.error());
+        }
+        return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = "aborted"})};
+    });
+}
+
+support::AsyncResult<bool> WorkflowRuntime::apply_post_tools_boundary(const TaskRecord& task, TaskRuntime& runtime) {
+    auto ended = std::make_shared<bool>(false);
+    auto committed = runtime.commit([task, ended, this](Transaction& tx,
+                                            const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+        const DocumentAddress address{.conversation_id = task.conversation_id};
+        auto inbox = tx.doc(inbox_document(), address);
+        if (!inbox) {
+            return std::unexpected(inbox.error());
+        }
+        auto items = read_inbox_items(*inbox);
+        if (!items) {
+            return std::unexpected(items.error());
+        }
+        auto boundary = prepare_boundary(tx, task.conversation_id, std::move(*inbox), std::move(*items));
+        if (!boundary) {
+            return std::unexpected(boundary.error());
+        }
+        auto live = tx.doc(live_document(), address);
+        if (!live) {
+            return std::unexpected(live.error());
+        }
+        auto applied = apply_boundary(tx, *boundary, BoundaryPoint::PostTools, now());
+        if (!applied) {
+            return std::unexpected(applied.error());
+        }
+        // The placed users join this run: their entries seed the next
+        // request's replay cache (frozen pi continues the run with the
+        // placed users as new inputs).
+        for (const EntryRecord& entry : applied->user_entries) {
+            auto user = input_user(entry);
+            if (!user) {
+                return std::unexpected(user.error());
+            }
+            messages_.push_back(std::move(*user));
+        }
+        if (applied->reset) {
+            // The queued reset cut the run's context before an
+            // answer: the run ends unanswered and the placed users
+            // start the next run. The replay cache clears with the reset:
+            // the next run's request carries only its own placed users
+            // (frozen pi walks the entry chain back to the reset head), not
+            // this run's transcript.
+            messages_.clear();
+            auto ended_run = end_run(
+                    tx, *live, task.id, SubmissionSettlement{.status = "unanswered", .reason = std::string{"reset"}});
+            if (!ended_run) {
+                return std::unexpected(ended_run.error());
+            }
+            if (!applied->users.empty()) {
+                auto started = start_run(tx, task.conversation_id, *live, applied->users, *generation_);
+                if (!started) {
+                    return std::unexpected(started.error());
                 }
-                session_.commit([this, conversation_id, text = std::move(text), definition, admission](
-                        Transaction& tx) -> support::ExpectedVoid {
-                    auto conversation = tx.conversation(conversation_id);
-                    if (!conversation) return std::unexpected(conversation.error());
-                    if (!conversation->has_value() || conversation_id.value != 1) {
-                        return std::unexpected(validation("The workflow requires the root conversation"));
-                    }
-                    auto tasks = tx.scan_tasks(std::numeric_limits<std::size_t>::max());
-                    if (!tasks) return std::unexpected(tasks.error());
-                    for (const auto& task : *tasks) {
-                        if (task.conversation_id == conversation_id && task.state.status != "terminal") {
-                            return std::unexpected(validation("Conversation is busy"));
-                        }
-                    }
-                    const auto user = ai::user_text_message(text, now());
-                    auto entry = tx.append_entry(conversation_id, "pi.user", entry_data(user_json(user)), std::nullopt,
-                            std::vector<chord::Json>{as_chord(user_json(user))});
-                    if (!entry) return std::unexpected(entry.error());
-                    auto task = tx.create_task(*definition, Json{Object{{"entry", numeric(entry->id.value)}}},
-                            TaskOptions{.conversation_id = conversation_id});
-                    if (!task) return std::unexpected(task.error());
-                    *admission = Submission{.id = *task, .conversation_id = conversation_id, .entry = entry->id};
-                    return {};
-                }).start([done = std::move(done), admission](support::ExpectedVoid result) mutable noexcept {
-                    if (!result) done(std::unexpected(result.error()));
-                    else done(*admission);
-                });
+            }
+            *ended = true;
+            return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = "completed"})};
+        }
+        auto joined = join_run_inputs(*live, task.id, applied->users);
+        if (!joined) {
+            return std::unexpected(joined.error());
+        }
+        return std::optional<NextTaskState>{};
+    });
+    return support::AsyncResult<bool>{support::AsyncProducer<bool, support::Error>{
+            [committed = std::move(committed), ended](
+                    support::AsyncCompletion<bool, support::Error> done) mutable noexcept {
+                std::move(committed).start(
+                        [ended, done = std::move(done)](support::ExpectedVoid result) mutable noexcept {
+                            if (!result) {
+                                done(std::unexpected(result.error()));
+                                return;
+                            }
+                            done(*ended);
+                        });
             }}};
 }
 
@@ -538,14 +1282,41 @@ ai::ToolResultMessage WorkflowRuntime::execute_tool(const ai::ToolCallContent& c
 }
 
 support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& runtime) {
-    auto input = integer_field(task.input, "entry");
-    if (!input) return std::unexpected(input.error());
-    auto entry = storage_.entry(EntryId{.value = *input});
-    if (!entry) return std::unexpected(entry.error());
-    if (!entry->has_value()) return std::unexpected(validation("Input entry not found"));
-    auto user = input_user(entry->value().entry);
-    if (!user) return std::unexpected(user.error());
-    messages_.push_back(std::move(*user));
+    auto run = committed_live_run(storage_, task.conversation_id);
+    if (!run) {
+        return std::unexpected(run.error());
+    }
+    if (!run->has_value()) {
+        return std::unexpected(validation("Generation task has no run"));
+    }
+    if ((*run)->task != task.id) {
+        return std::unexpected(validation("Generation task does not own the conversation run"));
+    }
+    const std::vector<SubmissionId> run_inputs = (*run)->inputs;
+
+    // The placed run inputs seed the replay cache (frozen pi run input
+    // conversion).
+    for (const SubmissionId input : run_inputs) {
+        auto submission = storage_.submission(input);
+        if (!submission) {
+            return std::unexpected(submission.error());
+        }
+        if (!submission->has_value() || !(**submission).entry.has_value()) {
+            return std::unexpected(validation("Placed input entry not found"));
+        }
+        auto entry = storage_.entry(*(**submission).entry);
+        if (!entry) {
+            return std::unexpected(entry.error());
+        }
+        if (!entry->has_value()) {
+            return std::unexpected(validation("Placed input entry not found"));
+        }
+        auto user = input_user(entry->value().entry);
+        if (!user) {
+            return std::unexpected(user.error());
+        }
+        messages_.push_back(std::move(*user));
+    }
 
     while (!runtime.stop_token().stop_requested()) {
         const auto snapshot = registry_.snapshot();
@@ -571,59 +1342,280 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
         options.stop_token = runtime.stop_token();
         auto stream = stream_(model_, std::move(context), options);
         auto response = await_result(std::move(stream).run([](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
-        if (!response) return std::unexpected(response.error());
+        if (!response) {
+            // A transport failure settles the run's inputs unanswered (frozen
+            // pi `failModelError`) and fails the task.
+            const std::string message = response.error().message;
+            auto failed = await_result(runtime.commit([task, message](Transaction& tx, const TaskRecord&)
+                                                              -> support::Expected<std::optional<NextTaskState>> {
+                auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                if (!live) {
+                    return std::unexpected(live.error());
+                }
+                auto ended = end_run(tx,
+                        *live,
+                        task.id,
+                        SubmissionSettlement{
+                                .status = "unanswered", .reason = std::string{"model_error"}, .detail = Json{message}});
+                if (!ended) {
+                    return std::unexpected(ended.error());
+                }
+                return std::optional<NextTaskState>{NextTaskState::terminal(
+                        TaskOutcome{.status = "failed", .error = TaskOutcomeError{.message = message}})};
+            }));
+            if (!failed) {
+                return std::unexpected(failed.error());
+            }
+            return {};
+        }
         const bool tools = response->stop_reason == ai::AssistantStopReason::ToolUse;
         const bool failed = response->stop_reason == ai::AssistantStopReason::Error;
         const bool aborted = response->stop_reason == ai::AssistantStopReason::Aborted;
-        auto committed = await_result(runtime.commit([id = task.conversation_id, response = *response, tools, failed, aborted](
-                Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-            auto entry = tx.append_entry(id, "pi.assistant", entry_data(assistant_json(response)), std::nullopt,
-                            std::vector<chord::Json>{as_chord(assistant_json(response))});
-            if (!entry) return std::unexpected(entry.error());
-            if (tools) return std::nullopt;
-            return NextTaskState::terminal(TaskOutcome{.status = aborted ? "aborted" : failed ? "failed" : "completed",
-                    .result = Json{Object{{"answer", numeric(entry->id.value)}}},
-                    .error = failed ? std::optional<TaskOutcomeError>{TaskOutcomeError{.message = response.error_message.value_or("Generation failed")}} : std::nullopt});
-        }));
-        if (!committed) return committed;
-        messages_.push_back(*response);
-        if (!tools) return {};
-        for (const auto& content : response->content) {
-            const auto* call = std::get_if<ai::ToolCallContent>(&content);
-            if (call == nullptr) continue;
-            auto result = execute_tool(*call, snapshot, runtime.stop_token());
-            auto saved = await_result(runtime.commit([id = task.conversation_id, tid = task.id, result](Transaction& tx, const TaskRecord&)
-                    -> support::Expected<std::optional<NextTaskState>> {
-                auto entry = tx.append_entry(id, "pi.tool-result", entry_data(tool_result_json(result), tid), std::nullopt,
-                            std::vector<chord::Json>{as_chord(tool_result_json(result))}, tid);
-                if (!entry) return std::unexpected(entry.error());
-                return std::nullopt;
-            }));
-            if (!saved) {
-                return std::unexpected(validation("Tool result commit failed: " + saved.error().message));
+        if (tools) {
+            auto committed = await_result(
+                    runtime.commit([id = task.conversation_id, response = *response](Transaction& tx,
+                                           const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                        auto entry = tx.append_entry(id,
+                                "pi.assistant",
+                                entry_data(assistant_json(response)),
+                                std::nullopt,
+                                std::vector<chord::Json>{as_chord(assistant_json(response))});
+                        if (!entry) return std::unexpected(entry.error());
+                        return std::nullopt;
+                    }));
+            if (!committed) return committed;
+            messages_.push_back(*response);
+            for (const auto& content : response->content) {
+                const auto* call = std::get_if<ai::ToolCallContent>(&content);
+                if (call == nullptr) continue;
+                auto result = execute_tool(*call, snapshot, runtime.stop_token());
+                auto saved = await_result(
+                        runtime.commit([id = task.conversation_id, tid = task.id, result](Transaction& tx,
+                                               const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                            auto entry = tx.append_entry(id,
+                                    "pi.tool-result",
+                                    entry_data(tool_result_json(result), tid),
+                                    std::nullopt,
+                                    std::vector<chord::Json>{as_chord(tool_result_json(result))},
+                                    tid);
+                            if (!entry) return std::unexpected(entry.error());
+                            return std::nullopt;
+                        }));
+                if (!saved) {
+                    return std::unexpected(validation("Tool result commit failed: " + saved.error().message));
+                }
+                messages_.push_back(std::move(result));
             }
-            messages_.push_back(std::move(result));
+            if (runtime.stop_token().stop_requested()) {
+                // The abort invocation settles the run (frozen pi generation
+                // `abort`); this loop only unwinds.
+                break;
+            }
+            auto ended_here = await_result(apply_post_tools_boundary(task, runtime));
+            if (!ended_here) {
+                return std::unexpected(ended_here.error());
+            }
+            if (*ended_here) {
+                // A queued reset ended the run at the postTools boundary;
+                // the placed users start the next run.
+                return {};
+            }
+            continue;
         }
+        // Final answer, model error, or abort: one commit appends the answer
+        // and settles the run at the final boundary (frozen pi `answer`).
+        auto outcome = await_result(runtime.commit(
+                [id = task.conversation_id, task, response = *response, aborted, failed, this](
+                        Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    const DocumentAddress address{.conversation_id = id};
+                    // A boundary reads the table before the commit's first
+                    // table write (frozen pi `prepareBoundary`).
+                    auto inbox = tx.doc(inbox_document(), address);
+                    if (!inbox) {
+                        return std::unexpected(inbox.error());
+                    }
+                    auto items = read_inbox_items(*inbox);
+                    if (!items) {
+                        return std::unexpected(items.error());
+                    }
+                    auto boundary = prepare_boundary(tx, id, std::move(*inbox), std::move(*items));
+                    if (!boundary) {
+                        return std::unexpected(boundary.error());
+                    }
+                    auto live = tx.doc(live_document(), address);
+                    if (!live) {
+                        return std::unexpected(live.error());
+                    }
+                    if (aborted) {
+                        auto ended = end_run(tx,
+                                *live,
+                                task.id,
+                                SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+                        if (!ended) {
+                            return std::unexpected(ended.error());
+                        }
+                        return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = "aborted"})};
+                    }
+                    auto entry = tx.append_entry(id,
+                            "pi.assistant",
+                            entry_data(assistant_json(response)),
+                            std::nullopt,
+                            std::vector<chord::Json>{as_chord(assistant_json(response))});
+                    if (!entry) {
+                        return std::unexpected(entry.error());
+                    }
+                    if (failed) {
+                        const std::string message = response.error_message.value_or("Generation failed");
+                        auto ended = end_run(tx,
+                                *live,
+                                task.id,
+                                SubmissionSettlement{.status = "unanswered",
+                                        .reason = std::string{"model_error"},
+                                        .detail = Json{message}});
+                        if (!ended) {
+                            return std::unexpected(ended.error());
+                        }
+                        return std::optional<NextTaskState>{NextTaskState::terminal(
+                                TaskOutcome{.status = "failed", .error = TaskOutcomeError{.message = message}})};
+                    }
+                    auto applied = apply_boundary(tx, *boundary, BoundaryPoint::Final, now());
+                    if (!applied) {
+                        return std::unexpected(applied.error());
+                    }
+                    if (applied->reset) {
+                        // A queued reset reached the final boundary: the
+                        // answered run still ends, and the next run's replay
+                        // starts from the reset head, not this transcript.
+                        messages_.clear();
+                    }
+                    auto ended =
+                            end_run(tx, *live, task.id, SubmissionSettlement{.status = "done", .answer = entry->id});
+                    if (!ended) {
+                        return std::unexpected(ended.error());
+                    }
+                    if (!applied->users.empty()) {
+                        auto started = start_run(tx, id, *live, applied->users, *generation_);
+                        if (!started) {
+                            return std::unexpected(started.error());
+                        }
+                    }
+                    return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{
+                            .status = "completed", .result = Json{Object{{"answer", numeric(entry->id.value)}}}})};
+                }));
+        if (!outcome) {
+            return std::unexpected(outcome.error());
+        }
+        return {};
     }
     return std::unexpected(validation("Request was aborted"));
 }
 
-support::Expected<SettledSubmission> WorkflowRuntime::receipt(const TaskRecord& task) {
-    if (task.kind != "pi.generation" || task.state.status != "terminal" || !task.state.outcome) {
-        return std::unexpected(validation("Not a settled generation task"));
+// ── Shared document definitions and run helpers (frozen pi `InboxDoc`, ─────
+// ── `LiveDoc`, `endRun`, `withdrawQueuedInputs`, `removeInboxItem`) ────────
+
+DocumentDefinition inbox_document() {
+    return define_document(std::string{kInboxDocKind}, [] { return initial_inbox_value(); });
+}
+
+DocumentDefinition live_document() {
+    return define_document(std::string{kLiveDocKind}, [] { return initial_live_value(); });
+}
+
+support::Expected<std::optional<LiveRunState>> committed_live_run(Storage& storage, ConversationId conversation_id) {
+    auto found = storage.find_document(std::string{kLiveDocKind}, conversation_id);
+    if (!found) {
+        return std::unexpected(found.error());
     }
-    auto input = integer_field(task.input, "entry");
-    if (!input) return std::unexpected(input.error());
-    SettledSubmission result{.id = task.id, .conversation_id = task.conversation_id,
-            .entry = EntryId{.value = *input},
-            .status = task.state.outcome->status == "completed" ? "done" : task.state.outcome->status};
-    if (task.state.outcome->result) {
-        auto answer = integer_field(*task.state.outcome->result, "answer");
-        if (!answer) return std::unexpected(answer.error());
-        result.answer = EntryId{.value = *answer};
+    if (!found->has_value()) {
+        return std::optional<LiveRunState>{};
     }
-    if (task.state.outcome->error) result.error = task.state.outcome->error->message;
-    return result;
+    auto doc = storage.document(found->value().id);
+    if (!doc) {
+        return std::unexpected(doc.error());
+    }
+    if (!doc->has_value()) {
+        return std::optional<LiveRunState>{};
+    }
+    const auto* value = (**doc).as_object();
+    if (value == nullptr) {
+        return std::unexpected(validation("Live document must be an object"));
+    }
+    const auto run = value->find("run");
+    if (run == value->end()) {
+        return std::optional<LiveRunState>{};
+    }
+    return parse_live_run(run->second);
+}
+
+support::ExpectedVoid end_run(
+        Transaction& tx, chord::Draft& live, TaskId task, const SubmissionSettlement& settlement) {
+    auto run = staged_live_run(live);
+    if (!run) {
+        return std::unexpected(run.error());
+    }
+    if (!run->has_value() || (*run)->task != task) {
+        return {};
+    }
+    for (const SubmissionId input : (*run)->inputs) {
+        auto settled = tx.settle_submission(input, settlement);
+        if (!settled) {
+            return std::unexpected(settled.error());
+        }
+    }
+    return live.erase(live_run_path());
+}
+
+support::ExpectedVoid withdraw_queued_inputs(Transaction& tx, chord::Draft& inbox) {
+    auto items = read_inbox_items(inbox);
+    if (!items) {
+        return std::unexpected(items.error());
+    }
+    for (std::size_t index = items->size(); index-- > 0;) {
+        auto mode = inbox_item_mode((*items)[index]);
+        if (!mode) {
+            return std::unexpected(mode.error());
+        }
+        if (*mode == "write") {
+            continue;
+        }
+        auto id = inbox_item_id(*(*items)[index].as_object());
+        if (!id) {
+            return std::unexpected(id.error());
+        }
+        auto settled = tx.settle_submission(SubmissionId{.value = *id},
+                SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+        if (!settled) {
+            return std::unexpected(settled.error());
+        }
+        items->erase(items->begin() + static_cast<std::ptrdiff_t>(index));
+    }
+    auto written = inbox.set(inbox_items_path(), Json{*items});
+    if (!written) {
+        return std::unexpected(written.error());
+    }
+    return {};
+}
+
+support::ExpectedVoid remove_inbox_item(chord::Draft& inbox, SubmissionId id) {
+    auto items = read_inbox_items(inbox);
+    if (!items) {
+        return std::unexpected(items.error());
+    }
+    for (std::size_t index = 0; index < items->size(); ++index) {
+        const auto* item = (*items)[index].as_object();
+        if (item == nullptr) {
+            return std::unexpected(validation("An inbox item must be an object"));
+        }
+        auto item_id = inbox_item_id(*item);
+        if (!item_id) {
+            return std::unexpected(item_id.error());
+        }
+        if (*item_id == id.value) {
+            items->erase(items->begin() + static_cast<std::ptrdiff_t>(index));
+            return inbox.set(inbox_items_path(), Json{*items});
+        }
+    }
+    return {};
 }
 
 } // namespace cch::durable

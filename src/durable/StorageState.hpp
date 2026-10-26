@@ -38,6 +38,10 @@ public:
     /// high-water mark. A rejected batch changes nothing.
     [[nodiscard]] support::Expected<Seq> apply(std::span<const StorageWrite> writes, Seq seq);
 
+    /// Validate and apply one detached batch at `next_seq()`, advancing the sequence
+    /// high-water mark atomically.
+    [[nodiscard]] support::Expected<Seq> apply_next(std::span<const StorageWrite> writes);
+
     /// Validate one batch without changing state. A backend calls this before
     /// it writes, so an invalid batch leaves no marker behind.
     [[nodiscard]] support::ExpectedVoid validate(std::span<const StorageWrite> writes, Seq seq);
@@ -61,6 +65,10 @@ public:
     [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id);
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id);
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit);
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id);
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id);
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit);
 
     [[nodiscard]] bool closed() const;
     void close();

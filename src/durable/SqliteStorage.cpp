@@ -584,6 +584,38 @@ struct SqliteStorage::Impl {
                 });
         if (!loaded) return loaded;
 
+        const std::string submissions = table(options.prefix, "submissions");
+        loaded = load_rows(
+                std::format("SELECT id,conversation_id,request_id,status,record FROM {} ORDER BY id", submissions),
+                [this, &restore_record_id](sqlite3_stmt* row) -> support::ExpectedVoid {
+                    const auto* record_text = reinterpret_cast<const char*>(sqlite3_column_text(row, 4));
+                    if (record_text == nullptr) return std::unexpected(corrupt("Invalid persisted submission JSON"));
+                    const auto parsed = parse_json(record_text);
+                    if (!parsed) return std::unexpected(corrupt("Invalid persisted submission JSON"));
+                    auto decoded = decode_submission_record(*parsed);
+                    if (!decoded) return std::unexpected(std::move(decoded.error()));
+                    const std::int64_t id = sqlite3_column_int64(row, 0);
+                    if (decoded->id.value != id || decoded->conversation_id.value != sqlite3_column_int64(row, 1)) {
+                        return std::unexpected(corrupt("Persisted submission columns do not match its record"));
+                    }
+                    const auto* stored_status = reinterpret_cast<const char*>(sqlite3_column_text(row, 3));
+                    if (stored_status == nullptr || decoded->status != stored_status) {
+                        return std::unexpected(corrupt("Persisted submission columns do not match its record"));
+                    }
+                    const auto* stored_request = reinterpret_cast<const char*>(sqlite3_column_text(row, 2));
+                    const std::optional<std::string> request_column =
+                            stored_request == nullptr ? std::optional<std::string>{}
+                                                      : std::optional<std::string>{std::string{stored_request}};
+                    if (decoded->request_id != request_column) {
+                        return std::unexpected(corrupt("Persisted submission columns do not match its record"));
+                    }
+                    const std::array write{StorageWrite{.type = "submission", .submission = *decoded}};
+                    auto restored = state.restore(write, 1);
+                    if (!restored) return std::unexpected(std::move(restored.error()));
+                    return restore_record_id(id, "submission");
+                });
+        if (!loaded) return loaded;
+
         Statement metadata{database, std::format("SELECT next_id,next_seq FROM {} WHERE singleton=1", metadata_table)};
         if (!metadata.valid()) return std::unexpected(metadata.error());
         auto row = metadata.step();
@@ -616,12 +648,19 @@ struct SqliteStorage::Impl {
                         "IS NULL)+"
                         "(SELECT count(*) FROM {} d LEFT JOIN {} r ON r.id=d.id AND r.record_type='document' WHERE "
                         "r.id IS NULL)+"
+                        "(SELECT count(*) FROM {} s LEFT JOIN {} r ON r.id=s.id AND r.record_type='submission' WHERE "
+                        "r.id IS NULL)+"
                         "(SELECT count(*) FROM {} v LEFT JOIN {} d ON d.id=v.document_id WHERE d.id IS NULL)+"
                         "(SELECT count(*) FROM {} r LEFT JOIN {} c ON c.id=r.id LEFT JOIN {} e ON e.id=r.id LEFT JOIN "
-                        "{} d ON d.id=r.id WHERE "
-                        "(r.record_type='conversation' AND (c.id IS NULL OR e.id IS NOT NULL OR d.id IS NOT NULL)) OR "
-                        "(r.record_type='entry' AND (e.id IS NULL OR c.id IS NOT NULL OR d.id IS NOT NULL)) OR "
-                        "(r.record_type='document' AND (d.id IS NULL OR c.id IS NOT NULL OR e.id IS NOT NULL)))+"
+                        "{} d ON d.id=r.id LEFT JOIN {} s ON s.id=r.id WHERE "
+                        "(r.record_type='conversation' AND (c.id IS NULL OR e.id IS NOT NULL OR d.id IS NOT NULL OR "
+                        "s.id IS NOT NULL)) OR "
+                        "(r.record_type='entry' AND (e.id IS NULL OR c.id IS NOT NULL OR d.id IS NOT NULL OR s.id IS "
+                        "NOT NULL)) OR "
+                        "(r.record_type='document' AND (d.id IS NULL OR c.id IS NOT NULL OR e.id IS NOT NULL OR s.id "
+                        "IS NOT NULL)) OR "
+                        "(r.record_type='submission' AND (s.id IS NULL OR c.id IS NOT NULL OR e.id IS NOT NULL OR "
+                        "d.id IS NOT NULL)))+"
                         "(SELECT count(*) FROM {} r LEFT JOIN {} d ON d.id=r.document_id WHERE d.id IS NULL)+"
                         "(SELECT count(*) FROM {} d WHERE NOT EXISTS (SELECT 1 FROM {} r WHERE r.document_id=d.id AND "
                         "r.kind='base'))",
@@ -631,12 +670,15 @@ struct SqliteStorage::Impl {
                         record_ids,
                         documents,
                         record_ids,
+                        submissions,
+                        record_ids,
                         revisions,
                         documents,
                         record_ids,
                         conversations,
                         entries,
                         documents,
+                        submissions,
                         revisions,
                         documents,
                         documents,
@@ -855,6 +897,38 @@ struct SqliteStorage::Impl {
                             return statement.bind_int(1, task.id.value);
                         });
                 if (!id_result) return fail(std::move(id_result.error()));
+            } else if (write.type == "submission") {
+                if (!write.submission.has_value()) {
+                    return fail(corrupt("Submission write has no record"));
+                }
+                const SubmissionRecord& submission = *write.submission;
+                auto claim = insert(std::format("INSERT OR IGNORE INTO {}(id,record_type) VALUES(?1,'submission')",
+                                            table(options.prefix, "record_ids")),
+                        [&](Statement& statement) { return statement.bind_int(1, submission.id.value); });
+                if (!claim) return fail(std::move(claim.error()));
+                next_id = std::max(next_id, submission.id.value + 1);
+                // Every submission write replaces the record, mirroring the
+                // frozen `SqliteStorage` submissions upsert.
+                const std::string record_str = as_string(encode_submission_record(submission));
+                auto result = insert(
+                        std::format(
+                                "INSERT INTO {}(id,conversation_id,request_id,status,record) VALUES(?1,?2,?3,?4,?5) "
+                                "ON CONFLICT(id) DO UPDATE SET conversation_id=excluded.conversation_id,"
+                                "request_id=excluded.request_id,status=excluded.status,record=excluded.record",
+                                table(options.prefix, "submissions")),
+                        [&](Statement& statement) -> support::ExpectedVoid {
+                            if (auto bound = statement.bind_int(1, submission.id.value); !bound) return bound;
+                            if (auto bound = statement.bind_int(2, submission.conversation_id.value); !bound)
+                                return bound;
+                            if (submission.request_id.has_value()) {
+                                if (auto bound = statement.bind_text(3, *submission.request_id); !bound) return bound;
+                            } else {
+                                if (auto bound = statement.bind_null(3); !bound) return bound;
+                            }
+                            if (auto bound = statement.bind_text(4, submission.status); !bound) return bound;
+                            return statement.bind_text(5, record_str);
+                        });
+                if (!result) return fail(std::move(result.error()));
             }
         }
         auto metadata = insert(std::format("UPDATE {} SET next_id=?1,next_seq=?2 WHERE singleton=1",
@@ -977,6 +1051,19 @@ support::Expected<std::optional<TaskRecord>> SqliteStorage::task(TaskId id) {
 support::Expected<std::vector<TaskRecord>> SqliteStorage::scan_tasks(std::size_t limit) {
     if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
     return impl_->state.scan_tasks(limit);
+}
+support::Expected<std::optional<SubmissionRecord>> SqliteStorage::submission(SubmissionId id) {
+    if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
+    return impl_->state.submission(id);
+}
+support::Expected<std::optional<SubmissionRecord>> SqliteStorage::submission_by_request(
+        ConversationId conversation_id, std::string_view request_id) {
+    if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
+    return impl_->state.submission_by_request(conversation_id, request_id);
+}
+support::Expected<std::vector<SubmissionRecord>> SqliteStorage::scan_submissions(std::size_t limit) {
+    if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
+    return impl_->state.scan_submissions(limit);
 }
 support::ExpectedVoid SqliteStorage::close() {
     if (impl_->database != nullptr) {

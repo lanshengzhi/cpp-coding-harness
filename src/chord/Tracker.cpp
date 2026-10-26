@@ -109,7 +109,7 @@ void emit_write(const detail::ChangeState& state, const Path& path, OpBatch& ope
         if (deletion != nullptr && has_same_path(deletion->path, path)) force_set = true;
     }
     if (!force_set && base && *base == *candidate) return;
-    if (!force_set && base != nullptr) {
+    if (!force_set && base.has_value()) {
         if (const auto* before = base->as_string(); before != nullptr) {
             if (const auto* after = candidate->as_string(); after != nullptr) {
                 detail::emit_string_change(*before, *after, path, operations);
