@@ -4,6 +4,7 @@
 #include <cch/durable/Session.hpp>
 #include <cch/durable/Storage.hpp>
 #include <cch/durable/Task.hpp>
+#include <cch/durable/Workflow.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/Error.hpp>
 
@@ -18,6 +19,10 @@ namespace cch::durable {
 struct HarnessOptions {
     std::vector<TaskDefinition> tasks{};
     std::move_only_function<std::int64_t()> now{};
+    /// When supplied, the registry must outlive this Harness and its operations.
+    Registry* registry{nullptr};
+    ai::ModelStreamFactory stream{};
+    HarnessSettings settings{};
 };
 
 /// Top-level durable runtime harness (frozen pi `Harness`).
@@ -58,6 +63,18 @@ public:
 
     /// Read the latest complete record for one task.
     [[nodiscard]] support::AsyncResult<std::optional<TaskRecord>> get_task(TaskId id);
+
+    /// Lazily create the reserved root and its five built-in documents in one
+    /// transaction. Later calls preserve the existing root's configuration.
+    [[nodiscard]] support::AsyncResult<ConversationId> root(RootOptions options = {});
+
+    /// Admit one input and start durable generation. Rejects a busy conversation
+    /// before appending the input. The Harness must outlive all returned work.
+    [[nodiscard]] support::AsyncResult<Submission> submit(ConversationId conversation_id, std::string text);
+
+    /// Wait for the generation task's committed receipt. No final answer is
+    /// exposed until the transaction containing it has been adopted.
+    [[nodiscard]] support::AsyncResult<SettledSubmission> wait_for_submission(Submission submission);
 
     /// Close the harness.
     [[nodiscard]] support::AsyncResult<void> close();

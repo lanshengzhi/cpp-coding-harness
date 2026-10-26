@@ -156,6 +156,9 @@ public:
     Transaction& operator=(Transaction&&) = delete;
     ~Transaction();
 
+    /// Create the reserved root (frozen pi `Tx.createRootConversation`).
+    [[nodiscard]] support::Expected<ConversationRecord> create_root_conversation();
+
     /// Create a conversation with ownerless ownership (frozen pi
     /// `Tx.createConversation`).
     [[nodiscard]] support::Expected<ConversationRecord> create_conversation();
@@ -164,7 +167,9 @@ public:
     [[nodiscard]] support::Expected<EntryRecord> append_entry(ConversationId conversation_id,
             std::string kind,
             chord::Json data,
-            std::optional<EntryHeadVariant> head = std::nullopt);
+            std::optional<EntryHeadVariant> head = std::nullopt,
+            std::vector<chord::Json> model = {},
+            std::optional<TaskId> by_task_id = std::nullopt);
 
     /// Append a typed entry with its kind and payload codec supplied by the
     /// definition (frozen `Tx.appendEntry<D>`); `head` selects an existing

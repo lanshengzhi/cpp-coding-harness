@@ -420,6 +420,16 @@ Transaction::Transaction(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
 Transaction::~Transaction() = default;
 
+support::Expected<ConversationRecord> Transaction::create_root_conversation() {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    ConversationRecord record{.id = ConversationId{.value = 1}};
+    impl_->has_table_write = true;
+    impl_->writes.push_back(StorageWrite{.type = "conversation", .conversation = record});
+    return record;
+}
+
 support::Expected<ConversationRecord> Transaction::create_conversation() {
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
@@ -434,8 +444,12 @@ support::Expected<ConversationRecord> Transaction::create_conversation() {
     return record;
 }
 
-support::Expected<EntryRecord> Transaction::append_entry(
-        ConversationId conversation_id, std::string kind, chord::Json data, std::optional<EntryHeadVariant> head) {
+support::Expected<EntryRecord> Transaction::append_entry(ConversationId conversation_id,
+        std::string kind,
+        chord::Json data,
+        std::optional<EntryHeadVariant> head,
+        std::vector<chord::Json> model,
+        std::optional<TaskId> by_task_id) {
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
     }
@@ -455,7 +469,9 @@ support::Expected<EntryRecord> Transaction::append_entry(
             .conversation_id = conversation_id,
             .kind = std::move(kind),
             .data = std::move(data),
-            .head = resolved_head};
+            .head = resolved_head,
+            .model = std::move(model),
+            .by_task_id = by_task_id};
     impl_->has_table_write = true;
     impl_->writes.push_back(StorageWrite{.type = "entry", .entry = record});
     return record;

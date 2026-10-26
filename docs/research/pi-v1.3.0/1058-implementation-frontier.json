@@ -826,7 +826,7 @@
           "fixtures/pi-v1.3.0/audit-1056/observability.json: inspect derives ready, running, waiting and blocked task states without running task code"
         ],
         "comparison": "Run the same public workflow in frozen pi and the durable example; compare settlement, committed entries, offered tools and inspect states.",
-        "missing": "No durable Harness exists in C++ today."
+        "missing": "#1079 adds a bounded public memory Harness workflow over durable tasks: root creation, live append-only tool/static-section registration, settings-driven AI ModelStream requests, one physical tool execution, committed Session publications and a task-backed settled receipt. Four issue1079 public-caller cases compare the normal workflow, root/late-registry observations and frozen held-tool ordering, and reject success on final storage failure. See 1079-memory-harness-workflow.md. Full Submission/inbox policies (#1080), workflow reopen (#1082), dynamic hooks (#1087), and event views/task graph/inspect (#1088) remain unverified; the F1 coverage rows are not promoted wholesale."
       },
       "coverage": [
         "cch_durable:harness-open-close",
@@ -836,7 +836,9 @@
         "cch_durable:task-graph",
         "cch_durable:conversation-view"
       ],
-      "relatedIssues": [],
+      "relatedIssues": [
+        "#1079"
+      ],
       "boundaries": [
         "The ordinary pike CLI runtime is not switched to durable"
       ]

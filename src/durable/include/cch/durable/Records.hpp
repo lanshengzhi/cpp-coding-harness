@@ -111,6 +111,13 @@ struct ConversationRecord {
     ConversationId id{};
 };
 
+/// Model messages and execution provenance carried by an entry draft (frozen
+/// pi `EntryDraft.model` and `EntryDraft.byTaskId`).
+struct EntryOptions {
+    std::vector<chord::Json> model{};
+    std::optional<TaskId> by_task_id{std::nullopt};
+};
+
 /// The immutable record of one transcript entry (frozen pi `EntryRecord`).
 struct EntryRecord {
     EntryId id{};
@@ -122,6 +129,8 @@ struct EntryRecord {
     /// The first entry of the active context selected by this entry (frozen
     /// `EntryRecord.head`); absent when the entry selects no context.
     std::optional<EntryId> head{};
+    std::vector<chord::Json> model{};
+    std::optional<TaskId> by_task_id{std::nullopt};
 };
 
 /// The immutable record of one document incarnation (frozen pi

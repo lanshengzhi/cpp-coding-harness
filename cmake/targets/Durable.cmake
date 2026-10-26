@@ -9,8 +9,10 @@ include_guard(GLOBAL)
 # CLI, or frontend integration: the ordinary coding-agent Session stays where
 # it is.
 #
-# The durable Storage backends include memory, JSONL and SQLite (#1075). The
-# durable task graph and submissions remain out of scope for this owner slice.
+# The durable Storage backends include memory, JSONL and SQLite (#1075).
+# #1079 adds a bounded model/tool workflow over the existing task runtime;
+# AI streams come directly from cch_ai, with no agent/application dependency.
+# Queued Submission storage and full task graph policies remain later slices.
 cch_parity_declare_target(
     TARGET cch_durable
     ROLE owner
@@ -24,11 +26,15 @@ cch_parity_declare_target(
         src/durable/StorageEncoding.cpp
         src/durable/StorageState.cpp
         src/durable/Task.cpp
+        src/durable/WorkflowRuntime.cpp
     DEPENDS
+        Boost::headers@boost
+        cch_ai
         cch_chord
         cch_support
         unofficial::sqlite3::sqlite3@sqlite3
     INTERFACE_DEPENDS
+        cch_ai
         cch_chord
         cch_support
 )

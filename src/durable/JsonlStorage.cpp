@@ -66,6 +66,16 @@ constexpr std::string_view kClosedMessage = "JSONL storage is closed";
     if (entry.head.has_value()) {
         value.emplace("head", number(entry.head->value));
     }
+    if (!entry.model.empty()) {
+        support::JsonValue::array_t model;
+        for (const auto& message : entry.model) {
+            model.push_back(encode_json(message));
+        }
+        value.emplace("model", support::JsonValue{std::move(model)});
+    }
+    if (entry.by_task_id.has_value()) {
+        value.emplace("byTaskId", number(entry.by_task_id->value));
+    }
     return support::JsonValue{std::move(value)};
 }
 
@@ -411,11 +421,28 @@ struct MainMarker {
         }
         head = EntryId{.value = *parsed_head};
     }
+    std::vector<chord::Json> model;
+    if (const auto* messages = support::json_array_member(*entry, "model")) {
+        model.reserve(messages->size());
+        for (const auto& message : *messages) {
+            auto decoded = decode_json(message);
+            if (!decoded) {
+                return std::unexpected(corruption("Invalid entry write in " + std::string{description}));
+            }
+            model.push_back(std::move(*decoded));
+        }
+    }
+    std::optional<TaskId> by_task_id;
+    if (const auto raw_task_id = support::json_integer_member(*entry, "byTaskId")) {
+        by_task_id = TaskId{.value = *raw_task_id};
+    }
     return EntryRecord{.id = EntryId{.value = *id},
             .conversation_id = ConversationId{.value = *conversation_id},
             .kind = std::string{*kind},
             .data = std::move(decoded_data),
-            .head = head};
+            .head = head,
+            .model = std::move(model),
+            .by_task_id = by_task_id};
 }
 
 [[nodiscard]] support::Expected<MainOperation> parse_main_operation(

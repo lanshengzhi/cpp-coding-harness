@@ -434,8 +434,23 @@ struct SqliteStorage::Impl {
                     }
                     std::optional<EntryId> head;
                     if (const auto head_id = json_int(object, "head"); head_id) head = EntryId{*head_id};
+                    std::vector<chord::Json> model;
+                    if (const auto* raw_model = object->contains("model") ? &object->at("model") : nullptr;
+                            raw_model != nullptr) {
+                        const auto* messages = raw_model->as_array();
+                        if (messages == nullptr) return std::unexpected(corrupt("Invalid persisted entry"));
+                        model.reserve(messages->size());
+                        for (const auto& message : *messages) {
+                            auto decoded = decode_json(message.to_support());
+                            if (!decoded) return std::unexpected(corrupt("Invalid persisted entry JSON"));
+                            model.push_back(std::move(*decoded));
+                        }
+                    }
+                    std::optional<TaskId> by_task_id;
+                    if (const auto task_id = json_int(object, "byTaskId")) by_task_id = TaskId{*task_id};
                     const std::array write{StorageWrite{.type = "entry",
-                            .entry = EntryRecord{EntryId{*id}, ConversationId{*conversation_id}, *kind, *data, head}}};
+                            .entry = EntryRecord{EntryId{*id}, ConversationId{*conversation_id}, *kind, *data, head,
+                                    std::move(model), by_task_id}}};
                     const Seq seq = static_cast<Seq>(sqlite3_column_int64(row, 3));
                     auto restored = state.restore(write, seq);
                     if (!restored) return std::unexpected(std::move(restored.error()));
@@ -717,7 +732,15 @@ struct SqliteStorage::Impl {
                         {"data", write.entry->data}};
                 if (write.entry->head)
                     value.emplace("head", chord::Json{static_cast<double>(write.entry->head->value)});
+                if (!write.entry->model.empty()) {
+                    chord::Json::Array model;
+                    for (const auto& message : write.entry->model) model.push_back(message);
+                    value.emplace("model", chord::Json{std::move(model)});
+                }
+                if (write.entry->by_task_id)
+                    value.emplace("byTaskId", chord::Json{static_cast<double>(write.entry->by_task_id->value)});
                 const std::string json = as_string(chord::Json{std::move(value)});
+                if (json.empty()) return fail(corrupt("SQLite entry record serialization failed"));
                 auto result = insert(
                         std::format("INSERT INTO {}(id,conversation_id,head,commit_seq,record) VALUES(?1,?2,?3,?4,?5)",
                                 table(options.prefix, "entries")),

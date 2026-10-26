@@ -9,7 +9,7 @@
 namespace cch::durable {
 namespace {
 
-[[nodiscard]] support::Expected<chord::Json> decode_json(const support::JsonValue& value) {
+[[nodiscard]] support::Expected<chord::Json> decode_json_value(const support::JsonValue& value) {
     return chord::Json::from_support(value);
 }
 
@@ -137,14 +137,14 @@ support::Expected<chord::OpBatch> decode_ops(const support::JsonValue& value) {
             return std::unexpected(corruption("Invalid document operation"));
         }
         if (*verb == "r" && tuple->size() == 2) {
-            auto replacement = decode_json((*tuple)[1]);
+            auto replacement = decode_json_value((*tuple)[1]);
             if (!replacement) {
                 return std::unexpected(std::move(replacement.error()));
             }
             ops.push_back(chord::ReplaceOp{.value = std::move(*replacement)});
         } else if (*verb == "s" && tuple->size() == 3) {
             auto path = decode_path((*tuple)[1]);
-            auto item = decode_json((*tuple)[2]);
+            auto item = decode_json_value((*tuple)[2]);
             if (!path || !item) {
                 return std::unexpected(corruption("Invalid document operation"));
             }
@@ -182,7 +182,7 @@ support::Expected<chord::OpBatch> decode_ops(const support::JsonValue& value) {
             std::vector<chord::Json> decoded_items;
             decoded_items.reserve(items->size());
             for (const support::JsonValue& item : *items) {
-                auto decoded = decode_json(item);
+                auto decoded = decode_json_value(item);
                 if (!decoded) {
                     return std::unexpected(std::move(decoded.error()));
                 }
@@ -398,6 +398,14 @@ support::Expected<TaskRecord> decode_task_record(const chord::Json& json) {
     }
 
     return record;
+}
+
+support::JsonValue encode_json(const chord::Json& json) {
+    return json.to_support();
+}
+
+support::Expected<chord::Json> decode_json(const support::JsonValue& json) {
+    return chord::Json::from_support(json);
 }
 
 } // namespace cch::durable

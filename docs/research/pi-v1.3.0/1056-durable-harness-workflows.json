@@ -75,7 +75,7 @@
       "verification": "upstream-captured",
       "boundary": null,
       "dependencies": [],
-      "implementationTicket": "#1058-draft",
+      "implementationTicket": "#1079",
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/harness/harness.ts:Harness.open,HarnessImpl.root,HarnessImpl.close",
@@ -86,11 +86,11 @@
           "close and reopen keeps conversations, fork identity, agent choices and provider state"
         ]
       },
-      "cppSeam": "No `cch_durable` target or Harness type exists. `src/coding_agent/runtime/SessionFactory.*` assembles an application AgentSession; `src/agent/harness/RuntimeRoot.*` is the agent executor root.",
-      "cppEvidence": "`tests/coding_agent/runtime/SessionLifecycleTest.cpp` and `SessionFactory` cover application Session assembly, not a public durable Harness lifecycle. `Harness.open` has no C++ analogue.",
+      "cppSeam": "`Harness::open`/`Harness::close` in `src/durable/Harness.cpp` owns Storage/Registry/settings lifetime. `WorkflowRuntime::root` lazily creates the root conversation and five built-in documents. `Harness::submit`/`wait_for_submission`/`WorkflowRuntime::receipt` provide admission and settled receipts.",
+      "cppEvidence": "`tests/durable/HarnessWorkflowTest.cpp` drives a real `Harness::open`/`close` with `MemoryStorage`, a scripted `ModelStreamFactory`, one injected tool, and frozen `audit-1056/workflow.json` transcript comparison. Model messages and `byTaskId` survive JSONL and SQLite round-trips. Storage-failure receipt is rejected without hanging.",
       "recommendation": "Create the cch_durable Owner target with a public Harness value owning Storage/Registry/settings/environment lifetime and a root factory. Keep SessionFactory out of cch_durable; do not implement Harness as another AgentSession wrapper.",
       "blockers": [
-        "no cch_durable target or public Harness implementation"
+        "no fork identity or provider state persistence across reopen"
       ]
     },
     {
@@ -334,7 +334,7 @@
       "verification": "upstream-captured",
       "boundary": null,
       "dependencies": [],
-      "implementationTicket": null,
+      "implementationTicket": "#1079",
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/harness/generation.ts:GenerationTask",
@@ -346,11 +346,11 @@
           "a generation onYield hook appends a user message and continues the same admitted run"
         ]
       },
-      "cppSeam": "`AgentSession::prompt`/`AgentSessionExecution` run application turns; `TaskScheduler` can persist a handler task but no GenerationTask type, submission admission or durable settlement receipt exists.",
-      "cppEvidence": "`SessionLifecycleTest.cpp`/`SessionCloseTest.cpp` cover application turns and close. No durable submission admission or generation task test.",
+      "cppSeam": "`Harness::open`/`Harness::close` in `src/durable/Harness.cpp` owns Storage/Registry/settings lifetime. `WorkflowRuntime::root` lazily creates the root conversation and five built-in documents. `Harness::submit`/`wait_for_submission`/`WorkflowRuntime::receipt` provide admission and settled receipts.",
+      "cppEvidence": "`tests/durable/HarnessWorkflowTest.cpp` drives a real `Harness::open`/`close` with `MemoryStorage`, a scripted `ModelStreamFactory`, one injected tool, and frozen `audit-1056/workflow.json` transcript comparison. Model messages and `byTaskId` survive JSONL and SQLite round-trips. Storage-failure receipt is rejected without hanging.",
       "recommendation": "Make generation a durable task that writes one terminal receipt and commits entries/tool tasks transactionally. Keep application prompt execution out of the durable task identity.",
       "blockers": [
-        "no durable GenerationTask or submission receipt"
+        "no generation onYield hook continuation"
       ]
     },
     {
@@ -669,7 +669,7 @@
       "verification": "upstream-captured",
       "boundary": null,
       "dependencies": [],
-      "implementationTicket": null,
+      "implementationTicket": "#1079",
       "upstreamEvidence": {
         "sources": [
           "packages/durable/src/harness/define.ts:section",
@@ -680,11 +680,11 @@
           "a blocking threshold compaction appends its summary before the request it protects"
         ]
       },
-      "cppSeam": "`SystemPromptBuilder` and `ProjectResourceLoader` assemble application prompt sections/instructions. There is no durable section registry or per-request extension section order.",
-      "cppEvidence": "`SystemPromptBuilder` tests and `SessionAssemblyContractTest.cpp` cover application sections. No durable section ordering test.",
+      "cppSeam": "`Registry::install` in `src/durable/WorkflowRuntime.cpp` accepts `Extension` values with `PromptSection` entries. `WorkflowRuntime::plan_prompt` renders static sections from the live registry snapshot into the system prompt.",
+      "cppEvidence": "`tests/durable/HarnessWorkflowTest.cpp` root/late-registry test installs a second extension after conversation creation and verifies the frozen `audit-1056/workflow.json` sectionsAdded/toolsAdded appear in the next request and committed pi.system entry.",
       "recommendation": "Render durable extension sections from the registry snapshot with explicit reserved-key ordering; do not reuse application prompt templates as the durable contract.",
       "blockers": [
-        "no durable section rendering"
+        "no blocking threshold compaction"
       ]
     },
     {

@@ -1,5 +1,7 @@
 #include <cch/durable/Harness.hpp>
 
+#include "durable/WorkflowRuntime.hpp"
+
 #include <cch/durable/Records.hpp>
 #include <cch/durable/Session.hpp>
 #include <cch/durable/Storage.hpp>
@@ -161,6 +163,7 @@ struct Harness::Impl {
     std::unique_ptr<Session> session;
     HarnessOptions options;
     std::shared_ptr<std::move_only_function<std::int64_t()>> clock;
+    std::unique_ptr<WorkflowRuntime> workflow;
 
     struct ExecutionThread {
         std::thread thread;
@@ -176,6 +179,7 @@ struct Harness::Impl {
 
     std::map<std::int64_t, std::stop_source> active_invocations;
     std::map<std::int64_t, std::vector<support::AsyncCompletion<TaskRecord, support::Error>>> waiters;
+    std::optional<support::Error> wait_error;
 
     Impl(Storage* s, std::unique_ptr<Session> sess, HarnessOptions opt)
         : storage(s), session(std::move(sess)), options(std::move(opt)),
@@ -216,6 +220,23 @@ struct Harness::Impl {
     }
 
     void init() {
+        workflow = std::make_unique<WorkflowRuntime>(*session, *storage, options, clock);
+        options.tasks.push_back(workflow->definition());
+        (void)session->subscribe_close([this] {
+            std::map<std::int64_t, std::vector<support::AsyncCompletion<TaskRecord, support::Error>>> pending;
+            const auto error = support::make_error(support::ErrorCode::Validation,
+                    session->failed() ? "Session failed after a storage error; close and reopen it" : "Session is closed");
+            {
+                std::lock_guard lock(mutex);
+                wait_error = error;
+                pending = std::move(waiters);
+                waiters.clear();
+            }
+            for (auto& [id, completions] : pending) {
+                (void)id;
+                for (auto& completion : completions) completion(std::unexpected(error));
+            }
+        });
         (void)session->subscribe_commits([this](const CommitPublication& pub) {
             for (const auto& change : pub.changes) {
                 if (const auto* tc = std::get_if<TableCommitChange>(&change)) {
@@ -540,6 +561,12 @@ Harness::~Harness() {
 }
 
 support::AsyncResult<std::unique_ptr<Harness>> Harness::open(Storage& storage, HarnessOptions options) {
+    for (const auto& task : options.tasks) {
+        if (task.kind() == "pi.generation") {
+            return support::AsyncResult<std::unique_ptr<Harness>>{std::unexpected(support::make_error(
+                    support::ErrorCode::Validation, "pi.generation is a reserved Harness task kind"))};
+        }
+    }
     auto session = Session::create(storage);
     auto impl = std::make_unique<Impl>(&storage, std::move(session), std::move(options));
     impl->init();
@@ -583,8 +610,20 @@ support::AsyncResult<TaskRecord> Harness::wait_for_task(TaskId id) {
     return support::AsyncResult<TaskRecord>{support::AsyncProducer<TaskRecord, support::Error>{
             [this, id](support::AsyncCompletion<TaskRecord, support::Error> completion) mutable noexcept {
                 std::unique_lock lock(impl_->mutex);
+                if (impl_->wait_error) {
+                    const auto error = *impl_->wait_error;
+                    lock.unlock();
+                    completion(std::unexpected(error));
+                    return;
+                }
                 auto cur_opt = impl_->storage->task(id);
-                if (cur_opt && cur_opt->has_value() && (*cur_opt)->state.status == "terminal") {
+                if (!cur_opt || !cur_opt->has_value()) {
+                    const auto error = !cur_opt ? cur_opt.error() : support::make_error(support::ErrorCode::Validation, "Task not found");
+                    lock.unlock();
+                    completion(std::unexpected(error));
+                    return;
+                }
+                if ((*cur_opt)->state.status == "terminal") {
                     lock.unlock();
                     completion(**cur_opt);
                     return;
@@ -664,6 +703,38 @@ support::AsyncResult<std::optional<TaskRecord>> Harness::get_task(TaskId id) {
         return support::AsyncResult<std::optional<TaskRecord>>{std::unexpected(res.error())};
     }
     return support::AsyncResult<std::optional<TaskRecord>>{*res};
+}
+
+support::AsyncResult<ConversationId> Harness::root(RootOptions options) {
+    return impl_->workflow->root(std::move(options));
+}
+
+support::AsyncResult<Submission> Harness::submit(ConversationId conversation_id, std::string text) {
+    auto operation = impl_->workflow->submit(conversation_id, std::move(text), *task_definition("pi.generation"));
+    // Harness outlives the producer and its completion (submit's declaration).
+    return support::AsyncResult<Submission>{support::AsyncProducer<Submission, support::Error>{
+            [this, operation = std::move(operation)](support::AsyncCompletion<Submission, support::Error> done) mutable noexcept {
+                std::move(operation).start([this, done = std::move(done)](support::Expected<Submission> result) mutable noexcept {
+                    if (result) {
+                        if (auto resumed = resume(); !resumed) {
+                            done(std::unexpected(resumed.error()));
+                            return;
+                        }
+                    }
+                    done(std::move(result));
+                });
+            }}};
+}
+
+support::AsyncResult<SettledSubmission> Harness::wait_for_submission(Submission submission) {
+    auto operation = wait_for_task(submission.id);
+    return support::AsyncResult<SettledSubmission>{support::AsyncProducer<SettledSubmission, support::Error>{
+            [operation = std::move(operation)](support::AsyncCompletion<SettledSubmission, support::Error> done) mutable noexcept {
+                std::move(operation).start([done = std::move(done)](support::Expected<TaskRecord> result) mutable noexcept {
+                    if (!result) done(std::unexpected(result.error()));
+                    else done(WorkflowRuntime::receipt(*result));
+                });
+            }}};
 }
 
 support::AsyncResult<void> Harness::close() {

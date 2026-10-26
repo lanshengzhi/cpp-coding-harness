@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "47d649203c6021508a58ea8f48c38b3dccd37dd0124ee615bc69529ac2e7d943"
+            "sha256": "56f5c89021be2d504e79458265b48a16e2868c7bcfd43d6c93bd7d905d68c698"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -644,7 +644,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 474,
+      "scenarios": 475,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -719,7 +719,8 @@
         "audit-1035/placement-span.json:plain-terminal-placement-span-control",
         "audit-1035/placement-span.json:wezterm-overlay-inside-placement-span",
         "audit-831/dock-footer.json:dock-fits-autocomplete-and-multiline",
-        "audit-831/dock-footer.json:dock-over-budget-editor-growth"
+        "audit-831/dock-footer.json:dock-over-budget-editor-growth",
+        "audit-1079/held-tool.json:a held real tool prevents the next model request and submission settlement"
       ],
       "uncovered": []
     }
@@ -3607,6 +3608,16 @@
         "cch_tui:residual-831-dock-growth-footer"
       ],
       "disposition": "the dock-growth slice consumes this observation when it advances cch_tui:residual-831-dock-growth-footer beyond upstream-captured."
+    },
+    {
+      "family": "audit-1079",
+      "artifact": "held-tool.json",
+      "scenario": "a held real tool prevents the next model request and submission settlement",
+      "reason": "Captured by #1079 after the #1058 ledger was committed; the held-tool ordering observation extends the F1 coverage rows without retroactively upgrading their recorded verification.",
+      "rows": [
+        "cch_durable:generation-admission"
+      ],
+      "disposition": "the durable workflow implementation must consume this observation when changing tool execution or settlement ordering"
     }
   ],
   "correctionsIndex": [
@@ -26331,7 +26342,7 @@
       },
       "missingObservation": null,
       "gaps": [
-        "no durable section rendering"
+        "no blocking threshold compaction"
       ],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Render durable extension sections from the registry snapshot with explicit reserved-key ordering; do not reuse application prompt templates as the durable contract.",
@@ -26384,7 +26395,7 @@
       },
       "missingObservation": null,
       "gaps": [
-        "no durable GenerationTask or submission receipt"
+        "no generation onYield hook continuation"
       ],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Make generation a durable task that writes one terminal receipt and commits entries/tool tasks transactionally. Keep application prompt execution out of the durable task identity.",
@@ -26543,7 +26554,7 @@
       },
       "missingObservation": null,
       "gaps": [
-        "no cch_durable target or public Harness implementation"
+        "no fork identity or provider state persistence across reopen"
       ],
       "remainingWork": "C++ comparison against the registered artifact is not run; the row stays unverified",
       "notes": "Recommendation: Create the cch_durable Owner target with a public Harness value owning Storage/Registry/settings/environment lifetime and a root factory. Keep SessionFactory out of cch_durable; do not implement Harness as another AgentSession wrapper.",

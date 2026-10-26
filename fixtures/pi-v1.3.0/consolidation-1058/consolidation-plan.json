@@ -1506,6 +1506,16 @@
         "cch_tui:residual-831-dock-growth-footer"
       ],
       "disposition": "the dock-growth slice consumes this observation when it advances cch_tui:residual-831-dock-growth-footer beyond upstream-captured."
+    },
+    {
+      "family": "audit-1079",
+      "artifact": "held-tool.json",
+      "scenario": "a held real tool prevents the next model request and submission settlement",
+      "reason": "Captured by #1079 after the #1058 ledger was committed; the held-tool ordering observation extends the F1 coverage rows without retroactively upgrading their recorded verification.",
+      "rows": [
+        "cch_durable:generation-admission"
+      ],
+      "disposition": "the durable workflow implementation must consume this observation when changing tool execution or settlement ordering"
     }
   ],
   "groups": [

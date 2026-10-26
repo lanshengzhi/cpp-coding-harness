@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="(empty)"
+	tests="5"
+	failures="0"
+	disabled="0"
+	skipped="0"
+	hostname=""
+	time="0"
+	timestamp="2026-10-26T12:32:15"
+	>
+	<testcase name="Harness creates its root atomically and resolves late registry installs and settings on request" classname="Harness creates its root atomically and resolves late registry installs and settings on request" time="0.00613124" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1079;workflow"/>
+		</properties>
+		<system-out>Filters: "Harness creates its root atomically and resolves late registry installs and settings on request"
+Randomness seeded to: 3148701457
+===============================================================================
+All tests passed (42 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Harness receipt reports a final storage failure instead of hanging or reporting success" classname="Harness receipt reports a final storage failure instead of hanging or reporting success" time="0.00380682" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1079;workflow"/>
+		</properties>
+		<system-out>Filters: "Harness receipt reports a final storage failure instead of hanging or reporting success"
+Randomness seeded to: 410479593
+===============================================================================
+All tests passed (7 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Harness runs an admitted prompt through a real injected tool and settles committed entries" classname="Harness runs an admitted prompt through a real injected tool and settles committed entries" time="0.00539674" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1079;workflow"/>
+		</properties>
+		<system-out>Filters: "Harness runs an admitted prompt through a real injected tool and settles committed entries"
+Randomness seeded to: 585268696
+===============================================================================
+All tests passed (53 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Harness waits for the real tool before requesting an answer and settling" classname="Harness waits for the real tool before requesting an answer and settling" time="0.00580562" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1079;workflow"/>
+		</properties>
+		<system-out>Filters: "Harness waits for the real tool before requesting an answer and settling"
+Randomness seeded to: 3109139287
+===============================================================================
+All tests passed (65 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+	<testcase name="Workflow entries persist model messages and byTaskId through JSONL and SQLite storage" classname="Workflow entries persist model messages and byTaskId through JSONL and SQLite storage" time="0.028378" status="run">
+		<properties>
+			<property name="cmake_labels" value="durable;issue1079;workflow"/>
+		</properties>
+		<system-out>Filters: "Workflow entries persist model messages and byTaskId through JSONL and SQLite storage"
+Randomness seeded to: 4007922430
+===============================================================================
+All tests passed (45 assertions in 1 test case)
+
+</system-out>
+	</testcase>
+</testsuite>

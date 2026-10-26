@@ -1,0 +1,117 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1079",
+  "family": "audit-1079",
+  "capturedAt": "2026-10-26T01:56:41.647Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1079/capture-1079.mts",
+    "sha256": "cda5921957225471fb2bdd9f3d77bbc29bfe67f496c0696804dc0242c1601f9a",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1079/capture-1079.mts",
+        "sha256": "cda5921957225471fb2bdd9f3d77bbc29bfe67f496c0696804dc0242c1601f9a"
+      }
+    ],
+    "command": "PI_CHECKOUT=/home/lansy/Work/github/coding-agent/pi NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH=/home/lansy/Work/github/coding-agent/pi/tsconfig.json /home/lansy/Work/github/coding-agent/pi/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1079/capture-1079.mts"
+  },
+  "artifacts": [
+    {
+      "path": "held-tool.json",
+      "family": "audit-1079",
+      "bytes": 2385,
+      "sha256": "da83a332afb29859a41df14469fac1c18853f2855e53082fe33f96de8e653cc4",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/harness.ts:Harness.open,root,close",
+        "packages/durable/src/harness/generation.ts:GenerationTask",
+        "packages/durable/src/harness/tool.ts:ToolTask",
+        "packages/durable/src/harness/submissions.ts:Submissions"
+      ],
+      "scenarios": [
+        {
+          "name": "a held real tool prevents the next model request and submission settlement",
+          "inputs": {
+            "storage": "MemoryStorage",
+            "turns": [
+              "toolUse echo {text:hello}",
+              "stop finished"
+            ],
+            "tool": "echo",
+            "hold": "inside execute until caller releases"
+          },
+          "expected": {
+            "before": {
+              "settled": false,
+              "executions": 1,
+              "requests": 1,
+              "entries": [
+                [
+                  "pi.user",
+                  "run the echo tool"
+                ],
+                [
+                  "pi.system",
+                  [],
+                  [
+                    "echo"
+                  ]
+                ],
+                [
+                  "pi.assistant",
+                  ""
+                ]
+              ]
+            },
+            "after": {
+              "status": "done",
+              "executions": 1,
+              "requests": 2,
+              "entries": [
+                [
+                  "pi.user",
+                  "run the echo tool"
+                ],
+                [
+                  "pi.system",
+                  [],
+                  [
+                    "echo"
+                  ]
+                ],
+                [
+                  "pi.assistant",
+                  ""
+                ],
+                [
+                  "pi.tool-result",
+                  "echo",
+                  "call-1",
+                  false,
+                  true,
+                  "echo:hello"
+                ],
+                [
+                  "pi.assistant",
+                  "finished"
+                ]
+              ]
+            }
+          },
+          "normalizations": [
+            "generated IDs and timestamps are omitted; entry ordering and text remain",
+            "elapsed duration is compared by presence, not its wall-clock value"
+          ]
+        }
+      ]
+    }
+  ]
+}
