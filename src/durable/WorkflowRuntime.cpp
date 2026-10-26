@@ -187,10 +187,97 @@ support::Expected<ai::UserMessage> input_user(const EntryRecord& entry) {
 
 } // namespace
 
+TaskHookRegistration task_hook(std::string task_kind, std::string hook_name, TaskHook handler) {
+    TaskHookRegistration reg{.task = std::move(task_kind)};
+    reg.handlers.emplace(std::move(hook_name), std::move(handler));
+    return reg;
+}
+
+TaskHookRegistration task_hook(const TaskDefinition& task, std::string hook_name, TaskHook handler) {
+    return task_hook(task.kind(), std::move(hook_name), std::move(handler));
+}
+
+TaskHookRegistration task_hook(
+        const TaskDefinition& task, std::string hook_name, std::move_only_function<support::ExpectedVoid()> handler) {
+    return task_hook(task.kind(),
+            std::move(hook_name),
+            [fn = std::move(handler)](const chord::Json&, TaskRuntime&) mutable -> support::AsyncResult<chord::Json> {
+                if (!fn) {
+                    return support::AsyncResult<chord::Json>{chord::Json{nullptr}};
+                }
+                auto res = fn();
+                if (!res) {
+                    return support::AsyncResult<chord::Json>{std::unexpected(res.error())};
+                }
+                return support::AsyncResult<chord::Json>{chord::Json{nullptr}};
+            });
+}
+
+struct InstalledExtension {
+    std::string name{};
+    std::vector<std::shared_ptr<ToolRegistration>> tools{};
+    std::vector<PromptSection> sections{};
+    std::vector<std::shared_ptr<TaskDefinition>> tasks{};
+    std::vector<std::shared_ptr<TaskHookRegistration>> hooks{};
+};
+
 struct Registry::Impl {
     mutable std::mutex mutex;
-    std::vector<std::string> extensions;
+    mutable std::mutex notify_mutex;
+    std::vector<InstalledExtension> extensions;
     Snapshot current;
+    std::uint64_t next_subscriber_id{1};
+    std::map<std::uint64_t, std::shared_ptr<std::move_only_function<void()>>> subscribers;
+
+    void rebuild_snapshot() {
+        Snapshot next;
+        for (const auto& ext : extensions) {
+            for (const auto& tool : ext.tools) {
+                auto existing = std::ranges::find_if(next.tools,
+                        [&tool](const auto& item) { return item->declaration.name == tool->declaration.name; });
+                if (existing != next.tools.end()) {
+                    *existing = tool;
+                } else {
+                    next.tools.push_back(tool);
+                }
+            }
+            for (const auto& section : ext.sections) {
+                auto existing = std::ranges::find_if(
+                        next.sections, [&section](const auto& item) { return item.key == section.key; });
+                if (existing != next.sections.end()) {
+                    *existing = section;
+                } else {
+                    next.sections.push_back(section);
+                }
+            }
+            for (const auto& task : ext.tasks) {
+                next.tasks.push_back(task);
+            }
+            for (const auto& hook : ext.hooks) {
+                next.hooks.push_back(hook);
+            }
+        }
+        current = std::move(next);
+    }
+
+    [[nodiscard]] std::vector<std::shared_ptr<std::move_only_function<void()>>> copy_subscribers() const {
+        std::vector<std::shared_ptr<std::move_only_function<void()>>> out;
+        out.reserve(subscribers.size());
+        for (const auto& [id, fn] : subscribers) {
+            (void)id;
+            out.push_back(fn);
+        }
+        return out;
+    }
+
+    void notify_all(const std::vector<std::shared_ptr<std::move_only_function<void()>>>& listeners) {
+        std::lock_guard notify_lock(notify_mutex);
+        for (const auto& fn : listeners) {
+            if (fn && *fn) {
+                (*fn)();
+            }
+        }
+    }
 };
 
 Registry::Registry() : impl_(std::make_unique<Impl>()) {}
@@ -199,46 +286,121 @@ Registry& Registry::operator=(Registry&&) noexcept = default;
 Registry::~Registry() = default;
 
 support::ExpectedVoid Registry::install(Extension extension) {
-    std::lock_guard lock(impl_->mutex);
-    if (extension.name.empty() || std::ranges::find(impl_->extensions, extension.name) != impl_->extensions.end()) {
-        return std::unexpected(validation("Extension name must be non-empty and unique"));
+    if (extension.name.empty()) {
+        return std::unexpected(validation("Extension name must be non-empty"));
     }
-    std::vector<std::string> names;
-    for (const auto& tool : extension.tools) {
-        if (tool.declaration.name.empty() || !tool.execute ||
-                std::ranges::find(names, tool.declaration.name) != names.end() ||
-                std::ranges::any_of(impl_->current.tools, [&tool](const auto& existing) {
-                    return existing->declaration.name == tool.declaration.name;
-                })) {
-            return std::unexpected(validation("Tool name must be non-empty, unique and executable"));
+    {
+        std::vector<std::string> tool_names;
+        for (const auto& tool : extension.tools) {
+            if (tool.declaration.name.empty() || !tool.execute ||
+                    std::ranges::find(tool_names, tool.declaration.name) != tool_names.end()) {
+                return std::unexpected(validation("Tool name must be non-empty, unique and executable"));
+            }
+            if (auto parameters = Json::from_support(tool.declaration.parameters); !parameters) {
+                return std::unexpected(parameters.error());
+            }
+            if (tool.declaration.output_schema) {
+                if (auto schema = Json::from_support(*tool.declaration.output_schema); !schema) {
+                    return std::unexpected(schema.error());
+                }
+            }
+            tool_names.push_back(tool.declaration.name);
         }
-        if (auto parameters = Json::from_support(tool.declaration.parameters); !parameters) {
-            return std::unexpected(parameters.error());
-        }
-        if (tool.declaration.output_schema) {
-            if (auto schema = Json::from_support(*tool.declaration.output_schema); !schema) return std::unexpected(schema.error());
-        }
-        names.push_back(tool.declaration.name);
     }
-    names.clear();
-    for (const auto& section : extension.sections) {
-        if (section.key.empty() || std::ranges::find(names, section.key) != names.end() ||
-                std::ranges::any_of(impl_->current.sections, [&section](const auto& existing) {
-                    return existing.key == section.key;
-                })) {
-            return std::unexpected(validation("Section key must be non-empty and unique"));
+    {
+        std::vector<std::string> section_keys;
+        for (const auto& section : extension.sections) {
+            if (section.key.empty() || std::ranges::find(section_keys, section.key) != section_keys.end()) {
+                return std::unexpected(validation("Section key must be non-empty and unique"));
+            }
+            section_keys.push_back(section.key);
         }
-        names.push_back(section.key);
     }
-    impl_->extensions.push_back(std::move(extension.name));
-    for (auto& tool : extension.tools) impl_->current.tools.push_back(std::make_shared<ToolRegistration>(std::move(tool)));
-    for (auto& section : extension.sections) impl_->current.sections.push_back(std::move(section));
+    {
+        std::vector<std::string> task_kinds;
+        for (const auto& task : extension.tasks) {
+            if (task.kind().empty() || task.kind() == "pi.generation" ||
+                    std::ranges::find(task_kinds, task.kind()) != task_kinds.end()) {
+                return std::unexpected(validation(
+                        "Task " + task.kind() + " of extension " + extension.name + " is already installed"));
+            }
+            task_kinds.push_back(task.kind());
+        }
+    }
+
+    std::vector<std::shared_ptr<std::move_only_function<void()>>> listeners;
+    {
+        std::lock_guard lock(impl_->mutex);
+        for (const auto& task : extension.tasks) {
+            for (const auto& existing_ext : impl_->extensions) {
+                if (existing_ext.name == extension.name) continue;
+                for (const auto& existing_task : existing_ext.tasks) {
+                    if (existing_task->kind() == task.kind()) {
+                        return std::unexpected(validation(
+                                "Task " + task.kind() + " of extension " + extension.name + " is already installed"));
+                    }
+                }
+            }
+        }
+
+        InstalledExtension installed_ext{.name = std::move(extension.name), .sections = std::move(extension.sections)};
+        for (auto& tool : extension.tools) {
+            installed_ext.tools.push_back(std::make_shared<ToolRegistration>(std::move(tool)));
+        }
+        for (auto& task : extension.tasks) {
+            installed_ext.tasks.push_back(std::make_shared<TaskDefinition>(std::move(task)));
+        }
+        for (auto& hook : extension.hooks) {
+            installed_ext.hooks.push_back(std::make_shared<TaskHookRegistration>(std::move(hook)));
+        }
+
+        auto existing = std::ranges::find_if(
+                impl_->extensions, [&installed_ext](const auto& item) { return item.name == installed_ext.name; });
+        if (existing != impl_->extensions.end()) {
+            *existing = std::move(installed_ext);
+        } else {
+            impl_->extensions.push_back(std::move(installed_ext));
+        }
+        impl_->rebuild_snapshot();
+        listeners = impl_->copy_subscribers();
+    }
+    impl_->notify_all(listeners);
     return {};
+}
+
+void Registry::uninstall(std::string_view extension_name) {
+    std::vector<std::shared_ptr<std::move_only_function<void()>>> listeners;
+    {
+        std::lock_guard lock(impl_->mutex);
+        auto existing = std::ranges::find_if(
+                impl_->extensions, [extension_name](const auto& item) { return item.name == extension_name; });
+        if (existing == impl_->extensions.end()) {
+            return;
+        }
+        impl_->extensions.erase(existing);
+        impl_->rebuild_snapshot();
+        listeners = impl_->copy_subscribers();
+    }
+    impl_->notify_all(listeners);
 }
 
 Registry::Snapshot Registry::snapshot() const {
     std::lock_guard lock(impl_->mutex);
     return impl_->current;
+}
+
+std::uint64_t Registry::subscribe(std::move_only_function<void()> listener) {
+    std::lock_guard lock(impl_->mutex);
+    const std::uint64_t id = impl_->next_subscriber_id++;
+    impl_->subscribers.emplace(id, std::make_shared<std::move_only_function<void()>>(std::move(listener)));
+    return id;
+}
+
+void Registry::unsubscribe(std::uint64_t id) {
+    if (id == 0) return;
+    std::lock_guard notify_lock(impl_->notify_mutex);
+    std::lock_guard lock(impl_->mutex);
+    impl_->subscribers.erase(id);
 }
 
 WorkflowRuntime::WorkflowRuntime(Session& session, Storage& storage, HarnessOptions& options,

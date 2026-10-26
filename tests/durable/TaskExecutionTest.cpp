@@ -957,6 +957,10 @@ TEST_CASE("TaskExecution: building a task definition twice reports a validation 
     builder.phase("late",
             [](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
     builder.abort([](const TaskRecord&, TaskRuntime&) { return support::AsyncResult<void>{support::ExpectedVoid{}}; });
+    builder.migrate([](const chord::Json& input, const chord::Json& checkpoint, std::int64_t) {
+        return MigratedTaskState{.input = input, .checkpoint = checkpoint};
+    });
+    builder.hook("lateHook");
     CHECK_FALSE(builder.valid());
 
     auto second = builder.build();
@@ -1073,6 +1077,1135 @@ TEST_CASE("TaskExecution: abort handler returning without a terminal outcome fau
     REQUIRE(receipt.state.outcome->error.has_value());
     CHECK(receipt.state.outcome->error->message ==
             "Abort handler of task " + std::to_string(task_id.value) + " returned without a terminal outcome");
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+namespace {
+
+const std::string kVersioningArtifact = "fixtures/pi-v1.3.0/audit-1055/task-versioning.json";
+const std::string kLifecycleArtifact = "fixtures/pi-v1.3.0/audit-1055/task-lifecycle.json";
+
+[[nodiscard]] TaskDefinition make_versioned_task(std::int64_t version,
+        std::string result_prefix,
+        MigrateHook migrate = {},
+        std::vector<std::string>* log = nullptr,
+        std::mutex* log_mutex = nullptr) {
+    auto builder = TaskDefinitionBuilder("audit.versioned", version);
+    builder.initial([](const chord::Json& input) {
+        double n = 0.0;
+        if (const auto* obj = input.as_object()) {
+            if (auto it = obj->find("n"); it != obj->end() && it->second.as_number()) {
+                n = *it->second.as_number();
+            }
+        }
+        return chord::Json(chord::Json::Object{
+                {"phase", chord::Json("run")},
+                {"n", chord::Json(n)},
+        });
+    });
+    builder.phase("run",
+            [result_prefix = std::move(result_prefix), log, log_mutex](
+                    const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
+                if (log != nullptr) {
+                    if (log_mutex != nullptr) {
+                        std::lock_guard lock(*log_mutex);
+                        log->push_back("run-v" + std::to_string(task.version));
+                    } else {
+                        log->push_back("run-v" + std::to_string(task.version));
+                    }
+                }
+                double n = 0.0;
+                if (task.state.checkpoint && task.state.checkpoint->as_object()) {
+                    const auto& cp = *task.state.checkpoint->as_object();
+                    if (auto it = cp.find("n"); it != cp.end() && it->second.as_number()) {
+                        n = *it->second.as_number();
+                    }
+                }
+                const std::string result = result_prefix + ":" + std::to_string(static_cast<int>(n));
+                return runtime.commit(
+                        [result](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                            return NextTaskState::terminal(TaskOutcome{
+                                    .status = "completed",
+                                    .result = chord::Json(result),
+                            });
+                        });
+            });
+    builder.abort([](const TaskRecord&, TaskRuntime& runtime) {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted"});
+        });
+    });
+    if (migrate) {
+        builder.migrate(std::move(migrate));
+    }
+    return std::move(*builder.build());
+}
+
+} // namespace
+
+TEST_CASE("TaskExecution: reservation migrates a stored definition before running the newer version",
+        "[durable][task][issue1077]") {
+    const auto scenario = FrozenScenario::load(
+            kVersioningArtifact, "reservation migrates a stored definition before running the newer version");
+    REQUIRE(scenario.has_value());
+
+    std::mutex log_mutex;
+    std::vector<std::string> log;
+
+    Registry registry;
+    Extension ext_v1{.name = "audit"};
+    ext_v1.tasks.push_back(make_versioned_task(1, "v1", {}, &log, &log_mutex));
+    REQUIRE(registry.install(std::move(ext_v1)).has_value());
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    auto root_res = consume(harness->root());
+    REQUIRE(root_res.has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* v1_def = harness->task_definition("audit.versioned");
+        if (v1_def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
+        }
+        auto created = tx.create_task(*v1_def,
+                chord::Json(chord::Json::Object{{"n", chord::Json(1.0)}}),
+                TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    const auto before_inspect = consume(harness->inspect());
+    REQUIRE(before_inspect.has_value());
+    REQUIRE(before_inspect.value().tasks.size() == 1);
+    const auto* expected_before = scenario->array_member("before");
+    REQUIRE(expected_before != nullptr);
+    REQUIRE(expected_before->size() == 1);
+    CHECK(before_inspect.value().tasks[0].state.kind == expected_before->at(0).at("kind").get_string());
+    REQUIRE(before_inspect.value().tasks[0].state.migrates.has_value());
+    CHECK(*before_inspect.value().tasks[0].state.migrates == expected_before->at(0).at("migrates").get_boolean());
+
+    Extension ext_v2{.name = "audit"};
+    ext_v2.tasks.push_back(make_versioned_task(
+            2,
+            "v2",
+            [](const chord::Json& input, const chord::Json& checkpoint, std::int64_t from_version)
+                    -> support::Expected<MigratedTaskState> {
+                const double in_n = *input.as_object()->at("n").as_number();
+                const double cp_n = *checkpoint.as_object()->at("n").as_number();
+                return MigratedTaskState{
+                        .input = chord::Json(chord::Json::Object{
+                                {"n", chord::Json(in_n + static_cast<double>(from_version))},
+                        }),
+                        .checkpoint = chord::Json(chord::Json::Object{
+                                {"phase", chord::Json("run")},
+                                {"n", chord::Json(cp_n + 10.0)},
+                        }),
+                };
+            },
+            &log,
+            &log_mutex));
+    REQUIRE(registry.install(std::move(ext_v2)).has_value());
+
+    const auto after_install_inspect = consume(harness->inspect());
+    REQUIRE(after_install_inspect.has_value());
+    REQUIRE(after_install_inspect.value().tasks.size() == 1);
+    const auto* expected_after_install = scenario->array_member("afterInstall");
+    REQUIRE(expected_after_install != nullptr);
+    REQUIRE(expected_after_install->size() == 1);
+    CHECK(after_install_inspect.value().tasks[0].state.kind == expected_after_install->at(0).at("kind").get_string());
+    REQUIRE(after_install_inspect.value().tasks[0].state.migrates.has_value());
+    CHECK(*after_install_inspect.value().tasks[0].state.migrates ==
+            expected_after_install->at(0).at("migrates").get_boolean());
+
+    REQUIRE(harness->resume().has_value());
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+
+    const auto* expected_log = scenario->array_member("log");
+    REQUIRE(expected_log != nullptr);
+    REQUIRE(log.size() == expected_log->size());
+    for (std::size_t i = 0; i < log.size(); ++i) {
+        CHECK(log[i] == expected_log->at(i).get_string());
+    }
+
+    CHECK(receipt.version == static_cast<std::int64_t>(*scenario->number_member("version")));
+    CHECK(json_equals(receipt.input, *scenario->member("input")));
+    REQUIRE(receipt.state.outcome.has_value());
+    const auto* expected_outcome = scenario->object_member("outcome");
+    REQUIRE(expected_outcome != nullptr);
+    CHECK(receipt.state.outcome->status == expected_outcome->at("status").get_string());
+    REQUIRE(receipt.state.outcome->result.has_value());
+    CHECK(json_equals(*receipt.state.outcome->result, expected_outcome->at("result")));
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: a task with no installed definition stays pending and runs when its definition returns",
+        "[durable][task][issue1077]") {
+    const auto scenario = FrozenScenario::load(kVersioningArtifact,
+            "a task with no installed definition stays pending and runs when its definition returns");
+    REQUIRE(scenario.has_value());
+
+    Registry registry;
+    Extension ext_initial{.name = "audit"};
+    ext_initial.tasks.push_back(make_versioned_task(1, "v1"));
+    REQUIRE(registry.install(std::move(ext_initial)).has_value());
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    auto root_res = consume(harness->root());
+    REQUIRE(root_res.has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* def = harness->task_definition("audit.versioned");
+        if (def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
+        }
+        auto created = tx.create_task(*def,
+                chord::Json(chord::Json::Object{{"n", chord::Json(1.0)}}),
+                TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    registry.uninstall("audit");
+    REQUIRE(harness->resume().has_value());
+
+    const auto blocked_inspect = consume(harness->inspect());
+    REQUIRE(blocked_inspect.has_value());
+    REQUIRE(blocked_inspect.value().tasks.size() == 1);
+    CHECK(blocked_inspect.value().tasks[0].state.kind == *scenario->string_member("inspection"));
+    REQUIRE(blocked_inspect.value().tasks[0].state.reason.has_value());
+    CHECK(*blocked_inspect.value().tasks[0].state.reason == *scenario->string_member("reason"));
+
+    const auto record_res = consume(harness->get_task(task_id));
+    REQUIRE(record_res.has_value());
+    REQUIRE(record_res.value().has_value());
+    CHECK(record_res.value()->state.status == *scenario->string_member("recordStatus"));
+
+    Extension ext_restored{.name = "audit"};
+    ext_restored.tasks.push_back(make_versioned_task(1, "v1"));
+    REQUIRE(registry.install(std::move(ext_restored)).has_value());
+
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+    REQUIRE(receipt.state.outcome.has_value());
+    const auto* expected_outcome = scenario->object_member("outcome");
+    REQUIRE(expected_outcome != nullptr);
+    CHECK(receipt.state.outcome->status == expected_outcome->at("status").get_string());
+    REQUIRE(receipt.state.outcome->result.has_value());
+    CHECK(json_equals(*receipt.state.outcome->result, expected_outcome->at("result")));
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: a task whose stored version is newer than the installed definition stays pending and blocked "
+          "then recovers",
+        "[durable][task][issue1077]") {
+    const auto scenario = FrozenScenario::load(kVersioningArtifact,
+            "a task whose stored version is newer than the installed definition stays pending and blocked");
+    REQUIRE(scenario.has_value());
+
+    Registry registry;
+    Extension ext_v2{.name = "audit"};
+    ext_v2.tasks.push_back(make_versioned_task(2,
+            "v2",
+            [](const chord::Json& input, const chord::Json& checkpoint, std::int64_t)
+                    -> support::Expected<MigratedTaskState> {
+                return MigratedTaskState{.input = input, .checkpoint = checkpoint};
+            }));
+    REQUIRE(registry.install(std::move(ext_v2)).has_value());
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    auto root_res = consume(harness->root());
+    REQUIRE(root_res.has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* def = harness->task_definition("audit.versioned");
+        if (def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
+        }
+        auto created = tx.create_task(*def,
+                chord::Json(chord::Json::Object{{"n", chord::Json(1.0)}}),
+                TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    Extension ext_v1{.name = "audit"};
+    ext_v1.tasks.push_back(make_versioned_task(1, "v1"));
+    REQUIRE(registry.install(std::move(ext_v1)).has_value());
+
+    REQUIRE(harness->resume().has_value());
+
+    const auto blocked_inspect = consume(harness->inspect());
+    REQUIRE(blocked_inspect.has_value());
+    REQUIRE(blocked_inspect.value().tasks.size() == 1);
+    CHECK(blocked_inspect.value().tasks[0].state.kind == *scenario->string_member("inspection"));
+    REQUIRE(blocked_inspect.value().tasks[0].state.reason.has_value());
+    CHECK(*blocked_inspect.value().tasks[0].state.reason == *scenario->string_member("reason"));
+
+    const auto record_res = consume(harness->get_task(task_id));
+    REQUIRE(record_res.has_value());
+    REQUIRE(record_res.value().has_value());
+    CHECK(record_res.value()->state.status == *scenario->string_member("recordStatus"));
+    REQUIRE(record_res.value()->state.checkpoint.has_value());
+    CHECK(json_equals(*record_res.value()->state.checkpoint, *scenario->member("checkpoint")));
+
+    // Repairing the registry with version 2 allows the same pending task to complete.
+    Extension ext_repaired{.name = "audit"};
+    ext_repaired.tasks.push_back(make_versioned_task(2, "v2"));
+    REQUIRE(registry.install(std::move(ext_repaired)).has_value());
+
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    REQUIRE(receipt_res.value().state.outcome.has_value());
+    CHECK(receipt_res.value().state.outcome->status == "completed");
+    REQUIRE(receipt_res.value().state.outcome->result.has_value());
+    CHECK(receipt_res.value().state.outcome->result == std::optional<chord::Json>{chord::Json("v2:1")});
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: a failed migration is reported once and leaves the task pending until a usable definition is "
+          "installed",
+        "[durable][task][issue1077]") {
+    const auto scenario = FrozenScenario::load(kVersioningArtifact,
+            "a failed migration is reported and leaves the task pending until a usable definition is installed");
+    REQUIRE(scenario.has_value());
+
+    std::mutex report_mutex;
+    std::condition_variable report_cv;
+    std::vector<std::string> reports;
+    std::atomic_int broken_migration_attempts{0};
+
+    Registry registry;
+    Extension ext_v1{.name = "audit"};
+    ext_v1.tasks.push_back(make_versioned_task(1, "v1"));
+    REQUIRE(registry.install(std::move(ext_v1)).has_value());
+
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    options.on_report = [&](const support::Error& error) {
+        std::lock_guard lock(report_mutex);
+        reports.push_back(error.message);
+        report_cv.notify_all();
+    };
+    auto harness_res = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    auto root_res = consume(harness->root());
+    REQUIRE(root_res.has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* def = harness->task_definition("audit.versioned");
+        if (def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
+        }
+        auto created = tx.create_task(*def,
+                chord::Json(chord::Json::Object{{"n", chord::Json(1.0)}}),
+                TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    Extension ext_broken{.name = "audit"};
+    ext_broken.tasks.push_back(make_versioned_task(2,
+            "broken",
+            [&broken_migration_attempts](
+                    const chord::Json&, const chord::Json&, std::int64_t) -> support::Expected<MigratedTaskState> {
+                ++broken_migration_attempts;
+                return std::unexpected(support::make_error(support::ErrorCode::Validation, "cannot migrate"));
+            }));
+    REQUIRE(registry.install(std::move(ext_broken)).has_value());
+
+    REQUIRE(harness->resume().has_value());
+    {
+        std::unique_lock lock(report_mutex);
+        REQUIRE(report_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return !reports.empty(); }));
+    }
+
+    // An unrelated extension install wakes the scheduler without retrying the same failed definition.
+    Extension ext_unrelated{.name = "unrelated"};
+    ext_unrelated.sections.push_back(PromptSection{.key = "note", .text = "unrelated"});
+    REQUIRE(registry.install(std::move(ext_unrelated)).has_value());
+
+    const auto blocked_inspect = consume(harness->inspect());
+    REQUIRE(blocked_inspect.has_value());
+    REQUIRE(blocked_inspect.value().tasks.size() == 1);
+    CHECK(blocked_inspect.value().tasks[0].state.kind == *scenario->string_member("blocked"));
+    REQUIRE(blocked_inspect.value().tasks[0].state.reason.has_value());
+    CHECK(*blocked_inspect.value().tasks[0].state.reason == *scenario->string_member("reason"));
+    CHECK(broken_migration_attempts.load() == 1);
+
+    const auto pending_record = consume(harness->get_task(task_id));
+    REQUIRE(pending_record.has_value());
+    REQUIRE(pending_record.value().has_value());
+    CHECK(pending_record.value()->state.status == "pending");
+    CHECK(pending_record.value()->version == 1);
+
+    Extension ext_good{.name = "audit"};
+    ext_good.tasks.push_back(make_versioned_task(2,
+            "v2",
+            [](const chord::Json& input, const chord::Json& checkpoint, std::int64_t)
+                    -> support::Expected<MigratedTaskState> {
+                return MigratedTaskState{.input = input, .checkpoint = checkpoint};
+            }));
+    REQUIRE(registry.install(std::move(ext_good)).has_value());
+
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+    CHECK(receipt.version == 2);
+    REQUIRE(receipt.state.outcome.has_value());
+    const auto* expected_outcome = scenario->object_member("recoveredOutcome");
+    REQUIRE(expected_outcome != nullptr);
+    CHECK(receipt.state.outcome->status == expected_outcome->at("status").get_string());
+    REQUIRE(receipt.state.outcome->result.has_value());
+    CHECK(json_equals(*receipt.state.outcome->result, expected_outcome->at("result")));
+
+    {
+        std::lock_guard lock(report_mutex);
+        const auto* expected_reports = scenario->array_member("reports");
+        REQUIRE(expected_reports != nullptr);
+        REQUIRE(reports.size() == expected_reports->size());
+        for (std::size_t i = 0; i < reports.size(); ++i) {
+            CHECK(reports[i] == expected_reports->at(i).get_string());
+        }
+    }
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: aborting a task blocked by too-old or failed-migration definition commits an orphaned "
+          "outcome with the blocked reason",
+        "[durable][task][issue1077]") {
+    Registry registry;
+    Extension ext_v2{.name = "audit"};
+    ext_v2.tasks.push_back(make_versioned_task(2, "v2"));
+    REQUIRE(registry.install(std::move(ext_v2)).has_value());
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    auto root_res = consume(harness->root());
+    REQUIRE(root_res.has_value());
+
+    TaskId too_old_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* def = harness->task_definition("audit.versioned");
+        if (def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
+        }
+        auto created = tx.create_task(*def,
+                chord::Json(chord::Json::Object{{"n", chord::Json(1.0)}}),
+                TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        too_old_id = *created;
+        return {};
+    })).has_value());
+
+    // Downgrade definition to v1: too_old_id (v2) is now blocked with task_too_old.
+    // Also create a v1 task that will fail migration when v2 without migrate is installed.
+    Extension ext_v1{.name = "audit"};
+    ext_v1.tasks.push_back(make_versioned_task(1, "v1"));
+    REQUIRE(registry.install(std::move(ext_v1)).has_value());
+
+    TaskId failed_mig_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* def = harness->task_definition("audit.versioned");
+        if (def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
+        }
+        auto created = tx.create_task(*def,
+                chord::Json(chord::Json::Object{{"n", chord::Json(1.0)}}),
+                TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        failed_mig_id = *created;
+        return {};
+    })).has_value());
+
+    const auto abort_too_old = consume(harness->abort_task(too_old_id));
+    REQUIRE(abort_too_old.has_value());
+    CHECK(abort_too_old.value() == "marked");
+    const auto too_old_receipt = consume(harness->wait_for_task(too_old_id));
+    REQUIRE(too_old_receipt.has_value());
+    CHECK(too_old_receipt.value().state.status == "terminal");
+    REQUIRE(too_old_receipt.value().state.outcome.has_value());
+    CHECK(too_old_receipt.value().state.outcome->status == "orphaned");
+    CHECK(too_old_receipt.value().state.outcome->reason == std::optional<std::string>{"task_too_old"});
+
+    // Install v2 without a migration callback: failed_mig_id (v1) is now blocked with migration_failed.
+    Extension ext_v2_no_mig{.name = "audit"};
+    ext_v2_no_mig.tasks.push_back(make_versioned_task(2, "v2"));
+    REQUIRE(registry.install(std::move(ext_v2_no_mig)).has_value());
+
+    const auto abort_failed_mig = consume(harness->abort_task(failed_mig_id));
+    REQUIRE(abort_failed_mig.has_value());
+    CHECK(abort_failed_mig.value() == "marked");
+    const auto failed_mig_receipt = consume(harness->wait_for_task(failed_mig_id));
+    REQUIRE(failed_mig_receipt.has_value());
+    CHECK(failed_mig_receipt.value().state.status == "terminal");
+    REQUIRE(failed_mig_receipt.value().state.outcome.has_value());
+    CHECK(failed_mig_receipt.value().state.outcome->status == "orphaned");
+    CHECK(failed_mig_receipt.value().state.outcome->reason == std::optional<std::string>{"migration_failed"});
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: a running task hands over to a newer definition at a phase boundary without mid-flight "
+          "takeover",
+        "[durable][task][issue1077]") {
+    const auto scenario = FrozenScenario::load(
+            kVersioningArtifact, "a running task hands over to a newer definition at a phase boundary");
+    REQUIRE(scenario.has_value());
+
+    std::mutex sync_mutex;
+    std::condition_variable sync_cv;
+    bool v1_p1_entered = false;
+    bool release_v1_p1 = false;
+    std::vector<std::string> log;
+    std::string memo_seen_in_v2;
+
+    auto record_log = [&](std::string entry) {
+        std::lock_guard lock(sync_mutex);
+        log.push_back(std::move(entry));
+    };
+
+    auto v1_builder = TaskDefinitionBuilder("audit.handover", 1);
+    v1_builder.initial(
+            [](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", chord::Json("p1")}}); });
+    v1_builder.phase("p1", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto memo_res = consume(runtime.memo("picked", chord::Json("v1")));
+        if (!memo_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(memo_res.error())};
+        }
+        auto commit_res = consume(
+                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    return NextTaskState::running(chord::Json(chord::Json::Object{{"phase", chord::Json("p2")}}));
+                }));
+        if (!commit_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(commit_res.error())};
+        }
+        {
+            std::unique_lock lock(sync_mutex);
+            log.push_back("v1-p1");
+            v1_p1_entered = true;
+            sync_cv.notify_all();
+            if (!sync_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return release_v1_p1; })) {
+                return support::AsyncResult<void>{std::unexpected(
+                        support::make_error(support::ErrorCode::Timeout, "Timed out waiting for handover gate"))};
+            }
+            log.push_back("v1-p1-release");
+        }
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    });
+    v1_builder.phase("p2", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        record_log("v1-p2-unexpected");
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json("v1")});
+        });
+    });
+    v1_builder.abort([](const TaskRecord&, TaskRuntime& runtime) {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted"});
+        });
+    });
+
+    auto v2_builder = TaskDefinitionBuilder("audit.handover", 2);
+    v2_builder.initial(
+            [](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", chord::Json("p1")}}); });
+    v2_builder.phase("p1", [&](const TaskRecord&, TaskRuntime&) -> support::AsyncResult<void> {
+        record_log("v2-p1-unexpected");
+        return support::AsyncResult<void>{std::unexpected(
+                support::make_error(support::ErrorCode::Validation, "version 2 phase p1 must not run"))};
+    });
+    v2_builder.phase("p2", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto memo_res = consume(runtime.memo("picked", chord::Json("v2")));
+        if (!memo_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(memo_res.error())};
+        }
+        {
+            std::lock_guard lock(sync_mutex);
+            if (const auto* str = memo_res.value().as_string()) {
+                memo_seen_in_v2 = *str;
+            }
+            log.push_back("v2-p2");
+        }
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json("v2")});
+        });
+    });
+    v2_builder.abort([](const TaskRecord&, TaskRuntime& runtime) {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted"});
+        });
+    });
+    v2_builder.migrate([&](const chord::Json& input,
+                               const chord::Json& checkpoint,
+                               std::int64_t from_version) -> support::Expected<MigratedTaskState> {
+        record_log("v2-migrate-from-" + std::to_string(from_version));
+        return MigratedTaskState{.input = input, .checkpoint = checkpoint};
+    });
+
+    Registry registry;
+    Extension ext_v1{.name = "audit"};
+    ext_v1.tasks.push_back(std::move(*v1_builder.build()));
+    REQUIRE(registry.install(std::move(ext_v1)).has_value());
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    auto root_res = consume(harness->root());
+    REQUIRE(root_res.has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* def = harness->task_definition("audit.handover");
+        if (def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.handover"));
+        }
+        auto created = tx.create_task(*def, chord::Json{nullptr}, TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    REQUIRE(harness->resume().has_value());
+    {
+        std::unique_lock lock(sync_mutex);
+        REQUIRE(sync_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return v1_p1_entered; }));
+    }
+
+    // Install v2 while v1 is still running p1: v2 must NOT take over mid-phase.
+    Extension ext_v2{.name = "audit"};
+    ext_v2.tasks.push_back(std::move(*v2_builder.build()));
+    REQUIRE(registry.install(std::move(ext_v2)).has_value());
+    {
+        std::lock_guard lock(sync_mutex);
+        CHECK(log == std::vector<std::string>{"v1-p1"});
+    }
+
+    {
+        std::lock_guard lock(sync_mutex);
+        release_v1_p1 = true;
+        sync_cv.notify_all();
+    }
+
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+
+    const auto* expected_log = scenario->array_member("log");
+    REQUIRE(expected_log != nullptr);
+    {
+        std::lock_guard lock(sync_mutex);
+        REQUIRE(log.size() == expected_log->size());
+        for (std::size_t i = 0; i < log.size(); ++i) {
+            CHECK(log[i] == expected_log->at(i).get_string());
+        }
+        CHECK(memo_seen_in_v2 == "v1");
+    }
+
+    CHECK(receipt.version == static_cast<std::int64_t>(*scenario->number_member("version")));
+    REQUIRE(receipt.state.outcome.has_value());
+    const auto* expected_outcome = scenario->object_member("outcome");
+    REQUIRE(expected_outcome != nullptr);
+    CHECK(receipt.state.outcome->status == expected_outcome->at("status").get_string());
+    REQUIRE(receipt.state.outcome->result.has_value());
+    CHECK(json_equals(*receipt.state.outcome->result, expected_outcome->at("result")));
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: a running task keeps its old definition when a replacement is missing or lacks a migration",
+        "[durable][task][issue1077]") {
+    std::mutex sync_mutex;
+    std::condition_variable sync_cv;
+    bool p1_entered = false;
+    bool release_p1 = false;
+    bool p2_entered = false;
+    bool release_p2 = false;
+    std::vector<std::string> log;
+    std::vector<std::string> reports;
+
+    auto v1_builder = TaskDefinitionBuilder("audit.keep-old", 1);
+    v1_builder.initial(
+            [](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", chord::Json("p1")}}); });
+    v1_builder.phase("p1", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto commit_res = consume(
+                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    return NextTaskState::running(chord::Json(chord::Json::Object{{"phase", chord::Json("p2")}}));
+                }));
+        if (!commit_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(commit_res.error())};
+        }
+        std::unique_lock lock(sync_mutex);
+        log.push_back("v1-p1");
+        p1_entered = true;
+        sync_cv.notify_all();
+        if (!sync_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return release_p1; })) {
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Timeout, "Timed out in p1"))};
+        }
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    });
+    v1_builder.phase("p2", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto commit_res = consume(
+                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    return NextTaskState::running(chord::Json(chord::Json::Object{{"phase", chord::Json("p3")}}));
+                }));
+        if (!commit_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(commit_res.error())};
+        }
+        std::unique_lock lock(sync_mutex);
+        log.push_back("v1-p2");
+        p2_entered = true;
+        sync_cv.notify_all();
+        if (!sync_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return release_p2; })) {
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Timeout, "Timed out in p2"))};
+        }
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    });
+    v1_builder.phase("p3", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        {
+            std::lock_guard lock(sync_mutex);
+            log.push_back("v1-p3");
+        }
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json("v1")});
+        });
+    });
+
+    Registry registry;
+    Extension ext_v1{.name = "audit"};
+    ext_v1.tasks.push_back(std::move(*v1_builder.build()));
+    REQUIRE(registry.install(std::move(ext_v1)).has_value());
+
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    options.on_report = [&](const support::Error& err) {
+        std::lock_guard lock(sync_mutex);
+        reports.push_back(err.message);
+    };
+    auto harness_res = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(*harness->task_definition("audit.keep-old"), chord::Json{nullptr});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    REQUIRE(harness->resume().has_value());
+    {
+        std::unique_lock lock(sync_mutex);
+        REQUIRE(sync_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return p1_entered; }));
+    }
+
+    // Uninstall definition while p1 is running; at p1 -> p2 boundary, v1 keeps running and reports once.
+    registry.uninstall("audit");
+    {
+        std::lock_guard lock(sync_mutex);
+        release_p1 = true;
+        sync_cv.notify_all();
+    }
+    {
+        std::unique_lock lock(sync_mutex);
+        REQUIRE(sync_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return p2_entered; }));
+    }
+
+    // Install v2 WITHOUT a migrate handler while p2 is running; at p2 -> p3 boundary, v1 keeps running and reports
+    // once.
+    auto v2_incompatible = TaskDefinitionBuilder("audit.keep-old", 2)
+                                   .initial([](const chord::Json&) {
+                                       return chord::Json(chord::Json::Object{{"phase", chord::Json("p1")}});
+                                   })
+                                   .phase("p3",
+                                           [&](const TaskRecord&, TaskRuntime&) -> support::AsyncResult<void> {
+                                               std::lock_guard lock(sync_mutex);
+                                               log.push_back("v2-p3-unexpected");
+                                               return support::AsyncResult<void>{support::ExpectedVoid{}};
+                                           })
+                                   .build();
+    REQUIRE(v2_incompatible.has_value());
+    Extension ext_v2{.name = "audit"};
+    ext_v2.tasks.push_back(std::move(*v2_incompatible));
+    REQUIRE(registry.install(std::move(ext_v2)).has_value());
+
+    {
+        std::lock_guard lock(sync_mutex);
+        release_p2 = true;
+        sync_cv.notify_all();
+    }
+
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    CHECK(receipt_res.value().version == 1);
+    REQUIRE(receipt_res.value().state.outcome.has_value());
+    CHECK(receipt_res.value().state.outcome->status == "completed");
+    CHECK(receipt_res.value().state.outcome->result == std::optional<chord::Json>{chord::Json("v1")});
+
+    {
+        std::lock_guard lock(sync_mutex);
+        CHECK(log == std::vector<std::string>{"v1-p1", "v1-p2", "v1-p3"});
+        REQUIRE(reports.size() == 2);
+        const std::string expected_msg =
+                "Task " + std::to_string(task_id.value) + " keeps running under its old audit.keep-old definition";
+        CHECK(reports[0] == expected_msg);
+        CHECK(reports[1] == expected_msg);
+    }
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE(
+        "TaskExecution: task hooks run in extension order and an ordinary failure is reported while the task continues",
+        "[durable][task][issue1077]") {
+    const auto scenario = FrozenScenario::load(kLifecycleArtifact,
+            "task hooks run in extension order and an ordinary throw is reported while the task continues");
+    REQUIRE(scenario.has_value());
+
+    std::mutex log_mutex;
+    std::vector<std::string> log;
+    std::vector<std::string> reports;
+
+    auto hooked_builder = TaskDefinitionBuilder("audit.hooked", 1);
+    hooked_builder.initial(
+            [](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", chord::Json("run")}}); });
+    hooked_builder.hook("onStep");
+    hooked_builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto hook_res = consume(runtime.each_hook("onStep"));
+        if (!hook_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(hook_res.error())};
+        }
+        {
+            std::lock_guard lock(log_mutex);
+            log.push_back("task");
+        }
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{
+                    .status = "completed",
+                    .result = chord::Json("done"),
+            });
+        });
+    });
+    hooked_builder.abort([](const TaskRecord&, TaskRuntime& runtime) {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted"});
+        });
+    });
+
+    auto hooked_def = hooked_builder.build();
+    REQUIRE(hooked_def.has_value());
+    CHECK(hooked_def->has_hook("onStep"));
+    CHECK_FALSE(hooked_def->has_hook("unknown"));
+
+    Registry registry;
+    Extension ext_tasks{.name = "audit"};
+    ext_tasks.tasks.push_back(std::move(*hooked_def));
+    REQUIRE(registry.install(std::move(ext_tasks)).has_value());
+
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    options.on_report = [&](const support::Error& err) {
+        std::lock_guard lock(log_mutex);
+        reports.push_back(err.message);
+    };
+    auto harness_res = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    const auto* registered_hooked = harness->task_definition("audit.hooked");
+    REQUIRE(registered_hooked != nullptr);
+
+    Extension ext_throw{.name = "hook-throw"};
+    ext_throw.hooks.push_back(task_hook(*registered_hooked, "onStep", [&]() -> support::ExpectedVoid {
+        {
+            std::lock_guard lock(log_mutex);
+            log.push_back("hook-1");
+        }
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "hook boom"));
+    }));
+    REQUIRE(registry.install(std::move(ext_throw)).has_value());
+
+    Extension ext_observer{.name = "hook-observer"};
+    ext_observer.hooks.push_back(task_hook(*registered_hooked, "onStep", [&]() -> support::ExpectedVoid {
+        std::lock_guard lock(log_mutex);
+        log.push_back("hook-2");
+        return {};
+    }));
+    REQUIRE(registry.install(std::move(ext_observer)).has_value());
+
+    auto root_res = consume(harness->root());
+    REQUIRE(root_res.has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(
+                *registered_hooked, chord::Json{nullptr}, TaskOptions{.conversation_id = root_res.value()});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    REQUIRE(harness->resume().has_value());
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+
+    {
+        std::lock_guard lock(log_mutex);
+        const auto* expected_log = scenario->array_member("log");
+        REQUIRE(expected_log != nullptr);
+        REQUIRE(log.size() == expected_log->size());
+        for (std::size_t i = 0; i < log.size(); ++i) {
+            CHECK(log[i] == expected_log->at(i).get_string());
+        }
+
+        const auto* expected_reports = scenario->array_member("reports");
+        REQUIRE(expected_reports != nullptr);
+        REQUIRE(reports.size() == expected_reports->size());
+        for (std::size_t i = 0; i < reports.size(); ++i) {
+            CHECK(reports[i] == expected_reports->at(i).get_string());
+        }
+    }
+
+    REQUIRE(receipt.state.outcome.has_value());
+    const auto* expected_outcome = scenario->object_member("outcome");
+    REQUIRE(expected_outcome != nullptr);
+    CHECK(receipt.state.outcome->status == expected_outcome->at("status").get_string());
+    REQUIRE(receipt.state.outcome->result.has_value());
+    CHECK(json_equals(*receipt.state.outcome->result, expected_outcome->at("result")));
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE(
+        "TaskExecution: a hook failure on an aborted invocation stops subsequent hooks and does not continue the phase",
+        "[durable][task][issue1077]") {
+    std::mutex sync_mutex;
+    std::condition_variable sync_cv;
+    bool hook1_started = false;
+    std::vector<std::string> log;
+    std::vector<std::string> reports;
+
+    auto hooked_builder = TaskDefinitionBuilder("audit.hooked-abort", 1);
+    hooked_builder.initial(
+            [](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", chord::Json("run")}}); });
+    hooked_builder.hook("onStep");
+    hooked_builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto hook_res = consume(runtime.each_hook("onStep"));
+        if (!hook_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(hook_res.error())};
+        }
+        {
+            std::lock_guard lock(sync_mutex);
+            log.push_back("task-unexpected");
+        }
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json("unexpected")});
+        });
+    });
+    hooked_builder.abort([&](const TaskRecord&, TaskRuntime& runtime) {
+        {
+            std::lock_guard lock(sync_mutex);
+            log.push_back("abort");
+        }
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted", .reason = "cancelled"});
+        });
+    });
+
+    Registry registry;
+    Extension ext_tasks{.name = "audit"};
+    ext_tasks.tasks.push_back(std::move(*hooked_builder.build()));
+    REQUIRE(registry.install(std::move(ext_tasks)).has_value());
+
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    options.on_report = [&](const support::Error& err) {
+        std::lock_guard lock(sync_mutex);
+        reports.push_back(err.message);
+    };
+    auto harness_res = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    const auto* registered_hooked = harness->task_definition("audit.hooked-abort");
+    REQUIRE(registered_hooked != nullptr);
+
+    Extension ext_first{.name = "hook-1"};
+    ext_first.hooks.push_back(task_hook(*registered_hooked,
+            "onStep",
+            [&](const chord::Json&, TaskRuntime& runtime) -> support::AsyncResult<chord::Json> {
+                const std::stop_token stop = runtime.stop_token();
+                std::unique_lock lock(sync_mutex);
+                hook1_started = true;
+                sync_cv.notify_all();
+                std::stop_callback wake_on_stop{stop, [&sync_cv] { sync_cv.notify_all(); }};
+                if (!sync_cv.wait_for(lock, std::chrono::seconds{5}, [&stop] { return stop.stop_requested(); })) {
+                    return support::AsyncResult<chord::Json>{std::unexpected(
+                            support::make_error(support::ErrorCode::Timeout, "Timed out waiting for stop"))};
+                }
+                log.push_back("hook-1-aborted");
+                return support::AsyncResult<chord::Json>{
+                        std::unexpected(support::make_error(support::ErrorCode::Cancelled, "cancelled in hook"))};
+            }));
+    REQUIRE(registry.install(std::move(ext_first)).has_value());
+
+    Extension ext_second{.name = "hook-2"};
+    ext_second.hooks.push_back(task_hook(*registered_hooked, "onStep", [&]() -> support::ExpectedVoid {
+        std::lock_guard lock(sync_mutex);
+        log.push_back("hook-2-unexpected");
+        return {};
+    }));
+    REQUIRE(registry.install(std::move(ext_second)).has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(*registered_hooked, chord::Json{nullptr});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    REQUIRE(harness->resume().has_value());
+    {
+        std::unique_lock lock(sync_mutex);
+        REQUIRE(sync_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return hook1_started; }));
+    }
+
+    const auto abort_res = consume(harness->abort_task(task_id));
+    REQUIRE(abort_res.has_value());
+    CHECK(abort_res.value() == "marked");
+
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    const auto& receipt = receipt_res.value();
+    CHECK(receipt.state.status == "terminal");
+    REQUIRE(receipt.state.outcome.has_value());
+    CHECK(receipt.state.outcome->status == "aborted");
+    CHECK(receipt.state.outcome->reason == std::optional<std::string>{"cancelled"});
+
+    {
+        std::lock_guard lock(sync_mutex);
+        CHECK(log == std::vector<std::string>{"hook-1-aborted", "abort"});
+        CHECK(reports.empty());
+    }
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("TaskExecution: replacing an extension in place preserves hook order while uninstall and reinstall moves it "
+          "to the end",
+        "[durable][task][issue1077]") {
+    std::mutex log_mutex;
+    std::vector<std::string> log;
+
+    auto hooked_builder = TaskDefinitionBuilder("audit.hook-order", 1);
+    hooked_builder.initial(
+            [](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", chord::Json("run")}}); });
+    hooked_builder.hook("onStep");
+    hooked_builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto hook_res = consume(runtime.each_hook("onStep"));
+        if (!hook_res.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(hook_res.error())};
+        }
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json("ok")});
+        });
+    });
+
+    Registry registry;
+    Extension ext_tasks{.name = "tasks"};
+    ext_tasks.tasks.push_back(std::move(*hooked_builder.build()));
+    REQUIRE(registry.install(std::move(ext_tasks)).has_value());
+
+    // A second extension trying to register the same task kind or reserved pi.generation is rejected.
+    Extension conflict_ext{.name = "other-tasks"};
+    conflict_ext.tasks.push_back(std::move(*TaskDefinitionBuilder("audit.hook-order", 1).build()));
+    CHECK_FALSE(registry.install(std::move(conflict_ext)).has_value());
+
+    Extension reserved_ext{.name = "reserved-tasks"};
+    reserved_ext.tasks.push_back(std::move(*TaskDefinitionBuilder("pi.generation", 1).build()));
+    CHECK_FALSE(registry.install(std::move(reserved_ext)).has_value());
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+
+    const auto* def = harness->task_definition("audit.hook-order");
+    REQUIRE(def != nullptr);
+
+    auto make_hook_ext = [&](std::string ext_name, std::string entry) {
+        Extension ext{.name = std::move(ext_name)};
+        ext.hooks.push_back(task_hook(*def, "onStep", [&, entry = std::move(entry)]() -> support::ExpectedVoid {
+            std::lock_guard lock(log_mutex);
+            log.push_back(entry);
+            return {};
+        }));
+        return ext;
+    };
+
+    REQUIRE(registry.install(make_hook_ext("ext-a", "a-v1")).has_value());
+    REQUIRE(registry.install(make_hook_ext("ext-b", "b-v1")).has_value());
+    REQUIRE(registry.install(make_hook_ext("ext-c", "c-v1")).has_value());
+
+    // Replace ext-a in place: stays at index 0.
+    REQUIRE(registry.install(make_hook_ext("ext-a", "a-v2")).has_value());
+    // Uninstall ext-b and reinstall it: moves to the end after ext-c.
+    registry.uninstall("ext-b");
+    REQUIRE(registry.install(make_hook_ext("ext-b", "b-v2")).has_value());
+
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(*def, chord::Json{nullptr});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        return {};
+    })).has_value());
+
+    REQUIRE(harness->resume().has_value());
+    const auto receipt_res = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt_res.has_value());
+    CHECK(receipt_res.value().state.status == "terminal");
+
+    {
+        std::lock_guard lock(log_mutex);
+        CHECK(log == std::vector<std::string>{"a-v2", "c-v1", "b-v2"});
+    }
 
     REQUIRE(consume(harness->close()).has_value());
 }

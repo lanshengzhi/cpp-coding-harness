@@ -15,6 +15,10 @@
 
 namespace cch::durable {
 
+/// Sink receiving non-fatal failures such as isolated hook errors or failed task migrations (frozen pi
+/// `HarnessOptions.onReport`).
+using ReportSink = std::move_only_function<void(const support::Error&)>;
+
 /// Options for opening a Harness (frozen pi `HarnessOptions`).
 struct HarnessOptions {
     std::vector<TaskDefinition> tasks{};
@@ -23,6 +27,7 @@ struct HarnessOptions {
     Registry* registry{nullptr};
     ai::ModelStreamFactory stream{};
     HarnessSettings settings{};
+    ReportSink on_report{};
 };
 
 /// Top-level durable runtime harness (frozen pi `Harness`).
@@ -44,6 +49,9 @@ public:
 
     /// Look up a registered task definition by kind.
     [[nodiscard]] const TaskDefinition* task_definition(std::string_view kind) const noexcept;
+
+    /// Inspect scheduling state and live tasks without running task code.
+    [[nodiscard]] support::AsyncResult<HarnessInspection> inspect();
 
     /// Run one atomic transaction on the Session.
     [[nodiscard]] support::AsyncResult<void> commit(

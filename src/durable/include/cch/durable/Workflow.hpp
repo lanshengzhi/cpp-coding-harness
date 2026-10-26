@@ -2,14 +2,18 @@
 
 #include <cch/ai/Models.hpp>
 #include <cch/durable/Records.hpp>
+#include <cch/durable/Task.hpp>
 #include <cch/support/AsyncResult.hpp>
 #include <cch/support/JsonValue.hpp>
 
+#include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <optional>
 #include <stop_token>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace cch::durable {
@@ -32,15 +36,29 @@ struct PromptSection {
     bool tag{true};
 };
 
+/// Hook handlers registered by an extension for a task kind (frozen pi `HookRegistration`).
+struct TaskHookRegistration {
+    std::string task{};
+    std::map<std::string, TaskHook> handlers{};
+};
+
+/// Build a `TaskHookRegistration` for a single named hook handler (frozen pi `hook`).
+[[nodiscard]] TaskHookRegistration task_hook(std::string task_kind, std::string hook_name, TaskHook handler);
+[[nodiscard]] TaskHookRegistration task_hook(const TaskDefinition& task, std::string hook_name, TaskHook handler);
+[[nodiscard]] TaskHookRegistration task_hook(
+        const TaskDefinition& task, std::string hook_name, std::move_only_function<support::ExpectedVoid()> handler);
+
 struct Extension {
     std::string name{};
     std::vector<ToolRegistration> tools{};
     std::vector<PromptSection> sections{};
+    std::vector<TaskDefinition> tasks{};
+    std::vector<TaskHookRegistration> hooks{};
 };
 
-/// Live, append-only registry for the bounded Harness workflow. Install and
-/// request snapshots are serialized internally. Existing registrations stay
-/// alive for a request even when another extension is installed.
+/// Live registry for the durable Harness. Install, replace-in-place, uninstall,
+/// and request snapshots are serialized internally. Existing registrations stay
+/// alive for a request or phase even when another extension is installed.
 class Registry {
 public:
     Registry();
@@ -51,17 +69,23 @@ public:
     Registry& operator=(const Registry&) = delete;
 
     [[nodiscard]] support::ExpectedVoid install(Extension extension);
+    void uninstall(std::string_view extension_name);
 
 private:
+    friend class Harness;
     friend class WorkflowRuntime;
 
     struct Snapshot {
-        /// Shared immutable registrations keep move-only execute operations
-        /// alive for every request that captured this snapshot.
+        /// Shared immutable registrations keep move-only execute and task/hook
+        /// operations alive for every request or phase that captured this snapshot.
         std::vector<std::shared_ptr<ToolRegistration>> tools{};
         std::vector<PromptSection> sections{};
+        std::vector<std::shared_ptr<TaskDefinition>> tasks{};
+        std::vector<std::shared_ptr<TaskHookRegistration>> hooks{};
     };
     [[nodiscard]] Snapshot snapshot() const;
+    [[nodiscard]] std::uint64_t subscribe(std::move_only_function<void()> listener);
+    void unsubscribe(std::uint64_t id);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;

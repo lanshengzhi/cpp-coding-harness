@@ -943,7 +943,7 @@
           "fixtures/pi-v1.3.0/audit-1056/workflow.json: tool hooks rewrite arguments before execution and observe the committed result"
         ],
         "comparison": "Compare phase logs, checkpoint state, version outcomes, hook order and terminal receipts with the frozen durable task captures.",
-        "missing": "The #1076 F3a slice verifies multi-phase checkpoint progression and resume, typed completed/failed/aborted outcomes, abort-mark rejection for phase writes, abort-handler memo and terminal-outcome writes, missing-definition orphaning, no-progress faulting, and the terminal task write at Storage::commit. Definition version migration/replacement, task phase hooks and hook isolation remain unverified in C++; scheduler-written orphaned/faulted outcomes are observed for this slice, while broader F3 acceptance remains incomplete."
+        "missing": "The #1076 F3a and #1077 F3b slices verify multi-phase checkpoint progression and resume, typed completed/failed/aborted outcomes, abort-mark rejection for phase writes, abort-handler memo and terminal-outcome writes, before-reservation definition migration, recoverable missing_task/task_too_old/migration_failed blocked states and Harness::inspect, orphan settlement with blocked reasons, phase-boundary definition handover without mid-flight takeover, incompatible-replacement reporting, extension-ordered TaskRuntime::each_hook with ordinary error isolation versus cancellation propagation, no-progress faulting, and the terminal task write at Storage::commit (see 1076-task-execution.md and 1077-task-versioning-hooks.md). Tool/generation hooks (#1087), completing holds, waiting joins and idle waits (#1078) remain separate slices; the composite F3 rows are not promoted wholesale."
       },
       "coverage": [
         "cch_durable:task-definition",
@@ -956,7 +956,8 @@
       "relatedIssues": [
         "#925",
         "#932",
-        "#1076"
+        "#1076",
+        "#1077"
       ],
       "boundaries": []
     },
@@ -2324,7 +2325,7 @@
   "closeOut": {
     "implemented": [
       "The 11 source audits and named-evidence infrastructure are complete. The current registry verifies 27 bundles, 81 artifacts and 480 scenarios; registration alone is not a C++ comparison.",
-      "cch_chord, cch_codemode, cch_mcp and cch_durable are configured libraries with real public callers. Durable has memory, transactional JSONL, SQLite and the #1076 task/checkpoint execution slice.",
+      "cch_chord, cch_codemode, cch_mcp and cch_durable are configured libraries with real public callers. Durable has memory, transactional JSONL, SQLite and the #1076/#1077 task execution, definition versioning/replacement and phase-hook slices.",
       "#1071 reconciles the already merged retirement of the unused agent-side SQLite/TaskStore/TaskScheduler subsystem. The preserved SessionStore and independent transcript export caller have current regression and dependency-closure evidence in 1071-legacy-retirement.md.",
       "#1101 preserves arbitrary structured JSON through real MCP clients and application conversion. Its whole-row frozen comparison receipt is in 1058-deliveries.json and its delivery report is 1101-structured-content.md.",
       "Codemode Inline (#1097), worker lifetime (#1096) and the Remote exchange/Linux host (#1098) are implemented. #1093 delivered deterministic local execution but is reopened for its explicitly unaccepted outcome/settlement ordering clause; Remote replay (#1099) and durable integration (#1094) remain open.",
@@ -2333,10 +2334,10 @@
     ],
     "specifiedOnly": [
       "The original 32 drafts are planning records; native dependencies on the 76 implementation issues determine the live frontier. See 1044-delivery-reconciliation-2026-10-26.md for the reviewed tracker corrections and acceptance mappings.",
-      "Durable definition versioning/hooks (#1077), ownership/join/wait cancellation (#1078), submissions/inbox (#1080), document lifecycle and integrations remain incomplete beyond the bounded #1079 workflow. #1095 is reopened: its application AgentSession tool_search delivery does not accept the required durable Harness behavior, and #1094 remains its blocker.",
+      "Durable ownership/join/wait cancellation (#1078), submissions/inbox (#1080), dynamic workflow/tool hooks (#1087), document lifecycle and integrations remain incomplete beyond the bounded #1076/#1077/#1079 slices. #1095 is reopened: its application AgentSession tool_search delivery does not accept the required durable Harness behavior, and #1094 remains its blocker.",
       "Durable bidirectional JSONL/SQLite continued operation (#1085/#1086), crash/recovery integration (#1084) and additional durability guarantees remain unverified.",
       "#812 delivered execute-only recorded tool duration through persistence and rendering. #1106 remains open for its remaining monotonic-clock discrimination and complete frozen comparison; reuse #812 instead of implementing the same propagation again. Agent queue/default/lifecycle/tool-selection behavior, native extensions and MCP cancellation/issuer/transport/management still have open work.",
-      "Other delivered slices, including #1074/#1075/#1076 and TUI program status, retain their delivery reports and tests. Their broader composite capability rows need complete per-row receipts before ledger verification can advance."
+      "Other delivered slices, including #1074/#1075/#1076/#1077 and TUI program status, retain their delivery reports and tests. Their broader composite capability rows need complete per-row receipts before ledger verification can advance."
     ],
     "retainedBoundaries": [
       "Magpie-only model discovery/authentication/inference; no overall cch_ai baseline advance (cch_ai rows).",

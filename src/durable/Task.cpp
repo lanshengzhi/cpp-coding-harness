@@ -2,6 +2,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -14,6 +15,8 @@ struct TaskDefinition::Impl {
     std::move_only_function<chord::Json(const chord::Json&)> initial;
     std::map<std::string, PhaseHandler> phases;
     AbortHandler abort_handler;
+    MigrateHook migrate_handler;
+    std::set<std::string, std::less<>> hooks;
 };
 
 TaskDefinition::TaskDefinition(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
@@ -31,6 +34,20 @@ chord::Json TaskDefinition::initial(const chord::Json& input) const {
     }
     return chord::Json(chord::Json::Object{});
 }
+
+bool TaskDefinition::has_migrate() const noexcept { return static_cast<bool>(impl_->migrate_handler); }
+
+support::Expected<MigratedTaskState> TaskDefinition::migrate(
+        const chord::Json& input, const chord::Json& checkpoint, std::int64_t from_version) const {
+    if (!impl_->migrate_handler) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Task " + impl_->kind + " version " + std::to_string(impl_->version) + " has no migration from " +
+                        std::to_string(from_version)));
+    }
+    return impl_->migrate_handler(input, checkpoint, from_version);
+}
+
+bool TaskDefinition::has_hook(std::string_view name) const noexcept { return impl_->hooks.contains(name); }
 
 bool TaskDefinition::has_phase(std::string_view phase) const { return impl_->phases.contains(std::string{phase}); }
 
@@ -58,6 +75,8 @@ TaskDefinitionBuilder::TaskDefinitionBuilder(std::string kind, std::int64_t vers
               .initial = {},
               .phases = {},
               .abort_handler = {},
+              .migrate_handler = {},
+              .hooks = {},
       })) {}
 
 TaskDefinitionBuilder::~TaskDefinitionBuilder() = default;
@@ -81,6 +100,20 @@ TaskDefinitionBuilder& TaskDefinitionBuilder::phase(std::string name, PhaseHandl
 TaskDefinitionBuilder& TaskDefinitionBuilder::abort(AbortHandler handler) {
     if (impl_) {
         impl_->abort_handler = std::move(handler);
+    }
+    return *this;
+}
+
+TaskDefinitionBuilder& TaskDefinitionBuilder::migrate(MigrateHook handler) {
+    if (impl_) {
+        impl_->migrate_handler = std::move(handler);
+    }
+    return *this;
+}
+
+TaskDefinitionBuilder& TaskDefinitionBuilder::hook(std::string name) {
+    if (impl_) {
+        impl_->hooks.insert(std::move(name));
     }
     return *this;
 }

@@ -102,6 +102,39 @@ struct TaskOptions {
     std::optional<chord::Json> checkpoint{std::nullopt};
 };
 
+/// Derived scheduler state of one live task (frozen pi `TaskInspection.state`).
+struct TaskInspectionState {
+    /// "running", "ready", "waiting", "completing", or "blocked".
+    std::string kind{};
+    /// Present when `kind == "ready"`.
+    std::optional<bool> migrates{std::nullopt};
+    /// Present when `kind == "waiting"`.
+    std::vector<TaskId> on{};
+    /// Present when `kind == "blocked"`: "missing_task", "task_too_old", or "migration_failed".
+    std::optional<std::string> reason{std::nullopt};
+    /// Present when `kind == "blocked"` and a migration failed.
+    std::optional<support::Error> error{std::nullopt};
+
+    [[nodiscard]] bool operator==(const TaskInspectionState&) const = default;
+};
+
+/// Live task and what the scheduler would do with it under the current registry (frozen pi `TaskInspection`).
+struct TaskInspection {
+    TaskRecord record{};
+    TaskInspectionState state{};
+
+    [[nodiscard]] bool operator==(const TaskInspection&) const = default;
+};
+
+/// Point-in-time view of live work (frozen pi `HarnessInspection`).
+struct HarnessInspection {
+    /// "paused", "running", or "closing".
+    std::string scheduling{};
+    std::vector<TaskInspection> tasks{};
+
+    [[nodiscard]] bool operator==(const HarnessInspection&) const = default;
+};
+
 /// The sequence of one adopted storage commit (frozen pi `Seq`). Sequences
 /// strictly increase per storage, one per adopted batch.
 using Seq = std::int64_t;
