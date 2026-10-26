@@ -44,8 +44,7 @@ using AsyncProducer = std::move_only_function<void(AsyncCompletion<T, E>) noexce
 /// thread pool, event bus, timeout, retry, stream, or cancellation outcome.
 /// Cancellation is supplied explicitly by the producer with `std::stop_token`
 /// and resolved into the operation's own terminal outcome.
-template <typename T, typename E = Error>
-class AsyncResult {
+template <typename T, typename E = Error> class [[nodiscard]] AsyncResult {
 public:
     using completion_type = AsyncCompletion<T, E>;
     using producer_type = AsyncProducer<T, E>;

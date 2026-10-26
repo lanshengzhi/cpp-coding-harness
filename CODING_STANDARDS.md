@@ -12,7 +12,7 @@ Code-level rules for this repository, written to be cited. Every rule is checkab
 
 1.3a. A new rule names its automated check inline, next to the text it justifies, or carries the literal prefix `review-only: <reason>`. Where the check exists only on the Clang conformance lane, or covers only part of the rule, the annotation says so. review-only: no tool checks it; a reviewer confirms the named check exists and covers what the rule claims.
 
-1.4. Review every rule applicable to the changed code, using the exact-violation exclusions in §14.
+1.4. Review every rule applicable to the changed code, using the exact-violation exclusions in §14. Focus review depth by blast radius: prioritize **high-blast-radius invariants** — Owner Interface contracts and package boundaries (§4, §8, §12), cross-suspension coroutine and callback lifetimes (§4.6, §6.2, §6.7, §7.5, §9.15), serialized execution domains and cancellation/Close semantics (§6.3–§6.6), and security/redaction invariants (§10) — over low-blast-radius local structure when validation gates pass.
 
 1.5. This file stays small enough to read whole on every implementation and review: a new rule generalizes or displaces an existing one where it can, rather than only accreting. A rule that has never been cited in review and is fully validation-enforced (§14) is a pruning candidate; the removal is recorded in its issue.
 
@@ -158,7 +158,7 @@ Modules stay ADR-only.
 
 9.8. `auto` when the type is obvious from the right-hand side (factories, expected results); an explicit type otherwise. `const auto&` in range-for.
 
-9.10. Result types are declared with the attribute at the type level — `struct [[nodiscard]] Error`, `class [[nodiscard]] AsyncResult` — so every function returning one inherits it, including through `std::expected<T, Error>`. Per-function `[[nodiscard]]` remains correct for other fallible returns (§4.7). review-only: `Error` and `AsyncResult` do not carry the attribute yet, so `-Wunused-result` stays silent on a discarded result of either type; it reports `std::expected` results only because libstdc++ declares `expected` itself `[[nodiscard]]`.
+9.10. Result types are declared with the attribute at the type level — `struct [[nodiscard]] Error`, `class [[nodiscard]] AsyncResult` — so every function returning one inherits it, including through `std::expected<T, Error>`. Per-function `[[nodiscard]]` remains correct for other fallible returns (§4.7). Checked by `cch_warning_gate` (`-Wunused-result` under `-Werror`) for `Error`, `AsyncResult`, and `std::expected`; `review-only` for other fallible returns not returning those types.
 
 9.13. Prefer `std::jthread` to `std::thread`; never use `volatile` for synchronization; a memory order other than `seq_cst` carries an adjacent comment justifying it. review-only: no compiler check exists; a grep gate for `std::thread` cannot distinguish a justified use and would fire on the 16 existing `std::thread` sites that predate this rule.
 
@@ -230,10 +230,10 @@ This section is the checkable form of `docs/agents/architecture.md` §Security a
 
 ## 14. Validation-enforced — reviewers skip exact violations
 
-- Skip a finding only when required validation necessarily rejects that exact violation. The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader code-rule conformance (ADR 0039), and a pass is never acceptance of the property the rule is named for (`docs/agents/validation.md` §Acceptance discipline).
-- A non-failing compiler diagnostic remains a review finding.
+- Skip a finding only when required validation necessarily rejects that exact violation (`cch_parity_gate_production_build`, `cch_owner_interface_standalone`, `cch_warning_gate`, and `scripts/format-check.sh`). The Parity Architecture Gate rejects only the configured relationships and stable rule identifiers its manifest/evidence policy defines; its pass does not imply broader code-rule conformance (ADR 0039), and a pass is never acceptance of the property the rule is named for (`docs/agents/validation.md` §Acceptance discipline).
+- `cch_warning_gate` recompiles every project-owned translation unit with `-Wall -Wextra -Wpedantic -Werror` (including `-Wunused-result` on `Error`, `AsyncResult`, and `std::expected`, §9.10). Any diagnostic outside that gate remains a review finding.
 - For §2.1 and §2.2, the required formatting gate is `scripts/format-check.sh`; skip findings that duplicate its patch. Invocation and repair instructions live in `docs/agents/validation.md` §Formatting gate.
-- Report every applicable code-rule violation in the changed scope that is not excluded above. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
+- Report every applicable code-rule violation in the changed scope that is not excluded above, prioritizing the high-blast-radius invariants named in §1.4. Documentation-only changes follow `docs/agents/validation.md` §Documentation-only changes instead.
 
 ## 15. Known exceptions and migrations
 

@@ -37,7 +37,7 @@ enum class ErrorCode {
     MissingSessionCwd,
 };
 
-struct Error {
+struct [[nodiscard]] Error {
     ErrorCode code{ErrorCode::Unknown};
     std::string message;
     std::string detail;

@@ -48,7 +48,7 @@
           },
           {
             "path": "CMakePresets.json",
-            "sha256": "6e2997df113af9be4dc6301f844a06816b57158f4b2838850210979318a02e82"
+            "sha256": "0f88366f84f19d6715859d891cb33597599de36d756d64edc7fdd7668058a007"
           },
           {
             "path": "vcpkg.json",
@@ -176,7 +176,7 @@
           },
           {
             "path": "src/support/include/cch/support/AsyncResult.hpp",
-            "sha256": "2a26e31ab143e28f60acb7ec26a02f8196d8c67e31b10522102bb43f055d5168"
+            "sha256": "db1e2881ae278abd38df766bc02aaba31963edea2575421d98759b4c21cef188"
           },
           {
             "path": "src/ai/include/cch/ai/Content.hpp",

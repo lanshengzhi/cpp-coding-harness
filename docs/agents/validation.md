@@ -4,9 +4,9 @@ Read this for implementation, review, test selection, Git delivery, or issue clo
 
 ## Acceptance discipline
 
-A change is accepted for the property, not for the check that stands in for it. #657's row adjudications found the same defect six times: the check was a cheap stand-in for the property it was named for, and the delivery satisfied the stand-in while the property was violated. Issue acceptance criteria, Parity Architecture Gate rules, golden tests, and test doubles are all in scope. The evidence is not restated here: the rows that reached a decision record are in the `ADR 0056` addendum (#664), and the rest are in #657's row notes.
+A change is accepted for the property, not for the check that stands in for it (historical adjudications: `ADR 0056` addendum #664 and issue #657). Issue acceptance criteria, Parity Architecture Gate rules, golden tests, and test doubles are all in scope.
 
-1. **A text or existence check is not acceptance of a property.** A predicate that matches an include spelling, searches for a string, asserts that a file or symbol exists, or compares a projection of a value can be satisfied by a respelling, a moved file, or a field added on one side while the property it is named for is violated; the clause-4 `agent-no-ai-private-includes` rule and the two session goldens are the measured cases. Run such a check when it is cheap and catches the ordinary case, but report its pass as a check, never as acceptance of the property.
+1. **A text or existence check is not acceptance of a property.** A predicate that matches an include spelling, searches for a string, asserts that a file or symbol exists, or compares a projection of a value can be satisfied by a respelling, a moved file, or a field added on one side while the property it is named for is violated. Run such a check when it is cheap and catches the ordinary case, but report its pass as a check, never as acceptance of the property.
 2. **Acceptance includes a case the property separates and the check does not.** For each acceptance criterion, name one case the check passes while the property is violated, and make it part of the delivery: a test where automation reaches it, manual evidence where it does not. One question finds it — *if this stand-in were broken, which case would it let through?* — and that case then gets built. A criterion with no such case is not yet accepted.
 3. **An empirical fork is accepted on a recorded observation, not on a described option.** Where two or more candidate behaviors are observably different, a small throwaway prototype may settle the fork; record the question it answered and the observation it produced, and treat that record as the evidence. Where the direction is already settled, or only one candidate is on the table, there is no fork to settle and no prototype to run. A design option listed in an ADR is not itself such a record.
 
@@ -30,11 +30,11 @@ Before editing, read the related code and tests plus the relevant build declarat
 
 During implementation, run the smallest focused test that can fail: build the owning shard incrementally on the default Debug preset, then select with native CTest arguments (CTest names and labels are the sole selection authority, ADR 0039):
 
-Configure presets require `VCPKG_ROOT` pointing at a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline; after Fresh Validation it is `.deps/vcpkg` in the repository root, and a linked worktree has no `.deps/` of its own, so point `VCPKG_ROOT` at the primary checkout and expect a cold build there. If `build/` is not configured (no `cmake --build --preset vcpkg` target tree), configure once with `cmake --preset vcpkg` first.
+Configure presets resolve a vcpkg checkout pinned to `vcpkg.json`'s builtin-baseline via `VCPKG_ROOT`, falling back to `.deps/vcpkg` in the current worktree or the primary Git worktree (`cmake/vcpkg-toolchain.cmake`). If `build/` is not configured, configure once with `cmake --preset vcpkg` first.
 
-**Include evidence (`PARITY-4011`).** The build phase re-derives each declared source's include directives and compares them with the recorded scan, so a changed include set needs a reconfigure (`VCPKG_ROOT=<root> cmake --preset <preset>`) before the Gate passes. A comment or body edit does not.
+**Include evidence (`PARITY-4011`).** The build phase re-derives each declared source's include directives and compares them with the recorded scan, so a changed include set needs a reconfigure (`cmake --preset <preset>`) before the Gate passes. A comment or body edit does not.
 
-The build-phase Parity Architecture Gate sources active transitive-conformance depfile evidence directly from `.ninja_deps` (schema version 2; issue #551, ADR 0039 addendum). CMake C++ module scanning is disabled globally (`CMAKE_CXX_SCAN_FOR_MODULES OFF`), ensuring that `compile_commands.json` carries no `-fmodules-ts` / `-fmodule-mapper` flags and every translation unit remains cacheable under ccache across all presets.
+The build-phase Parity Architecture Gate sources active transitive-conformance depfile evidence directly from `.ninja_deps` (schema version 2; issue #551, ADR 0039 addendum). CMake C++ module scanning is disabled globally (`CMAKE_CXX_SCAN_FOR_MODULES OFF`), keeping every translation unit cacheable under ccache across all presets.
 
 ```bash
 cmake --build --preset vcpkg --target cch_tests_coding_agent   # owning shard
@@ -43,11 +43,11 @@ ctest --preset vcpkg -LE architecture -L coding_agent          # owning module l
 cmake --build --preset vcpkg && ctest --preset vcpkg -LE architecture   # suite minus the architecture label
 ```
 
-Parallel builds share one host budget. On the measured host in [build-performance-baseline.md](../build-performance-baseline.md), four concurrent jobs left 1.24 GiB available with swap effectively full, and six jobs were not safe. Treat four as the ceiling: two lanes at `-j2`, or four at `-j1`.
+Parallel builds share one host budget: four concurrent jobs is the ceiling (`CMakePresets.json` `jobs: 4`; two concurrent lanes at `-j2`, or four at `-j1`; measurement record in [build-performance-baseline.md](../build-performance-baseline.md)).
 
-The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), and a regex that matches other cases passes silently. Measured on this repository: `-R 'message conversion'` selects no case, `-R 'thinking level'` selects 13 of the wrong ones, and `-R 'session'` selects 207. Verify the match set before trusting it — `ctest --preset vcpkg -N -R '<regex>'` prints the case names and the count — and prefer a label (`-L <label>`) or the owning shard. Report the selected count with the result.
+The `vcpkg` test preset treats an empty selection as an error (`noTests: error`), while a broad regex can match unintended cases. Verify the match set before trusting it (`ctest --preset vcpkg -N -R '<regex>'`), prefer a label (`-L <label>`) or the owning shard, and report the selected count with the result.
 
-A cold or shard-only build tree registers fewer cases than a full one. `catch_discover_tests` registers a target's cases when that target builds, so a label selected in a worktree where only one shard was built silently covers a subset: measured in a fresh worktree after building `cch_tests_durable` alone, `-L architecture` selected 36 cases against the primary checkout's 43, because the 7 `cch_tests_cli_arch` cases were never registered. `noTests: error` does not catch a partial selection, and the run passes on the smaller set. Build the full preset before any label-wide run (`cmake --build --preset vcpkg`), or compare the `ctest -N` count against the primary checkout before trusting a pass.
+`catch_discover_tests` registers a target's cases only when that target builds, so a label run in a shard-only build tree silently covers a subset. Build the full preset before any label-wide run (`cmake --build --preset vcpkg`), or compare the `ctest -N` count against the primary checkout before trusting a pass.
 
 Run Full Validation once before code delivery on the default Debug preset, as required by `/implement`:
 
@@ -81,13 +81,14 @@ The measurement history and original test examples are recorded in issue #632. F
 
 ### Test quarantine
 
-Flaky or runner-sensitive tests have one standard home instead of ad-hoc per-PR exclusions (issues #632, #634):
+Flaky or runner-sensitive tests have one standard home instead of ad-hoc per-PR exclusions (issues #632, #634, #734):
 
 - At the test site, add the `[quarantine]` Catch2 tag — surfaced as the `quarantine` CTest label through `ADD_TAGS_AS_LABELS` — next to a comment naming the reason, the owner issue, and the re-enable condition.
 - In `.github/workflows/linux-toolchain.yml`, the `build-and-test` matrix `ctest_label_exclude` field excludes that label per lane via `ctest -LE`. Only lanes that cannot run the test reliably exclude it; each non-empty entry cites the owner issue and the re-enable condition.
-- First entry: the projection 100-chunk cost-bound test in `tests/coding_agent/ProjectionStreamTest.cpp`, whose own exclusion is the GCC 16 Release lane (owner #632; re-enable when dedicated-runner measurements clear the 100us contract with headroom). The label exclusion that the second entry adds to the unoptimized lanes removes this test from those lanes too, so its 2ms Debug bound runs only on a local `ctest --preset vcpkg` (jobs=4), and it is measured on the processor clock so unrelated host load cannot move it. Measured on an 8-CPU Debug host: 1.23-1.37ms of loop time sequentially, 2.03-2.12ms with all eight CPUs saturated by this case alone, and 14.66ms with per-event full-history materialization reintroduced — a saturated host spends real processor time, so its failure stays a runner-resourcing condition for the quarantine to cover rather than a bound to retune.
-- Second entry: the ChatContainer 100-chunk streaming flat-time benchmark in `tests/coding_agent/tui/ChatContainerTest.cpp`, excluded on unoptimized lanes (owner #632; re-enable when dedicated runners are provisioned or runner headroom is established).
-- Third entry: the staged-install relocation gate in `tests/cli/InstallRelocationTest.cpp`, whose subprocess aborts intermittently across lanes (owner #734; `main` runs 35409541470/35327789164, plus the cch_ai stack runs). Every lane except GCC 16 TSan already excludes the `quarantine` label, so the tag removes it there and TSan stays the canary; re-enable when the abort's root cause is fixed and runner measurements show it stable with headroom.
+- Active quarantined cases:
+  1. `tests/coding_agent/ProjectionStreamTest.cpp` (projection 100-chunk cost bound; owner #632);
+  2. `tests/coding_agent/tui/ChatContainerTest.cpp` (ChatContainer 100-chunk streaming flat-time benchmark; owner #632);
+  3. `tests/cli/InstallRelocationTest.cpp` (staged-install relocation gate, kept active on GCC 16 TSan as canary; owner #734).
 
 Quarantine is for resource-caused failures; bounds are never loosened silently to fit the runner.
 

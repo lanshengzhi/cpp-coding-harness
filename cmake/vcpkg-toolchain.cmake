@@ -12,6 +12,21 @@ if(DEFINED ENV{VCPKG_ROOT} AND NOT "$ENV{VCPKG_ROOT}" STREQUAL "")
 else()
     cmake_path(GET CMAKE_CURRENT_LIST_DIR PARENT_PATH _cch_repo_root)
     set(_cch_vcpkg_root "${_cch_repo_root}/.deps/vcpkg")
+    if(NOT EXISTS "${_cch_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
+        execute_process(
+            COMMAND git -C "${_cch_repo_root}" rev-parse --path-format=absolute --git-common-dir
+            RESULT_VARIABLE _cch_git_common_res
+            OUTPUT_VARIABLE _cch_git_common_dir
+            ERROR_QUIET
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        if(_cch_git_common_res EQUAL 0 AND NOT "${_cch_git_common_dir}" STREQUAL "")
+            cmake_path(GET _cch_git_common_dir PARENT_PATH _cch_primary_repo_root)
+            if(EXISTS "${_cch_primary_repo_root}/.deps/vcpkg/scripts/buildsystems/vcpkg.cmake")
+                set(_cch_vcpkg_root "${_cch_primary_repo_root}/.deps/vcpkg")
+            endif()
+        endif()
+    endif()
 endif()
 
 if(NOT EXISTS "${_cch_vcpkg_root}/scripts/buildsystems/vcpkg.cmake")

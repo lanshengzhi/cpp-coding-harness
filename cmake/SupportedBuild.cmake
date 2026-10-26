@@ -226,6 +226,21 @@ function(cch_vcpkg_root_from_toolchain toolchain_file output_variable)
             cmake_path(GET real_toolchain PARENT_PATH cmake_dir)
             cmake_path(GET cmake_dir PARENT_PATH repo_root)
             set(vcpkg_root "${repo_root}/.deps/vcpkg")
+            if(NOT EXISTS "${vcpkg_root}/scripts/buildsystems/vcpkg.cmake")
+                execute_process(
+                    COMMAND git -C "${repo_root}" rev-parse --path-format=absolute --git-common-dir
+                    RESULT_VARIABLE git_common_res
+                    OUTPUT_VARIABLE git_common_dir
+                    ERROR_QUIET
+                    OUTPUT_STRIP_TRAILING_WHITESPACE
+                )
+                if(git_common_res EQUAL 0 AND NOT "${git_common_dir}" STREQUAL "")
+                    cmake_path(GET git_common_dir PARENT_PATH primary_repo_root)
+                    if(EXISTS "${primary_repo_root}/.deps/vcpkg/scripts/buildsystems/vcpkg.cmake")
+                        set(vcpkg_root "${primary_repo_root}/.deps/vcpkg")
+                    endif()
+                endif()
+            endif()
         endif()
     else()
         cmake_path(GET real_toolchain PARENT_PATH buildsystems_dir)

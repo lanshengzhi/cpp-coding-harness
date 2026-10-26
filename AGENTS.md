@@ -20,7 +20,7 @@ Read [validation](docs/agents/validation.md) for Focused, Full, and Fresh tiers,
 - **Review:** read [CODING_STANDARDS.md](CODING_STANDARDS.md) and [validation](docs/agents/validation.md).
 - **Architecture, Owner packages, module structure, seams, or security boundaries:** read [architecture](docs/agents/architecture.md), [pi parity](docs/agents/pi-parity.md), and relevant ADRs.
 - **pi-ai catalog or upstream sync:** read `fixtures/pi-ai/README.md` and the module's ADR.
-- **Running or E2E tests:** read [usage](docs/usage.md); TUI seams live in `tests/coding_agent/tui/`. To drive CLI/TUI and capture evidence, read `.cursor/skills/verify-pike/SKILL.md`.
+- **Running or E2E tests:** read [usage](docs/usage.md); TUI seams live in `tests/coding_agent/tui/`. To drive CLI/TUI and capture evidence, read `.agents/skills/verify-pike/SKILL.md`.
 
 ## Agent skills
 

@@ -26,10 +26,10 @@ out of scope for the default offline proof.
 
 ## Using this skill
 
-This is a file in the repository, pointed at from `AGENTS.md`'s Running/E2E row.
-**Read the file and follow it.** Nothing auto-loads it, and it is not invocable as
-a Cursor skill from here, so "use the verification skill" means open this file.
-Read `helpers/` and `features/` from the same path.
+This skill lives at `.agents/skills/verify-pike/SKILL.md` (pointed at from
+`AGENTS.md`'s Running/E2E row and discovered automatically by Agent Skills
+harnesses as `/skill:verify-pike`). Read `helpers/` and `features/` from the
+same directory.
 
 ## Launch
 
@@ -69,7 +69,7 @@ disposable directory. Never drive a Pike instance against the developer's real
 ```bash
 VERIFY_ROOT="$(mktemp -d /tmp/pike-verify.XXXXXX)"
 export HOME="$VERIFY_ROOT/home" XDG_CONFIG_HOME="$VERIFY_ROOT/home/.config"
-mkdir -p "$HOME"
+mkdir -p "$HOME" "$VERIFY_ROOT/ws"
 ```
 
 **TUI (PTY or tmux):** use the bundled PTY harness (see Helpers) or drive a
@@ -82,7 +82,7 @@ live. Both are first-class; pick one per run and stay on it.
 
 
 ```bash
-HELPER=".cursor/skills/verify-pike/helpers/pike_tui.py"
+HELPER=".agents/skills/verify-pike/helpers/pike_tui.py"
 PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run" "$HELPER" spawn \
   --name main --binary "$BIN" --cwd "$VERIFY_ROOT/ws" \
   --env "HOME=$HOME" --env "XDG_CONFIG_HOME=$XDG_CONFIG_HOME" \
@@ -101,7 +101,7 @@ machine can be addressed — neither by a drive nor by cleanup.
 ```bash
 TMUX_SOCK="$VERIFY_ROOT/tmux.sock"     # inside the disposable root; removed with it
 SESS="pike-verify"
-tmux -S "$TMUX_SOCK" new-session -d -s "$SESS" -x 100 -y 30 \
+tmux -S "$TMUX_SOCK" new-session -d -s "$SESS" -c "$VERIFY_ROOT/ws" -x 100 -y 30 \
   "env HOME=$HOME XDG_CONFIG_HOME=$XDG_CONFIG_HOME $BIN --no-session"
 ```
 Every tmux command in this skill carries `-S "$TMUX_SOCK"`: that one path keeps
@@ -188,23 +188,34 @@ test -x "$BIN"                          # binary is executable
 resolved="$(env HOME="$HOME" XDG_CONFIG_HOME="$XDG_CONFIG_HOME" "$BIN" --print x 2>&1 >/dev/null || true)"
 # The offline error must be the deterministic gateway-model failure, not a crash.
 grep -qF 'has no API implementation' <<<"$resolved"
+
+# Build provenance: verify $BIN.provenance.json matches $BIN's SHA-256 and current HEAD.
+python3 - "$BIN" <<'PY'
+import hashlib, json, subprocess, sys
+from pathlib import Path
+bin_path = Path(sys.argv[1]).resolve()
+prov = json.loads(Path(f"{bin_path}.provenance.json").read_text(encoding="utf-8"))
+actual_sha = hashlib.sha256(bin_path.read_bytes()).hexdigest()
+assert prov["binary_sha256"] == actual_sha, f"hash mismatch: {actual_sha} != {prov['binary_sha256']}"
+head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+assert prov["git_head"] == head, f"stale binary: built at {prov['git_head']}, HEAD is {head}"
+PY
 ```
 
-A doctor failure means: the binary is missing or unusable (rebuild), the flag
-surface drifted (the CLI seam changed — re-read `docs/usage.md`), or state is
-leaking into the real home (isolation broken — do not proceed). **Staleness is
-deliberately not on this list** — the doctor cannot see it (next paragraph), so
-`stale` is a verdict from build-identity evidence outside the doctor, never a
-doctor failure.
+A doctor failure means: the binary is missing or unusable (rebuild), the
+provenance sidecar `$BIN.provenance.json` is missing, its recorded
+`binary_sha256` does not match `$BIN`, or its `git_head` does not match `HEAD`
+(stale binary — rebuild), the flag surface drifted (the CLI seam changed —
+re-read `docs/usage.md`), or state is leaking into the real home (isolation
+broken — do not proceed).
 
-**The doctor does not judge freshness.** It checks that the binary runs, that the
-flag surface is present, and that isolation holds — it cannot tell whether `BIN`
-was built from the current sources. `--version` prints the project version only
-(currently `0.1.0`), and a stale binary is something the operator infers, not
-something these checks detect. Establish build provenance only from a build-time
-identity bound to the binary's own hash; that is **not implemented here**. So read
-a passing doctor as "the binary runs and isolation holds" — never as "the current
-sources are verified".
+**How build provenance is bound.** Every build of `pike` runs a post-build step
+(`cmake/write-pike-provenance.cmake`, after Release stripping) that writes
+`$BIN.provenance.json` with `binary_sha256`, `git_head`, `git_dirty`,
+`build_source_state`, and `built_at`. Checking both `prov["binary_sha256"] ==
+sha256($BIN)` and `prov["git_head"] == $(git rev-parse HEAD)` binds the
+provenance record to the exact binary bytes on disk and catches a stale binary
+after a branch switch or commit without altering `pike --version`.
 
 ## Drive
 
@@ -212,7 +223,7 @@ The PTY harness is the primary driver for the TUI. All paths below are relative
 to the repo root. Prefer the exact text anchors observed from the real binary.
 
 ```bash
-HELPER=".cursor/skills/verify-pike/helpers/pike_tui.py"
+HELPER=".agents/skills/verify-pike/helpers/pike_tui.py"
 export PIKE_VERIFY_RUN_DIR="$VERIFY_ROOT/run"
 ```
 
@@ -339,7 +350,7 @@ file**, alongside the captures (for example `$EVIDENCE_DIR/identity.txt`):
 run_started_at               = <ISO-8601 timestamp>
 run_source_revision          = git rev-parse HEAD
 checkout_state_at_run_start  = git status --porcelain     # taken BEFORE evidence exists
-build_source_state           = unknown unless a build-time identity bound to the binary hash exists
+build_source_state           = <build_source_state from $BIN.provenance.json when binary_sha256 matches sha256sum <BIN>; otherwise unknown>
 binary_path                  = the $BIN this run drove (resolve to its real path)
 binary_version               = <BIN> --version
 binary_sha256                = sha256sum <BIN>
@@ -354,16 +365,11 @@ from `build_source_state` (what the binary came from). A single boolean `dirty`
 conflates user material, run output, and source changes, and does not identify
 which inputs changed.
 
-**What L1 proves, and what it does not.** It records that *these binary bytes
-were run against this checkout state*. It does **not** prove the binary was built
-from that revision: `run_source_revision` is where the checkout was, not where
-the binary came from. `binary_version` (a project version) and file mtimes cannot
-close that gap. **Without a build-time identity bound to the binary's own hash,
-write `build_source_state = unknown` — always**, whether or not the checkout was
-clean and whether or not the revision matches. A clean checkout at the right
-revision records where the sources were, not what the binary was built from; only
-an identity emitted by the build itself and tied to the binary hash supports
-anything stronger.
+**What L1 proves, and what it does not.** When `$BIN.provenance.json` is present
+and its `binary_sha256` matches `sha256sum <BIN>`, `build_source_state` records
+the build-time identity (`clean (<git_head>)` or `dirty (<git_head>)`) emitted
+when those exact binary bytes were linked. If the sidecar is missing or its
+`binary_sha256` does not match `<BIN>`, write `build_source_state = unknown`.
 
 ## Cleanup
 

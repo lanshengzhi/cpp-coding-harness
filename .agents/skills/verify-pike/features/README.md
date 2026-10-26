@@ -3,7 +3,7 @@
 This directory is the maintained source for verifying user-facing Pike
 behavior. Read this index before driving the app, then use the matching feature
 file as the recipe. The harness is `helpers/pike_tui.py`; the skill entry point
-is `.cursor/skills/verify-pike/SKILL.md`.
+is `.agents/skills/verify-pike/SKILL.md`.
 
 ## Baseline preconditions
 

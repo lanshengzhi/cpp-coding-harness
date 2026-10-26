@@ -104,49 +104,49 @@
       "name": "vcpkg",
       "configurePreset": "vcpkg",
       "configuration": "Debug",
-      "jobs": 8
+      "jobs": 4
     },
     {
       "name": "vcpkg-release",
       "configurePreset": "vcpkg-release",
       "configuration": "Release",
-      "jobs": 8
+      "jobs": 4
     },
     {
       "name": "vcpkg-release-artifact",
       "configurePreset": "vcpkg-release-artifact",
       "configuration": "Release",
-      "jobs": 8
+      "jobs": 4
     },
     {
       "name": "clang-conformance",
       "configurePreset": "clang-conformance",
       "configuration": "Debug",
-      "jobs": 8
+      "jobs": 4
     },
     {
       "name": "vcpkg-asan-ubsan",
       "configurePreset": "vcpkg-asan-ubsan",
       "configuration": "Debug",
-      "jobs": 8
+      "jobs": 4
     },
     {
       "name": "vcpkg-tsan",
       "configurePreset": "vcpkg-tsan",
       "configuration": "Debug",
-      "jobs": 8
+      "jobs": 4
     },
     {
       "name": "dev-fast",
       "configurePreset": "dev-fast",
       "configuration": "Debug",
-      "jobs": 8
+      "jobs": 4
     },
     {
       "name": "dev-fast-release",
       "configurePreset": "dev-fast-release",
       "configuration": "Release",
-      "jobs": 8
+      "jobs": 4
     }
   ],
   "testPresets": [

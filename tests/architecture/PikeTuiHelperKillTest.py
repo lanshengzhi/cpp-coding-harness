@@ -30,7 +30,7 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
-HELPER = ROOT / ".cursor/skills/verify-pike/helpers/pike_tui.py"
+HELPER = ROOT / ".agents/skills/verify-pike/helpers/pike_tui.py"
 
 
 def load_helper():

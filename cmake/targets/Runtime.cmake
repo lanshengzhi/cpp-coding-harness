@@ -41,3 +41,11 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         COMMENT "Stripping .eh_frame from Release runtime executable"
     )
 endif()
+
+add_custom_command(TARGET pike POST_BUILD
+    COMMAND "${CMAKE_COMMAND}"
+        "-DBINARY_PATH=$<TARGET_FILE:pike>"
+        "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/write-pike-provenance.cmake"
+    COMMENT "Writing build provenance sidecar for pike"
+)
