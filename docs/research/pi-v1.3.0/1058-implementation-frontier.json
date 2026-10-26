@@ -2194,27 +2194,27 @@
     },
     {
       "issue": "#831",
-      "state": "closed",
+      "state": "open",
       "title": "Native TUI dock-growth frames drop footer rows",
-      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
+      "recommendation": "Reopened during the 2026-10-26 delivery reconciliation: retain the frozen VirtualTerminal comparisons and Pike PTY frames, but finish the accepted dated dual-runtime terminal growth evidence. The close-out explicitly recorded no emulator A/B and only virtual-terminal over-budget observations.",
       "evidence": [
         "/tmp/cch-1044-context/protocol.md #1051 note: real footer/image evidence missing",
         "https://github.com/lanshengzhi/cpp-coding-harness/issues/831"
       ],
       "draft": "F24",
-      "action": "closed-slice-retain-verification-boundary"
+      "action": "reopened-terminal-evidence-gap"
     },
     {
       "issue": "#1035",
-      "state": "closed",
+      "state": "open",
       "title": "Repaint fullscreen images on frozen placement-span changes",
-      "recommendation": "The refreshed implementation slice is closed. Use its delivery evidence for the bounded result; recorded tool-duration and real-emulator obligations remain under #1044. Ticket closure alone does not verify this capability row.",
+      "recommendation": "Reopened during the 2026-10-26 delivery reconciliation: the frozen byte replay and discrimination probes remain delivered. WEZTERM_PANE over VirtualTerminal is not the required dated Kitty/WezTerm emulator observation; finish that acceptance clause without changing the proven byte contract.",
       "evidence": [
         "fixtures/pi-v1.3.0/audit-1051/product-differential.json: native differential cells at 100/120/72 columns",
         "https://github.com/lanshengzhi/cpp-coding-harness/issues/1035"
       ],
       "draft": "F24",
-      "action": "closed-slice-retain-verification-boundary"
+      "action": "reopened-terminal-evidence-gap"
     },
     {
       "issue": "#1033",
@@ -2323,18 +2323,19 @@
   ],
   "closeOut": {
     "implemented": [
-      "The 11 source audits and named-evidence infrastructure are complete. The current registry verifies 25 bundles, 79 artifacts and 477 scenarios; registration alone is not a C++ comparison.",
+      "The 11 source audits and named-evidence infrastructure are complete. The current registry verifies 27 bundles, 81 artifacts and 480 scenarios; registration alone is not a C++ comparison.",
       "cch_chord, cch_codemode, cch_mcp and cch_durable are configured libraries with real public callers. Durable has memory, transactional JSONL, SQLite and the #1076 task/checkpoint execution slice.",
       "#1071 reconciles the already merged retirement of the unused agent-side SQLite/TaskStore/TaskScheduler subsystem. The preserved SessionStore and independent transcript export caller have current regression and dependency-closure evidence in 1071-legacy-retirement.md.",
       "#1101 preserves arbitrary structured JSON through real MCP clients and application conversion. Its whole-row frozen comparison receipt is in 1058-deliveries.json and its delivery report is 1101-structured-content.md.",
-      "Codemode Inline (#1097), deterministic local execution (#1093), worker lifetime (#1096) and the Remote exchange/Linux host (#1098) are implemented. Remote replay (#1099) and durable integration (#1094) remain open.",
-      "The eight historical TUI residual implementation tickets are closed. PTY comparisons exist, including #1123 and #1125; dated real-emulator rendering remains a separate verification obligation."
+      "Codemode Inline (#1097), worker lifetime (#1096) and the Remote exchange/Linux host (#1098) are implemented. #1093 delivered deterministic local execution but is reopened for its explicitly unaccepted outcome/settlement ordering clause; Remote replay (#1099) and durable integration (#1094) remain open.",
+      "Session ownership #1068 -> #1069 -> #1070, live Session consumers #1072 and application environments/tools #1073 are delivered. The bounded #1079 memory Harness runs real injected tools independently of AgentSession; see the owning delivery reports.",
+      "Six historical TUI residual tickets remain closed. #831 and #1035 are reopened for their dated terminal acceptance gaps, retaining their delivered byte/frame comparisons. PTY comparisons exist, including #1123 and #1125; they do not establish emulator rendering."
     ],
     "specifiedOnly": [
-      "The Session ownership migration #1068 -> #1069 -> #1070 and concrete environment/tool migration remain open. The original 32 drafts are planning records; native dependencies on the 76 implementation issues determine the live frontier.",
-      "Durable definition versioning/hooks (#1077), ownership/join/wait cancellation (#1078), full prompt/tool Harness workflows (#1079), submissions/inbox, document lifecycle and integrations remain incomplete beyond their delivered slices.",
+      "The original 32 drafts are planning records; native dependencies on the 76 implementation issues determine the live frontier. See 1044-delivery-reconciliation-2026-10-26.md for the reviewed tracker corrections and acceptance mappings.",
+      "Durable definition versioning/hooks (#1077), ownership/join/wait cancellation (#1078), submissions/inbox (#1080), document lifecycle and integrations remain incomplete beyond the bounded #1079 workflow. #1095 is reopened: its application AgentSession tool_search delivery does not accept the required durable Harness behavior, and #1094 remains its blocker.",
       "Durable bidirectional JSONL/SQLite continued operation (#1085/#1086), crash/recovery integration (#1084) and additional durability guarantees remain unverified.",
-      "Agent/application tool duration, queue/default/lifecycle/tool-selection behavior, native extensions and MCP cancellation/issuer/transport/management still have open implementation or verification work.",
+      "#812 delivered execute-only recorded tool duration through persistence and rendering. #1106 remains open for its remaining monotonic-clock discrimination and complete frozen comparison; reuse #812 instead of implementing the same propagation again. Agent queue/default/lifecycle/tool-selection behavior, native extensions and MCP cancellation/issuer/transport/management still have open work.",
       "Other delivered slices, including #1074/#1075/#1076 and TUI program status, retain their delivery reports and tests. Their broader composite capability rows need complete per-row receipts before ledger verification can advance."
     ],
     "retainedBoundaries": [

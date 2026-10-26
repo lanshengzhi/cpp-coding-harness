@@ -66,6 +66,12 @@ the application model-text observation supplies additional coverage. The selecte
 row has no remaining comparison obligation. Neighboring MCP obligations remain
 outside this claim.
 
+The [2026-10-26 reconciliation](1044-delivery-reconciliation-2026-10-26.md)
+refreshes the current receipt with 14/14 passing cases and a new JUnit artifact.
+Only the consolidation-plan input changed: two explicit #1072 orphan observations
+were added; this row, its scenarios, production sources, comparison tests and
+expected bytes are unchanged. The earlier validation artifacts remain retained.
+
 Consolidation `build`/`check`, all 39 receipt/consolidation boundary tests and the
 shared frozen-evidence verifier pass. Full-suite and architecture results, including
 the first run's performance failure, are recorded in

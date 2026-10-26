@@ -23,8 +23,10 @@ frontier. A closed slice does not necessarily verify an entire capability row.
   the deterministic consolidation. Source audit records are retained in
   `sourceRows`; each promoted row also keeps `auditStatus` and names its delivery.
 - The frontier's close-out distinguishes implemented packages from outstanding
-  behavior and comparison work. The eight residual TUI issues are recorded as
-  closed without promoting their capability rows. Existing dated PTY evidence
+  behavior and comparison work. The original reconciliation recorded eight residual
+  TUI issues as closed without promoting their rows. The
+  [2026-10-26 reconciliation](1044-delivery-reconciliation-2026-10-26.md) reopens
+  #831/#1035 for missing terminal acceptance evidence. Existing dated PTY evidence
   does not establish real emulator rendering.
 
 ## Delivery evidence contract
@@ -71,6 +73,15 @@ For a future delivery:
    consolidation boundary tests, and the repository's required validation tier.
 5. Record the result in the ticket's owning report and follow the existing issue
    completion procedure. Leave #1044 open while any included obligation remains.
+
+When adding a bundle changes a plan pinned by an existing receipt, review the exact
+plan delta against that receipt's row and scenarios. Register narrower observations
+as explicit orphans until a complete comparison is available. Rebuild the affected
+comparison targets, rerun their exact selection into a new JUnit artifact, then
+refresh only the reviewed changed input digests and validation record. Retain the
+old artifact and record why the scenario mapping remains valid. Do not bulk rehash
+inputs or lower the verifier to admit the addition. The #1072 registration in the
+2026-10-26 record demonstrates this path without promoting another row.
 
 ## Validation
 
@@ -128,11 +139,14 @@ current comparison records.
 
 ## Remaining boundary
 
-The Session migration #1068 → #1069 → #1070 remains the main application dependency
-chain. Full Durable Runtime, bidirectional JSONL/SQLite continuation, remaining
-Agent/MCP/application behavior, and real emulator evidence remain open under
-#1044. This reconciliation neither broadens capability membership nor accepts
-those remaining obligations through a full-suite pass.
+The Session migration #1068 → #1069 → #1070, live consumers #1072 and application
+environments/tools #1073 are delivered. #1079 supplies a bounded independent memory
+Harness workflow. Full Durable Runtime, bidirectional JSONL/SQLite continuation,
+remaining Agent/MCP/application behavior, and real emulator evidence remain open
+under #1044. Current tracker corrections and the #1106/#812 coverage map are in the
+[2026-10-26 reconciliation](1044-delivery-reconciliation-2026-10-26.md). This
+reconciliation neither broadens capability membership nor accepts those remaining
+obligations through a full-suite pass.
 
 The reconciliation artifacts are published on `main` in
 [`8425ff3db04168a8e992e90b2304c65a8e268ff8`](https://github.com/lanshengzhi/cpp-coding-harness/commit/8425ff3db04168a8e992e90b2304c65a8e268ff8).

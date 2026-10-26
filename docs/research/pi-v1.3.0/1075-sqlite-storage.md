@@ -79,5 +79,6 @@ consolidation regeneration.
 - Frozen `Tx.task`, `Tx.scanTasks`, `Tx.latestHeadMarker`, and `Tx.submissionByRequest`
   have no C++ counterparts in the current public `Transaction` contract and
   remain parity gaps outside the scope of #1075.
-- Bidirectional JSONL/SQLite interchange is owned by ticket #1076.
+- Bidirectional JSONL/SQLite continued operation is owned by #1085/#1086;
+  #1076 delivered the separate task/checkpoint execution slice.
 - Cloudflare SQLite hosting stays excluded.

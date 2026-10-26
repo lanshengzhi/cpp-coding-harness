@@ -1516,6 +1516,28 @@
         "cch_durable:generation-admission"
       ],
       "disposition": "the durable workflow implementation must consume this observation when changing tool execution or settlement ordering"
+    },
+    {
+      "family": "audit-1072",
+      "artifact": "live-session.json",
+      "scenario": "export uses the live selected branch while HTML retains all entries",
+      "reason": "The #1072 public SessionManager/export observation is narrower than the composite interactive consumer row; registration does not establish complete selector or export UI parity.",
+      "rows": [
+        "cch_coding_agent:Session:consumers:tui-live-session",
+        "cch_coding_agent:export-jsonl-branch",
+        "cch_coding_agent:export-html"
+      ],
+      "disposition": "reuse the selected-branch and HTML-leaf observation in future complete C++ comparison receipts; keep current row statuses unchanged"
+    },
+    {
+      "family": "audit-1072",
+      "artifact": "live-session.json",
+      "scenario": "live session info append advances the leaf under the selected parent",
+      "reason": "The #1072 observation drives SessionManager directly; frozen pi's selector callback opens a second manager, so it does not prove equivalence of the interactive rename flow.",
+      "rows": [
+        "cch_coding_agent:Session:consumers:tui-live-session"
+      ],
+      "disposition": "reuse the append parent/leaf observation without claiming frozen selector equivalence or promoting the composite row"
     }
   ],
   "groups": [

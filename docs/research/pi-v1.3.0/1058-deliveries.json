@@ -178,7 +178,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "56f5c89021be2d504e79458265b48a16e2868c7bcfd43d6c93bd7d905d68c698"
+          "sha256": "dcd17d18cac77f0a8b913defbefdf04a29c0e596b6bef52f94c85727c0e7d1cc"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -225,15 +225,15 @@
           "-L",
           "issue1101",
           "--output-junit",
-          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/1073-1101-validation.xml",
+          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1044-reconciliation-1101.xml",
           "--output-on-failure"
         ],
-        "testedRevision": "c454477cc2a9a11c980b949ddf601b660308abf0",
-        "recordedAt": "2026-10-26T01:16:23Z",
+        "testedRevision": "72d22b26f20a0685899dc875a3fc6a11208e2ee6",
+        "recordedAt": "2026-10-26T06:50:43Z",
         "selected": 14,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/1073-1101-validation.xml",
-          "sha256": "be1daf8bd8bc1f09dac257fd34cdedf80bcdb19cdfea2fa35d953fbe25ab3050"
+          "path": "docs/research/pi-v1.3.0/deliveries/1044-reconciliation-1101.xml",
+          "sha256": "8141f1b56be68423c10cacab726aa22fe924f81339de55d7f98a8a2cace81f6b"
         }
       },
       "rows": [

@@ -102,14 +102,14 @@ the C++ contract, not pi parity.
 
 ## 3. Evidence routes and bundled scenarios
 
-The 25 registered bundles ([baselines.json](../../../fixtures/pi-v1.3.0/baselines.json)) hold 79
-artifacts and 477 scenarios. The consolidation covers all 474 non-bootstrap scenarios
+The 27 registered bundles ([baselines.json](../../../fixtures/pi-v1.3.0/baselines.json)) hold 81
+artifacts and 480 scenarios. The consolidation covers all 477 non-bootstrap scenarios
 (audit-1046 is the bootstrap evidence-infrastructure bundle):
 
 - 347 scenarios are named directly by at least one consolidated row's comparison list;
 - 55 more scenarios are covered because their artifact is referenced by a row (the row records the
   artifact-level capture without listing every scenario name);
-- 72 scenarios are registered as explicit `orphanScenarios` with a reason, related rows and a
+- 75 scenarios are registered as explicit `orphanScenarios` with a reason, related rows and a
   disposition instead of being silently linked to different semantics. Their exact identities
   are listed in the generated ledger and include the later #1076 task observations;
 - 0 scenarios are unrouted: no registered audit scenario is missing a route; the checker fails if any
@@ -391,11 +391,12 @@ JSONL/SQLite legs (F8) and the SIGKILL-only crash model (F6).
 
 ## 10. Residual tracker reconciliation
 
-The eight refreshed TUI residual implementation tickets (#808, #810, #812, #831,
-#1035, #1033, #1032 and #1043) are closed. Their issue URLs and bounded delivery
-status are recorded in `residualReconciliation`. The old open-state recommendations
-are superseded. Their closure does not promote capability rows or waive real-emulator
-and persisted-duration obligations under #1044.
+Six refreshed TUI residual tickets (#808, #810, #812, #1033, #1032 and #1043)
+remain closed. #831 and #1035 are reopened for the dated terminal evidence their
+acceptance criteria require; their delivered byte/frame comparisons remain valid.
+The reviewed dispositions are in `residualReconciliation` and
+[the 2026-10-26 reconciliation](1044-delivery-reconciliation-2026-10-26.md).
+Ticket closure does not promote capability rows or waive remaining comparison obligations.
 
 #946, #882, #915, #920, #925 and #932 remain historical references; their alignment
 claims do not transfer to v1.3.0.
@@ -415,10 +416,14 @@ complete per-row receipts accept their broader capability obligations.
 
 The source audit ledgers are not live completion estimates. The generated ledger
 above and its `counts` are authoritative for recorded status; 1019 rows still have
-missing observations, including 858 historical-only TUI routes. Session migration,
-full durable workflows, bidirectional continuation, remaining Agent/application/MCP
-behavior and actual emulator evidence keep #1044 open. Magpie/XDG, the 29 explicit
-exclusions and the no-old-Pike-migration boundary remain unchanged.
+missing observations, including 858 historical-only TUI routes. Session ownership
+#1068–#1070, live consumers #1072 and application environment/tools #1073 are delivered.
+Full durable workflows beyond #1079, bidirectional continuation, remaining
+Agent/application/MCP behavior and actual emulator evidence keep #1044 open.
+#1095 is reopened because its application tool-search evidence does not accept the
+Durable caller; #1093 retains its unaccepted outcome/settlement ordering clause.
+Magpie/XDG, the 29 explicit exclusions and the no-old-Pike-migration boundary
+remain unchanged.
 
 ## 12. Validation
 

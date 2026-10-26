@@ -65,11 +65,12 @@ The frozen interactive selector callback itself still calls
 does not establish the desired live-tree behavior. The active-selector change
 is authorized by #1072/P8; no claim of complete frozen selector equivalence is made.
 
-The candidate passes `audit_evidence.py check`. It is deliberately **not
-registered**: routing the two new scenarios requires editing the consolidation
-plan, which is pinned by the existing #1101 whole-row delivery receipt. This
-prefactor preserves that receipt instead of changing its recorded inputs.
-Candidate observations are not counted as registered/verified capability rows.
+The candidate passed `audit_evidence.py check` at delivery and was initially left
+unregistered because the consolidation plan was pinned by the #1101 receipt. The
+[2026-10-26 reconciliation](1044-delivery-reconciliation-2026-10-26.md) registers
+the unchanged manifest and both observations as explicit orphans, after reviewing
+the plan delta and refreshing the existing #1101 comparison result. They are now
+registered observations, not verified capability rows.
 
 ## Validation
 
@@ -112,5 +113,4 @@ multi-process writer, historical durable migration, or overall AI parity claim.
 Foreign sessions still use their own application JSONL store. Ordinary CLI
 Sessions stay on the application SessionStore; Magpie-only AI access, XDG state
 roots and strict no-exception behavior remain in force. Full-row frozen UI
-comparison and candidate-evidence registration belong to subsequent evidence
-reconciliation; other #1044 capabilities remain outside this slice.
+comparison remains outstanding after the evidence registration; other #1044 capabilities remain outside this slice.

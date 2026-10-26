@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "56f5c89021be2d504e79458265b48a16e2868c7bcfd43d6c93bd7d905d68c698"
+            "sha256": "dcd17d18cac77f0a8b913defbefdf04a29c0e596b6bef52f94c85727c0e7d1cc"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -255,15 +255,15 @@
             "-L",
             "issue1101",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/1073-1101-validation.xml",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1044-reconciliation-1101.xml",
             "--output-on-failure"
           ],
-          "testedRevision": "c454477cc2a9a11c980b949ddf601b660308abf0",
-          "recordedAt": "2026-10-26T01:16:23Z",
+          "testedRevision": "72d22b26f20a0685899dc875a3fc6a11208e2ee6",
+          "recordedAt": "2026-10-26T06:50:43Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/1073-1101-validation.xml",
-            "sha256": "be1daf8bd8bc1f09dac257fd34cdedf80bcdb19cdfea2fa35d953fbe25ab3050"
+            "path": "docs/research/pi-v1.3.0/deliveries/1044-reconciliation-1101.xml",
+            "sha256": "8141f1b56be68423c10cacab726aa22fe924f81339de55d7f98a8a2cace81f6b"
           }
         },
         "rows": [
@@ -644,7 +644,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 475,
+      "scenarios": 477,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -720,7 +720,9 @@
         "audit-1035/placement-span.json:wezterm-overlay-inside-placement-span",
         "audit-831/dock-footer.json:dock-fits-autocomplete-and-multiline",
         "audit-831/dock-footer.json:dock-over-budget-editor-growth",
-        "audit-1079/held-tool.json:a held real tool prevents the next model request and submission settlement"
+        "audit-1079/held-tool.json:a held real tool prevents the next model request and submission settlement",
+        "audit-1072/live-session.json:export uses the live selected branch while HTML retains all entries",
+        "audit-1072/live-session.json:live session info append advances the leaf under the selected parent"
       ],
       "uncovered": []
     }
@@ -3618,6 +3620,28 @@
         "cch_durable:generation-admission"
       ],
       "disposition": "the durable workflow implementation must consume this observation when changing tool execution or settlement ordering"
+    },
+    {
+      "family": "audit-1072",
+      "artifact": "live-session.json",
+      "scenario": "export uses the live selected branch while HTML retains all entries",
+      "reason": "The #1072 public SessionManager/export observation is narrower than the composite interactive consumer row; registration does not establish complete selector or export UI parity.",
+      "rows": [
+        "cch_coding_agent:Session:consumers:tui-live-session",
+        "cch_coding_agent:export-jsonl-branch",
+        "cch_coding_agent:export-html"
+      ],
+      "disposition": "reuse the selected-branch and HTML-leaf observation in future complete C++ comparison receipts; keep current row statuses unchanged"
+    },
+    {
+      "family": "audit-1072",
+      "artifact": "live-session.json",
+      "scenario": "live session info append advances the leaf under the selected parent",
+      "reason": "The #1072 observation drives SessionManager directly; frozen pi's selector callback opens a second manager, so it does not prove equivalence of the interactive rename flow.",
+      "rows": [
+        "cch_coding_agent:Session:consumers:tui-live-session"
+      ],
+      "disposition": "reuse the append parent/leaf observation without claiming frozen selector equivalence or promoting the composite row"
     }
   ],
   "correctionsIndex": [
