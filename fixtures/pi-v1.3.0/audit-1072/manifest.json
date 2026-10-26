@@ -1,0 +1,94 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1072",
+  "family": "audit-1072",
+  "capturedAt": "2026-10-26T04:32:20.445Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "docs/research/pi-v1.3.0/capture-1072-live-session.mts",
+    "sha256": "9db20cf58eb92e8be9da290fb871a0e98901ad68a36e36bc5065116e91d42f76",
+    "command": "PI_CHECKOUT=/home/lansy/Work/github/coding-agent/cpp-coding-harness/../pi NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH=/home/lansy/Work/github/coding-agent/pi/tsconfig.json /home/lansy/Work/github/coding-agent/pi/node_modules/.bin/tsx docs/research/pi-v1.3.0/capture-1072-live-session.mts",
+    "sources": [
+      {
+        "path": "docs/research/pi-v1.3.0/capture-1072-live-session.mts",
+        "sha256": "9db20cf58eb92e8be9da290fb871a0e98901ad68a36e36bc5065116e91d42f76"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "live-session.json",
+      "family": "audit-1072",
+      "bytes": 1999,
+      "sha256": "0781d8a25608f6a92bda1ece321cb4fa3d7292f766339d6f2f9db7e71350e32d",
+      "sourceEndpoints": [
+        "packages/coding-agent/src/core/session-manager.ts:SessionManager.branch,appendSessionInfo,getEntries,getLeafId",
+        "packages/coding-agent/src/core/session-export.ts:serializeSessionBranch",
+        "packages/coding-agent/src/core/export-html/index.ts:exportSessionToHtml"
+      ],
+      "scenarios": [
+        {
+          "name": "export uses the live selected branch while HTML retains all entries",
+          "inputs": {
+            "messages": [
+              "first branch",
+              "first answer",
+              "later branch"
+            ],
+            "selected": "first answer"
+          },
+          "expected": {
+            "jsonlMessages": [
+              "first branch",
+              [
+                {
+                  "type": "text",
+                  "text": "first answer"
+                }
+              ]
+            ],
+            "htmlMessages": [
+              "first branch",
+              [
+                {
+                  "type": "text",
+                  "text": "first answer"
+                }
+              ],
+              "later branch"
+            ],
+            "htmlLeafIsSelected": true
+          },
+          "normalizations": [
+            "Entry identifiers compared by relationship; wall-clock timestamps and generated header identity omitted."
+          ]
+        },
+        {
+          "name": "live session info append advances the leaf under the selected parent",
+          "inputs": {
+            "name": "  Live\r\nSession  ",
+            "selected": "first answer"
+          },
+          "expected": {
+            "name": "Live Session",
+            "parentIsSelected": true,
+            "leafIsRename": true,
+            "entryCount": 4
+          },
+          "normalizations": [
+            "Generated identifiers compared by relationship; timestamps omitted."
+          ]
+        }
+      ]
+    }
+  ]
+}

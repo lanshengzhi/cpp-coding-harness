@@ -440,28 +440,25 @@ support::Expected<HtmlExportTheme> make_html_export_theme(const ResolvedTheme& t
 }
 
 support::Expected<std::string> build_html_session_data_json(
-        cch::harness::session::SessionStore& store, const HtmlExportExtras& extras) {
+        const cch::harness::session::SessionWireSnapshot& snapshot, const HtmlExportExtras& extras) {
     // pi `SessionManager.getEntries()`: every entry of the session in file
     // order, each as its pi wire line. The harness tree reading excludes the
     // header line and unknown entry kinds; every remaining kind round-trips
     // through the package-private serializer as its pi wire line.
-    auto snapshot = store.export_wire_snapshot();
-    if (!snapshot) return std::unexpected(snapshot.error());
-
     std::string document = R"({"header":)";
-    document += snapshot->header;
+    document += snapshot.header;
     document += R"(,"entries":[)";
     bool first = true;
-    for (const auto& line : snapshot->entries) {
+    for (const auto& line : snapshot.entries) {
         if (!first) document.push_back(',');
         first = false;
         document += line;
     }
     document += R"(],"leafId":)";
-    if (snapshot->leaf_id.empty()) {
+    if (snapshot.leaf_id.empty()) {
         document += "null";
     } else {
-        auto encoded = json_string(snapshot->leaf_id);
+        auto encoded = json_string(snapshot.leaf_id);
         if (!encoded) return std::unexpected(encoded.error());
         document += *encoded;
     }
@@ -545,12 +542,12 @@ support::Expected<std::string> generate_session_html(std::string_view session_da
     return html;
 }
 
-support::Expected<std::string> export_session_to_html(cch::harness::session::SessionStore& store,
+support::Expected<std::string> export_session_to_html(const cch::harness::session::SessionWireSnapshot& snapshot,
         std::string_view output_path,
         const std::filesystem::path& session_file,
         const HtmlExportTheme& theme,
         const HtmlExportExtras& extras) {
-    auto document = build_html_session_data_json(store, extras);
+    auto document = build_html_session_data_json(snapshot, extras);
     if (!document) return std::unexpected(document.error());
     auto html = generate_session_html(*document, theme);
     if (!html) return std::unexpected(html.error());

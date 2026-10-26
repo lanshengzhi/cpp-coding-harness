@@ -399,6 +399,75 @@ TEST_CASE("session selector renames a session through the inline input",
     CHECK(*running.run_result);
 }
 
+TEST_CASE("session selector rename publishes the live tree and cancellation preserves it",
+        "[coding_agent][tui][session-selector][e2e][issue1072][spec]") {
+    Fixture fixture;
+    fixture.write_session(fixture.session_file, {"boot session seed"}, std::nullopt, "boot-session");
+    Running running;
+    auto actions = std::make_shared<coding_agent::tui::testing::ActionSinkRecorder>();
+    auto session = boot(fixture, running, actions);
+    auto observed = std::make_shared<std::vector<coding_agent::ProjectionStreamMessageVariant>>();
+    auto observed_names = std::make_shared<std::vector<std::optional<std::string>>>();
+    // The subscription is destroyed before the session at the end of this test.
+    auto subscription = session->attach_projection([observed, observed_names, session_ptr = session.get()](
+                                                           const coding_agent::ProjectionStreamMessageVariant& value) {
+        observed->push_back(value);
+        observed_names->push_back(session_ptr->session_name());
+    });
+    REQUIRE(subscription.drain() == 1);
+    const auto before = session->session_tree();
+    REQUIRE(before);
+
+    REQUIRE(running.terminal.inject_input("\x1b[17~"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\x12"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("Live Session\r"));
+    drain_ready(running.io);
+
+    CHECK(session->session_name() == "Live Session");
+    const auto entries = session->session_entries();
+    REQUIRE(entries);
+    REQUIRE_FALSE(entries->empty());
+    CHECK(entries->back().kind == harness::session::SessionEntryKind::SessionInfo);
+    CHECK(harness::session::parent_entry_id(entries->back().parent_id) == before->leaf_id);
+    const auto after = session->session_tree();
+    REQUIRE(after);
+    CHECK(after->leaf_id == entries->back().entry_id);
+    CHECK(subscription.drain() == 1);
+    REQUIRE(observed->size() >= 2);
+    const auto* message = std::get_if<coding_agent::ProjectionStreamPatchMsg>(&observed->back());
+    REQUIRE(message);
+    REQUIRE(message->patches.size() == 1);
+    const auto* patch = std::get_if<coding_agent::SessionSnapshotPatch>(&message->patches.front());
+    REQUIRE(patch);
+    CHECK(observed_names->back() == "Live Session");
+
+    // Escape cancels the second inline rename before any append or publication.
+    REQUIRE(running.terminal.inject_input("\x12"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("discarded"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\x1b"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input(""));
+    drain_ready(running.io);
+    CHECK(session->session_name() == "Live Session");
+    const auto cancelled_entries = session->session_entries();
+    REQUIRE(cancelled_entries);
+    CHECK(cancelled_entries->size() == entries->size());
+    CHECK(subscription.drain() == 0);
+
+    REQUIRE(running.terminal.inject_input("\x1b"));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input(""));
+    drain_ready(running.io);
+    REQUIRE(running.terminal.inject_input("\x04"));
+    drain_ready(running.io);
+    REQUIRE(running.run_result);
+    CHECK(*running.run_result);
+}
+
 TEST_CASE("session selector deletes a session after confirmation",
         "[coding_agent][tui][session-selector][e2e][issue409][spec]") {
     Fixture fixture;

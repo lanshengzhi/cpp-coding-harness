@@ -52,7 +52,7 @@ struct HtmlExportExtras {
 /// `SessionManager.getEntries()` — every entry of the session, each as its pi
 /// wire line — and `leafId` is the active leaf's id or null.
 [[nodiscard]] support::Expected<std::string> build_html_session_data_json(
-        cch::harness::session::SessionStore& store, const HtmlExportExtras& extras);
+        const cch::harness::session::SessionWireSnapshot& snapshot, const HtmlExportExtras& extras);
 
 /// pi `generateHtml`: substitute the vendored pi template (third_party/
 /// pi-export-html, byte-for-byte pi v1.3.0) with the base64 session-data
@@ -63,7 +63,8 @@ struct HtmlExportExtras {
 /// pi `exportSessionToHtml`: an empty `output_path` selects pi's default
 /// `pike-session-<basename>.html`; the destination is written through the
 /// workspace filesystem like the JSONL lane. Returns the written path.
-[[nodiscard]] support::Expected<std::string> export_session_to_html(cch::harness::session::SessionStore& store,
+[[nodiscard]] support::Expected<std::string> export_session_to_html(
+        const cch::harness::session::SessionWireSnapshot& snapshot,
         std::string_view output_path,
         const std::filesystem::path& session_file,
         const HtmlExportTheme& theme,

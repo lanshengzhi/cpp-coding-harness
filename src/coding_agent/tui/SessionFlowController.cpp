@@ -529,15 +529,14 @@ void SessionFlowController::show_session_selector() {
 
     const auto weak = weak_from_this();
     auto selector = std::make_shared<SessionSelectorComponent>(
-        hooks_.live_theme(),
-        keybindings_->get(),
-        current_loader,
-        all_loader,
-        session->session_path(),
-        [weak](std::string session_path) {
-            if (const auto self = weak.lock()) {
-                self->post(
-                    [self, session_path = std::move(session_path)]() mutable {
+            hooks_.live_theme(),
+            keybindings_->get(),
+            current_loader,
+            all_loader,
+            session->session_path(),
+            [weak](std::string session_path) {
+                if (const auto self = weak.lock()) {
+                    self->post([self, session_path = std::move(session_path)]() mutable {
                         self->presenter_->restore_prompt_slot();
                         self->spawn(
                             [self, session_path = std::move(session_path)]() mutable
@@ -547,33 +546,44 @@ void SessionFlowController::show_session_selector() {
                             },
                             "Native TUI session resume flow failed");
                     });
-            }
-        },
-        [weak] {
-            if (const auto self = weak.lock()) {
-                self->post([self] { self->presenter_->restore_prompt_slot(); });
-            }
-        },
-        [weak] {
-            if (const auto self = weak.lock();
-                self && self->hooks_.request_exit != nullptr) {
-                self->hooks_.request_exit();
-            }
-        },
-        [weak](std::string session_path, std::string name) -> support::ExpectedVoid {
-            if (weak.expired()) {
-                return std::unexpected(support::make_error(
-                    support::ErrorCode::Cancelled,
-                    "Session selector is no longer active"));
-            }
-            auto opened = harness::session::SessionStore::open_existing(
-                std::filesystem::path{session_path});
-            if (!opened) return std::unexpected(opened.error());
-            return opened->append_session_info(std::nullopt, name);
-        },
-        [weak] {
-            if (const auto self = weak.lock()) self->presenter_->request_render();
-        });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock()) {
+                    self->post([self] { self->presenter_->restore_prompt_slot(); });
+                }
+            },
+            [weak] {
+                if (const auto self = weak.lock(); self && self->hooks_.request_exit != nullptr) {
+                    self->hooks_.request_exit();
+                }
+            },
+            [weak](std::string session_path, std::string name) -> support::ExpectedVoid {
+                const auto self = weak.lock();
+                if (!self || !self->is_live()) {
+                    return std::unexpected(
+                            support::make_error(support::ErrorCode::Cancelled, "Session selector is no longer active"));
+                }
+                auto* session = self->current_session();
+                if (session != nullptr) {
+                    const auto live_path = session->session_path();
+                    std::error_code error;
+                    if (live_path &&
+                            (live_path->lexically_normal() == std::filesystem::path{session_path}.lexically_normal() ||
+                                    std::filesystem::equivalent(*live_path, session_path, error))) {
+                        auto renamed = session->set_session_name(std::move(name));
+                        if (!renamed) return std::unexpected(renamed.error());
+                        return {};
+                    }
+                }
+                // A foreign selector row has no live Agent Session in this host.
+                auto opened = harness::session::SessionStore::open_existing(std::filesystem::path{session_path});
+                if (!opened) return std::unexpected(opened.error());
+                return opened->append_session_info(std::nullopt, name);
+            },
+            [weak] {
+                if (const auto self = weak.lock()) self->presenter_->request_render();
+            });
     presenter_->replace_prompt_slot(std::move(selector));
 }
 

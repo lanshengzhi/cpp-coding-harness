@@ -17,6 +17,7 @@
 #include "coding_agent/ProjectResourceLoader.hpp"
 #include "coding_agent/runtime/AgentSessionInteractiveAccess.hpp"
 #include "coding_agent/runtime/UserBashOutputAccumulator.hpp"
+#include "coding_agent/session/TranscriptExport.hpp"
 
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/redirect_error.hpp>
@@ -1535,6 +1536,24 @@ runtime::McpSessionManager* detail::AgentSessionInteractiveAccess::mcp_manager(A
         return nullptr;
     }
     return session.impl_->services_.mcp_manager.get();
+}
+
+support::Expected<harness::session::SessionWireSnapshot> detail::AgentSessionInteractiveAccess::export_wire_snapshot(
+        const AgentSession& session) {
+    if (!session.is_open() || !session.impl_->session_.store) {
+        return std::unexpected(support::make_error(support::ErrorCode::Session, "session is closed"));
+    }
+    return session.impl_->session_.store->export_wire_snapshot();
+}
+
+support::Expected<std::string> detail::AgentSessionInteractiveAccess::export_transcript(
+        const AgentSession& session, std::string destination) {
+    if (!session.is_open() || !session.impl_->session_.store) {
+        return std::unexpected(support::make_error(support::ErrorCode::Session, "session is closed"));
+    }
+    const auto& store = *session.impl_->session_.store;
+    auto handler = harness::transcript_export_handler(store.metadata(), store.get_branch(), std::move(destination));
+    return handler({});
 }
 
 std::vector<ai::Tool> detail::AgentSessionInteractiveAccess::active_tool_definitions(const AgentSession& session) {

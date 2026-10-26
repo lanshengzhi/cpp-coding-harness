@@ -13,12 +13,14 @@
 #include "coding_agent/tui/InteractiveMode.hpp"
 #include "coding_agent/tui/InteractiveSessionRun.hpp"
 #include "support/ModelsFixture.hpp"
+#include "support/ImageFixture.hpp"
 #include "support/PumpUntil.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/RuntimeLoopDriver.hpp"
 #include "support/TempWorkspace.hpp"
 
 #include <cch/tui/VirtualTerminal.hpp>
+#include "support/Json.hpp"
 
 #include <boost/asio/co_spawn.hpp>
 #include <boost/asio/io_context.hpp>
@@ -60,12 +62,16 @@ struct Fixture {
     std::optional<tests::RuntimeLoopDriver> runtime_driver;
     std::unique_ptr<coding_agent::AgentSession> session;
 
-    void create_session() {
+    void create_session(bool persist = true) {
         tests::ModelsSessionOptions options;
         options.session_facts.no_skills = true;
         options.session_facts.no_prompt_templates = true;
         // A persisted session: the export lane requires the session file.
-        options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{.path = session_path};
+        if (persist) {
+            options.session_target = coding_agent::ExplicitOpenOrCreateSessionTarget{.path = session_path};
+        } else {
+            options.session_target = coding_agent::InMemorySessionTarget{};
+        }
         options.workspace = workspace.path();
         options.request_model = tests::scripted_request_model("fake", "fake-model");
         options.execution_runtime_target = runtime.make_target();
@@ -196,6 +202,81 @@ TEST_CASE("/export reads its destination through pi's getPathCommandArgument",
     std::filesystem::remove(destination, error);
     REQUIRE_FALSE(error);
 
+    finish_interactive(running);
+}
+
+TEST_CASE("/export preserves the live branch in JSONL and HTML after tree navigation",
+        "[coding_agent][tui][export][e2e][issue1072][spec]") {
+    Fixture fixture;
+    fixture.create_session();
+    Running running;
+    start_interactive(fixture, running);
+    REQUIRE(running.terminal.inject_input("first branch\r"));
+    REQUIRE(wait_for_text(running, "fake: first branch"));
+    REQUIRE(tests::pump_until(running.io, [&fixture] { return !fixture.session->is_busy(); }));
+    const auto first = fixture.session->session_tree();
+    REQUIRE(first);
+    REQUIRE(running.terminal.inject_input("later branch\r"));
+    REQUIRE(wait_for_text(running, "fake: later branch"));
+    REQUIRE(tests::pump_until(running.io, [&fixture] { return !fixture.session->is_busy(); }));
+    const auto disk_before = read_file(fixture.session_path);
+    REQUIRE(fixture.session->navigate_tree(first->leaf_id));
+    CHECK(read_file(fixture.session_path) == disk_before);
+
+    const auto destination = (fixture.workspace.path() / "live.jsonl").string();
+    REQUIRE(running.terminal.inject_input("/export " + destination + "\r\r"));
+    REQUIRE(wait_for_text(running, "Session exported to: " + destination));
+    const auto transcript = read_file(destination);
+    CHECK(transcript.find("first branch") != std::string::npos);
+    CHECK(transcript.find("later branch") == std::string::npos);
+
+    const auto html_destination = (fixture.workspace.path() / "live.html").string();
+    REQUIRE(running.terminal.inject_input("/export " + html_destination + "\r\r"));
+    REQUIRE(wait_for_text(running, "Session exported to: " + html_destination));
+    const auto html = read_file(html_destination);
+    const std::string marker = R"(<script id="session-data" type="application/json">)";
+    const auto begin = html.find(marker);
+    REQUIRE(begin != std::string::npos);
+    const auto end = html.find("</script>", begin + marker.size());
+    REQUIRE(end != std::string::npos);
+    const auto decoded = tests::bytes_as_string(
+            tests::decode_base64(std::string_view{html}.substr(begin + marker.size(), end - begin - marker.size())));
+    const auto data = support::read_json(decoded);
+    REQUIRE(data);
+    CHECK(data->get_object().at("leafId").get<std::string>() == first->leaf_id);
+    CHECK(decoded.find("first branch") != std::string::npos);
+    CHECK(decoded.find("later branch") != std::string::npos);
+    CHECK(read_file(fixture.session_path) == disk_before);
+    const auto after = fixture.session->session_tree();
+    REQUIRE(after);
+    CHECK(after->leaf_id == first->leaf_id);
+    finish_interactive(running);
+}
+
+TEST_CASE("/export rejects a session whose file has not been published",
+        "[coding_agent][tui][export][e2e][issue1072][spec]") {
+    Fixture fixture;
+    fixture.create_session();
+    Running running;
+    start_interactive(fixture, running);
+    const auto destination = (fixture.workspace.path() / "unpublished.jsonl").string();
+    REQUIRE(running.terminal.inject_input("/export " + destination + "\r\r"));
+    REQUIRE(wait_for_text(running, "session file does not exist"));
+    CHECK_FALSE(std::filesystem::exists(destination));
+    CHECK_FALSE(std::filesystem::exists(fixture.session_path));
+    finish_interactive(running);
+}
+
+TEST_CASE("/export keeps the in-memory session boundary", "[coding_agent][tui][export][e2e][issue1072][spec]") {
+    Fixture fixture;
+    fixture.create_session(false);
+    Running running;
+    start_interactive(fixture, running);
+    const auto destination = (fixture.workspace.path() / "memory.html").string();
+    REQUIRE(running.terminal.inject_input("/export " + destination + "\r\r"));
+    REQUIRE(wait_for_text(running, "Cannot export an in-memory session"));
+    CHECK_FALSE(std::filesystem::exists(destination));
+    CHECK_FALSE(fixture.session->session_path());
     finish_interactive(running);
 }
 

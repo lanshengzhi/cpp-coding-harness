@@ -775,13 +775,13 @@
         "captures": [
           "fixtures/pi-v1.3.0/audit-1048/session-tool-restore.json: resume without modifiers restores the recorded order and does not rewrite the transcript"
         ],
-        "comparison": "Consumer trace plus the existing session/TUI selections; no frozen capture covers the second-writer case today.",
-        "missing": "Static consumer trace only; a live-observer regression test is the acceptance case."
+        "comparison": "#1072 drives the Native TUI selector and /export through VirtualTerminal, observing the live tree, Projection Stream, JSONL branch and decoded HTML leaf; see 1072-live-session-consumers.md.",
+        "missing": "The prefactor is implemented; composite capability verification remains unverified because frozen pi's selector callback still opens another manager and no whole-row receipt is claimed."
       },
       "coverage": [
         "cch_coding_agent:Session:consumers"
       ],
-      "relatedIssues": [],
+      "relatedIssues": ["#1072"],
       "boundaries": []
     },
     {

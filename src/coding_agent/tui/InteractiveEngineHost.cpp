@@ -19,10 +19,7 @@
 #include "coding_agent/tui/SettingsFlowController.hpp"
 #include "coding_agent/tui/SharedKeybindings.hpp"
 #include "coding_agent/tui/SlashCommandEffects.hpp"
-#include "coding_agent/session/TranscriptExport.hpp"
 #include "support/AsyncResultBridge.hpp"
-
-#include <cch/coding_agent/session/SessionStore.hpp>
 
 #include <cctype>
 #include <csignal>
@@ -356,8 +353,10 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
             return std::unexpected(
                     support::make_error(support::ErrorCode::Session, "Cannot export an in-memory session"));
         }
-        auto store = harness::session::SessionStore::open_existing(*session_path);
-        if (!store) return std::unexpected(store.error());
+        std::error_code path_error;
+        if (!std::filesystem::exists(*session_path, path_error)) {
+            return std::unexpected(support::make_error(support::ErrorCode::Session, "session file does not exist"));
+        }
         // pi `handleExportCommand` reads the destination through
         // `getPathCommandArgument`, so a quoted path keeps its spaces and
         // trailing tokens are ignored. A `.jsonl` destination takes the JSONL
@@ -366,8 +365,7 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
         // destination.
         const auto destination = path_command_argument(invocation.argument);
         if (destination.has_value() && destination->ends_with(".jsonl")) {
-            auto handler = harness::transcript_export_handler(store->metadata(), store->get_branch(), *destination);
-            auto exported = handler({});
+            auto exported = detail::AgentSessionInteractiveAccess::export_transcript(*session_, *destination);
             if (!exported) return std::unexpected(exported.error());
             if (view_ != nullptr) {
                 // pi `handleExportCommand` prints the same status line for
@@ -391,8 +389,10 @@ support::ExpectedVoid InteractiveEngine::execute_immediate_slash_command(const S
             extras.system_prompt = system_prompt;
         }
         extras.tools = detail::AgentSessionInteractiveAccess::active_tool_definitions(*session_);
-        auto exported =
-                tui::export_session_to_html(*store, destination.value_or(std::string{}), *session_path, *theme, extras);
+        auto snapshot = detail::AgentSessionInteractiveAccess::export_wire_snapshot(*session_);
+        if (!snapshot) return std::unexpected(snapshot.error());
+        auto exported = tui::export_session_to_html(
+                *snapshot, destination.value_or(std::string{}), *session_path, *theme, extras);
         if (!exported) return std::unexpected(exported.error());
         if (view_ != nullptr) {
             view_->append_status_message(std::format("Session exported to: {}", *exported));

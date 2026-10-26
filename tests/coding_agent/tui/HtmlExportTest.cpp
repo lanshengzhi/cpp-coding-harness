@@ -246,8 +246,10 @@ TEST_CASE("HTML export SESSION_DATA decodes to pi's sessionData shape with wire-
     const auto leaf = store.leaf_id();
     REQUIRE_FALSE(leaf.empty());
 
+    const auto snapshot = store.export_wire_snapshot();
+    REQUIRE(snapshot);
     const auto exported = catui::export_session_to_html(
-            store, (workspace.path() / "out.html").string(), session_path, builtin_dark_export_theme(), {});
+            *snapshot, (workspace.path() / "out.html").string(), session_path, builtin_dark_export_theme(), {});
     REQUIRE(exported.has_value());
 
     const auto html = read_file(*exported);
@@ -284,8 +286,10 @@ TEST_CASE("HTML export SESSION_DATA carries the optional pi AgentState members w
     catui::HtmlExportExtras extras;
     extras.system_prompt = "You are a test assistant.";
     extras.tools = {ai::Tool{.name = "read_file", .description = "Read a file."}};
+    const auto snapshot = store.export_wire_snapshot();
+    REQUIRE(snapshot);
     const auto exported = catui::export_session_to_html(
-            store, (workspace.path() / "out.html").string(), session_path, builtin_dark_export_theme(), extras);
+            *snapshot, (workspace.path() / "out.html").string(), session_path, builtin_dark_export_theme(), extras);
     REQUIRE(exported.has_value());
     const auto decoded = decode_base64(session_data_payload(read_file(*exported)));
     const auto data = support::read_json(decoded);
@@ -313,7 +317,9 @@ TEST_CASE("HTML export default output name is relative to the working directory"
     // a relative path); the C++ binary's identity is "pike". The default
     // name collides if the working directory already holds one, so clean up
     // after the assertion.
-    const auto exported = catui::export_session_to_html(store, "", session_path, builtin_dark_export_theme(), {});
+    const auto snapshot = store.export_wire_snapshot();
+    REQUIRE(snapshot);
+    const auto exported = catui::export_session_to_html(*snapshot, "", session_path, builtin_dark_export_theme(), {});
     REQUIRE(exported.has_value());
     CHECK(*exported == "pike-session-session-abc123.html");
     REQUIRE(std::filesystem::exists(*exported));

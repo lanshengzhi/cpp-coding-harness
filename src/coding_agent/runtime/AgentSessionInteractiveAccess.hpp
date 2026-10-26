@@ -2,6 +2,7 @@
 
 #include "coding_agent/AgentSession.hpp"
 #include <cch/ai/Tool.hpp>
+#include <cch/coding_agent/session/SessionStore.hpp>
 #include <cch/support/Error.hpp>
 #include "coding_agent/runtime/McpSessionManager.hpp"
 #include "coding_agent/runtime/UserBash.hpp"
@@ -29,6 +30,12 @@ public:
     /// Whether the session's project scope is trusted (pi
     /// `settingsManager.isProjectTrusted()`).
     [[nodiscard]] static bool is_project_trusted(const AgentSession& session);
+
+    /// Export values come from the live store; no writable store escapes.
+    [[nodiscard]] static support::Expected<harness::session::SessionWireSnapshot> export_wire_snapshot(
+            const AgentSession& session);
+    [[nodiscard]] static support::Expected<std::string> export_transcript(
+            const AgentSession& session, std::string destination);
 
     /// pi `AgentState.tools` for `/export`'s HTML lane: the active tools'
     /// definitions (name, description, parameters) in active-tool order.
