@@ -100,11 +100,15 @@ private:
 /// Shared state of one registered wait: the completion and the atomic
 /// claim that makes the resolve, reject-all, and cancellation paths meet
 /// exactly once. Waiter nodes stay alive through their shared state, so a
-/// cancellation racing a resolution never touches freed memory.
+/// cancellation racing a resolution never touches freed memory. The outcome
+/// claim uses the default seq_cst ordering: every claimant already
+/// serializes on the registry mutex or holds the waiter through the waiter
+/// list's shared ownership, so no weaker ordering (nor a separate
+/// justification at each site) is needed.
 struct Submission::Registry::Waiter {
     std::atomic<unsigned> outcome{0}; ///< 0 pending, 1 resolved, 2 cancelled
     std::optional<support::AsyncCompletion<SettledSubmission, support::Error>> completion{};
-    std::unique_ptr<std::stop_callback<std::function<void()>>> cancellation{};
+    std::unique_ptr<std::stop_callback<std::move_only_function<void()>>> cancellation{};
 };
 
 Submission::Registry::Registry(Session& session, Storage& storage) : session_(session), storage_(storage) {}
@@ -132,7 +136,7 @@ void Submission::Registry::observe(const CommitPublication& publication) {
                 continue;
             }
             for (const std::shared_ptr<Waiter>& waiter : bucket->second) {
-                if (waiter->outcome.exchange(1, std::memory_order_acq_rel) == 0) {
+                if (waiter->outcome.exchange(1) == 0) {
                     resolved.emplace_back(waiter, settled);
                 }
             }
@@ -154,7 +158,7 @@ void Submission::Registry::reject_all(const support::Error& error) {
         wait_error_ = error;
         for (auto& [_, bucket] : waiters_) {
             for (const std::shared_ptr<Waiter>& waiter : bucket) {
-                if (waiter->outcome.exchange(1, std::memory_order_acq_rel) == 0) {
+                if (waiter->outcome.exchange(1) == 0) {
                     rejected.push_back(waiter);
                 }
             }
@@ -220,17 +224,26 @@ support::AsyncResult<SettledSubmission> Submission::Registry::wait(SubmissionId 
                 // Arm the cancellation outside the lock. The callback only
                 // touches the shared waiter state (one claim wins), so it
                 // never needs the registry mutex; a stop that raced the
-                // registration fires it immediately.
-                waiter->cancellation = std::make_unique<std::stop_callback<std::function<void()>>>(stop, [waiter] {
-                    if (waiter->outcome.exchange(2, std::memory_order_acq_rel) != 0) {
-                        return;
-                    }
-                    auto completion = std::move(waiter->completion);
-                    if (completion.has_value()) {
-                        (*completion)(
-                                std::unexpected(support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
-                    }
-                });
+                // registration fires it immediately. It captures the waiter
+                // weakly: a strong capture would cycle with the stop_callback
+                // the waiter owns and leak the node after its bucket is
+                // erased, so a later fire on an already-claimed (destroyed)
+                // waiter locks to nothing and skips.
+                waiter->cancellation = std::make_unique<std::stop_callback<std::move_only_function<void()>>>(
+                        stop, [weak = std::weak_ptr<Waiter>{waiter}] {
+                            const std::shared_ptr<Waiter> waiter = weak.lock();
+                            if (waiter == nullptr) {
+                                return;
+                            }
+                            if (waiter->outcome.exchange(2) != 0) {
+                                return;
+                            }
+                            auto completion = std::move(waiter->completion);
+                            if (completion.has_value()) {
+                                (*completion)(std::unexpected(
+                                        support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
+                            }
+                        });
             }}};
 }
 
@@ -238,23 +251,32 @@ support::AsyncResult<std::string> Submission::Registry::abort_submission(
         SubmissionId id, std::optional<ConversationId> conversation_id) {
     // Withdraw a queued submission and remove its inbox item; placed inputs
     // and settled submissions are only reported (frozen pi `Submissions.abort`).
-    auto submission = storage_.submission(id);
-    if (!submission) {
-        return support::AsyncResult<std::string>{std::unexpected(submission.error())};
-    }
-    if (!submission->has_value() ||
-            (conversation_id.has_value() && (**submission).conversation_id != *conversation_id)) {
-        return support::AsyncResult<std::string>{std::string{"not_found"}};
-    }
-    const SubmissionRecord record = **submission;
-    if (record.status == "queued") {
-        auto result = std::make_shared<std::string>();
-        return support::AsyncResult<std::string>{support::AsyncProducer<std::string, support::Error>{
-                [this, id, record, result](
-                        support::AsyncCompletion<std::string, support::Error> done) mutable noexcept {
-                    session_.commit([id, conversation = record.conversation_id, result](
-                                            Transaction& tx) -> support::ExpectedVoid {
-                                auto inbox = tx.doc(inbox_document(), DocumentAddress{.conversation_id = conversation});
+    // The read, the decision, and the settle/remove share one Session commit:
+    // an interleaved boundary placement therefore cannot slip between the
+    // read and the write to regress a placed record or misreport a settled one.
+    auto result = std::make_shared<std::string>();
+    return support::AsyncResult<std::string>{support::AsyncProducer<std::string, support::Error>{
+            [this, id, conversation_id, result](
+                    support::AsyncCompletion<std::string, support::Error> done) mutable noexcept {
+                session_.commit([id, conversation_id, result](Transaction& tx) -> support::ExpectedVoid {
+                            auto record = tx.submission(id);
+                            if (!record) {
+                                return std::unexpected(record.error());
+                            }
+                            if (!record->has_value() ||
+                                    (conversation_id.has_value() && (**record).conversation_id != *conversation_id)) {
+                                *result = "not_found";
+                                return {};
+                            }
+                            const SubmissionRecord& current = **record;
+                            if (current.status == "queued") {
+                                auto settled = tx.settle_submission(id,
+                                        SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+                                if (!settled) {
+                                    return std::unexpected(settled.error());
+                                }
+                                auto inbox = tx.doc(
+                                        inbox_document(), DocumentAddress{.conversation_id = current.conversation_id});
                                 if (!inbox) {
                                     return std::unexpected(inbox.error());
                                 }
@@ -262,27 +284,20 @@ support::AsyncResult<std::string> Submission::Registry::abort_submission(
                                 if (!removed) {
                                     return std::unexpected(removed.error());
                                 }
-                                auto settled = tx.settle_submission(id,
-                                        SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
-                                if (!settled) {
-                                    return std::unexpected(settled.error());
-                                }
                                 *result = "aborted";
                                 return {};
-                            })
-                            .start([done = std::move(done), result](support::ExpectedVoid outcome) mutable noexcept {
-                                if (!outcome) {
-                                    done(std::unexpected(outcome.error()));
-                                } else {
-                                    done(std::move(*result));
-                                }
-                            });
-                }}};
-    }
-    if (record.status == "placed") {
-        return support::AsyncResult<std::string>{std::string{"already_placed"}};
-    }
-    return support::AsyncResult<std::string>{std::string{"settled"}};
+                            }
+                            *result = current.status == "placed" ? "already_placed" : "settled";
+                            return {};
+                        })
+                        .start([done = std::move(done), result](support::ExpectedVoid outcome) mutable noexcept {
+                            if (!outcome) {
+                                done(std::unexpected(outcome.error()));
+                            } else {
+                                done(std::move(*result));
+                            }
+                        });
+            }}};
 }
 
 namespace {
@@ -1330,43 +1345,67 @@ support::AsyncResult<void> Harness::abort_conversation(ConversationId conversati
     // the conversation is idle again.
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
             [this, conversation_id](support::AsyncCompletion<void, support::Error> done) mutable noexcept {
-                auto run = committed_live_run(*impl_->storage, conversation_id);
-                if (!run) {
-                    done(std::unexpected(run.error()));
-                    return;
-                }
-                std::move(impl_->session->commit([conversation_id](Transaction& tx) -> support::ExpectedVoid {
-                    auto inbox = tx.doc(inbox_document(), DocumentAddress{.conversation_id = conversation_id});
-                    if (!inbox) {
-                        return std::unexpected(inbox.error());
-                    }
-                    return withdraw_queued_inputs(tx, *inbox);
-                }))
-                        .start([this, run = std::move(*run), done = std::move(done)](
-                                       support::ExpectedVoid withdrawn) mutable noexcept {
-                            if (!withdrawn) {
-                                done(std::unexpected(withdrawn.error()));
-                                return;
-                            }
-                            if (!run.has_value()) {
-                                done(support::ExpectedVoid{});
-                                return;
-                            }
-                            std::move(abort_task(run->task))
-                                    .start([this, task = run->task, done = std::move(done)](
-                                                   support::Expected<std::string> marked) mutable noexcept {
-                                        if (!marked) {
-                                            done(std::unexpected(marked.error()));
-                                            return;
-                                        }
-                                        std::move(wait_for_task(task))
-                                                .start([done = std::move(done)](
-                                                               support::Expected<TaskRecord>) mutable noexcept {
-                                                    done(support::ExpectedVoid{});
-                                                });
-                                    });
-                        });
+                abort_conversation_pass(conversation_id, std::move(done));
             }}};
+}
+
+void Harness::abort_conversation_pass(
+        ConversationId conversation_id, support::AsyncCompletion<void, support::Error> done) {
+    // One pass: the staged live-run read and the queued-input withdrawal share
+    // one Session commit, so a run rollover cannot start a new run between the
+    // read and the withdrawal (frozen pi reads the live scopes inside the same
+    // commit that marks the aborts). After the marked run's abort settles, the
+    // loop re-reads: a natural completion that started a follow-up run before
+    // the abort mark landed is aborted by the next pass, so the call resolves
+    // only once the conversation is actually idle.
+    const auto run = std::make_shared<std::optional<LiveRunState>>();
+    std::move(impl_->session->commit([conversation_id, run](Transaction& tx) -> support::ExpectedVoid {
+        auto inbox = tx.doc(inbox_document(), DocumentAddress{.conversation_id = conversation_id});
+        if (!inbox) {
+            return std::unexpected(inbox.error());
+        }
+        auto withdrawn = withdraw_queued_inputs(tx, *inbox);
+        if (!withdrawn) {
+            return std::unexpected(withdrawn.error());
+        }
+        auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = conversation_id});
+        if (!live) {
+            return std::unexpected(live.error());
+        }
+        auto staged = staged_live_run(*live);
+        if (!staged) {
+            return std::unexpected(staged.error());
+        }
+        *run = std::move(*staged);
+        return {};
+    })).start([this, conversation_id, run, done = std::move(done)](support::ExpectedVoid withdrawn) mutable noexcept {
+        if (!withdrawn) {
+            done(std::unexpected(withdrawn.error()));
+            return;
+        }
+        if (!run->has_value()) {
+            done(support::ExpectedVoid{});
+            return;
+        }
+        const TaskId task = (*run)->task;
+        std::move(abort_task(task))
+                .start([this, conversation_id, task, done = std::move(done)](
+                               support::Expected<std::string> marked) mutable noexcept {
+                    if (!marked) {
+                        done(std::unexpected(marked.error()));
+                        return;
+                    }
+                    std::move(wait_for_task(task))
+                            .start([this, conversation_id, done = std::move(done)](
+                                           support::Expected<TaskRecord> result) mutable noexcept {
+                                if (!result) {
+                                    done(std::unexpected(result.error()));
+                                    return;
+                                }
+                                abort_conversation_pass(conversation_id, std::move(done));
+                            });
+                });
+    });
 }
 
 support::AsyncResult<void> Harness::close() {

@@ -110,6 +110,9 @@ private:
 [[nodiscard]] support::Expected<std::optional<LiveRunState>> committed_live_run(
         Storage& storage, ConversationId conversation_id);
 
+/// The live-run marker staged in a live document draft, if any.
+[[nodiscard]] support::Expected<std::optional<LiveRunState>> staged_live_run(chord::Draft& live);
+
 /// Settle every input of the live run and clear the marker, but only when
 /// the marker names `task` (frozen pi `endRun`).
 [[nodiscard]] support::ExpectedVoid end_run(

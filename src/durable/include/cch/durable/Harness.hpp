@@ -103,6 +103,10 @@ public:
 private:
     struct Impl;
     explicit Harness(std::unique_ptr<Impl> impl);
+    /// One abort pass: withdraw queued inputs and read the staged live run in
+    /// one commit, abort the marked run, then re-run until the conversation
+    /// is idle (frozen pi `Conversation.abort`).
+    void abort_conversation_pass(ConversationId conversation_id, support::AsyncCompletion<void, support::Error> done);
     std::unique_ptr<Impl> impl_;
 };
 

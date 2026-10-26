@@ -17,6 +17,8 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
+#include <type_traits>
+#include <variant>
 #include <vector>
 
 namespace cch::tests::durable {
@@ -208,6 +210,134 @@ FrozenScenario frozen_1055(std::string_view name) {
     auto scenario = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json", name);
     REQUIRE(scenario.has_value());
     return *scenario;
+}
+
+FrozenScenario frozen_reset(std::string_view name) {
+    auto scenario = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1080/reset-writes.json", name);
+    REQUIRE(scenario.has_value());
+    return *scenario;
+}
+
+/// The workflow's inbox document definition, used by tests to stage malformed
+/// persisted items the production readers must reject with typed errors.
+DocumentDefinition test_inbox_document() {
+    return define_document(std::string{"pi.inbox:v1"}, std::move_only_function<chord::Json()>{[] {
+        return chord::Json{chord::Json::Object{{"items", chord::Json{chord::Json::Array{}}}}};
+    }});
+}
+
+chord::Path inbox_items_member() { return chord::Path{chord::path_key("items")}; }
+
+/// Replace the persisted inbox items with one staged document write.
+Outcome<void> set_inbox_items(Harness& harness, ConversationId root, chord::Json::Array items) {
+    return consume(harness.commit([root, items = std::move(items)](Transaction& tx) mutable -> support::Expected<void> {
+        auto inbox = tx.doc(test_inbox_document(), DocumentAddress{.conversation_id = root});
+        if (!inbox) {
+            return std::unexpected(std::move(inbox.error()));
+        }
+        if (auto set = inbox->set(inbox_items_member(), chord::Json{std::move(items)}); !set) {
+            return std::unexpected(std::move(set.error()));
+        }
+        return {};
+    }));
+}
+
+/// Whether a persisted inbox item is a write whose entry pins `head: "self"`.
+bool has_self_head(const chord::Json& item) {
+    const auto* object = item.as_object();
+    if (object == nullptr) return false;
+    const auto entry = object->find("entry");
+    if (entry == object->end()) return false;
+    const auto* draft = entry->second.as_object();
+    if (draft == nullptr) return false;
+    const auto head = draft->find("head");
+    return head != draft->end() && head->second.as_string() != nullptr && *head->second.as_string() == "self";
+}
+
+/// Role:text projection of one request message, matching the frozen
+/// `requestMessages` helper (the system baseline text is elided).
+std::string message_projection(const ai::MessageVariant& message) {
+    return std::visit(
+            [](const auto& value) -> std::string {
+                using T = std::decay_t<decltype(value)>;
+                if constexpr (std::is_same_v<T, ai::SystemMessage>) {
+                    return "system:";
+                } else if constexpr (std::is_same_v<T, ai::UserMessage>) {
+                    std::string text;
+                    if (const auto* plain = std::get_if<std::string>(&value.content)) {
+                        text = *plain;
+                    } else {
+                        for (const ai::Content& block : std::get<std::vector<ai::Content>>(value.content)) {
+                            if (const auto* content = std::get_if<ai::TextContent>(&block)) text += content->text;
+                        }
+                    }
+                    return "user:" + std::move(text);
+                } else if constexpr (std::is_same_v<T, ai::AssistantMessage>) {
+                    std::string text;
+                    for (const ai::AssistantContent& block : value.content) {
+                        if (const auto* content = std::get_if<ai::TextContent>(&block)) text += content->text;
+                    }
+                    return "assistant:" + std::move(text);
+                } else {
+                    return std::string{"message"};
+                }
+            },
+            message);
+}
+
+/// The frozen-normalized projection of one model request: the elided system
+/// marker first, then each carried message as `role:text`.
+std::vector<std::string> request_projection(const ai::AiContext& context) {
+    std::vector<std::string> projection;
+    if (context.system_prompt.has_value()) projection.emplace_back("system:");
+    for (const ai::MessageVariant& message : context.messages) {
+        projection.push_back(message_projection(message));
+    }
+    return projection;
+}
+
+/// The registered `hold` tool and its section, shared by the reset scenarios.
+Extension hold_tool_extension(std::binary_semaphore& entered, std::binary_semaphore& release_gate) {
+    Extension extension{.name = "held-tool"};
+    extension.tools.push_back(
+            ToolRegistration{.declaration = ai::Tool{.name = "hold", .description = "Waits for the test"},
+                    .execute = [&entered, &release_gate](support::JsonValue, std::stop_token) {
+                        entered.release();
+                        release_gate.acquire();
+                        return support::AsyncResult<std::vector<ai::Content>>{
+                                std::vector<ai::Content>{ai::text_content("held")}};
+                    }});
+    extension.sections.push_back(PromptSection{.key = "audit-note", .text = "reset context under audit"});
+    return extension;
+}
+
+/// One model request that only emits a `hold` tool call (frozen faux first response).
+ai::ModelStream tool_call_stream() {
+    return ai::ModelStream{ai::ModelStreamProducer{
+            [](ai::AssistantEventSink sink, ai::ModelStreamCompletion completion) mutable noexcept {
+                auto message = ai::assistant_text_message("");
+                message.content = {ai::ToolCallContent{
+                        .id = "c1", .name = "hold", .arguments = support::JsonValue{support::JsonValue::object_t{}}}};
+                message.stop_reason = ai::AssistantStopReason::ToolUse;
+                auto delivered = sink(ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
+                if (!delivered)
+                    completion(std::unexpected(delivered.error()));
+                else
+                    completion(std::move(message));
+            }}};
+}
+
+/// One model request that answers with `text` (frozen faux answer response).
+ai::ModelStream answer_stream(std::string text) {
+    return ai::ModelStream{ai::ModelStreamProducer{[text = std::move(text)](ai::AssistantEventSink sink,
+                                                           ai::ModelStreamCompletion completion) mutable noexcept {
+        auto message = ai::assistant_text_message(std::move(text));
+        auto delivered = sink(ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
+        if (!delivered)
+            completion(std::unexpected(delivered.error()));
+        else
+            completion(std::move(message));
+    }}};
 }
 
 } // namespace
@@ -1229,6 +1359,706 @@ TEST_CASE("conversation abort withdraws queued inputs, keeps queued writes and s
     CHECK((*live_val)->as_object()->find("run") == (*live_val)->as_object()->end());
 
     held.release();
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+// ===========================================================================
+// audit-1080 reset-boundary observations and review-fix regressions
+// ===========================================================================
+
+TEST_CASE("a pinned-head write at the entry before the reset head settles unanswered and stale while one at the reset "
+          "head is done",
+        "[durable][workflow][issue1080]") {
+    const auto frozen = frozen_reset("a pinned-head write at the entry before the reset head settles unanswered and "
+                                     "stale while one at the reset head is done");
+    const auto& expected = frozen.expected().get_object();
+
+    MemoryStorage storage;
+    HarnessOptions options;
+    options.stream = [](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        FAIL("stream must not be called for idle writes");
+        return ai::ModelStream{ai::ModelStreamProducer{[](auto, auto) noexcept {}}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    // The entry before the reset head: an idle display-only write.
+    auto old = consume(harness->submit(root.value(), write_submission("note")));
+    REQUIRE(old.has_value());
+    auto old_settled = consume(old.value().wait());
+    REQUIRE(old_settled.has_value());
+    REQUIRE(old_settled.value().entry.has_value());
+    const EntryId old_entry = *old_settled.value().entry;
+
+    // The reset head itself: a head:self write on the idle conversation.
+    auto reset = consume(harness->submit(root.value(),
+            write_submission("pi.reset", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{SelfEntryHead{}})));
+    REQUIRE(reset.has_value());
+    auto reset_settled = consume(reset.value().wait());
+    REQUIRE(reset_settled.has_value());
+    REQUIRE(reset_settled.value().entry.has_value());
+    const EntryId reset_entry = *reset_settled.value().entry;
+    CHECK(old_entry.value < reset_entry.value); // frozen oldBeforeReset
+
+    const auto stored_reset = storage.entry(reset_entry);
+    REQUIRE(stored_reset.has_value());
+    REQUIRE(stored_reset->has_value());
+    CHECK(stored_reset->value().entry.kind == expected.at("resetHead").get_object().at("kind").get_string());
+    REQUIRE(stored_reset->value().entry.head.has_value());
+    CHECK(stored_reset->value().entry.head->value == reset_entry.value); // frozen headEqualsId
+
+    // A write pinned before the reset head is stale.
+    auto stale = consume(harness->submit(root.value(),
+            write_submission("summary", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{old_entry})));
+    REQUIRE(stale.has_value());
+    auto stale_settled = consume(stale.value().wait());
+    REQUIRE(stale_settled.has_value());
+    const auto& stale_expected = expected.at("stale").get_object();
+    CHECK(stale_settled.value().status == stale_expected.at("status").get_string());
+    REQUIRE(stale_settled.value().reason.has_value());
+    CHECK(*stale_settled.value().reason == stale_expected.at("reason").get_string());
+    CHECK_FALSE(stale_settled.value().entry.has_value());
+    CHECK_FALSE(stale_settled.value().answer.has_value());
+
+    // A write pinned at the reset head lands, carrying the reset head.
+    auto fresh = consume(harness->submit(root.value(),
+            write_submission("summary", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{reset_entry})));
+    REQUIRE(fresh.has_value());
+    auto fresh_settled = consume(fresh.value().wait());
+    REQUIRE(fresh_settled.has_value());
+    const auto& fresh_expected = expected.at("fresh").get_object();
+    CHECK(fresh_settled.value().status == fresh_expected.at("status").get_string());
+    CHECK_FALSE(fresh_settled.value().reason.has_value());
+    REQUIRE(fresh_settled.value().entry.has_value());
+    CHECK_FALSE(fresh_settled.value().answer.has_value());
+    const auto stored_fresh = storage.entry(*fresh_settled.value().entry);
+    REQUIRE(stored_fresh.has_value());
+    REQUIRE(stored_fresh->has_value());
+    REQUIRE(stored_fresh->value().entry.head.has_value());
+    CHECK(stored_fresh->value().entry.head->value == reset_entry.value); // frozen freshEntryHead == resetHead.id
+
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    std::ranges::reverse(*entries);
+    CHECK(json_equals(transcript(*entries), *frozen.member("transcript")));
+
+    CHECK(inbox_items(storage, root.value()).empty());
+    CHECK(expected.at("inbox").get_number() == 0);
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a queued head:self reset at the postTools boundary ends the current run unanswered and reset and starts the "
+          "selected queued input in the reset context",
+        "[durable][workflow][issue1080]") {
+    const auto frozen = frozen_reset("a queued head:self reset at the postTools boundary ends the current run "
+                                     "unanswered and reset and starts the selected queued input in the reset context");
+    const auto& expected = frozen.expected().get_object();
+
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release_gate{0};
+    Registry registry;
+    REQUIRE(registry.install(hold_tool_extension(entered, release_gate)).has_value());
+
+    std::atomic<int> turn{0};
+    std::vector<std::vector<std::string>> requests;
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&turn, &requests](ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+        if (turn.fetch_add(1) == 0) {
+            return tool_call_stream();
+        }
+        requests.push_back(request_projection(context));
+        return answer_stream("fresh");
+    };
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    auto first = consume(harness->submit(root.value(), text_input("a")));
+    REQUIRE(first.has_value());
+    REQUIRE(entered.try_acquire_for(std::chrono::seconds(5)));
+
+    auto follow_up = consume(harness->submit(root.value(), text_input("f")));
+    REQUIRE(follow_up.has_value());
+    auto reset = consume(harness->submit(root.value(),
+            write_submission("pi.reset", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{SelfEntryHead{}})));
+    REQUIRE(reset.has_value());
+
+    const auto& queued_expected = expected.at("queued").get_object();
+    auto first_before = consume(first.value().status());
+    auto follow_before = consume(follow_up.value().status());
+    auto reset_before = consume(reset.value().status());
+    REQUIRE(first_before.has_value());
+    REQUIRE(follow_before.has_value());
+    REQUIRE(reset_before.has_value());
+    CHECK(first_before.value().status == queued_expected.at("first").get_string());
+    CHECK(follow_before.value().status == queued_expected.at("followUp").get_string());
+    CHECK(reset_before.value().status == "queued");
+
+    auto items_before = inbox_items(storage, root.value());
+    const auto& inbox_expected = queued_expected.at("inbox").get_array();
+    REQUIRE(items_before.size() == inbox_expected.size());
+    for (std::size_t i = 0; i < inbox_expected.size(); ++i) {
+        const auto* item = items_before[i].as_object();
+        REQUIRE(item != nullptr);
+        CHECK(item->at("mode") == chord::Json{inbox_expected.at(i).get_object().at("mode").get_string()});
+        CHECK(has_self_head(items_before[i]) == inbox_expected.at(i).get_object().at("isReset").get_boolean());
+    }
+    REQUIRE(inbox_expected.size() == 2);
+    CHECK(items_before[0].as_object()->at("id") == chord::Json{static_cast<double>(follow_up.value().id.value)});
+    CHECK(items_before[1].as_object()->at("id") == chord::Json{static_cast<double>(reset.value().id.value)});
+
+    release_gate.release();
+
+    auto settled_follow_up = consume(follow_up.value().wait());
+    REQUIRE(settled_follow_up.has_value());
+
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    std::ranges::reverse(*entries);
+    CHECK(json_equals(transcript(*entries), *frozen.member("transcript")));
+
+    std::vector<EntryRecord> assistants;
+    const EntryRecord* reset_entry = nullptr;
+    for (const auto& entry : *entries) {
+        if (entry.kind == "pi.assistant") assistants.push_back(entry);
+        if (entry.kind == "pi.reset") reset_entry = &entry;
+    }
+    REQUIRE(assistants.size() == 2);
+    const auto& answers_expected = expected.at("assistantAnswers").get_array();
+    REQUIRE(answers_expected.size() == assistants.size());
+    for (std::size_t i = 0; i < assistants.size(); ++i) {
+        const auto text = text_of(assistants[i]);
+        if (answers_expected.at(i).holds<std::string>()) {
+            REQUIRE(text.has_value());
+            CHECK(*text == answers_expected.at(i).get_string());
+        } else {
+            CHECK_FALSE(text.has_value());
+        }
+    }
+    REQUIRE(reset_entry != nullptr);
+    REQUIRE(reset_entry->head.has_value());
+    CHECK(reset_entry->head->value == reset_entry->id.value); // frozen reset.headEqualsId
+
+    auto first_settled = consume(first.value().status());
+    REQUIRE(first_settled.has_value());
+    const auto& first_expected = expected.at("first").get_object();
+    CHECK(first_settled.value().status == first_expected.at("status").get_string());
+    REQUIRE(first_settled.value().reason.has_value());
+    CHECK(*first_settled.value().reason == first_expected.at("reason").get_string());
+    REQUIRE(first_settled.value().entry.has_value());
+    CHECK_FALSE(first_settled.value().answer.has_value());
+
+    const auto& follow_expected = expected.at("followUp").get_object();
+    CHECK(settled_follow_up.value().status == follow_expected.at("status").get_string());
+    CHECK_FALSE(settled_follow_up.value().reason.has_value());
+    REQUIRE(settled_follow_up.value().answer.has_value());
+    CHECK(settled_follow_up.value().answer->value == assistants[1].id.value); // frozen answerIndex 1
+
+    // The reset run's request carries only its own placed input and the
+    // elided system marker, never the cut run's transcript.
+    REQUIRE(requests.size() == 1);
+    const auto& requests_expected = expected.at("followUpRequests").get_array();
+    REQUIRE(requests_expected.size() == 1);
+    chord::Json::Array observed_request;
+    for (const auto& message : requests[0])
+        observed_request.emplace_back(chord::Json{message});
+    CHECK(json_equals(chord::Json{std::move(observed_request)}, requests_expected.at(0).get_array()));
+    CHECK(turn.load() == static_cast<int>(expected.at("requestCount").get_number()));
+
+    CHECK(inbox_items(storage, root.value()).empty());
+    CHECK(expected.at("inbox").get_number() == 0);
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a display-only write behind a queued reset queues and lands after the reset when the run ends",
+        "[durable][workflow][issue1080]") {
+    const auto frozen = frozen_reset("a display-only write behind a queued reset queues and lands after the reset when "
+                                     "the run ends");
+    const auto& expected = frozen.expected().get_object();
+
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release_gate{0};
+    Registry registry;
+    REQUIRE(registry.install(hold_tool_extension(entered, release_gate)).has_value());
+
+    std::atomic<int> turn{0};
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&turn](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        if (turn.fetch_add(1) == 0) {
+            return tool_call_stream();
+        }
+        FAIL("the run must end at the postTools boundary behind a queued reset");
+        return ai::ModelStream{ai::ModelStreamProducer{[](auto, auto) noexcept {}}};
+    };
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    auto first = consume(harness->submit(root.value(), text_input("a")));
+    REQUIRE(first.has_value());
+    REQUIRE(entered.try_acquire_for(std::chrono::seconds(5)));
+
+    auto reset = consume(harness->submit(root.value(),
+            write_submission("pi.reset", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{SelfEntryHead{}})));
+    REQUIRE(reset.has_value());
+    auto note = consume(harness->submit(root.value(), write_submission("note")));
+    REQUIRE(note.has_value());
+
+    const auto& before_expected = expected.at("before").get_object();
+    auto first_before = consume(first.value().status());
+    auto note_before = consume(note.value().status());
+    REQUIRE(first_before.has_value());
+    REQUIRE(note_before.has_value());
+    CHECK(first_before.value().status == before_expected.at("first").get_string());
+    CHECK(note_before.value().status == before_expected.at("note").get_string());
+
+    auto items_before = inbox_items(storage, root.value());
+    const auto& inbox_expected = before_expected.at("inbox").get_array();
+    REQUIRE(items_before.size() == inbox_expected.size());
+    for (std::size_t i = 0; i < inbox_expected.size(); ++i) {
+        const auto* item = items_before[i].as_object();
+        REQUIRE(item != nullptr);
+        CHECK(item->at("mode") == chord::Json{inbox_expected.at(i).get_object().at("mode").get_string()});
+        CHECK(has_self_head(items_before[i]) == inbox_expected.at(i).get_object().at("isReset").get_boolean());
+    }
+    REQUIRE(inbox_expected.size() == 2);
+    CHECK(items_before[0].as_object()->at("id") == chord::Json{static_cast<double>(reset.value().id.value)});
+    CHECK(items_before[1].as_object()->at("id") == chord::Json{static_cast<double>(note.value().id.value)});
+
+    release_gate.release();
+
+    auto settled_first = consume(first.value().wait());
+    REQUIRE(settled_first.has_value());
+    const auto& first_expected = expected.at("first").get_object();
+    CHECK(settled_first.value().status == first_expected.at("status").get_string());
+    REQUIRE(settled_first.value().reason.has_value());
+    CHECK(*settled_first.value().reason == first_expected.at("reason").get_string());
+    REQUIRE(settled_first.value().entry.has_value());
+    CHECK_FALSE(settled_first.value().answer.has_value());
+
+    auto settled_note = consume(note.value().wait());
+    REQUIRE(settled_note.has_value());
+    const auto& note_expected = expected.at("note").get_object();
+    CHECK(settled_note.value().status == note_expected.at("status").get_string());
+    CHECK_FALSE(settled_note.value().reason.has_value());
+    REQUIRE(settled_note.value().entry.has_value());
+    CHECK_FALSE(settled_note.value().answer.has_value());
+
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    std::ranges::reverse(*entries);
+    CHECK(json_equals(transcript(*entries), *frozen.member("transcript")));
+
+    CHECK(inbox_items(storage, root.value()).empty());
+    CHECK(expected.at("inbox").get_number() == 0);
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a write pinned before a head marker buried behind more than 4096 newer headless entries settles stale",
+        "[durable][workflow][issue1080]") {
+    MemoryStorage storage;
+    HarnessOptions options;
+    options.stream = [](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        FAIL("stream must not be called for pinned writes");
+        return ai::ModelStream{ai::ModelStreamProducer{[](auto, auto) noexcept {}}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    auto old = consume(harness->submit(root.value(), write_submission("note")));
+    REQUIRE(old.has_value());
+    auto old_settled = consume(old.value().wait());
+    REQUIRE(old_settled.has_value());
+    REQUIRE(old_settled.value().entry.has_value());
+    const EntryId old_entry = *old_settled.value().entry;
+
+    auto reset = consume(harness->submit(root.value(),
+            write_submission("pi.reset", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{SelfEntryHead{}})));
+    REQUIRE(reset.has_value());
+    auto reset_settled = consume(reset.value().wait());
+    REQUIRE(reset_settled.has_value());
+    REQUIRE(reset_settled.value().entry.has_value());
+    const EntryId reset_entry = *reset_settled.value().entry;
+    CHECK(old_entry.value < reset_entry.value);
+
+    // Bury the reset head behind more than one fixed 4096-entry scan page of
+    // newer headless entries; the boundary head lookup must grow its page and
+    // still find the marker instead of silently dropping the stale pin.
+    constexpr int kHeadlessEntries = 4096 + 4;
+    auto appended = consume(harness->commit([root_id = root.value()](Transaction& tx) -> support::Expected<void> {
+        for (int i = 0; i < kHeadlessEntries; ++i) {
+            auto entry = tx.append_entry(root_id,
+                    "audit.headless",
+                    chord::Json{chord::Json::Object{}},
+                    std::nullopt,
+                    std::vector<chord::Json>{});
+            if (!entry) {
+                return std::unexpected(std::move(entry.error()));
+            }
+        }
+        return {};
+    }));
+    REQUIRE(appended.has_value());
+
+    auto buried = consume(harness->submit(root.value(),
+            write_submission("summary", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{old_entry})));
+    REQUIRE(buried.has_value());
+    auto buried_settled = consume(buried.value().wait());
+    REQUIRE(buried_settled.has_value());
+    CHECK(buried_settled.value().status == "unanswered");
+    REQUIRE(buried_settled.value().reason.has_value());
+    CHECK(*buried_settled.value().reason == "stale");
+    CHECK_FALSE(buried_settled.value().entry.has_value());
+
+    auto at_head = consume(harness->submit(root.value(),
+            write_submission("summary", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{reset_entry})));
+    REQUIRE(at_head.has_value());
+    auto at_head_settled = consume(at_head.value().wait());
+    REQUIRE(at_head_settled.has_value());
+    CHECK(at_head_settled.value().status == "done");
+    REQUIRE(at_head_settled.value().entry.has_value());
+    const auto stored = storage.entry(*at_head_settled.value().entry);
+    REQUIRE(stored.has_value());
+    REQUIRE(stored->has_value());
+    REQUIRE(stored->value().entry.head.has_value());
+    CHECK(stored->value().entry.head->value == reset_entry.value);
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a malformed persisted inbox item fails admission with a typed validation error",
+        "[durable][workflow][issue1080]") {
+    MemoryStorage storage;
+    std::atomic<int> turn{0};
+    HarnessOptions options;
+    options.stream = [&turn](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        (void)turn.fetch_add(1);
+        return answer_stream("hello");
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    const auto mode_item = [](std::string mode) {
+        return chord::Json{chord::Json::Object{{"mode", chord::Json{std::move(mode)}}}};
+    };
+    const std::vector<std::pair<chord::Json, std::string>> malformed{
+            {chord::Json{42.0}, "An inbox item must be an object"},
+            {mode_item("bogus"), "An inbox item mode must be \"write\", \"steer\" or \"followUp\""},
+            {mode_item("write"), "An inbox item must have a entry"},
+            {mode_item("followUp"), "An inbox item must have a id"},
+    };
+    for (const auto& [item, message] : malformed) {
+        INFO("expected validation: " << message);
+        REQUIRE(set_inbox_items(*harness, root.value(), chord::Json::Array{item}).has_value());
+        auto rejected = consume(harness->submit(root.value(), text_input("trigger")));
+        REQUIRE_FALSE(rejected.has_value());
+        CHECK(rejected.error().code == support::ErrorCode::Validation);
+        CHECK(rejected.error().message == message);
+        // The rejected commit leaves no trace: no submission is created.
+        auto submissions = storage.scan_submissions(100);
+        REQUIRE(submissions.has_value());
+        CHECK(submissions->empty());
+    }
+
+    // The session stays usable once the inbox is repaired.
+    REQUIRE(set_inbox_items(*harness, root.value(), chord::Json::Array{}).has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("hello")));
+    REQUIRE(admitted.has_value());
+    REQUIRE(consume(admitted.value().wait()).has_value());
+    CHECK(turn.load() == 1);
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a malformed persisted inbox item fails conversation abort with a typed validation error",
+        "[durable][workflow][issue1080]") {
+    MemoryStorage storage;
+    std::atomic<int> turn{0};
+    HarnessOptions options;
+    options.stream = [&turn](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        (void)turn.fetch_add(1);
+        return answer_stream("hello");
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    REQUIRE(set_inbox_items(*harness,
+            root.value(),
+            chord::Json::Array{
+                    chord::Json{chord::Json::Object{{"mode", chord::Json{"steer"}}}},
+            })
+                    .has_value());
+    auto aborted = consume(harness->abort_conversation(root.value()));
+    REQUIRE_FALSE(aborted.has_value());
+    CHECK(aborted.error().code == support::ErrorCode::Validation);
+    CHECK(aborted.error().message == "An inbox item must have a id");
+
+    SubmissionId queued_id;
+    // consume keeps queued_id alive through this commit's completion.
+    REQUIRE(consume(
+            harness->commit([conversation = root.value(), &queued_id](Transaction& tx) -> support::ExpectedVoid {
+                auto queued = tx.create_submission(
+                        SubmissionRecord{.conversation_id = conversation, .type = "input", .status = "queued"});
+                if (!queued) return std::unexpected(queued.error());
+                queued_id = queued->id;
+                return {};
+            })).has_value());
+    REQUIRE(set_inbox_items(*harness, root.value(), chord::Json::Array{chord::Json{42.0}}).has_value());
+    auto rejected = consume(harness->abort_submission(queued_id, root.value()));
+    REQUIRE_FALSE(rejected.has_value());
+    CHECK(rejected.error().code == support::ErrorCode::Validation);
+    CHECK(rejected.error().message == "An inbox item must be an object");
+    auto unchanged = storage.submission(queued_id);
+    REQUIRE(unchanged.has_value());
+    REQUIRE(unchanged->has_value());
+    CHECK((**unchanged).status == "queued");
+
+    // The session stays usable once the inbox is repaired.
+    REQUIRE(set_inbox_items(*harness, root.value(), chord::Json::Array{}).has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("hello")));
+    REQUIRE(admitted.has_value());
+    REQUIRE(consume(admitted.value().wait()).has_value());
+    CHECK(turn.load() == 1);
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE(
+        "a submission abort reports already_placed when a boundary places the submission before the abort commit runs",
+        "[durable][workflow][issue1080]") {
+    MemoryStorage storage;
+    HeldStep answer;
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release_gate{0};
+    Registry registry;
+    REQUIRE(registry.install(hold_tool_extension(entered, release_gate)).has_value());
+
+    std::atomic<int> turn{0};
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&turn, &answer](ai::Model, ai::AiContext, ai::SimpleStreamOptions options) {
+        if (turn.fetch_add(1) == 0) {
+            return tool_call_stream();
+        }
+        return answer.step(options.stop_token);
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    auto first = consume(harness->submit(root.value(), text_input("a")));
+    REQUIRE(first.has_value());
+    REQUIRE(entered.try_acquire_for(std::chrono::seconds(5)));
+
+    auto steer = consume(harness->submit(root.value(), text_input("s", WhenBusy::Steer)));
+    REQUIRE(steer.has_value());
+    auto steer_before = consume(steer.value().status());
+    REQUIRE(steer_before.has_value());
+    CHECK(steer_before.value().status == "queued");
+
+    // Construct the operation while queued, then let the real postTools
+    // boundary place it before initiating the abort transaction. Admission
+    // must read the current record on the Session line, not retain the
+    // queued state from operation construction.
+    auto pending_abort = harness->abort_submission(steer.value().id, root.value());
+    release_gate.release();
+    REQUIRE(answer.reached.try_acquire_for(std::chrono::seconds(5)));
+    auto placed = consume(steer.value().status());
+    REQUIRE(placed.has_value());
+    REQUIRE(placed.value().status == "placed");
+
+    auto abort_outcome = consume(std::move(pending_abort));
+    REQUIRE(abort_outcome.has_value());
+    CHECK(abort_outcome.value() == "already_placed");
+    answer.release();
+
+    auto settled_steer = consume(steer.value().wait());
+    REQUIRE(settled_steer.has_value());
+    CHECK(settled_steer.value().status == "done");
+    CHECK(settled_steer.value().answer.has_value());
+
+    auto settled_first = consume(first.value().wait());
+    REQUIRE(settled_first.has_value());
+    CHECK(settled_first.value().status == "done");
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a conversation abort during run rollover settles the follow-up run and leaves the conversation idle",
+        "[durable][workflow][issue1080]") {
+    MemoryStorage storage;
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release_gate{0};
+    Registry registry;
+    REQUIRE(registry.install(hold_tool_extension(entered, release_gate)).has_value());
+
+    std::atomic<int> turn{0};
+    HeldStep second;
+    HeldStep third;
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions s) -> ai::ModelStream {
+        switch (turn.fetch_add(1)) {
+        case 0:
+            return tool_call_stream();
+        case 1:
+            return second.step(s.stop_token);
+        default:
+            return third.step(s.stop_token);
+        }
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    auto first = consume(harness->submit(root.value(), text_input("a")));
+    REQUIRE(first.has_value());
+    REQUIRE(entered.try_acquire_for(std::chrono::seconds(5)));
+
+    // Run one continues past its postTools boundary into a second model
+    // request; the follow-up is queued while that request is in flight, so it
+    // is placed only at run one's final boundary.
+    release_gate.release();
+    REQUIRE(second.reached.try_acquire_for(std::chrono::seconds(5)));
+
+    auto follow_up = consume(harness->submit(root.value(), text_input("f")));
+    REQUIRE(follow_up.has_value());
+    auto queued = consume(follow_up.value().status());
+    REQUIRE(queued.has_value());
+    REQUIRE(queued.value().status == "queued");
+
+    // Run one answers. Its final boundary places the follow-up and starts run
+    // two, whose model request is in flight when the abort arrives: the abort
+    // must catch run two as well, not only the run it read first.
+    second.release();
+    REQUIRE(third.reached.try_acquire_for(std::chrono::seconds(5)));
+    REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
+
+    auto settled_first = consume(first.value().wait());
+    REQUIRE(settled_first.has_value());
+    CHECK(settled_first.value().status == "done");
+    CHECK(settled_first.value().answer.has_value());
+
+    auto settled_follow_up = consume(follow_up.value().wait());
+    REQUIRE(settled_follow_up.has_value());
+    CHECK(settled_follow_up.value().status == "unanswered");
+    REQUIRE(settled_follow_up.value().reason.has_value());
+    CHECK(*settled_follow_up.value().reason == "aborted");
+    // The follow-up was placed at run one's final boundary, so it carries the
+    // entry it was placed at even though run two never answered it.
+    REQUIRE(settled_follow_up.value().entry.has_value());
+
+    auto live_doc = storage.find_document("pi.live:v1", root.value());
+    REQUIRE(live_doc.has_value());
+    REQUIRE(live_doc->has_value());
+    auto live_val = storage.document((*live_doc)->id);
+    REQUIRE(live_val.has_value());
+    REQUIRE(live_val->has_value());
+    CHECK((*live_val)->as_object()->find("run") == (*live_val)->as_object()->end());
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a queued reset placed at admission clears the replay cache of the run it starts",
+        "[durable][workflow][issue1080]") {
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release_gate{0};
+    Registry registry;
+    REQUIRE(registry.install(hold_tool_extension(entered, release_gate)).has_value());
+
+    std::atomic<int> turn{0};
+    std::vector<std::vector<std::string>> requests;
+    HeldStep held;
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&turn, &requests, &held](ai::Model, ai::AiContext context, ai::SimpleStreamOptions s) {
+        if (turn.fetch_add(1) == 0) {
+            return held.step(s.stop_token);
+        }
+        requests.push_back(request_projection(context));
+        return answer_stream("fresh");
+    };
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    auto first = consume(harness->submit(root.value(), text_input("a")));
+    REQUIRE(first.has_value());
+    REQUIRE(held.reached.try_acquire_for(std::chrono::seconds(5)));
+
+    auto reset = consume(harness->submit(root.value(),
+            write_submission("pi.reset", std::nullopt, std::nullopt, std::nullopt, EntryHeadVariant{SelfEntryHead{}})));
+    REQUIRE(reset.has_value());
+    auto reset_before = consume(reset.value().status());
+    REQUIRE(reset_before.has_value());
+    CHECK(reset_before.value().status == "queued");
+
+    // Aborting the conversation keeps the queued write and ends the run
+    // without a boundary; the reset stays queued for the next admission.
+    REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
+    auto first_settled = consume(first.value().status());
+    REQUIRE(first_settled.has_value());
+    CHECK(first_settled.value().status == "unanswered");
+    REQUIRE(first_settled.value().reason.has_value());
+    CHECK(*first_settled.value().reason == "aborted");
+
+    // The new input lands behind the queued reset; admission applies the
+    // final boundary and starts one run in the reset context.
+    auto second = consume(harness->submit(root.value(), text_input("b")));
+    REQUIRE(second.has_value());
+    auto settled_second = consume(second.value().wait());
+    REQUIRE(settled_second.has_value());
+    CHECK(settled_second.value().status == "done");
+    CHECK(settled_second.value().answer.has_value());
+
+    // The reset run's request carries only its own placed input and the
+    // elided system marker, never the aborted run's transcript.
+    REQUIRE(requests.size() == 1);
+    CHECK(requests[0] == std::vector<std::string>{"system:", "user:b"});
+
+    // The reset write placed as a pi.reset entry selecting itself, and its
+    // submission settled done at that entry.
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    const EntryRecord* reset_entry = nullptr;
+    for (const auto& entry : *entries) {
+        if (entry.kind == "pi.reset") reset_entry = &entry;
+    }
+    REQUIRE(reset_entry != nullptr);
+    REQUIRE(reset_entry->head.has_value());
+    CHECK(reset_entry->head->value == reset_entry->id.value);
+
+    auto reset_settled = consume(reset.value().status());
+    REQUIRE(reset_settled.has_value());
+    CHECK(reset_settled.value().status == "done");
+    REQUIRE(reset_settled.value().entry.has_value());
+    CHECK(reset_settled.value().entry->value == reset_entry->id.value);
+
     REQUIRE(consume(harness->close()).has_value());
 }
 
