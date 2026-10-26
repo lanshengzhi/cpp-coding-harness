@@ -45,6 +45,61 @@ struct TaskId {
     [[nodiscard]] bool operator==(const TaskId&) const = default;
 };
 
+/// One durable submission identity (frozen pi `SubmissionId`). The numeric
+/// value comes from the Session-global ID namespace, like task and entry IDs.
+struct SubmissionId {
+    std::int64_t value{0};
+
+    [[nodiscard]] bool operator==(const SubmissionId&) const = default;
+};
+
+/// Complete replacement record for one admitted user input or passive entry
+/// write (frozen pi `SubmissionRecord`). The flat C++ form mirrors the frozen
+/// state machine: an `input` submission is `queued`, `placed` (carrying its
+/// transcript `entry`), `done` (also carrying the `answer` entry), or
+/// `unanswered` (carrying a `reason` and optional JSON `detail`, keeping its
+/// `entry` when it was placed); a `write` submission is `queued`, `done`
+/// (carrying its `entry`), or `unanswered`. Every write replaces the record.
+struct SubmissionRecord {
+    SubmissionId id{};
+    ConversationId conversation_id{};
+    /// Host-provided deduplication key, scoped to the conversation; absent
+    /// when the submission has no dedup key (frozen
+    /// `SubmissionRecord.requestId`).
+    std::optional<std::string> request_id{std::nullopt};
+    /// The submission discriminator: `"input"` or `"write"` (frozen
+    /// `SubmissionRecord.type`).
+    std::string type{};
+    /// `"queued"`, `"placed"`, `"done"` or `"unanswered"` (frozen
+    /// `SubmissionRecord.status`).
+    std::string status{};
+    /// The transcript entry the submission was placed at; present for placed
+    /// and done records (frozen `SubmissionRecord.entry`).
+    std::optional<EntryId> entry{std::nullopt};
+    /// The answer entry of a done input submission (frozen
+    /// `SubmissionRecord.answer`).
+    std::optional<EntryId> answer{std::nullopt};
+    /// The terminal reason of an unanswered submission (frozen
+    /// `SubmissionRecord.reason`).
+    std::optional<std::string> reason{std::nullopt};
+    /// Optional structured diagnostic data of an unanswered submission
+    /// (frozen `SubmissionRecord.detail`).
+    std::optional<chord::Json> detail{std::nullopt};
+
+    [[nodiscard]] bool operator==(const SubmissionRecord&) const = default;
+};
+
+/// Terminal settlement staged for one submission (frozen pi
+/// `SubmissionSettlement`): `done` carries the `answer` entry,
+/// `unanswered` carries the `reason` and optional JSON `detail`.
+struct SubmissionSettlement {
+    /// `"done"` or `"unanswered"` (frozen `SubmissionSettlement.status`).
+    std::string status{};
+    std::optional<EntryId> answer{std::nullopt};
+    std::optional<std::string> reason{std::nullopt};
+    std::optional<chord::Json> detail{std::nullopt};
+};
+
 /// JSON-safe error snapshot persisted instead of a runtime error (frozen pi `TaskOutcomeError`).
 struct TaskOutcomeError {
     std::string message{};
@@ -205,9 +260,19 @@ struct DocumentCommitChange {
     chord::OpBatch ops{};
 };
 
+/// One committed submission change (frozen pi `CommitChange` for a
+/// submission write).
+struct SubmissionCommitChange {
+    /// The record kind: `"submission"` (frozen `StorageWrite.type`).
+    std::string type{};
+    /// The full replaced submission record (frozen
+    /// `SubmissionCommitChange.value`).
+    SubmissionRecord value{};
+};
+
 /// Every immutable change from one successful Session commit (frozen pi
 /// `CommitChange`).
-using CommitChange = std::variant<TableCommitChange, DocumentCommitChange>;
+using CommitChange = std::variant<TableCommitChange, DocumentCommitChange, SubmissionCommitChange>;
 
 /// Every immutable change from one successful Session commit (frozen pi
 /// `CommitPublication`). The change order is unspecified.
@@ -219,8 +284,9 @@ struct CommitPublication {
 /// One record or document mutation in an atomic storage commit (frozen pi
 /// `StorageWrite`).
 struct StorageWrite {
-    /// The write kind: `conversation`, `entry`, `task`, `document.create`,
-    /// `document.change` or `document.retire` (frozen `StorageWrite.type`).
+    /// The write kind: `conversation`, `entry`, `task`, `submission`,
+    /// `document.create`, `document.change` or `document.retire` (frozen
+    /// `StorageWrite.type`).
     std::string type{};
     /// The conversation record of a `conversation` write.
     std::optional<ConversationRecord> conversation{};
@@ -228,6 +294,9 @@ struct StorageWrite {
     std::optional<EntryRecord> entry{};
     /// The task record of a `task` write.
     std::optional<TaskRecord> task{};
+    /// The full record of a `submission` write; every submission write
+    /// replaces the record.
+    std::optional<SubmissionRecord> submission{};
     /// The document record of a `document.create` write.
     std::optional<DocumentRecord> document_record{};
     /// The incarnation a `document.change` or `document.retire` write targets.

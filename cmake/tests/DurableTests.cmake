@@ -14,6 +14,7 @@ include_guard(GLOBAL)
         tests/durable/SqliteStorageTest.cpp
         tests/durable/SessionTransactionTest.cpp
         tests/durable/SessionWatchTest.cpp
+        tests/durable/SubmissionStorageTest.cpp
         tests/durable/TaskExecutionTest.cpp
         tests/durable/HarnessWorkflowTest.cpp
 )

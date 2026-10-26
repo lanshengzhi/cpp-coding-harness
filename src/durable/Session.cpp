@@ -62,6 +62,15 @@ struct StagedDocument {
     bool created{false};
 };
 
+/// One staged submission change: a settlement, or the placement of a queued
+/// submission at its transcript entry (frozen pi `SubmissionChange`).
+struct SubmissionChange {
+    SubmissionId id{};
+    SubmissionSettlement settlement{};
+    /// The placement entry; absent for a settlement.
+    std::optional<EntryId> placed_entry{std::nullopt};
+};
+
 /// One committed document incarnation the Session knows, by address key.
 struct CachedDocument {
     DocumentRecord record{};
@@ -189,6 +198,9 @@ struct Session::Impl {
                             .entry_id = std::nullopt,
                             .task_id = write.task->id,
                             .task = write.task});
+                } else if (write.type == "submission" && write.submission.has_value()) {
+                    publication.changes.push_back(
+                            SubmissionCommitChange{.type = "submission", .value = *write.submission});
                 }
             }
             for (const DocumentCommitChange& change : document_changes) {
@@ -397,6 +409,12 @@ struct Transaction::Impl {
     bool sealed{false};
     std::vector<StorageWrite> writes{};
     std::vector<StagedDocument> documents{};
+    /// The submission candidates this transaction created or replaced so far,
+    /// by ID (frozen pi `Tx.#submissions`).
+    std::map<std::int64_t, SubmissionRecord> staged_submissions{};
+    /// The staged submission changes resolved at assembly (frozen pi
+    /// `Tx.#submissionChanges`).
+    std::vector<SubmissionChange> submission_changes{};
 
     [[nodiscard]] support::ExpectedVoid reject_read(std::string_view method) const {
         if (sealed) {
@@ -414,7 +432,51 @@ struct Transaction::Impl {
         }
         return {};
     }
+
+    /// Whether one conversation is visible to this transaction: one it staged
+    /// or one committed state holds (frozen pi `Tx.#requireConversation`).
+    [[nodiscard]] bool has_conversation(ConversationId id) const {
+        for (const StorageWrite& write : writes) {
+            if (write.type == "conversation" && write.conversation.has_value() && write.conversation->id == id) {
+                return true;
+            }
+        }
+        return false;
+    }
 };
+
+/// Apply one staged change to the current candidate record (frozen pi
+/// `applySubmissionChange`). Placement turns a queued input placed and a
+/// queued write done; only a placed input can be answered; a terminal record
+/// stays unchanged.
+[[nodiscard]] support::Expected<SubmissionRecord> apply_submission_change(
+        const SubmissionRecord& current, const SubmissionChange& change) {
+    if (current.status == "done" || current.status == "unanswered") {
+        return current;
+    }
+    if (change.placed_entry.has_value()) {
+        if (current.status != "queued") {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    std::string{"Submission "} + std::to_string(current.id.value) + " is not queued"));
+        }
+        SubmissionRecord placed = current;
+        placed.status = current.type == "input" ? "placed" : "done";
+        placed.entry = *change.placed_entry;
+        return placed;
+    }
+    if (change.settlement.status == "done" && current.status != "placed") {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                std::string{"Submission "} + std::to_string(current.id.value) + " is not a placed input"));
+    }
+    // Queued and placed records carry no answer, reason, or detail; an
+    // unanswered input keeps its entry.
+    SubmissionRecord settled = current;
+    settled.status = change.settlement.status;
+    settled.answer = change.settlement.answer;
+    settled.reason = change.settlement.reason;
+    settled.detail = change.settlement.detail;
+    return settled;
+}
 
 Transaction::Transaction(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
 
@@ -633,6 +695,66 @@ support::Expected<std::vector<TaskRecord>> Transaction::scan_tasks(std::size_t l
     return impl_->storage->scan_tasks(limit);
 }
 
+support::Expected<std::optional<SubmissionRecord>> Transaction::submission(SubmissionId id) {
+    if (auto rejected = impl_->reject_read("submission"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->submission(id);
+}
+
+support::Expected<std::optional<SubmissionRecord>> Transaction::submission_by_request(
+        ConversationId conversation_id, std::string_view request_id) {
+    if (auto rejected = impl_->reject_read("submissionByRequest"); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    return impl_->storage->submission_by_request(conversation_id, request_id);
+}
+
+support::Expected<SubmissionRecord> Transaction::create_submission(SubmissionRecord record) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    impl_->has_table_write = true;
+    if (!impl_->has_conversation(record.conversation_id)) {
+        auto conversation = impl_->storage->conversation(record.conversation_id);
+        if (!conversation) {
+            return std::unexpected(std::move(conversation.error()));
+        }
+        if (!(*conversation).has_value()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    std::string{"Conversation "} + std::to_string(record.conversation_id.value) + " does not exist"));
+        }
+    }
+    auto id = impl_->storage->mint_id();
+    if (!id) {
+        return std::unexpected(std::move(id.error()));
+    }
+    record.id = SubmissionId{.value = *id};
+    impl_->staged_submissions.emplace(record.id.value, record);
+    return record;
+}
+
+support::ExpectedVoid Transaction::settle_submission(SubmissionId id, SubmissionSettlement settlement) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    // The change stages and resolves at assembly; it is not a caller table
+    // read and works after the first table write.
+    impl_->has_table_write = true;
+    impl_->submission_changes.push_back(
+            SubmissionChange{.id = id, .settlement = std::move(settlement), .placed_entry = std::nullopt});
+    return {};
+}
+
+support::ExpectedVoid Transaction::place_submission(SubmissionId id, EntryId entry) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    impl_->has_table_write = true;
+    impl_->submission_changes.push_back(SubmissionChange{.id = id, .settlement = {}, .placed_entry = entry});
+    return {};
+}
+
 // ── DocumentWatch ───────────────────────────────────────────────────────────
 
 DocumentWatch::DocumentWatch(std::shared_ptr<Impl> impl) : impl_(std::move(impl)) {}
@@ -743,6 +865,52 @@ support::AsyncResult<void> Session::Impl::commit_now(
             document.change.abort();
         }
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(outcome.error()))}};
+    }
+
+    // Resolve the staged submission changes at assembly, against this
+    // transaction's staged candidates first, then committed state (frozen pi
+    // `Tx.#assemble`). A failure rejects the commit and publishes nothing,
+    // like a failed callback.
+    const auto reject_assembly = [&transaction](support::Error error) {
+        transaction.impl_->sealed = true;
+        for (StagedDocument& document : transaction.impl_->documents) {
+            document.change.abort();
+        }
+        return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(error))}};
+    };
+    for (const SubmissionChange& change : transaction.impl_->submission_changes) {
+        std::optional<SubmissionRecord> committed;
+        SubmissionRecord* current = nullptr;
+        if (auto staged = transaction.impl_->staged_submissions.find(change.id.value);
+                staged != transaction.impl_->staged_submissions.end()) {
+            current = &staged->second;
+        } else {
+            auto stored = storage->submission(change.id);
+            if (!stored) {
+                return reject_assembly(std::move(stored.error()));
+            }
+            if (!(*stored).has_value()) {
+                return reject_assembly(support::make_error(support::ErrorCode::Validation,
+                        std::string{"Submission "} + std::to_string(change.id.value) + " does not exist"));
+            }
+            committed = **stored;
+            current = &*committed;
+        }
+        auto next = apply_submission_change(*current, change);
+        if (!next) {
+            return reject_assembly(std::move(next.error()));
+        }
+        // A change that leaves a committed record unchanged publishes no write
+        // (frozen pi `Tx.#assemble` replaces the candidate only when the
+        // resolved record differs); a staged candidate was already part of
+        // the batch.
+        if (!committed.has_value() || *next != *current) {
+            transaction.impl_->staged_submissions.insert_or_assign(change.id.value, *next);
+        }
+    }
+    // Every resolved candidate joins the batch as a submission write.
+    for (const auto& [id, record] : transaction.impl_->staged_submissions) {
+        transaction.impl_->writes.push_back(StorageWrite{.type = "submission", .submission = record});
     }
 
     auto state = std::make_shared<Session::Impl::CommitState>();

@@ -80,6 +80,20 @@ public:
     /// pi `Storage.scanTasks`).
     [[nodiscard]] virtual support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) = 0;
 
+    /// Look up the latest complete record for one submission (frozen pi
+    /// `Storage.submission`).
+    [[nodiscard]] virtual support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) = 0;
+
+    /// Look up the committed submission with one conversation-scoped dedup key
+    /// (frozen pi `Storage.submissionByRequest`).
+    [[nodiscard]] virtual support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id) = 0;
+
+    /// Scan submission records, oldest first, returning at most `limit`
+    /// submissions (frozen pi `Storage.scanSubmissions`; the C++ mirror scans
+    /// every status).
+    [[nodiscard]] virtual support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) = 0;
+
     /// Release backend resources; all later operations must reject (frozen pi
     /// `Storage.close`).
     [[nodiscard]] virtual support::ExpectedVoid close() = 0;
@@ -120,6 +134,13 @@ public:
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override;
 
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override;
+
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override;
+
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id) override;
+
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) override;
 
     [[nodiscard]] support::ExpectedVoid close() override;
 

@@ -254,11 +254,39 @@ public:
     /// Look up one task by ID (frozen pi `Tx.task`).
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id);
 
+    /// Look up one submission by ID (frozen pi `Tx.submission`). Rejected with
+    /// `Tx.submission() cannot read tables after the first table write` when
+    /// the transaction already wrote a table.
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id);
+
+    /// Look up one submission by its conversation-scoped dedup key (frozen pi
+    /// `Tx.submissionByRequest`). Rejected with
+    /// `Tx.submissionByRequest() cannot read tables after the first table
+    /// write` when the transaction already wrote a table.
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id);
+
     /// Set or replace one task record (frozen pi `Tx.setTask`).
     support::ExpectedVoid set_task(TaskRecord record);
 
     /// Scan task records (frozen pi `Tx.scanTasks`).
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit);
+
+    /// Create one submission record with a fresh Session-global ID (frozen pi
+    /// `Tx.createSubmission`); no admission rules apply. The supplied record
+    /// carries `id == 0`; the staged create works for every initial state.
+    [[nodiscard]] support::Expected<SubmissionRecord> create_submission(SubmissionRecord record);
+
+    /// Settle one submission. The change STAGES and resolves at transaction
+    /// assembly against this transaction's latest staged candidate first,
+    /// then committed state, so it is not a caller table read and works after
+    /// the first table write (frozen pi `Tx.settleSubmission`).
+    support::ExpectedVoid settle_submission(SubmissionId id, SubmissionSettlement settlement);
+
+    /// Place one queued submission at its transcript entry. The change STAGES
+    /// and resolves at transaction assembly like `settle_submission()` (frozen
+    /// pi `Tx.placeSubmission`).
+    support::ExpectedVoid place_submission(SubmissionId id, EntryId entry);
 
 private:
     friend class Session;

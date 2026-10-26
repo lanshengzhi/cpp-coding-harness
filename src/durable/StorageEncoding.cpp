@@ -400,6 +400,83 @@ support::Expected<TaskRecord> decode_task_record(const chord::Json& json) {
     return record;
 }
 
+chord::Json encode_submission_record(const SubmissionRecord& submission) {
+    chord::Json::Object obj;
+    obj.emplace("id", chord::Json(static_cast<double>(submission.id.value)));
+    obj.emplace("conversationId", chord::Json(static_cast<double>(submission.conversation_id.value)));
+    if (submission.request_id.has_value()) {
+        obj.emplace("requestId", chord::Json(*submission.request_id));
+    }
+    obj.emplace("type", chord::Json(submission.type));
+    obj.emplace("status", chord::Json(submission.status));
+    if (submission.entry.has_value()) {
+        obj.emplace("entry", chord::Json(static_cast<double>(submission.entry->value)));
+    }
+    if (submission.answer.has_value()) {
+        obj.emplace("answer", chord::Json(static_cast<double>(submission.answer->value)));
+    }
+    if (submission.reason.has_value()) {
+        obj.emplace("reason", chord::Json(*submission.reason));
+    }
+    if (submission.detail.has_value()) {
+        obj.emplace("detail", *submission.detail);
+    }
+    return chord::Json(std::move(obj));
+}
+
+support::Expected<SubmissionRecord> decode_submission_record(const chord::Json& json) {
+    const auto* obj = json.as_object();
+    if (obj == nullptr) {
+        return std::unexpected(corruption("Submission record must be a JSON object"));
+    }
+    const auto id_it = obj->find("id");
+    const auto conv_it = obj->find("conversationId");
+    const auto type_it = obj->find("type");
+    const auto status_it = obj->find("status");
+    if (id_it == obj->end() || conv_it == obj->end() || type_it == obj->end() || status_it == obj->end()) {
+        return std::unexpected(corruption("Submission record missing required fields"));
+    }
+    const auto* id_num = id_it->second.as_number();
+    const auto* conv_num = conv_it->second.as_number();
+    const auto* type_str = type_it->second.as_string();
+    const auto* status_str = status_it->second.as_string();
+    if (id_num == nullptr || conv_num == nullptr || type_str == nullptr || status_str == nullptr) {
+        return std::unexpected(corruption("Invalid submission record field types"));
+    }
+    SubmissionRecord record{
+            .id = SubmissionId{static_cast<std::int64_t>(*id_num)},
+            .conversation_id = ConversationId{static_cast<std::int64_t>(*conv_num)},
+            .request_id = std::nullopt,
+            .type = *type_str,
+            .status = *status_str,
+            .entry = std::nullopt,
+            .answer = std::nullopt,
+            .reason = std::nullopt,
+            .detail = std::nullopt,
+    };
+    const auto request_it = obj->find("requestId");
+    if (request_it != obj->end() && request_it->second.as_string() != nullptr) {
+        record.request_id = *request_it->second.as_string();
+    }
+    const auto entry_it = obj->find("entry");
+    if (entry_it != obj->end() && entry_it->second.as_number() != nullptr) {
+        record.entry = EntryId{static_cast<std::int64_t>(*entry_it->second.as_number())};
+    }
+    const auto answer_it = obj->find("answer");
+    if (answer_it != obj->end() && answer_it->second.as_number() != nullptr) {
+        record.answer = EntryId{static_cast<std::int64_t>(*answer_it->second.as_number())};
+    }
+    const auto reason_it = obj->find("reason");
+    if (reason_it != obj->end() && reason_it->second.as_string() != nullptr) {
+        record.reason = *reason_it->second.as_string();
+    }
+    const auto detail_it = obj->find("detail");
+    if (detail_it != obj->end()) {
+        record.detail = detail_it->second;
+    }
+    return record;
+}
+
 support::JsonValue encode_json(const chord::Json& json) {
     return json.to_support();
 }
