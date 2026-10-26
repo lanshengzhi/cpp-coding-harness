@@ -1538,6 +1538,89 @@
         "cch_coding_agent:Session:consumers:tui-live-session"
       ],
       "disposition": "reuse the append parent/leaf observation without claiming frozen selector equivalence or promoting the composite row"
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "submissions-inbox.json",
+      "scenario": "a busy steer input is placed at the postTools boundary and a busy follow-up is held to the final boundary",
+      "reason": "Captured by #1080 after the #1058 audit; this bounded submission/inbox comparison does not promote an entire capability row without a complete delivery receipt.",
+      "rows": [
+        "cch_durable:steering-boundary-placement",
+        "cch_durable:busy-admission-modes"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessSubmissionsTest.cpp; retain current row statuses pending a complete pinned capability delivery."
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "submissions-inbox.json",
+      "scenario": "a duplicate request ID with a different payload returns the existing submission with zero new storage batches",
+      "reason": "Captured by #1080 after the #1058 audit; this bounded submission/inbox comparison does not promote an entire capability row without a complete delivery receipt.",
+      "rows": [
+        "cch_durable:submission-queues"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessSubmissionsTest.cpp; retain current row statuses pending a complete pinned capability delivery."
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "submissions-inbox.json",
+      "scenario": "a conversation abort settles the queued input unanswered and aborted, keeps the queued write queued and settles the placed input unanswered and aborted",
+      "reason": "Captured by #1080 after the #1058 audit; this bounded submission/inbox comparison does not promote an entire capability row without a complete delivery receipt.",
+      "rows": [
+        "cch_durable:busy-admission-modes"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessSubmissionsTest.cpp; retain current row statuses pending a complete pinned capability delivery."
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "submissions-inbox.json",
+      "scenario": "a busy follow-up is placed at the final boundary and answered by a second run",
+      "reason": "Captured by #1080 after the #1058 audit; this bounded submission/inbox comparison does not promote an entire capability row without a complete delivery receipt.",
+      "rows": [
+        "cch_durable:busy-admission-modes"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessSubmissionsTest.cpp; retain current row statuses pending a complete pinned capability delivery."
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "submissions-inbox.json",
+      "scenario": "a busy queued admission commits one batch with the submission and the pi.inbox items change",
+      "reason": "Captured by #1080 after the #1058 audit; this bounded submission/inbox comparison does not promote an entire capability row without a complete delivery receipt.",
+      "rows": [
+        "cch_durable:atomic-admission-inbox"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessSubmissionsTest.cpp; retain current row statuses pending a complete pinned capability delivery."
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "reset-writes.json",
+      "scenario": "a pinned-head write at the entry before the reset head settles unanswered and stale while one at the reset head is done",
+      "reason": "Captured by #1080 to distinguish stale head pins and reset boundaries; the comparison covers this bounded slice without promoting composite capability rows.",
+      "rows": [
+        "cch_durable:passive-write-admission"
+      ],
+      "disposition": "Consumed by the #1080 public Harness reset/write comparisons; retain row statuses pending complete pinned capability receipts."
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "reset-writes.json",
+      "scenario": "a queued head:self reset at the postTools boundary ends the current run unanswered and reset and starts the selected queued input in the reset context",
+      "reason": "Captured by #1080 to distinguish stale head pins and reset boundaries; the comparison covers this bounded slice without promoting composite capability rows.",
+      "rows": [
+        "cch_durable:steering-boundary-placement",
+        "cch_durable:submission-queues"
+      ],
+      "disposition": "Consumed by the #1080 public Harness reset/write comparisons; retain row statuses pending complete pinned capability receipts."
+    },
+    {
+      "family": "audit-1080",
+      "artifact": "reset-writes.json",
+      "scenario": "a display-only write behind a queued reset queues and lands after the reset when the run ends",
+      "reason": "Captured by #1080 to distinguish stale head pins and reset boundaries; the comparison covers this bounded slice without promoting composite capability rows.",
+      "rows": [
+        "cch_durable:steering-boundary-placement",
+        "cch_durable:submission-queues"
+      ],
+      "disposition": "Consumed by the #1080 public Harness reset/write comparisons; retain row statuses pending complete pinned capability receipts."
     }
   ],
   "groups": [

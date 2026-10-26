@@ -1000,10 +1000,13 @@
           "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: a busy steer input queues in steer mode and a conversation abort withdraws it",
           "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: a duplicate request ID returns the existing submission without a storage write",
           "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: a busy input with whenBusy reject throws ConversationBusy and writes no submission",
-          "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: an idle passive write is appended and settled done without starting a run"
+          "fixtures/pi-v1.3.0/audit-1055/submissions-inbox.json: an idle passive write is appended and settled done without starting a run",
+          "fixtures/pi-v1.3.0/audit-1080/submissions-inbox.json: a busy steer input is placed at the postTools boundary and a busy follow-up is held to the final boundary",
+          "fixtures/pi-v1.3.0/audit-1080/submissions-inbox.json: a duplicate request ID with a different payload returns the existing submission with zero new storage batches",
+          "fixtures/pi-v1.3.0/audit-1080/submissions-inbox.json: a conversation abort settles the queued input unanswered and aborted, keeps the queued write queued and settles the placed input unanswered and aborted"
         ],
         "comparison": "Compare admission outcomes, queue placement, dedup results and abort effects with the frozen captures.",
-        "missing": "postTools steer placement versus final followUp placement is a 1055 residual gap."
+        "missing": "#1080 delivers submission storage and Harness admission, request-ID deduplication, atomic queued admission, postTools steering, final follow-up placement, wait cancellation and queued-input versus queued-write abort outcomes. Tests compare audit-1055 and audit-1080 observations through the public Harness; see docs/research/pi-v1.3.0/1080-submissions-inbox-admission.md. Whole-row verification remains unchanged pending complete pinned capability receipts; workflow reopen remains #1082."
       },
       "coverage": [
         "cch_durable:submission",
