@@ -779,7 +779,16 @@ TEST_CASE("a conversation abort keeps live background work while a direct abort 
             "both tasks running");
 
     // The ordinary conversation abort stops at the background boundary.
-    REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
+    auto aborted = consume(harness->abort_conversation(root.value()));
+    if (!aborted.has_value()) {
+        // A scoped INFO is unsafe here: Catch2 is built without exceptions, so
+        // the fatal REQUIRE below would leave it registered.
+        FAIL("abort_conversation failed: code=" << support::to_string(aborted.error().code)
+                                                << " message=" << aborted.error().message
+                                                << " detail=" << aborted.error().detail << " sessionFailure="
+                                                << harness->session().failure_message().value_or("none"));
+    }
+    REQUIRE(aborted.has_value());
 
     auto foreground = consume(harness->get_task(foreground_id));
     REQUIRE(foreground.has_value());
@@ -801,6 +810,12 @@ TEST_CASE("a conversation abort keeps live background work while a direct abort 
     auto marked_res = consume(harness->abort_task(background_id));
     REQUIRE(marked_res.has_value());
     auto receipt_res = consume(harness->wait_for_task(background_id));
+    if (!receipt_res.has_value()) {
+        FAIL("wait_for_task failed: code=" << support::to_string(receipt_res.error().code)
+                                           << " message=" << receipt_res.error().message
+                                           << " detail=" << receipt_res.error().detail << " sessionFailure="
+                                           << harness->session().failure_message().value_or("none"));
+    }
     REQUIRE(receipt_res.has_value());
     REQUIRE(receipt_res.value().state.outcome.has_value());
     const auto* expected_after_direct = scenario->object_member("afterDirect");
