@@ -3,6 +3,7 @@
 
 #include "durable/CommittedContext.hpp"
 #include "durable/Compaction.hpp"
+#include "support/Json.hpp"
 
 #include <cch/ai/InferenceFailure.hpp>
 #include <cch/ai/StreamEvent.hpp>
@@ -1715,6 +1716,119 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_compaction_summary(
     return admit_submission(tx, conversation_id, draft, now);
 }
 
+namespace {
+
+/// Order-sensitive JSON value equality, the C++ form of frozen
+/// `declarationsEqual`'s JSON round-trip comparison.
+bool json_equal(const support::JsonValue& left, const support::JsonValue& right) {
+    const auto left_text = support::write_json(left);
+    const auto right_text = support::write_json(right);
+    return left_text && right_text && *left_text == *right_text;
+}
+
+/// Whether two tools declare the same interface (frozen `declarationsEqual`).
+/// C++ also persists `outputSchema`, so a changed schema is a changed
+/// declaration and is removed and re-added like any other change.
+bool declarations_equal(const ai::Tool& left, const ai::Tool& right) {
+    if (left.name != right.name || left.description != right.description ||
+            !json_equal(left.parameters, right.parameters)) {
+        return false;
+    }
+    if (left.output_schema.has_value() != right.output_schema.has_value()) return false;
+    if (left.output_schema && !json_equal(*left.output_schema, *right.output_schema)) return false;
+    if (left.constrained_sampling.has_value() != right.constrained_sampling.has_value()) return false;
+    return !left.constrained_sampling || left.constrained_sampling->variants == right.constrained_sampling->variants;
+}
+
+struct ToolChanges {
+    std::vector<ai::ToolReference> removed{};
+    std::vector<ai::Tool> added{};
+};
+
+/// Frozen `planTools`: keep unchanged declarations in place and append
+/// additions; when that replay would not yield the desired order, remove every
+/// offered tool and re-add every desired tool in order.
+ToolChanges plan_tools(std::span<const ai::Tool> offered, std::span<const ai::Tool> desired) {
+    std::vector<const ai::Tool*> kept;
+    for (const auto& tool : offered) {
+        const auto wanted = std::ranges::find_if(desired, [&tool](const ai::Tool& candidate) {
+            return candidate.name == tool.name && declarations_equal(tool, candidate);
+        });
+        if (wanted != desired.end()) kept.push_back(&tool);
+    }
+    const auto is_kept = [&kept](const ai::Tool& tool) {
+        return std::ranges::any_of(kept, [&tool](const ai::Tool* each) { return each->name == tool.name; });
+    };
+    std::vector<const ai::Tool*> added;
+    for (const auto& tool : desired)
+        if (!is_kept(tool)) added.push_back(&tool);
+    std::vector<std::string_view> replayed;
+    for (const auto* tool : kept)
+        replayed.push_back(tool->name);
+    for (const auto* tool : added)
+        replayed.push_back(tool->name);
+    bool order_matches = replayed.size() == desired.size();
+    for (std::size_t index = 0; order_matches && index < replayed.size(); ++index)
+        order_matches = replayed[index] == desired[index].name;
+    ToolChanges changes;
+    if (!order_matches) {
+        for (const auto& tool : offered)
+            changes.removed.push_back(ai::ToolReference{.name = tool.name});
+        for (const auto& tool : desired)
+            changes.added.push_back(tool);
+        return changes;
+    }
+    for (const auto& tool : offered)
+        if (!is_kept(tool)) changes.removed.push_back(ai::ToolReference{.name = tool.name});
+    for (const auto* tool : added)
+        changes.added.push_back(*tool);
+    return changes;
+}
+
+using SectionPatch = std::vector<ai::SystemMessageSection>;
+
+/// Frozen `planSections`: no patch, the minimal patch of changed values and
+/// `null` removals, or a remove-all/re-add-all pair when the minimal patch
+/// would leave a different order.
+std::vector<SectionPatch> plan_sections(
+        std::span<const ai::SystemMessageSection> shown, std::span<const ai::SystemMessageSection> desired) {
+    const auto wanted = [&desired](std::string_view name) {
+        return std::ranges::find_if(
+                desired, [name](const ai::SystemMessageSection& section) { return section.name == name; });
+    };
+    const auto is_shown = [&shown](const ai::SystemMessageSection& section) {
+        return std::ranges::any_of(shown, [&section](const auto& each) { return each.name == section.name; });
+    };
+    std::vector<std::string_view> patched_order;
+    for (const auto& section : shown)
+        if (wanted(section.name) != desired.end()) patched_order.push_back(section.name);
+    for (const auto& section : desired)
+        if (!is_shown(section)) patched_order.push_back(section.name);
+    bool order_matches = patched_order.size() == desired.size();
+    for (std::size_t index = 0; order_matches && index < patched_order.size(); ++index)
+        order_matches = patched_order[index] == desired[index].name;
+    if (!order_matches) {
+        SectionPatch removal;
+        for (const auto& section : shown)
+            removal.push_back(ai::SystemMessageSection{.name = section.name, .text = std::nullopt});
+        return {std::move(removal), SectionPatch{desired.begin(), desired.end()}};
+    }
+    SectionPatch patch;
+    for (const auto& section : shown) {
+        const auto next = wanted(section.name);
+        if (next == desired.end())
+            patch.push_back(ai::SystemMessageSection{.name = section.name, .text = std::nullopt});
+        else if (next->text != section.text)
+            patch.push_back(*next);
+    }
+    for (const auto& section : desired)
+        if (!is_shown(section)) patch.push_back(section);
+    if (patch.empty()) return {};
+    return {std::move(patch)};
+}
+
+} // namespace
+
 WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapshot& snapshot,
         std::span<const ai::Tool> shown_tools,
         std::span<const ai::SystemMessageSection> shown_sections,
@@ -1743,16 +1857,35 @@ WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapsho
         plan.systems.push_back(std::move(baseline));
         return plan;
     }
-    ai::SystemMessage patch{.timestamp = timestamp};
-    for (const auto& wanted : desired) {
-        if (std::ranges::none_of(shown_sections, [&wanted](const auto& shown) { return shown.name == wanted.name; }))
-            patch.sections.push_back(wanted);
+    auto section_patches = plan_sections(shown_sections, desired);
+    auto tool_changes = plan_tools(shown_tools, plan.context.tools);
+    const bool tools_changed = !tool_changes.removed.empty() || !tool_changes.added.empty();
+    if (!tools_changed) {
+        for (auto& patch : section_patches) {
+            ai::SystemMessage message{.timestamp = timestamp};
+            message.sections = std::move(patch);
+            plan.systems.push_back(std::move(message));
+        }
+        return plan;
     }
-    for (const auto& wanted : plan.context.tools) {
-        if (std::ranges::none_of(shown_tools, [&wanted](const auto& shown) { return shown.name == wanted.name; }))
-            patch.tools_added.push_back(wanted);
+    if (section_patches.empty()) {
+        ai::SystemMessage message{.timestamp = timestamp};
+        message.tools_removed = std::move(tool_changes.removed);
+        message.tools_added = std::move(tool_changes.added);
+        plan.systems.push_back(std::move(message));
+        return plan;
     }
-    if (!patch.sections.empty() || !patch.tools_added.empty()) plan.systems.push_back(std::move(patch));
+    // Tool changes ride on the last planned section entry (frozen
+    // `planSystemEntries`).
+    for (std::size_t index = 0; index < section_patches.size(); ++index) {
+        ai::SystemMessage message{.timestamp = timestamp};
+        message.sections = std::move(section_patches[index]);
+        if (index + 1 == section_patches.size()) {
+            message.tools_removed = std::move(tool_changes.removed);
+            message.tools_added = std::move(tool_changes.added);
+        }
+        plan.systems.push_back(std::move(message));
+    }
     return plan;
 }
 
