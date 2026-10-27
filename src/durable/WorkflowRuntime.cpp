@@ -1,6 +1,11 @@
 #include "StorageEncoding.hpp"
 #include "WorkflowRuntime.hpp"
 
+#include "durable/CommittedContext.hpp"
+#include "durable/Compaction.hpp"
+
+#include <cch/ai/InferenceFailure.hpp>
+#include <cch/ai/StreamEvent.hpp>
 #include <cch/chord/Json.hpp>
 #include <cch/durable/Session.hpp>
 #include <cch/durable/Storage.hpp>
@@ -124,6 +129,22 @@ chord::Json as_chord(Json json) {
     return chord::Json::from_support(json.to_support()).value();
 }
 
+struct FailureCapture {
+    std::optional<ai::InferenceFailure> inference_failure{};
+};
+
+/// Error text for a generation whose blocking compaction ended without
+/// completing (frozen pi `compactionFailure`).
+std::string compaction_failure_text(const TaskOutcome& outcome) {
+    if (outcome.status == "failed" || outcome.status == "faulted") {
+        return "Compaction failed: " + outcome.error.value_or(TaskOutcomeError{}).message;
+    }
+    if (outcome.status == "orphaned") {
+        return "Compaction failed: " + outcome.reason.value_or("orphaned");
+    }
+    return "Compaction was aborted";
+}
+
 std::string thinking_name(ai::ThinkingLevel level) {
     for (const auto& [model_level, name] : ai::kModelThinkingLevels) {
         (void)model_level;
@@ -185,6 +206,13 @@ std::vector<DocumentDefinition> initial_document_definitions(const RootOptions& 
 
 support::Error validation(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
+}
+
+const Json* member(const Json& value, std::string_view key) {
+    const auto* object = value.as_object();
+    if (object == nullptr) return nullptr;
+    const auto found = object->find(std::string{key});
+    return found == object->end() ? nullptr : &found->second;
 }
 
 support::Expected<std::int64_t> as_integer(const Json& json) {
@@ -1090,10 +1118,15 @@ std::shared_ptr<TaskDefinition> WorkflowRuntime::generation() const noexcept { r
 
 support::Expected<TaskDefinition> WorkflowRuntime::build_definition() {
     TaskDefinitionBuilder builder{"pi.generation", 1};
-    builder.initial([](const Json&) { return Json{Object{{"phase", "generate"}}}; });
+    // The frozen v1.3.0 generation alternates `prepare` (compaction resume,
+    // prompt planning, threshold decision) and `request` (stream, tool
+    // rounds, overflow recovery); each phase run is one scheduler round.
+    builder.initial([](const Json&) { return Json{Object{{"phase", "prepare"}, {"attempt", numeric(1)}}}; });
     // This runtime is owned by Harness::Impl, which joins every execution
-    // before releasing the definition or this callback's borrowed pointer.
-    builder.phase("generate", [this](const TaskRecord& task, TaskRuntime& runtime) { return generate(task, runtime); });
+    // before releasing the definition or these callbacks' borrowed pointer.
+    builder.phase("prepare", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
+    builder.phase("request", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
+    builder.phase("retry", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
     builder.abort([this](const TaskRecord& task, TaskRuntime& runtime) { return abort_run(task, runtime); });
     return builder.build();
 }
@@ -1563,8 +1596,123 @@ support::AsyncResult<bool> WorkflowRuntime::apply_post_tools_boundary(const Task
             }}};
 }
 
-support::AsyncResult<void> WorkflowRuntime::generate(const TaskRecord& task, TaskRuntime& runtime) {
-    return support::AsyncResult<void>{run(task, runtime)};
+support::AsyncResult<void> WorkflowRuntime::dispatch(const TaskRecord& task, TaskRuntime& runtime) {
+    const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
+    const std::string_view phase = [checkpoint]() -> std::string_view {
+        if (checkpoint == nullptr) return "prepare";
+        const Json* value = member(*checkpoint, "phase");
+        if (value == nullptr) return "prepare";
+        const std::string* text = value->as_string();
+        return text == nullptr ? std::string_view{"prepare"} : std::string_view{*text};
+    }();
+    if (phase == "retry") {
+        auto retried = retry(task, runtime);
+        if (!retried) return support::AsyncResult<void>{std::unexpected(retried.error())};
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+    if (phase == "request") {
+        auto requested = request(task, runtime);
+        if (!requested) return support::AsyncResult<void>{std::unexpected(requested.error())};
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    }
+    auto prepared = prepare(task, runtime);
+    if (!prepared) return support::AsyncResult<void>{std::unexpected(prepared.error())};
+    return support::AsyncResult<void>{support::ExpectedVoid{}};
+}
+
+/// Settle the run's inputs `unanswered/model_error` and fail with `text`
+/// (frozen pi generation `failModelError`).
+support::ExpectedVoid WorkflowRuntime::retry(const TaskRecord& task, TaskRuntime& runtime) {
+    if (!task.state.checkpoint) return std::unexpected(validation("Retry phase needs a checkpoint"));
+    const Json* until_value = member(*task.state.checkpoint, "until");
+    const Json* attempt_value = member(*task.state.checkpoint, "attempt");
+    if (!until_value || !attempt_value) return std::unexpected(validation("Retry checkpoint is incomplete"));
+    auto until = as_integer(*until_value);
+    auto attempt = as_integer(*attempt_value);
+    if (!until) return std::unexpected(until.error());
+    if (!attempt) return std::unexpected(attempt.error());
+    std::mutex mutex;
+    std::condition_variable ready;
+    std::stop_callback wake(runtime.stop_token(), [&ready] { ready.notify_all(); });
+    std::unique_lock lock(mutex);
+    if (*until > now())
+        ready.wait_for(
+                lock, std::chrono::milliseconds(*until - now()), [&] { return runtime.stop_token().stop_requested(); });
+    if (runtime.stop_token().stop_requested()) return {};
+    Object checkpoint{{"phase", "prepare"}, {"attempt", numeric(*attempt + 1)}};
+    if (const Json* compacted = member(*task.state.checkpoint, "compacted"))
+        checkpoint.emplace("compacted", *compacted);
+    auto committed = await_result(
+            runtime.commit([task, checkpoint = Json{std::move(checkpoint)}, attempt = *attempt + 1](Transaction& tx,
+                                   const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                if (!live) return std::unexpected(live.error());
+                auto set = live->set(
+                        chord::Path{chord::path_key("generation")}, Json{Object{{"attempt", numeric(attempt)}}});
+                if (!set) return std::unexpected(set.error());
+                return std::optional<NextTaskState>{NextTaskState::running(checkpoint)};
+            }));
+    if (!committed) return std::unexpected(committed.error());
+    return {};
+}
+
+support::ExpectedVoid WorkflowRuntime::fail_model_error(
+        const TaskRecord& task, TaskRuntime& runtime, std::string_view text) {
+    const std::string message{text};
+    auto committed = await_result(runtime.commit([task, message](Transaction& tx, const TaskRecord&)
+                                                         -> support::Expected<std::optional<NextTaskState>> {
+        auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+        if (!live) return std::unexpected(live.error());
+        auto ended = end_run(tx,
+                *live,
+                task.id,
+                SubmissionSettlement{
+                        .status = "unanswered", .reason = std::string{"model_error"}, .detail = Json{message}});
+        if (!ended) return std::unexpected(ended.error());
+        return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = "failed",
+                .error = TaskOutcomeError{.message = message, .detail = Json{Object{{"reason", "model_error"}}}}})};
+    }));
+    if (!committed) return std::unexpected(committed.error());
+    return {};
+}
+
+support::Expected<TaskId> WorkflowRuntime::create_compaction(
+        Transaction& tx, const TaskRecord& task, std::string_view reason, bool background) const {
+    if (compaction_ == nullptr) {
+        return std::unexpected(validation("No compaction definition is installed"));
+    }
+    const Json input{Object{{"reason", std::string{reason}}}};
+    return create_compaction_task(tx,
+            *compaction_,
+            task.conversation_id,
+            input,
+            background ? std::optional<TaskId>{} : std::optional<TaskId>{task.id},
+            background);
+}
+
+void WorkflowRuntime::install_compaction_definition(std::shared_ptr<const TaskDefinition> definition) {
+    compaction_ = std::move(definition);
+}
+
+const ai::Model& WorkflowRuntime::model() const noexcept { return model_; }
+const HarnessSettings& WorkflowRuntime::settings() const noexcept { return settings_; }
+ai::ModelStream WorkflowRuntime::stream(ai::AiContext context, ai::SimpleStreamOptions options) {
+    return stream_(model_, std::move(context), std::move(options));
+}
+
+bool WorkflowRuntime::model_available(std::string_view provider, std::string_view model_id) const noexcept {
+    // The bounded C++ slice has no model catalog: the Harness model is the
+    // only one that can be served (frozen pi `runtime.models.getModel`).
+    return !model_.id.empty() && model_.id == model_id && model_.provider == provider;
+}
+
+support::Expected<SubmissionId> WorkflowRuntime::admit_compaction_summary(
+        Transaction& tx, ConversationId conversation_id, const SubmissionDraft& draft, std::int64_t now) {
+    // The ordinary admission path is the frozen `placeSummary` contract: a
+    // conversation-owned summary is placed at once when idle, queued to the
+    // next boundary when busy, or settled `stale` when its head target left
+    // the range.
+    return admit_submission(tx, conversation_id, draft, now);
 }
 
 WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapshot& snapshot,
@@ -1625,7 +1773,7 @@ ai::ToolResultMessage WorkflowRuntime::execute_tool(const ai::ToolCallContent& c
     return result;
 }
 
-support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& runtime) {
+support::ExpectedVoid WorkflowRuntime::prepare(const TaskRecord& task, TaskRuntime& runtime) {
     auto run = committed_live_run(storage_, task.conversation_id);
     if (!run) {
         return std::unexpected(run.error());
@@ -1636,6 +1784,194 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
     if ((*run)->task != task.id) {
         return std::unexpected(validation("Generation task does not own the conversation run"));
     }
+    const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
+    const std::int64_t attempt = [&]() -> std::int64_t {
+        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "attempt");
+        if (value == nullptr) return 1;
+        auto parsed = as_integer(*value);
+        return parsed ? *parsed : 1;
+    }();
+    const std::optional<TaskId> compacted = [&]() -> std::optional<TaskId> {
+        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "compacted");
+        if (value == nullptr) return std::nullopt;
+        auto parsed = as_integer(*value);
+        if (!parsed) return std::nullopt;
+        return TaskId{.value = *parsed};
+    }();
+    const bool threshold_blocked = [&]() -> bool {
+        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "threshold");
+        return value != nullptr && value->as_boolean() != nullptr && *value->as_boolean();
+    }();
+    const std::optional<std::string> overflow_text = [&]() -> std::optional<std::string> {
+        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "overflow");
+        if (value == nullptr) return std::nullopt;
+        const std::string* text = value->as_string();
+        return text == nullptr ? std::optional<std::string>{} : std::optional<std::string>{*text};
+    }();
+
+    if (compacted.has_value()) {
+        auto outcome = storage_.task(*compacted);
+        if (!outcome) return std::unexpected(outcome.error());
+        if (overflow_text.has_value()) {
+            // The overflow recovery must have appended a summary; otherwise
+            // the original overflow error stands (frozen pi generation
+            // `prepare`).
+            const bool answered = outcome->has_value() && (*outcome)->state.status == "terminal" &&
+                                  (*outcome)->state.outcome.has_value() &&
+                                  (*outcome)->state.outcome->status == "completed" &&
+                                  (*outcome)->state.outcome->result.has_value() &&
+                                  member(*(*outcome)->state.outcome->result, "entryId") != nullptr;
+            if (!answered) {
+                return fail_model_error(task, runtime, *overflow_text);
+            }
+        } else if (threshold_blocked && outcome->has_value() && (*outcome)->state.status == "terminal" &&
+                   (*outcome)->state.outcome.has_value() && (*outcome)->state.outcome->status != "completed") {
+            // A threshold compaction that failed left a context it judged too
+            // large: sending it would at best leave no room for the answer
+            // (frozen pi generation `prepare`).
+            return fail_model_error(task, runtime, compaction_failure_text(*(*outcome)->state.outcome));
+        }
+    }
+
+    auto loaded_view = derive_committed_context(session_, task.conversation_id);
+    if (!loaded_view) return std::unexpected(loaded_view.error());
+    auto& view = *loaded_view;
+    ReplayState replay;
+    for (const auto& message : view.messages) {
+        auto parsed = message_from_json(message);
+        if (!parsed) continue;
+        if (const auto* system = std::get_if<ai::SystemMessage>(&*parsed)) {
+            for (const auto& section : system->sections) {
+                auto it = std::ranges::find_if(
+                        replay.shown_sections, [&section](const auto& value) { return value.name == section.name; });
+                if (!section.text) {
+                    if (it != replay.shown_sections.end()) replay.shown_sections.erase(it);
+                } else if (it != replay.shown_sections.end())
+                    *it = section;
+                else
+                    replay.shown_sections.push_back(section);
+            }
+            for (const auto& tool : system->tools_removed)
+                std::erase_if(replay.shown_tools, [&tool](const auto& value) { return value.name == tool.name; });
+            for (const auto& tool : system->tools_added) {
+                std::erase_if(replay.shown_tools, [&tool](const auto& value) { return value.name == tool.name; });
+                replay.shown_tools.push_back(tool);
+            }
+        }
+    }
+    auto plan = plan_prompt(registry_.snapshot(), replay.shown_tools, replay.shown_sections, view, now());
+    std::vector<Json> planned;
+    for (const auto& system : plan.systems)
+        planned.push_back(system_json(system));
+
+    // The threshold decision (frozen pi generation `prepare`): `blocking`
+    // above `contextWindow - reserveTokens`, `background` above the
+    // background threshold, and only when range selection finds a cut.
+    enum class Threshold { None, Background, Blocking };
+    Threshold threshold = Threshold::None;
+    if (!compacted.has_value() && settings_.compaction.enabled && model_.context_window > 0) {
+        const std::int64_t tokens = estimate_context_tokens(view, planned);
+        const std::int64_t blocking_line =
+                static_cast<std::int64_t>(model_.context_window) - settings_.compaction.reserve_tokens;
+        const std::int64_t background_line = blocking_line - settings_.compaction.background_tokens;
+        if (tokens > blocking_line) {
+            threshold = Threshold::Blocking;
+        } else if (settings_.compaction.background_tokens > 0 && tokens > background_line) {
+            threshold = Threshold::Background;
+        }
+        if (threshold != Threshold::None && !select_cut(view, settings_.compaction.keep_recent_tokens).has_value()) {
+            threshold = Threshold::None;
+        }
+    }
+
+    if (threshold == Threshold::Blocking) {
+        // Compact first and prepare again; the transcript is unchanged until
+        // the compaction appends (frozen pi generation `prepare`).
+        auto waited = await_result(runtime.commit([this, task, attempt](Transaction& tx, const TaskRecord&)
+                                                          -> support::Expected<std::optional<NextTaskState>> {
+            auto child = create_compaction(tx, task, "threshold", false);
+            if (!child) return std::unexpected(child.error());
+            return std::optional<NextTaskState>{NextTaskState::waiting(Json{Object{{"phase", "prepare"},
+                                                                               {"attempt", numeric(attempt)},
+                                                                               {"compacted", numeric(child->value)},
+                                                                               {"threshold", true}}},
+                    {*child},
+                    JoinPolicy::AllSettled)};
+        }));
+        if (!waited) return std::unexpected(waited.error());
+        return {};
+    }
+
+    auto committed = await_result(runtime.commit(
+            [this, task, attempt, compacted, threshold, planned = std::move(planned), edits = plan.edits](
+                    Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                auto newest = tx.scan_entries(task.conversation_id, 1);
+                if (!newest) return std::unexpected(newest.error());
+                std::optional<EntryId> cutoff;
+                if (!newest->empty()) cutoff = newest->front().id;
+                for (std::size_t i = 0; i < planned.size(); ++i) {
+                    auto entry = tx.append_entry(task.conversation_id,
+                            "pi.system",
+                            entry_data(planned[i]),
+                            std::nullopt,
+                            std::vector<chord::Json>{as_chord(planned[i])},
+                            std::nullopt,
+                            i == 0 ? edits : std::vector<ContextEdit>{});
+                    if (!entry) return std::unexpected(entry.error());
+                    cutoff = entry->id;
+                }
+                if (!cutoff.has_value()) return std::unexpected(validation("Conversation has no entries to send"));
+                if (threshold == Threshold::Background) {
+                    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                    if (!live) return std::unexpected(live.error());
+                    auto listed = live_has_compaction(*live);
+                    if (!listed) return std::unexpected(listed.error());
+                    if (!*listed) {
+                        auto child = create_compaction(tx, task, "threshold", true);
+                        if (!child) return std::unexpected(child.error());
+                    }
+                }
+                Object next{{"phase", "request"}, {"attempt", numeric(attempt)}, {"cutoff", numeric(cutoff->value)}};
+                if (compacted) next.emplace("compacted", numeric(compacted->value));
+                return std::optional<NextTaskState>{NextTaskState::running(Json{std::move(next)})};
+            }));
+    if (!committed) return std::unexpected(committed.error());
+    return {};
+}
+
+support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRuntime& runtime) {
+    auto run = committed_live_run(storage_, task.conversation_id);
+    if (!run) {
+        return std::unexpected(run.error());
+    }
+    if (!run->has_value()) {
+        return std::unexpected(validation("Generation task has no run"));
+    }
+    if ((*run)->task != task.id) {
+        return std::unexpected(validation("Generation task does not own the conversation run"));
+    }
+    const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
+    const std::int64_t attempt = [&]() -> std::int64_t {
+        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "attempt");
+        if (value == nullptr) return 1;
+        auto parsed = as_integer(*value);
+        return parsed ? *parsed : 1;
+    }();
+    const std::optional<TaskId> compacted = [&]() -> std::optional<TaskId> {
+        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "compacted");
+        if (value == nullptr) return std::nullopt;
+        auto parsed = as_integer(*value);
+        if (!parsed) return std::nullopt;
+        return TaskId{.value = *parsed};
+    }();
+    const std::optional<EntryId> cutoff = [&]() -> std::optional<EntryId> {
+        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "cutoff");
+        if (value == nullptr) return std::nullopt;
+        auto parsed = as_integer(*value);
+        if (!parsed) return std::nullopt;
+        return EntryId{.value = *parsed};
+    }();
+
     ReplayState& replay = replay_[task.conversation_id.value];
     replay = ReplayState{};
     Transaction::ContextView view;
@@ -1716,8 +2052,17 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
         auto options = settings_.stream;
         if (thinking_level_) options.reasoning = thinking_level_;
         options.stop_token = runtime.stop_token();
+        // The overflow retry decision reads the structured classification of
+        // the terminal error event; the diagnostic text is never consulted
+        // (#1083 contract, frozen pi `isRetryableAssistantError`).
+        const auto captured = std::make_shared<FailureCapture>();
         auto stream = stream_(model_, std::move(context), options);
-        auto response = await_result(std::move(stream).run([](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
+        auto response = await_result(
+                std::move(stream).run([captured](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
+                    const auto* error = std::get_if<ai::AssistantErrorEvent>(&event);
+                    if (error != nullptr) captured->inference_failure = error->inference_failure;
+                    return {};
+                }));
         if (!response) {
             // A transport failure settles the run's inputs unanswered (frozen
             // pi `failModelError`) and fails the task.
@@ -1797,6 +2142,76 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
                 return {};
             }
             continue;
+        }
+        // Overflow recovery: a context-overflow terminal error compacts the
+        // committed context first and retries with the attempt and its
+        // budget intact (frozen pi generation `classify`).
+        std::optional<std::string> overflow_text;
+        if (failed && captured->inference_failure.has_value() &&
+                captured->inference_failure->kind == ai::InferenceFailureKind::ContextOverflow) {
+            overflow_text = response->error_message.value_or("Context overflow");
+        }
+        if (overflow_text.has_value() && !compacted.has_value() && settings_.compaction.enabled && cutoff.has_value()) {
+            auto view = derive_committed_context(session_, task.conversation_id, cutoff);
+            if (!view) return std::unexpected(view.error());
+            if (select_cut(*view, settings_.compaction.keep_recent_tokens).has_value()) {
+                const std::string text = *overflow_text;
+                auto waited = await_result(
+                        runtime.commit([this, task, attempt, response = *response, text](Transaction& tx,
+                                               const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                            // The error entry lands in the same commit as the
+                            // compaction task (frozen pi generation `classify`).
+                            auto entry = tx.append_entry(task.conversation_id,
+                                    "pi.assistant",
+                                    entry_data(assistant_json(response)),
+                                    std::nullopt,
+                                    std::vector<chord::Json>{as_chord(assistant_json(response))});
+                            if (!entry) return std::unexpected(entry.error());
+                            auto child = create_compaction(tx, task, "overflow", false);
+                            if (!child) return std::unexpected(child.error());
+                            return std::optional<NextTaskState>{
+                                    NextTaskState::waiting(Json{Object{{"phase", "prepare"},
+                                                                   {"attempt", numeric(attempt)},
+                                                                   {"compacted", numeric(child->value)},
+                                                                   {"overflow", text}}},
+                                            {*child},
+                                            JoinPolicy::AllSettled)};
+                        }));
+                if (!waited) return std::unexpected(waited.error());
+                return {};
+            }
+        }
+        const bool retryable = failed && !overflow_text && captured->inference_failure &&
+                               ai::is_retryable_inference_failure(*captured->inference_failure) &&
+                               settings_.retry.enabled && attempt <= settings_.retry.max_retries;
+        if (retryable) {
+            const double multiplier = std::pow(2.0, static_cast<double>(std::max<std::int64_t>(0, attempt - 1)));
+            const auto delay = static_cast<std::int64_t>(std::min<double>(settings_.retry.max_agent_delay_ms,
+                    std::max<double>(0, settings_.retry.base_delay_ms) * multiplier));
+            const auto until = now() + delay;
+            auto retried = await_result(
+                    runtime.commit([task, attempt, compacted, until, response = *response](Transaction& tx,
+                                           const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                        auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                        if (!live) return std::unexpected(live.error());
+                        auto entry = tx.append_entry(task.conversation_id,
+                                "pi.assistant",
+                                entry_data(assistant_json(response)),
+                                std::nullopt,
+                                std::vector<chord::Json>{as_chord(assistant_json(response))});
+                        if (!entry) return std::unexpected(entry.error());
+                        auto set = live->set(chord::Path{chord::path_key("generation")},
+                                Json{Object{{"attempt", numeric(attempt)},
+                                        {"retry",
+                                                Json{Object{{"at", numeric(until)},
+                                                        {"error", response.error_message.value_or("")}}}}}});
+                        if (!set) return std::unexpected(set.error());
+                        Object checkpoint{{"phase", "retry"}, {"attempt", numeric(attempt)}, {"until", numeric(until)}};
+                        if (compacted) checkpoint.emplace("compacted", numeric(compacted->value));
+                        return std::optional<NextTaskState>{NextTaskState::running(Json{std::move(checkpoint)})};
+                    }));
+            if (!retried) return std::unexpected(retried.error());
+            return {};
         }
         // Final answer, model error, or abort: one commit appends the answer
         // and settles the run at the final boundary (frozen pi `answer`).
