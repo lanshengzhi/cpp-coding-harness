@@ -1,0 +1,86 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1089",
+  "family": "audit-1089",
+  "capturedAt": "2026-10-27T23:01:57.374Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1089/capture-1089.mts",
+    "sha256": "04c27a79324ee5bac21b92ad60eb27b169a100e59eff5498d11c48b9fb898c84",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1089/capture-1089.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1089/capture-1089.mts",
+        "sha256": "04c27a79324ee5bac21b92ad60eb27b169a100e59eff5498d11c48b9fb898c84"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "environment.json",
+      "family": "audit-1089",
+      "bytes": 1683,
+      "sha256": "01e0fc202c26896e27f8120d6b05756722dea60f0ee26be4f35f10c3d6505ca5",
+      "sourceEndpoints": [
+        "packages/durable/src/env/node.ts:NodeExecutionEnv.watch,exec",
+        "packages/durable/src/env/node-watch.ts:NodeFileWatcher.close"
+      ],
+      "scenarios": [
+        {
+          "name": "watch covers creation after return and stops callbacks after close",
+          "inputs": {
+            "target": "missing file",
+            "mutations": [
+              "create after watch returns",
+              "write after close"
+            ]
+          },
+          "expected": {
+            "observedAfterReturn": true,
+            "callbacksStableAfterClose": true,
+            "mode": "native"
+          },
+          "normalizations": [
+            "temporary paths omitted"
+          ]
+        },
+        {
+          "name": "normal exit cancellation and timeout have distinct shell outcomes",
+          "inputs": {
+            "normalExit": 7,
+            "cancelledCommand": "wait after readiness output",
+            "timeoutSeconds": 0.1
+          },
+          "expected": {
+            "normal": {
+              "ok": true,
+              "exitCode": 7
+            },
+            "cancelled": {
+              "ok": false,
+              "code": "aborted",
+              "message": "aborted"
+            },
+            "timeout": {
+              "ok": false,
+              "code": "timeout",
+              "message": "timeout:0.1"
+            }
+          },
+          "normalizations": [
+            "process identifiers omitted"
+          ]
+        }
+      ]
+    }
+  ]
+}
