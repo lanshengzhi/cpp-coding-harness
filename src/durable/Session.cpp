@@ -1138,6 +1138,80 @@ support::Expected<ConversationRecord> Transaction::create_conversation() {
     return record;
 }
 
+support::Expected<ConversationRecord> Transaction::fork_conversation(ConversationId parent, EntryId at) {
+    if (auto rejected = impl_->reject_write(); !rejected) return std::unexpected(rejected.error());
+    auto parent_record = impl_->storage->conversation(parent);
+    if (!parent_record) return std::unexpected(parent_record.error());
+    if (!parent_record->has_value()) {
+        return std::unexpected(validation_error("Conversation " + std::to_string(parent.value) + " does not exist"));
+    }
+    auto visible = impl_->storage->scan_entries(parent, static_cast<std::size_t>(-1));
+    if (!visible) return std::unexpected(visible.error());
+    const auto selected = std::ranges::find_if(*visible, [at](const EntryRecord& entry) { return entry.id == at; });
+    if (selected == visible->end()) {
+        return std::unexpected(validation_error("Entry " + std::to_string(at.value) +
+                                                " is not visible from conversation " + std::to_string(parent.value)));
+    }
+    auto selected_stored = impl_->storage->entry(at);
+    if (!selected_stored) return std::unexpected(selected_stored.error());
+    if (!selected_stored->has_value()) return std::unexpected(validation_error("Fork entry does not exist"));
+    auto as_of_documents = impl_->storage->scan_conversation_documents(selected->conversation_id,
+            DocumentPoint::as_of(selected_stored->value().commit_seq),
+            static_cast<std::size_t>(-1));
+    if (!as_of_documents) return std::unexpected(as_of_documents.error());
+    auto current_documents =
+            impl_->storage->scan_conversation_documents(parent, DocumentPoint::current(), static_cast<std::size_t>(-1));
+    if (!current_documents) return std::unexpected(current_documents.error());
+    struct Copy {
+        DocumentRecord record;
+        DocumentPoint point;
+    };
+    std::vector<Copy> copies;
+    std::set<std::string> addresses;
+    const auto gather = [&](const std::vector<DocumentRecord>& documents,
+                                DocumentPoint point,
+                                DocumentFork policy) -> support::ExpectedVoid {
+        for (const DocumentRecord& source : documents) {
+            if (source.fork != policy) continue;
+            const std::string address = source.kind + "\n" + source.key.value_or("");
+            if (!addresses.insert(address).second) {
+                return std::unexpected(validation_error("Multiple documents share fork address " + source.kind));
+            }
+            copies.push_back(Copy{.record = source, .point = point});
+        }
+        return {};
+    };
+    if (auto as_of = gather(
+                *as_of_documents, DocumentPoint::as_of(selected_stored->value().commit_seq), DocumentFork::AsOf);
+            !as_of)
+        return std::unexpected(as_of.error());
+    if (auto current = gather(*current_documents, DocumentPoint::current(), DocumentFork::Current); !current) {
+        return std::unexpected(current.error());
+    }
+    auto id = impl_->storage->mint_id();
+    if (!id) return std::unexpected(id.error());
+    ConversationRecord record{.id = ConversationId{.value = *id},
+            .parent = ConversationRecord::Parent{.conversation_id = parent, .at = at}};
+    std::vector<StorageWrite> staged;
+    staged.push_back(StorageWrite{.type = "conversation", .conversation = record});
+    for (const Copy& source : copies) {
+        auto document_id = impl_->storage->mint_id();
+        if (!document_id) return std::unexpected(std::move(document_id.error()));
+        DocumentRecord copy = source.record;
+        copy.id = DocumentId{.value = *document_id};
+        copy.created_at = 0;
+        copy.retired_at.reset();
+        copy.conversation_id = record.id;
+        staged.push_back(StorageWrite{.type = "document.copy",
+                .document_record = std::move(copy),
+                .document_copy_source = DocumentCopySource{.id = source.record.id, .at = source.point}});
+    }
+    impl_->writes.insert(
+            impl_->writes.end(), std::make_move_iterator(staged.begin()), std::make_move_iterator(staged.end()));
+    impl_->has_table_write = true;
+    return record;
+}
+
 support::Expected<ConversationRecord> Transaction::create_conversation(TaskId owner) {
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
@@ -1169,7 +1243,8 @@ support::Expected<EntryRecord> Transaction::append_entry(ConversationId conversa
         chord::Json data,
         std::optional<EntryHeadVariant> head,
         std::vector<chord::Json> model,
-        std::optional<TaskId> by_task_id) {
+        std::optional<TaskId> by_task_id,
+        std::vector<ContextEdit> edits) {
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
     }
@@ -1191,10 +1266,128 @@ support::Expected<EntryRecord> Transaction::append_entry(ConversationId conversa
             .data = std::move(data),
             .head = resolved_head,
             .model = std::move(model),
+            .edits = std::move(edits),
             .by_task_id = by_task_id};
     impl_->has_table_write = true;
     impl_->writes.push_back(StorageWrite{.type = "entry", .entry = record});
     return record;
+}
+
+support::Expected<std::vector<chord::Json>> Transaction::context_messages(
+        ConversationId conversation_id, std::optional<EntryId> at) {
+    if (auto rejected = impl_->reject_read("context"); !rejected) return std::unexpected(rejected.error());
+    auto entries = impl_->storage->scan_entries(conversation_id, static_cast<std::size_t>(-1));
+    if (!entries) return std::unexpected(entries.error());
+    std::ranges::reverse(*entries);
+    if (at.has_value()) {
+        const auto selected =
+                std::ranges::find_if(*entries, [at](const EntryRecord& entry) { return entry.id == *at; });
+        if (selected == entries->end()) {
+            return std::unexpected(
+                    validation_error("Entry " + std::to_string(at->value) + " is not visible from conversation " +
+                                     std::to_string(conversation_id.value)));
+        }
+        entries->erase(std::next(selected), entries->end());
+    }
+    std::optional<EntryId> head;
+    for (const EntryRecord& entry : *entries)
+        if (entry.head.has_value()) head = entry.head;
+    if (head.has_value()) {
+        const auto first =
+                std::ranges::find_if(*entries, [head](const EntryRecord& entry) { return entry.id == *head; });
+        if (first == entries->end()) return std::unexpected(validation_error("Context head is not visible"));
+        entries->erase(entries->begin(), first);
+    }
+    std::map<std::int64_t, ContextEdit> edits;
+    for (const EntryRecord& entry : *entries)
+        for (const ContextEdit& edit : entry.edits)
+            edits.insert_or_assign(edit.target.value, edit);
+    std::vector<chord::Json> messages;
+    std::vector<std::vector<chord::Json>> open;
+    for (const EntryRecord& entry : *entries) {
+        if (entry.head.has_value() && entry.id != *head) continue;
+        const auto edit = edits.find(entry.id.value);
+        if (edit != edits.end() && edit->second.action == "omit") continue;
+        const std::vector<chord::Json>& contribution =
+                edit != edits.end() && edit->second.action == "replace" ? edit->second.messages : entry.model;
+        for (const chord::Json& message : contribution) {
+            const auto* object = message.as_object();
+            if (object == nullptr) continue;
+            const auto role = object->find("role");
+            if (role == object->end() || role->second.as_string() == nullptr) continue;
+            const std::string& role_name = *role->second.as_string();
+            if (role_name == "assistant") {
+                auto stop_reason = object->find("stopReason");
+                if (stop_reason != object->end() && stop_reason->second.as_string() != nullptr &&
+                        (*stop_reason->second.as_string() == "aborted" || *stop_reason->second.as_string() == "error" ||
+                                *stop_reason->second.as_string() == "deferred"))
+                    continue;
+                if (open.size() > 1) messages.insert(messages.end(), open.begin(), open.end() - 1);
+                open.clear();
+            }
+            open.push_back({message});
+        }
+    }
+    for (const auto& group : open)
+        messages.insert(messages.end(), group.begin(), group.end());
+    return messages;
+}
+
+support::Expected<std::vector<chord::Json>> Transaction::conversation_messages(ConversationId conversation_id) {
+    if (auto rejected = impl_->reject_read("conversationMessages"); !rejected) {
+        return std::unexpected(rejected.error());
+    }
+    auto entries = impl_->storage->scan_entries(conversation_id, static_cast<std::size_t>(-1));
+    if (!entries) return std::unexpected(entries.error());
+    std::ranges::reverse(*entries);
+    std::optional<EntryId> head;
+    for (const EntryRecord& entry : *entries)
+        if (entry.head.has_value()) head = entry.head;
+    if (head.has_value()) {
+        const auto first =
+                std::ranges::find_if(*entries, [head](const EntryRecord& entry) { return entry.id == *head; });
+        if (first == entries->end()) return std::unexpected(validation_error("Context head is not visible"));
+        entries->erase(entries->begin(), first);
+    }
+    std::map<std::int64_t, ContextEdit> edits;
+    for (const EntryRecord& entry : *entries) {
+        for (const ContextEdit& edit : entry.edits)
+            edits.insert_or_assign(edit.target.value, edit);
+    }
+    std::vector<chord::Json> messages;
+    std::vector<chord::Json> open;
+    for (const EntryRecord& entry : *entries) {
+        if (entry.kind == "pi.reset") {
+            messages.clear();
+            open.clear();
+        }
+        if (entry.head.has_value() && entry.id != *head) continue;
+        const auto edit = edits.find(entry.id.value);
+        if (edit != edits.end() && edit->second.action == "omit") continue;
+        const std::vector<chord::Json>& contribution =
+                edit != edits.end() && edit->second.action == "replace" ? edit->second.messages : entry.model;
+        for (const chord::Json& message : contribution) {
+            const auto* object = message.as_object();
+            if (object == nullptr) continue;
+            const auto role = object->find("role");
+            if (role == object->end() || role->second.as_string() == nullptr) continue;
+            const std::string& role_name = *role->second.as_string();
+            if (role_name == "assistant") {
+                const auto stop_reason = object->find("stopReason");
+                if (stop_reason != object->end() && stop_reason->second.as_string() != nullptr &&
+                        (*stop_reason->second.as_string() == "aborted" || *stop_reason->second.as_string() == "error" ||
+                                *stop_reason->second.as_string() == "deferred"))
+                    continue;
+                if (!open.empty()) {
+                    messages.insert(messages.end(), open.begin(), open.end());
+                    open.clear();
+                }
+            }
+            open.push_back(message);
+        }
+    }
+    messages.insert(messages.end(), open.begin(), open.end());
+    return messages;
 }
 
 support::Expected<std::optional<ConversationRecord>> Transaction::conversation(ConversationId id) {

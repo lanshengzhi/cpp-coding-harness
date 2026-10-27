@@ -443,6 +443,12 @@ chord::Json encode_conversation_record(const ConversationRecord& conversation) {
         owner.emplace("taskId", chord::Json(static_cast<double>(conversation.owner->task_id.value)));
         obj.emplace("owner", chord::Json(std::move(owner)));
     }
+    if (conversation.parent.has_value()) {
+        chord::Json::Object parent;
+        parent.emplace("conversationId", chord::Json(static_cast<double>(conversation.parent->conversation_id.value)));
+        parent.emplace("at", chord::Json(static_cast<double>(conversation.parent->at.value)));
+        obj.emplace("parent", chord::Json(std::move(parent)));
+    }
     return chord::Json(std::move(obj));
 }
 
@@ -457,6 +463,21 @@ support::Expected<ConversationRecord> decode_conversation_record(const chord::Js
         return std::unexpected(corruption("Conversation record missing id"));
     }
     ConversationRecord record{.id = ConversationId{static_cast<std::int64_t>(*id_num)}};
+    const auto parent_it = obj->find("parent");
+    if (parent_it != obj->end()) {
+        const auto* parent = parent_it->second.as_object();
+        if (parent == nullptr) return std::unexpected(corruption("Conversation parent must be a JSON object"));
+        const auto conversation_it = parent->find("conversationId");
+        const auto at_it = parent->find("at");
+        const auto* conversation_num = conversation_it == parent->end() ? nullptr : conversation_it->second.as_number();
+        const auto* at_num = at_it == parent->end() ? nullptr : at_it->second.as_number();
+        if (conversation_num == nullptr || at_num == nullptr) {
+            return std::unexpected(corruption("Conversation parent missing an edge field"));
+        }
+        record.parent = ConversationRecord::Parent{
+                .conversation_id = ConversationId{static_cast<std::int64_t>(*conversation_num)},
+                .at = EntryId{static_cast<std::int64_t>(*at_num)}};
+    }
     const auto owner_it = obj->find("owner");
     if (owner_it != obj->end()) {
         const auto* owner = owner_it->second.as_object();

@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <span>
 #include <string>
 #include <string_view>
@@ -176,6 +178,27 @@ struct StorageState::Impl {
         const auto retired_by_batch = [&retired_in_batch](std::int64_t id) {
             return std::ranges::find(retired_in_batch, id) != retired_in_batch.end();
         };
+        const auto entry_visible = [](ConversationId conversation_id,
+                                           EntryId entry_id,
+                                           const std::map<std::int64_t, ConversationRecord>& conversations,
+                                           const std::map<std::int64_t, StoredEntryState>& entries) {
+            const auto entry = entries.find(entry_id.value);
+            if (entry == entries.end()) return false;
+            std::optional<ConversationId> current = conversation_id;
+            std::optional<EntryId> cutoff;
+            std::set<std::int64_t> visited;
+            while (current.has_value() && visited.insert(current->value).second) {
+                const auto conversation = conversations.find(current->value);
+                if (conversation == conversations.end()) return false;
+                if (entry->second.record.conversation_id == *current) {
+                    return !cutoff.has_value() || entry_id.value <= cutoff->value;
+                }
+                if (!conversation->second.parent.has_value()) return false;
+                cutoff = conversation->second.parent->at;
+                current = conversation->second.parent->conversation_id;
+            }
+            return false;
+        };
 
         for (const StorageWrite& write : detached) {
             if (write.type == "conversation") {
@@ -187,6 +210,16 @@ struct StorageState::Impl {
                 if (next_conversations.contains(record.id.value)) {
                     return std::unexpected(
                             support::make_error(support::ErrorCode::Validation, "Conversation already exists"));
+                }
+                if (record.parent.has_value()) {
+                    const auto parent = next_conversations.find(record.parent->conversation_id.value);
+                    if (parent == next_conversations.end() || !entry_visible(record.parent->conversation_id,
+                                                                      record.parent->at,
+                                                                      next_conversations,
+                                                                      next_entries)) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Fork parent entry does not exist"));
+                    }
                 }
                 next_conversations.emplace(record.id.value, record);
                 next_conversation_ids.push_back(record.id.value);
@@ -202,6 +235,27 @@ struct StorageState::Impl {
                 }
                 if (!next_conversations.contains(record.conversation_id.value)) {
                     return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown conversation"));
+                }
+                if (record.head.has_value()) {
+                    const auto head = next_entries.find(record.head->value);
+                    const bool self = record.head == record.id;
+                    if (!self &&
+                            (head == next_entries.end() ||
+                                    !entry_visible(
+                                            record.conversation_id, *record.head, next_conversations, next_entries))) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Entry head is not visible from its conversation"));
+                    }
+                }
+                for (const ContextEdit& edit : record.edits) {
+                    if (!entry_visible(record.conversation_id, edit.target, next_conversations, next_entries)) {
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Context edit target is not visible from its conversation"));
+                    }
+                    if (edit.action != "omit" && edit.action != "replace") {
+                        return std::unexpected(
+                                support::make_error(support::ErrorCode::Validation, "Unknown context edit action"));
+                    }
                 }
                 next_entries.emplace(record.id.value, StoredEntryState{.record = record, .commit_seq = seq});
                 next_entry_ids[record.conversation_id.value].push_back(record.id.value);
@@ -524,18 +578,63 @@ support::Expected<std::vector<EntryRecord>> StorageState::scan_entries(
         return std::unexpected(impl_->closed_error());
     }
     std::vector<EntryRecord> records;
-    const auto found = impl_->entry_ids_by_conversation.find(conversation_id.value);
-    if (found == impl_->entry_ids_by_conversation.end()) {
-        return records;
+    if (!impl_->conversations.contains(conversation_id.value)) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Conversation " + std::to_string(conversation_id.value) + " does not exist"));
     }
-    // The frozen backend scans entries newest first.
-    for (auto index = found->second.size(); index > 0; --index) {
-        if (records.size() >= limit) {
-            break;
+
+    std::vector<EntryRecord> visible;
+    std::optional<ConversationId> current = conversation_id;
+    std::optional<EntryId> cutoff;
+    std::set<std::int64_t> visited;
+    while (current.has_value()) {
+        if (!impl_->conversations.contains(current->value)) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "Conversation " + std::to_string(current->value) + " does not exist"));
         }
-        const auto entry = impl_->entries.find(found->second[index - 1]);
-        if (entry != impl_->entries.end()) {
-            records.push_back(entry->second.record);
+        if (!visited.insert(current->value).second) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Conversation ancestry contains a cycle"));
+        }
+        const auto record = impl_->conversations.find(current->value);
+        if (record == impl_->conversations.end()) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "Conversation ancestry is incomplete"));
+        }
+        const auto found = impl_->entry_ids_by_conversation.find(current->value);
+        if (found != impl_->entry_ids_by_conversation.end()) {
+            const std::int64_t ceiling = cutoff.has_value() ? cutoff->value : std::numeric_limits<std::int64_t>::max();
+            for (auto index = found->second.rbegin(); index != found->second.rend(); ++index) {
+                const std::int64_t id = *index;
+                if (id > ceiling) continue;
+                const auto entry = impl_->entries.find(id);
+                if (entry != impl_->entries.end()) visible.push_back(entry->second.record);
+            }
+        }
+        if (!record->second.parent.has_value()) break;
+        cutoff = record->second.parent->at;
+        current = record->second.parent->conversation_id;
+    }
+    std::ranges::sort(
+            visible, [](const EntryRecord& left, const EntryRecord& right) { return left.id.value < right.id.value; });
+    const std::size_t begin = visible.size() > limit ? visible.size() - limit : 0;
+    records.reserve(visible.size() - begin);
+    for (std::size_t index = visible.size(); index > begin; --index)
+        records.push_back(visible[index - 1]);
+    return records;
+}
+
+support::Expected<std::vector<DocumentRecord>> StorageState::scan_conversation_documents(
+        ConversationId conversation_id, DocumentPoint at, std::size_t limit) {
+    std::lock_guard lock(impl_->mutex);
+    if (impl_->closed) return std::unexpected(impl_->closed_error());
+    std::vector<DocumentRecord> records;
+    for (const auto& [id, stored] : impl_->documents) {
+        (void)id;
+        if (stored.record.conversation_id == conversation_id && stored.record.scope() == DocumentScope::Conversation &&
+                is_alive_at(stored.record, at)) {
+            if (records.size() >= limit) break;
+            records.push_back(stored.record);
         }
     }
     return records;

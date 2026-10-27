@@ -6,7 +6,9 @@
 #include "durable/FrozenExpectation.hpp"
 #include "durable/GatedStorage.hpp"
 #include "durable/Outcome.hpp"
+#include "support/Json.hpp"
 #include "support/TempWorkspace.hpp"
+#include <cch/support/JsonAccess.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -15,7 +17,10 @@
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <memory>
+#include <ranges>
 #include <mutex>
 #include <semaphore>
 #include <string>
@@ -370,6 +375,436 @@ TEST_CASE("Harness receipt reports a final storage failure instead of hanging or
     CHECK_FALSE(receipt.has_value());
     if (!receipt.has_value()) CHECK(receipt.error().message == "Session failed after a storage error; close and reopen it");
     CHECK(harness->session().failed());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Harness rebuilds conversation context across reopen", "[durable][workflow][issue1082]") {
+    TempWorkspace workspace;
+    const std::filesystem::path file = workspace.path() / "reopen";
+    auto storage = JsonlStorage::open(file);
+    REQUIRE(storage.has_value());
+    const auto open_harness = [](Storage& backend,
+                                      std::atomic_int& requests,
+                                      std::atomic_size_t& observed_size,
+                                      std::vector<ai::MessageVariant>& observed_messages,
+                                      std::mutex& observed_mutex) {
+        HarnessOptions options;
+        options.stream = [&requests, &observed_size, &observed_messages, &observed_mutex](
+                                 ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+            requests.fetch_add(1);
+            observed_size.store(context.messages.size());
+            {
+                std::lock_guard lock(observed_mutex);
+                observed_messages = context.messages;
+            }
+            return ai::ModelStream{ai::ModelStreamProducer{[](ai::AssistantEventSink sink,
+                                                                   ai::ModelStreamCompletion completion) noexcept {
+                auto response = ai::assistant_text_message("answer");
+                if (auto delivered = sink(ai::AssistantDoneEvent{.reason = response.stop_reason, .message = response});
+                        !delivered)
+                    completion(std::unexpected(delivered.error()));
+                else
+                    completion(std::move(response));
+            }}};
+        };
+        return Harness::open(backend, std::move(options));
+    };
+    std::atomic_int requests{0};
+    std::atomic_size_t first_context_size{0};
+    std::vector<ai::MessageVariant> first_context;
+    std::mutex first_context_mutex;
+    auto opened =
+            consume(open_harness(*storage.value(), requests, first_context_size, first_context, first_context_mutex));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    const ConversationId root_id = root.value();
+    auto first = consume(harness->submit(root_id, text_input("remember this")));
+    REQUIRE(first.has_value());
+    REQUIRE(consume(first.value().wait()).has_value());
+    CHECK(first_context_size.load() == 1);
+    REQUIRE(first_context.size() == 1);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(first_context.front())) == "remember this");
+    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(storage.value()->close().has_value());
+    storage = JsonlStorage::open(file);
+    REQUIRE(storage.has_value());
+
+    std::atomic_int reopened_requests{0};
+    std::atomic_size_t reopened_context_size{0};
+    std::vector<ai::MessageVariant> reopened_context;
+    std::mutex reopened_context_mutex;
+    auto reopened = consume(open_harness(
+            *storage.value(), reopened_requests, reopened_context_size, reopened_context, reopened_context_mutex));
+    REQUIRE(reopened.has_value());
+    harness = std::move(reopened.value());
+    auto second = consume(harness->submit(root_id, text_input("continue")));
+    if (!second.has_value()) UNSCOPED_INFO(second.error().message);
+    REQUIRE(second.has_value());
+    REQUIRE(consume(second.value().wait()).has_value());
+    CHECK(requests.load() == 1);
+    CHECK(reopened_requests.load() == 1);
+    CHECK(reopened_context_size.load() == 3);
+    REQUIRE(reopened_context.size() == 3);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(reopened_context.at(0))) == "remember this");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(reopened_context.at(2))) == "continue");
+    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(storage.value()->close().has_value());
+}
+
+TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets with handoff",
+        "[durable][workflow][issue1082]") {
+    const auto fork_frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1056/conversations.json",
+            "a fork copies the transcript and agent state as of its entry and stays independent");
+    REQUIRE(fork_frozen.has_value());
+    const auto reset_frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1056/conversations.json",
+            "reset starts a new context and carries its handoff text as the first user message");
+    REQUIRE(reset_frozen.has_value());
+    TempWorkspace workspace;
+    const std::filesystem::path dir = workspace.path() / "fork-reset";
+
+    std::atomic_int requests{0};
+    HarnessOptions options;
+    options.now = [] { return std::int64_t{7}; };
+    std::mutex contexts_mutex;
+    std::vector<std::vector<ai::MessageVariant>> observed_contexts;
+    options.stream = [&requests, &contexts_mutex, &observed_contexts](
+                             ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+        const int turn = requests++;
+        {
+            std::lock_guard lock(contexts_mutex);
+            observed_contexts.push_back(context.messages);
+        }
+        return ai::ModelStream{ai::ModelStreamProducer{[turn](ai::AssistantEventSink sink,
+                                                               ai::ModelStreamCompletion completion) noexcept {
+            auto response = ai::assistant_text_message(turn == 0 ? "a1" : "a2");
+            if (auto delivered = sink(ai::AssistantDoneEvent{.reason = response.stop_reason, .message = response});
+                    !delivered)
+                completion(std::unexpected(delivered.error()));
+            else
+                completion(std::move(response));
+        }}};
+    };
+    auto opened_storage = JsonlStorage::open(dir);
+    REQUIRE(opened_storage.has_value());
+    std::unique_ptr<JsonlStorage> storage = std::move(*opened_storage);
+    auto opened = consume(Harness::open(*storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    const ConversationId root_id = root.value();
+
+    auto first = consume(harness->submit(root_id, text_input("u1")));
+    if (!first.has_value()) {
+        INFO(first.error().message);
+        FAIL("submit failed");
+    }
+    auto first_receipt = consume(first.value().wait());
+    REQUIRE(first_receipt.has_value());
+    if (!first_receipt.has_value()) {
+        const bool closed = consume(harness->close()).has_value();
+        FAIL(first_receipt.error().message + " close=" + std::to_string(closed));
+    }
+    const auto root_entries = storage->scan_entries(root_id, 100);
+    if (!root_entries.has_value()) {
+        INFO(root_entries.error().message);
+        FAIL("scan failed");
+    }
+    if (root_entries->size() != 2) FAIL("unexpected entries");
+    const EntryId first_turn = root_entries->front().id;
+
+    auto fork = consume(harness->fork_conversation(root_id, first_turn));
+    REQUIRE(fork.has_value());
+    if (!fork.has_value()) {
+        REQUIRE(consume(harness->close()).has_value());
+        FAIL(fork.error().message);
+    }
+    const ConversationId fork_id = fork.value().id;
+    CHECK(fork.value().parent == ConversationRecord::Parent{.conversation_id = root_id, .at = first_turn});
+    auto inherited = storage->scan_entries(fork_id, 100);
+    REQUIRE(inherited.has_value());
+    REQUIRE(inherited->size() == 2);
+    CHECK(inherited->front().id == first_turn);
+
+    auto later = consume(harness->submit(root_id, text_input("u2")));
+    REQUIRE(later.has_value());
+    REQUIRE(consume(later.value().wait()).has_value());
+    auto branch = consume(harness->submit(fork_id, text_input("branch")));
+    REQUIRE(branch.has_value());
+    REQUIRE(consume(branch.value().wait()).has_value());
+    auto original = storage->scan_entries(root_id, 100);
+    auto fork_entries = storage->scan_entries(fork_id, 100);
+    REQUIRE(original.has_value());
+    REQUIRE(fork_entries.has_value());
+    const auto* root_expected = fork_frozen->array_member("rootEntries");
+    REQUIRE(root_expected != nullptr);
+    std::ranges::reverse(*original);
+    {
+        std::string kinds;
+        for (const auto& entry : *original) {
+            if (!kinds.empty()) kinds += ",";
+            kinds += entry.kind;
+        }
+        INFO(kinds);
+    }
+    CHECK(json_equals(transcript(*original), *root_expected));
+    CHECK(std::ranges::any_of(
+            *fork_entries, [first_turn](const EntryRecord& entry) { return entry.id == first_turn; }));
+    CHECK(std::ranges::any_of(*fork_entries, [](const EntryRecord& entry) {
+        return entry.kind == "pi.user" && entry.data.as_object()
+                                                          ->at("model")
+                                                          .as_array()
+                                                          ->front()
+                                                          .as_object()
+                                                          ->at("content")
+                                                          .as_array()
+                                                          ->front()
+                                                          .as_object()
+                                                          ->at("text") == chord::Json{"branch"};
+    }));
+    const auto* distinct = fork_frozen->member("forksAreDistinct");
+    const auto* preserved = fork_frozen->member("rootStillHasTwoTurns");
+    REQUIRE(distinct != nullptr);
+    REQUIRE(preserved != nullptr);
+    CHECK(fork_id != root_id);
+    CHECK(original->size() == 4);
+    CHECK(fork_entries->size() == 4);
+
+    // The selected entry's commit fixes the source point. The as-of document
+    // also proves the fork copied the agent state as of the selected entry,
+    // and the retained prompt deltas prove reset does not replay them.
+    // is committed with a later source revision before the fork is made.
+    auto doc_definition = define_document(
+            DocumentDefinitionBuilder{"issue1082.as-of"}.conversation(DocumentHistory::Rewindable, DocumentFork::AsOf),
+            std::move_only_function<chord::Json()>{
+                    [] { return chord::Json{chord::Json::Object{{"value", chord::Json{"initial"}}}}; }});
+    REQUIRE(doc_definition.has_value());
+    std::optional<EntryId> selected;
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto marker = tx.append_entry(root_id, "issue1082.marker", chord::Json{chord::Json::Object{}});
+        if (!marker) return std::unexpected(marker.error());
+        selected = marker->id;
+        auto doc = tx.doc(*doc_definition, DocumentAddress{.conversation_id = root_id});
+        if (!doc) return std::unexpected(doc.error());
+        return doc->set(chord::Path{chord::path_key("value")}, chord::Json{"at-selected"});
+    })).has_value());
+    REQUIRE(selected.has_value());
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto doc = tx.doc(*doc_definition, DocumentAddress{.conversation_id = root_id});
+        if (!doc) return std::unexpected(doc.error());
+        return doc->set(chord::Path{chord::path_key("value")}, chord::Json{"current"});
+    })).has_value());
+    auto doc_fork = consume(harness->fork_conversation(root_id, *selected));
+    REQUIRE(doc_fork.has_value());
+    const ConversationId doc_fork_id = doc_fork.value().id;
+    auto fork_agent_doc = storage->find_document(
+            "pi.agent:v1", DocumentAddress{.conversation_id = doc_fork_id}, DocumentPoint::current());
+    REQUIRE(fork_agent_doc.has_value());
+    REQUIRE(fork_agent_doc->has_value());
+    auto fork_agent = storage->document(fork_agent_doc->value().id, DocumentPoint::current());
+    REQUIRE(fork_agent.has_value());
+    REQUIRE(fork_agent->has_value());
+    const auto* fork_agent_object = fork_agent->value().value.as_object();
+    REQUIRE(fork_agent_object != nullptr);
+    CHECK_FALSE(fork_agent_object->contains("thinkingLevel"));
+    auto copied = storage->find_document(
+            doc_definition->kind(), DocumentAddress{.conversation_id = doc_fork_id}, DocumentPoint::current());
+    REQUIRE(copied.has_value());
+    REQUIRE(copied->has_value());
+    auto copied_value = storage->document((*copied)->id, DocumentPoint::current());
+    REQUIRE(copied_value.has_value());
+    REQUIRE(copied_value->has_value());
+    CHECK((*copied_value)->value.as_object()->at("value") == chord::Json{"at-selected"});
+    CHECK((*copied_value)->value.as_object()->at("value") != chord::Json{"current"});
+
+    const auto before_reset = storage->scan_entries(root_id, 100);
+    REQUIRE(before_reset.has_value());
+    REQUIRE(before_reset->size() == 5);
+    REQUIRE(consume(harness->reset(root_id, std::string{"carry this forward"})).has_value());
+    auto after_reset = consume(harness->submit(root_id, text_input("u2")));
+    REQUIRE(after_reset.has_value());
+    REQUIRE(consume(after_reset.value().wait()).has_value());
+    // A discriminating reopen at the fork: rebuilding this branch starts from
+    // the fork's copied state, not from any later root writes.
+    // Release the backend only after the Session close settles, then reopen
+    // the same directory with a fresh backend and Harness.
+    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(consume(harness->session().close()).has_value());
+    storage.reset();
+    std::string persisted_main;
+    {
+        std::ifstream input(dir / "main.jsonl", std::ios::binary);
+        persisted_main = std::string{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
+    }
+    auto reopened_storage = JsonlStorage::open(dir);
+    if (!reopened_storage.has_value()) {
+        std::string line5;
+        {
+            std::size_t start = 0;
+            for (int index = 0; index < 5 && start < persisted_main.size(); ++index) {
+                const std::size_t end = persisted_main.find('\n', start);
+                line5 = persisted_main.substr(start, end == std::string::npos ? std::string::npos : end - start);
+                if (end == std::string::npos) break;
+                start = end + 1;
+            }
+        }
+        auto parsed = support::read_json(line5);
+        std::string debug;
+        if (parsed) {
+            const auto* root = parsed->get_if<support::JsonValue::object_t>();
+            const auto* writes = root == nullptr ? nullptr : support::json_array_member(*root, "writes");
+            if (writes != nullptr) {
+                debug = "line5=[" + line5 + "] writes=" + std::to_string(writes->size());
+                for (std::size_t index = 0; index < writes->size(); ++index) {
+                    const auto* write = writes->at(index).get_if<support::JsonValue::object_t>();
+                    if (write == nullptr) continue;
+                    const auto* type = support::json_member(*write, "type");
+                    const auto* id = support::json_member(*write, "id");
+                    const auto* ordinal = support::json_member(*write, "ordinal");
+                    const auto* source = support::json_member(*write, "source");
+                    const auto* record = support::json_member(*write, "record");
+                    debug += " [" + std::to_string(index) + "]";
+                    if (const auto* type_string = type != nullptr ? type->get_if<std::string>() : nullptr)
+                        debug += " type=" + *type_string;
+                    debug += " id=" + std::to_string(id != nullptr && id->get_if<double>() != nullptr);
+                    debug += " ordinal=" + std::to_string(ordinal != nullptr && ordinal->get_if<double>() != nullptr);
+                    debug += " source=" + std::to_string(source != nullptr &&
+                                                         source->get_if<support::JsonValue::object_t>() != nullptr);
+                    debug += " record=" + std::to_string(record != nullptr &&
+                                                         record->get_if<support::JsonValue::object_t>() != nullptr);
+                }
+            }
+        }
+        FAIL(std::string{"reopen failed: "} + reopened_storage.error().message + "\n" + debug + "\n" + persisted_main);
+    }
+    storage = std::move(*reopened_storage);
+    std::atomic_int fork_requests{0};
+    std::atomic_size_t fork_context_size{0};
+    std::vector<ai::MessageVariant> fork_context;
+    std::mutex fork_context_mutex;
+    {
+        HarnessOptions fork_options;
+        fork_options.stream = [&fork_requests, &fork_context_size, &fork_context, &fork_context_mutex](
+                                      ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+            fork_requests.fetch_add(1);
+            fork_context_size.store(context.messages.size());
+            {
+                std::lock_guard lock(fork_context_mutex);
+                fork_context = context.messages;
+            }
+            return ai::ModelStream{ai::ModelStreamProducer{[](ai::AssistantEventSink sink,
+                                                                   ai::ModelStreamCompletion completion) noexcept {
+                auto response = ai::assistant_text_message("fork reply");
+                if (auto delivered = sink(ai::AssistantDoneEvent{.reason = response.stop_reason, .message = response});
+                        !delivered)
+                    completion(std::unexpected(delivered.error()));
+                else
+                    completion(std::move(response));
+            }}};
+        };
+        auto reopened = consume(Harness::open(*storage, std::move(fork_options)));
+        REQUIRE(reopened.has_value());
+        harness = std::move(reopened.value());
+        auto forked = consume(harness->submit(doc_fork_id, text_input("continue from the fork")));
+        if (!forked.has_value()) {
+            INFO(std::string{"fork submit failed: "} + forked.error().message);
+            FAIL("fork submit failed");
+        }
+        REQUIRE(forked.has_value());
+        REQUIRE(consume(forked.value().wait()).has_value());
+        CHECK(fork_requests.load() == 1);
+        // The doc fork descends from the root conversation at the selected
+        // entry, so reopened replay rebuilds the root ancestry (u1/a1/u2/a2)
+        // and appends the new user turn.
+        REQUIRE(fork_context.size() == 5);
+        CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(fork_context.at(0))) == "u1");
+        CHECK(std::get<ai::TextContent>(std::get<ai::AssistantMessage>(fork_context.at(1)).content.front()).text ==
+                "a1");
+        CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(fork_context.at(2))) == "u2");
+        CHECK(std::get<ai::TextContent>(std::get<ai::AssistantMessage>(fork_context.at(3)).content.front()).text ==
+                "a2");
+        CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(fork_context.at(4))) == "continue from the fork");
+    }
+    REQUIRE(observed_contexts.size() == 4);
+    // The last captured pre-reopen context is the post-reset turn: the
+    // handoff user message restarts the context, followed by the new user
+    // turn (frozen reset scenario contextTexts minus the system row).
+    const auto& reset_context = observed_contexts.back();
+    REQUIRE(reset_context.size() == 2);
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(reset_context.at(0))) == "carry this forward");
+    CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(reset_context.at(1))) == "u2");
+    std::vector<chord::Json> replayed;
+    auto final_messages = harness->commit([&replayed](Transaction& tx) -> support::Expected<void> {
+        auto messages = tx.conversation_messages(ConversationId{.value = 1});
+        if (!messages) return std::unexpected(messages.error());
+        replayed = std::move(*messages);
+        return {};
+    });
+    REQUIRE(consume(std::move(final_messages)).has_value());
+    CHECK(observed_contexts.at(0).size() == 1);
+    CHECK(observed_contexts.at(1).size() == 3);
+    CHECK(observed_contexts.at(2).size() == 3);
+    const auto* expected_roles = reset_frozen->array_member("contextRoles");
+    const auto* expected_texts = reset_frozen->array_member("contextTexts");
+    REQUIRE(expected_roles != nullptr);
+    REQUIRE(expected_texts != nullptr);
+    // Frozen pi's reset context starts with the planned system row; the
+    // durable-owned replay comparison skips that presentation row.
+    REQUIRE(expected_roles->size() == replayed.size() + 1);
+    REQUIRE(expected_texts->size() == replayed.size() + 1);
+    CHECK(expected_roles->front().get_string() == "system");
+    CHECK(expected_texts->front().get_string() == "system");
+    for (std::size_t index = 0; index < replayed.size(); ++index) {
+        const std::size_t expected_index = index + 1;
+        const auto* message = replayed.at(index).as_object();
+        REQUIRE(message != nullptr);
+        CHECK(message->at("role") == chord::Json{expected_roles->at(expected_index).get_string()});
+        std::string text;
+        if (const auto content = message->find("content"); content != message->end()) {
+            if (const auto* string = content->second.as_string())
+                text = *string;
+            else if (const auto* blocks = content->second.as_array())
+                for (const chord::Json& block : *blocks) {
+                    if (const auto* fields = block.as_object(); fields != nullptr) {
+                        if (const auto value = fields->find("text");
+                                value != fields->end() && value->second.as_string())
+                            text += *value->second.as_string();
+                    }
+                }
+        }
+        CHECK(chord::Json{text} == chord::Json{expected_texts->at(expected_index).get_string()});
+    }
+    auto final_entries = storage->scan_entries(root_id, 100);
+    REQUIRE(final_entries.has_value());
+    const auto reset_entry =
+            std::ranges::find_if(*final_entries, [](const EntryRecord& entry) { return entry.kind == "pi.reset"; });
+    REQUIRE(reset_entry != final_entries->end());
+    CHECK(reset_entry->head == reset_entry->id);
+    const auto* reset_spec = reset_frozen->array_member("reset");
+    REQUIRE(reset_spec != nullptr);
+    CHECK(reset_spec->size() == 1);
+    const auto* reset_spec_object = reset_spec->front().get_if<support::JsonValue::object_t>();
+    REQUIRE(reset_spec_object != nullptr);
+    const auto expected_self_head = reset_spec_object->find("headIsSelf");
+    REQUIRE(expected_self_head != reset_spec_object->end());
+    const auto* expected_bool = expected_self_head->second.get_if<bool>();
+    REQUIRE(expected_bool != nullptr);
+    CHECK(*expected_bool);
+    CHECK(reset_entry->model.size() == 1);
+    const auto* reset_record = reset_entry->model.front().as_object();
+    REQUIRE(reset_record != nullptr);
+    CHECK(reset_spec->size() == 1);
+    const auto reset_role = reset_record->find("role");
+    REQUIRE(reset_role != reset_record->end());
+    REQUIRE(reset_role->second.as_string() != nullptr);
+    CHECK(*reset_role->second.as_string() == "user");
+    const auto reset_content = reset_record->find("content");
+    REQUIRE(reset_content != reset_record->end());
+    const auto* reset_text_value = reset_content->second.as_string();
+    REQUIRE(reset_text_value != nullptr);
+    CHECK(*reset_text_value == "carry this forward");
     REQUIRE(consume(harness->close()).has_value());
 }
 

@@ -111,6 +111,13 @@ public:
         return inner_->scan_conversations(limit);
     }
 
+    [[nodiscard]] support::Expected<std::vector<::cch::durable::DocumentRecord>> scan_conversation_documents(
+            ::cch::durable::ConversationId conversation_id,
+            ::cch::durable::DocumentPoint at,
+            std::size_t limit) override {
+        return inner_->scan_conversation_documents(conversation_id, at, limit);
+    }
+
     [[nodiscard]] support::Expected<std::optional<::cch::durable::DocumentRecord>> find_document(std::string_view kind,
             const ::cch::durable::DocumentAddress& address,
             ::cch::durable::DocumentPoint at) override {

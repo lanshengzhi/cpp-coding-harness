@@ -76,6 +76,18 @@ constexpr std::string_view kClosedMessage = "JSONL storage is closed";
     if (entry.by_task_id.has_value()) {
         value.emplace("byTaskId", number(entry.by_task_id->value));
     }
+    if (!entry.edits.empty()) {
+        support::JsonValue::array_t edits;
+        for (const ContextEdit& edit : entry.edits) {
+            support::JsonValue::array_t messages;
+            for (const chord::Json& message : edit.messages)
+                messages.push_back(encode_json(message));
+            edits.push_back(object({{"target", number(edit.target.value)},
+                    {"action", support::JsonValue{edit.action}},
+                    {"messages", support::JsonValue{std::move(messages)}}}));
+        }
+        value.emplace("edits", support::JsonValue{std::move(edits)});
+    }
     return support::JsonValue{std::move(value)};
 }
 
@@ -471,12 +483,34 @@ struct MainMarker {
     if (const auto raw_task_id = support::json_integer_member(*entry, "byTaskId")) {
         by_task_id = TaskId{.value = *raw_task_id};
     }
+    std::vector<ContextEdit> edits;
+    if (const auto* raw_edits = support::json_array_member(*entry, "edits")) {
+        for (const support::JsonValue& raw_edit : *raw_edits) {
+            const auto* object = raw_edit.get_if<support::JsonValue::object_t>();
+            if (object == nullptr)
+                return std::unexpected(corruption("Invalid context edit in " + std::string{description}));
+            const auto target = support::json_integer_member(*object, "target");
+            const auto action = support::json_string_member(*object, "action");
+            const auto* raw_messages = support::json_array_member(*object, "messages");
+            if (!target || !action || raw_messages == nullptr) {
+                return std::unexpected(corruption("Invalid context edit in " + std::string{description}));
+            }
+            ContextEdit edit{.target = EntryId{.value = *target}, .action = std::string{*action}};
+            for (const support::JsonValue& raw_message : *raw_messages) {
+                auto decoded = decode_json(raw_message);
+                if (!decoded) return std::unexpected(corruption("Invalid context edit in " + std::string{description}));
+                edit.messages.push_back(std::move(*decoded));
+            }
+            edits.push_back(std::move(edit));
+        }
+    }
     return EntryRecord{.id = EntryId{.value = *id},
             .conversation_id = ConversationId{.value = *conversation_id},
             .kind = std::string{*kind},
             .data = std::move(decoded_data),
             .head = head,
             .model = std::move(model),
+            .edits = std::move(edits),
             .by_task_id = by_task_id};
 }
 
@@ -644,10 +678,12 @@ struct MainMarker {
                 .kind = MainKind::DocumentCreate, .document_record = std::move(*parsed_record), .ordinal = *ordinal};
     }
     if (*type == "document.copy") {
-        const auto id = support::json_integer_member(*operation, "id");
+        const auto* record = support::json_object_member(*operation, "record");
+        if (record == nullptr)
+            return std::unexpected(corruption("Invalid document copy in " + std::string{description}));
+        const auto id = support::json_integer_member(*record, "id");
         const auto ordinal = support::json_integer_member(*operation, "ordinal");
         const auto* source = support::json_object_member(*operation, "source");
-        const auto* record = support::json_object_member(*operation, "record");
         if (!id || !ordinal || *ordinal < 0 || source == nullptr || record == nullptr) {
             return std::unexpected(corruption("Invalid document copy in " + std::string{description}));
         }
@@ -739,8 +775,25 @@ struct EncodedCommit {
     std::map<std::string, std::string> reclamations;
 };
 
-[[nodiscard]] EncodedCommit encode_commit(
-        Seq seq, std::span<const StorageWrite> writes, const std::set<std::int64_t>& current_only_documents) {
+/// Read and parse one existing document sidecar file.
+[[nodiscard]] support::Expected<std::vector<SidecarRecord>> load_sidecar_records(
+        const std::filesystem::path& directory, std::string_view file) {
+    auto lines = read_complete_lines(directory / file, file);
+    if (!lines) return std::unexpected(std::move(lines.error()));
+    std::vector<SidecarRecord> records;
+    records.reserve(lines->size());
+    for (std::size_t index = 0; index < lines->size(); ++index) {
+        auto record = parse_sidecar((*lines)[index].text, file, index + 1);
+        if (!record) return std::unexpected(std::move(record.error()));
+        records.push_back(std::move(*record));
+    }
+    return records;
+}
+
+[[nodiscard]] EncodedCommit encode_commit(Seq seq,
+        std::span<const StorageWrite> writes,
+        const std::set<std::int64_t>& current_only_documents,
+        const std::filesystem::path& directory) {
     std::vector<support::JsonValue> main_writes;
     std::map<std::string, std::string> sidecars;
     std::set<std::int64_t> retired;
@@ -790,14 +843,45 @@ struct EncodedCommit {
         } else if (write.type == "document.copy") {
             // A copy persists the source's materialized base as the new
             // incarnation's first revision.
+            const DocumentCopySource& source = *write.document_copy_source;
+            const std::string source_file = document_file(source.id);
+            auto source_sidecars = load_sidecar_records(directory, source_file);
+            if (!source_sidecars) {
+                return {};
+            }
+            const bool source_current_only = document_is_current_only(write.document_record.value());
+            std::vector<const SidecarRecord*> source_revisions;
+            source_revisions.reserve(source_sidecars->size());
+            for (const SidecarRecord& revision : *source_sidecars) {
+                if (source.at.at.has_value() && revision.seq > *source.at.at) break;
+                source_revisions.push_back(&revision);
+            }
+            if (source.at.at.has_value() && source_current_only) {
+                return {};
+            }
+            std::size_t base_index = source_revisions.size();
+            while (base_index > 0 && !source_revisions[base_index - 1]->payload.content.base) {
+                --base_index;
+            }
+            if (base_index == 0) {
+                return {};
+            }
+            const DocumentContent& base = source_revisions[base_index - 1]->payload.content;
+            chord::Json materialized = base.value;
+            for (std::size_t index = base_index; index < source_revisions.size(); ++index) {
+                auto applied =
+                        chord::apply_immutable_batches(materialized, {source_revisions[index]->payload.content.ops});
+                if (!applied) return {};
+                materialized = std::move(*applied);
+            }
             const std::string file = document_file(write.document_record->id);
             const std::int64_t ordinal = add_sidecar(file,
                     SidecarRecord{.seq = seq,
                             .ordinal = 0,
                             .payload = SidecarPayload{.id = write.document_record->id,
                                     .content = DocumentContent{.base = true,
-                                            .version = write.document_version,
-                                            .value = *write.document_value,
+                                            .version = base.version,
+                                            .value = std::move(materialized),
                                             .ops = {}}}});
             main_writes.push_back(object({{"type", support::JsonValue{"document.copy"}},
                     {"record", document_create_record(*write.document_record)},
@@ -805,7 +889,7 @@ struct EncodedCommit {
                             object({{"id", number(write.document_copy_source->id.value)},
                                     {"at",
                                             write.document_copy_source->at.at.has_value()
-                                                    ? support::JsonValue{number(*write.document_copy_source->at.at)}
+                                                    ? number(*write.document_copy_source->at.at)
                                                     : support::JsonValue{"current"}}})},
                     {"ordinal", number(ordinal)}}));
         } else if (write.type == "document.change") {
@@ -1046,19 +1130,22 @@ struct JsonlStorage::Impl {
                             return std::unexpected(corruption("Document creation lacks a confirmed base in commit " +
                                                               std::to_string(marker.seq)));
                         }
+                        StorageWrite restored{
+                                .type = operation.kind == MainKind::DocumentCopy ? "document.copy" : "document.create",
+                                .document_record = operation.document_record};
+                        if (operation.kind == MainKind::DocumentCopy) {
+                            restored.document_copy_source = operation.document_copy_source;
+                        }
                         if (record == nullptr) {
                             // A reclaimed creation still restores its record, so
                             // the retired incarnation stays addressable by ID.
-                            writes.push_back(StorageWrite{.type = "document.create",
-                                    .document_record = operation.document_record,
-                                    .document_version = 1,
-                                    .document_value = chord::Json{chord::Json::Object{}}});
+                            restored.document_version = 1;
+                            restored.document_value = chord::Json{chord::Json::Object{}};
                         } else {
-                            writes.push_back(StorageWrite{.type = "document.create",
-                                    .document_record = operation.document_record,
-                                    .document_version = record->payload.content.version,
-                                    .document_value = record->payload.content.value});
+                            restored.document_version = record->payload.content.version;
+                            restored.document_value = record->payload.content.value;
                         }
+                        writes.push_back(std::move(restored));
                     } else if (!reclaimed && record != nullptr) {
                         if (record->payload.content.base) {
                             writes.push_back(StorageWrite{.type = "document.change",
@@ -1204,7 +1291,7 @@ struct JsonlStorage::Impl {
             }
         }
 
-        EncodedCommit encoded = encode_commit(seq, writes, current_only_documents);
+        EncodedCommit encoded = encode_commit(seq, writes, current_only_documents, directory);
         for (const auto& [file, content] : encoded.sidecars) {
             if (auto appended = append_file(directory / file, content); !appended) {
                 poisoned = true;
@@ -1284,6 +1371,14 @@ support::Expected<std::vector<EntryRecord>> JsonlStorage::scan_entries(
         return std::unexpected(*error);
     }
     return impl_->state.scan_entries(conversation_id, limit);
+}
+
+support::Expected<std::vector<DocumentRecord>> JsonlStorage::scan_conversation_documents(
+        ConversationId conversation_id, DocumentPoint at, std::size_t limit) {
+    if (const auto error = impl_->unusable(); error.has_value()) {
+        return std::unexpected(*error);
+    }
+    return impl_->state.scan_conversation_documents(conversation_id, at, limit);
 }
 
 support::Expected<std::optional<DocumentRecord>> JsonlStorage::find_document(

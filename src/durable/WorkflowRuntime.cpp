@@ -15,6 +15,7 @@
 #include <format>
 #include <limits>
 #include <mutex>
+#include <set>
 #include <type_traits>
 #include <utility>
 
@@ -221,6 +222,189 @@ support::Expected<ai::UserMessage> input_user(const EntryRecord& entry) {
     return ai::user_text_message(*text->second.as_string(), *timestamp);
 }
 
+std::optional<ai::UserMessage> user_message_from_json(const Json& message);
+
+std::optional<ai::Tool> tool_from_json(const Json& value) {
+    const auto* object = value.as_object();
+    if (object == nullptr) return std::nullopt;
+    const auto name = object->find("name");
+    const auto description = object->find("description");
+    const auto parameters = object->find("parameters");
+    if (name == object->end() || name->second.as_string() == nullptr || description == object->end() ||
+            description->second.as_string() == nullptr || parameters == object->end())
+        return std::nullopt;
+    ai::Tool tool{.name = *name->second.as_string(),
+            .description = *description->second.as_string(),
+            .parameters = parameters->second.to_support()};
+    if (const auto found = object->find("outputSchema"); found != object->end()) {
+        tool.output_schema = found->second.to_support();
+    }
+    return tool;
+}
+
+std::optional<ai::MessageVariant> message_from_json(const Json& message) {
+    const auto* object = message.as_object();
+    if (object == nullptr) return std::nullopt;
+    const auto role = object->find("role");
+    if (role == object->end() || role->second.as_string() == nullptr) return std::nullopt;
+    const std::string& role_name = *role->second.as_string();
+    const auto timestamp_field = object->find("timestamp");
+    const auto timestamp = timestamp_field != object->end() && timestamp_field->second.as_number() != nullptr
+                                   ? static_cast<std::int64_t>(*timestamp_field->second.as_number())
+                                   : 0;
+    const auto content = object->find("content");
+    if (role_name == "user") {
+        auto user = user_message_from_json(message);
+        if (!user) return std::nullopt;
+        return std::optional<ai::MessageVariant>{std::in_place, ai::MessageVariant{std::move(*user)}};
+    }
+    if (role_name == "system") {
+        ai::SystemMessage result{.timestamp = timestamp};
+        if (content != object->end()) {
+            if (const std::string* text = content->second.as_string())
+                result.content = *text;
+            else if (const auto* blocks = content->second.as_array())
+                for (const Json& item : *blocks) {
+                    const auto* block = item.as_object();
+                    if (block == nullptr) continue;
+                    const auto text = block->find("text");
+                    if (text != block->end() && text->second.as_string() != nullptr)
+                        result.content += *text->second.as_string();
+                }
+        }
+        if (const auto sections = object->find("sections"); sections != object->end()) {
+            if (const auto* fields = sections->second.as_object())
+                for (const auto& [name, value] : *fields) {
+                    result.sections.push_back(ai::SystemMessageSection{.name = name,
+                            .text = value.as_string() ? std::optional<std::string>{*value.as_string()} : std::nullopt});
+                }
+        }
+        if (const auto tools = object->find("toolsAdded"); tools != object->end()) {
+            if (const auto* values = tools->second.as_array())
+                for (const Json& tool : *values) {
+                    if (auto parsed = tool_from_json(tool); parsed.has_value())
+                        result.tools_added.push_back(std::move(*parsed));
+                }
+        }
+        if (const auto tools = object->find("toolsRemoved"); tools != object->end()) {
+            if (const auto* values = tools->second.as_array())
+                for (const Json& tool : *values) {
+                    if (const auto* reference = tool.as_object()) {
+                        const auto name = reference->find("name");
+                        if (name != reference->end() && name->second.as_string() != nullptr)
+                            result.tools_removed.push_back(ai::ToolReference{.name = *name->second.as_string()});
+                    }
+                }
+        }
+        return ai::MessageVariant{std::move(result)};
+    }
+    const auto blocks = [content, object]() {
+        std::vector<ai::Content> parsed;
+        if (content == object->end()) return parsed;
+        if (const auto* values = content->second.as_array())
+            for (const Json& item : *values) {
+                const auto* block = item.as_object();
+                if (block == nullptr) continue;
+                const auto type = block->find("type");
+                if (type == block->end() || type->second.as_string() == nullptr) continue;
+                if (*type->second.as_string() == "text") {
+                    const auto text = block->find("text");
+                    if (text != block->end() && text->second.as_string() != nullptr)
+                        parsed.push_back(ai::text_content(*text->second.as_string()));
+                } else if (*type->second.as_string() == "thinking") {
+                    const auto thinking = block->find("thinking");
+                    if (thinking != block->end() && thinking->second.as_string() != nullptr)
+                        parsed.push_back(ai::thinking_content(*thinking->second.as_string()));
+                } else if (*type->second.as_string() == "image") {
+                    const auto data = block->find("data");
+                    const auto mime = block->find("mimeType");
+                    if (data != block->end() && data->second.as_string() != nullptr && mime != block->end() &&
+                            mime->second.as_string() != nullptr)
+                        parsed.push_back(ai::image_content(*data->second.as_string(), *mime->second.as_string()));
+                }
+            }
+        return parsed;
+    }();
+    if (role_name == "toolResult") {
+        const auto call_id = object->find("toolCallId");
+        const auto tool_name = object->find("toolName");
+        const auto is_error = object->find("isError");
+        return ai::MessageVariant{ai::ToolResultMessage{
+                .tool_call_id = call_id != object->end() && call_id->second.as_string() ? *call_id->second.as_string()
+                                                                                        : std::string{},
+                .tool_name = tool_name != object->end() && tool_name->second.as_string()
+                                     ? *tool_name->second.as_string()
+                                     : std::string{},
+                .content = blocks,
+                .is_error = is_error != object->end() && is_error->second.as_boolean() != nullptr &&
+                            *is_error->second.as_boolean(),
+                .timestamp = timestamp}};
+    }
+    if (role_name == "assistant") {
+        ai::AssistantMessage result{.timestamp = timestamp};
+        if (const auto found = object->find("stopReason");
+                found != object->end() && found->second.as_string() != nullptr) {
+            result.stop_reason =
+                    ai::stop_reason_from_string(*found->second.as_string()).value_or(ai::AssistantStopReason::Error);
+        }
+        if (const auto found = object->find("api"); found != object->end() && found->second.as_string())
+            result.api = *found->second.as_string();
+        if (const auto found = object->find("provider"); found != object->end() && found->second.as_string())
+            result.provider = *found->second.as_string();
+        if (const auto found = object->find("model"); found != object->end() && found->second.as_string())
+            result.model = *found->second.as_string();
+        if (const auto found = object->find("errorMessage"); found != object->end() && found->second.as_string())
+            result.error_message = *found->second.as_string();
+        for (const auto& block : blocks) {
+            if (const auto* text = std::get_if<ai::TextContent>(&block))
+                result.content.emplace_back(*text);
+            else if (const auto* thinking = std::get_if<ai::ThinkingContent>(&block))
+                result.content.emplace_back(*thinking);
+        }
+        return ai::MessageVariant{std::move(result)};
+    }
+    return std::nullopt;
+}
+
+std::optional<ai::UserMessage> user_message_from_json(const Json& message) {
+    const auto* object = message.as_object();
+    if (object == nullptr) return std::nullopt;
+    const auto role = object->find("role");
+    if (role == object->end() || role->second.as_string() == nullptr || *role->second.as_string() != "user") {
+        return std::nullopt;
+    }
+    const auto content = object->find("content");
+    if (content == object->end()) return std::nullopt;
+    std::vector<ai::Content> blocks;
+    if (const std::string* text = content->second.as_string()) {
+        blocks.push_back(ai::text_content(*text));
+    } else if (const auto* values = content->second.as_array()) {
+        for (const Json& block_json : *values) {
+            const auto* block = block_json.as_object();
+            if (block == nullptr) continue;
+            const auto type = block->find("type");
+            if (type == block->end() || type->second.as_string() == nullptr) continue;
+            if (*type->second.as_string() == "text") {
+                const auto text = block->find("text");
+                if (text != block->end() && text->second.as_string() != nullptr)
+                    blocks.push_back(ai::text_content(*text->second.as_string()));
+            } else if (*type->second.as_string() == "image") {
+                const auto data = block->find("data");
+                const auto mime = block->find("mimeType");
+                if (data != block->end() && data->second.as_string() != nullptr && mime != block->end() &&
+                        mime->second.as_string() != nullptr) {
+                    blocks.push_back(ai::image_content(*data->second.as_string(), *mime->second.as_string()));
+                }
+            }
+        }
+    }
+    std::int64_t timestamp = 0;
+    if (const auto value = object->find("timestamp"); value != object->end() && value->second.as_number() != nullptr) {
+        timestamp = static_cast<std::int64_t>(*value->second.as_number());
+    }
+    return ai::UserMessage{.content = std::move(blocks), .timestamp = timestamp};
+}
+
 // ── Lane C admission helpers (frozen pi inbox.ts, live.ts, submissions.ts) ──
 
 constexpr std::string_view kInboxDocKind{"pi.inbox:v1"};
@@ -245,9 +429,11 @@ support::Expected<Array> read_inbox_items(chord::Draft& inbox) {
     return *array;
 }
 
-/// A write is display-only when it pins neither model messages nor a head
+/// A write is display-only when it pins neither model messages nor a head or edits
 /// (presence counts, even when empty; frozen `isDisplayOnly`).
-bool is_display_only(const WriteEntry& entry) { return !entry.model.has_value() && !entry.head.has_value(); }
+bool is_display_only(const WriteEntry& entry) {
+    return !entry.model.has_value() && !entry.head.has_value() && entry.edits.empty();
+}
 
 /// The validated mode of one persisted inbox item. The mode string is frozen
 /// wire vocabulary; anything else fails the commit with a typed error instead
@@ -395,6 +581,33 @@ support::Expected<WriteEntry> write_entry_from_json(const Json& json) {
             entry.head = EntryHeadVariant{EntryId{.value = *pinned}};
         }
     }
+    if (const auto it = value->find("edits"); it != value->end()) {
+        const auto* edits = it->second.as_array();
+        if (edits == nullptr) return std::unexpected(validation("A write entry edits must be an array"));
+        for (const Json& item : *edits) {
+            const auto* edit = item.as_object();
+            if (edit == nullptr) return std::unexpected(validation("A context edit must be an object"));
+            const auto target = edit->find("target");
+            const auto action = edit->find("action");
+            if (target == edit->end() || action == edit->end() || action->second.as_string() == nullptr) {
+                return std::unexpected(validation("A context edit must have a target and action"));
+            }
+            auto target_id = as_integer(target->second);
+            if (!target_id) return std::unexpected(target_id.error());
+            ContextEdit decoded{.target = EntryId{.value = *target_id}, .action = *action->second.as_string()};
+            if (decoded.action != "omit" && decoded.action != "replace") {
+                return std::unexpected(validation("A context edit action must be \"omit\" or \"replace\""));
+            }
+            if (const auto messages = edit->find("messages"); messages != edit->end()) {
+                const auto* array = messages->second.as_array();
+                if (array == nullptr) return std::unexpected(validation("Context edit messages must be an array"));
+                decoded.messages = *array;
+            } else if (decoded.action == "replace") {
+                return std::unexpected(validation("A replace context edit must carry messages"));
+            }
+            entry.edits.push_back(std::move(decoded));
+        }
+    }
     return entry;
 }
 
@@ -451,8 +664,13 @@ support::Expected<EntryRecord> append_write_entry(
     if (entry.head.has_value()) {
         head = *entry.head;
     }
-    return tx.append_entry(
-            conversation_id, entry.kind, std::move(data), head, entry.model.value_or(std::vector<Json>{}));
+    return tx.append_entry(conversation_id,
+            entry.kind,
+            std::move(data),
+            head,
+            entry.model.value_or(std::vector<Json>{}),
+            std::nullopt,
+            entry.edits);
 }
 
 /// The run control marker of one live document value (frozen pi `LiveRun`).
@@ -600,6 +818,11 @@ support::Expected<BoundaryResult> apply_boundary(
         if (!appended) return std::unexpected(appended.error());
         auto placed = tx.place_submission(SubmissionId{.value = *id}, appended->id);
         if (!placed) return std::unexpected(placed.error());
+        const std::string_view kind = entry.has_value() ? std::string_view{entry->kind} : std::string_view{"pi.user"};
+        if (kind == "pi.reset") {
+            result.user_entries.clear();
+            result.users.clear();
+        }
         result.users.push_back(SubmissionId{.value = *id});
         result.user_entries.push_back(*appended);
     }
@@ -904,6 +1127,46 @@ support::AsyncResult<ConversationId> WorkflowRuntime::root(RootOptions options) 
             }}};
 }
 
+support::AsyncResult<ConversationRecord> WorkflowRuntime::fork_conversation(ConversationId parent, EntryId at) {
+    auto forked = std::make_shared<std::optional<ConversationRecord>>();
+    return support::AsyncResult<ConversationRecord>{support::AsyncProducer<ConversationRecord, support::Error>{
+            [this, parent, at, forked](
+                    support::AsyncCompletion<ConversationRecord, support::Error> done) mutable noexcept {
+                session_.commit([forked, parent, at](Transaction& tx) -> support::ExpectedVoid {
+                            auto record = tx.fork_conversation(parent, at);
+                            if (!record) return std::unexpected(record.error());
+                            *forked = std::move(*record);
+                            return {};
+                        })
+                        .start([forked, done = std::move(done)](support::ExpectedVoid outcome) mutable noexcept {
+                            if (!outcome)
+                                done(std::unexpected(outcome.error()));
+                            else
+                                done(std::move(**forked));
+                        });
+            }}};
+}
+
+support::AsyncResult<void> WorkflowRuntime::reset(ConversationId conversation_id, std::optional<std::string> handoff) {
+    WriteEntry entry{.kind = "pi.reset", .head = EntryHeadVariant{SelfEntryHead{}}};
+    if (handoff.has_value()) {
+        const Json message{Object{{"role", "user"}, {"content", *handoff}, {"timestamp", numeric(now())}}};
+        entry.model = std::vector<Json>{message};
+    }
+    SubmissionDraft draft{.body = WriteSubmissionDraft{.entry = std::move(entry)}};
+    auto submitted = submit(conversation_id, std::move(draft));
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [submitted = std::move(submitted)](support::AsyncCompletion<void, support::Error> done) mutable noexcept {
+                std::move(submitted).start(
+                        [done = std::move(done)](support::Expected<SubmissionId> outcome) mutable noexcept {
+                            if (!outcome)
+                                done(std::unexpected(outcome.error()));
+                            else
+                                done({});
+                        });
+            }}};
+}
+
 support::AsyncResult<SubmissionId> WorkflowRuntime::submit(ConversationId conversation_id, SubmissionDraft draft) {
     const std::int64_t admitted_at = now();
     auto admission = std::make_shared<SubmissionId>();
@@ -964,8 +1227,8 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
     if (!conversation) {
         return std::unexpected(conversation.error());
     }
-    if (!conversation->has_value() || conversation_id.value != 1) {
-        return std::unexpected(validation("The workflow requires the root conversation"));
+    if (!conversation->has_value()) {
+        return std::unexpected(validation("The conversation does not exist"));
     }
     const DocumentAddress address{.conversation_id = conversation_id};
     // A display-only write appends and settles at once, busy or not; only
@@ -1081,10 +1344,9 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
             return std::unexpected(applied.error());
         }
         if (applied->reset) {
-            // The queued reset reached the final boundary through admission
-            // (the previous run ended without a boundary): the next run's
-            // replay starts from the reset head, not the stale transcript.
-            messages_.clear();
+            // The queued reset reached the final boundary through admission;
+            // clear model history while retaining prompt deltas already shown.
+            replay_[conversation_id.value].messages.clear();
         }
         if (!applied->users.empty()) {
             auto started = start_run(tx, conversation_id, *live, applied->users, *generation_);
@@ -1111,6 +1373,22 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
         if (!appended) {
             return std::unexpected(appended.error());
         }
+        if (write->entry.kind == "pi.reset") {
+            ReplayState& replay = replay_[conversation_id.value];
+            replay.messages.clear();
+            const std::vector<Json> model = write->entry.model.value_or(std::vector<Json>{});
+            const auto handoff = std::ranges::find_if(model, [](const Json& value) {
+                const auto* object = value.as_object();
+                if (object == nullptr) return false;
+                const auto role = object->find("role");
+                return role != object->end() && role->second.as_string() != nullptr &&
+                       *role->second.as_string() == "user";
+            });
+            if (handoff != model.end()) {
+                if (auto parsed = message_from_json(*handoff); parsed.has_value())
+                    replay.messages.push_back(std::move(*parsed));
+            }
+        }
         auto created = tx.create_submission(SubmissionRecord{.id = {},
                 .conversation_id = conversation_id,
                 .request_id = draft.request_id,
@@ -1126,6 +1404,9 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
     if (!appended) {
         return std::unexpected(appended.error());
     }
+    auto running = staged_live_run(*live);
+    if (!running) return std::unexpected(running.error());
+    const bool run_already_exists = running->has_value();
     auto created = tx.create_submission(SubmissionRecord{.id = {},
             .conversation_id = conversation_id,
             .request_id = draft.request_id,
@@ -1138,6 +1419,13 @@ support::Expected<SubmissionId> WorkflowRuntime::admit_submission(
     auto started = start_run(tx, conversation_id, *live, {created->id}, *generation_);
     if (!started) {
         return std::unexpected(started.error());
+    }
+    if (run_already_exists) {
+        if (!appended->model.empty()) {
+            if (auto parsed = message_from_json(appended->model.front()); parsed.has_value()) {
+                replay_[conversation_id.value].messages.push_back(std::move(*parsed));
+            }
+        }
     }
     return created->id;
 }
@@ -1222,24 +1510,15 @@ support::AsyncResult<bool> WorkflowRuntime::apply_post_tools_boundary(const Task
         if (!applied) {
             return std::unexpected(applied.error());
         }
-        // The placed users join this run: their entries seed the next
-        // request's replay cache (frozen pi continues the run with the
-        // placed users as new inputs).
-        for (const EntryRecord& entry : applied->user_entries) {
-            auto user = input_user(entry);
-            if (!user) {
-                return std::unexpected(user.error());
-            }
-            messages_.push_back(std::move(*user));
-        }
         if (applied->reset) {
-            // The queued reset cut the run's context before an
-            // answer: the run ends unanswered and the placed users
-            // start the next run. The replay cache clears with the reset:
-            // the next run's request carries only its own placed users
-            // (frozen pi walks the entry chain back to the reset head), not
-            // this run's transcript.
-            messages_.clear();
+            // The queued reset cut the run's context before an answer; the
+            // selected user entries begin the replacement run's context.
+            replay_[task.conversation_id.value].messages.clear();
+            for (const EntryRecord& entry : applied->user_entries) {
+                auto user = input_user(entry);
+                if (!user) return std::unexpected(user.error());
+                replay_[task.conversation_id.value].messages.push_back(std::move(*user));
+            }
             auto ended_run = end_run(
                     tx, *live, task.id, SubmissionSettlement{.status = "unanswered", .reason = std::string{"reset"}});
             if (!ended_run) {
@@ -1253,6 +1532,12 @@ support::AsyncResult<bool> WorkflowRuntime::apply_post_tools_boundary(const Task
             }
             *ended = true;
             return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = "completed"})};
+        }
+        // The placed users join this run and seed its next request.
+        for (const EntryRecord& entry : applied->user_entries) {
+            auto user = input_user(entry);
+            if (!user) return std::unexpected(user.error());
+            replay_[task.conversation_id.value].messages.push_back(std::move(*user));
         }
         auto joined = join_run_inputs(*live, task.id, applied->users);
         if (!joined) {
@@ -1328,35 +1613,45 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
     if ((*run)->task != task.id) {
         return std::unexpected(validation("Generation task does not own the conversation run"));
     }
-    const std::vector<SubmissionId> run_inputs = (*run)->inputs;
-
-    // The placed run inputs seed the replay cache (frozen pi run input
-    // conversion).
-    for (const SubmissionId input : run_inputs) {
-        auto submission = storage_.submission(input);
-        if (!submission) {
-            return std::unexpected(submission.error());
+    ReplayState& replay = replay_[task.conversation_id.value];
+    replay = ReplayState{};
+    std::vector<EntryRecord> visible_entries;
+    std::vector<chord::Json> recovered_messages;
+    auto visible_commit = session_.commit([conversation = task.conversation_id, &visible_entries, &recovered_messages](
+                                                  Transaction& tx) -> support::ExpectedVoid {
+        auto entries = tx.scan_entries(conversation, static_cast<std::size_t>(-1));
+        if (!entries) return std::unexpected(entries.error());
+        visible_entries = std::move(*entries);
+        auto messages = tx.conversation_messages(conversation);
+        if (!messages) return std::unexpected(messages.error());
+        recovered_messages = std::move(*messages);
+        return {};
+    });
+    auto visible_records = await_result(std::move(visible_commit));
+    if (!visible_records) return std::unexpected(visible_records.error());
+    for (const EntryRecord& entry : visible_entries) {
+        for (const chord::Json& message : entry.model) {
+            if (entry.kind == "pi.reset" && entry.head == entry.id) continue;
+            if (auto parsed = message_from_json(message); parsed.has_value()) {
+                if (const auto* system = std::get_if<ai::SystemMessage>(&*parsed)) {
+                    replay.shown_sections.insert(
+                            replay.shown_sections.end(), system->sections.begin(), system->sections.end());
+                    for (const ai::Tool& tool : system->tools_added) {
+                        if (std::ranges::none_of(replay.shown_tools,
+                                    [&tool](const ai::Tool& shown) { return shown.name == tool.name; }))
+                            replay.shown_tools.push_back(tool);
+                    }
+                }
+            }
         }
-        if (!submission->has_value() || !(**submission).entry.has_value()) {
-            return std::unexpected(validation("Placed input entry not found"));
-        }
-        auto entry = storage_.entry(*(**submission).entry);
-        if (!entry) {
-            return std::unexpected(entry.error());
-        }
-        if (!entry->has_value()) {
-            return std::unexpected(validation("Placed input entry not found"));
-        }
-        auto user = input_user(entry->value().entry);
-        if (!user) {
-            return std::unexpected(user.error());
-        }
-        messages_.push_back(std::move(*user));
+    }
+    for (const chord::Json& message : recovered_messages) {
+        if (auto parsed = message_from_json(message); parsed.has_value()) replay.messages.push_back(std::move(*parsed));
     }
 
     while (!runtime.stop_token().stop_requested()) {
         const auto snapshot = registry_.snapshot();
-        auto plan = plan_prompt(snapshot, shown_tools_, shown_sections_, now());
+        auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, now());
         auto& context = plan.context;
         const auto& system = plan.system;
         if (!system.sections.empty() || !system.tools_added.empty()) {
@@ -1368,11 +1663,12 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
                 return std::nullopt;
             }));
             if (!committed) return committed;
-            messages_.push_back(system);
-            for (const auto& section : system.sections) shown_sections_.push_back(section);
-            shown_tools_ = context.tools;
+            replay.messages.push_back(system);
+            for (const auto& section : system.sections)
+                replay.shown_sections.push_back(section);
+            replay.shown_tools = context.tools;
         }
-        context.messages = messages_;
+        context.messages = replay.messages;
         auto options = settings_.stream;
         if (thinking_level_) options.reasoning = thinking_level_;
         options.stop_token = runtime.stop_token();
@@ -1420,7 +1716,7 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
                         return std::nullopt;
                     }));
             if (!committed) return committed;
-            messages_.push_back(*response);
+            replay.messages.push_back(*response);
             for (const auto& content : response->content) {
                 const auto* call = std::get_if<ai::ToolCallContent>(&content);
                 if (call == nullptr) continue;
@@ -1440,7 +1736,7 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
                 if (!saved) {
                     return std::unexpected(validation("Tool result commit failed: " + saved.error().message));
                 }
-                messages_.push_back(std::move(result));
+                replay.messages.push_back(std::move(result));
             }
             if (runtime.stop_token().stop_requested()) {
                 // The abort invocation settles the run (frozen pi generation
@@ -1522,7 +1818,7 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
                         // A queued reset reached the final boundary: the
                         // answered run still ends, and the next run's replay
                         // starts from the reset head, not this transcript.
-                        messages_.clear();
+                        replay_[id.value].messages.clear();
                     }
                     auto ended =
                             end_run(tx, *live, task.id, SubmissionSettlement{.status = "done", .answer = entry->id});

@@ -1996,6 +1996,14 @@ support::AsyncResult<ConversationId> Harness::root(RootOptions options) {
     return impl_->workflow->root(std::move(options));
 }
 
+support::AsyncResult<ConversationRecord> Harness::fork_conversation(ConversationId parent, EntryId at) {
+    return impl_->workflow->fork_conversation(parent, at);
+}
+
+support::AsyncResult<void> Harness::reset(ConversationId conversation_id, std::optional<std::string> handoff) {
+    return impl_->workflow->reset(conversation_id, std::move(handoff));
+}
+
 support::AsyncResult<Submission> Harness::submit(ConversationId conversation_id, SubmissionDraft draft) {
     auto operation = impl_->workflow->submit(conversation_id, std::move(draft));
     // Harness outlives the producer and its completion (submit's declaration).

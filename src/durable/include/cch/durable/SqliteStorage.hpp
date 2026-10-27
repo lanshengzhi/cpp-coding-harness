@@ -39,6 +39,8 @@ public:
     [[nodiscard]] support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit) override;
     [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
             ConversationId conversation_id, std::size_t limit) override;
+    [[nodiscard]] support::Expected<std::vector<DocumentRecord>> scan_conversation_documents(
+            ConversationId conversation_id, DocumentPoint at, std::size_t limit) override;
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
             std::string_view kind, const DocumentAddress& address, DocumentPoint at) override;
     [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override;

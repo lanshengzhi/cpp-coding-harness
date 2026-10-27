@@ -4,6 +4,7 @@
 #include <cch/chord/Json.hpp>
 #include <cch/durable/Harness.hpp>
 
+#include <map>
 #include <optional>
 #include <span>
 #include <vector>
@@ -51,6 +52,8 @@ public:
     /// drive the run loop below.
     [[nodiscard]] std::shared_ptr<TaskDefinition> generation() const noexcept;
     [[nodiscard]] support::AsyncResult<ConversationId> root(RootOptions options);
+    [[nodiscard]] support::AsyncResult<ConversationRecord> fork_conversation(ConversationId parent, EntryId at);
+    [[nodiscard]] support::AsyncResult<void> reset(ConversationId conversation_id, std::optional<std::string> handoff);
     [[nodiscard]] support::AsyncResult<SubmissionId> submit(ConversationId conversation_id, SubmissionDraft draft);
 
 private:
@@ -87,6 +90,12 @@ private:
             Transaction& tx, ConversationId conversation_id, chord::Draft inbox, std::vector<chord::Json> items);
     [[nodiscard]] std::int64_t now() const;
 
+    struct ReplayState {
+        std::vector<ai::MessageVariant> messages{};
+        std::vector<ai::Tool> shown_tools{};
+        std::vector<ai::SystemMessageSection> shown_sections{};
+    };
+
     Session& session_; // outlives every operation (Harness ownership)
     Storage& storage_; // outlives every operation (Harness::open contract)
     Registry empty_registry_;
@@ -99,11 +108,7 @@ private:
     std::shared_ptr<TaskDefinition> generation_;
     ai::Model model_{};
     std::optional<ai::ThinkingLevel> thinking_level_{std::nullopt};
-    // debt: the workflow's replay cache covers one open Harness. #1082 must
-    // rebuild model context and prompt deltas from committed entries on reopen.
-    std::vector<ai::MessageVariant> messages_;
-    std::vector<ai::Tool> shown_tools_;
-    std::vector<ai::SystemMessageSection> shown_sections_;
+    std::map<std::int64_t, ReplayState> replay_;
 };
 
 /// The committed live-run marker of one conversation, if any.

@@ -480,9 +480,35 @@ struct SqliteStorage::Impl {
                     }
                     std::optional<TaskId> by_task_id;
                     if (const auto task_id = json_int(object, "byTaskId")) by_task_id = TaskId{*task_id};
+                    std::vector<ContextEdit> edits;
+                    if (const auto raw_edits = object->find("edits"); raw_edits != object->end()) {
+                        const auto* values = raw_edits->second.as_array();
+                        if (values == nullptr) return std::unexpected(corrupt("Invalid persisted entry edits"));
+                        for (const chord::Json& item : *values) {
+                            const auto* edit = item.as_object();
+                            if (edit == nullptr) return std::unexpected(corrupt("Invalid persisted entry edit"));
+                            const auto target = json_int(edit, "target");
+                            const auto action_it = edit->find("action");
+                            const auto* action = action_it == edit->end() ? nullptr : action_it->second.as_string();
+                            const auto messages_it = edit->find("messages");
+                            const auto* raw_messages =
+                                    messages_it == edit->end() ? nullptr : messages_it->second.as_array();
+                            if (!target || action == nullptr || raw_messages == nullptr) {
+                                return std::unexpected(corrupt("Invalid persisted entry edit"));
+                            }
+                            edits.push_back(ContextEdit{
+                                    .target = EntryId{*target}, .action = *action, .messages = *raw_messages});
+                        }
+                    }
                     const std::array write{StorageWrite{.type = "entry",
-                            .entry = EntryRecord{EntryId{*id}, ConversationId{*conversation_id}, *kind, *data, head,
-                                    std::move(model), by_task_id}}};
+                            .entry = EntryRecord{.id = EntryId{*id},
+                                    .conversation_id = ConversationId{*conversation_id},
+                                    .kind = *kind,
+                                    .data = *data,
+                                    .head = head,
+                                    .model = std::move(model),
+                                    .edits = std::move(edits),
+                                    .by_task_id = by_task_id}}};
                     const Seq seq = static_cast<Seq>(sqlite3_column_int64(row, 3));
                     auto restored = state.restore(write, seq);
                     if (!restored) return std::unexpected(std::move(restored.error()));
@@ -860,6 +886,19 @@ struct SqliteStorage::Impl {
                 }
                 if (write.entry->by_task_id)
                     value.emplace("byTaskId", chord::Json{static_cast<double>(write.entry->by_task_id->value)});
+                if (!write.entry->edits.empty()) {
+                    chord::Json::Array edits;
+                    for (const ContextEdit& edit : write.entry->edits) {
+                        chord::Json::Array messages;
+                        for (const chord::Json& message : edit.messages)
+                            messages.push_back(message);
+                        edits.push_back(chord::Json{
+                                chord::Json::Object{{"target", chord::Json{static_cast<double>(edit.target.value)}},
+                                        {"action", chord::Json{edit.action}},
+                                        {"messages", chord::Json{std::move(messages)}}}});
+                    }
+                    value.emplace("edits", chord::Json{std::move(edits)});
+                }
                 const std::string json = as_string(chord::Json{std::move(value)});
                 if (json.empty()) return fail(corrupt("SQLite entry record serialization failed"));
                 auto result = insert(
@@ -1110,6 +1149,11 @@ support::Expected<std::vector<ConversationRecord>> SqliteStorage::scan_conversat
 support::Expected<std::vector<EntryRecord>> SqliteStorage::scan_entries(ConversationId id, std::size_t limit) {
     if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
     return impl_->state.scan_entries(id, limit);
+}
+support::Expected<std::vector<DocumentRecord>> SqliteStorage::scan_conversation_documents(
+        ConversationId id, DocumentPoint at, std::size_t limit) {
+    if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
+    return impl_->state.scan_conversation_documents(id, at, limit);
 }
 support::Expected<std::optional<DocumentRecord>> SqliteStorage::find_document(
         std::string_view kind, const DocumentAddress& address, DocumentPoint at) {

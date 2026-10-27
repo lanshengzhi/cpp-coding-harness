@@ -46,6 +46,11 @@ support::Expected<std::vector<EntryRecord>> MemoryStorage::scan_entries(
     return impl_->scan_entries(conversation_id, limit);
 }
 
+support::Expected<std::vector<DocumentRecord>> MemoryStorage::scan_conversation_documents(
+        ConversationId conversation_id, DocumentPoint at, std::size_t limit) {
+    return impl_->scan_conversation_documents(conversation_id, at, limit);
+}
+
 support::Expected<std::optional<DocumentRecord>> MemoryStorage::find_document(
         std::string_view kind, const DocumentAddress& address, DocumentPoint at) {
     return impl_->find_document(kind, address, at);

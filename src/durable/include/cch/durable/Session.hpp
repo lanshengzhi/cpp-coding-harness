@@ -298,6 +298,10 @@ public:
     /// `{kind: "ownerless"}`).
     [[nodiscard]] support::Expected<ConversationRecord> create_conversation();
 
+    /// Fork one visible entry into a new ownerless conversation. The selected
+    /// entry is included; later entries in its source branch are not inherited.
+    [[nodiscard]] support::Expected<ConversationRecord> fork_conversation(ConversationId parent, EntryId at);
+
     /// Create a conversation owned by `owner` (frozen pi `Tx.createConversation`
     /// with `{kind: "task"}`). The owner task must exist and be live: a
     /// missing, terminal, `completing`, or abort-marked owner is rejected, as is
@@ -310,7 +314,15 @@ public:
             chord::Json data,
             std::optional<EntryHeadVariant> head = std::nullopt,
             std::vector<chord::Json> model = {},
-            std::optional<TaskId> by_task_id = std::nullopt);
+            std::optional<TaskId> by_task_id = std::nullopt,
+            std::vector<ContextEdit> edits = {});
+
+    /// Resolve an entry's model contribution (frozen pi `Tx.context` projection).
+    [[nodiscard]] support::Expected<std::vector<chord::Json>> context_messages(
+            ConversationId conversation_id, std::optional<EntryId> at = std::nullopt);
+
+    /// Reconstruct a conversation's active messages from its durable entry log.
+    [[nodiscard]] support::Expected<std::vector<chord::Json>> conversation_messages(ConversationId conversation_id);
 
     /// Append a typed entry with its kind and payload codec supplied by the
     /// definition (frozen `Tx.appendEntry<D>`); `head` selects an existing
@@ -319,12 +331,14 @@ public:
     [[nodiscard]] support::Expected<TypedEntry<Data>> append_entry(const EntryDefinition<Data>& definition,
             ConversationId conversation_id,
             Data data,
-            std::optional<EntryHeadVariant> head = std::nullopt) {
+            std::optional<EntryHeadVariant> head = std::nullopt,
+            std::vector<ContextEdit> edits = {}) {
         auto encoded = definition.encode(data);
         if (!encoded) {
             return std::unexpected(std::move(encoded.error()));
         }
-        auto record = append_entry(conversation_id, definition.kind(), std::move(*encoded), head);
+        auto record = append_entry(
+                conversation_id, definition.kind(), std::move(*encoded), head, {}, std::nullopt, std::move(edits));
         if (!record) {
             return std::unexpected(std::move(record.error()));
         }

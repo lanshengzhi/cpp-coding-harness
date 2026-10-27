@@ -60,6 +60,11 @@ public:
         return inner_.scan_entries(conversation_id, limit);
     }
 
+    [[nodiscard]] support::Expected<std::vector<DocumentRecord>> scan_conversation_documents(
+            ConversationId conversation_id, DocumentPoint at, std::size_t limit) override {
+        return inner_.scan_conversation_documents(conversation_id, at, limit);
+    }
+
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
             std::string_view kind, const DocumentAddress& address, DocumentPoint at) override {
         return inner_.find_document(kind, address, at);

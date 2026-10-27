@@ -141,12 +141,11 @@ struct InputEntry {
 };
 
 /// A passive entry write admitted as a submission (frozen pi `EntryDraft`
-/// write body). The frozen `edits` context-override field is not part of the
-/// C++ record model: a write carrying `edits` cannot be expressed through this
-/// boundary and stays frozen-only.
+/// write body), including context-only edits of prior entries.
 struct WriteEntry {
     std::string kind{};
     std::optional<chord::Json> data{std::nullopt};
+    std::vector<ContextEdit> edits{};
     /// Model messages the entry carries. Presence counts against display-only
     /// even when the array is empty (frozen `isDisplayOnly` present-counts
     /// rule); a display-only write has no `model` and no `head`.

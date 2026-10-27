@@ -88,6 +88,14 @@ public:
     /// transaction. Later calls preserve the existing root's configuration.
     [[nodiscard]] support::AsyncResult<ConversationId> root(RootOptions options = {});
 
+    /// Create a durable branch at one visible entry and copy its selected
+    /// conversation documents in the same commit.
+    [[nodiscard]] support::AsyncResult<ConversationRecord> fork_conversation(ConversationId parent, EntryId at);
+
+    /// Start a new context, optionally carrying handoff text as its first user
+    /// message. The reset is admitted through the ordinary submission boundary.
+    [[nodiscard]] support::AsyncResult<void> reset(ConversationId conversation_id, std::optional<std::string> handoff);
+
     /// Admit one submission in one commit (frozen pi `Harness.submit` /
     /// `admitSubmission`): a known request ID returns its existing submission
     /// without writing, a display-only write settles at once, a busy

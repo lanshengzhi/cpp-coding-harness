@@ -244,6 +244,14 @@ struct ConversationOwner {
 /// The immutable record of one conversation (frozen pi `ConversationRecord`).
 struct ConversationRecord {
     ConversationId id{};
+    /// Inclusive transcript ancestry selected by a fork.
+    struct Parent {
+        ConversationId conversation_id{};
+        EntryId at{};
+
+        [[nodiscard]] bool operator==(const Parent&) const = default;
+    };
+    std::optional<Parent> parent{std::nullopt};
     /// The creator edge (frozen `ConversationRecord.owner`); absent for an
     /// ownerless conversation, the reserved root included.
     std::optional<ConversationOwner> owner{std::nullopt};
@@ -259,6 +267,15 @@ struct EntryOptions {
 };
 
 /// The immutable record of one transcript entry (frozen pi `EntryRecord`).
+/// A context-only override of an earlier entry's model contribution.
+struct ContextEdit {
+    EntryId target{};
+    std::string action{};
+    std::vector<chord::Json> messages{};
+
+    [[nodiscard]] bool operator==(const ContextEdit&) const = default;
+};
+
 struct EntryRecord {
     EntryId id{};
     ConversationId conversation_id{};
@@ -270,6 +287,8 @@ struct EntryRecord {
     /// `EntryRecord.head`); absent when the entry selects no context.
     std::optional<EntryId> head{};
     std::vector<chord::Json> model{};
+    /// Context-only overrides applied to earlier entries in the context range.
+    std::vector<ContextEdit> edits{};
     std::optional<TaskId> by_task_id{std::nullopt};
 };
 
