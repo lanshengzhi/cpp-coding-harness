@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "7f9cff08f947ee8289cb1da999994741f21381db51d274428e5400f65e61af7f"
+            "sha256": "24c984fa659a9de8452eb0a21559239dbf21101f22663ade442f28c0384a5f18"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -255,15 +255,15 @@
             "-L",
             "issue1101",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1080-registration-1101.xml",
+            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1078/docs/research/pi-v1.3.0/deliveries/1078-registration-1101.xml",
             "--output-on-failure"
           ],
-          "testedRevision": "e97289e19bbef3e7692cb5e955ee38e17038faef",
-          "recordedAt": "2026-10-26T13:26:29Z",
+          "testedRevision": "379dbe9dc329017550cbd37aacc13c1fb376eda1",
+          "recordedAt": "2026-10-27T04:57:18Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1080-registration-1101.xml",
-            "sha256": "822e234579f613179a6aab0946538a26af96206394ae4f4220732f91f69a434b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1078-registration-1101.xml",
+            "sha256": "763f0fe577df8465c7f0ed98088340d71324dda048284ed2d85182ebe87a6dd4"
           }
         },
         "rows": [
@@ -730,14 +730,13 @@
         "audit-1080/submissions-inbox.json:a busy queued admission commits one batch with the submission and the pi.inbox items change",
         "audit-1080/reset-writes.json:a pinned-head write at the entry before the reset head settles unanswered and stale while one at the reset head is done",
         "audit-1080/reset-writes.json:a queued head:self reset at the postTools boundary ends the current run unanswered and reset and starts the selected queued input in the reset context",
-        "audit-1080/reset-writes.json:a display-only write behind a queued reset queues and lands after the reset when the run ends"
-      ],
-      "uncovered": [
+        "audit-1080/reset-writes.json:a display-only write behind a queued reset queues and lands after the reset when the run ends",
         "audit-1078/ownership-waits.json:a conversation abort keeps live background work while a direct abort reaches it",
         "audit-1078/ownership-waits.json:a background-crossing conversation abort reaches and waits for a live background task",
         "audit-1078/ownership-waits.json:an idle wait resolves with live background work and holds on a live foreground task",
         "audit-1078/ownership-waits.json:a child task and a task-owned conversation are rejected for a terminal owner and accepted for a live one"
-      ]
+      ],
+      "uncovered": []
     }
   },
   "sourceAliases": {
@@ -3738,6 +3737,52 @@
         "cch_durable:submission-queues"
       ],
       "disposition": "Consumed by the #1080 public Harness reset/write comparisons; retain row statuses pending complete pinned capability receipts."
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "a conversation abort keeps live background work while a direct abort reaches it",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact; the foreground/background abort boundary rows it discriminates stay recorded here.",
+      "rows": [
+        "cch_durable:background-ownership-boundary",
+        "cch_durable:conversation-abort",
+        "cch_durable:abort-task-protocol"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "a background-crossing conversation abort reaches and waits for a live background task",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact.",
+      "rows": [
+        "cch_durable:background-ownership-boundary",
+        "cch_durable:conversation-abort-effects"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "an idle wait resolves with live background work and holds on a live foreground task",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact.",
+      "rows": [
+        "cch_durable:idle-waits"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to this row"
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "a child task and a task-owned conversation are rejected for a terminal owner and accepted for a live one",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact.",
+      "rows": [
+        "cch_durable:task-ownership-graph",
+        "cch_durable:conversation-ownership",
+        "cch_durable:Tx:createTask",
+        "cch_durable:Tx:createConversation"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
     }
   ],
   "correctionsIndex": [

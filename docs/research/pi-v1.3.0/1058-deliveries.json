@@ -178,7 +178,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "7f9cff08f947ee8289cb1da999994741f21381db51d274428e5400f65e61af7f"
+          "sha256": "24c984fa659a9de8452eb0a21559239dbf21101f22663ade442f28c0384a5f18"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -225,15 +225,15 @@
           "-L",
           "issue1101",
           "--output-junit",
-          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/docs/research/pi-v1.3.0/deliveries/1080-registration-1101.xml",
+          "/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1078/docs/research/pi-v1.3.0/deliveries/1078-registration-1101.xml",
           "--output-on-failure"
         ],
-        "testedRevision": "e97289e19bbef3e7692cb5e955ee38e17038faef",
-        "recordedAt": "2026-10-26T13:26:29Z",
+        "testedRevision": "379dbe9dc329017550cbd37aacc13c1fb376eda1",
+        "recordedAt": "2026-10-27T04:57:18Z",
         "selected": 14,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1080-registration-1101.xml",
-          "sha256": "822e234579f613179a6aab0946538a26af96206394ae4f4220732f91f69a434b"
+          "path": "docs/research/pi-v1.3.0/deliveries/1078-registration-1101.xml",
+          "sha256": "763f0fe577df8465c7f0ed98088340d71324dda048284ed2d85182ebe87a6dd4"
         }
       },
       "rows": [
