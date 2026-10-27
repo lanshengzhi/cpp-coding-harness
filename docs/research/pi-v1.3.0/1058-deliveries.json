@@ -225,15 +225,15 @@
           "-L",
           "issue1101",
           "--output-junit",
-          "../docs/research/pi-v1.3.0/deliveries/1151-revalidation-1101.xml",
+          "/tmp/1151-revalidation-1101-final.xml",
           "--output-on-failure"
         ],
-        "testedRevision": "0ae22c284122f8b15fa44f024c7cd7f5b680c104",
-        "recordedAt": "2026-10-27T21:30:18Z",
+        "testedRevision": "40fdba4233c72cc9a6a53856d888e78f386f3c8a",
+        "recordedAt": "2026-10-27T21:31:31Z",
         "selected": 14,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1151-revalidation-1101.xml",
-          "sha256": "65c64035218a0aae9feece1a09d0d180c81ff023f154798b7a2b2d860ea284cf"
+          "path": "docs/research/pi-v1.3.0/deliveries/1151-revalidation-1101-final.xml",
+          "sha256": "52e03bb5937d238b147e5f8fe3ebda075bb52a84b0b12fd50b4e864763d289c4"
         }
       },
       "rows": [
