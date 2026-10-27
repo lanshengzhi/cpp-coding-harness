@@ -23,6 +23,7 @@
 
 using namespace cch::durable;
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <condition_variable>
@@ -75,6 +76,28 @@ struct SyncLog {
         return entries;
     }
 };
+
+// pi's CommitPublication says "Change order is unspecified". Its async
+// handlers run their prelude before yielding; these C++ handlers can block
+// synchronously, so their initial run markers can arrive in either order.
+void check_handler_log(const std::vector<std::string>& actual, const std::vector<support::JsonValue>& frozen) {
+    std::vector<std::string> expected;
+    for (const auto& entry : frozen)
+        expected.push_back(entry.get_string());
+    auto sorted_actual = actual;
+    auto sorted_expected = expected;
+    std::sort(sorted_actual.begin(), sorted_actual.end());
+    std::sort(sorted_expected.begin(), sorted_expected.end());
+    CHECK(sorted_actual == sorted_expected);
+    const auto semantic_events = [](const std::vector<std::string>& entries) {
+        std::vector<std::string> events;
+        for (const auto& entry : entries) {
+            if (!entry.ends_with(":run")) events.push_back(entry);
+        }
+        return events;
+    };
+    CHECK(semantic_events(actual) == semantic_events(expected));
+}
 
 /// One gate the test thread releases; a phase races it against the invocation
 /// stop token so an abort mark ends the run phase (frozen pi
@@ -788,10 +811,7 @@ TEST_CASE("a conversation abort keeps live background work while a direct abort 
 
     const std::vector<std::string> entries = log.snapshot();
     const auto& expected_log = expected_after_direct->at("log").get_array();
-    REQUIRE(entries.size() == expected_log.size());
-    for (std::size_t i = 0; i < expected_log.size(); ++i) {
-        CHECK(entries[i] == expected_log.at(i).get_string());
-    }
+    check_handler_log(entries, expected_log);
 
     REQUIRE(consume(harness->close()).has_value());
 }
@@ -944,10 +964,7 @@ TEST_CASE("an idle wait resolves with live background work and holds on a live f
     CHECK(background_still.value()->state.status == expected_idle_after->at("backgroundStillLive").get_string());
     const std::vector<std::string> idle_entries = log.snapshot();
     const auto& expected_idle_log = expected_idle_after->at("log").get_array();
-    REQUIRE(idle_entries.size() == expected_idle_log.size());
-    for (std::size_t i = 0; i < expected_idle_log.size(); ++i) {
-        CHECK(idle_entries[i] == expected_idle_log.at(i).get_string());
-    }
+    check_handler_log(idle_entries, expected_idle_log);
 
     // The background task finishing changes nothing about the ordinary scope.
     background_gate->release();
@@ -1168,6 +1185,18 @@ TEST_CASE("a completing owner holds its terminal outcome until ordinary owned wo
     auto harness = std::move(harness_res.value());
     child_def = harness->task_definition("audit.hold-child");
     REQUIRE(child_def != nullptr);
+    std::atomic_bool parent_terminal_published{false};
+    REQUIRE(harness->session()
+                    .subscribe_commits([&](const CommitPublication& publication) {
+                        for (const auto& change : publication.changes) {
+                            const auto* table = std::get_if<TableCommitChange>(&change);
+                            if (table && table->task && table->task->kind == "audit.hold-parent" &&
+                                    table->task->state.status == "terminal") {
+                                parent_terminal_published.store(true);
+                            }
+                        }
+                    })
+                    .has_value());
     auto root = consume(harness->root());
     REQUIRE(root.has_value());
 
@@ -1186,10 +1215,32 @@ TEST_CASE("a completing owner holds its terminal outcome until ordinary owned wo
     wait_until([&] { return log.includes("parent-commit-completed"); }, "parent completed commit");
     wait_until([&] { return log.includes("audit.hold-child:run"); }, "child running");
 
-    // The held parent: record `completing`, inspection `completing`; the child
-    // is still running.
+    // The child can start before the synchronous parent handler commits its
+    // outcome. Wait for that transition while the child gate keeps it live.
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(20);
     auto inspection = consume(harness->inspect());
     REQUIRE(inspection.has_value());
+    while (true) {
+        bool completing = false;
+        std::string observed = "parent missing";
+        for (const auto& task : inspection.value().tasks) {
+            if (task.record.id.value == parent_id.value) {
+                observed = task.record.state.status + "/" + task.state.kind;
+                completing = task.record.state.status == "completing" && task.state.kind == "completing";
+            }
+        }
+        if (completing) break;
+        if (std::chrono::steady_clock::now() > deadline) {
+            FAIL("parent did not enter completing: " << observed);
+            break;
+        }
+        std::this_thread::yield();
+        inspection = consume(harness->inspect());
+        REQUIRE(inspection.has_value());
+    }
+
+    // A completing record retains its outcome, but has not published a
+    // terminal record; the gated child is still live.
     const auto* expected_before = scenario->array_member("before");
     REQUIRE(expected_before != nullptr);
     REQUIRE(inspection.value().tasks.size() == expected_before->size());
@@ -1201,6 +1252,7 @@ TEST_CASE("a completing owner holds its terminal outcome until ordinary owned wo
         CHECK(task.state.kind == expected.at("inspection").get_string());
     }
 
+    CHECK_FALSE(parent_terminal_published.load());
     child_gate->release();
     auto receipt_res = consume(harness->wait_for_task(parent_id));
     REQUIRE(receipt_res.has_value());
