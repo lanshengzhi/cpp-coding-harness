@@ -1,0 +1,71 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1152",
+  "family": "audit-1152",
+  "capturedAt": "2026-10-27T21:36:32.115Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/mcp/src/protocol/content.ts:toLlmContent"
+  ],
+  "scenarios": [
+    {
+      "name": "mixed-keys",
+      "inputs": {
+        "raw": "{\"b\":1,\"2\":2,\"a\":3,\"1\":4}"
+      },
+      "expected": {
+        "text": "{\n  \"1\": 4,\n  \"2\": 2,\n  \"b\": 1,\n  \"a\": 3\n}"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "numbers",
+      "inputs": {
+        "raw": "{\"a\":1.0,\"b\":1e2,\"c\":-0,\"d\":1e21,\"e\":9007199254740993}"
+      },
+      "expected": {
+        "text": "{\n  \"a\": 1,\n  \"b\": 100,\n  \"c\": 0,\n  \"d\": 1e+21,\n  \"e\": 9007199254740992\n}"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "reverse",
+      "inputs": {
+        "raw": "{\"z\":\"last\",\"a\":\"first\",\"m\":\"middle\"}"
+      },
+      "expected": {
+        "text": "{\n  \"z\": \"last\",\n  \"a\": \"first\",\n  \"m\": \"middle\"\n}"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "nested",
+      "inputs": {
+        "raw": "{\"z\":{\"b\":1,\"2\":2,\"a\":3,\"1\":4},\"a\":true}"
+      },
+      "expected": {
+        "text": "{\n  \"z\": {\n    \"1\": 4,\n    \"2\": 2,\n    \"b\": 1,\n    \"a\": 3\n  },\n  \"a\": true\n}"
+      },
+      "normalizations": []
+    },
+    {
+      "name": "strings",
+      "inputs": {
+        "raw": "{\"z\":\"line\\nquote\\\" slash\\\\ tab\\t\",\"a\":\"é\"}"
+      },
+      "expected": {
+        "text": "{\n  \"z\": \"line\\nquote\\\" slash\\\\ tab\\t\",\n  \"a\": \"é\"\n}"
+      },
+      "normalizations": []
+    }
+  ]
+}
