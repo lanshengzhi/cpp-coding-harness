@@ -392,20 +392,17 @@ struct SqliteStorage::Impl {
         };
 
         auto loaded = load_rows(std::format("SELECT id,record FROM {} ORDER BY id", conversations),
-                [this, &restore_record_id, &sqlite_integer](sqlite3_stmt* row) -> support::ExpectedVoid {
+                [this, &restore_record_id](sqlite3_stmt* row) -> support::ExpectedVoid {
                     const auto* record_text = reinterpret_cast<const char*>(sqlite3_column_text(row, 1));
                     if (record_text == nullptr) return std::unexpected(corrupt("Invalid persisted conversation JSON"));
                     const auto parsed = parse_json(record_text);
                     if (!parsed) return std::unexpected(corrupt("Invalid persisted conversation JSON"));
-                    const auto* object = parsed->as_object();
-                    const auto id_value = object == nullptr || !object->contains("id")
-                                                  ? std::nullopt
-                                                  : sqlite_integer(object->at("id"));
-                    if (!id_value || *id_value != sqlite3_column_int64(row, 0))
+                    auto record = decode_conversation_record(*parsed);
+                    if (!record) return std::unexpected(corrupt("Invalid persisted conversation"));
+                    if (record->id.value != sqlite3_column_int64(row, 0))
                         return std::unexpected(corrupt("Invalid persisted conversation"));
-                    const std::int64_t id = *id_value;
-                    const std::array write{StorageWrite{
-                            .type = "conversation", .conversation = ConversationRecord{ConversationId{id}}}};
+                    const std::int64_t id = record->id.value;
+                    const std::array write{StorageWrite{.type = "conversation", .conversation = std::move(*record)}};
                     auto restored = state.restore(write, 1);
                     if (!restored) return std::unexpected(std::move(restored.error()));
                     return restore_record_id(id, "conversation");
@@ -750,16 +747,23 @@ struct SqliteStorage::Impl {
                         [&](Statement& statement) { return statement.bind_int(1, write.conversation->id.value); });
                 if (!claim) return fail(std::move(claim.error()));
                 next_id = std::max(next_id, write.conversation->id.value + 1);
-                const chord::Json value{
-                        chord::Json::Object{{"id", chord::Json{static_cast<double>(write.conversation->id.value)}}}};
-                const std::string json = as_string(value);
+                const std::string json = as_string(encode_conversation_record(*write.conversation));
+                if (json.empty()) return fail(corrupt("SQLite conversation record serialization failed"));
                 auto result = insert(
-                        std::format(
-                                "INSERT INTO {}(id,owner_conversation_id,owner_task_id,record) VALUES(?1,NULL,NULL,?2)",
+                        std::format("INSERT INTO {}(id,owner_conversation_id,owner_task_id,record) VALUES(?1,?2,?3,?4)",
                                 table(options.prefix, "conversations")),
                         [&](Statement& statement) -> support::ExpectedVoid {
                             if (auto bound = statement.bind_int(1, write.conversation->id.value); !bound) return bound;
-                            return statement.bind_text(2, json);
+                            const auto& owner = write.conversation->owner;
+                            if (owner.has_value()) {
+                                if (auto bound = statement.bind_int(2, owner->conversation_id.value); !bound)
+                                    return bound;
+                                if (auto bound = statement.bind_int(3, owner->task_id.value); !bound) return bound;
+                            } else {
+                                if (auto bound = statement.bind_null(2); !bound) return bound;
+                                if (auto bound = statement.bind_null(3); !bound) return bound;
+                            }
+                            return statement.bind_text(4, json);
                         });
                 if (!result) return fail(std::move(result.error()));
             } else if (write.type == "entry") {

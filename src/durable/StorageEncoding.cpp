@@ -250,6 +250,17 @@ chord::Json encode_task_record(const TaskRecord& task) {
     if (task.state.checkpoint.has_value()) {
         state_obj.emplace("checkpoint", *task.state.checkpoint);
     }
+    if (task.state.status == "waiting") {
+        chord::Json::Array on;
+        on.reserve(task.state.on.size());
+        for (const TaskId id : task.state.on) {
+            on.push_back(chord::Json(static_cast<double>(id.value)));
+        }
+        state_obj.emplace("on", chord::Json(std::move(on)));
+        if (task.state.policy.has_value()) {
+            state_obj.emplace("policy", chord::Json(std::string{join_policy_name(*task.state.policy)}));
+        }
+    }
     if (task.state.outcome.has_value()) {
         chord::Json::Object outcome_obj;
         outcome_obj.emplace("status", chord::Json(task.state.outcome->status));
@@ -312,6 +323,29 @@ support::Expected<TaskRecord> decode_task_record(const chord::Json& json) {
     const auto cp_it = state_obj->find("checkpoint");
     if (cp_it != state_obj->end()) {
         state.checkpoint = cp_it->second;
+    }
+    const auto on_it = state_obj->find("on");
+    if (on_it != state_obj->end()) {
+        const auto* on = on_it->second.as_array();
+        if (on == nullptr) {
+            return std::unexpected(corruption("Task wait list must be an array"));
+        }
+        for (const chord::Json& entry : *on) {
+            const double* number = entry.as_number();
+            if (number == nullptr) {
+                return std::unexpected(corruption("Task wait list entry must be a number"));
+            }
+            state.on.push_back(TaskId{static_cast<std::int64_t>(*number)});
+        }
+    }
+    const auto policy_it = state_obj->find("policy");
+    if (policy_it != state_obj->end()) {
+        const std::string* name = policy_it->second.as_string();
+        const auto policy = name == nullptr ? std::nullopt : join_policy_from_name(*name);
+        if (!policy.has_value()) {
+            return std::unexpected(corruption("Task join policy is invalid"));
+        }
+        state.policy = *policy;
     }
     const auto outcome_it = state_obj->find("outcome");
     if (outcome_it != state_obj->end()) {
@@ -397,6 +431,49 @@ support::Expected<TaskRecord> decode_task_record(const chord::Json& json) {
         }
     }
 
+    return record;
+}
+
+chord::Json encode_conversation_record(const ConversationRecord& conversation) {
+    chord::Json::Object obj;
+    obj.emplace("id", chord::Json(static_cast<double>(conversation.id.value)));
+    if (conversation.owner.has_value()) {
+        chord::Json::Object owner;
+        owner.emplace("conversationId", chord::Json(static_cast<double>(conversation.owner->conversation_id.value)));
+        owner.emplace("taskId", chord::Json(static_cast<double>(conversation.owner->task_id.value)));
+        obj.emplace("owner", chord::Json(std::move(owner)));
+    }
+    return chord::Json(std::move(obj));
+}
+
+support::Expected<ConversationRecord> decode_conversation_record(const chord::Json& json) {
+    const auto* obj = json.as_object();
+    if (obj == nullptr) {
+        return std::unexpected(corruption("Conversation record must be a JSON object"));
+    }
+    const auto id_it = obj->find("id");
+    const auto* id_num = id_it == obj->end() ? nullptr : id_it->second.as_number();
+    if (id_num == nullptr) {
+        return std::unexpected(corruption("Conversation record missing id"));
+    }
+    ConversationRecord record{.id = ConversationId{static_cast<std::int64_t>(*id_num)}};
+    const auto owner_it = obj->find("owner");
+    if (owner_it != obj->end()) {
+        const auto* owner = owner_it->second.as_object();
+        if (owner == nullptr) {
+            return std::unexpected(corruption("Conversation owner must be a JSON object"));
+        }
+        const auto conversation_it = owner->find("conversationId");
+        const auto task_it = owner->find("taskId");
+        const auto* conversation_num = conversation_it == owner->end() ? nullptr : conversation_it->second.as_number();
+        const auto* task_num = task_it == owner->end() ? nullptr : task_it->second.as_number();
+        if (conversation_num == nullptr || task_num == nullptr) {
+            return std::unexpected(corruption("Conversation owner missing an edge field"));
+        }
+        record.owner =
+                ConversationOwner{.conversation_id = ConversationId{static_cast<std::int64_t>(*conversation_num)},
+                        .task_id = TaskId{static_cast<std::int64_t>(*task_num)}};
+    }
     return record;
 }
 

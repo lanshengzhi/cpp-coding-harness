@@ -457,13 +457,19 @@ struct MainMarker {
         return std::unexpected(corruption("Invalid write in " + std::string{description}));
     }
     if (*type == "conversation") {
-        const auto* record = support::json_object_member(*operation, "value");
-        const auto id = record == nullptr ? std::nullopt : support::json_integer_member(*record, "id");
-        if (!id) {
+        const auto* record = support::json_member(*operation, "value");
+        if (record == nullptr) {
             return std::unexpected(corruption("Invalid conversation write in " + std::string{description}));
         }
-        return MainOperation{
-                .kind = MainKind::Conversation, .conversation = ConversationRecord{.id = ConversationId{.value = *id}}};
+        auto json = chord::Json::from_support(*record);
+        if (!json) {
+            return std::unexpected(std::move(json.error()));
+        }
+        auto decoded = decode_conversation_record(*json);
+        if (!decoded) {
+            return std::unexpected(std::move(decoded.error()));
+        }
+        return MainOperation{.kind = MainKind::Conversation, .conversation = std::move(*decoded)};
     }
     if (*type == "entry") {
         const auto* record = support::json_member(*operation, "value");
@@ -628,7 +634,7 @@ struct EncodedCommit {
     for (const StorageWrite& write : writes) {
         if (write.type == "conversation") {
             main_writes.push_back(object({{"type", support::JsonValue{"conversation"}},
-                    {"value", object({{"id", number(write.conversation->id.value)}})}}));
+                    {"value", encode_json(encode_conversation_record(*write.conversation))}}));
         } else if (write.type == "entry") {
             main_writes.push_back(
                     object({{"type", support::JsonValue{"entry"}}, {"value", entry_value(*write.entry)}}));

@@ -8,6 +8,7 @@
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -119,11 +120,40 @@ struct TaskOutcome {
     [[nodiscard]] bool operator==(const TaskOutcome&) const = default;
 };
 
+/// How a waiting task reacts when one of the tasks it waits for ends without
+/// `completed` (frozen pi `JoinPolicy`).
+///
+/// `FailFast` marks the other live members abort; `AllSettled` lets every
+/// member finish on its own. Both resume at the waiting checkpoint once every
+/// member is terminal.
+enum class JoinPolicy {
+    AllSettled,
+    FailFast,
+};
+
+/// The frozen `JoinPolicy` spelling: `"allSettled"` or `"failFast"`.
+[[nodiscard]] constexpr std::string_view join_policy_name(JoinPolicy policy) noexcept {
+    return policy == JoinPolicy::FailFast ? "failFast" : "allSettled";
+}
+
+/// Parse the frozen `JoinPolicy` spelling.
+[[nodiscard]] inline std::optional<JoinPolicy> join_policy_from_name(std::string_view name) noexcept {
+    if (name == "failFast") return JoinPolicy::FailFast;
+    if (name == "allSettled") return JoinPolicy::AllSettled;
+    return std::nullopt;
+}
+
 /// Complete durable execution state of a task (frozen pi `TaskState`).
 struct TaskState {
     /// Status: "pending", "running", "waiting", "completing", or "terminal".
     std::string status{};
     std::optional<chord::Json> checkpoint{std::nullopt};
+    /// The tasks a waiting task waits for (frozen `TaskState.on`); empty for
+    /// every other status.
+    std::vector<TaskId> on{};
+    /// The join policy of a waiting task (frozen `TaskState.policy`); absent
+    /// for every other status.
+    std::optional<JoinPolicy> policy{std::nullopt};
     std::optional<TaskOutcome> outcome{std::nullopt};
 
     [[nodiscard]] bool operator==(const TaskState&) const = default;
@@ -150,8 +180,14 @@ struct TaskRecord {
 
 /// Task options when creating a task (frozen pi `TaskOptions`).
 struct TaskOptions {
+    /// The conversation the task lives in. A child task inherits its owner's
+    /// conversation, and naming another one is rejected.
     std::optional<ConversationId> conversation_id{std::nullopt};
+    /// The owning task (frozen `TaskOptions.ownership` `{kind: "task"}`);
+    /// absent creates a conversation-owned task.
     std::optional<TaskId> owner{std::nullopt};
+    /// Whether the task's subtree is a background one that an ordinary scope
+    /// walk does not enter (frozen `TaskOptions.background`).
     bool background{false};
     bool abandon_on_restart{false};
     std::optional<chord::Json> checkpoint{std::nullopt};
@@ -194,9 +230,25 @@ struct HarnessInspection {
 /// strictly increase per storage, one per adopted batch.
 using Seq = std::int64_t;
 
+/// The creator edge of one conversation (frozen pi
+/// `ConversationRecord.owner`): the task that created it, and the conversation
+/// that task lives in. The edge is the conversation's parent node in the
+/// ownership tree, so subtree aborts and subtree idle waits reach it.
+struct ConversationOwner {
+    ConversationId conversation_id{};
+    TaskId task_id{};
+
+    [[nodiscard]] bool operator==(const ConversationOwner&) const = default;
+};
+
 /// The immutable record of one conversation (frozen pi `ConversationRecord`).
 struct ConversationRecord {
     ConversationId id{};
+    /// The creator edge (frozen `ConversationRecord.owner`); absent for an
+    /// ownerless conversation, the reserved root included.
+    std::optional<ConversationOwner> owner{std::nullopt};
+
+    [[nodiscard]] bool operator==(const ConversationRecord&) const = default;
 };
 
 /// Model messages and execution provenance carried by an entry draft (frozen

@@ -159,9 +159,15 @@ public:
     /// Create the reserved root (frozen pi `Tx.createRootConversation`).
     [[nodiscard]] support::Expected<ConversationRecord> create_root_conversation();
 
-    /// Create a conversation with ownerless ownership (frozen pi
-    /// `Tx.createConversation`).
+    /// Create an ownerless conversation (frozen pi `Tx.createConversation` with
+    /// `{kind: "ownerless"}`).
     [[nodiscard]] support::Expected<ConversationRecord> create_conversation();
+
+    /// Create a conversation owned by `owner` (frozen pi `Tx.createConversation`
+    /// with `{kind: "task"}`). The owner task must exist and be live: a
+    /// missing, terminal, `completing`, or abort-marked owner is rejected, as is
+    /// an owner that a later commit of this transaction settles.
+    [[nodiscard]] support::Expected<ConversationRecord> create_conversation(TaskId owner);
 
     /// Append one entry to a conversation (frozen pi `Tx.appendEntry`).
     [[nodiscard]] support::Expected<EntryRecord> append_entry(ConversationId conversation_id,
@@ -248,6 +254,11 @@ public:
     [[nodiscard]] support::Expected<chord::Draft> doc(const DocumentDefinition& definition, DocumentAddress address);
 
     /// Create a task (frozen pi `Tx.createTask`).
+    ///
+    /// A child task (`options.owner`) is rejected when its owner does not exist,
+    /// is terminal, `completing`, or abort-marked, when the child is
+    /// `background`, or when it names another conversation than its owner's. The
+    /// child inherits its owner's conversation.
     [[nodiscard]] support::Expected<TaskId> create_task(
             const TaskDefinition& definition, chord::Json input, TaskOptions options = {});
 
@@ -268,6 +279,14 @@ public:
 
     /// Set or replace one task record (frozen pi `Tx.setTask`).
     support::ExpectedVoid set_task(TaskRecord record);
+
+    /// The scheduler's view of every task candidate in this transaction: the
+    /// committed records with this transaction's staged writes applied (frozen
+    /// pi `overlayOf(tx)`). It is not a caller table read, so it stays
+    /// available after the first table write; the scheduler uses it to judge a
+    /// `completing` hold and to validate a wait, both of which must count work
+    /// the same commit creates.
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> overlay_tasks();
 
     /// Scan task records (frozen pi `Tx.scanTasks`).
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit);

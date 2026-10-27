@@ -63,8 +63,20 @@ public:
     /// Reconcile surviving running tasks back to pending (call upon reopen).
     [[nodiscard]] support::AsyncResult<void> open_tasks();
 
-    /// Wait for a task to reach terminal status and return its terminal record receipt.
-    [[nodiscard]] support::AsyncResult<TaskRecord> wait_for_task(TaskId id);
+    /// Wait for a task to reach terminal status and return its terminal record
+    /// receipt (frozen pi `Harness.waitForTask`). Cancelling `stop` rejects only
+    /// this wait with a "stop waiting" cancellation error; the task keeps
+    /// running and settles on its own.
+    [[nodiscard]] support::AsyncResult<TaskRecord> wait_for_task(TaskId id, std::stop_token stop = std::stop_token{});
+
+    /// Resolve once ordinary traversal from `conversation` reaches no live
+    /// non-background task, or from every ownerless conversation when
+    /// `conversation` is absent (frozen pi `Harness.waitForIdle`,
+    /// `Conversation.waitForIdle`). Live background work never holds it.
+    /// Cancelling `stop` rejects only this wait with a "stop waiting"
+    /// cancellation error.
+    [[nodiscard]] support::AsyncResult<void> wait_for_idle(
+            std::optional<ConversationId> conversation = std::nullopt, std::stop_token stop = std::stop_token{});
 
     /// Abort a task. Returns "marked" or "terminal". The Harness must outlive the asynchronous operation.
     [[nodiscard]] support::AsyncResult<std::string> abort_task(TaskId id);
@@ -91,11 +103,14 @@ public:
     [[nodiscard]] support::AsyncResult<std::string> abort_submission(
             SubmissionId id, std::optional<ConversationId> conversation_id = std::nullopt);
 
-    /// Withdraw every queued input of the conversation, keep queued writes,
-    /// and settle the running run's inputs `unanswered/aborted` (frozen pi
-    /// `Conversation.abort`, admitted-behavior slice; background crossing
-    /// stays out of scope). Resolves once the conversation is idle.
-    [[nodiscard]] support::AsyncResult<void> abort_conversation(ConversationId conversation_id);
+    /// Abort one conversation's ordinary scope (frozen pi
+    /// `Conversation.abort`): withdraw every queued input, keep queued writes,
+    /// mark every live non-background task ordinary traversal reaches, and
+    /// settle the running run's inputs `unanswered/aborted`. With `background`,
+    /// traversal crosses background boundaries, the reached tasks are waited
+    /// for, and the wait also covers them. Resolves once the scope is idle.
+    [[nodiscard]] support::AsyncResult<void> abort_conversation(
+            ConversationId conversation_id, bool background = false);
 
     /// Close the harness.
     [[nodiscard]] support::AsyncResult<void> close();
@@ -103,10 +118,12 @@ public:
 private:
     struct Impl;
     explicit Harness(std::unique_ptr<Impl> impl);
-    /// One abort pass: withdraw queued inputs and read the staged live run in
-    /// one commit, abort the marked run, then re-run until the conversation
-    /// is idle (frozen pi `Conversation.abort`).
-    void abort_conversation_pass(ConversationId conversation_id, support::AsyncCompletion<void, support::Error> done);
+    /// One abort pass: withdraw the in-scope queued inputs and mark every live
+    /// reached task in one commit, then wait for the reached tasks (with
+    /// `background`) and the idle scope, re-running until the scope is idle
+    /// (frozen pi `Conversation.abort`).
+    void abort_conversation_pass(
+            ConversationId conversation_id, bool background, support::AsyncCompletion<void, support::Error> done);
     std::unique_ptr<Impl> impl_;
 };
 

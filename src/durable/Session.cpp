@@ -10,6 +10,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -77,6 +78,22 @@ struct CachedDocument {
     DocumentRecord record{};
     chord::Json value{};
 };
+
+/// Reject new owned work below an owner that cannot take it (frozen pi
+/// `Tx.#validateOwners`): new owned work needs a live owner, so a terminal,
+/// `completing`, or abort-marked task cannot take a child task or a
+/// task-owned conversation.
+[[nodiscard]] support::ExpectedVoid require_live_owner(std::string_view what, TaskId owner, const TaskRecord& record) {
+    const std::string prefix = std::string{what} + " " + std::to_string(owner.value);
+    if (record.state.status == "terminal" || record.state.status == "completing") {
+        return std::unexpected(
+                support::make_error(support::ErrorCode::Validation, prefix + " is " + record.state.status));
+    }
+    if (record.abort_requested) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, prefix + " is abort-marked"));
+    }
+    return {};
+}
 
 } // namespace
 
@@ -436,6 +453,10 @@ struct Transaction::Impl {
     /// The staged submission changes resolved at assembly (frozen pi
     /// `Tx.#submissionChanges`).
     std::vector<SubmissionChange> submission_changes{};
+    /// The latest staged candidate per task this transaction created or
+    /// replaced (frozen pi `Tx.#tasksById`); a child owner is judged against it
+    /// first, so a task cannot create owned work in the commit that ends it.
+    std::map<std::int64_t, TaskRecord> staged_tasks{};
 
     [[nodiscard]] support::ExpectedVoid reject_read(std::string_view method) const {
         if (sealed) {
@@ -453,6 +474,25 @@ struct Transaction::Impl {
         }
         return {};
     }
+
+    /// The latest candidate of one task: this transaction's staged write first,
+    /// then committed state (frozen pi `Tx.#currentTask`). A caller table read,
+    /// so it is only used before the first table write of a child creation.
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> current_task(TaskId id) {
+        if (const auto staged = staged_tasks.find(id.value); staged != staged_tasks.end()) {
+            return std::optional<TaskRecord>{staged->second};
+        }
+        return storage->task(id);
+    }
+
+    /// Record the latest candidate of one task write, so a later child-owner or
+    /// conversation-owner validation of this transaction sees it.
+    void stage_task(TaskRecord record) { staged_tasks.insert_or_assign(record.id.value, std::move(record)); }
+
+    /// The tasks this transaction creates (frozen pi `Tx.#tasksById` entries
+    /// whose write kind is `create`); only a created task's owner edge is
+    /// validated again at assembly.
+    std::set<std::int64_t> created_tasks{};
 
     /// Whether one conversation is visible to this transaction: one it staged
     /// or one committed state holds (frozen pi `Tx.#requireConversation`).
@@ -522,6 +562,32 @@ support::Expected<ConversationRecord> Transaction::create_conversation() {
         return std::unexpected(std::move(id.error()));
     }
     ConversationRecord record{.id = ConversationId{.value = *id}};
+    impl_->has_table_write = true;
+    impl_->writes.push_back(StorageWrite{.type = "conversation", .conversation = record});
+    return record;
+}
+
+support::Expected<ConversationRecord> Transaction::create_conversation(TaskId owner) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    auto owner_record = impl_->current_task(owner);
+    if (!owner_record) {
+        return std::unexpected(std::move(owner_record.error()));
+    }
+    if (!(*owner_record).has_value()) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Conversation owner task " + std::to_string(owner.value) + " does not exist"));
+    }
+    // Liveness is judged on the owner's final candidate at assembly time
+    // (frozen pi `Tx.#validateOwners`), after every write of this transaction
+    // has staged; here only existence is validated.
+    auto id = impl_->storage->mint_id();
+    if (!id) {
+        return std::unexpected(std::move(id.error()));
+    }
+    ConversationRecord record{.id = ConversationId{.value = *id},
+            .owner = ConversationOwner{.conversation_id = (*owner_record)->conversation_id, .task_id = owner}};
     impl_->has_table_write = true;
     impl_->writes.push_back(StorageWrite{.type = "conversation", .conversation = record});
     return record;
@@ -662,11 +728,42 @@ support::Expected<TaskId> Transaction::create_task(
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
     }
+    std::optional<TaskRecord> owner_record;
+    if (options.owner.has_value()) {
+        auto current = impl_->current_task(*options.owner);
+        if (!current) {
+            return std::unexpected(std::move(current.error()));
+        }
+        if (!(*current).has_value()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "Task owner " + std::to_string(options.owner->value) + " does not exist"));
+        }
+        owner_record = **current;
+        // Liveness is judged on the owner's final candidate at assembly time
+        // (frozen pi `Tx.#validateOwners`), after every write of this
+        // transaction has staged; here only shape is validated.
+        if (options.background) {
+            return std::unexpected(
+                    support::make_error(support::ErrorCode::Validation, "A child task cannot be background"));
+        }
+        if (options.conversation_id.has_value() && *options.conversation_id != owner_record->conversation_id) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                    "A child task lives in its owner's conversation " +
+                            std::to_string(owner_record->conversation_id.value)));
+        }
+    }
+    const ConversationId conv_id = owner_record.has_value() ? owner_record->conversation_id
+                                                            : options.conversation_id.value_or(ConversationId{1});
+    if (owner_record.has_value()) {
+        // The child hangs from its owner's conversation, which must exist.
+        if (auto conversation = impl_->storage->conversation(conv_id); !conversation) {
+            return std::unexpected(std::move(conversation.error()));
+        }
+    }
     auto id = impl_->storage->mint_id();
     if (!id) {
         return std::unexpected(std::move(id.error()));
     }
-    ConversationId conv_id = options.conversation_id.value_or(ConversationId{1});
     TaskRecord record{
             .id = TaskId{.value = *id},
             .conversation_id = conv_id,
@@ -690,6 +787,8 @@ support::Expected<TaskId> Transaction::create_task(
     };
     impl_->has_table_write = true;
     impl_->writes.push_back(StorageWrite{.type = "task", .task = record});
+    impl_->stage_task(record);
+    impl_->created_tasks.insert(record.id.value);
     return TaskId{.value = *id};
 }
 
@@ -700,11 +799,36 @@ support::Expected<std::optional<TaskRecord>> Transaction::task(TaskId id) {
     return impl_->storage->task(id);
 }
 
+support::Expected<std::vector<TaskRecord>> Transaction::overlay_tasks() {
+    if (impl_->sealed) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation, "Transaction has settled"));
+    }
+    auto committed = impl_->storage->scan_tasks(1024);
+    if (!committed) {
+        return std::unexpected(committed.error());
+    }
+    std::map<std::int64_t, TaskRecord> merged;
+    for (TaskRecord& record : *committed) {
+        merged.insert_or_assign(record.id.value, std::move(record));
+    }
+    for (const auto& [id, record] : impl_->staged_tasks) {
+        merged.insert_or_assign(id, record);
+    }
+    std::vector<TaskRecord> candidates;
+    candidates.reserve(merged.size());
+    for (auto& [id, record] : merged) {
+        (void)id;
+        candidates.push_back(std::move(record));
+    }
+    return candidates;
+}
+
 support::ExpectedVoid Transaction::set_task(TaskRecord record) {
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
     }
     impl_->has_table_write = true;
+    impl_->stage_task(record);
     impl_->writes.push_back(StorageWrite{.type = "task", .task = std::move(record)});
     return {};
 }
@@ -938,6 +1062,45 @@ support::AsyncResult<void> Session::Impl::commit_now(
     // Every resolved candidate joins the batch as a submission write.
     for (const auto& [id, record] : transaction.impl_->staged_submissions) {
         transaction.impl_->writes.push_back(StorageWrite{.type = "submission", .submission = record});
+    }
+
+    // New owned work needs a live owner judged on the owner's final candidate
+    // in this commit: a task cannot take a child task or a task-owned
+    // conversation in the commit that settles it (frozen pi `Tx.#validateOwners`
+    // runs at assembly over every owner edge, against staged candidates first
+    // and the committed record otherwise).
+    const auto final_candidate = [this, &transaction](TaskId owner) -> support::Expected<std::optional<TaskRecord>> {
+        const auto staged = transaction.impl_->staged_tasks.find(owner.value);
+        if (staged != transaction.impl_->staged_tasks.end()) {
+            return std::optional<TaskRecord>{staged->second};
+        }
+        return storage->task(owner);
+    };
+    for (const std::int64_t created : transaction.impl_->created_tasks) {
+        const auto staged = transaction.impl_->staged_tasks.find(created);
+        if (staged == transaction.impl_->staged_tasks.end() || !staged->second.owner.has_value()) continue;
+        auto owner = final_candidate(*staged->second.owner);
+        if (!owner) {
+            return reject_assembly(std::move(owner.error()));
+        }
+        if (!owner->has_value()) continue; // create-time existence check already rejected this
+        if (auto live = require_live_owner("Task owner", *staged->second.owner, **owner); !live) {
+            return reject_assembly(std::move(live.error()));
+        }
+    }
+    for (const StorageWrite& write : transaction.impl_->writes) {
+        if (write.type != "conversation" || !write.conversation.has_value() || !write.conversation->owner.has_value()) {
+            continue;
+        }
+        auto owner = final_candidate(write.conversation->owner->task_id);
+        if (!owner) {
+            return reject_assembly(std::move(owner.error()));
+        }
+        if (!owner->has_value()) continue; // create-time existence check already rejected this
+        if (auto live = require_live_owner("Conversation owner task", write.conversation->owner->task_id, **owner);
+                !live) {
+            return reject_assembly(std::move(live.error()));
+        }
     }
 
     auto state = std::make_shared<Session::Impl::CommitState>();

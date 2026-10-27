@@ -644,7 +644,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 485,
+      "scenarios": 489,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -732,7 +732,12 @@
         "audit-1080/reset-writes.json:a queued head:self reset at the postTools boundary ends the current run unanswered and reset and starts the selected queued input in the reset context",
         "audit-1080/reset-writes.json:a display-only write behind a queued reset queues and lands after the reset when the run ends"
       ],
-      "uncovered": []
+      "uncovered": [
+        "audit-1078/ownership-waits.json:a conversation abort keeps live background work while a direct abort reaches it",
+        "audit-1078/ownership-waits.json:a background-crossing conversation abort reaches and waits for a live background task",
+        "audit-1078/ownership-waits.json:an idle wait resolves with live background work and holds on a live foreground task",
+        "audit-1078/ownership-waits.json:a child task and a task-owned conversation are rejected for a terminal owner and accepted for a live one"
+      ]
     }
   },
   "sourceAliases": {

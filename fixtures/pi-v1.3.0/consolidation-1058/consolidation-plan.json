@@ -1621,6 +1621,52 @@
         "cch_durable:submission-queues"
       ],
       "disposition": "Consumed by the #1080 public Harness reset/write comparisons; retain row statuses pending complete pinned capability receipts."
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "a conversation abort keeps live background work while a direct abort reaches it",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact; the foreground/background abort boundary rows it discriminates stay recorded here.",
+      "rows": [
+        "cch_durable:background-ownership-boundary",
+        "cch_durable:conversation-abort",
+        "cch_durable:abort-task-protocol"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "a background-crossing conversation abort reaches and waits for a live background task",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact.",
+      "rows": [
+        "cch_durable:background-ownership-boundary",
+        "cch_durable:conversation-abort-effects"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "an idle wait resolves with live background work and holds on a live foreground task",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact.",
+      "rows": [
+        "cch_durable:idle-waits"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to this row"
+    },
+    {
+      "family": "audit-1078",
+      "artifact": "ownership-waits.json",
+      "scenario": "a child task and a task-owned conversation are rejected for a terminal owner and accepted for a live one",
+      "reason": "Captured and verified by #1078, but no 1055/1056 ledger row routes to the audit-1078 ownership-waits artifact.",
+      "rows": [
+        "cch_durable:task-ownership-graph",
+        "cch_durable:conversation-ownership",
+        "cch_durable:Tx:createTask",
+        "cch_durable:Tx:createConversation"
+      ],
+      "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
     }
   ],
   "groups": [

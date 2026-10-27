@@ -19,13 +19,28 @@ namespace cch::durable {
 class Transaction;
 
 /// Next state a task phase or abort handler commits (frozen pi `NextTaskState`).
+///
+/// A returned `terminal` state is stored as `completing` while ordinary owned
+/// work below the task is live; the scheduler writes the terminal record once
+/// that work drains (spec §5.5).
 struct NextTaskState {
     std::string status{};
     std::optional<chord::Json> checkpoint{std::nullopt};
+    /// The tasks to wait for; only meaningful for `waiting`.
+    std::vector<TaskId> on{};
+    /// The join policy; only meaningful for `waiting`.
+    std::optional<JoinPolicy> policy{std::nullopt};
     std::optional<TaskOutcome> outcome{std::nullopt};
 
     [[nodiscard]] static NextTaskState running(chord::Json checkpoint) {
         return NextTaskState{.status = "running", .checkpoint = std::move(checkpoint)};
+    }
+
+    /// Park the task until every task in `on` is terminal (frozen
+    /// `TaskState` `waiting`).
+    [[nodiscard]] static NextTaskState waiting(chord::Json checkpoint, std::vector<TaskId> on, JoinPolicy policy) {
+        return NextTaskState{
+                .status = "waiting", .checkpoint = std::move(checkpoint), .on = std::move(on), .policy = policy};
     }
 
     [[nodiscard]] static NextTaskState terminal(TaskOutcome outcome) {

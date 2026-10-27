@@ -1,0 +1,175 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1078",
+  "family": "audit-1078",
+  "capturedAt": "2026-10-27T02:12:54.412Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/scheduler.ts:abortConversation,waitForIdle,#walkDown,#inScope,#idle",
+    "packages/durable/src/session/transaction.ts:Transaction.createTask,Transaction.createConversation,#validateOwners",
+    "packages/durable/test/harness-ownership.test.ts:background boundary,idle wait,ownership restrictions"
+  ],
+  "scenarios": [
+    {
+      "name": "a conversation abort keeps live background work while a direct abort reaches it",
+      "inputs": {
+        "conversationAbort": "ordinary",
+        "tasks": [
+          "foreground (ordinary)",
+          "background"
+        ],
+        "directAbort": "abortTask(background)"
+      },
+      "expected": {
+        "afterAbort": {
+          "log": [
+            "audit.bg-foreground:run",
+            "audit.bg-background:run",
+            "audit.bg-foreground:signalled",
+            "audit.bg-foreground:abort"
+          ],
+          "foregroundStatus": "terminal",
+          "foregroundOutcome": {
+            "status": "aborted",
+            "reason": "cascade"
+          },
+          "backgroundStatus": "running",
+          "backgroundAbortRequested": false
+        },
+        "afterDirect": {
+          "marked": "marked",
+          "outcome": {
+            "status": "aborted",
+            "reason": "cascade"
+          },
+          "log": [
+            "audit.bg-foreground:run",
+            "audit.bg-background:run",
+            "audit.bg-foreground:signalled",
+            "audit.bg-foreground:abort",
+            "audit.bg-background:signalled",
+            "audit.bg-background:abort"
+          ]
+        }
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task and conversation IDs are compared only where the identity relation is the observation; an owner edge is compared as a boolean relation to the same ID the scenario created",
+        "the in-memory storage holds no durable state beyond the captured records",
+        "task log entries are the scenario's own phase and abort markers, recorded in the order the scheduler ran them"
+      ]
+    },
+    {
+      "name": "a background-crossing conversation abort reaches and waits for a live background task",
+      "inputs": {
+        "conversationAbort": "{background: true}",
+        "tasks": [
+          "background"
+        ]
+      },
+      "expected": {
+        "status": "terminal",
+        "outcome": {
+          "status": "aborted",
+          "reason": "cascade"
+        },
+        "abortRequested": true,
+        "log": [
+          "audit.bg-cross:run",
+          "audit.bg-cross:signalled",
+          "audit.bg-cross:abort"
+        ]
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task and conversation IDs are compared only where the identity relation is the observation; an owner edge is compared as a boolean relation to the same ID the scenario created",
+        "the in-memory storage holds no durable state beyond the captured records",
+        "task log entries are the scenario's own phase and abort markers, recorded in the order the scheduler ran them"
+      ]
+    },
+    {
+      "name": "an idle wait resolves with live background work and holds on a live foreground task",
+      "inputs": {
+        "idleWaits": [
+          "a background-only conversation",
+          "the root with a live foreground task",
+          "the harness"
+        ],
+        "tasks": [
+          "foreground (ordinary)",
+          "background",
+          "another conversation's background"
+        ]
+      },
+      "expected": {
+        "backgroundOnlyIdle": "idle",
+        "heldBeforeRelease": true,
+        "idleAfterForeground": {
+          "log": [
+            "audit.idle-foreground:run",
+            "audit.idle-background:run",
+            "audit.idle-other:run",
+            "audit.idle-foreground:released"
+          ],
+          "backgroundStillLive": "running"
+        },
+        "afterBackground": {
+          "outcome": {
+            "status": "completed",
+            "result": "background"
+          },
+          "backgroundStillLive": "terminal"
+        }
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task and conversation IDs are compared only where the identity relation is the observation; an owner edge is compared as a boolean relation to the same ID the scenario created",
+        "the in-memory storage holds no durable state beyond the captured records",
+        "task log entries are the scenario's own phase and abort markers, recorded in the order the scheduler ran them"
+      ]
+    },
+    {
+      "name": "a child task and a task-owned conversation are rejected for a terminal owner and accepted for a live one",
+      "inputs": {
+        "rejected": [
+          "child of a terminal owner",
+          "child of a missing owner",
+          "background child",
+          "child in another conversation",
+          "conversation owned by a terminal task"
+        ],
+        "accepted": [
+          "child of a live owner",
+          "conversation owned by a live task"
+        ]
+      },
+      "expected": {
+        "errors": {
+          "child_of_terminal": "Task owner 7 is terminal",
+          "child_of_missing": "Task owner 999999 does not exist",
+          "background_child": "A child task cannot be background",
+          "child_other_conversation": "A child task lives in its owner's conversation 1",
+          "conversation_of_terminal": "Conversation owner task 7 is terminal"
+        },
+        "acceptedChildOwner": 21,
+        "acceptedConversationOwner": 21,
+        "acceptedConversationIdIsFresh": true
+      },
+      "normalizations": [
+        "wall-clock capture timestamps are omitted; the Harness clock is not part of these observations",
+        "generated task and conversation IDs are compared only where the identity relation is the observation; an owner edge is compared as a boolean relation to the same ID the scenario created",
+        "the in-memory storage holds no durable state beyond the captured records",
+        "task log entries are the scenario's own phase and abort markers, recorded in the order the scheduler ran them"
+      ]
+    }
+  ]
+}

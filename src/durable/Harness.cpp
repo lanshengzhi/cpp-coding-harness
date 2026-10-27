@@ -17,6 +17,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <stop_token>
 #include <string>
 #include <thread>
@@ -306,6 +307,244 @@ namespace {
     return (*clock)();
 }
 
+[[nodiscard]] bool can_reserve(const TaskDefinition& def, const TaskRecord& record) noexcept {
+    return def.version() == record.version || (def.version() > record.version && def.has_migrate());
+}
+
+/// Whether a task record is still live: anything but `terminal` (frozen pi
+/// `LIVE_STATUSES`).
+[[nodiscard]] bool task_live(const TaskRecord& record) noexcept { return record.state.status != "terminal"; }
+
+/// Whether the record holds or ended with an outcome other than `completed`
+/// (frozen pi `failedOutcome`).
+[[nodiscard]] bool failed_outcome(const TaskRecord& record) noexcept {
+    if (record.state.status != "completing" && record.state.status != "terminal") return false;
+    return !record.state.outcome.has_value() || record.state.outcome->status != "completed";
+}
+
+/// A live owner's durable cancellation intent: its abort mark, or a held
+/// outcome other than `completed` (frozen pi `cancellationIntent`).
+[[nodiscard]] bool cancellation_intent(const TaskRecord& record) noexcept {
+    return task_live(record) && (record.abort_requested || failed_outcome(record));
+}
+
+/// The ownership tree of one scheduling pass (frozen pi `TaskScheduler.#below`,
+/// `#edges`, `#roots`): tasks and conversations with their owner edges.
+///
+/// A task's parent is its owner task, or its conversation; a conversation's
+/// parent is its owner task, if any. Walks down this tree decide what ordinary
+/// work holds a task's outcome, what a conversation abort reaches, and whether a
+/// scope is idle.
+class OwnershipIndex {
+public:
+    OwnershipIndex(std::vector<TaskRecord> tasks, std::vector<ConversationRecord> conversations) {
+        for (const TaskRecord& task : tasks)
+            tasks_.emplace(task.id.value, task);
+        for (const ConversationRecord& conversation : conversations) {
+            conversations_.emplace(conversation.id.value, conversation);
+        }
+        for (const auto& [id, task] : tasks_) {
+            if (task.owner.has_value()) {
+                owned_tasks_[task.owner->value].push_back(id);
+            } else {
+                conversation_tasks_[task.conversation_id.value].push_back(id);
+            }
+        }
+        for (const auto& [id, conversation] : conversations_) {
+            if (conversation.owner.has_value()) {
+                owned_conversations_[conversation.owner->task_id.value].push_back(id);
+            }
+        }
+    }
+
+    [[nodiscard]] const TaskRecord* task(TaskId id) const {
+        const auto found = tasks_.find(id.value);
+        return found == tasks_.end() ? nullptr : &found->second;
+    }
+
+    [[nodiscard]] const ConversationRecord* conversation(ConversationId id) const {
+        const auto found = conversations_.find(id.value);
+        return found == conversations_.end() ? nullptr : &found->second;
+    }
+
+    [[nodiscard]] const std::map<std::int64_t, TaskRecord>& tasks() const noexcept { return tasks_; }
+
+    /// Live tasks below `owner` that ordinary traversal reaches: a background
+    /// task is reached but neither counted as owned work nor entered, so its
+    /// own subtree holds nothing above it (frozen `#ownedLive`). Tasks in
+    /// `done` are neither counted nor entered: their outcome already settled.
+    [[nodiscard]] std::vector<TaskId> owned_live(TaskId owner, const std::set<std::int64_t>* done = nullptr) const {
+        std::vector<TaskId> found;
+        walk_down(
+                TaskNode{owner.value},
+                false,
+                [&](const TaskRecord& record, bool is_background) {
+                    if (!is_background && task_live(record)) found.push_back(record.id);
+                },
+                [done](const TaskRecord& record) { return done == nullptr || !done->contains(record.id.value); });
+        return found;
+    }
+
+    /// Whether ordinary traversal from `conversation` reaches no live
+    /// non-background task (frozen `#idle`).
+    [[nodiscard]] bool idle(ConversationId conversation) const {
+        bool live = false;
+        walk_down(
+                ConversationNode{conversation.value},
+                false,
+                [&](const TaskRecord& record, bool is_background) {
+                    if (!is_background && task_live(record)) live = true;
+                },
+                [](const TaskRecord&) { return true; });
+        return !live;
+    }
+
+    /// Whether every ownerless conversation's ordinary scope is idle (frozen
+    /// `Harness.waitForIdle`).
+    [[nodiscard]] bool all_idle() const {
+        for (const auto& [id, conversation] : conversations_) {
+            if (conversation.owner.has_value()) continue;
+            if (!idle(conversation.id)) return false;
+        }
+        return true;
+    }
+
+    /// Live tasks ordinary traversal from `conversation` reaches, in walk order.
+    /// With `cross_background`, background boundaries are crossed and the
+    /// background tasks themselves are reached too.
+    [[nodiscard]] std::vector<TaskId> reachable(ConversationId conversation, bool cross_background) const {
+        std::vector<TaskId> reached;
+        walk_down(
+                ConversationNode{conversation.value},
+                cross_background,
+                [&](const TaskRecord& record, bool is_background) {
+                    if (cross_background || !is_background) {
+                        if (task_live(record)) reached.push_back(record.id);
+                    }
+                },
+                [](const TaskRecord&) { return true; });
+        return reached;
+    }
+
+    /// Live non-background tasks below each live owner with cancellation intent,
+    /// not entering another such owner, which has its own walk (frozen
+    /// `#reconcile`'s cascade derivation). Marking them is the bottom-up abort
+    /// cascade: a marked owner keeps its abort handler until its ordinary owned
+    /// work is gone.
+    [[nodiscard]] std::vector<TaskId> cascade_targets() const {
+        std::vector<TaskId> targets;
+        for (const auto& [id, owner] : tasks_) {
+            if (!cancellation_intent(owner)) continue;
+            walk_down(
+                    TaskNode{id},
+                    false,
+                    [&](const TaskRecord& record, bool is_background) {
+                        if (!is_background && task_live(record) && !record.abort_requested) {
+                            targets.push_back(record.id);
+                        }
+                    },
+                    [this](const TaskRecord& record) {
+                        const TaskRecord* live = task(record.id);
+                        return live != nullptr && !cancellation_intent(*live);
+                    });
+        }
+        return targets;
+    }
+
+    /// Whether walking up from `start` reaches `conversation` without passing a
+    /// background owner (frozen `#inScope`).
+    [[nodiscard]] bool in_scope(TaskId start, ConversationId conversation) const {
+        const TaskRecord* current = task(start);
+        while (current != nullptr) {
+            if (current->background) return false;
+            if (current->conversation_id == conversation) {
+                // A task hangs from its owner task, not its conversation, until
+                // the chain reaches a task without an owner.
+                if (!current->owner.has_value()) return true;
+            }
+            if (!current->owner.has_value()) {
+                return current->conversation_id == conversation;
+            }
+            current = task(*current->owner);
+        }
+        return false;
+    }
+
+private:
+    /// A node of the ownership tree: a task, or a conversation.
+    struct TaskNode {
+        std::int64_t value{0};
+    };
+    struct ConversationNode {
+        std::int64_t value{0};
+    };
+    using Node = std::variant<TaskNode, ConversationNode>;
+
+    /// Visit every task the walk from `start` reaches. Background tasks are
+    /// reached but not entered unless `cross_background`; `enter` decides
+    /// whether a reached task is descended into.
+    template <typename Visit, typename Enter>
+    void walk_down(Node start, bool cross_background, Visit visit, Enter enter) const {
+        std::vector<Node> pending{start};
+        while (!pending.empty()) {
+            const Node node = pending.back();
+            pending.pop_back();
+            if (const auto* conversation = std::get_if<ConversationNode>(&node)) {
+                const auto children = conversation_tasks_.find(conversation->value);
+                if (children == conversation_tasks_.end()) continue;
+                for (const std::int64_t id : children->second) {
+                    const auto found = tasks_.find(id);
+                    if (found == tasks_.end()) continue;
+                    visit(found->second, found->second.background);
+                    if ((cross_background || !found->second.background) && enter(found->second)) {
+                        pending.push_back(TaskNode{id});
+                    }
+                }
+                continue;
+            }
+            const std::int64_t id = std::get<TaskNode>(node).value;
+            if (const auto conversations = owned_conversations_.find(id); conversations != owned_conversations_.end()) {
+                for (const std::int64_t owned : conversations->second) {
+                    pending.push_back(ConversationNode{owned});
+                }
+            }
+            const auto children = owned_tasks_.find(id);
+            if (children == owned_tasks_.end()) continue;
+            for (const std::int64_t child : children->second) {
+                const auto found = tasks_.find(child);
+                if (found == tasks_.end()) continue;
+                visit(found->second, found->second.background);
+                if ((cross_background || !found->second.background) && enter(found->second)) {
+                    pending.push_back(TaskNode{child});
+                }
+            }
+        }
+    }
+
+    std::map<std::int64_t, TaskRecord> tasks_;
+    std::map<std::int64_t, ConversationRecord> conversations_;
+    std::map<std::int64_t, std::vector<std::int64_t>> owned_tasks_;
+    std::map<std::int64_t, std::vector<std::int64_t>> owned_conversations_;
+    std::map<std::int64_t, std::vector<std::int64_t>> conversation_tasks_;
+};
+
+/// Shared state of one registered task wait: the completion and the atomic
+/// claim that makes the resolve, reject-all, and cancellation paths meet
+/// exactly once (the `Submission::Registry::Waiter` shape, for a task receipt).
+struct TaskWaiter {
+    std::atomic<unsigned> outcome{0}; ///< 0 pending, 1 resolved, 2 cancelled
+    std::optional<support::AsyncCompletion<TaskRecord, support::Error>> completion{};
+    std::unique_ptr<std::stop_callback<std::move_only_function<void()>>> cancellation{};
+};
+
+/// Shared state of one registered idle wait; same claim protocol as
+/// `TaskWaiter`.
+struct IdleWaiter {
+    std::atomic<unsigned> outcome{0}; ///< 0 pending, 1 resolved, 2 cancelled
+    std::optional<support::AsyncCompletion<void, support::Error>> completion{};
+    std::unique_ptr<std::stop_callback<std::move_only_function<void()>>> cancellation{};
+};
+
 class HarnessTaskRuntime final : public TaskRuntime {
 public:
     HarnessTaskRuntime(Session& session,
@@ -316,10 +555,12 @@ public:
             std::stop_token stop_token,
             std::shared_ptr<std::move_only_function<std::int64_t()>> now_fn,
             std::move_only_function<void(const support::Error&)> report_fn,
-            bool allow_abort_commit = false)
+            bool allow_abort_commit = false,
+            bool abort_invocation = false)
         : session_(session), task_id_(id), conversation_id_(conv_id), task_def_(task_def),
           phase_hooks_(std::move(phase_hooks)), stop_token_(std::move(stop_token)), now_fn_(std::move(now_fn)),
-          report_fn_(std::move(report_fn)), allow_abort_commit_(allow_abort_commit) {}
+          report_fn_(std::move(report_fn)), allow_abort_commit_(allow_abort_commit),
+          abort_invocation_(abort_invocation) {}
 
     [[nodiscard]] TaskId task_id() const noexcept override { return task_id_; }
     [[nodiscard]] ConversationId conversation_id() const noexcept override { return conversation_id_; }
@@ -328,8 +569,9 @@ public:
     [[nodiscard]] support::AsyncResult<void> commit(CommitCallback change) override {
         const TaskId task_id = task_id_;
         const bool allow_abort_commit = allow_abort_commit_;
+        const bool abort_invocation = abort_invocation_;
         const auto now_fn = now_fn_;
-        return session_.commit([task_id, allow_abort_commit, now_fn, change = std::move(change)](
+        return session_.commit([task_id, allow_abort_commit, abort_invocation, now_fn, change = std::move(change)](
                                        Transaction& tx) mutable -> support::ExpectedVoid {
             auto cur_opt = tx.task(task_id);
             if (!cur_opt || !cur_opt->has_value()) {
@@ -351,10 +593,38 @@ public:
             if (next_res->has_value()) {
                 auto next = std::move(*next_res.value());
                 if (next.status == "terminal") {
-                    current.state.status = "terminal";
+                    // A terminal outcome holds as `completing` while ordinary
+                    // owned work below the task is live, judged on this
+                    // commit's candidates so work it creates below the task
+                    // counts too (spec §5.5). The scheduler writes the terminal
+                    // record once that work drains.
+                    current.state.status = has_owned_live_in(tx, current) ? "completing" : "terminal";
                     current.state.outcome = std::move(next.outcome);
-                    current.ended_at = current_time(now_fn);
+                    current.state.on.clear();
+                    current.state.policy = std::nullopt;
+                    // `endedAt` marks the change to `terminal`; a held
+                    // `completing` outcome has not ended yet.
+                    if (current.state.status == "terminal") {
+                        current.ended_at = current_time(now_fn);
+                    }
                     current.memos.clear();
+                } else if (next.status == "waiting") {
+                    if (!next.policy.has_value()) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "A waiting task needs a join policy"));
+                    }
+                    if (abort_invocation) {
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Abort handler of task " + std::to_string(task_id.value) + " cannot wait"));
+                    }
+                    if (auto valid = validate_wait(tx, current, next.on, *next.policy); !valid) {
+                        return std::unexpected(std::move(valid.error()));
+                    }
+                    current.state.status = "waiting";
+                    current.state.checkpoint = std::move(next.checkpoint);
+                    current.state.on = std::move(next.on);
+                    current.state.policy = *next.policy;
+                    current.state.outcome = std::nullopt;
                 } else if (next.status == "running") {
                     current.state.status = "running";
                     current.state.checkpoint = std::move(next.checkpoint);
@@ -364,6 +634,75 @@ public:
             }
             return {};
         });
+    }
+
+    /// Whether ordinary owned work below `current` is live, judged on this
+    /// transaction's candidates (frozen pi `#commitState` ->
+    /// `#hasOwnedLive(id, overlay)`), so work the same commit creates below the
+    /// task counts.
+    [[nodiscard]] static bool has_owned_live_in(Transaction& tx, const TaskRecord& current) {
+        auto candidates = tx.overlay_tasks();
+        if (!candidates) return false;
+        const OwnershipIndex index(std::move(*candidates), {});
+        return !index.owned_live(current.id).empty();
+    }
+
+    /// Validate a wait before it is stored (frozen pi `#validateWait`): every
+    /// member exists, `failFast` may only name tasks the waiter owns, and the
+    /// wait may not close a cycle in the wait-for graph. An abort handler
+    /// cannot wait.
+    [[nodiscard]] static support::ExpectedVoid validate_wait(
+            Transaction& tx, const TaskRecord& current, const std::vector<TaskId>& on, JoinPolicy policy) {
+        auto candidates = tx.overlay_tasks();
+        if (!candidates) return std::unexpected(candidates.error());
+        std::map<std::int64_t, TaskRecord> members;
+        for (TaskRecord& record : *candidates)
+            members.insert_or_assign(record.id.value, std::move(record));
+        const auto find = [&members](TaskId id) -> const TaskRecord* {
+            const auto found = members.find(id.value);
+            return found == members.end() ? nullptr : &found->second;
+        };
+        for (const TaskId member_id : on) {
+            const TaskRecord* member = find(member_id);
+            if (member == nullptr) {
+                return std::unexpected(support::make_error(
+                        support::ErrorCode::Validation, "Task " + std::to_string(member_id.value) + " does not exist"));
+            }
+            if (policy == JoinPolicy::FailFast && member->owner != std::optional<TaskId>{current.id}) {
+                return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                        "Task " + std::to_string(current.id.value) + " can wait failFast only on tasks it owns; " +
+                                std::to_string(member_id.value) + " is not one"));
+            }
+            // A live child already holds the waiter (task-owned tasks are never
+            // background), so waiting on it adds no edge; a terminal task has
+            // no edges at all.
+            if (member->state.status == "terminal" || member->owner == std::optional<TaskId>{current.id}) continue;
+            // Any other member's live work chain, and its own wait edges, must
+            // not lead back to the waiter (frozen pi `#waitCycle`).
+            std::vector<TaskId> pending{member_id};
+            std::set<std::int64_t> visited{current.id.value};
+            while (!pending.empty()) {
+                const TaskId at_id = pending.back();
+                pending.pop_back();
+                const TaskRecord* at = find(at_id);
+                if (at == nullptr) continue;
+                if (!visited.insert(at->id.value).second) continue;
+                if (at->owner.has_value()) {
+                    if (*at->owner == current.id) {
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Task " + std::to_string(current.id.value) + " cannot wait on " +
+                                        std::to_string(member_id.value) + ": " + std::to_string(current.id.value) +
+                                        " -> " + std::to_string(member_id.value) + " is a wait cycle"));
+                    }
+                    pending.push_back(*at->owner);
+                }
+                if (at->state.status == "waiting" && !at->abort_requested) {
+                    for (const TaskId next : at->state.on)
+                        pending.push_back(next);
+                }
+            }
+        }
+        return {};
     }
 
     [[nodiscard]] support::AsyncResult<chord::Json> memo(std::string key, chord::Json candidate) override {
@@ -472,11 +811,9 @@ private:
     std::shared_ptr<std::move_only_function<std::int64_t()>> now_fn_;
     std::move_only_function<void(const support::Error&)> report_fn_;
     bool allow_abort_commit_{false};
+    /// Whether this runtime belongs to an abort handler, which cannot wait.
+    bool abort_invocation_{false};
 };
-
-[[nodiscard]] bool can_reserve(const TaskDefinition& def, const TaskRecord& record) noexcept {
-    return def.version() == record.version || (def.version() > record.version && def.has_migrate());
-}
 
 } // namespace
 
@@ -526,8 +863,29 @@ struct Harness::Impl {
 
     std::map<std::int64_t, std::stop_source> active_invocations;
     std::map<std::int64_t, FailedMigration> failed_migrations;
-    std::map<std::int64_t, std::vector<support::AsyncCompletion<TaskRecord, support::Error>>> waiters;
+    std::map<std::int64_t, std::vector<std::shared_ptr<TaskWaiter>>> waiters;
+    /// Idle waiters, keyed by conversation; `std::nullopt` waits for every
+    /// ownerless scope (frozen pi `TaskScheduler.#idleWaiters`).
+    std::map<std::optional<std::int64_t>, std::vector<std::shared_ptr<IdleWaiter>>> idle_waiters;
     std::optional<support::Error> wait_error;
+
+    /// One read-only view of the ownership world the scheduler reasons over:
+    /// every task and conversation record at one point in time.
+    struct World {
+        OwnershipIndex index;
+        std::vector<TaskRecord> tasks;
+
+        World(std::vector<TaskRecord> task_records, std::vector<ConversationRecord> conversation_records)
+            : index(task_records, conversation_records), tasks(std::move(task_records)) {}
+    };
+
+    [[nodiscard]] support::Expected<World> load_world() const {
+        auto tasks = storage->scan_tasks(1024);
+        if (!tasks) return std::unexpected(tasks.error());
+        auto conversations = storage->scan_conversations(1024);
+        if (!conversations) return std::unexpected(conversations.error());
+        return World{std::move(*tasks), std::move(*conversations)};
+    }
 
     Impl(Storage* s, std::unique_ptr<Session> sess, HarnessOptions opt)
         : storage(s), session(std::move(sess)), options(std::move(opt)),
@@ -599,6 +957,24 @@ struct Harness::Impl {
         }
         if (record.state.status == "completing") {
             return TaskInspectionState{.kind = "completing"};
+        }
+        // A marked task runs its abort handler once its ordinary owned work is
+        // gone, so it reports the work it waits for, like a waiting task
+        // (frozen pi `#inspectTask` -> `#waitingOn`).
+        auto world = load_world();
+        if (world) {
+            const std::vector<TaskId> on =
+                    record.abort_requested
+                            ? world->index.owned_live(record.id)
+                            : (record.state.status == "waiting" ? record.state.on : std::vector<TaskId>{});
+            std::vector<TaskId> live;
+            for (const TaskId id : on) {
+                const TaskRecord* member = world->index.task(id);
+                if (member != nullptr && task_live(*member)) live.push_back(id);
+            }
+            if (!live.empty()) {
+                return TaskInspectionState{.kind = "waiting", .on = std::move(live)};
+            }
         }
         auto fit = fit_task(record, snapshot);
         if (fit.blocked_reason.has_value()) {
@@ -688,7 +1064,7 @@ struct Harness::Impl {
     }
 
     void notify_waiters(const TaskRecord& record) {
-        std::vector<support::AsyncCompletion<TaskRecord, support::Error>> comps;
+        std::vector<std::shared_ptr<TaskWaiter>> comps;
         {
             std::lock_guard lock(mutex);
             failed_migrations.erase(record.id.value);
@@ -698,8 +1074,143 @@ struct Harness::Impl {
                 waiters.erase(it);
             }
         }
-        for (auto& comp : comps) {
-            comp(record);
+        for (const std::shared_ptr<TaskWaiter>& waiter : comps) {
+            if (waiter->outcome.exchange(1) != 0) continue;
+            auto completion = std::move(waiter->completion);
+            if (completion.has_value()) (*completion)(record);
+        }
+    }
+
+    /// Resolve every idle waiter whose scope is now idle (frozen pi
+    /// `#settleIdle`).
+    void settle_idle() {
+        auto world = load_world();
+        if (!world) return;
+        std::vector<std::shared_ptr<IdleWaiter>> resolved;
+        {
+            std::lock_guard lock(mutex);
+            for (auto waiter = idle_waiters.begin(); waiter != idle_waiters.end();) {
+                const bool idle = waiter->first.has_value() ? world->index.idle(ConversationId{*waiter->first})
+                                                            : world->index.all_idle();
+                if (!idle) {
+                    ++waiter;
+                    continue;
+                }
+                for (const auto& pending : waiter->second)
+                    resolved.push_back(pending);
+                waiter = idle_waiters.erase(waiter);
+            }
+        }
+        for (const std::shared_ptr<IdleWaiter>& waiter : resolved) {
+            if (waiter->outcome.exchange(1) != 0) continue;
+            auto completion = std::move(waiter->completion);
+            if (completion.has_value()) (*completion)(support::ExpectedVoid{});
+        }
+    }
+
+    /// The scheduler's reconciliation pass (frozen pi `#reconcile`): in one
+    /// commit, mark the live ordinary work below every owner with cancellation
+    /// intent, apply `failFast` join marks, and write the terminal record of
+    /// every `completing` task whose ordinary owned work is gone.
+    void reconcile() {
+        auto scan_res = storage->scan_tasks(1024);
+        if (!scan_res) return;
+        std::vector<TaskId> cascade;
+        std::vector<TaskId> fail_fast;
+        {
+            auto conversations = storage->scan_conversations(1024);
+            if (!conversations) return;
+            const OwnershipIndex index(*scan_res, *conversations);
+            cascade = index.cascade_targets();
+            for (const TaskRecord& task : *scan_res) {
+                if (task.state.status != "waiting" || task.state.policy != JoinPolicy::FailFast) continue;
+                bool failed = false;
+                for (const TaskId member_id : task.state.on) {
+                    const TaskRecord* member = index.task(member_id);
+                    if (member != nullptr && failed_outcome(*member)) failed = true;
+                }
+                if (failed) fail_fast.push_back(task.id);
+            }
+        }
+        if (cascade.empty() && fail_fast.empty()) {
+            // Only the completing finalize remains; it reads no marks.
+            finalize_completing();
+            settle_idle();
+            return;
+        }
+        std::set<std::int64_t> to_mark;
+        for (const TaskId id : cascade)
+            to_mark.insert(id.value);
+        for (const TaskId waiter_id : fail_fast) {
+            const TaskRecord* waiter = nullptr;
+            for (const TaskRecord& task : *scan_res) {
+                if (task.id == waiter_id) waiter = &task;
+            }
+            if (waiter == nullptr) continue;
+            for (const TaskId member_id : waiter->state.on) {
+                for (const TaskRecord& task : *scan_res) {
+                    if (task.id == member_id && task_live(task) && !failed_outcome(task)) {
+                        to_mark.insert(task.id.value);
+                    }
+                }
+            }
+        }
+        if (!to_mark.empty()) {
+            (void)await_async_void(
+                    session->commit([to_mark = std::move(to_mark)](Transaction& tx) -> support::ExpectedVoid {
+                        auto tasks = tx.scan_tasks(1024);
+                        if (!tasks) return std::unexpected(tasks.error());
+                        for (const TaskRecord& task : *tasks) {
+                            if (!to_mark.contains(task.id.value)) continue;
+                            if (task.state.status == "terminal" || task.abort_requested) continue;
+                            TaskRecord marked = task;
+                            marked.abort_requested = true;
+                            auto written = tx.set_task(std::move(marked));
+                            if (!written) return written;
+                        }
+                        return {};
+                    }));
+        }
+        finalize_completing();
+        settle_idle();
+    }
+
+    /// Write the terminal record of every `completing` task without live
+    /// ordinary owned work (frozen pi `#finalize`). Finalizing one frees the
+    /// holder above it, so this repeats over the commit's candidates until
+    /// nothing changes.
+    void finalize_completing() {
+        for (int round = 0; round < 64; ++round) {
+            auto world = load_world();
+            if (!world) return;
+            std::vector<TaskId> ready;
+            for (const TaskRecord& task : world->tasks) {
+                if (task.state.status != "completing") continue;
+                if (!world->index.owned_live(task.id).empty()) continue;
+                ready.push_back(task.id);
+            }
+            if (ready.empty()) return;
+            const auto written =
+                    await_async_void(session->commit([ready, this](Transaction& tx) -> support::ExpectedVoid {
+                        auto tasks = tx.scan_tasks(1024);
+                        if (!tasks) return std::unexpected(tasks.error());
+                        for (const TaskRecord& task : *tasks) {
+                            bool wanted = false;
+                            for (const TaskId id : ready) {
+                                if (task.id == id) wanted = true;
+                            }
+                            if (!wanted || task.state.status != "completing") continue;
+                            TaskRecord terminal = task;
+                            terminal.state.status = "terminal";
+                            if (!terminal.ended_at.has_value()) {
+                                terminal.ended_at = current_time(clock);
+                            }
+                            auto written = tx.set_task(std::move(terminal));
+                            if (!written) return written;
+                        }
+                        return {};
+                    }));
+            if (!written) return;
         }
     }
 
@@ -719,7 +1230,8 @@ struct Harness::Impl {
             cv.notify_all();
         });
         (void)session->subscribe_close([this] {
-            std::map<std::int64_t, std::vector<support::AsyncCompletion<TaskRecord, support::Error>>> pending;
+            std::map<std::int64_t, std::vector<std::shared_ptr<TaskWaiter>>> pending;
+            std::map<std::optional<std::int64_t>, std::vector<std::shared_ptr<IdleWaiter>>> pending_idle;
             const auto error = support::make_error(support::ErrorCode::Validation,
                     session->failed() ? "Session failed after a storage error; close and reopen it" : "Session is closed");
             {
@@ -727,11 +1239,25 @@ struct Harness::Impl {
                 wait_error = error;
                 pending = std::move(waiters);
                 waiters.clear();
+                pending_idle = std::move(idle_waiters);
+                idle_waiters.clear();
             }
             submissions->reject_all(error);
             for (auto& [id, completions] : pending) {
                 (void)id;
-                for (auto& completion : completions) completion(std::unexpected(error));
+                for (const std::shared_ptr<TaskWaiter>& waiter : completions) {
+                    if (waiter->outcome.exchange(1) != 0) continue;
+                    auto completion = std::move(waiter->completion);
+                    if (completion.has_value()) (*completion)(std::unexpected(error));
+                }
+            }
+            for (auto& [scope, completions] : pending_idle) {
+                (void)scope;
+                for (const std::shared_ptr<IdleWaiter>& waiter : completions) {
+                    if (waiter->outcome.exchange(1) != 0) continue;
+                    auto completion = std::move(waiter->completion);
+                    if (completion.has_value()) (*completion)(std::unexpected(error));
+                }
             }
         });
         (void)session->subscribe_commits([this](const CommitPublication& pub) {
@@ -741,6 +1267,16 @@ struct Harness::Impl {
                     if (tc->type == "task" && tc->task.has_value()) {
                         if (tc->task->state.status == "terminal") {
                             notify_waiters(*tc->task);
+                        } else if (tc->task->abort_requested) {
+                            // A new abort mark ends a held run invocation; its
+                            // abort handler runs once the owned work below it
+                            // drains (frozen pi commit listener ->
+                            // `#invocations.get(id).controller.abort()`).
+                            std::lock_guard lock(mutex);
+                            auto invocation = active_invocations.find(tc->task->id.value);
+                            if (invocation != active_invocations.end()) {
+                                invocation->second.request_stop();
+                            }
                         }
                     }
                 }
@@ -786,15 +1322,26 @@ struct Harness::Impl {
 
     void run_worker(std::stop_token stop) {
         while (!stop.stop_requested()) {
-            std::unique_lock lock(mutex);
-            cv.wait(lock, [&] { return stop.stop_requested() || closed || (enabled && !closed); });
-            if (stop.stop_requested() || closed) {
-                break;
+            bool running = false;
+            {
+                std::unique_lock lock(mutex);
+                cv.wait(lock, [&] { return stop.stop_requested() || closed || dirty; });
+                if (stop.stop_requested() || closed) {
+                    break;
+                }
+                dirty = false;
+                running = enabled;
             }
-            dirty = false;
-            lock.unlock();
 
-            schedule_step();
+            // Derived state (abort cascades, `failFast` marks, held outcomes,
+            // idle waits) follows the durable records whether or not new work
+            // may start, so a paused Harness still cascades and finalizes.
+            if (running) {
+                schedule_step();
+            } else {
+                reconcile();
+                settle_idle();
+            }
 
             std::unique_lock wait_lock(mutex);
             cv.wait_for(
@@ -817,15 +1364,73 @@ struct Harness::Impl {
         auto scan_res = storage->scan_tasks(256);
         if (!scan_res) return;
 
+        auto conversations = storage->scan_conversations(256);
+        if (!conversations) return;
+        const OwnershipIndex index(*scan_res, *conversations);
+
+        // Reconcile first: cascade marks, `failFast` marks, and the terminal
+        // record of every drained `completing` task. The durable records are
+        // the intent, so this also repairs whatever a reopen left unapplied.
+        reconcile();
+        auto refreshed = storage->scan_tasks(256);
+        if (!refreshed) return;
+        auto refreshed_conversations = storage->scan_conversations(256);
+        if (!refreshed_conversations) return;
+        const OwnershipIndex world(*refreshed, *refreshed_conversations);
+
         std::optional<Registry::Snapshot> snapshot_opt;
 
-        for (const auto& task : *scan_res) {
+        for (const auto& task : *refreshed) {
             if (task.state.status == "terminal") {
                 notify_waiters(task);
                 continue;
             }
 
-            if (task.state.status == "pending") {
+            // A live owner's cancellation intent marks the work below it before
+            // that work runs a phase; a task the cascade already marked runs its
+            // abort handler instead.
+            if (!task.abort_requested && !task.background && task.owner.has_value()) {
+                const TaskRecord* owner = world.task(*task.owner);
+                if (owner != nullptr && cancellation_intent(*owner)) continue;
+            }
+
+            // A waiting task resumes once every member is terminal; a `failFast`
+            // wait whose member failed is handled by `reconcile()`.
+            if (task.state.status == "waiting") {
+                bool all_terminal = true;
+                for (const TaskId member_id : task.state.on) {
+                    const TaskRecord* member = world.task(member_id);
+                    if (member == nullptr || task_live(*member)) all_terminal = false;
+                }
+                if (!all_terminal) continue;
+                (void)await_async_void(session->commit([id = task.id](Transaction& tx) -> support::ExpectedVoid {
+                    auto cur = tx.task(id);
+                    if (!cur || !cur->has_value()) return {};
+                    TaskRecord resumed = **cur;
+                    if (resumed.state.status != "waiting") return {};
+                    resumed.state.status = "pending";
+                    resumed.state.on.clear();
+                    resumed.state.policy = std::nullopt;
+                    return tx.set_task(std::move(resumed));
+                }));
+                continue;
+            }
+
+            // A `completing` task's terminal record is written by
+            // `finalize_completing()` once its ordinary owned work is gone.
+            if (task.state.status == "completing") continue;
+
+            // A marked task runs its abort handler only after its ordinary
+            // owned work has drained, so descendants' handlers run first
+            // (frozen pi `#runnable` -> `#waitingOn` returns the owned live
+            // work while the record carries the abort mark).
+            if (task.abort_requested && !world.owned_live(task.id).empty()) continue;
+
+            // A marked task of any live status is reserved for its abort
+            // invocation once the owned work below it is gone.
+            if (task.state.status != "pending" && !task.abort_requested) continue;
+
+            if (task.state.status == "pending" || task.abort_requested) {
                 {
                     std::lock_guard lock(mutex);
                     if (closed || active_invocations.contains(task.id.value)) {
@@ -861,7 +1466,10 @@ struct Harness::Impl {
                             auto cur_opt = tx.task(tid);
                             if (!cur_opt || !cur_opt->has_value()) return {};
                             auto cur = *cur_opt.value();
-                            if (cur.state.status != "pending") return {};
+                            // A marked task may be reserved from any live
+                            // status for its abort invocation; the abort
+                            // commit then replaces the whole state.
+                            if (cur.state.status != "pending" && !cur.abort_requested) return {};
                             cur.version = resolved_record.version;
                             cur.input = resolved_record.input;
                             cur.state.checkpoint = resolved_record.state.checkpoint;
@@ -961,6 +1569,16 @@ struct Harness::Impl {
             }
 
             if (task.abort_requested) {
+                // The abort handler runs only once the ordinary owned work
+                // below the task has drained, so descendants' handlers run
+                // first (frozen pi `#runnable` -> `#waitingOn`). Until then
+                // this invocation ends and the scheduler reserves the task for
+                // its abort invocation once the owned work is gone.
+                auto world = load_world();
+                if (world && !world->index.owned_live(task.id).empty()) {
+                    cleanup();
+                    return;
+                }
                 run_abort_handler(task);
                 cleanup();
                 return;
@@ -1040,6 +1658,15 @@ struct Harness::Impl {
                 } else {
                     settle_faulted(tid, phase_res.error().message);
                 }
+                cleanup();
+                return;
+            }
+
+            if (after.state.status == "waiting" || after.state.status == "completing") {
+                // The invocation ends once its task parks or holds: the
+                // scheduler resumes a settled wait, and `finalize_completing`
+                // writes the held outcome's terminal record (frozen pi `#step`
+                // ends an invocation whose record is no longer `running`).
                 cleanup();
                 return;
             }
@@ -1179,29 +1806,106 @@ support::AsyncResult<void> Harness::open_tasks() {
     });
 }
 
-support::AsyncResult<TaskRecord> Harness::wait_for_task(TaskId id) {
+support::AsyncResult<TaskRecord> Harness::wait_for_task(TaskId id, std::stop_token stop) {
     return support::AsyncResult<TaskRecord>{support::AsyncProducer<TaskRecord, support::Error>{
-            [this, id](support::AsyncCompletion<TaskRecord, support::Error> completion) mutable noexcept {
-                std::unique_lock lock(impl_->mutex);
-                if (impl_->wait_error) {
-                    const auto error = *impl_->wait_error;
-                    lock.unlock();
-                    completion(std::unexpected(error));
+            [this, id, stop = std::move(stop)](
+                    support::AsyncCompletion<TaskRecord, support::Error> completion) mutable noexcept {
+                // Check and register under the lock so no terminal publication
+                // falls between them (frozen pi `TaskScheduler.waitForTask`).
+                std::optional<support::Error> immediate_error;
+                std::optional<TaskRecord> immediate_value;
+                std::shared_ptr<TaskWaiter> waiter;
+                {
+                    std::lock_guard lock(impl_->mutex);
+                    if (impl_->wait_error) {
+                        immediate_error = *impl_->wait_error;
+                    } else if (auto cur_opt = impl_->storage->task(id); !cur_opt) {
+                        immediate_error = cur_opt.error();
+                    } else if (!cur_opt->has_value()) {
+                        immediate_error = support::make_error(
+                                support::ErrorCode::Validation, "Task " + std::to_string(id.value) + " does not exist");
+                    } else if ((*cur_opt)->state.status == "terminal") {
+                        immediate_value = **cur_opt;
+                    } else if (stop.stop_requested()) {
+                        immediate_error = support::make_error(support::ErrorCode::Cancelled, "stop waiting");
+                    } else {
+                        waiter = std::make_shared<TaskWaiter>();
+                        waiter->completion = std::move(completion);
+                        impl_->waiters[id.value].push_back(waiter);
+                    }
+                }
+                if (immediate_value.has_value()) {
+                    completion(std::move(*immediate_value));
                     return;
                 }
-                auto cur_opt = impl_->storage->task(id);
-                if (!cur_opt || !cur_opt->has_value()) {
-                    const auto error = !cur_opt ? cur_opt.error() : support::make_error(support::ErrorCode::Validation, "Task not found");
-                    lock.unlock();
-                    completion(std::unexpected(error));
+                if (immediate_error.has_value()) {
+                    completion(std::unexpected(*immediate_error));
                     return;
                 }
-                if ((*cur_opt)->state.status == "terminal") {
-                    lock.unlock();
-                    completion(**cur_opt);
+                // Cancelling this wait rejects only this waiter; the task keeps
+                // running and settles on its own (frozen pi's abort signal on a
+                // wait, not on the task).
+                waiter->cancellation = std::make_unique<std::stop_callback<std::move_only_function<void()>>>(
+                        stop, [weak = std::weak_ptr<TaskWaiter>{waiter}] {
+                            const std::shared_ptr<TaskWaiter> claimed = weak.lock();
+                            if (claimed == nullptr) return;
+                            if (claimed->outcome.exchange(2) != 0) return;
+                            auto done = std::move(claimed->completion);
+                            if (done.has_value()) {
+                                (*done)(std::unexpected(
+                                        support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
+                            }
+                        });
+            }}};
+}
+
+support::AsyncResult<void> Harness::wait_for_idle(std::optional<ConversationId> conversation, std::stop_token stop) {
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [this, conversation, stop = std::move(stop)](
+                    support::AsyncCompletion<void, support::Error> done) mutable noexcept {
+                const std::optional<std::int64_t> scope =
+                        conversation.has_value() ? std::optional<std::int64_t>{conversation->value} : std::nullopt;
+                {
+                    std::lock_guard lock(impl_->mutex);
+                    if (impl_->wait_error) {
+                        const auto error = *impl_->wait_error;
+                        done(std::unexpected(error));
+                        return;
+                    }
+                }
+                if (stop.stop_requested()) {
+                    done(std::unexpected(support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
                     return;
                 }
-                impl_->waiters[id.value].push_back(std::move(completion));
+                auto world = impl_->load_world();
+                if (!world) {
+                    done(std::unexpected(world.error()));
+                    return;
+                }
+                const bool idle = conversation.has_value() ? world->index.idle(*conversation) : world->index.all_idle();
+                if (idle) {
+                    done(support::ExpectedVoid{});
+                    return;
+                }
+                auto waiter = std::make_shared<IdleWaiter>();
+                waiter->completion = std::move(done);
+                {
+                    std::lock_guard lock(impl_->mutex);
+                    impl_->idle_waiters[scope].push_back(waiter);
+                }
+                waiter->cancellation = std::make_unique<std::stop_callback<std::move_only_function<void()>>>(
+                        stop, [weak = std::weak_ptr<IdleWaiter>{waiter}] {
+                            const std::shared_ptr<IdleWaiter> claimed = weak.lock();
+                            if (claimed == nullptr) return;
+                            if (claimed->outcome.exchange(2) != 0) return;
+                            auto completion = std::move(claimed->completion);
+                            if (completion.has_value()) {
+                                (*completion)(std::unexpected(
+                                        support::make_error(support::ErrorCode::Cancelled, "stop waiting")));
+                            }
+                        });
+                // The scope may have become idle before the registration landed.
+                impl_->settle_idle();
             }}};
 }
 
@@ -1338,73 +2042,135 @@ support::AsyncResult<std::string> Harness::abort_submission(
             }}};
 }
 
-support::AsyncResult<void> Harness::abort_conversation(ConversationId conversation_id) {
-    // Withdraw every queued input, keep queued writes queued, and abort the
-    // running run's task, whose abort handler settles the placed inputs
-    // `unanswered/aborted` (frozen pi `Conversation.abort`). Resolves once
-    // the conversation is idle again.
+support::AsyncResult<void> Harness::abort_conversation(ConversationId conversation_id, bool background) {
+    // One commit withdraws the in-scope queued inputs and marks every live task
+    // ordinary traversal reaches; the abort handlers then settle those tasks
+    // bottom-up (frozen pi `Conversation.abort`). Resolves once the scope is
+    // idle, and with `background` also once every reached task is terminal.
     return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
-            [this, conversation_id](support::AsyncCompletion<void, support::Error> done) mutable noexcept {
-                abort_conversation_pass(conversation_id, std::move(done));
+            [this, conversation_id, background](support::AsyncCompletion<void, support::Error> done) mutable noexcept {
+                abort_conversation_pass(conversation_id, background, std::move(done));
             }}};
 }
 
 void Harness::abort_conversation_pass(
-        ConversationId conversation_id, support::AsyncCompletion<void, support::Error> done) {
-    // One pass: the staged live-run read and the queued-input withdrawal share
-    // one Session commit, so a run rollover cannot start a new run between the
-    // read and the withdrawal (frozen pi reads the live scopes inside the same
-    // commit that marks the aborts). After the marked run's abort settles, the
-    // loop re-reads: a natural completion that started a follow-up run before
-    // the abort mark landed is aborted by the next pass, so the call resolves
-    // only once the conversation is actually idle.
-    const auto run = std::make_shared<std::optional<LiveRunState>>();
-    std::move(impl_->session->commit([conversation_id, run](Transaction& tx) -> support::ExpectedVoid {
+        ConversationId conversation_id, bool background, support::AsyncCompletion<void, support::Error> done) {
+    // One abort pass's shared state: the reached tasks it waits for, and the
+    // single completion that resolves once they and the scope are idle.
+    struct Pass {
+        Harness* harness{nullptr};
+        ConversationId conversation{};
+        bool background{false};
+        std::size_t pending{0};
+        std::optional<support::Error> failed{};
+        support::AsyncCompletion<void, support::Error> done{};
+
+        // `self` keeps the pass state alive until the idle wait resolves; the
+        // callback may run long after the initiating call returned.
+        static void finish(const std::shared_ptr<Pass>& self) {
+            if (--self->pending != 0) return;
+            if (self->failed.has_value()) {
+                auto completion = std::move(self->done);
+                completion(std::unexpected(*self->failed));
+                return;
+            }
+            std::move(self->harness->wait_for_idle(self->conversation))
+                    .start([self](support::ExpectedVoid idle) mutable noexcept {
+                        if (!idle) {
+                            auto completion = std::move(self->done);
+                            completion(std::unexpected(idle.error()));
+                            return;
+                        }
+                        // A run that settled before the mark landed can have
+                        // started a follow-up run; abort again until the scope
+                        // is genuinely idle.
+                        auto world = self->harness->impl_->load_world();
+                        if (!world) {
+                            auto completion = std::move(self->done);
+                            completion(std::unexpected(world.error()));
+                            return;
+                        }
+                        if (!world->index.idle(self->conversation)) {
+                            self->harness->abort_conversation_pass(
+                                    self->conversation, self->background, std::move(self->done));
+                            return;
+                        }
+                        auto completion = std::move(self->done);
+                        completion(support::ExpectedVoid{});
+                    });
+        }
+    };
+
+    // The read of the ownership scope, the queued-input withdrawal, and the
+    // abort marks share one Session commit, so a run rollover cannot start new
+    // work between the read and the marks.
+    auto pass = std::make_shared<Pass>();
+    pass->harness = this;
+    pass->conversation = conversation_id;
+    pass->background = background;
+    pass->done = std::move(done);
+    const auto reached = std::make_shared<std::vector<TaskId>>();
+    std::move(impl_->session->commit([conversation_id, background, reached](Transaction& tx) -> support::ExpectedVoid {
+        auto tasks = tx.scan_tasks(1024);
+        if (!tasks) return std::unexpected(tasks.error());
+        auto conversations = tx.scan_conversations(1024);
+        if (!conversations) return std::unexpected(conversations.error());
+        const OwnershipIndex index(*tasks, *conversations);
+        // Mark the reached live tasks. A background task is
+        // reached but not marked unless the walk crosses
+        // background boundaries.
+        for (const TaskId id : index.reachable(conversation_id, background)) {
+            reached->push_back(id);
+            auto cur = tx.task(id);
+            if (!cur) return std::unexpected(cur.error());
+            if (!cur->has_value()) continue;
+            TaskRecord task = **cur;
+            if (task.state.status == "terminal" || task.abort_requested) continue;
+            task.abort_requested = true;
+            auto written = tx.set_task(std::move(task));
+            if (!written) return written;
+        }
         auto inbox = tx.doc(inbox_document(), DocumentAddress{.conversation_id = conversation_id});
-        if (!inbox) {
-            return std::unexpected(inbox.error());
-        }
-        auto withdrawn = withdraw_queued_inputs(tx, *inbox);
+        if (!inbox) return std::unexpected(inbox.error());
+        return withdraw_queued_inputs(tx, *inbox);
+    })).start([this, pass, reached](support::ExpectedVoid withdrawn) mutable noexcept {
         if (!withdrawn) {
-            return std::unexpected(withdrawn.error());
-        }
-        auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = conversation_id});
-        if (!live) {
-            return std::unexpected(live.error());
-        }
-        auto staged = staged_live_run(*live);
-        if (!staged) {
-            return std::unexpected(staged.error());
-        }
-        *run = std::move(*staged);
-        return {};
-    })).start([this, conversation_id, run, done = std::move(done)](support::ExpectedVoid withdrawn) mutable noexcept {
-        if (!withdrawn) {
-            done(std::unexpected(withdrawn.error()));
+            auto completion = std::move(pass->done);
+            completion(std::unexpected(withdrawn.error()));
             return;
         }
-        if (!run->has_value()) {
-            done(support::ExpectedVoid{});
+        // The marked tasks' abort handlers run bottom-up: a task's
+        // handler waits for its ordinary owned work. With `background`,
+        // the reached tasks are waited for directly; otherwise the idle
+        // wait covers the ordinary scope only. Ending a held invocation
+        // lets its abort handler run (mirrors `abort_task`).
+        {
+            std::lock_guard lock(impl_->mutex);
+            for (const TaskId id : *reached) {
+                auto invocation = impl_->active_invocations.find(id.value);
+                if (invocation != impl_->active_invocations.end()) {
+                    invocation->second.request_stop();
+                }
+            }
+        }
+        impl_->cv.notify_all();
+        pass->pending = pass->background ? reached->size() : 1;
+        if (pass->pending == 0) {
+            auto completion = std::move(pass->done);
+            completion(support::ExpectedVoid{});
             return;
         }
-        const TaskId task = (*run)->task;
-        std::move(abort_task(task))
-                .start([this, conversation_id, task, done = std::move(done)](
-                               support::Expected<std::string> marked) mutable noexcept {
-                    if (!marked) {
-                        done(std::unexpected(marked.error()));
-                        return;
-                    }
-                    std::move(wait_for_task(task))
-                            .start([this, conversation_id, done = std::move(done)](
-                                           support::Expected<TaskRecord> result) mutable noexcept {
-                                if (!result) {
-                                    done(std::unexpected(result.error()));
-                                    return;
-                                }
-                                abort_conversation_pass(conversation_id, std::move(done));
-                            });
-                });
+        if (!pass->background) {
+            Pass::finish(pass);
+            return;
+        }
+        for (const TaskId id : *reached) {
+            std::move(pass->harness->wait_for_task(id))
+                    .start([pass](support::Expected<TaskRecord> settled) mutable noexcept {
+                        if (!settled && !pass->failed.has_value()) pass->failed = settled.error();
+                        Pass::finish(pass);
+                    });
+        }
     });
 }
 
