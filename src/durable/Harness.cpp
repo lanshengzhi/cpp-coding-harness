@@ -1031,6 +1031,7 @@ struct Harness::Impl {
                     auto cur = tx.task(tid);
                     if (cur && cur->has_value()) {
                         auto t = *cur.value();
+                        if (t.state.status == "terminal") return {};
                         t.state.status = "terminal";
                         t.state.outcome = TaskOutcome{
                                 .status = "orphaned",
@@ -1050,6 +1051,7 @@ struct Harness::Impl {
                     auto cur = tx.task(tid);
                     if (cur && cur->has_value()) {
                         auto t = *cur.value();
+                        if (t.state.status == "terminal") return {};
                         t.state.status = "terminal";
                         t.state.outcome = TaskOutcome{
                                 .status = "faulted",
@@ -1460,12 +1462,18 @@ struct Harness::Impl {
 
                 auto tid = task.id;
                 TaskRecord resolved_record = std::move(resolution.record);
-                auto trans_res =
-                        await_async_void(session->commit([this, tid, resolved_record = std::move(resolved_record)](
-                                                                 Transaction& tx) -> support::ExpectedVoid {
+                // A stale scheduling snapshot can reach this reservation after
+                // the task's abort invocation already committed terminal. The
+                // reservation must not rewrite the terminal record: Storage
+                // rejects that write and permanently fails the Session.
+                auto reserved = std::make_shared<std::atomic_bool>(false);
+                auto trans_res = await_async_void(
+                        session->commit([this, tid, resolved_record = std::move(resolved_record), reserved](
+                                                Transaction& tx) -> support::ExpectedVoid {
                             auto cur_opt = tx.task(tid);
                             if (!cur_opt || !cur_opt->has_value()) return {};
                             auto cur = *cur_opt.value();
+                            if (cur.state.status == "terminal") return {};
                             // A marked task may be reserved from any live
                             // status for its abort invocation; the abort
                             // commit then replaces the whole state.
@@ -1477,12 +1485,15 @@ struct Harness::Impl {
                             if (!cur.started_at.has_value()) {
                                 cur.started_at = current_time(clock);
                             }
-                            return tx.set_task(cur);
+                            auto written = tx.set_task(cur);
+                            if (written) reserved->store(true, std::memory_order_release);
+                            return written;
                         }));
 
-                if (!trans_res) {
+                if (!trans_res || !reserved->load(std::memory_order_acquire)) {
                     std::lock_guard l(mutex);
                     active_invocations.erase(tid.value);
+                    cv.notify_all();
                     continue;
                 }
 

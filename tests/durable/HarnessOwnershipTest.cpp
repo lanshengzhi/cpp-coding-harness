@@ -199,6 +199,28 @@ void add_gated_task(std::vector<TaskDefinition>& tasks,
     tasks.push_back(std::move(*def));
 }
 
+/// A task that settles `completed` on its only phase and `aborted/cascade`
+/// from its abort handler. Used to drive a deterministic stale-reservation
+/// race without depending on load.
+[[nodiscard]] TaskDefinition completed_terminal_task(std::string kind, std::int64_t version, MigrateHook migrate = {}) {
+    auto builder = TaskDefinitionBuilder(std::move(kind), version);
+    builder.initial([](const chord::Json&) { return checkpoint_phase("run"); });
+    builder.phase("run", [](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    builder.abort([](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted", .reason = "cascade"});
+        });
+    });
+    if (migrate) builder.migrate(std::move(migrate));
+    auto def = builder.build();
+    REQUIRE(def.has_value());
+    return std::move(*def);
+}
+
 /// Build the frozen `audit.join-child`: run, optional 40 ms hold, then fail or
 /// complete; the abort handler settles `aborted/cascade`. `started` is released
 /// the moment the run phase begins; `fail_after_started` holds the failure back
@@ -779,7 +801,16 @@ TEST_CASE("a conversation abort keeps live background work while a direct abort 
             "both tasks running");
 
     // The ordinary conversation abort stops at the background boundary.
-    REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
+    auto aborted = consume(harness->abort_conversation(root.value()));
+    if (!aborted.has_value()) {
+        // A scoped INFO is unsafe here: Catch2 is built without exceptions, so
+        // the fatal REQUIRE below would leave it registered.
+        FAIL("abort_conversation failed: code=" << support::to_string(aborted.error().code)
+                                                << " message=" << aborted.error().message
+                                                << " detail=" << aborted.error().detail << " sessionFailure="
+                                                << harness->session().failure_message().value_or("none"));
+    }
+    REQUIRE(aborted.has_value());
 
     auto foreground = consume(harness->get_task(foreground_id));
     REQUIRE(foreground.has_value());
@@ -801,6 +832,12 @@ TEST_CASE("a conversation abort keeps live background work while a direct abort 
     auto marked_res = consume(harness->abort_task(background_id));
     REQUIRE(marked_res.has_value());
     auto receipt_res = consume(harness->wait_for_task(background_id));
+    if (!receipt_res.has_value()) {
+        FAIL("wait_for_task failed: code=" << support::to_string(receipt_res.error().code)
+                                           << " message=" << receipt_res.error().message
+                                           << " detail=" << receipt_res.error().detail << " sessionFailure="
+                                           << harness->session().failure_message().value_or("none"));
+    }
     REQUIRE(receipt_res.has_value());
     REQUIRE(receipt_res.value().state.outcome.has_value());
     const auto* expected_after_direct = scenario->object_member("afterDirect");
@@ -812,6 +849,141 @@ TEST_CASE("a conversation abort keeps live background work while a direct abort 
     const std::vector<std::string> entries = log.snapshot();
     const auto& expected_log = expected_after_direct->at("log").get_array();
     check_handler_log(entries, expected_log);
+
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a stale reservation skips a task whose abort terminal already landed", "[durable][ownership][issue1078]") {
+    Gate migration_gate;
+    std::atomic_bool migration_entered{false};
+
+    Registry registry;
+    Extension ext_v1{.name = "audit.reservation"};
+    ext_v1.tasks.push_back(completed_terminal_task("audit.reservation-stale", 1));
+    ext_v1.tasks.push_back(completed_terminal_task("audit.reservation-target", 1));
+    ext_v1.tasks.push_back(completed_terminal_task("audit.reservation-after", 1));
+    REQUIRE(registry.install(std::move(ext_v1)).has_value());
+
+    MemoryStorage storage;
+    auto harness_res = consume(Harness::open(storage, HarnessOptions{.registry = &registry}));
+    REQUIRE(harness_res.has_value());
+    auto harness = std::move(harness_res.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+
+    TaskId target_id;
+    auto created = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto* stale_def = harness->task_definition("audit.reservation-stale");
+        const auto* target_def = harness->task_definition("audit.reservation-target");
+        if (stale_def == nullptr || target_def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing task definition"));
+        }
+        auto stale = tx.create_task(
+                *stale_def, chord::Json{}, TaskOptions{.conversation_id = root.value(), .background = true});
+        if (!stale) return std::unexpected(stale.error());
+        auto target = tx.create_task(*target_def, chord::Json{}, TaskOptions{.conversation_id = root.value()});
+        if (!target) return std::unexpected(target.error());
+        target_id = *target;
+        return {};
+    }));
+    REQUIRE(created.has_value());
+
+    // The scheduler scan sees this live, abort-marked record. Its abort
+    // terminal is committed later, after the scan but before the reservation.
+    auto marked = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto cur = tx.task(target_id);
+        if (!cur) return std::unexpected(cur.error());
+        if (!cur->has_value()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "target task missing"));
+        }
+        TaskRecord target = **cur;
+        target.state.status = "running";
+        target.abort_requested = true;
+        return tx.set_task(std::move(target));
+    }));
+    REQUIRE(marked.has_value());
+
+    Extension ext_v2{.name = "audit.reservation"};
+    ext_v2.tasks.push_back(completed_terminal_task("audit.reservation-stale",
+            2,
+            [&migration_gate, &migration_entered](const chord::Json& input, const chord::Json& checkpoint, std::int64_t)
+                    -> support::Expected<MigratedTaskState> {
+                migration_entered.store(true, std::memory_order_release);
+                (void)migration_gate.wait(std::stop_token{});
+                return MigratedTaskState{.input = input, .checkpoint = checkpoint};
+            }));
+    ext_v2.tasks.push_back(completed_terminal_task("audit.reservation-target", 1));
+    ext_v2.tasks.push_back(completed_terminal_task("audit.reservation-after", 1));
+    REQUIRE(registry.install(std::move(ext_v2)).has_value());
+    REQUIRE(harness->resume().has_value());
+    wait_until([&] { return migration_entered.load(std::memory_order_acquire); },
+            "the scheduler to scan the target and enter the stale reservation window");
+
+    TaskId after_id;
+    auto terminal = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto cur = tx.task(target_id);
+        if (!cur) return std::unexpected(cur.error());
+        if (!cur->has_value()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "target task missing"));
+        }
+        TaskRecord target = **cur;
+        if (target.state.status == "terminal") {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "target terminal too early"));
+        }
+        target.state.status = "terminal";
+        target.state.outcome = TaskOutcome{.status = "aborted", .reason = "cascade"};
+        target.memos.clear();
+        auto written = tx.set_task(std::move(target));
+        if (!written) return written;
+
+        const auto* after_def = harness->task_definition("audit.reservation-after");
+        if (after_def == nullptr) {
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing after definition"));
+        }
+        auto after = tx.create_task(*after_def, chord::Json{}, TaskOptions{.conversation_id = root.value()});
+        if (!after) return std::unexpected(after.error());
+        after_id = *after;
+        return {};
+    }));
+    if (!terminal.has_value()) {
+        FAIL("target terminal commit failed: code=" << support::to_string(terminal.error().code)
+                                                    << " message=" << terminal.error().message
+                                                    << " detail=" << terminal.error().detail << " sessionFailure="
+                                                    << harness->session().failure_message().value_or("none"));
+    }
+    REQUIRE(terminal.has_value());
+    migration_gate.release();
+
+    // `after` is admitted after the target terminal but not in the current
+    // scheduling snapshot, so it can only run after this pass has attempted
+    // the stale reservation.
+    auto after = consume(harness->wait_for_task(after_id));
+    if (!after.has_value()) {
+        FAIL("scheduler pass did not survive the stale reservation: code="
+                << support::to_string(after.error().code) << " message=" << after.error().message
+                << " sessionFailure=" << harness->session().failure_message().value_or("none"));
+    }
+    REQUIRE(after.has_value());
+    CHECK_FALSE(harness->session().failed());
+
+    auto target = consume(harness->get_task(target_id));
+    REQUIRE(target.has_value());
+    REQUIRE(target.value().has_value());
+    CHECK(target.value()->state.status == "terminal");
+    REQUIRE(target.value()->state.outcome.has_value());
+    CHECK(target.value()->state.outcome->status == "aborted");
+    REQUIRE(target.value()->state.outcome->reason.has_value());
+    CHECK(*target.value()->state.outcome->reason == "cascade");
+
+    auto aborted = consume(harness->abort_conversation(root.value()));
+    if (!aborted.has_value()) {
+        FAIL("abort_conversation failed after the stale reservation: code="
+                << support::to_string(aborted.error().code) << " message=" << aborted.error().message
+                << " sessionFailure=" << harness->session().failure_message().value_or("none"));
+    }
+    REQUIRE(aborted.has_value());
+    CHECK_FALSE(harness->session().failed());
+    REQUIRE(consume(harness->commit([](Transaction&) -> support::ExpectedVoid { return {}; })).has_value());
 
     REQUIRE(consume(harness->close()).has_value());
 }
