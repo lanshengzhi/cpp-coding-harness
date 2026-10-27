@@ -1540,6 +1540,16 @@
       "disposition": "reuse the append parent/leaf observation without claiming frozen selector equivalence or promoting the composite row"
     },
     {
+      "family": "audit-1082",
+      "artifact": "contexts.json",
+      "scenario": "fork isolation and edited head contexts survive reopen",
+      "reason": "Captured by #1082 for a bounded fork and context comparison; broader capability guarantees remain partial.",
+      "rows": [
+        "cch_durable:Tx:forkConversation"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; retain current row statuses."
+    },
+    {
       "family": "audit-1080",
       "artifact": "submissions-inbox.json",
       "scenario": "a busy steer input is placed at the postTools boundary and a busy follow-up is held to the final boundary",

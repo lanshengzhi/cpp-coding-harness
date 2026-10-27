@@ -1,0 +1,654 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1082",
+  "family": "audit-1082",
+  "capturedAt": "2026-10-27T11:58:50.864Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/context.ts:readContext,deriveRange,selectActive",
+    "packages/durable/src/harness/harness.ts:ConversationImpl.context,fork",
+    "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage"
+  ],
+  "scenarios": [
+    {
+      "name": "fork isolation and edited head contexts survive reopen",
+      "inputs": {
+        "messages": [
+          "a",
+          "b",
+          "later one",
+          "later two"
+        ],
+        "edits": [
+          "omit",
+          "replace"
+        ],
+        "heads": [
+          "old",
+          "new"
+        ],
+        "storage": "node JSONL"
+      },
+      "expected": {
+        "ids": {
+          "a": 8,
+          "b": 9,
+          "omit": 20,
+          "replace": 21,
+          "oldHead": 29,
+          "marker": 30
+        },
+        "forkBefore": {
+          "entries": [
+            8,
+            9
+          ],
+          "contributions": [
+            [
+              "a"
+            ],
+            [
+              "b"
+            ]
+          ],
+          "messages": [
+            "a",
+            "b"
+          ]
+        },
+        "forkAfterRoot": {
+          "entries": [
+            8,
+            9
+          ],
+          "contributions": [
+            [
+              "a"
+            ],
+            [
+              "b"
+            ]
+          ],
+          "messages": [
+            "a",
+            "b"
+          ]
+        },
+        "forkDoc": "at fork",
+        "rootBeforeForkWrite": {
+          "entries": [
+            8,
+            9,
+            17,
+            18
+          ],
+          "contributions": [
+            [
+              "a"
+            ],
+            [
+              "b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ]
+          ],
+          "messages": [
+            "a",
+            "b",
+            "later one",
+            "later two"
+          ]
+        },
+        "rootAfterForkWrite": {
+          "entries": [
+            8,
+            9,
+            17,
+            18
+          ],
+          "contributions": [
+            [
+              "a"
+            ],
+            [
+              "b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ]
+          ],
+          "messages": [
+            "a",
+            "b",
+            "later one",
+            "later two"
+          ]
+        },
+        "forkAfter": {
+          "entries": [
+            8,
+            9,
+            19
+          ],
+          "contributions": [
+            [
+              "a"
+            ],
+            [
+              "b"
+            ],
+            [
+              "branch only"
+            ]
+          ],
+          "messages": [
+            "a",
+            "b",
+            "branch only"
+          ]
+        },
+        "omitted": {
+          "entries": [
+            8,
+            9,
+            17,
+            18,
+            20
+          ],
+          "contributions": [
+            [],
+            [
+              "b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ],
+            [
+              "omit marker"
+            ]
+          ],
+          "messages": [
+            "b",
+            "later one",
+            "later two",
+            "omit marker"
+          ]
+        },
+        "replaced": {
+          "entries": [
+            8,
+            9,
+            17,
+            18,
+            20,
+            21
+          ],
+          "contributions": [
+            [
+              "replacement"
+            ],
+            [
+              "b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ],
+            [
+              "omit marker"
+            ],
+            [
+              "replace marker"
+            ]
+          ],
+          "messages": [
+            "replacement",
+            "b",
+            "later one",
+            "later two",
+            "omit marker",
+            "replace marker"
+          ]
+        },
+        "atReplace": {
+          "entries": [
+            8,
+            9,
+            17,
+            18,
+            20,
+            21
+          ],
+          "contributions": [
+            [
+              "replacement"
+            ],
+            [
+              "b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ],
+            [
+              "omit marker"
+            ],
+            [
+              "replace marker"
+            ]
+          ],
+          "messages": [
+            "replacement",
+            "b",
+            "later one",
+            "later two",
+            "omit marker",
+            "replace marker"
+          ]
+        },
+        "forkAtReplace": {
+          "entries": [
+            8,
+            9,
+            17,
+            18,
+            20,
+            21
+          ],
+          "contributions": [
+            [
+              "replacement"
+            ],
+            [
+              "b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ],
+            [
+              "omit marker"
+            ],
+            [
+              "replace marker"
+            ]
+          ],
+          "messages": [
+            "replacement",
+            "b",
+            "later one",
+            "later two",
+            "omit marker",
+            "replace marker"
+          ]
+        },
+        "headed": {
+          "entries": [
+            30,
+            8,
+            9,
+            17,
+            18,
+            20,
+            21
+          ],
+          "contributions": [
+            [
+              "new head"
+            ],
+            [
+              "replacement"
+            ],
+            [
+              "edited b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ],
+            [
+              "omit marker"
+            ],
+            [
+              "replace marker"
+            ]
+          ],
+          "messages": [
+            "new head",
+            "replacement",
+            "edited b",
+            "later one",
+            "later two",
+            "omit marker",
+            "replace marker"
+          ]
+        },
+        "atHead": {
+          "entries": [
+            30,
+            8,
+            9,
+            17,
+            18,
+            20,
+            21
+          ],
+          "contributions": [
+            [
+              "new head"
+            ],
+            [
+              "replacement"
+            ],
+            [
+              "edited b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ],
+            [
+              "omit marker"
+            ],
+            [
+              "replace marker"
+            ]
+          ],
+          "messages": [
+            "new head",
+            "replacement",
+            "edited b",
+            "later one",
+            "later two",
+            "omit marker",
+            "replace marker"
+          ]
+        },
+        "forkAtHead": {
+          "entries": [
+            30,
+            8,
+            9,
+            17,
+            18,
+            20,
+            21
+          ],
+          "contributions": [
+            [
+              "new head"
+            ],
+            [
+              "replacement"
+            ],
+            [
+              "edited b"
+            ],
+            [
+              "later one"
+            ],
+            [
+              "later two"
+            ],
+            [
+              "omit marker"
+            ],
+            [
+              "replace marker"
+            ]
+          ],
+          "messages": [
+            "new head",
+            "replacement",
+            "edited b",
+            "later one",
+            "later two",
+            "omit marker",
+            "replace marker"
+          ]
+        },
+        "reopened": {
+          "root": {
+            "entries": [
+              30,
+              8,
+              9,
+              17,
+              18,
+              20,
+              21
+            ],
+            "contributions": [
+              [
+                "new head"
+              ],
+              [
+                "replacement"
+              ],
+              [
+                "edited b"
+              ],
+              [
+                "later one"
+              ],
+              [
+                "later two"
+              ],
+              [
+                "omit marker"
+              ],
+              [
+                "replace marker"
+              ]
+            ],
+            "messages": [
+              "new head",
+              "replacement",
+              "edited b",
+              "later one",
+              "later two",
+              "omit marker",
+              "replace marker"
+            ]
+          },
+          "fork": {
+            "entries": [
+              8,
+              9,
+              19
+            ],
+            "contributions": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ],
+              [
+                "branch only"
+              ]
+            ],
+            "messages": [
+              "a",
+              "b",
+              "branch only"
+            ]
+          },
+          "rootBeforeForkWrite": {
+            "entries": [
+              8,
+              9,
+              17,
+              18
+            ],
+            "contributions": [
+              [
+                "a"
+              ],
+              [
+                "b"
+              ],
+              [
+                "later one"
+              ],
+              [
+                "later two"
+              ]
+            ],
+            "messages": [
+              "a",
+              "b",
+              "later one",
+              "later two"
+            ]
+          },
+          "omitted": {
+            "entries": [
+              8,
+              9,
+              17,
+              18,
+              20
+            ],
+            "contributions": [
+              [],
+              [
+                "b"
+              ],
+              [
+                "later one"
+              ],
+              [
+                "later two"
+              ],
+              [
+                "omit marker"
+              ]
+            ],
+            "messages": [
+              "b",
+              "later one",
+              "later two",
+              "omit marker"
+            ]
+          },
+          "replaced": {
+            "entries": [
+              8,
+              9,
+              17,
+              18,
+              20,
+              21
+            ],
+            "contributions": [
+              [
+                "replacement"
+              ],
+              [
+                "b"
+              ],
+              [
+                "later one"
+              ],
+              [
+                "later two"
+              ],
+              [
+                "omit marker"
+              ],
+              [
+                "replace marker"
+              ]
+            ],
+            "messages": [
+              "replacement",
+              "b",
+              "later one",
+              "later two",
+              "omit marker",
+              "replace marker"
+            ]
+          },
+          "headed": {
+            "entries": [
+              30,
+              8,
+              9,
+              17,
+              18,
+              20,
+              21
+            ],
+            "contributions": [
+              [
+                "new head"
+              ],
+              [
+                "replacement"
+              ],
+              [
+                "edited b"
+              ],
+              [
+                "later one"
+              ],
+              [
+                "later two"
+              ],
+              [
+                "omit marker"
+              ],
+              [
+                "replace marker"
+              ]
+            ],
+            "messages": [
+              "new head",
+              "replacement",
+              "edited b",
+              "later one",
+              "later two",
+              "omit marker",
+              "replace marker"
+            ]
+          },
+          "forkDocument": "at fork"
+        }
+      },
+      "normalizations": [
+        "entry IDs are compared as identity relationships in one persisted store",
+        "message projections retain ordered content"
+      ]
+    }
+  ]
+}

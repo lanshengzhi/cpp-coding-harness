@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "24c984fa659a9de8452eb0a21559239dbf21101f22663ade442f28c0384a5f18"
+            "sha256": "91a463856bededec67186ab3aba0f17923c5e4ca569810c6325a451d6f0d58fe"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -644,7 +644,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 489,
+      "scenarios": 490,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -723,6 +723,7 @@
         "audit-1079/held-tool.json:a held real tool prevents the next model request and submission settlement",
         "audit-1072/live-session.json:export uses the live selected branch while HTML retains all entries",
         "audit-1072/live-session.json:live session info append advances the leaf under the selected parent",
+        "audit-1082/contexts.json:fork isolation and edited head contexts survive reopen",
         "audit-1080/submissions-inbox.json:a busy steer input is placed at the postTools boundary and a busy follow-up is held to the final boundary",
         "audit-1080/submissions-inbox.json:a duplicate request ID with a different payload returns the existing submission with zero new storage batches",
         "audit-1080/submissions-inbox.json:a conversation abort settles the queued input unanswered and aborted, keeps the queued write queued and settles the placed input unanswered and aborted",
@@ -3654,6 +3655,16 @@
         "cch_coding_agent:Session:consumers:tui-live-session"
       ],
       "disposition": "reuse the append parent/leaf observation without claiming frozen selector equivalence or promoting the composite row"
+    },
+    {
+      "family": "audit-1082",
+      "artifact": "contexts.json",
+      "scenario": "fork isolation and edited head contexts survive reopen",
+      "reason": "Captured by #1082 for a bounded fork and context comparison; broader capability guarantees remain partial.",
+      "rows": [
+        "cch_durable:Tx:forkConversation"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; retain current row statuses."
     },
     {
       "family": "audit-1080",

@@ -460,6 +460,22 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
     auto root = consume(harness->root());
     REQUIRE(root.has_value());
     const auto root_id = root.value();
+    const auto frozen = FrozenScenario::load(
+            "fixtures/pi-v1.3.0/audit-1082/contexts.json", "fork isolation and edited head contexts survive reopen");
+    REQUIRE(frozen.has_value());
+    const auto frozen_messages = [&](std::string_view name) {
+        const auto* object = frozen->object_member(name);
+        REQUIRE(object != nullptr);
+        const auto found = object->find("messages");
+        REQUIRE(found != object->end());
+        const auto* values = found->second.get_if<support::JsonValue::array_t>();
+        REQUIRE(values != nullptr);
+        std::vector<chord::Json> messages;
+        for (const auto& value : *values)
+            messages.emplace_back(
+                    chord::Json::Object{{"role", chord::Json{"user"}}, {"content", chord::Json{value.get_string()}}});
+        return messages;
+    };
     const auto message = [](std::string text) {
         return chord::Json{
                 chord::Json::Object{{"role", chord::Json{"user"}}, {"content", chord::Json{std::move(text)}}}};
@@ -516,7 +532,7 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
     REQUIRE(fork_result.has_value());
     const auto fork_id = fork_result.value().id;
     const auto original_fork = view(fork_id);
-    REQUIRE(original_fork == std::vector<chord::Json>{message("a"), message("b")});
+    REQUIRE(original_fork == frozen_messages("forkBefore"));
     auto fork_document = storage.value()->find_document(
             "issue1082.isolation", DocumentAddress{.conversation_id = fork_id}, DocumentPoint::current());
     REQUIRE(fork_document.has_value());
@@ -527,8 +543,9 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
     set_document("root changed once");
     append(root_id, "later one");
     set_document("root changed twice");
-    append(root_id, "later two");
+    const auto root_before_fork_tail = append(root_id, "later two");
     CHECK(view(fork_id) == original_fork);
+    CHECK(view(fork_id) == frozen_messages("forkAfterRoot"));
     const auto fork_entries_after = storage.value()->scan_entries(fork_id, 100);
     REQUIRE(fork_entries_after.has_value());
     REQUIRE(fork_entries_after->size() == fork_entries_before->size());
@@ -543,21 +560,16 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
     const auto original_root = view(root_id);
     append(fork_id, "branch only");
     CHECK(view(root_id) == original_root);
+    CHECK(view(root_id) == frozen_messages("rootAfterForkWrite"));
     const auto fork_after = view(fork_id);
-    CHECK(fork_after == std::vector<chord::Json>{message("a"), message("b"), message("branch only")});
+    CHECK(fork_after == frozen_messages("forkAfter"));
 
     const auto omit = append(root_id, "omit marker", {}, {{.target = a, .action = "omit"}});
-    CHECK(view(root_id, omit) ==
-            std::vector<chord::Json>{message("b"), message("later one"), message("later two"), message("omit marker")});
+    CHECK(view(root_id, omit) == frozen_messages("omitted"));
     const auto replace = append(
             root_id, "replace marker", {}, {{.target = a, .action = "replace", .messages = {message("replacement")}}});
     const auto replaced = view(root_id, replace);
-    CHECK(replaced == std::vector<chord::Json>{message("replacement"),
-                              message("b"),
-                              message("later one"),
-                              message("later two"),
-                              message("omit marker"),
-                              message("replace marker")});
+    CHECK(replaced == frozen_messages("replaced"));
     auto historical_fork = consume(harness->fork_conversation(root_id, replace));
     REQUIRE(historical_fork.has_value());
     CHECK(view(historical_fork.value().id) == replaced);
@@ -567,13 +579,7 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
             EntryHeadVariant{a},
             {{.target = b, .action = "replace", .messages = {message("edited b")}}});
     const auto headed = view(root_id);
-    CHECK(headed == std::vector<chord::Json>{message("new head"),
-                            message("replacement"),
-                            message("edited b"),
-                            message("later one"),
-                            message("later two"),
-                            message("omit marker"),
-                            message("replace marker")});
+    CHECK(headed == frozen_messages("headed"));
     auto headed_fork = consume(harness->fork_conversation(root_id, marker));
     REQUIRE(headed_fork.has_value());
     CHECK(view(headed_fork.value().id) == headed);
@@ -588,12 +594,12 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
     CHECK(view(fork_id) == fork_after);
     CHECK(view(root_id) == headed);
     CHECK(view(root_id, b) == original_fork);
+    CHECK(view(root_id, root_before_fork_tail) == original_root);
     fork_document_value = storage.value()->document(fork_document_id, DocumentPoint::current());
     REQUIRE(fork_document_value.has_value());
     REQUIRE(fork_document_value->has_value());
     CHECK(fork_document_value->value().value.as_object()->at("value") == chord::Json{"at fork"});
-    CHECK(view(root_id, omit) ==
-            std::vector<chord::Json>{message("b"), message("later one"), message("later two"), message("omit marker")});
+    CHECK(view(root_id, omit) == frozen_messages("omitted"));
     CHECK(view(root_id, replace) == replaced);
     CHECK(view(historical_fork.value().id) == replaced);
     CHECK(view(headed_fork.value().id) == headed);
