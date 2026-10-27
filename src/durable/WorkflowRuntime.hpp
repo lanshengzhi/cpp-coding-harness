@@ -107,8 +107,12 @@ private:
     /// `createCompaction`); blocking (owned by the generation) or background.
     [[nodiscard]] support::Expected<TaskId> create_compaction(
             Transaction& tx, const TaskRecord& task, std::string_view reason, bool background) const;
-    [[nodiscard]] ai::ToolResultMessage execute_tool(const ai::ToolCallContent& call,
-            const Registry::Snapshot& snapshot, std::stop_token stop_token);
+    /// Execute one model-issued call inside the generation invocation: run
+    /// the built-in `pi.tool` `beforeTool` hooks, execute with the arguments
+    /// they leave, then let `afterTool` replace the result before it is
+    /// committed (frozen pi `ToolTask.call`).
+    [[nodiscard]] support::Expected<ai::ToolResultMessage> execute_tool(
+            const ai::ToolCallContent& call, const Registry::Snapshot& snapshot, TaskRuntime& runtime);
     /// Both halves of the built-in generation definition, dispatched by the
     /// checkpoint's `phase` (frozen pi generation `prepare`/`request`).
     [[nodiscard]] support::AsyncResult<void> dispatch(const TaskRecord& task, TaskRuntime& runtime);
@@ -119,6 +123,11 @@ private:
     /// steers, joining them to the run (frozen `finishToolRound`). Returns
     /// true when a queued reset ended the run at this boundary.
     [[nodiscard]] support::AsyncResult<bool> apply_post_tools_boundary(const TaskRecord& task, TaskRuntime& runtime);
+    /// Run the first `onYield` decision of one final answer and return the
+    /// continuation content it asked for (frozen pi `GenerationTask.onYield`).
+    /// Ordinary hook errors stay isolated through `report`.
+    [[nodiscard]] support::Expected<std::optional<chord::Json>> on_yield(
+            const Registry::Snapshot& snapshot, const chord::Json& answer, TaskRuntime& runtime);
     /// The admission state machine of one commit (frozen pi `admitSubmission`),
     /// in the frozen order: dedup by request ID, display-only write shortcut,
     /// busy reject, boundary preparation (before the first table write), then

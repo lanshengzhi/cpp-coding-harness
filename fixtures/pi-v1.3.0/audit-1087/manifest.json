@@ -1,0 +1,430 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1087",
+  "family": "audit-1087",
+  "capturedAt": "2026-10-27T20:57:55.642Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1087/capture-1087.mts",
+    "sha256": "a453f8c7e2a0802163d3b7537da74989d535c4322312e6e69a61029a17d7c8bc",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1087/capture-1087.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1087/capture-1087.mts",
+        "sha256": "a453f8c7e2a0802163d3b7537da74989d535c4322312e6e69a61029a17d7c8bc"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1087/pi.mts",
+        "sha256": "77f16b349c65e6dd170d3bc4aa43ce52aa958fcce1d6a3e3b0a7be366e1b7e14"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "registry-hooks.json",
+      "family": "audit-1087",
+      "bytes": 10256,
+      "sha256": "5ac8e97a5356dbc3a4bbc8bcf9cb4863b300962448f6617093b6574b68ebf40b",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/generation.ts:GenerationTask.answer",
+        "packages/durable/src/harness/tool.ts:ToolTask.call",
+        "packages/durable/src/harness/tool.ts:finalResult",
+        "packages/durable/src/harness/registry.ts:RegistryImpl.install,RegistryImpl.uninstall",
+        "packages/durable/src/harness/harness.ts:Harness.inspect,Harness.getTask,Harness.waitForIdle"
+      ],
+      "scenarios": [
+        {
+          "name": "a generation onYield continuation hands the admitted run to a successor generation task",
+          "inputs": {
+            "hook": "GenerationTask.onYield",
+            "scriptedAnswers": [
+              "first answer",
+              "second answer"
+            ],
+            "continuesWith": "go on"
+          },
+          "expected": {
+            "duringFirst": {
+              "scheduling": "running",
+              "tasks": [
+                {
+                  "id": "9",
+                  "kind": "pi.generation",
+                  "status": "running",
+                  "state": "running"
+                }
+              ],
+              "submissions": [
+                {
+                  "status": "placed",
+                  "type": "input"
+                }
+              ]
+            },
+            "duringSecond": {
+              "scheduling": "running",
+              "tasks": [
+                {
+                  "id": "12",
+                  "kind": "pi.generation",
+                  "status": "running",
+                  "state": "running"
+                }
+              ],
+              "submissions": [
+                {
+                  "status": "placed",
+                  "type": "input"
+                }
+              ]
+            },
+            "firstTaskTerminal": {
+              "status": "terminal",
+              "outcomeStatus": "completed",
+              "resultKeys": [
+                "entryId"
+              ],
+              "entryId": "10"
+            },
+            "secondTaskTerminal": {
+              "status": "terminal",
+              "outcomeStatus": "completed",
+              "resultKeys": [
+                "entryId"
+              ],
+              "entryId": "13"
+            },
+            "firstOutcomeEntryIsFirstAssistant": true,
+            "secondOutcomeEntryIsLastAssistant": true,
+            "successorIsNewTask": true,
+            "settled": {
+              "status": "done",
+              "entryIsFirstUser": true,
+              "answerIsLastAssistant": true
+            },
+            "secondRequestUsers": [
+              "start",
+              "go on"
+            ],
+            "callCount": 2,
+            "yields": [
+              "first answer",
+              "second answer"
+            ],
+            "entries": [
+              [
+                "pi.user",
+                "start"
+              ],
+              [
+                "pi.assistant",
+                "first answer"
+              ],
+              [
+                "pi.user",
+                "go on"
+              ],
+              [
+                "pi.assistant",
+                "second answer"
+              ]
+            ],
+            "afterIdle": {
+              "scheduling": "running",
+              "tasks": [],
+              "submissions": []
+            }
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "an afterTool hook replaces the committed tool result",
+          "inputs": {
+            "call": {
+              "name": "echo",
+              "arguments": {
+                "text": "original"
+              }
+            },
+            "afterTool": "replace the output with 'replaced'"
+          },
+          "expected": {
+            "hooks": [
+              {
+                "phase": "afterTool",
+                "id": "call-1",
+                "arguments": {
+                  "text": "original"
+                },
+                "text": "echo:original",
+                "isError": false
+              }
+            ],
+            "status": "done",
+            "resultText": "replaced",
+            "isError": false,
+            "durationPresent": true,
+            "entries": [
+              [
+                "pi.user",
+                "echo"
+              ],
+              [
+                "pi.system",
+                [],
+                [
+                  "echo"
+                ]
+              ],
+              [
+                "pi.assistant",
+                ""
+              ],
+              [
+                "pi.tool-result",
+                "echo",
+                "call-1",
+                false,
+                true,
+                "replaced"
+              ],
+              [
+                "pi.assistant",
+                "done"
+              ]
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "beforeTool hooks run in extension order and the last rewrite executes",
+          "inputs": {
+            "call": {
+              "name": "echo",
+              "arguments": {
+                "text": "original"
+              }
+            },
+            "rewrites": [
+              "first",
+              "second"
+            ]
+          },
+          "expected": {
+            "hooks": [
+              {
+                "extension": "first-hook",
+                "id": "call-1",
+                "arguments": {
+                  "text": "original"
+                }
+              },
+              {
+                "extension": "second-hook",
+                "id": "call-1",
+                "arguments": {
+                  "text": "first"
+                }
+              }
+            ],
+            "executions": [
+              "second"
+            ],
+            "resultText": "echo:second",
+            "entries": [
+              [
+                "pi.user",
+                "echo"
+              ],
+              [
+                "pi.system",
+                [],
+                [
+                  "echo"
+                ]
+              ],
+              [
+                "pi.assistant",
+                ""
+              ],
+              [
+                "pi.tool-result",
+                "echo",
+                "call-1",
+                false,
+                true,
+                "echo:second"
+              ],
+              [
+                "pi.assistant",
+                "done"
+              ]
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "a throwing beforeTool blocks the call and the run still settles",
+          "inputs": {
+            "call": {
+              "name": "echo",
+              "arguments": {
+                "text": "original"
+              }
+            },
+            "throwMessage": "denied by policy"
+          },
+          "expected": {
+            "hooks": [
+              {
+                "extension": "blocking-hook",
+                "id": "call-1",
+                "arguments": {
+                  "text": "original"
+                }
+              }
+            ],
+            "executions": [],
+            "status": "done",
+            "isError": true,
+            "durationPresent": false,
+            "resultText": "<harness>\n[error] Tool call blocked: denied by policy\n</harness>",
+            "entries": [
+              [
+                "pi.user",
+                "echo"
+              ],
+              [
+                "pi.system",
+                [],
+                [
+                  "echo"
+                ]
+              ],
+              [
+                "pi.assistant",
+                ""
+              ],
+              [
+                "pi.tool-result",
+                "echo",
+                "call-1",
+                true,
+                false,
+                "<harness>\n[error] Tool call blocked: denied by policy\n</harness>"
+              ],
+              [
+                "pi.assistant",
+                "done"
+              ]
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "replacing and uninstalling an extension changes the next request's tool hooks",
+          "inputs": {
+            "installed": [
+              "audit-tools",
+              "hook-set"
+            ],
+            "rewrites": [
+              "one",
+              "two"
+            ],
+            "requests": 3
+          },
+          "expected": {
+            "beforeReplace": {
+              "status": "done",
+              "resultText": "echo:one"
+            },
+            "afterReplace": {
+              "status": "done",
+              "resultText": "echo:two"
+            },
+            "afterUninstall": {
+              "status": "done",
+              "resultText": "echo:original"
+            },
+            "observations": [
+              {
+                "request": 1,
+                "extension": "hook-set",
+                "arguments": {
+                  "text": "original"
+                }
+              },
+              {
+                "request": 2,
+                "extension": "hook-set",
+                "arguments": {
+                  "text": "original"
+                }
+              }
+            ]
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        },
+        {
+          "name": "afterTool observes the model's call while the rewritten arguments execute",
+          "inputs": {
+            "call": {
+              "name": "echo",
+              "arguments": {
+                "text": "original"
+              }
+            },
+            "beforeTool": "rewrite to 'rewritten'",
+            "afterTool": "observe only"
+          },
+          "expected": {
+            "executed": [
+              "rewritten"
+            ],
+            "observed": [
+              {
+                "phase": "afterTool",
+                "id": "call-1",
+                "arguments": {
+                  "text": "original"
+                },
+                "text": "echo:rewritten"
+              }
+            ],
+            "status": "done",
+            "resultText": "echo:rewritten"
+          },
+          "normalizations": [
+            "generated conversation, task, submission and message IDs are compared only through identity relations or stable in-memory IDs",
+            "elapsed durations are recorded as presence, not wall-clock values"
+          ]
+        }
+      ]
+    }
+  ]
+}

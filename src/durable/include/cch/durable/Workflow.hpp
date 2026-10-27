@@ -50,6 +50,13 @@ struct TaskHookRegistration {
 [[nodiscard]] TaskHookRegistration task_hook(
         const TaskDefinition& task, std::string hook_name, std::move_only_function<support::ExpectedVoid()> handler);
 
+/// Build a `TaskHookRegistration` for one built-in `pi.tool` hook, `beforeTool`
+/// or `afterTool` (frozen pi `hook(ToolTask, ...)`). A model-issued call runs
+/// inline inside the generation invocation in this slice, so these hooks are
+/// dispatched from the request's registry snapshot rather than from a separate
+/// tool task; the tool hooks of a request see the registry as of that request.
+[[nodiscard]] TaskHookRegistration tool_hook(std::string hook_name, TaskHook handler);
+
 struct Extension {
     std::string name{};
     std::vector<ToolRegistration> tools{};
@@ -60,7 +67,8 @@ struct Extension {
 
 /// Live registry for the durable Harness. Install, replace-in-place, uninstall,
 /// and request snapshots are serialized internally. Existing registrations stay
-/// alive for a request or phase even when another extension is installed.
+/// alive for a request or phase even when another extension is installed; a
+/// replace or uninstall changes the next request's tools, sections and hooks.
 class Registry {
 public:
     Registry();

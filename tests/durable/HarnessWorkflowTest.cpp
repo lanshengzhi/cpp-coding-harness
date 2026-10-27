@@ -1631,4 +1631,819 @@ TEST_CASE("Workflow entries persist model messages and byTaskId through JSONL an
     }
 }
 
+namespace {
+
+constexpr std::string_view kRegistryHooksArtifact = "fixtures/pi-v1.3.0/audit-1087/registry-hooks.json";
+
+/// One scripted model stream that delivers `message` and completes.
+ai::ModelStream scripted_reply(ai::AssistantMessage message) {
+    return ai::ModelStream{ai::ModelStreamProducer{
+            [message = std::move(message)](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                auto delivered = sink(ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
+                if (!delivered)
+                    done(std::unexpected(delivered.error()));
+                else
+                    done(message);
+            }}};
+}
+
+/// One scripted model response that calls `name` with `arguments`.
+ai::AssistantMessage call_message(std::string name, support::JsonValue arguments, std::string id = "call-1") {
+    auto message = ai::assistant_text_message("");
+    message.content = {
+            ai::ToolCallContent{.id = std::move(id), .name = std::move(name), .arguments = std::move(arguments)}};
+    message.stop_reason = ai::AssistantStopReason::ToolUse;
+    return message;
+}
+
+/// The `text` member of a hook's `call.arguments` object.
+std::string argument_text(const chord::Json& call) {
+    const auto* fields = call.as_object();
+    REQUIRE(fields != nullptr);
+    const auto arguments = fields->find("arguments");
+    REQUIRE(arguments != fields->end());
+    const auto* text = arguments->second.as_object()->at("text").as_string();
+    REQUIRE(text != nullptr);
+    return *text;
+}
+
+/// The text blocks of an assistant message as one `|`-joined string.
+std::string message_text(const chord::Json& message) {
+    const auto* fields = message.as_object();
+    REQUIRE(fields != nullptr);
+    const auto content = fields->find("content");
+    REQUIRE(content != fields->end());
+    if (const auto* text = content->second.as_string()) return *text;
+    std::string joined;
+    for (const auto& block : *content->second.as_array()) {
+        const auto* block_fields = block.as_object();
+        REQUIRE(block_fields != nullptr);
+        if (const auto* text = block_fields->at("text").as_string()) {
+            if (!joined.empty()) joined += "|";
+            joined += *text;
+        }
+    }
+    return joined;
+}
+
+/// The `echo` tool of the frozen `audit-1087` scenarios, recording what it executed.
+ToolRegistration echo_tool(std::vector<std::string>* executed) {
+    return ToolRegistration{.declaration = ai::Tool{.name = "echo", .description = "Echo the text argument back"},
+            .execute = [executed](support::JsonValue arguments, std::stop_token) {
+                const std::string text = arguments.at("text").get_string();
+                if (executed != nullptr) executed->push_back(text);
+                return support::AsyncResult<std::vector<ai::Content>>{
+                        std::vector<ai::Content>{ai::text_content("echo:" + text)}};
+            }};
+}
+
+/// Install one extension that registers a single `pi.tool` hook.
+void install_tool_hook(Registry& registry, std::string name, std::string hook_name, TaskHook handler) {
+    Extension extension{.name = std::move(name)};
+    extension.hooks.push_back(tool_hook(std::move(hook_name), std::move(handler)));
+    REQUIRE(registry.install(std::move(extension)).has_value());
+}
+
+/// The conversation entries of `conversation`, oldest first.
+std::vector<EntryRecord> entries_oldest_first(Storage& storage, ConversationId conversation) {
+    auto scanned = storage.scan_entries(conversation, 1000);
+    REQUIRE(scanned.has_value());
+    std::ranges::reverse(*scanned);
+    return *scanned;
+}
+
+} // namespace
+
+TEST_CASE("Workflow onYield continues the admitted run under a successor generation task",
+        "[durable][workflow][issue1087]") {
+    const auto frozen = FrozenScenario::load(kRegistryHooksArtifact,
+            "a generation onYield continuation hands the admitted run to a successor generation task");
+    REQUIRE(frozen.has_value());
+    Registry registry;
+    std::vector<std::string> yields;
+    std::vector<std::string> second_users;
+    std::atomic_int calls{0};
+    std::binary_semaphore first_requested{0};
+    std::binary_semaphore release_first{0};
+    std::binary_semaphore second_requested{0};
+    std::binary_semaphore release_second{0};
+    Extension hooks{.name = "audit-hooks"};
+    hooks.hooks.push_back(task_hook("pi.generation", "onYield", [&yields](const chord::Json& answer, TaskRuntime&) {
+        const std::string text = message_text(answer);
+        yields.push_back(text);
+        // Exactly one continuation, decided by the first answer (frozen
+        // `onYield` returning `{ continue }`).
+        if (text != "first answer") return support::AsyncResult<chord::Json>{chord::Json{}};
+        return support::AsyncResult<chord::Json>{chord::Json{chord::Json::Object{{"continue", chord::Json{"go on"}}}}};
+    }));
+    REQUIRE(registry.install(std::move(hooks)).has_value());
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&](ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+        const int turn = calls.fetch_add(1);
+        if (turn == 0) {
+            first_requested.release();
+            return ai::ModelStream{ai::ModelStreamProducer{
+                    [&release_first](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                        if (!release_first.try_acquire_for(std::chrono::seconds{10})) {
+                            done(std::unexpected(
+                                    support::make_error(support::ErrorCode::Cancelled, "first request timed out")));
+                            return;
+                        }
+                        auto answer = ai::assistant_text_message("first answer");
+                        auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                        if (!delivered)
+                            done(std::unexpected(delivered.error()));
+                        else
+                            done(std::move(answer));
+                    }}};
+        }
+        for (const auto& message : context.messages) {
+            if (const auto* user = std::get_if<ai::UserMessage>(&message))
+                second_users.push_back(ai::text_from_user_message(*user));
+        }
+        second_requested.release();
+        return ai::ModelStream{ai::ModelStreamProducer{[&release_second](ai::AssistantEventSink sink,
+                                                               ai::ModelStreamCompletion done) noexcept {
+            if (!release_second.try_acquire_for(std::chrono::seconds{10})) {
+                done(std::unexpected(support::make_error(support::ErrorCode::Cancelled, "second request timed out")));
+                return;
+            }
+            auto answer = ai::assistant_text_message("second answer");
+            auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+            if (!delivered)
+                done(std::unexpected(delivered.error()));
+            else
+                done(std::move(answer));
+        }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("start")));
+    REQUIRE(admitted.has_value());
+    auto submission = std::move(admitted.value());
+    const auto await_request = [&](std::binary_semaphore& requested, std::string_view label) {
+        if (requested.try_acquire_for(std::chrono::seconds{5})) return;
+        // Release any pending stream before failing, so Harness destruction can drain.
+        if (label == "first request") release_first.release();
+        release_second.release();
+        auto inspection = consume(harness->inspect());
+        std::string diagnostic = "Timed out waiting for " + std::string{label};
+        if (inspection.has_value()) {
+            for (const auto& task : inspection.value().tasks) {
+                diagnostic += " task " + std::to_string(task.record.id.value) + " kind " + task.record.kind +
+                              " record " + task.record.state.status + " scheduler " + task.state.kind;
+            }
+        }
+        auto live = storage.find_document(
+                "pi.live:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
+        if (live && live->has_value()) {
+            auto value = storage.document((**live).id, DocumentPoint::current());
+            if (value && value->has_value()) {
+                const auto* fields = (**value).value.as_object();
+                if (fields != nullptr && fields->contains("run")) {
+                    const auto* run = fields->at("run").as_object();
+                    if (run != nullptr && run->contains("task") && run->at("task").as_number()) {
+                        diagnostic += " live.run.task " + std::to_string(*run->at("task").as_number());
+                    }
+                }
+            }
+        }
+        FAIL(diagnostic << "; model request was not reached (check early-settlement mutation when applicable)");
+    };
+    await_request(first_requested, "first request");
+
+    // The first request runs one live generation task.
+    auto first_inspection = consume(harness->inspect());
+    REQUIRE(first_inspection.has_value());
+    CHECK(first_inspection.value().scheduling == "running");
+    REQUIRE(first_inspection.value().tasks.size() == 1);
+    const TaskInspection& first_task = first_inspection.value().tasks.front();
+    CHECK(first_task.record.kind == "pi.generation");
+    CHECK(first_task.state.kind == "running");
+    const TaskId first_task_id = first_task.record.id;
+
+    release_first.release();
+    await_request(second_requested, "successor request");
+    // The continuation keeps the run alive under a successor task: one live
+    // generation task, and it is not the task that answered.
+    auto second_inspection = consume(harness->inspect());
+    REQUIRE(second_inspection.has_value());
+    REQUIRE(second_inspection.value().tasks.size() == 1);
+    const TaskInspection& second_task = second_inspection.value().tasks.front();
+    CHECK(second_task.record.kind == "pi.generation");
+    CHECK(second_task.state.kind == "running");
+    const TaskId second_task_id = second_task.record.id;
+    CHECK(second_task_id.value != first_task_id.value);
+
+    const auto first_terminal = consume(harness->get_task(first_task_id));
+    REQUIRE(first_terminal.has_value());
+    REQUIRE(first_terminal.value().has_value());
+    const TaskRecord& first_record = *first_terminal.value();
+    CHECK(first_record.state.status == "terminal");
+    REQUIRE(first_record.state.outcome.has_value());
+    CHECK(first_record.state.outcome->status == "completed");
+    REQUIRE(first_record.state.outcome->result.has_value());
+    const auto* first_result = first_record.state.outcome->result->as_object();
+    REQUIRE(first_result != nullptr);
+    // The terminal outcome is the frozen `{ entryId }` shape, not an answer.
+    REQUIRE(first_result->size() == 1);
+    REQUIRE(first_result->contains("entryId"));
+    CHECK_FALSE(first_result->contains("answer"));
+
+    release_second.release();
+    auto settled = consume(submission.wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    REQUIRE(consume(harness->wait_for_idle()).has_value());
+    auto idle_inspection = consume(harness->inspect());
+    REQUIRE(idle_inspection.has_value());
+    CHECK(idle_inspection.value().tasks.empty());
+
+    const auto entries = entries_oldest_first(storage, root.value());
+    const auto assistants = [&entries] {
+        std::vector<const EntryRecord*> found;
+        for (const auto& entry : entries) {
+            if (entry.kind == "pi.assistant") found.push_back(&entry);
+        }
+        return found;
+    }();
+    REQUIRE(assistants.size() == 2);
+    // Exactly one settlement over the whole continued run, pointing at the
+    // first user entry and the SECOND assistant answer.
+    REQUIRE(settled.value().entry.has_value());
+    REQUIRE(settled.value().answer.has_value());
+    CHECK(settled.value().entry->value == entries.front().id.value);
+    CHECK(settled.value().answer->value == assistants.back()->id.value);
+    CHECK(settled.value().answer->value != assistants.front()->id.value);
+    CHECK(*first_result->at("entryId").as_number() == static_cast<double>(assistants.front()->id.value));
+
+    const auto second_terminal = consume(harness->get_task(second_task_id));
+    REQUIRE(second_terminal.has_value());
+    REQUIRE(second_terminal.value().has_value());
+    const TaskRecord& second_record = *second_terminal.value();
+    REQUIRE(second_record.state.outcome.has_value());
+    CHECK(second_record.state.outcome->status == "completed");
+    REQUIRE(second_record.state.outcome->result.has_value());
+    const auto* second_result = second_record.state.outcome->result->as_object();
+    REQUIRE(second_result != nullptr);
+    REQUIRE(second_result->size() == 1);
+    REQUIRE(second_result->contains("entryId"));
+    CHECK(*second_result->at("entryId").as_number() == static_cast<double>(assistants.back()->id.value));
+
+    // The continuation appends a plain user entry and never admits a second
+    // submission: one record, done, at the first user entry.
+    auto submissions = storage.scan_submissions(100);
+    REQUIRE(submissions.has_value());
+    REQUIRE(submissions->size() == 1);
+    CHECK(submissions->front().type == "input");
+    CHECK(submissions->front().status == "done");
+    REQUIRE(submissions->front().entry.has_value());
+    CHECK(submissions->front().entry->value == entries.front().id.value);
+
+    const auto* expected_entries = frozen->array_member("entries");
+    REQUIRE(expected_entries != nullptr);
+    CHECK(json_equals(transcript(entries), *expected_entries));
+    const auto* expected_users = frozen->array_member("secondRequestUsers");
+    REQUIRE(expected_users != nullptr);
+    chord::Json::Array users;
+    for (const auto& text : second_users)
+        users.emplace_back(text);
+    CHECK(json_equals(chord::Json{std::move(users)}, *expected_users));
+    const auto expected_calls = frozen->number_member("callCount");
+    REQUIRE(expected_calls.has_value());
+    CHECK(calls.load() == static_cast<int>(*expected_calls));
+    chord::Json::Array yields_json;
+    for (const auto& text : yields)
+        yields_json.emplace_back(text);
+    const auto* expected_yields = frozen->array_member("yields");
+    REQUIRE(expected_yields != nullptr);
+    CHECK(json_equals(chord::Json{std::move(yields_json)}, *expected_yields));
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Workflow afterTool replaces the committed tool result", "[durable][workflow][issue1087]") {
+    const auto frozen =
+            FrozenScenario::load(kRegistryHooksArtifact, "an afterTool hook replaces the committed tool result");
+    REQUIRE(frozen.has_value());
+    Registry registry;
+    std::vector<std::string> executed;
+    std::vector<chord::Json> observed;
+    Extension tools{.name = "audit-tools"};
+    tools.tools.push_back(echo_tool(&executed));
+    REQUIRE(registry.install(std::move(tools)).has_value());
+    install_tool_hook(registry, "audit-tool", "afterTool", [&observed](const chord::Json& input, TaskRuntime&) {
+        const auto* fields = input.as_object();
+        REQUIRE(fields != nullptr);
+        const auto call = fields->find("call");
+        const auto result = fields->find("result");
+        REQUIRE(call != fields->end());
+        REQUIRE(result != fields->end());
+        const auto* result_fields = result->second.as_object();
+        REQUIRE(result_fields != nullptr);
+        std::string text;
+        for (const auto& block : *result_fields->at("output").as_array()) {
+            if (const auto* value = block.as_object()->at("text").as_string()) text += *value;
+        }
+        observed.emplace_back(chord::Json{chord::Json::Object{{"phase", "afterTool"},
+                {"id", call->second.as_object()->at("id")},
+                {"arguments", call->second.as_object()->at("arguments")},
+                {"text", text},
+                {"isError", result_fields->at("isError")}}});
+        return support::AsyncResult<chord::Json>{
+                chord::Json{chord::Json::Object{{"output",
+                                                        chord::Json{chord::Json::Array{chord::Json{chord::Json::Object{
+                                                                {"type", "text"}, {"text", "replaced"}}}}}},
+                        {"isError", false}}}};
+    });
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    std::atomic_int calls{0};
+    options.stream = [&calls](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        if (calls.fetch_add(1) == 0)
+            return scripted_reply(
+                    call_message("echo", support::JsonValue{support::JsonValue::object_t{{"text", "original"}}}));
+        return scripted_reply(ai::assistant_text_message("done"));
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("echo")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    const auto entries = entries_oldest_first(storage, root.value());
+    const auto results = [&entries] {
+        std::vector<const EntryRecord*> found;
+        for (const auto& entry : entries) {
+            if (entry.kind == "pi.tool-result") found.push_back(&entry);
+        }
+        return found;
+    }();
+    REQUIRE(results.size() == 1);
+    const chord::Json& model = entry_model(*results.front());
+    const auto* result_fields = model.as_object();
+    REQUIRE(result_fields != nullptr);
+    const auto result_text = [&result_fields] {
+        std::string text;
+        for (const auto& block : *result_fields->at("content").as_array()) {
+            const auto* fields = block.as_object();
+            REQUIRE(fields != nullptr);
+            if (const auto* value = fields->at("text").as_string()) text += *value;
+        }
+        return text;
+    }();
+    // The committed result is the hook's replacement, not the tool's output.
+    CHECK(result_text == *frozen->string_member("resultText"));
+    CHECK(*result_fields->at("isError").as_boolean() == *frozen->member("isError")->get_if<bool>());
+    const auto expected_duration = frozen->member("durationPresent");
+    REQUIRE(expected_duration != nullptr);
+    CHECK(result_fields->contains("durationMs") == *expected_duration->get_if<bool>());
+    CHECK(executed.size() == 1);
+    CHECK(executed.front() == "original");
+    const auto* expected_hooks = frozen->array_member("hooks");
+    REQUIRE(expected_hooks != nullptr);
+    CHECK(json_equals(chord::Json{chord::Json::Array{observed.begin(), observed.end()}}, *expected_hooks));
+    const auto* expected_entries = frozen->array_member("entries");
+    REQUIRE(expected_entries != nullptr);
+    CHECK(json_equals(transcript(entries), *expected_entries));
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Workflow beforeTool hooks run in extension order and the last rewrite executes",
+        "[durable][workflow][issue1087]") {
+    const auto frozen = FrozenScenario::load(
+            kRegistryHooksArtifact, "beforeTool hooks run in extension order and the last rewrite executes");
+    REQUIRE(frozen.has_value());
+    Registry registry;
+    std::vector<std::string> executed;
+    std::vector<chord::Json> observed;
+    Extension tools{.name = "audit-tools"};
+    tools.tools.push_back(echo_tool(&executed));
+    REQUIRE(registry.install(std::move(tools)).has_value());
+    const auto rewrite = [&registry, &observed](std::string name, std::string text) {
+        install_tool_hook(registry,
+                name,
+                "beforeTool",
+                [&observed, extension = name, text](const chord::Json& call, TaskRuntime&) {
+                    const auto* fields = call.as_object();
+                    REQUIRE(fields != nullptr);
+                    observed.emplace_back(chord::Json{chord::Json::Object{{"extension", extension},
+                            {"id", fields->at("id")},
+                            {"arguments", fields->at("arguments")}}});
+                    return support::AsyncResult<chord::Json>{chord::Json{
+                            chord::Json::Object{{"arguments", chord::Json{chord::Json::Object{{"text", text}}}}}}};
+                });
+    };
+    rewrite("first-hook", "first");
+    rewrite("second-hook", "second");
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    std::atomic_int calls{0};
+    options.stream = [&calls](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        if (calls.fetch_add(1) == 0)
+            return scripted_reply(
+                    call_message("echo", support::JsonValue{support::JsonValue::object_t{{"text", "original"}}}));
+        return scripted_reply(ai::assistant_text_message("done"));
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("echo")));
+    REQUIRE(admitted.has_value());
+    REQUIRE(consume(admitted.value().wait()).has_value());
+    const auto entries = entries_oldest_first(storage, root.value());
+    chord::Json::Array executed_json;
+    for (const auto& text : executed)
+        executed_json.emplace_back(text);
+    const auto* expected_executions = frozen->array_member("executions");
+    REQUIRE(expected_executions != nullptr);
+    CHECK(json_equals(chord::Json{std::move(executed_json)}, *expected_executions));
+    const auto* expected_hooks = frozen->array_member("hooks");
+    REQUIRE(expected_hooks != nullptr);
+    CHECK(json_equals(chord::Json{chord::Json::Array{observed.begin(), observed.end()}}, *expected_hooks));
+    // The second hook sees the first hook's rewrite, and its own rewrite is
+    // the one that executes.
+    REQUIRE(observed.size() == 2);
+    CHECK(argument_text(observed.front()) == "original");
+    CHECK(argument_text(observed.back()) == "first");
+    const auto* expected_entries = frozen->array_member("entries");
+    REQUIRE(expected_entries != nullptr);
+    CHECK(json_equals(transcript(entries), *expected_entries));
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Workflow throwing beforeTool blocks the call with the frozen harness error",
+        "[durable][workflow][issue1087]") {
+    const auto frozen = FrozenScenario::load(
+            kRegistryHooksArtifact, "a throwing beforeTool blocks the call and the run still settles");
+    REQUIRE(frozen.has_value());
+    Registry registry;
+    std::vector<std::string> executed;
+    std::vector<chord::Json> observed;
+    Extension tools{.name = "audit-tools"};
+    tools.tools.push_back(echo_tool(&executed));
+    REQUIRE(registry.install(std::move(tools)).has_value());
+    install_tool_hook(registry,
+            "blocking-hook",
+            "beforeTool",
+            [&observed](const chord::Json& call, TaskRuntime&) -> support::AsyncResult<chord::Json> {
+                observed.emplace_back(chord::Json{chord::Json::Object{{"extension", "blocking-hook"},
+                        {"id", call.as_object()->at("id")},
+                        {"arguments", call.as_object()->at("arguments")}}});
+                return support::AsyncResult<chord::Json>{
+                        std::unexpected(support::make_error(support::ErrorCode::Validation, "denied by policy"))};
+            });
+    install_tool_hook(registry, "later-hook", "beforeTool", [&observed](const chord::Json& call, TaskRuntime&) {
+        observed.emplace_back(chord::Json{chord::Json::Object{{"extension", "later-hook"},
+                {"id", call.as_object()->at("id")},
+                {"arguments", call.as_object()->at("arguments")}}});
+        return support::AsyncResult<chord::Json>{
+                chord::Json{chord::Json::Object{{"arguments", chord::Json{chord::Json::Object{{"text", "later"}}}}}}};
+    });
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    std::atomic_int calls{0};
+    options.stream = [&calls](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        if (calls.fetch_add(1) == 0)
+            return scripted_reply(
+                    call_message("echo", support::JsonValue{support::JsonValue::object_t{{"text", "original"}}}));
+        return scripted_reply(ai::assistant_text_message("done"));
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("echo")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    // A blocked call feeds an error result back to the model, so the run
+    // still settles.
+    CHECK(settled.value().status == *frozen->string_member("status"));
+    CHECK(executed.empty());
+    const auto entries = entries_oldest_first(storage, root.value());
+    const auto* result = [&entries]() -> const chord::Json* {
+        for (const auto& entry : entries) {
+            if (entry.kind == "pi.tool-result") return &entry_model(entry);
+        }
+        return nullptr;
+    }();
+    REQUIRE(result != nullptr);
+    const auto* fields = result->as_object();
+    REQUIRE(fields != nullptr);
+    // The committed text is byte-for-byte the frozen artifact's own string.
+    const std::string expected_text = *frozen->string_member("resultText");
+    REQUIRE(expected_text.find("Tool call blocked: denied by policy") != std::string::npos);
+    std::string text;
+    for (const auto& block : *fields->at("content").as_array()) {
+        if (const auto* value = block.as_object()->at("text").as_string()) text += *value;
+    }
+    CHECK(text == expected_text);
+    CHECK(*fields->at("isError").as_boolean() == *frozen->member("isError")->get_if<bool>());
+    const auto expected_duration = frozen->member("durationPresent");
+    REQUIRE(expected_duration != nullptr);
+    // A call that never executed carries no duration.
+    CHECK(fields->contains("durationMs") == *expected_duration->get_if<bool>());
+    CHECK_FALSE(fields->contains("durationMs"));
+    // The later hook never ran.
+    const auto* expected_hooks = frozen->array_member("hooks");
+    REQUIRE(expected_hooks != nullptr);
+    CHECK(json_equals(chord::Json{chord::Json::Array{observed.begin(), observed.end()}}, *expected_hooks));
+    REQUIRE(observed.size() == 1);
+    CHECK(argument_text(observed.front()) == "original");
+    const auto* expected_entries = frozen->array_member("entries");
+    REQUIRE(expected_entries != nullptr);
+    CHECK(json_equals(transcript(entries), *expected_entries));
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Workflow afterTool observes the model call while the rewritten arguments execute",
+        "[durable][workflow][issue1087]") {
+    const auto frozen = FrozenScenario::load(
+            kRegistryHooksArtifact, "afterTool observes the model's call while the rewritten arguments execute");
+    REQUIRE(frozen.has_value());
+    Registry registry;
+    std::vector<std::string> executed;
+    std::vector<chord::Json> observed;
+    Extension tools{.name = "audit-tools"};
+    tools.tools.push_back(echo_tool(&executed));
+    REQUIRE(registry.install(std::move(tools)).has_value());
+    install_tool_hook(registry, "rewrite-hook", "beforeTool", [](const chord::Json&, TaskRuntime&) {
+        return support::AsyncResult<chord::Json>{chord::Json{
+                chord::Json::Object{{"arguments", chord::Json{chord::Json::Object{{"text", "rewritten"}}}}}}};
+    });
+    install_tool_hook(registry, "observe-hook", "afterTool", [&observed](const chord::Json& input, TaskRuntime&) {
+        const auto* fields = input.as_object();
+        REQUIRE(fields != nullptr);
+        const auto* result = fields->at("result").as_object();
+        REQUIRE(result != nullptr);
+        std::string text;
+        for (const auto& block : *result->at("output").as_array()) {
+            if (const auto* value = block.as_object()->at("text").as_string()) text += *value;
+        }
+        observed.emplace_back(chord::Json{chord::Json::Object{{"phase", "afterTool"},
+                {"id", fields->at("call").as_object()->at("id")},
+                {"arguments", fields->at("call").as_object()->at("arguments")},
+                {"text", text}}});
+        // Observing only: an absent decision keeps the result.
+        return support::AsyncResult<chord::Json>{chord::Json{}};
+    });
+    MemoryStorage storage;
+    HarnessOptions options{.registry = &registry};
+    std::atomic_int calls{0};
+    options.stream = [&calls](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        if (calls.fetch_add(1) == 0)
+            return scripted_reply(
+                    call_message("echo", support::JsonValue{support::JsonValue::object_t{{"text", "original"}}}));
+        return scripted_reply(ai::assistant_text_message("done"));
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("echo")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == *frozen->string_member("status"));
+    // The rewrite executed, and the hook still saw the model's call.
+    const auto* expected_executed = frozen->array_member("executed");
+    REQUIRE(expected_executed != nullptr);
+    chord::Json::Array executed_json;
+    for (const auto& text : executed)
+        executed_json.emplace_back(text);
+    CHECK(json_equals(chord::Json{std::move(executed_json)}, *expected_executed));
+    const auto* expected_observed = frozen->array_member("observed");
+    REQUIRE(expected_observed != nullptr);
+    CHECK(json_equals(chord::Json{chord::Json::Array{observed.begin(), observed.end()}}, *expected_observed));
+    REQUIRE(observed.size() == 1);
+    CHECK(argument_text(observed.front()) == "original");
+    CHECK(executed.size() == 1);
+    CHECK(executed.front() == "rewritten");
+    const auto entries = entries_oldest_first(storage, root.value());
+    const auto* result = [&entries]() -> const chord::Json* {
+        for (const auto& entry : entries) {
+            if (entry.kind == "pi.tool-result") return &entry_model(entry);
+        }
+        return nullptr;
+    }();
+    REQUIRE(result != nullptr);
+    std::string text;
+    for (const auto& block : *result->as_object()->at("content").as_array()) {
+        if (const auto* value = block.as_object()->at("text").as_string()) text += *value;
+    }
+    CHECK(text == *frozen->string_member("resultText"));
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("Workflow extension replacement and uninstall change the next request's tool hooks",
+        "[durable][workflow][issue1087]") {
+    const auto frozen = FrozenScenario::load(
+            kRegistryHooksArtifact, "replacing and uninstalling an extension changes the next request's tool hooks");
+    REQUIRE(frozen.has_value());
+    Registry registry;
+    std::vector<chord::Json> observed;
+    std::atomic_int calls{0};
+    std::vector<chord::Json> results;
+    MemoryStorage storage;
+    Extension tools{.name = "audit-tools"};
+    tools.tools.push_back(echo_tool(nullptr));
+    REQUIRE(registry.install(std::move(tools)).has_value());
+    const auto hooked = [&observed](std::string name, std::string text) {
+        Extension extension{.name = name};
+        extension.hooks.push_back(
+                tool_hook("beforeTool", [&observed, name, text](const chord::Json& call, TaskRuntime&) {
+                    const auto* fields = call.as_object();
+                    REQUIRE(fields != nullptr);
+                    observed.emplace_back(chord::Json{
+                            chord::Json::Object{{"request", chord::Json{static_cast<double>(observed.size() + 1)}},
+                                    {"extension", name},
+                                    {"arguments", fields->at("arguments")}}});
+                    return support::AsyncResult<chord::Json>{chord::Json{
+                            chord::Json::Object{{"arguments", chord::Json{chord::Json::Object{{"text", text}}}}}}};
+                }));
+        return extension;
+    };
+    REQUIRE(registry.install(hooked("hook-set", "one")).has_value());
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&calls](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        if (calls.fetch_add(1) % 2 == 0)
+            return scripted_reply(
+                    call_message("echo", support::JsonValue{support::JsonValue::object_t{{"text", "original"}}}));
+        return scripted_reply(ai::assistant_text_message("done"));
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    const auto run = [&](std::string label) {
+        auto admitted = consume(harness->submit(root.value(), text_input(std::move(label))));
+        REQUIRE(admitted.has_value());
+        auto settled = consume(admitted.value().wait());
+        REQUIRE(settled.has_value());
+        const auto entries = entries_oldest_first(storage, root.value());
+        const auto* result = [&entries]() -> const chord::Json* {
+            for (auto it = entries.rbegin(); it != entries.rend(); ++it) {
+                if (it->kind == "pi.tool-result") return &entry_model(*it);
+            }
+            return nullptr;
+        }();
+        REQUIRE(result != nullptr);
+        std::string text;
+        for (const auto& block : *result->as_object()->at("content").as_array()) {
+            if (const auto* value = block.as_object()->at("text").as_string()) text += *value;
+        }
+        return std::pair{settled.value().status, text};
+    };
+    const auto before_replace = run("first");
+    REQUIRE(registry.install(hooked("hook-set", "two")).has_value());
+    const auto after_replace = run("second");
+    registry.uninstall("hook-set");
+    const auto after_uninstall = run("third");
+    const auto* expected_before = frozen->object_member("beforeReplace");
+    const auto* expected_replace = frozen->object_member("afterReplace");
+    const auto* expected_uninstall = frozen->object_member("afterUninstall");
+    REQUIRE(expected_before != nullptr);
+    REQUIRE(expected_replace != nullptr);
+    REQUIRE(expected_uninstall != nullptr);
+    const auto expected_text = [](const support::JsonValue::object_t& object) {
+        const auto found = object.find("resultText");
+        REQUIRE(found != object.end());
+        const auto* text = found->second.get_if<std::string>();
+        REQUIRE(text != nullptr);
+        return *text;
+    };
+    // The next request after a replace sees the new rewrite; after an
+    // uninstall it sees none.
+    CHECK(before_replace.first == "done");
+    CHECK(before_replace.second == expected_text(*expected_before));
+    CHECK(after_replace.first == "done");
+    CHECK(after_replace.second == expected_text(*expected_replace));
+    CHECK(after_uninstall.first == "done");
+    CHECK(after_uninstall.second == expected_text(*expected_uninstall));
+    const auto* expected_observations = frozen->array_member("observations");
+    REQUIRE(expected_observations != nullptr);
+    // Hooks observed only the two requests that had a hook installed.
+    CHECK(json_equals(chord::Json{chord::Json::Array{observed.begin(), observed.end()}}, *expected_observations));
+    REQUIRE(observed.size() == 2);
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE(
+        "Workflow generation outcome keeps entryId through JSONL and SQLite reopen", "[durable][workflow][issue1087]") {
+    TempWorkspace workspace;
+    const std::filesystem::path base = workspace.path() / "generation-outcome";
+    for (const std::string backend : {"jsonl", "sqlite"}) {
+        const std::filesystem::path file = base / backend;
+        std::filesystem::create_directories(file);
+        const std::filesystem::path path = file / (backend == "jsonl" ? "state.jsonl" : "state.sqlite");
+        auto storage_result = [&]() -> std::expected<std::unique_ptr<Storage>, support::Error> {
+            if (backend == "jsonl") {
+                auto opened_storage = JsonlStorage::open(path);
+                if (!opened_storage) return std::unexpected(opened_storage.error());
+                return std::unique_ptr<Storage>{std::move(*opened_storage)};
+            }
+            auto opened_storage = SqliteStorage::open(path);
+            if (!opened_storage) return std::unexpected(opened_storage.error());
+            return std::unique_ptr<Storage>{std::move(*opened_storage)};
+        }();
+        REQUIRE(storage_result.has_value());
+        auto storage = std::move(*storage_result);
+        HarnessOptions options;
+        options.stream = [](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+            return scripted_reply(ai::assistant_text_message("answer"));
+        };
+        auto opened = consume(Harness::open(*storage, std::move(options)));
+        REQUIRE(opened.has_value());
+        auto harness = std::move(opened.value());
+        auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+        REQUIRE(root.has_value());
+        auto admitted = consume(harness->submit(root.value(), text_input("ask")));
+        REQUIRE(admitted.has_value());
+        REQUIRE(consume(admitted.value().wait()).has_value());
+        auto tasks = storage->scan_tasks(100);
+        REQUIRE(tasks.has_value());
+        const auto generation = std::ranges::find_if(*tasks,
+                [](const TaskRecord& task) { return task.kind == "pi.generation" && task.state.status == "terminal"; });
+        REQUIRE(generation != tasks->end());
+        const TaskId generation_id = generation->id;
+        REQUIRE(generation->state.outcome.has_value());
+        REQUIRE(generation->state.outcome->result.has_value());
+        REQUIRE(consume(harness->close()).has_value());
+        REQUIRE(storage->close().has_value());
+
+        // Reopen the same bytes: the terminal outcome still names the answer
+        // entry under `entryId`, with no `answer` key.
+        auto reopened_storage = [&]() -> std::expected<std::unique_ptr<Storage>, support::Error> {
+            if (backend == "jsonl") {
+                auto opened_storage = JsonlStorage::open(path);
+                if (!opened_storage) return std::unexpected(opened_storage.error());
+                return std::unique_ptr<Storage>{std::move(*opened_storage)};
+            }
+            auto opened_storage = SqliteStorage::open(path);
+            if (!opened_storage) return std::unexpected(opened_storage.error());
+            return std::unique_ptr<Storage>{std::move(*opened_storage)};
+        }();
+        REQUIRE(reopened_storage.has_value());
+        auto reopened = std::move(*reopened_storage);
+        auto restored = reopened->task(generation_id);
+        REQUIRE(restored.has_value());
+        REQUIRE(restored->has_value());
+        REQUIRE((*restored)->state.outcome.has_value());
+        REQUIRE((*restored)->state.outcome->result.has_value());
+        const auto* result = (*restored)->state.outcome->result->as_object();
+        REQUIRE(result != nullptr);
+        REQUIRE(result->contains("entryId"));
+        CHECK_FALSE(result->contains("answer"));
+        const auto entries = entries_oldest_first(*reopened, root.value());
+        const auto assistant =
+                std::ranges::find_if(entries, [](const EntryRecord& entry) { return entry.kind == "pi.assistant"; });
+        REQUIRE(assistant != entries.end());
+        CHECK(*result->at("entryId").as_number() == static_cast<double>(assistant->id.value));
+        HarnessOptions reopen_options;
+        reopen_options.stream = [](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+            return scripted_reply(ai::assistant_text_message("answer"));
+        };
+        auto reopened_harness = consume(Harness::open(*reopened, std::move(reopen_options)));
+        REQUIRE(reopened_harness.has_value());
+        auto harness_again = std::move(reopened_harness.value());
+        // Both public projections agree after the reopen.
+        auto projection = consume(harness_again->get_task(generation_id));
+        REQUIRE(projection.has_value());
+        REQUIRE(projection.value().has_value());
+        const TaskRecord& projected_record = *projection.value();
+        REQUIRE(projected_record.state.outcome.has_value());
+        REQUIRE(projected_record.state.outcome->result.has_value());
+        CHECK(*projected_record.state.outcome->result == *(*restored)->state.outcome->result);
+        const auto* projected = projected_record.state.outcome->result->as_object();
+        REQUIRE(projected != nullptr);
+        CHECK(projected->contains("entryId"));
+        auto inspection = consume(harness_again->inspect());
+        REQUIRE(inspection.has_value());
+        CHECK(inspection.value().tasks.empty());
+        REQUIRE(consume(harness_again->close()).has_value());
+        REQUIRE(reopened->close().has_value());
+        if (backend == "jsonl") {
+            // The persisted line carries the frozen key, not the old one.
+            std::ifstream stream(path / "main.jsonl");
+            std::stringstream buffer;
+            buffer << stream.rdbuf();
+            const std::string text = buffer.str();
+            CHECK(text.find("\"entryId\"") != std::string::npos);
+        }
+    }
+}
+
 } // namespace cch::tests::durable

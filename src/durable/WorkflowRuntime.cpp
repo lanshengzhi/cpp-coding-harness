@@ -81,6 +81,15 @@ template <typename Block> Json block_json(const Block& block) {
     }, block);
 }
 
+/// The call as tool hooks see it (frozen pi `ToolHookCall`): the model's
+/// arguments, or the arguments a `beforeTool` rewrite left for the next
+/// handler and for execution.
+Json tool_call_json(const ai::ToolCallContent& call, const Json& arguments) {
+    Object value{{"type", "toolCall"}, {"id", call.id}, {"name", call.name}, {"arguments", arguments}};
+    if (call.thought_signature) value.emplace("thoughtSignature", *call.thought_signature);
+    return Json{std::move(value)};
+}
+
 template <typename Blocks> Json blocks_json(const Blocks& blocks) {
     Array result;
     for (const auto& block : blocks) result.push_back(block_json(block));
@@ -442,6 +451,10 @@ std::optional<ai::UserMessage> user_message_from_json(const Json& message) {
 
 constexpr std::string_view kInboxDocKind{"pi.inbox:v1"};
 constexpr std::string_view kLiveDocKind{"pi.live:v1"};
+/// The built-in task kind whose hooks a model-issued tool call dispatches
+/// (frozen pi `ToolTask`).
+constexpr std::string_view kToolTaskKind{"pi.tool"};
+constexpr std::string_view kGenerationTaskKind{"pi.generation"};
 
 chord::Path inbox_items_path() { return chord::Path{chord::path_key("items")}; }
 
@@ -777,6 +790,98 @@ support::ExpectedVoid start_run(Transaction& tx,
     return {};
 }
 
+/// Hand the live run to a successor generation task, keeping its inputs
+/// (frozen pi `handOver`). The successor is created in the same commit that
+/// publishes the new run marker, so no observer sees the run name a terminal
+/// task.
+support::ExpectedVoid hand_over(
+        Transaction& tx, ConversationId conversation_id, chord::Draft& live, const TaskDefinition& definition) {
+    auto run = staged_live_run(live);
+    if (!run) return std::unexpected(run.error());
+    if (!run->has_value()) return std::unexpected(validation("A live run must exist to hand over"));
+    return start_run(tx, conversation_id, live, (*run)->inputs, definition);
+}
+
+/// Decode the content blocks a hook returns (frozen pi `Content`).
+support::Expected<std::vector<ai::Content>> content_from_json(const Json& value) {
+    const auto* blocks = value.as_array();
+    if (blocks == nullptr) return std::unexpected(validation("Hook content must be an array"));
+    std::vector<ai::Content> content;
+    content.reserve(blocks->size());
+    for (const Json& item : *blocks) {
+        const Json* type = member(item, "type");
+        if (type == nullptr || type->as_string() == nullptr) {
+            return std::unexpected(validation("A content block must name its type"));
+        }
+        if (*type->as_string() == "text") {
+            const Json* text = member(item, "text");
+            if (text == nullptr || text->as_string() == nullptr) {
+                return std::unexpected(validation("A text block must carry text"));
+            }
+            content.push_back(ai::text_content(*text->as_string()));
+        } else if (*type->as_string() == "image") {
+            const Json* data = member(item, "data");
+            const Json* mime = member(item, "mimeType");
+            if (data == nullptr || data->as_string() == nullptr || mime == nullptr || mime->as_string() == nullptr) {
+                return std::unexpected(validation("An image block must carry data and mimeType"));
+            }
+            content.push_back(ai::image_content(*data->as_string(), *mime->as_string()));
+        } else if (*type->as_string() == "thinking") {
+            const Json* thinking = member(item, "thinking");
+            if (thinking == nullptr || thinking->as_string() == nullptr) {
+                return std::unexpected(validation("A thinking block must carry thinking"));
+            }
+            content.push_back(ai::thinking_content(*thinking->as_string()));
+        } else {
+            return std::unexpected(validation("A tool result block must be text, image or thinking"));
+        }
+    }
+    return content;
+}
+
+/// The content of a harness-produced tool result: its diagnostic rendered in
+/// the frozen `<harness>` block (frozen pi `appendToolResult` of
+/// `harnessError`).
+std::vector<ai::Content> harness_error_content(std::string_view message) {
+    return {ai::text_content(std::format("<harness>\n[error] {}\n</harness>", message))};
+}
+
+/// Invoke every handler registered for `name` on task kind `kind` in
+/// extension order: ordinary errors are isolated through the runtime's report
+/// sink and cancellation propagates (frozen pi `HookRunner.each`).
+/// `TaskRuntime::each_hook` filters on the invocation's own task kind and
+/// freezes the handlers at the invocation's first request; the built-in
+/// generation dispatches its hooks from the request's registry snapshot
+/// instead, because one C++ phase invocation issues several frozen requests.
+support::AsyncResult<void> each_kind_hook(std::span<const std::shared_ptr<TaskHookRegistration>> hooks,
+        std::string_view kind,
+        std::string_view name,
+        TaskRuntime& runtime,
+        HookInvokeHook invoke) {
+    if (!invoke) return support::AsyncResult<void>{support::ExpectedVoid{}};
+    const std::string hook_name{name};
+    for (const auto& hook_reg : hooks) {
+        if (runtime.stop_token().stop_requested()) {
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Task invocation was aborted"))};
+        }
+        if (!hook_reg || std::string_view{hook_reg->task} != kind) continue;
+        const auto handler = hook_reg->handlers.find(hook_name);
+        if (handler == hook_reg->handlers.end() || !handler->second) continue;
+        auto invoked = await_result(invoke(handler->second));
+        if (!invoked) {
+            if (runtime.stop_token().stop_requested()) {
+                return support::AsyncResult<void>{std::unexpected(invoked.error())};
+            }
+            runtime.report(invoked.error());
+        } else if (runtime.stop_token().stop_requested()) {
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Task invocation was aborted"))};
+        }
+    }
+    return support::AsyncResult<void>{support::ExpectedVoid{}};
+}
+
 enum class BoundaryPoint { PostTools, Final };
 
 /// Place the queued items a boundary selects: every write, the first or all
@@ -910,6 +1015,10 @@ TaskHookRegistration task_hook(
                 }
                 return support::AsyncResult<chord::Json>{chord::Json{nullptr}};
             });
+}
+
+TaskHookRegistration tool_hook(std::string hook_name, TaskHook handler) {
+    return task_hook(std::string{kToolTaskKind}, std::move(hook_name), std::move(handler));
 }
 
 struct InstalledExtension {
@@ -1128,6 +1237,9 @@ support::Expected<TaskDefinition> WorkflowRuntime::build_definition() {
     builder.phase("prepare", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
     builder.phase("request", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
     builder.phase("retry", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
+    // The generation's hook surface (frozen pi `GenerationHooks`): a final
+    // answer may ask for one continuation that keeps the admitted run.
+    builder.hook("onYield");
     builder.abort([this](const TaskRecord& task, TaskRuntime& runtime) { return abort_run(task, runtime); });
     return builder.build();
 }
@@ -1889,20 +2001,132 @@ WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapsho
     return plan;
 }
 
-ai::ToolResultMessage WorkflowRuntime::execute_tool(const ai::ToolCallContent& call,
-        const Registry::Snapshot& snapshot, std::stop_token stop_token) {
+/// One final answer's `onYield` decision, taken before the commit that
+/// appends the answer (frozen pi generation `answer`): the first hook that
+/// returns a `continue` content wins and later handlers are not invoked.
+support::Expected<std::optional<Json>> WorkflowRuntime::on_yield(
+        const Registry::Snapshot& snapshot, const Json& answer, TaskRuntime& runtime) {
+    auto continuation = std::make_shared<std::optional<Json>>();
+    auto hooked = await_result(each_kind_hook(snapshot.hooks,
+            kGenerationTaskKind,
+            "onYield",
+            runtime,
+            [answer, continuation, &runtime](TaskHook& handler) -> support::AsyncResult<void> {
+                if (continuation->has_value()) return support::AsyncResult<void>{support::ExpectedVoid{}};
+                auto returned = handler(answer, runtime);
+                return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+                        [returned = std::move(returned), continuation](
+                                support::AsyncCompletion<void, support::Error> done) mutable noexcept {
+                            std::move(returned).start([continuation, done = std::move(done)](
+                                                              support::Expected<Json> value) mutable noexcept {
+                                if (!value) {
+                                    done(std::unexpected(value.error()));
+                                    return;
+                                }
+                                const Json* next = member(*value, "continue");
+                                if (next != nullptr && (next->as_string() != nullptr || next->as_array() != nullptr)) {
+                                    continuation->emplace(*next);
+                                }
+                                done(support::ExpectedVoid{});
+                            });
+                        }}};
+            }));
+    if (!hooked) return std::unexpected(hooked.error());
+    return *continuation;
+}
+
+support::Expected<ai::ToolResultMessage> WorkflowRuntime::execute_tool(
+        const ai::ToolCallContent& call, const Registry::Snapshot& snapshot, TaskRuntime& runtime) {
     ai::ToolResultMessage result{.tool_call_id = call.id, .tool_name = call.name, .timestamp = now()};
     auto found = std::ranges::find_if(snapshot.tools, [&call](const auto& tool) { return tool->declaration.name == call.name; });
-    if (found == snapshot.tools.end() || !call.arguments_valid || !call.arguments) {
+    if (found == snapshot.tools.end()) {
+        // A call to a tool the request did not offer settles before the tool
+        // task, with no hook and no duration (frozen pi `startToolRound`).
         result.is_error = true;
-        result.content.push_back(ai::text_content(found == snapshot.tools.end() ? std::format("Tool {} not found", call.name) : "Invalid tool arguments"));
+        result.content = harness_error_content(std::format("Tool {} is not available", call.name));
+        return result;
+    }
+    if (!call.arguments_valid || !call.arguments) {
+        result.is_error = true;
+        result.content = harness_error_content("Invalid tool arguments");
+        return result;
+    }
+    // The call as tool hooks see it keeps the model's arguments; a `beforeTool`
+    // rewrite changes what executes, never the call the later hooks read
+    // (frozen pi `ToolTask` reads the call, the intent carries the rewrite).
+    Json arguments = *Json::from_support(*call.arguments);
+    const Json original = tool_call_json(call, arguments);
+    // beforeTool: the first block wins, every `arguments` decision replaces
+    // the call's arguments, and a throwing handler blocks the call (frozen pi
+    // `ToolTask.call`). A blocked call never executes and skips afterTool.
+    std::optional<std::string> block;
+    for (const auto& hook_reg : snapshot.hooks) {
+        if (block.has_value()) break;
+        if (!hook_reg || std::string_view{hook_reg->task} != kToolTaskKind) continue;
+        const auto handler = hook_reg->handlers.find("beforeTool");
+        if (handler == hook_reg->handlers.end() || !handler->second) continue;
+        if (runtime.stop_token().stop_requested()) {
+            return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Task invocation was aborted"));
+        }
+        auto decided = await_result(handler->second(tool_call_json(call, arguments), runtime));
+        if (!decided) {
+            // A throw blocks with its message; cancellation is not a block
+            // (frozen pi `ToolTask.call`).
+            if (runtime.stop_token().stop_requested()) return std::unexpected(decided.error());
+            block = decided.error().message;
+            continue;
+        }
+        if (const Json* reason = member(*decided, "block"); reason != nullptr && reason->as_string() != nullptr) {
+            block = *reason->as_string();
+        } else if (const Json* rewritten = member(*decided, "arguments");
+                rewritten != nullptr && rewritten->as_object() != nullptr) {
+            arguments = *rewritten;
+        }
+    }
+    if (block.has_value()) {
+        result.is_error = true;
+        result.content = harness_error_content(std::format("Tool call blocked: {}", *block));
         return result;
     }
     const auto started = std::chrono::steady_clock::now();
-    auto output = await_result((*found)->execute(*call.arguments, stop_token));
+    auto output = await_result((*found)->execute(arguments.to_support(), runtime.stop_token()));
     result.duration_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started).count();
     result.is_error = !output.has_value();
     result.content = output ? std::move(*output) : std::vector<ai::Content>{ai::text_content(output.error().message)};
+    // afterTool: every replacement becomes the next handler's result and the
+    // committed entry carries the last one (frozen pi `finalResult`); ordinary
+    // handler errors stay isolated.
+    Json final_result = Json{Object{{"output", blocks_json(result.content)}, {"isError", result.is_error}}};
+    auto hooked = await_result(each_kind_hook(snapshot.hooks,
+            kToolTaskKind,
+            "afterTool",
+            runtime,
+            [original, final = &final_result, &runtime](TaskHook& handler) -> support::AsyncResult<void> {
+                auto returned = handler(Json{Object{{"call", original}, {"result", *final}}}, runtime);
+                return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+                        [returned = std::move(returned), final](
+                                support::AsyncCompletion<void, support::Error> done) mutable noexcept {
+                            std::move(returned).start(
+                                    [final, done = std::move(done)](support::Expected<Json> value) mutable noexcept {
+                                        if (!value) {
+                                            done(std::unexpected(value.error()));
+                                            return;
+                                        }
+                                        if (value->as_object() != nullptr) *final = std::move(*value);
+                                        done(support::ExpectedVoid{});
+                                    });
+                        }}};
+            }));
+    if (!hooked) return std::unexpected(hooked.error());
+    if (const Json* blocks = member(final_result, "output"); blocks != nullptr) {
+        auto decoded = content_from_json(*blocks);
+        if (!decoded) return std::unexpected(decoded.error());
+        result.content = std::move(*decoded);
+    }
+    if (const Json* is_error = member(final_result, "isError");
+            is_error != nullptr && is_error->as_boolean() != nullptr) {
+        result.is_error = *is_error->as_boolean();
+    }
     return result;
 }
 
@@ -2242,9 +2466,10 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
             for (const auto& content : response->content) {
                 const auto* call = std::get_if<ai::ToolCallContent>(&content);
                 if (call == nullptr) continue;
-                auto result = execute_tool(*call, snapshot, runtime.stop_token());
+                auto result = execute_tool(*call, snapshot, runtime);
+                if (!result) return std::unexpected(result.error());
                 auto saved = await_result(
-                        runtime.commit([id = task.conversation_id, tid = task.id, result](Transaction& tx,
+                        runtime.commit([id = task.conversation_id, tid = task.id, result = *result](Transaction& tx,
                                                const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
                             auto entry = tx.append_entry(id,
                                     "pi.tool-result",
@@ -2258,7 +2483,7 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                 if (!saved) {
                     return std::unexpected(validation("Tool result commit failed: " + saved.error().message));
                 }
-                replay.messages.push_back(std::move(result));
+                replay.messages.push_back(std::move(*result));
             }
             if (runtime.stop_token().stop_requested()) {
                 // The abort invocation settles the run (frozen pi generation
@@ -2347,9 +2572,17 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
             return {};
         }
         // Final answer, model error, or abort: one commit appends the answer
-        // and settles the run at the final boundary (frozen pi `answer`).
+        // and settles the run at the final boundary (frozen pi `answer`). The
+        // `onYield` continuation is decided before the commit, so a hook may
+        // read committed state and share the task's memos.
+        auto continuation = std::make_shared<std::optional<Json>>();
+        if (!aborted && !failed) {
+            auto decided = on_yield(snapshot, assistant_json(*response), runtime);
+            if (!decided) return std::unexpected(decided.error());
+            *continuation = std::move(*decided);
+        }
         auto outcome = await_result(runtime.commit(
-                [id = task.conversation_id, task, response = *response, aborted, failed, this](
+                [id = task.conversation_id, task, response = *response, aborted, failed, continuation, this](
                         Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
                     const DocumentAddress address{.conversation_id = id};
                     // A boundary reads the table before the commit's first
@@ -2412,6 +2645,19 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                         // starts from the reset head, not this transcript.
                         replay_[id.value].messages.clear();
                     }
+                    if (continuation->has_value() && applied->users.empty() && !applied->reset) {
+                        // The continuation appends a plain user entry, which is
+                        // not a submission, and hands the same admitted run to
+                        // a successor generation task in this commit (frozen pi
+                        // `answer`): the run's inputs stay unsettled and settle
+                        // once, under the successor.
+                        auto appended = append_input_entry(tx, id, **continuation, std::nullopt, now());
+                        if (!appended) return std::unexpected(appended.error());
+                        auto handed = hand_over(tx, id, *live, *generation_);
+                        if (!handed) return std::unexpected(handed.error());
+                        return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{
+                                .status = "completed", .result = Json{Object{{"entryId", numeric(entry->id.value)}}}})};
+                    }
                     auto ended =
                             end_run(tx, *live, task.id, SubmissionSettlement{.status = "done", .answer = entry->id});
                     if (!ended) {
@@ -2424,7 +2670,7 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                         }
                     }
                     return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{
-                            .status = "completed", .result = Json{Object{{"answer", numeric(entry->id.value)}}}})};
+                            .status = "completed", .result = Json{Object{{"entryId", numeric(entry->id.value)}}}})};
                 }));
         if (!outcome) {
             return std::unexpected(outcome.error());
