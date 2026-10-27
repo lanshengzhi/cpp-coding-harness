@@ -102,6 +102,11 @@ def handle_tools_call(rid, params):
         return
     arguments = params.get("arguments") or {}
     kind = arguments.get("kind")
+    if kind == "audit-1152":
+        raw = arguments["raw"]
+        sys.stdout.write('{"jsonrpc":"2.0","id":' + json.dumps(rid) + ',"result":{"structuredContent":' + raw + '}}\n')
+        sys.stdout.flush()
+        return
     if kind == "replay":
         respond(rid, arguments["result"])
         return
