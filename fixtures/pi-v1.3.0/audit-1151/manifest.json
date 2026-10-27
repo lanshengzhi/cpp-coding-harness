@@ -1,0 +1,1052 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1151",
+  "family": "audit-1151",
+  "capturedAt": "2026-10-27T20:55:59.252Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "generator": {
+    "path": "fixtures/pi-v1.3.0/audit-1151/capture-1151.mts",
+    "sha256": "b62068e5e1449852250a426ab53122c2d049126c859a43de689f8e803ea7e451",
+    "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> PI_BASELINE=pi-v1.3.0 <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1151/capture-1151.mts",
+    "sources": [
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1151/capture-1151.mts",
+        "sha256": "b62068e5e1449852250a426ab53122c2d049126c859a43de689f8e803ea7e451"
+      },
+      {
+        "path": "fixtures/pi-v1.3.0/audit-1151/pi.mts",
+        "sha256": "23fda39fb99a4360fa7a0656cf9996edb7ca51a21be84fadf40866027834e3b2"
+      }
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "prompt-plan.json",
+      "family": "audit-1151",
+      "bytes": 23003,
+      "sha256": "11ea571a74b6819c9318a17c7de267774d77b52bc4af1cbb9ec192ef8f30d40e",
+      "sourceEndpoints": [
+        "packages/durable/src/harness/prompt.ts:planSystemEntries",
+        "packages/durable/src/harness/prompt.ts:planSections",
+        "packages/durable/src/harness/prompt.ts:planTools",
+        "packages/durable/src/harness/generation.ts:GenerationTask.prepare,request",
+        "packages/ai/src/utils/transcript.ts:getCurrentSystemMessage,getCurrentTools"
+      ],
+      "scenarios": [
+        {
+          "name": "reordered sections are removed and re-added in the desired order",
+          "inputs": {
+            "sectionsPerTurn": [
+              [
+                "a",
+                "b"
+              ],
+              [
+                "b",
+                "a"
+              ],
+              [
+                "b",
+                "a"
+              ]
+            ],
+            "turns": [
+              "u1",
+              "u2",
+              "u3"
+            ]
+          },
+          "expected": {
+            "first": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                }
+              ]
+            },
+            "second": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                },
+                {
+                  "sections": [
+                    [
+                      "a",
+                      null
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                },
+                {
+                  "sections": [
+                    [
+                      "b",
+                      "2"
+                    ],
+                    [
+                      "a",
+                      "1"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "2\n\n1",
+                  "tools": [],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                }
+              ]
+            },
+            "third": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                },
+                {
+                  "sections": [
+                    [
+                      "a",
+                      null
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                },
+                {
+                  "sections": [
+                    [
+                      "b",
+                      "2"
+                    ],
+                    [
+                      "a",
+                      "1"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "2\n\n1",
+                  "tools": [],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "2\n\n1",
+                  "tools": [],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u3"
+                    }
+                  ]
+                }
+              ]
+            },
+            "systemEntryCount": 3
+          },
+          "normalizations": [
+            "timestamps, task and entry identifiers are omitted",
+            "assistant text is abbreviated to the scripted answer",
+            "sections are recorded as [name, value] pairs so object member order is explicit"
+          ]
+        },
+        {
+          "name": "reordered tools are removed and re-added in the desired order",
+          "inputs": {
+            "toolsPerTurn": [
+              [
+                "x",
+                "y"
+              ],
+              [
+                "y",
+                "x"
+              ],
+              [
+                "y",
+                "x"
+              ]
+            ],
+            "turns": [
+              "u1",
+              "u2",
+              "u3"
+            ]
+          },
+          "expected": {
+            "first": {
+              "systemEntries": [
+                {
+                  "sections": [],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                }
+              ]
+            },
+            "second": {
+              "systemEntries": [
+                {
+                  "sections": [],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                },
+                {
+                  "sections": [],
+                  "toolsRemoved": [
+                    "x",
+                    "y"
+                  ],
+                  "toolsAdded": [
+                    "y",
+                    "x"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "",
+                  "tools": [
+                    "y",
+                    "x"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                }
+              ]
+            },
+            "third": {
+              "systemEntries": [
+                {
+                  "sections": [],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                },
+                {
+                  "sections": [],
+                  "toolsRemoved": [
+                    "x",
+                    "y"
+                  ],
+                  "toolsAdded": [
+                    "y",
+                    "x"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "",
+                  "tools": [
+                    "y",
+                    "x"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "",
+                  "tools": [
+                    "y",
+                    "x"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u3"
+                    }
+                  ]
+                }
+              ]
+            },
+            "systemEntryCount": 2
+          },
+          "normalizations": [
+            "timestamps, task and entry identifiers are omitted",
+            "assistant text is abbreviated to the scripted answer",
+            "sections are recorded as [name, value] pairs so object member order is explicit"
+          ]
+        },
+        {
+          "name": "section and tool reorders share the last planned entry",
+          "inputs": {
+            "sectionsPerTurn": [
+              [
+                "a",
+                "b"
+              ],
+              [
+                "b",
+                "a"
+              ],
+              [
+                "b",
+                "a"
+              ]
+            ],
+            "toolsPerTurn": [
+              [
+                "x",
+                "y"
+              ],
+              [
+                "y",
+                "x"
+              ],
+              [
+                "y",
+                "x"
+              ]
+            ],
+            "turns": [
+              "u1",
+              "u2",
+              "u3"
+            ]
+          },
+          "expected": {
+            "first": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                }
+              ]
+            },
+            "second": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                },
+                {
+                  "sections": [
+                    [
+                      "a",
+                      null
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                },
+                {
+                  "sections": [
+                    [
+                      "b",
+                      "2"
+                    ],
+                    [
+                      "a",
+                      "1"
+                    ]
+                  ],
+                  "toolsRemoved": [
+                    "x",
+                    "y"
+                  ],
+                  "toolsAdded": [
+                    "y",
+                    "x"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "2\n\n1",
+                  "tools": [
+                    "y",
+                    "x"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                }
+              ]
+            },
+            "third": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                },
+                {
+                  "sections": [
+                    [
+                      "a",
+                      null
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": []
+                },
+                {
+                  "sections": [
+                    [
+                      "b",
+                      "2"
+                    ],
+                    [
+                      "a",
+                      "1"
+                    ]
+                  ],
+                  "toolsRemoved": [
+                    "x",
+                    "y"
+                  ],
+                  "toolsAdded": [
+                    "y",
+                    "x"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "2\n\n1",
+                  "tools": [
+                    "y",
+                    "x"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "2\n\n1",
+                  "tools": [
+                    "y",
+                    "x"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u3"
+                    }
+                  ]
+                }
+              ]
+            },
+            "systemEntryCount": 3
+          },
+          "normalizations": [
+            "timestamps, task and entry identifiers are omitted",
+            "assistant text is abbreviated to the scripted answer",
+            "sections are recorded as [name, value] pairs so object member order is explicit"
+          ]
+        },
+        {
+          "name": "changed and removed sections and tools produce one minimal patch",
+          "inputs": {
+            "sectionsPerTurn": [
+              [
+                "a",
+                "b"
+              ],
+              [
+                "a"
+              ]
+            ],
+            "sectionValuesPerTurn": [
+              {
+                "a": "1",
+                "b": "2"
+              },
+              {
+                "a": "one"
+              }
+            ],
+            "toolsPerTurn": [
+              [
+                "x",
+                "y"
+              ],
+              [
+                "x",
+                "z"
+              ]
+            ],
+            "turns": [
+              "u1",
+              "u2",
+              "u3"
+            ]
+          },
+          "expected": {
+            "first": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                }
+              ]
+            },
+            "second": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                },
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "one"
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  "toolsRemoved": [
+                    "x",
+                    "y"
+                  ],
+                  "toolsAdded": [
+                    "x",
+                    "z"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "one",
+                  "tools": [
+                    "x",
+                    "z"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                }
+              ]
+            },
+            "third": {
+              "systemEntries": [
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "1"
+                    ],
+                    [
+                      "b",
+                      "2"
+                    ]
+                  ],
+                  "toolsRemoved": [],
+                  "toolsAdded": [
+                    "x",
+                    "y"
+                  ]
+                },
+                {
+                  "sections": [
+                    [
+                      "a",
+                      "one"
+                    ],
+                    [
+                      "b",
+                      null
+                    ]
+                  ],
+                  "toolsRemoved": [
+                    "x",
+                    "y"
+                  ],
+                  "toolsAdded": [
+                    "x",
+                    "z"
+                  ]
+                }
+              ],
+              "requests": [
+                {
+                  "systemPrompt": "1\n\n2",
+                  "tools": [
+                    "x",
+                    "y"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "one",
+                  "tools": [
+                    "x",
+                    "z"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    }
+                  ]
+                },
+                {
+                  "systemPrompt": "one",
+                  "tools": [
+                    "x",
+                    "z"
+                  ],
+                  "messages": [
+                    {
+                      "role": "user",
+                      "text": "u1"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u2"
+                    },
+                    {
+                      "role": "assistant",
+                      "text": "ok"
+                    },
+                    {
+                      "role": "user",
+                      "text": "u3"
+                    }
+                  ]
+                }
+              ]
+            },
+            "systemEntryCount": 2
+          },
+          "normalizations": [
+            "timestamps, task and entry identifiers are omitted",
+            "assistant text is abbreviated to the scripted answer",
+            "sections are recorded as [name, value] pairs so object member order is explicit"
+          ]
+        }
+      ]
+    }
+  ]
+}

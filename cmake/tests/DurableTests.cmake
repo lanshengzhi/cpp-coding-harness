@@ -11,6 +11,7 @@ include_guard(GLOBAL)
         tests/Catch2Main.cpp
         tests/durable/FrozenExpectation.cpp
         tests/durable/JsonObjectOrderTest.cpp
+        tests/durable/PromptPlanTest.cpp
         tests/durable/JsonlStorageTest.cpp
         tests/durable/SqliteStorageTest.cpp
         tests/durable/DocumentLifecycleTest.cpp

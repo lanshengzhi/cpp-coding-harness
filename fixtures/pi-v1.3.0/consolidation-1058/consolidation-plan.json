@@ -1727,6 +1727,96 @@
         "cch_durable:overflow-compaction-retry"
       ],
       "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "reordered sections are removed and re-added in the desired order",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when section order changes"
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "reordered tools are removed and re-added in the desired order",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when tool order changes"
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "section and tool reorders share the last planned entry",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when section and tool changes coincide"
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "changed and removed sections and tools produce one minimal patch",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when only values, removals or additions change"
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "mixed-keys",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "numbers",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "reverse",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "nested",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "strings",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
     }
   ],
   "groups": [

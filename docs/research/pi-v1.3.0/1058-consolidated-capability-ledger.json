@@ -84,23 +84,19 @@
           },
           {
             "path": "src/mcp/StdioClient.cpp",
-            "sha256": "45c8dd9a5c63c5badd598c92f09bceb89584e3df2a6e5bdaeccd2e74ee1815e3"
+            "sha256": "c703a9f47dae23664b1c64578bd07592d3fb70c6c7cb620cded91eef3617314a"
           },
           {
             "path": "src/mcp/StdioClientImpl.hpp",
-            "sha256": "925adc37b2fc5f05a4d4aafd4c63811dd335c0e90871b14c424467845e24a0b9"
+            "sha256": "5aa24edfb6ca3b30993f185eff2d4c272e33a8e94d66914e800edd3549b80757"
           },
           {
             "path": "src/mcp/HttpClient.cpp",
-            "sha256": "fd48a5ff1a835b215de242b221054d15b5d75513fe525f0863e1022737fa4c3c"
+            "sha256": "76f51b1190e828fc701b093978a2a272383ac6be31f57e66bd832ca5735dce1d"
           },
           {
             "path": "src/mcp/HttpClientImpl.hpp",
-            "sha256": "3845a9bb2253d2ff144c8b0ba934165f7775c71bfa821634a902a7cc455b096f"
-          },
-          {
-            "path": "src/mcp/OrderedResultText.hpp",
-            "sha256": "037ebfb788e722df28297fd3511efbbc9abd502218e129f8f7c202c49557cbd7"
+            "sha256": "a11775b5074146cec27889f5375c920df117f3a19b8082a5495cb5ba641cc3b6"
           },
           {
             "path": "src/mcp/ProtocolInternal.hpp",
@@ -188,7 +184,7 @@
           },
           {
             "path": "fixtures/pi-mcp/structured_content_server.py",
-            "sha256": "3340e72a228c8a098b6bae72aa3c0d5fe1e4f5a5bc7680111be93950bc38cbab"
+            "sha256": "6b36b71bb8b7f7ef966e2915f4218211a7f0b31c0087ffbdd1688bfedc684778"
           },
           {
             "path": "fixtures/pi-mcp/http_server.py",
@@ -208,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "21758480fe8362d91d6d931f9ad96392bd7b6cef49ad426b234da5b981015c29"
+            "sha256": "dfb372ee8dd35bafb632424a789b5eef9b872b850971aad6db7e9321fa28b0ee"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -232,7 +228,7 @@
           },
           {
             "path": "tests/coding_agent/McpStructuredContentTest.cpp",
-            "sha256": "cb20fa1227277204769643d369e7dbc222590ffb21dc2a73cfc09ce43660cd62"
+            "sha256": "f9b140da98049b41d9193a1db241532da54aecc33dcf98f89293028511537f31"
           },
           {
             "path": "tests/support/JsonCompare.hpp",
@@ -245,6 +241,14 @@
           {
             "path": "tests/support/McpTestKit.hpp",
             "sha256": "aa2dc284c0b79b70021fcd8cfb82996e88af7ed82c7be550dfc471f9ca57e1a1"
+          },
+          {
+            "path": "src/mcp/StructuredResultText.hpp",
+            "sha256": "9f7e6e3286abe1620b3db35515a942a68aed103002b635a0918f695a542f7e90"
+          },
+          {
+            "path": "fixtures/pi-v1.3.0/audit-1152/structured-text.json",
+            "sha256": "b8f788c536845a7724cb9a163a7826b07d4e6118c0305996aeb034f93adf7553"
           }
         ],
         "validation": {
@@ -255,15 +259,15 @@
             "-L",
             "issue1101",
             "--output-junit",
-            "../docs/research/pi-v1.3.0/deliveries/1149-revalidation-1101.xml",
+            "/tmp/1152-issue1101-final.xml",
             "--output-on-failure"
           ],
-          "testedRevision": "8b71d0917bca72151dec639d74c86255b88fd8c1",
-          "recordedAt": "2026-10-27T18:00:31Z",
+          "testedRevision": "633f44df9f4293f430ad53a9834218a8ea54a777",
+          "recordedAt": "2026-10-27T21:59:02Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1149-revalidation-1101.xml",
-            "sha256": "b2e3b483ca93680ad13d84c98d0c69313a502f9eb6ce0724617f65d9f58827ef"
+            "path": "docs/research/pi-v1.3.0/deliveries/1152-revalidation-1101.xml",
+            "sha256": "b656fa290dc3e370cb2ebb85a7dd5a1abb967f23ba1a86c5aae3b2179322211b"
           }
         },
         "rows": [
@@ -644,7 +648,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 495,
+      "scenarios": 504,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -740,7 +744,16 @@
         "audit-1083/compaction.json:blocking threshold compaction appends before the protected request",
         "audit-1083/compaction.json:background threshold compaction never blocks the run",
         "audit-1083/compaction.json:overflow compacts before retrying the original request",
-        "audit-1083/compaction.json:compaction retry commits the backoff checkpoint and live retry status"
+        "audit-1083/compaction.json:compaction retry commits the backoff checkpoint and live retry status",
+        "audit-1151/prompt-plan.json:reordered sections are removed and re-added in the desired order",
+        "audit-1151/prompt-plan.json:reordered tools are removed and re-added in the desired order",
+        "audit-1151/prompt-plan.json:section and tool reorders share the last planned entry",
+        "audit-1151/prompt-plan.json:changed and removed sections and tools produce one minimal patch",
+        "audit-1152/structured-text.json:mixed-keys",
+        "audit-1152/structured-text.json:numbers",
+        "audit-1152/structured-text.json:reverse",
+        "audit-1152/structured-text.json:nested",
+        "audit-1152/structured-text.json:strings"
       ],
       "uncovered": []
     }
@@ -3849,6 +3862,96 @@
         "cch_durable:overflow-compaction-retry"
       ],
       "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "reordered sections are removed and re-added in the desired order",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when section order changes"
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "reordered tools are removed and re-added in the desired order",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when tool order changes"
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "section and tool reorders share the last planned entry",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when section and tool changes coincide"
+    },
+    {
+      "family": "audit-1151",
+      "artifact": "prompt-plan.json",
+      "scenario": "changed and removed sections and tools produce one minimal patch",
+      "reason": "Captured by #1151 after the #1058 ledger was committed, but no 1056 ledger row routes to the prompt-plan artifact; the planner observation is compared by tests/durable/PromptPlanTest.cpp.",
+      "rows": [
+        "cch_durable:prompt-context"
+      ],
+      "disposition": "the Durable prompt-planning slices must consume this observation when only values, removals or additions change"
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "mixed-keys",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "numbers",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "reverse",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "nested",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1152",
+      "artifact": "structured-text.json",
+      "scenario": "strings",
+      "reason": "Captured by #1152 after the ledger; tested through the real MCP application conversion in McpStructuredContentTest.cpp.",
+      "rows": [
+        "cch_mcp:mcp-tools-call-structured"
+      ],
+      "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
     }
   ],
   "correctionsIndex": [

@@ -163,6 +163,18 @@ TEST_CASE(
         REQUIRE(actual_text != nullptr);
         CHECK(actual_text->text == text->second.get_string());
     }
+    for (const auto& scenario : frozen_scenarios("audit-1152/structured-text.json")) {
+        INFO("audit-1152: " << scenario.at("name").get_string());
+        support::JsonValue args{support::JsonValue::object_t{
+                {"kind", "audit-1152"}, {"raw", scenario.at("inputs").at("raw").get_string()}}};
+        auto executed = runtime.run(
+                tools.front().context_execute(std::move(args), extensions::ExtensionToolContext{}, std::stop_token{}));
+        REQUIRE(executed.has_value());
+        REQUIRE(executed->content.size() == 1);
+        const auto* text = std::get_if<ai::TextContent>(&executed->content.front());
+        REQUIRE(text != nullptr);
+        CHECK(text->text == scenario.at("expected").at("text").get_string());
+    }
 }
 
 TEST_CASE("an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects",
