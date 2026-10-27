@@ -6,9 +6,7 @@
 #include "durable/FrozenExpectation.hpp"
 #include "durable/GatedStorage.hpp"
 #include "durable/Outcome.hpp"
-#include "support/Json.hpp"
 #include "support/TempWorkspace.hpp"
-#include <cch/support/JsonAccess.hpp>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -17,8 +15,6 @@
 #include <chrono>
 #include <condition_variable>
 #include <filesystem>
-#include <fstream>
-#include <iterator>
 #include <memory>
 #include <ranges>
 #include <mutex>
@@ -453,6 +449,158 @@ TEST_CASE("Harness rebuilds conversation context across reopen", "[durable][work
     REQUIRE(storage.value()->close().has_value());
 }
 
+TEST_CASE("Session preserves edited context and fork views across reopen", "[durable][workflow][issue1082]") {
+    TempWorkspace workspace;
+    const auto dir = workspace.path() / "context-views";
+    auto storage = JsonlStorage::open(dir);
+    REQUIRE(storage.has_value());
+    auto opened = consume(Harness::open(*storage.value()));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    const auto root_id = root.value();
+    const auto message = [](std::string text) {
+        return chord::Json{
+                chord::Json::Object{{"role", chord::Json{"user"}}, {"content", chord::Json{std::move(text)}}}};
+    };
+    auto append = [&](ConversationId conversation,
+                          std::string text,
+                          std::optional<EntryHeadVariant> head = {},
+                          std::vector<ContextEdit> edits = {}) {
+        std::optional<EntryId> id;
+        auto result = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+            auto entry = tx.append_entry(conversation,
+                    "test.message",
+                    chord::Json{chord::Json::Object{}},
+                    head,
+                    {message(text)},
+                    std::nullopt,
+                    edits);
+            if (!entry) return std::unexpected(entry.error());
+            id = entry->id;
+            return {};
+        }));
+        REQUIRE(result.has_value());
+        REQUIRE(id.has_value());
+        return *id;
+    };
+    auto view = [&](ConversationId conversation, std::optional<EntryId> at = {}) {
+        std::vector<chord::Json> result;
+        auto committed = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+            auto messages = tx.context_messages(conversation, at);
+            if (!messages) return std::unexpected(messages.error());
+            result = std::move(*messages);
+            return {};
+        }));
+        REQUIRE(committed.has_value());
+        return result;
+    };
+    auto definition = define_document(DocumentDefinitionBuilder{"issue1082.isolation"}.conversation(
+                                              DocumentHistory::Rewindable, DocumentFork::AsOf),
+            std::move_only_function<chord::Json()>{
+                    [] { return chord::Json{chord::Json::Object{{"value", "initial"}}}; }});
+    REQUIRE(definition.has_value());
+    auto set_document = [&](std::string value) {
+        auto result = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+            auto doc = tx.doc(*definition, DocumentAddress{.conversation_id = root_id});
+            if (!doc) return std::unexpected(doc.error());
+            return doc->set(chord::Path{chord::path_key("value")}, chord::Json{value});
+        }));
+        REQUIRE(result.has_value());
+    };
+    set_document("at fork");
+    const auto a = append(root_id, "a");
+    const auto b = append(root_id, "b");
+    auto fork_result = consume(harness->fork_conversation(root_id, b));
+    REQUIRE(fork_result.has_value());
+    const auto fork_id = fork_result.value().id;
+    const auto original_fork = view(fork_id);
+    REQUIRE(original_fork == std::vector<chord::Json>{message("a"), message("b")});
+    auto fork_document = storage.value()->find_document(
+            "issue1082.isolation", DocumentAddress{.conversation_id = fork_id}, DocumentPoint::current());
+    REQUIRE(fork_document.has_value());
+    REQUIRE(fork_document->has_value());
+    const auto fork_document_id = fork_document->value().id;
+    const auto fork_entries_before = storage.value()->scan_entries(fork_id, 100);
+    REQUIRE(fork_entries_before.has_value());
+    set_document("root changed once");
+    append(root_id, "later one");
+    set_document("root changed twice");
+    append(root_id, "later two");
+    CHECK(view(fork_id) == original_fork);
+    const auto fork_entries_after = storage.value()->scan_entries(fork_id, 100);
+    REQUIRE(fork_entries_after.has_value());
+    REQUIRE(fork_entries_after->size() == fork_entries_before->size());
+    for (std::size_t index = 0; index < fork_entries_after->size(); ++index) {
+        CHECK(fork_entries_after->at(index).id == fork_entries_before->at(index).id);
+        CHECK(fork_entries_after->at(index).model == fork_entries_before->at(index).model);
+    }
+    auto fork_document_value = storage.value()->document(fork_document_id, DocumentPoint::current());
+    REQUIRE(fork_document_value.has_value());
+    REQUIRE(fork_document_value->has_value());
+    CHECK(fork_document_value->value().value.as_object()->at("value") == chord::Json{"at fork"});
+    const auto original_root = view(root_id);
+    append(fork_id, "branch only");
+    CHECK(view(root_id) == original_root);
+    const auto fork_after = view(fork_id);
+    CHECK(fork_after == std::vector<chord::Json>{message("a"), message("b"), message("branch only")});
+
+    const auto omit = append(root_id, "omit marker", {}, {{.target = a, .action = "omit"}});
+    CHECK(view(root_id, omit) ==
+            std::vector<chord::Json>{message("b"), message("later one"), message("later two"), message("omit marker")});
+    const auto replace = append(
+            root_id, "replace marker", {}, {{.target = a, .action = "replace", .messages = {message("replacement")}}});
+    const auto replaced = view(root_id, replace);
+    CHECK(replaced == std::vector<chord::Json>{message("replacement"),
+                              message("b"),
+                              message("later one"),
+                              message("later two"),
+                              message("omit marker"),
+                              message("replace marker")});
+    auto historical_fork = consume(harness->fork_conversation(root_id, replace));
+    REQUIRE(historical_fork.has_value());
+    CHECK(view(historical_fork.value().id) == replaced);
+    append(root_id, "old head", EntryHeadVariant{b});
+    const auto marker = append(root_id,
+            "new head",
+            EntryHeadVariant{a},
+            {{.target = b, .action = "replace", .messages = {message("edited b")}}});
+    const auto headed = view(root_id);
+    CHECK(headed == std::vector<chord::Json>{message("new head"),
+                            message("replacement"),
+                            message("edited b"),
+                            message("later one"),
+                            message("later two"),
+                            message("omit marker"),
+                            message("replace marker")});
+    auto headed_fork = consume(harness->fork_conversation(root_id, marker));
+    REQUIRE(headed_fork.has_value());
+    CHECK(view(headed_fork.value().id) == headed);
+    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(consume(harness->session().close()).has_value());
+    storage.value().reset();
+    storage = JsonlStorage::open(dir);
+    REQUIRE(storage.has_value());
+    opened = consume(Harness::open(*storage.value()));
+    REQUIRE(opened.has_value());
+    harness = std::move(opened.value());
+    CHECK(view(fork_id) == fork_after);
+    CHECK(view(root_id) == headed);
+    CHECK(view(root_id, b) == original_fork);
+    fork_document_value = storage.value()->document(fork_document_id, DocumentPoint::current());
+    REQUIRE(fork_document_value.has_value());
+    REQUIRE(fork_document_value->has_value());
+    CHECK(fork_document_value->value().value.as_object()->at("value") == chord::Json{"at fork"});
+    CHECK(view(root_id, omit) ==
+            std::vector<chord::Json>{message("b"), message("later one"), message("later two"), message("omit marker")});
+    CHECK(view(root_id, replace) == replaced);
+    CHECK(view(historical_fork.value().id) == replaced);
+    CHECK(view(headed_fork.value().id) == headed);
+    REQUIRE(consume(harness->close()).has_value());
+    REQUIRE(consume(harness->session().close()).has_value());
+}
+
 TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets with handoff",
         "[durable][workflow][issue1082]") {
     const auto fork_frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1056/conversations.json",
@@ -633,52 +781,8 @@ TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets wi
     REQUIRE(consume(harness->close()).has_value());
     REQUIRE(consume(harness->session().close()).has_value());
     storage.reset();
-    std::string persisted_main;
-    {
-        std::ifstream input(dir / "main.jsonl", std::ios::binary);
-        persisted_main = std::string{std::istreambuf_iterator<char>(input), std::istreambuf_iterator<char>()};
-    }
     auto reopened_storage = JsonlStorage::open(dir);
-    if (!reopened_storage.has_value()) {
-        std::string line5;
-        {
-            std::size_t start = 0;
-            for (int index = 0; index < 5 && start < persisted_main.size(); ++index) {
-                const std::size_t end = persisted_main.find('\n', start);
-                line5 = persisted_main.substr(start, end == std::string::npos ? std::string::npos : end - start);
-                if (end == std::string::npos) break;
-                start = end + 1;
-            }
-        }
-        auto parsed = support::read_json(line5);
-        std::string debug;
-        if (parsed) {
-            const auto* root = parsed->get_if<support::JsonValue::object_t>();
-            const auto* writes = root == nullptr ? nullptr : support::json_array_member(*root, "writes");
-            if (writes != nullptr) {
-                debug = "line5=[" + line5 + "] writes=" + std::to_string(writes->size());
-                for (std::size_t index = 0; index < writes->size(); ++index) {
-                    const auto* write = writes->at(index).get_if<support::JsonValue::object_t>();
-                    if (write == nullptr) continue;
-                    const auto* type = support::json_member(*write, "type");
-                    const auto* id = support::json_member(*write, "id");
-                    const auto* ordinal = support::json_member(*write, "ordinal");
-                    const auto* source = support::json_member(*write, "source");
-                    const auto* record = support::json_member(*write, "record");
-                    debug += " [" + std::to_string(index) + "]";
-                    if (const auto* type_string = type != nullptr ? type->get_if<std::string>() : nullptr)
-                        debug += " type=" + *type_string;
-                    debug += " id=" + std::to_string(id != nullptr && id->get_if<double>() != nullptr);
-                    debug += " ordinal=" + std::to_string(ordinal != nullptr && ordinal->get_if<double>() != nullptr);
-                    debug += " source=" + std::to_string(source != nullptr &&
-                                                         source->get_if<support::JsonValue::object_t>() != nullptr);
-                    debug += " record=" + std::to_string(record != nullptr &&
-                                                         record->get_if<support::JsonValue::object_t>() != nullptr);
-                }
-            }
-        }
-        FAIL(std::string{"reopen failed: "} + reopened_storage.error().message + "\n" + debug + "\n" + persisted_main);
-    }
+    REQUIRE(reopened_storage.has_value());
     storage = std::move(*reopened_storage);
     std::atomic_int fork_requests{0};
     std::atomic_size_t fork_context_size{0};
