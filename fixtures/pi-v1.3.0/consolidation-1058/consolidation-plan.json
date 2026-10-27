@@ -1540,6 +1540,16 @@
       "disposition": "reuse the append parent/leaf observation without claiming frozen selector equivalence or promoting the composite row"
     },
     {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "manual compaction decline completes without a summary request or marker",
+      "reason": "Captured by #1083 for the bounded decline behavior; the broader capability row remains partial.",
+      "rows": [
+        "cch_durable:compaction-decline"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; retain current row status."
+    },
+    {
       "family": "audit-1082",
       "artifact": "contexts.json",
       "scenario": "fork isolation and edited head contexts survive reopen",
@@ -1677,6 +1687,46 @@
         "cch_durable:Tx:createConversation"
       ],
       "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "blocking threshold compaction appends before the protected request",
+      "reason": "Captured by #1083 for the blocking threshold ordering; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 threshold row keeps its recorded upstream evidence and status.",
+      "rows": [
+        "cch_durable:threshold-compaction"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "background threshold compaction never blocks the run",
+      "reason": "Captured by #1083 for the non-blocking background ordering; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 background row keeps its recorded status.",
+      "rows": [
+        "cch_durable:background-compaction"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "overflow compacts before retrying the original request",
+      "reason": "Captured by #1083 for the structured overflow ordering; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 overflow row keeps its recorded status.",
+      "rows": [
+        "cch_durable:overflow-compaction-retry"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "compaction retry commits the backoff checkpoint and live retry status",
+      "reason": "Captured by #1083 for the committed retry checkpoint and live status; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 overflow row keeps its recorded status.",
+      "rows": [
+        "cch_durable:overflow-compaction-retry"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
     }
   ],
   "groups": [

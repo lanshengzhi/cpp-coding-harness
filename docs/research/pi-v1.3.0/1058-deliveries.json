@@ -178,7 +178,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "91a463856bededec67186ab3aba0f17923c5e4ca569810c6325a451d6f0d58fe"
+          "sha256": "21758480fe8362d91d6d931f9ad96392bd7b6cef49ad426b234da5b981015c29"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",

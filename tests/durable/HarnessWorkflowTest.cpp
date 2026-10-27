@@ -20,6 +20,7 @@
 #include <mutex>
 #include <semaphore>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace cch::tests::durable {
@@ -96,6 +97,556 @@ SubmissionDraft text_input(std::string text, std::optional<WhenBusy> when_busy =
 }
 
 } // namespace
+
+TEST_CASE("manual compaction decline makes no summary request or marker", "[durable][workflow][issue1083]") {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1083/compaction.json",
+            "manual compaction decline completes without a summary request or marker");
+    REQUIRE(frozen.has_value());
+    Registry registry;
+    MemoryStorage storage;
+    std::atomic_int requests{0};
+    HarnessOptions options{.registry = &registry};
+    options.settings.compaction.keep_recent_tokens = 1;
+    options.stream = [&requests](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        ++requests;
+        return ai::ModelStream{
+                ai::ModelStreamProducer{[](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                    auto answer = ai::assistant_text_message("summary");
+                    auto result = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!result)
+                        done(std::unexpected(result.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    const auto* definition = harness->task_definition("pi.compaction");
+    REQUIRE(definition != nullptr);
+    int hooks = 0;
+    Extension extension{.name = "decline-compaction"};
+    extension.hooks.push_back(task_hook(*definition, "beforeCompact", [&hooks](const chord::Json&, TaskRuntime&) {
+        ++hooks;
+        return support::AsyncResult<chord::Json>{chord::Json{chord::Json::Object{{"decline", true}}}};
+    }));
+    REQUIRE(registry.install(std::move(extension)).has_value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        for (const auto* text : {"old history", "recent history"}) {
+            auto entry = tx.append_entry(root.value(),
+                    "test.message",
+                    chord::Json{chord::Json::Object{}},
+                    {},
+                    {chord::Json{chord::Json::Object{{"role", "user"}, {"content", text}}}});
+            if (!entry) return std::unexpected(entry.error());
+        }
+        return {};
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+    auto task = harness->compact(root.value());
+    REQUIRE(task.has_value());
+    auto finished = consume(harness->wait_for_task(*task));
+    REQUIRE(finished.has_value());
+    REQUIRE(finished.value().state.outcome.has_value());
+    CHECK(finished.value().state.outcome->status == frozen->string_member("outcome").value());
+    CHECK(hooks == frozen->number_member("hookCalls").value());
+    CHECK(requests == frozen->number_member("summaryRequests").value());
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    CHECK(std::ranges::count_if(*entries, [](const auto& entry) { return entry.kind == "pi.compaction"; }) ==
+            frozen->number_member("markerCount").value());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("threshold compaction precedes the protected model request", "[durable][workflow][issue1083]") {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1083/compaction.json",
+            "blocking threshold compaction appends before the protected request");
+    REQUIRE(frozen.has_value());
+    MemoryStorage storage;
+    std::vector<std::string> requests;
+    std::vector<std::string> first_users;
+    std::mutex mutex;
+    HarnessOptions options;
+    options.settings.compaction.reserve_tokens = 30;
+    options.settings.compaction.keep_recent_tokens = 1;
+    options.settings.compaction.background_tokens = 0;
+    options.stream = [&](ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+        const auto* system =
+                context.messages.empty() ? nullptr : std::get_if<ai::SystemMessage>(&context.messages.front());
+        const bool summary = system && system->content.find("context summarization assistant") != std::string::npos;
+        {
+            std::lock_guard lock(mutex);
+            requests.push_back(summary ? "summary" : "agent");
+            std::string first_user;
+            for (const auto& message : context.messages) {
+                const auto* user = std::get_if<ai::UserMessage>(&message);
+                if (user == nullptr) continue;
+                if (const auto* text = std::get_if<std::string>(&user->content)) {
+                    first_user = *text;
+                } else {
+                    for (const auto& block : std::get<std::vector<ai::Content>>(user->content))
+                        if (const auto* text = std::get_if<ai::TextContent>(&block)) first_user += text->text;
+                }
+                break;
+            }
+            first_users.push_back(std::move(first_user));
+        }
+        return ai::ModelStream{ai::ModelStreamProducer{
+                [summary](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                    auto answer = ai::assistant_text_message(summary ? "compressed history" : "finished");
+                    auto result = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!result)
+                        done(std::unexpected(result.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{
+            .model = ai::Model{.id = "model", .provider = "test", .context_window = 50, .max_tokens = 100}}));
+    REQUIRE(root.has_value());
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        for (const auto* text : {"old history that is large enough to exceed the model threshold", "recent message"}) {
+            auto entry = tx.append_entry(root.value(),
+                    "test.message",
+                    chord::Json{chord::Json::Object{}},
+                    {},
+                    {chord::Json{chord::Json::Object{{"role", "user"}, {"content", text}}}});
+            if (!entry) return std::unexpected(entry.error());
+        }
+        return {};
+    })).has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("continue the conversation")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    {
+        std::lock_guard lock(mutex);
+        const auto* order = frozen->array_member("requestOrder");
+        REQUIRE(order != nullptr);
+        REQUIRE(order->size() == requests.size());
+        for (std::size_t index = 0; index < order->size(); ++index)
+            CHECK(order->at(index).get_string() == requests[index]);
+        REQUIRE(first_users.size() == requests.size());
+        CHECK(first_users.back().find("compressed history") != std::string::npos);
+        CHECK(frozen->member("requestLeadsWithSummary") != nullptr);
+    }
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    CHECK(std::ranges::count_if(*entries, [](const auto& entry) { return entry.kind == "pi.compaction"; }) ==
+            frozen->number_member("markerCount").value());
+    const auto* last_kinds = frozen->array_member("lastKinds");
+    REQUIRE(last_kinds != nullptr);
+    REQUIRE(entries->size() >= last_kinds->size());
+    for (std::size_t index = 0; index < last_kinds->size(); ++index)
+        CHECK((*entries)[last_kinds->size() - 1 - index].kind == last_kinds->at(index).get_string());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("background compaction allows the generation to finish before summary", "[durable][workflow][issue1083]") {
+    const auto frozen = FrozenScenario::load(
+            "fixtures/pi-v1.3.0/audit-1083/compaction.json", "background threshold compaction never blocks the run");
+    REQUIRE(frozen.has_value());
+    MemoryStorage storage;
+    std::binary_semaphore summary_started{0};
+    std::binary_semaphore release_summary{0};
+    std::atomic_bool summary_finished{false};
+    HarnessOptions options;
+    options.settings.compaction.reserve_tokens = 100;
+    options.settings.compaction.keep_recent_tokens = 1;
+    options.settings.compaction.background_tokens = 900;
+    options.stream = [&](ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+        const auto* system =
+                context.messages.empty() ? nullptr : std::get_if<ai::SystemMessage>(&context.messages.front());
+        const bool summary = system && system->content.find("context summarization assistant") != std::string::npos;
+        return ai::ModelStream{ai::ModelStreamProducer{
+                [&, summary](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                    if (summary) {
+                        summary_started.release();
+                        release_summary.acquire();
+                        summary_finished = true;
+                    }
+                    auto answer = ai::assistant_text_message(summary ? "summary" : "finished");
+                    auto result = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!result)
+                        done(std::unexpected(result.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{
+            .model = ai::Model{.id = "model", .provider = "test", .context_window = 1000, .max_tokens = 100}}));
+    REQUIRE(root.has_value());
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        for (const auto* text : {"old history", "recent history"}) {
+            auto entry = tx.append_entry(root.value(),
+                    "test.message",
+                    chord::Json{chord::Json::Object{}},
+                    {},
+                    {chord::Json{chord::Json::Object{{"role", "user"}, {"content", text}}}});
+            if (!entry) return std::unexpected(entry.error());
+        }
+        return {};
+    })).has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("continue")));
+    REQUIRE(admitted.has_value());
+    const bool started = summary_started.try_acquire_for(std::chrono::seconds(3));
+    if (!started) release_summary.release();
+    REQUIRE(started);
+    auto tasks = storage.scan_tasks(100);
+    REQUIRE(tasks.has_value());
+    const auto compaction =
+            std::ranges::find_if(*tasks, [](const TaskRecord& task) { return task.kind == "pi.compaction"; });
+    REQUIRE(compaction != tasks->end());
+    CHECK(compaction->background == frozen->member("background")->get_boolean());
+    CHECK_FALSE(compaction->owner.has_value());
+    CHECK(*compaction->input.as_object()->at("reason").as_string() == frozen->string_member("reason").value());
+    auto settled = consume(admitted.value().wait());
+    CHECK(settled.has_value());
+    CHECK_FALSE(summary_finished.load());
+    release_summary.release();
+    auto finished = consume(harness->wait_for_task(compaction->id));
+    REQUIRE(finished.has_value());
+    REQUIRE(finished.value().state.outcome.has_value());
+    CHECK(finished.value().state.outcome->status == frozen->string_member("outcome").value());
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    REQUIRE(!entries->empty());
+    CHECK(entries->front().kind == frozen->string_member("lastKind").value());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("overflow compacts before retrying the original request", "[durable][workflow][issue1083]") {
+    const auto frozen = FrozenScenario::load(
+            "fixtures/pi-v1.3.0/audit-1083/compaction.json", "overflow compacts before retrying the original request");
+    REQUIRE(frozen.has_value());
+    MemoryStorage storage;
+    std::vector<std::string> requests;
+    std::mutex mutex;
+    std::int64_t generation_attempt_after_compaction = 0;
+    HarnessOptions options;
+    options.settings.compaction.keep_recent_tokens = 1;
+    options.stream = [&](ai::Model, ai::AiContext context, ai::SimpleStreamOptions) {
+        const auto* system =
+                context.messages.empty() ? nullptr : std::get_if<ai::SystemMessage>(&context.messages.front());
+        const bool summary = system && system->content.find("context summarization assistant") != std::string::npos;
+        std::size_t turn;
+        {
+            std::lock_guard lock(mutex);
+            requests.push_back(summary ? "summary" : "agent");
+            turn = requests.size();
+        }
+        return ai::ModelStream{ai::ModelStreamProducer{[summary, turn](ai::AssistantEventSink sink,
+                                                               ai::ModelStreamCompletion done) noexcept {
+            auto answer = ai::assistant_text_message(summary ? "summary" : "finished");
+            if (turn == 1) {
+                answer.stop_reason = ai::AssistantStopReason::Error;
+                answer.error_message = "arbitrary diagnostic";
+                auto result = sink(ai::AssistantErrorEvent{.reason = answer.stop_reason,
+                        .error = answer,
+                        .inference_failure = ai::InferenceFailure{.kind = ai::InferenceFailureKind::ContextOverflow}});
+                if (!result) {
+                    done(std::unexpected(result.error()));
+                    return;
+                }
+            } else {
+                auto result = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                if (!result) {
+                    done(std::unexpected(result.error()));
+                    return;
+                }
+            }
+            done(std::move(answer));
+        }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(
+            harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test", .max_tokens = 100}}));
+    REQUIRE(root.has_value());
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        for (const auto* text : {"old history", "recent history"}) {
+            auto entry = tx.append_entry(root.value(),
+                    "test.message",
+                    chord::Json{chord::Json::Object{}},
+                    {},
+                    {chord::Json{chord::Json::Object{{"role", "user"}, {"content", text}}}});
+            if (!entry) return std::unexpected(entry.error());
+        }
+        return {};
+    })).has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("continue")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    {
+        std::lock_guard lock(mutex);
+        std::vector<std::string> frozen_order;
+        const auto* order = frozen->array_member("requestOrder");
+        REQUIRE(order != nullptr);
+        for (const auto& value : *order)
+            frozen_order.push_back(value.get_string());
+        std::vector<std::string> observed;
+        for (const auto& request : requests)
+            observed.push_back(request == "summary" ? "summary" : "agent");
+        CHECK(observed == frozen_order);
+    }
+    auto tasks = storage.scan_tasks(100);
+    REQUIRE(tasks.has_value());
+    for (const auto& task : *tasks) {
+        if (task.kind != "pi.generation" || task.conversation_id != root.value() || !task.state.checkpoint) continue;
+        const auto* checkpoint = task.state.checkpoint->as_object();
+        if (checkpoint == nullptr) continue;
+        const auto attempt = checkpoint->find("attempt");
+        if (attempt != checkpoint->end() && attempt->second.as_number() != nullptr)
+            generation_attempt_after_compaction = static_cast<std::int64_t>(*attempt->second.as_number());
+    }
+    CHECK(generation_attempt_after_compaction ==
+            static_cast<std::int64_t>(frozen->number_member("generationAttemptAfterCompaction").value()));
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    CHECK(std::ranges::count_if(*entries, [](const auto& entry) { return entry.kind == "pi.compaction"; }) ==
+            frozen->number_member("markerCount").value());
+    const auto* last_kinds = frozen->array_member("lastKinds");
+    REQUIRE(last_kinds != nullptr);
+    REQUIRE(entries->size() >= last_kinds->size());
+    for (std::size_t index = 0; index < last_kinds->size(); ++index)
+        CHECK((*entries)[last_kinds->size() - 1 - index].kind == last_kinds->at(index).get_string());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("compaction retries structured failures with committed backoff and stops at budget",
+        "[durable][workflow][issue1083]") {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1083/compaction.json",
+            "compaction retry commits the backoff checkpoint and live retry status");
+    REQUIRE(frozen.has_value());
+    MemoryStorage storage;
+    std::atomic_int attempts{0};
+    std::binary_semaphore first{0};
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release{0};
+    HarnessOptions options;
+    options.now = [] { return std::int64_t{1000}; };
+    options.settings.compaction.keep_recent_tokens = 1;
+    options.settings.retry.max_retries = 2;
+    options.settings.retry.base_delay_ms = 200;
+    options.settings.retry.max_agent_delay_ms = 1000;
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        return ai::ModelStream{
+                ai::ModelStreamProducer{[&](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                    const int attempt = ++attempts;
+                    if (attempt == 1) first.release();
+                    if (attempt == 2) {
+                        entered.release();
+                        release.acquire();
+                    }
+                    auto answer = ai::assistant_text_message("");
+                    answer.provider = "test";
+                    answer.model = "model";
+                    answer.usage.input = 3;
+                    answer.stop_reason = ai::AssistantStopReason::Error;
+                    answer.error_message = "transient";
+                    auto result = sink(ai::AssistantErrorEvent{.reason = answer.stop_reason,
+                            .error = answer,
+                            .inference_failure = ai::InferenceFailure{.kind = ai::InferenceFailureKind::RateLimited}});
+                    if (!result)
+                        done(std::unexpected(result.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(
+            harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test", .max_tokens = 100}}));
+    REQUIRE(root.has_value());
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        for (const auto* text : {"old history", "recent history"}) {
+            auto entry = tx.append_entry(root.value(),
+                    "test.message",
+                    chord::Json{chord::Json::Object{}},
+                    {},
+                    {chord::Json{chord::Json::Object{{"role", "user"}, {"content", text}}}});
+            if (!entry) return std::unexpected(entry.error());
+        }
+        return {};
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+    auto task = harness->compact(root.value());
+    REQUIRE(task.has_value());
+    REQUIRE(first.try_acquire_for(std::chrono::seconds(3)));
+    bool saw_retry = false;
+    for (int i = 0; i < 100 && !saw_retry; ++i) {
+        auto state = storage.task(*task);
+        REQUIRE(state.has_value());
+        if (state->has_value() && (**state).state.checkpoint) {
+            const auto* object = (**state).state.checkpoint->as_object();
+            if (object && object->at("phase").as_string() && *object->at("phase").as_string() == "retry") {
+                CHECK(*object->at("phase").as_string() == frozen->string_member("checkpointPhase").value());
+                CHECK(*object->at("attempt").as_number() == frozen->number_member("checkpointAttempt").value());
+                CHECK(*object->at("until").as_number() == frozen->number_member("checkpointUntil").value());
+                saw_retry = true;
+            }
+        }
+        if (!saw_retry) std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    }
+    CHECK(saw_retry);
+    const bool reached = entered.try_acquire_for(std::chrono::seconds(3));
+    if (!reached) release.release();
+    REQUIRE(reached);
+    auto current = storage.task(*task);
+    REQUIRE(current.has_value());
+    REQUIRE(current->has_value());
+    REQUIRE((**current).state.checkpoint.has_value());
+    const auto& checkpoint = *(**current).state.checkpoint->as_object();
+    CHECK(*checkpoint.at("phase").as_string() == "summarize");
+    CHECK(*checkpoint.at("attempt").as_number() == 2);
+    release.release();
+    auto finished = consume(harness->wait_for_task(*task));
+    REQUIRE(finished.has_value());
+    REQUIRE(finished.value().state.outcome.has_value());
+    CHECK(finished.value().state.outcome->status == "failed");
+    CHECK(attempts == 3);
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    CHECK(std::ranges::none_of(*entries, [](const auto& entry) { return entry.kind == "pi.compaction"; }));
+    auto doc = storage.find_document(
+            "pi.usage:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
+    REQUIRE(doc.has_value());
+    REQUIRE(doc->has_value());
+    auto usage = storage.document((**doc).id, DocumentPoint::current());
+    REQUIRE(usage.has_value());
+    REQUIRE(usage->has_value());
+    const auto& models = *(**usage).value.as_object()->at("models").as_object();
+    CHECK(*models.at("test/model").as_object()->at("input").as_number() == 9);
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("generation writes a post-head system baseline with paired omissions", "[durable][workflow][issue1083]") {
+    MemoryStorage storage;
+    Registry registry;
+    Extension section{.name = "baseline-section"};
+    section.sections.push_back(PromptSection{.key = "preamble", .text = "desired", .tag = false});
+    REQUIRE(registry.install(std::move(section)).has_value());
+    HarnessOptions options{.registry = &registry};
+    options.settings.compaction.enabled = false;
+    options.stream = [](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        return ai::ModelStream{
+                ai::ModelStreamProducer{[](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                    auto answer = ai::assistant_text_message("finished");
+                    auto result = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!result)
+                        done(std::unexpected(result.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    EntryId old_system{};
+    EntryId marker{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto old = tx.append_entry(root.value(),
+                "pi.system",
+                chord::Json{chord::Json::Object{}},
+                {},
+                {chord::Json{chord::Json::Object{{"role", "system"}, {"content", "old"}}}});
+        if (!old) return std::unexpected(old.error());
+        old_system = old->id;
+        auto kept = tx.append_entry(root.value(),
+                "test.message",
+                chord::Json{chord::Json::Object{}},
+                {},
+                {chord::Json{chord::Json::Object{{"role", "user"}, {"content", "kept"}}}});
+        if (!kept) return std::unexpected(kept.error());
+        auto head = tx.append_entry(root.value(),
+                "pi.compaction",
+                chord::Json{chord::Json::Object{}},
+                EntryHeadVariant{old_system},
+                {chord::Json{chord::Json::Object{{"role", "user"}, {"content", "summary"}}}});
+        if (!head) return std::unexpected(head.error());
+        marker = head->id;
+        return {};
+    })).has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("continue")));
+    REQUIRE(admitted.has_value());
+    REQUIRE(consume(admitted.value().wait()).has_value());
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    auto baseline = std::ranges::find_if(
+            *entries, [&](const auto& entry) { return entry.kind == "pi.system" && entry.id.value > marker.value; });
+    REQUIRE(baseline != entries->end());
+    REQUIRE(baseline->edits.size() == 1);
+    CHECK(baseline->edits[0].target == old_system);
+    CHECK(baseline->edits[0].action == "omit");
+    REQUIRE(baseline->model.size() == 1);
+    const auto& sections = *baseline->model[0].as_object()->at("sections").as_object();
+    CHECK(*sections.at("preamble").as_string() == "desired");
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("generation retries structured transient failures after committed retry", "[durable][workflow][issue1083]") {
+    MemoryStorage storage;
+    std::atomic_int requests{0};
+    HarnessOptions options;
+    options.settings.compaction.enabled = false;
+    options.settings.retry.max_retries = 1;
+    options.settings.retry.base_delay_ms = 1;
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        const int turn = ++requests;
+        return ai::ModelStream{ai::ModelStreamProducer{[turn](ai::AssistantEventSink sink,
+                                                               ai::ModelStreamCompletion done) noexcept {
+            auto answer = ai::assistant_text_message("finished");
+            if (turn == 1) {
+                answer.stop_reason = ai::AssistantStopReason::Error;
+                answer.error_message = "not used for classification";
+                auto result = sink(ai::AssistantErrorEvent{.reason = answer.stop_reason,
+                        .error = answer,
+                        .inference_failure = ai::InferenceFailure{.kind = ai::InferenceFailureKind::RateLimited}});
+                if (!result) {
+                    done(std::unexpected(result.error()));
+                    return;
+                }
+            } else {
+                auto result = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                if (!result) {
+                    done(std::unexpected(result.error()));
+                    return;
+                }
+            }
+            done(std::move(answer));
+        }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("continue")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    CHECK(requests == 2);
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    CHECK(std::ranges::count_if(*entries, [](const auto& entry) { return entry.kind == "pi.assistant"; }) == 2);
+    REQUIRE(consume(harness->close()).has_value());
+}
 
 TEST_CASE("Harness runs an admitted prompt through a real injected tool and settles committed entries",
         "[durable][workflow][issue1079]") {

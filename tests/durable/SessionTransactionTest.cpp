@@ -2,6 +2,7 @@
 #include <cch/durable/Storage.hpp>
 #include <cch/support/JsonAccess.hpp>
 
+#include "durable/CommittedContext.hpp"
 #include "durable/FrozenExpectation.hpp"
 #include "durable/GatedStorage.hpp"
 #include "durable/Outcome.hpp"
@@ -1496,4 +1497,51 @@ TEST_CASE("context views lead with the post-head baseline without restoring omit
         CHECK(view->messages[2] == msg("user", "kept"));
         return {};
     }).has_value());
+}
+
+TEST_CASE("context token estimates anchor on the newest assistant with usage after the head",
+        "[durable][transaction][issue1083]") {
+    const auto message = [](std::string role, std::string content, std::optional<std::int64_t> usage = {}) {
+        chord::Json::Object object{{"role", std::move(role)}, {"content", std::move(content)}, {"timestamp", 0}};
+        if (usage) {
+            chord::Json::Object total{{"input", static_cast<double>(*usage)},
+                    {"output", 0.0},
+                    {"cacheRead", 0.0},
+                    {"cacheWrite", 0.0},
+                    {"totalTokens", static_cast<double>(*usage)},
+                    {"cost", chord::Json{chord::Json::Object{}}}};
+            object.emplace("usage", chord::Json{std::move(total)});
+        }
+        return chord::Json{std::move(object)};
+    };
+    Transaction::ContextView view;
+    view.head = EntryRecord{.id = EntryId{1}, .kind = "pi.compaction", .model = {message("system", "")}};
+    view.entries.push_back(*view.head);
+    view.entries.push_back(
+            EntryRecord{.id = EntryId{2}, .kind = "pi.assistant", .model = {message("assistant", "same", 50)}});
+    view.entries.push_back(
+            EntryRecord{.id = EntryId{3}, .kind = "pi.assistant", .model = {message("assistant", "unused")}});
+    view.entries.push_back(EntryRecord{.id = EntryId{4}, .kind = "pi.user", .model = {message("user", "trailing")}});
+    for (const auto& entry : view.entries)
+        view.contributions.push_back(entry.model);
+    for (const auto& entry : view.entries)
+        for (const auto& value : entry.model)
+            view.messages.push_back(value);
+    const auto trailing = estimate_message_tokens(view.messages.back());
+    const auto unused = estimate_message_tokens(view.messages[2]);
+    CHECK(estimate_context_tokens(view) == 50 + unused + trailing);
+    CHECK(estimate_context_tokens(view, {message("user", "extra")}) ==
+            50 + unused + trailing + estimate_message_tokens(message("user", "extra")));
+
+    Transaction::ContextView duplicate = view;
+    duplicate.entries[1].model = {message("assistant", "same", 20)};
+    duplicate.entries[2].model = {message("assistant", "same", 20)};
+    duplicate.contributions.clear();
+    duplicate.messages.clear();
+    for (const auto& entry : duplicate.entries)
+        duplicate.contributions.push_back(entry.model);
+    for (const auto& entry : duplicate.entries)
+        for (const auto& value : entry.model)
+            duplicate.messages.push_back(value);
+    CHECK(estimate_context_tokens(duplicate) == 20 + trailing);
 }

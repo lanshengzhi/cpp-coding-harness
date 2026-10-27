@@ -1,0 +1,159 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1083",
+  "family": "audit-1083",
+  "capturedAt": "2026-10-27T14:02:37.087Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/compaction.ts:CompactionTask.select,summarize,retry",
+    "packages/durable/src/harness/compaction.ts:createCompaction",
+    "packages/durable/src/harness/generation.ts:GenerationTask.prepare,request",
+    "packages/durable/src/harness/harness.ts:ConversationImpl.compact"
+  ],
+  "scenarios": [
+    {
+      "name": "manual compaction decline completes without a summary request or marker",
+      "inputs": {
+        "messages": [
+          "old history",
+          "recent history"
+        ],
+        "keepRecentTokens": 1,
+        "decision": {
+          "decline": true
+        }
+      },
+      "expected": {
+        "outcome": "completed",
+        "hookCalls": 1,
+        "summaryRequests": 0,
+        "markerCount": 0
+      },
+      "normalizations": [
+        "task identifiers omitted"
+      ]
+    },
+    {
+      "name": "blocking threshold compaction appends before the protected request",
+      "inputs": {
+        "contextWindow": 1000,
+        "policy": {
+          "enabled": true,
+          "reserveTokens": 300,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 0
+        },
+        "userTokens": 200
+      },
+      "expected": {
+        "requestOrder": [
+          "summary",
+          "agent"
+        ],
+        "lastKinds": [
+          "pi.compaction",
+          "pi.system",
+          "pi.assistant"
+        ],
+        "markerCount": 1,
+        "systemMessagesInRequest": 1,
+        "requestLeadsWithSummary": true
+      },
+      "normalizations": [
+        "task identifiers omitted",
+        "assistant text abbreviated"
+      ]
+    },
+    {
+      "name": "background threshold compaction never blocks the run",
+      "inputs": {
+        "contextWindow": 2000,
+        "policy": {
+          "enabled": true,
+          "reserveTokens": 500,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 1000
+        },
+        "userTokens": 100
+      },
+      "expected": {
+        "completedWhileGated": true,
+        "background": true,
+        "ownerAbsent": true,
+        "reason": "threshold",
+        "statusAfterIdleAndAbort": "running",
+        "outcome": "completed",
+        "lastKind": "pi.compaction"
+      },
+      "normalizations": [
+        "task identifiers omitted",
+        "assistant text abbreviated"
+      ]
+    },
+    {
+      "name": "overflow compacts before retrying the original request",
+      "inputs": {
+        "error": "prompt is too long: 250000 tokens > 200000 maximum",
+        "policy": {
+          "enabled": true,
+          "reserveTokens": 1000,
+          "keepRecentTokens": 150,
+          "backgroundTokens": 0
+        },
+        "userTokens": 100
+      },
+      "expected": {
+        "requestOrder": [
+          "agent",
+          "summary",
+          "agent"
+        ],
+        "generationAttemptAfterCompaction": 1,
+        "markerCount": 1,
+        "lastKinds": [
+          "pi.user",
+          "pi.assistant",
+          "pi.compaction",
+          "pi.system",
+          "pi.assistant"
+        ]
+      },
+      "normalizations": [
+        "task identifiers omitted",
+        "assistant text abbreviated"
+      ]
+    },
+    {
+      "name": "compaction retry commits the backoff checkpoint and live retry status",
+      "inputs": {
+        "now": 1000,
+        "retry": {
+          "enabled": true,
+          "maxRetries": 2,
+          "baseDelayMs": 200
+        },
+        "error": "overloaded"
+      },
+      "expected": {
+        "checkpointPhase": "retry",
+        "checkpointAttempt": 1,
+        "checkpointUntil": 1200,
+        "statusRetryAt": 1200,
+        "statusRetryError": "overloaded",
+        "summaryRequests": 1
+      },
+      "normalizations": [
+        "task identifiers omitted"
+      ]
+    }
+  ]
+}

@@ -208,7 +208,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "91a463856bededec67186ab3aba0f17923c5e4ca569810c6325a451d6f0d58fe"
+            "sha256": "21758480fe8362d91d6d931f9ad96392bd7b6cef49ad426b234da5b981015c29"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -644,7 +644,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 490,
+      "scenarios": 495,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -723,6 +723,7 @@
         "audit-1079/held-tool.json:a held real tool prevents the next model request and submission settlement",
         "audit-1072/live-session.json:export uses the live selected branch while HTML retains all entries",
         "audit-1072/live-session.json:live session info append advances the leaf under the selected parent",
+        "audit-1083/compaction.json:manual compaction decline completes without a summary request or marker",
         "audit-1082/contexts.json:fork isolation and edited head contexts survive reopen",
         "audit-1080/submissions-inbox.json:a busy steer input is placed at the postTools boundary and a busy follow-up is held to the final boundary",
         "audit-1080/submissions-inbox.json:a duplicate request ID with a different payload returns the existing submission with zero new storage batches",
@@ -735,7 +736,11 @@
         "audit-1078/ownership-waits.json:a conversation abort keeps live background work while a direct abort reaches it",
         "audit-1078/ownership-waits.json:a background-crossing conversation abort reaches and waits for a live background task",
         "audit-1078/ownership-waits.json:an idle wait resolves with live background work and holds on a live foreground task",
-        "audit-1078/ownership-waits.json:a child task and a task-owned conversation are rejected for a terminal owner and accepted for a live one"
+        "audit-1078/ownership-waits.json:a child task and a task-owned conversation are rejected for a terminal owner and accepted for a live one",
+        "audit-1083/compaction.json:blocking threshold compaction appends before the protected request",
+        "audit-1083/compaction.json:background threshold compaction never blocks the run",
+        "audit-1083/compaction.json:overflow compacts before retrying the original request",
+        "audit-1083/compaction.json:compaction retry commits the backoff checkpoint and live retry status"
       ],
       "uncovered": []
     }
@@ -3657,6 +3662,16 @@
       "disposition": "reuse the append parent/leaf observation without claiming frozen selector equivalence or promoting the composite row"
     },
     {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "manual compaction decline completes without a summary request or marker",
+      "reason": "Captured by #1083 for the bounded decline behavior; the broader capability row remains partial.",
+      "rows": [
+        "cch_durable:compaction-decline"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; retain current row status."
+    },
+    {
       "family": "audit-1082",
       "artifact": "contexts.json",
       "scenario": "fork isolation and edited head contexts survive reopen",
@@ -3794,6 +3809,46 @@
         "cch_durable:Tx:createConversation"
       ],
       "disposition": "the B20 F5 ownership slices consume this observation through tests/durable/HarnessOwnershipTest.cpp; later consolidation routes the artifact to these rows"
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "blocking threshold compaction appends before the protected request",
+      "reason": "Captured by #1083 for the blocking threshold ordering; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 threshold row keeps its recorded upstream evidence and status.",
+      "rows": [
+        "cch_durable:threshold-compaction"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "background threshold compaction never blocks the run",
+      "reason": "Captured by #1083 for the non-blocking background ordering; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 background row keeps its recorded status.",
+      "rows": [
+        "cch_durable:background-compaction"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "overflow compacts before retrying the original request",
+      "reason": "Captured by #1083 for the structured overflow ordering; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 overflow row keeps its recorded status.",
+      "rows": [
+        "cch_durable:overflow-compaction-retry"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
+    },
+    {
+      "family": "audit-1083",
+      "artifact": "compaction.json",
+      "scenario": "compaction retry commits the backoff checkpoint and live retry status",
+      "reason": "Captured by #1083 for the committed retry checkpoint and live status; tests/durable/HarnessWorkflowTest.cpp consumes it. The #1056 overflow row keeps its recorded status.",
+      "rows": [
+        "cch_durable:overflow-compaction-retry"
+      ],
+      "disposition": "Consumed by tests/durable/HarnessWorkflowTest.cpp; do not promote the referenced #1056 row from this observation alone."
     }
   ],
   "correctionsIndex": [
