@@ -59,13 +59,15 @@ public:
 private:
     struct PromptPlan {
         ai::AiContext context{};
-        ai::SystemMessage system{};
+        std::vector<ai::SystemMessage> systems{};
+        std::vector<ContextEdit> edits{};
     };
 
     [[nodiscard]] support::Expected<TaskDefinition> build_definition();
     [[nodiscard]] PromptPlan plan_prompt(const Registry::Snapshot& snapshot,
             std::span<const ai::Tool> shown_tools,
             std::span<const ai::SystemMessageSection> shown_sections,
+            const Transaction::ContextView& view,
             std::int64_t timestamp);
     [[nodiscard]] ai::ToolResultMessage execute_tool(const ai::ToolCallContent& call,
             const Registry::Snapshot& snapshot, std::stop_token stop_token);

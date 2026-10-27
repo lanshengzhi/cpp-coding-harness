@@ -91,6 +91,10 @@ Json system_json(const ai::SystemMessage& message) {
     Array tools;
     for (const auto& tool : message.tools_added) tools.push_back(tool_json(tool));
     if (!tools.empty()) result.emplace("toolsAdded", Json{std::move(tools)});
+    Array removed;
+    for (const auto& tool : message.tools_removed)
+        removed.push_back(Json{Object{{"name", tool.name}}});
+    if (!removed.empty()) result.emplace("toolsRemoved", Json{std::move(removed)});
     return Json{std::move(result)};
 }
 
@@ -1564,24 +1568,43 @@ support::AsyncResult<void> WorkflowRuntime::generate(const TaskRecord& task, Tas
 }
 
 WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapshot& snapshot,
-        std::span<const ai::Tool> shown_tools, std::span<const ai::SystemMessageSection> shown_sections,
+        std::span<const ai::Tool> shown_tools,
+        std::span<const ai::SystemMessageSection> shown_sections,
+        const Transaction::ContextView& view,
         std::int64_t timestamp) {
-    PromptPlan plan{.system = ai::SystemMessage{.timestamp = timestamp}};
-    for (const auto& tool : snapshot.tools) {
-        plan.context.tools.push_back(tool->declaration);
-        if (std::ranges::none_of(shown_tools, [&tool](const auto& shown) { return shown.name == tool->declaration.name; })) {
-            plan.system.tools_added.push_back(tool->declaration);
-        }
-    }
+    PromptPlan plan;
+    std::vector<ai::SystemMessageSection> desired;
     for (const auto& section : snapshot.sections) {
         const std::string text = section.tag ? std::format("<{}>\n{}\n</{}>", section.key, section.text, section.key) : section.text;
         if (plan.context.system_prompt) *plan.context.system_prompt += "\n\n";
         else plan.context.system_prompt.emplace();
         *plan.context.system_prompt += text;
-        if (std::ranges::none_of(shown_sections, [&section](const auto& shown) { return shown.name == section.key; })) {
-            plan.system.sections.push_back(ai::SystemMessageSection{.name = section.key, .text = text});
-        }
+        desired.push_back(ai::SystemMessageSection{.name = section.key, .text = text});
     }
+    for (const auto& tool : snapshot.tools)
+        plan.context.tools.push_back(tool->declaration);
+    const auto later_system = [&] {
+        return view.head && std::ranges::any_of(view.entries, [&view](const EntryRecord& e) {
+            return e.kind == "pi.system" && e.id.value > view.head->id.value;
+        });
+    };
+    if (view.head && !later_system()) {
+        ai::SystemMessage baseline{.sections = desired, .tools_added = plan.context.tools, .timestamp = timestamp};
+        for (const auto& entry : view.entries)
+            if (entry.kind == "pi.system") plan.edits.push_back(ContextEdit{.target = entry.id, .action = "omit"});
+        plan.systems.push_back(std::move(baseline));
+        return plan;
+    }
+    ai::SystemMessage patch{.timestamp = timestamp};
+    for (const auto& wanted : desired) {
+        if (std::ranges::none_of(shown_sections, [&wanted](const auto& shown) { return shown.name == wanted.name; }))
+            patch.sections.push_back(wanted);
+    }
+    for (const auto& wanted : plan.context.tools) {
+        if (std::ranges::none_of(shown_tools, [&wanted](const auto& shown) { return shown.name == wanted.name; }))
+            patch.tools_added.push_back(wanted);
+    }
+    if (!patch.sections.empty() || !patch.tools_added.empty()) plan.systems.push_back(std::move(patch));
     return plan;
 }
 
@@ -1615,60 +1638,81 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
     }
     ReplayState& replay = replay_[task.conversation_id.value];
     replay = ReplayState{};
-    std::vector<EntryRecord> visible_entries;
-    std::vector<chord::Json> recovered_messages;
-    auto visible_commit = session_.commit([conversation = task.conversation_id, &visible_entries, &recovered_messages](
-                                                  Transaction& tx) -> support::ExpectedVoid {
-        auto entries = tx.scan_entries(conversation, static_cast<std::size_t>(-1));
-        if (!entries) return std::unexpected(entries.error());
-        visible_entries = std::move(*entries);
-        auto messages = tx.conversation_messages(conversation);
-        if (!messages) return std::unexpected(messages.error());
-        recovered_messages = std::move(*messages);
-        return {};
-    });
-    auto visible_records = await_result(std::move(visible_commit));
-    if (!visible_records) return std::unexpected(visible_records.error());
-    for (const EntryRecord& entry : visible_entries) {
-        for (const chord::Json& message : entry.model) {
-            if (entry.kind == "pi.reset" && entry.head == entry.id) continue;
-            if (auto parsed = message_from_json(message); parsed.has_value()) {
-                if (const auto* system = std::get_if<ai::SystemMessage>(&*parsed)) {
-                    replay.shown_sections.insert(
-                            replay.shown_sections.end(), system->sections.begin(), system->sections.end());
-                    for (const ai::Tool& tool : system->tools_added) {
-                        if (std::ranges::none_of(replay.shown_tools,
-                                    [&tool](const ai::Tool& shown) { return shown.name == tool.name; }))
-                            replay.shown_tools.push_back(tool);
-                    }
+    Transaction::ContextView view;
+    auto load_view = [&]() -> support::ExpectedVoid {
+        auto committed = await_result(session_.commit([&](Transaction& tx) -> support::ExpectedVoid {
+            auto loaded = tx.context_view(task.conversation_id);
+            if (!loaded) return std::unexpected(loaded.error());
+            view = std::move(*loaded);
+            return {};
+        }));
+        if (!committed) return std::unexpected(committed.error());
+        replay = ReplayState{};
+        for (const auto& message : view.messages) {
+            auto parsed = message_from_json(message);
+            if (!parsed) continue;
+            if (const auto* system = std::get_if<ai::SystemMessage>(&*parsed)) {
+                for (const auto& section : system->sections) {
+                    auto it = std::ranges::find_if(
+                            replay.shown_sections, [&section](const auto& s) { return s.name == section.name; });
+                    if (!section.text) {
+                        if (it != replay.shown_sections.end()) replay.shown_sections.erase(it);
+                    } else if (it != replay.shown_sections.end())
+                        *it = section;
+                    else
+                        replay.shown_sections.push_back(section);
+                }
+                for (const auto& tool : system->tools_removed)
+                    std::erase_if(replay.shown_tools, [&tool](const auto& t) { return t.name == tool.name; });
+                for (const auto& tool : system->tools_added) {
+                    std::erase_if(replay.shown_tools, [&tool](const auto& t) { return t.name == tool.name; });
+                    replay.shown_tools.push_back(tool);
                 }
             }
+            replay.messages.push_back(std::move(*parsed));
         }
-    }
-    for (const chord::Json& message : recovered_messages) {
-        if (auto parsed = message_from_json(message); parsed.has_value()) replay.messages.push_back(std::move(*parsed));
-    }
+        return {};
+    };
 
     while (!runtime.stop_token().stop_requested()) {
         const auto snapshot = registry_.snapshot();
-        auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, now());
-        auto& context = plan.context;
-        const auto& system = plan.system;
-        if (!system.sections.empty() || !system.tools_added.empty()) {
-            auto committed = await_result(runtime.commit([id = task.conversation_id, system](Transaction& tx, const TaskRecord&)
-                    -> support::Expected<std::optional<NextTaskState>> {
-                auto entry = tx.append_entry(id, "pi.system", entry_data(system_json(system)), std::nullopt,
-                            std::vector<chord::Json>{as_chord(system_json(system))});
-                if (!entry) return std::unexpected(entry.error());
-                return std::nullopt;
-            }));
-            if (!committed) return committed;
-            replay.messages.push_back(system);
-            for (const auto& section : system.sections)
-                replay.shown_sections.push_back(section);
-            replay.shown_tools = context.tools;
+        auto loaded = load_view();
+        if (!loaded) return std::unexpected(loaded.error());
+        auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, view, now());
+        if (!plan.systems.empty()) {
+            auto committed = await_result(runtime.commit(
+                    [id = task.conversation_id, systems = plan.systems, edits = plan.edits](
+                            Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                        for (std::size_t i = 0; i < systems.size(); ++i) {
+                            const auto message = system_json(systems[i]);
+                            auto entry = tx.append_entry(id,
+                                    "pi.system",
+                                    entry_data(message),
+                                    std::nullopt,
+                                    std::vector<chord::Json>{as_chord(message)},
+                                    std::nullopt,
+                                    i == 0 ? edits : std::vector<ContextEdit>{});
+                            if (!entry) return std::unexpected(entry.error());
+                        }
+                        return std::nullopt;
+                    }));
+            if (!committed) return std::unexpected(committed.error());
+            loaded = load_view();
+            if (!loaded) return std::unexpected(loaded.error());
         }
+        auto& context = plan.context;
         context.messages = replay.messages;
+        // Rendered sections and tools are carried in the provider context;
+        // transcript system entries record their incremental history.
+        if (!context.messages.empty()) {
+            const auto* first_system = std::get_if<ai::SystemMessage>(&context.messages.front());
+            if (first_system &&
+                    (context.system_prompt ||
+                            (first_system->content.empty() && first_system->sections.empty() &&
+                                    first_system->tools_added.empty() && first_system->tools_removed.empty()))) {
+                context.messages.erase(context.messages.begin());
+            }
+        }
         auto options = settings_.stream;
         if (thinking_level_) options.reasoning = thinking_level_;
         options.stop_token = runtime.stop_token();
