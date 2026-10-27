@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "dfb372ee8dd35bafb632424a789b5eef9b872b850971aad6db7e9321fa28b0ee"
+            "sha256": "9e6c7f6b77680534b2104bd6ee67bdd8d17362c2bc96f66ec425a9e3a92b9c87"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -254,20 +254,20 @@
         "validation": {
           "command": [
             "ctest",
-            "--test-dir",
-            "build",
+            "--preset",
+            "vcpkg",
             "-L",
             "issue1101",
+            "--output-on-failure",
             "--output-junit",
-            "/tmp/1152-issue1101-final.xml",
-            "--output-on-failure"
+            "/tmp/cch-1087-1101.xml"
           ],
-          "testedRevision": "633f44df9f4293f430ad53a9834218a8ea54a777",
-          "recordedAt": "2026-10-27T21:59:02Z",
+          "testedRevision": "42f4f04bc9d2dabe823178c56fc4048413f2e978",
+          "recordedAt": "2026-10-27T23:16:23Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1152-revalidation-1101.xml",
-            "sha256": "b656fa290dc3e370cb2ebb85a7dd5a1abb967f23ba1a86c5aae3b2179322211b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1087-revalidation-1101.xml",
+            "sha256": "00fd23dd5667d5b38c46afba042db521fec12ba05d6c1a9b7a48033270dcd25d"
           }
         },
         "rows": [
@@ -648,7 +648,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 504,
+      "scenarios": 510,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -753,7 +753,13 @@
         "audit-1152/structured-text.json:numbers",
         "audit-1152/structured-text.json:reverse",
         "audit-1152/structured-text.json:nested",
-        "audit-1152/structured-text.json:strings"
+        "audit-1152/structured-text.json:strings",
+        "audit-1087/registry-hooks.json:a generation onYield continuation hands the admitted run to a successor generation task",
+        "audit-1087/registry-hooks.json:an afterTool hook replaces the committed tool result",
+        "audit-1087/registry-hooks.json:beforeTool hooks run in extension order and the last rewrite executes",
+        "audit-1087/registry-hooks.json:a throwing beforeTool blocks the call and the run still settles",
+        "audit-1087/registry-hooks.json:replacing and uninstalling an extension changes the next request's tool hooks",
+        "audit-1087/registry-hooks.json:afterTool observes the model's call while the rewritten arguments execute"
       ],
       "uncovered": []
     }
@@ -3952,6 +3958,66 @@
         "cch_mcp:mcp-tools-call-structured"
       ],
       "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "a generation onYield continuation hands the admitted run to a successor generation task",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:generation-onYield"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "an afterTool hook replaces the committed tool result",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "beforeTool hooks run in extension order and the last rewrite executes",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "a throwing beforeTool blocks the call and the run still settles",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "replacing and uninstalling an extension changes the next request's tool hooks",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:registry-transition"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "afterTool observes the model's call while the rewritten arguments execute",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
     }
   ],
   "correctionsIndex": [
