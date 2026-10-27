@@ -57,6 +57,13 @@ public:
     [[nodiscard]] support::AsyncResult<void> commit(
             std::move_only_function<support::Expected<void>(Transaction&)> change);
 
+    /// Start one manual compaction of a conversation (frozen pi
+    /// `Harness.compact`): a conversation-owned, non-background task that a
+    /// blocking state never waits for. `instructions` steers the
+    /// summarizer's focus. Returns the created task id.
+    [[nodiscard]] support::Expected<TaskId> compact(
+            ConversationId conversation_id, std::optional<std::string> instructions = std::nullopt);
+
     /// Resume scheduling tasks.
     [[nodiscard]] support::ExpectedVoid resume();
 

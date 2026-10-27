@@ -105,6 +105,37 @@ enum class QueueMode {
 /// Stream options selected by the host; no credentials are stored in Session
 /// state. Production callers supply `ai::Models::stream` through the AI-owned
 /// factory; tests use the same ModelStream contract.
+/// Durable compaction policy (frozen pi `CompactionPolicy`,
+/// `DEFAULT_COMPACTION_POLICY`).
+struct CompactionPolicy {
+    bool enabled{true};
+    /// Headroom reserved below the model window for the blocking threshold
+    /// (frozen `CompactionPolicy.reserveTokens`).
+    std::int64_t reserve_tokens{16384};
+    /// The recent-tail budget a summary always keeps (frozen
+    /// `CompactionPolicy.keepRecentTokens`).
+    std::int64_t keep_recent_tokens{20000};
+    /// How far below the blocking threshold background compaction starts
+    /// (frozen `CompactionPolicy.backgroundTokens`).
+    std::int64_t background_tokens{32768};
+};
+
+/// Bounded retry policy of durable task attempts (frozen pi
+/// `ConversationRetryPolicy`, `DEFAULT_RETRY_POLICY`). Consumed by the
+/// compaction task's summarization retries in this slice.
+struct RetryPolicy {
+    bool enabled{true};
+    /// Max retry attempts; the initial call never counts (frozen
+    /// `ConversationRetryPolicy.maxRetries`).
+    std::int64_t max_retries{3};
+    /// Per-attempt delay base: `baseDelayMs * 2^(attempt-1)` before the cap
+    /// (frozen `retryDelayMs`).
+    std::int64_t base_delay_ms{2000};
+    /// Cap for each computed delay (frozen
+    /// `ConversationRetryPolicy.maxAgentDelayMs`).
+    std::int64_t max_agent_delay_ms{60000};
+};
+
 struct HarnessSettings {
     ai::SimpleStreamOptions stream{};
     /// How many queued steers join the run at the postTools boundary (frozen
@@ -113,6 +144,12 @@ struct HarnessSettings {
     /// How many queued follow-ups are placed at the final boundary (frozen
     /// `Settings.followUpMode`; the frozen default is one-at-a-time).
     QueueMode follow_up_mode{QueueMode::OneAtATime};
+    /// Compaction policy read at every preparation (frozen
+    /// `Settings.compaction`).
+    CompactionPolicy compaction{};
+    /// Retry policy read when a summarization attempt fails (frozen
+    /// `Settings.retry`).
+    RetryPolicy retry{};
 };
 
 struct RootOptions {

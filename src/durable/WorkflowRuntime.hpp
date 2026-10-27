@@ -56,7 +56,27 @@ public:
     [[nodiscard]] support::AsyncResult<void> reset(ConversationId conversation_id, std::optional<std::string> handoff);
     [[nodiscard]] support::AsyncResult<SubmissionId> submit(ConversationId conversation_id, SubmissionDraft draft);
 
+    /// Install the built-in `pi.compaction` definition used when preparation
+    /// or overflow recovery creates a compaction task (frozen pi
+    /// `createCompaction`). Called once before the worker starts.
+    void install_compaction_definition(std::shared_ptr<const TaskDefinition> definition);
+    /// The model configured at root creation (frozen pi `HarnessOptions.model`).
+    [[nodiscard]] const ai::Model& model() const noexcept;
+    /// Whether the pinned provider/model can still be served. The C++ slice
+    /// has no model catalog, so the Harness model is the only source (frozen
+    /// pi `runtime.models.getModel`).
+    [[nodiscard]] bool model_available(std::string_view provider, std::string_view model_id) const noexcept;
+    /// Admit a conversation-owned compaction summary as a write submission
+    /// (frozen pi `placeSummary.admitSubmission`): placed at once when idle,
+    /// queued to the next boundary when busy, or settled `stale`.
+    [[nodiscard]] support::Expected<SubmissionId> admit_compaction_summary(
+            Transaction& tx, ConversationId conversation_id, const SubmissionDraft& draft, std::int64_t now);
+
 private:
+    /// Settle the run's inputs `unanswered/model_error` and fail with `text`
+    /// (frozen pi generation `failModelError`).
+    [[nodiscard]] support::ExpectedVoid fail_model_error(
+            const TaskRecord& task, TaskRuntime& runtime, std::string_view text);
     struct PromptPlan {
         ai::AiContext context{};
         ai::SystemMessage system{};
@@ -67,10 +87,27 @@ private:
             std::span<const ai::Tool> shown_tools,
             std::span<const ai::SystemMessageSection> shown_sections,
             std::int64_t timestamp);
+    /// The preparation half of one request (frozen pi generation `prepare`):
+    /// resume a finished compaction wait, plan the prompt baseline, decide
+    /// the compaction threshold, and commit the `request` checkpoint.
+    [[nodiscard]] support::ExpectedVoid prepare(const TaskRecord& task, TaskRuntime& runtime);
+    /// The request half of one run (frozen pi generation `request`): stream,
+    /// tool rounds, final answer, and overflow compaction recovery.
+    [[nodiscard]] support::ExpectedVoid request(const TaskRecord& task, TaskRuntime& runtime);
+    /// Rebuild the replay cache and prompt baseline from the committed
+    /// context after a compaction landed: the summary marker leads the kept
+    /// range, and a head marker with no later `pi.system` entry is rebaselined
+    /// by the next preparation (frozen pi `planSystemEntries`).
+    [[nodiscard]] support::ExpectedVoid rebuild_after_compaction(const TaskRecord& task);
+    /// Create one compaction task of this conversation in `tx` (frozen pi
+    /// `createCompaction`); blocking (owned by the generation) or background.
+    [[nodiscard]] support::Expected<TaskId> create_compaction(
+            Transaction& tx, const TaskRecord& task, std::string_view reason, bool background) const;
     [[nodiscard]] ai::ToolResultMessage execute_tool(const ai::ToolCallContent& call,
             const Registry::Snapshot& snapshot, std::stop_token stop_token);
-    [[nodiscard]] support::AsyncResult<void> generate(const TaskRecord& task, TaskRuntime& runtime);
-    [[nodiscard]] support::ExpectedVoid run(const TaskRecord& task, TaskRuntime& runtime);
+    /// Both halves of the built-in generation definition, dispatched by the
+    /// checkpoint's `phase` (frozen pi generation `prepare`/`request`).
+    [[nodiscard]] support::AsyncResult<void> dispatch(const TaskRecord& task, TaskRuntime& runtime);
     /// The abort handler of the built-in generation definition: settle the
     /// run's inputs `unanswered/aborted` (frozen pi generation `abort`).
     [[nodiscard]] support::AsyncResult<void> abort_run(const TaskRecord& task, TaskRuntime& runtime);
@@ -106,6 +143,8 @@ private:
     /// The built-in generation definition; every run it starts is created
     /// with this definition.
     std::shared_ptr<TaskDefinition> generation_;
+    /// The built-in compaction definition; installed before the worker starts.
+    std::shared_ptr<const TaskDefinition> compaction_{};
     ai::Model model_{};
     std::optional<ai::ThinkingLevel> thinking_level_{std::nullopt};
     std::map<std::int64_t, ReplayState> replay_;
