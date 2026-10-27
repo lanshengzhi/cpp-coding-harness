@@ -27,6 +27,7 @@ using namespace cch::durable;
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -176,16 +177,34 @@ void add_gated_task(std::vector<TaskDefinition>& tasks,
 }
 
 /// Build the frozen `audit.join-child`: run, optional 40 ms hold, then fail or
-/// complete; the abort handler settles `aborted/cascade`.
-void add_join_child(std::vector<TaskDefinition>& tasks, SyncLog& log) {
+/// complete; the abort handler settles `aborted/cascade`. `started` is released
+/// the moment the run phase begins; `fail_after_started` holds the failure back
+/// until every named sibling is live, so a failFast mark always reaches live
+/// siblings (the frozen log interleaving has every child run before the aborts).
+void add_join_child(std::vector<TaskDefinition>& tasks,
+        SyncLog& log,
+        std::shared_ptr<std::map<std::string, std::shared_ptr<Gate>>> started = nullptr) {
     auto builder = TaskDefinitionBuilder("audit.join-child", 1);
     builder.initial([](const chord::Json&) { return checkpoint_phase("run"); });
-    builder.phase("run", [&log](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
+    builder.phase("run", [&log, started](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
         const auto* input = task.input.as_object();
         const std::string name = *input->at("name").as_string();
         const bool fail = input->contains("fail");
         const bool wait = input->contains("wait");
         log.push("child-run-" + name);
+        if (started) {
+            started->at(name)->release();
+            const auto* after = input->contains("after") ? input->at("after").as_array() : nullptr;
+            if (fail && after) {
+                // The failure waits until every named sibling is live, so the
+                // failFast mark always aborts running siblings.
+                for (const chord::Json& sibling : *after) {
+                    if (!started->at(*sibling.as_string())->wait(runtime.stop_token())) {
+                        return support::AsyncResult<void>{support::ExpectedVoid{}};
+                    }
+                }
+            }
+        }
         if (wait) {
             std::this_thread::sleep_for(std::chrono::milliseconds(40));
         }
@@ -222,7 +241,7 @@ void add_join_child(std::vector<TaskDefinition>& tasks, SyncLog& log) {
 void add_join_parent(std::vector<TaskDefinition>& tasks,
         SyncLog& log,
         JoinPolicy policy,
-        const std::vector<std::tuple<std::string, bool, bool>>& children,
+        const std::vector<std::tuple<std::string, bool, bool, std::vector<std::string>>>& children,
         bool with_abort_handler,
         const TaskDefinition** child_def) {
     auto builder = TaskDefinitionBuilder("audit.join-parent", 1);
@@ -231,11 +250,18 @@ void add_join_parent(std::vector<TaskDefinition>& tasks,
             [&log, child_def, children, policy](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
                 log.push("parent-spawn");
                 std::vector<TaskId> ids;
-                for (const auto& [name, fail, wait] : children) {
+                for (const auto& [name, fail, wait, after] : children) {
                     chord::Json::Object input;
                     input.emplace("name", name);
                     if (fail) input.emplace("fail", true);
                     if (wait) input.emplace("wait", true);
+                    if (!after.empty()) {
+                        chord::Json::Array after_jsons;
+                        for (const std::string& sibling : after) {
+                            after_jsons.push_back(chord::Json(sibling));
+                        }
+                        input.emplace("after", chord::Json(std::move(after_jsons)));
+                    }
                     auto spawned = consume(runtime.commit(
                             [child_def, input = chord::Json(std::move(input)), &ids, owner = runtime.task_id()](
                                     Transaction& tx,
@@ -304,12 +330,19 @@ TEST_CASE("a failFast join aborts live siblings and the parent reads ordered ter
 
     SyncLog log;
     std::vector<TaskDefinition> tasks;
-    add_join_child(tasks, log);
+    // The failing child waits until both siblings are live, so the failFast
+    // cascade always aborts running siblings (frozen pi never guarantees a
+    // marked-but-never-started task a run phase).
+    auto started = std::make_shared<std::map<std::string, std::shared_ptr<Gate>>>();
+    started->emplace("a", std::make_shared<Gate>());
+    started->emplace("b", std::make_shared<Gate>());
+    started->emplace("c", std::make_shared<Gate>());
+    add_join_child(tasks, log, started);
     const TaskDefinition* child_def = nullptr;
     add_join_parent(tasks,
             log,
             JoinPolicy::FailFast,
-            {{"a", true, false}, {"b", false, true}, {"c", false, true}},
+            {{"a", true, false, {"b", "c"}}, {"b", false, true, {}}, {"c", false, true, {}}},
             true,
             &child_def);
 
@@ -390,7 +423,8 @@ TEST_CASE("an allSettled join lets surviving siblings finish and still reads ord
     std::vector<TaskDefinition> tasks;
     add_join_child(tasks, log);
     const TaskDefinition* child_def = nullptr;
-    add_join_parent(tasks, log, JoinPolicy::AllSettled, {{"b", true, false}, {"c", false, true}}, false, &child_def);
+    add_join_parent(
+            tasks, log, JoinPolicy::AllSettled, {{"b", true, false, {}}, {"c", false, true, {}}}, false, &child_def);
 
     MemoryStorage storage;
     auto harness_res = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(tasks)}));
