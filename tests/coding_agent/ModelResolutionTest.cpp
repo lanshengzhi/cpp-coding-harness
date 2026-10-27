@@ -1156,7 +1156,10 @@ TEST_CASE("thinking-persistence golden pins the entry shape and the settings def
     settings_default.get_object().emplace("defaultThinkingLevel", found->second);
     golden.get_object().emplace("settingsDefaultWrite", std::move(settings_default));
 
-    auto serialized = support::write_json(golden);
+    // The committed golden is canonical text: object members sorted at every
+    // depth. `write_json` preserves member order (#1149), so the comparison
+    // normalizes explicitly rather than inheriting a container order.
+    auto serialized = support::canonical_json(golden);
     REQUIRE(serialized);
     const std::string path = std::string{CCH_SOURCE_DIR} +
                              "/fixtures/pi-agent-core/thinking-persistence.json";

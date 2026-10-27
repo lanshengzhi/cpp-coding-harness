@@ -65,7 +65,10 @@ TEST_CASE("JsonValue serializes control characters as unicode escapes and the re
     CHECK(*slash == "\"/\"");
 }
 
-TEST_CASE("JsonValue serializer emits sorted keys and compact structure", "[support][json][t6][compat-pi]") {
+TEST_CASE("JsonValue serializer preserves insertion order and compact structure", "[support][json][t6][compat-pi]") {
+    // The old expectation pinned `std::map`'s sorted output, which was an
+    // implementation detail of the previous container. The contract is the
+    // frozen pi one: `JSON.stringify` emits members in insertion order (#1149).
     const support::JsonValue value = support::JsonValue::object_t{
         {"b", support::JsonValue::array_t{1.0, 2.0}},
         {"a", true},
@@ -73,7 +76,25 @@ TEST_CASE("JsonValue serializer emits sorted keys and compact structure", "[supp
     };
     const auto serialized = support::write_json(value);
     REQUIRE(serialized);
-    CHECK(*serialized == R"({"a":true,"b":[1,2],"c":null})");
+    CHECK(*serialized == R"({"b":[1,2],"a":true,"c":null})");
+}
+
+TEST_CASE("canonical_json sorts object members at every depth", "[support][json][t6][compat-pi]") {
+    const support::JsonValue value = support::JsonValue::object_t{
+            {"b", support::JsonValue{support::JsonValue::object_t{{"z", 1.0}, {"y", 2.0}}}},
+            {"a", true},
+    };
+    const auto canonical = support::canonical_json(value);
+    REQUIRE(canonical);
+    CHECK(*canonical == R"({"a":true,"b":{"y":2,"z":1}})");
+    // Two values that differ only in member order share one canonical text.
+    const support::JsonValue reordered = support::JsonValue::object_t{
+            {"a", true},
+            {"b", support::JsonValue{support::JsonValue::object_t{{"y", 2.0}, {"z", 1.0}}}},
+    };
+    const auto reordered_canonical = support::canonical_json(reordered);
+    REQUIRE(reordered_canonical);
+    CHECK(*reordered_canonical == *canonical);
 }
 
 TEST_CASE("JsonValue parser handles whitespace-only containers like Glaze", "[support][json][t6][compat-pi]") {
@@ -164,10 +185,11 @@ TEST_CASE("JsonValue parse errors are typed and carry context", "[support][json]
 }
 
 TEST_CASE("JsonValue round-trips nested structures byte-identically", "[support][json][t6][compat-pi]") {
-    // Object keys are map-sorted (matching the Glaze path), so the input uses
-    // sorted keys for a byte-identical round-trip.
+    // The input's keys are deliberately not in dictionary order: parsing keeps
+    // the source text's member order and the serializer emits it, so the bytes
+    // round-trip without any sorting (#1149).
     const std::string input =
-        R"({"arr":[1,2.5,"x",null],"flag":false,"n":0.1,"neg":-42.5,"obj":{"k":"v"},"text":"hello\nworld"})";
+            R"({"text":"hello\nworld","n":0.1,"arr":[1,2.5,"x",null],"neg":-42.5,"obj":{"k":"v"},"flag":false})";
     const auto parsed = support::read_json(input);
     REQUIRE(parsed);
     const auto serialized = support::write_json(*parsed);

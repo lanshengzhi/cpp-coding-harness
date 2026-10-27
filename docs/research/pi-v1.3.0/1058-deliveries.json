@@ -110,7 +110,7 @@
         },
         {
           "path": "src/coding_agent/PrettyJson.hpp",
-          "sha256": "04501dad3e14e9c85337eaf3c4f43ceb28f8f629ed68c92361e5ee9426e58152"
+          "sha256": "e5c49351d47ab80370d0023b804953b2ffdefae986272d85841b973cd570cb70"
         },
         {
           "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -130,15 +130,15 @@
         },
         {
           "path": "src/support/Json.cpp",
-          "sha256": "95275d76867bb01ad4b4c6f58693674aad997cb88a10a750c6a153f7d4ffe852"
+          "sha256": "918e66aef3214726db77269ad8bfd45d91bae871a2d4672402cd6dc2d0467feb"
         },
         {
           "path": "src/support/Json.hpp",
-          "sha256": "520264602a7fc3689324416aa969ccbe2802b7ac1260fda47a6124119389a4a6"
+          "sha256": "4b7efc0a5d1379f0f418635284359478d5f58c9caa02dd44eb677c5de4bc09ad"
         },
         {
           "path": "src/support/include/cch/support/JsonValue.hpp",
-          "sha256": "35023bef670be8f7f446d35f9369e7c5f38eacff440ef42ec5d7f75744714667"
+          "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
         },
         {
           "path": "src/support/AsyncResultBridge.hpp",
@@ -202,7 +202,7 @@
         },
         {
           "path": "tests/coding_agent/McpStructuredContentTest.cpp",
-          "sha256": "e5ccbcf411c17c81b5fa2491603971cfbf3ee53c1cd58f448b79d726e1d7ae58"
+          "sha256": "cb20fa1227277204769643d369e7dbc222590ffb21dc2a73cfc09ce43660cd62"
         },
         {
           "path": "tests/support/JsonCompare.hpp",
@@ -220,20 +220,20 @@
       "validation": {
         "command": [
           "ctest",
-          "--preset",
-          "vcpkg",
+          "--test-dir",
+          "build",
           "-L",
           "issue1101",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1102-revalidation-1101.xml",
+          "../docs/research/pi-v1.3.0/deliveries/1149-revalidation-1101.xml",
           "--output-on-failure"
         ],
-        "testedRevision": "c79c2a5389f956751175c43f1a4f332bac990cb4",
-        "recordedAt": "2026-10-27T08:58:59Z",
+        "testedRevision": "8b71d0917bca72151dec639d74c86255b88fd8c1",
+        "recordedAt": "2026-10-27T18:00:31Z",
         "selected": 14,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1102-revalidation-1101.xml",
-          "sha256": "faa9983a123bc632697d3c075d29b89a629492b202cc5981ecb8f4236fe98dfb"
+          "path": "docs/research/pi-v1.3.0/deliveries/1149-revalidation-1101.xml",
+          "sha256": "b2e3b483ca93680ad13d84c98d0c69313a502f9eb6ce0724617f65d9f58827ef"
         }
       },
       "rows": [

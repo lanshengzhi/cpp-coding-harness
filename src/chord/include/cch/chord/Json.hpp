@@ -1,10 +1,10 @@
 #pragma once
 
 #include <cch/support/Error.hpp>
+#include <cch/support/JsonObject.hpp>
 #include <cch/support/JsonValue.hpp>
 
 #include <cstddef>
-#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -20,7 +20,9 @@ namespace cch::chord {
 class Json {
 public:
     using Array = std::vector<Json>;
-    using Object = std::map<std::string, Json>;
+    /// Members keep parse/insertion order (#1149), matching the frozen pi
+    /// `pi.system` section order the durable prompt planner reads.
+    using Object = support::JsonObject<Json>;
     using Storage = std::variant<std::nullptr_t,
             bool,
             double,

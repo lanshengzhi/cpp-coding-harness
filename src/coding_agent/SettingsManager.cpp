@@ -96,8 +96,13 @@ constexpr auto kLockStaleAfter = std::chrono::seconds{30};
 // ─────────────────────────────────────────────────────────────────────────────
 
 void migrate_settings(JsonObject& settings) {
+    // Every member this function copies is read out before the destination is
+    // written: a JSON object holds its members in a contiguous sequence, so a
+    // reference or iterator into `settings` does not survive an insertion that
+    // grows it (the previous `std::map` gave reference stability, #1149).
     if (settings.contains("queueMode") && !settings.contains("steeringMode")) {
-        settings["steeringMode"] = settings["queueMode"];
+        const auto queue_mode = settings.at("queueMode");
+        settings.insert_or_assign("steeringMode", queue_mode);
         settings.erase("queueMode");
     }
 
@@ -105,59 +110,62 @@ void migrate_settings(JsonObject& settings) {
         const auto websockets = settings.find("websockets");
         if (websockets != settings.end()) {
             if (const auto* enabled = websockets->second.get_if<bool>()) {
-                settings["transport"] = support::JsonValue{
-                    *enabled ? std::string{"websocket"} : std::string{"sse"}};
+                const support::JsonValue transport{*enabled ? std::string{"websocket"} : std::string{"sse"}};
+                settings.insert_or_assign("transport", transport);
             }
-            settings.erase(websockets);
+            settings.erase("websockets");
         }
     }
 
-    const auto skills = settings.find("skills");
-    if (skills != settings.end() && !skills->second.holds<support::JsonValue::array_t>()) {
+    if (const auto skills = settings.find("skills");
+            skills != settings.end() && !skills->second.holds<support::JsonValue::array_t>()) {
         if (const auto* skills_object = skills->second.get_if<JsonObject>()) {
             const auto enable_commands = skills_object->find("enableSkillCommands");
-            if (enable_commands != skills_object->end() &&
-                !settings.contains("enableSkillCommands")) {
-                settings["enableSkillCommands"] = enable_commands->second;
+            if (enable_commands != skills_object->end() && !settings.contains("enableSkillCommands")) {
+                const auto enabled = enable_commands->second;
+                settings.insert_or_assign("enableSkillCommands", enabled);
             }
             const auto custom = skills_object->find("customDirectories");
-            if (custom != skills_object->end() &&
-                custom->second.holds<support::JsonValue::array_t>() &&
-                !custom->second.get_array().empty()) {
-                settings["skills"] = custom->second;
+            if (custom != skills_object->end() && custom->second.holds<support::JsonValue::array_t>() &&
+                    !custom->second.get_array().empty()) {
+                const auto directories = custom->second;
+                settings.insert_or_assign("skills", directories);
             } else {
-                settings.erase(skills);
+                settings.erase("skills");
             }
         }
     }
 
-    const auto retry = settings.find("retry");
-    if (retry != settings.end()) {
+    if (const auto retry = settings.find("retry"); retry != settings.end()) {
         if (const auto* retry_object = retry->second.get_if<JsonObject>()) {
             auto mutated = *retry_object;
-            const auto provider = mutated.find("provider");
-            support::JsonValue::object_t* provider_object = nullptr;
-            JsonObject merged_provider;
-            if (provider != mutated.end()) {
-                if (auto* provided = provider->second.get_if<JsonObject>()) {
-                    merged_provider = *provided;
-                    provider_object = &merged_provider;
-                }
-            }
             const auto max_delay = mutated.find("maxDelayMs");
-            const bool provider_missing_delay =
-                provider_object == nullptr ||
-                !provider_object->contains("maxRetryDelayMs") ||
-                provider_object->at("maxRetryDelayMs").holds<support::JsonValue::null_t>();
-            if (max_delay != mutated.end() &&
-                max_delay->second.holds<double>() &&
-                provider_missing_delay) {
-                JsonObject configured_provider = std::move(merged_provider);
-                configured_provider["maxRetryDelayMs"] = max_delay->second;
-                mutated["provider"] = support::JsonValue{std::move(configured_provider)};
+            // Copy the candidate value out before any member of `mutated` is
+            // inserted: the insert can relocate the sequence that `max_delay`
+            // points into.
+            const bool has_numeric_delay = max_delay != mutated.end() && max_delay->second.holds<double>();
+            const support::JsonValue delay_value = has_numeric_delay ? max_delay->second : support::JsonValue{};
+            const bool provider_missing_delay = [&mutated] {
+                const auto provider = mutated.find("provider");
+                if (provider == mutated.end()) {
+                    return true;
+                }
+                const auto* provider_object = provider->second.get_if<JsonObject>();
+                return provider_object == nullptr || !provider_object->contains("maxRetryDelayMs") ||
+                       provider_object->at("maxRetryDelayMs").holds<support::JsonValue::null_t>();
+            }();
+            if (has_numeric_delay && provider_missing_delay) {
+                JsonObject configured_provider;
+                if (const auto provider = mutated.find("provider");
+                        provider != mutated.end() && provider->second.holds<JsonObject>()) {
+                    configured_provider = provider->second.get<JsonObject>();
+                }
+                configured_provider.insert_or_assign("maxRetryDelayMs", delay_value);
+                mutated.insert_or_assign("provider", support::JsonValue{std::move(configured_provider)});
             }
             mutated.erase("maxDelayMs");
-            retry->second = support::JsonValue{std::move(mutated)};
+            const auto migrated = support::JsonValue{std::move(mutated)};
+            settings.insert_or_assign("retry", migrated);
         }
     }
 }

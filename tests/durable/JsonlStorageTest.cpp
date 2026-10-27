@@ -91,6 +91,16 @@ constexpr std::string_view kCheckpointScenario =
     return *text;
 }
 
+/// Canonical comparison text for the frozen `audit-1054` records. The frozen
+/// artifacts are compared by value, not by their member order, so the
+/// comparison normalizes explicitly instead of relying on a container order
+/// (#1149).
+[[nodiscard]] std::string canonical_text(const support::JsonValue& value) {
+    auto text = support::canonical_json(value);
+    REQUIRE(text.has_value());
+    return *text;
+}
+
 [[nodiscard]] support::JsonValue json_object(
         std::initializer_list<std::pair<std::string, support::JsonValue>> members) {
     support::JsonValue::object_t object;
@@ -121,7 +131,7 @@ void require_files_match(const TempWorkspace& workspace, const support::JsonValu
         const auto actual_lines = json_lines(workspace.read(std::string{*name}));
         REQUIRE(actual_lines.size() == lines->size());
         for (std::size_t index = 0; index < lines->size(); ++index) {
-            CHECK(json_text(actual_lines[index]) == json_text((*lines)[index]));
+            CHECK(canonical_text(actual_lines[index]) == canonical_text((*lines)[index]));
         }
     }
     std::sort(expected_names.begin(), expected_names.end());
@@ -207,13 +217,13 @@ TEST_CASE("a JSONL store commits, closes and reopens the same records through th
 
     const auto* frozen_marker = scenario.object_member("mainMarker");
     REQUIRE(frozen_marker != nullptr);
-    CHECK(json_text(main_lines.back()) == json_text(support::JsonValue{*frozen_marker}));
+    CHECK(canonical_text(main_lines.back()) == canonical_text(support::JsonValue{*frozen_marker}));
 
     const auto sidecar_lines = json_lines(workspace.read("doc-4.jsonl"));
     REQUIRE(sidecar_lines.size() == 1);
     const auto* frozen_sidecar = scenario.object_member("sidecarRecord");
     REQUIRE(frozen_sidecar != nullptr);
-    CHECK(json_text(sidecar_lines.back()) == json_text(support::JsonValue{*frozen_sidecar}));
+    CHECK(canonical_text(sidecar_lines.back()) == canonical_text(support::JsonValue{*frozen_sidecar}));
 
     // Close and reopen through the same public seam: the records and the ID
     // namespace continue rather than restarting.

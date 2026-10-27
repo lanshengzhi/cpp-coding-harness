@@ -1,7 +1,8 @@
 #pragma once
 
+#include <cch/support/JsonObject.hpp>
+
 #include <cstddef>
-#include <map>
 #include <string>
 #include <utility>
 #include <variant>
@@ -15,7 +16,8 @@ namespace cch::support {
 struct JsonValue {
     using null_t = std::nullptr_t;
     using array_t = std::vector<JsonValue>;
-    using object_t = std::map<std::string, JsonValue>;
+    /// Members keep parse/insertion order (#1149).
+    using object_t = JsonObject<JsonValue>;
     using value_t = std::variant<null_t, double, std::string, bool, array_t, object_t>;
 
     value_t data{nullptr};

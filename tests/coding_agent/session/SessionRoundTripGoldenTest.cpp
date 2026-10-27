@@ -138,8 +138,13 @@ namespace {
     return support::JsonValue{std::move(out)};
 }
 
-[[nodiscard]] std::string canonical_json(const support::JsonValue& value) {
-    auto serialized = support::write_json(value);
+/// Canonical comparison text: `support::canonical_json` sorts object members at
+/// every depth, so two values that differ only in member order compare equal
+/// (#1149). This is the explicit normalization point for this golden, not an
+/// inherited container order. Named distinctly from `support::canonical_json`
+/// so argument-dependent lookup cannot select between the two.
+[[nodiscard]] std::string comparison_text(const support::JsonValue& value) {
+    auto serialized = support::canonical_json(value);
     REQUIRE(serialized);
     return *serialized;
 }
@@ -349,8 +354,8 @@ TEST_CASE("pi context projection: compaction retainedTail, custom omitted, custo
     const auto actual = cpp_messages_canonical(context.messages);
     const auto expected_canonical = canonical_messages(*expected);
 
-    auto actual_json = canonical_json(actual);
-    auto expected_json = canonical_json(expected_canonical);
+    auto actual_json = comparison_text(actual);
+    auto expected_json = comparison_text(expected_canonical);
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] projection mismatch\n--- expected ---\n"
                   << expected_json << "\n--- actual ---\n"
@@ -373,8 +378,8 @@ TEST_CASE("pi context projection: branch_summary, custom omitted, custom_message
     const auto actual = cpp_messages_canonical(context.messages);
     const auto expected_canonical = canonical_messages(*expected);
 
-    auto actual_json = canonical_json(actual);
-    auto expected_json = canonical_json(expected_canonical);
+    auto actual_json = comparison_text(actual);
+    auto expected_json = comparison_text(expected_canonical);
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] branch projection mismatch\n--- expected ---\n"
                   << expected_json << "\n--- actual ---\n"
@@ -437,8 +442,8 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
     std::vector<ai::MessageVariant> session_messages(recorded.begin(), recorded.end() - 1);
     const auto expected = support::read_json(read_fixture_text("projection-context.json"));
     REQUIRE(expected);
-    auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
-    auto expected_json = canonical_json(canonical_messages(*expected));
+    auto actual_json = comparison_text(cpp_messages_canonical(session_messages));
+    auto expected_json = comparison_text(canonical_messages(*expected));
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] seam projection mismatch\n--- expected ---\n"
                   << expected_json << "\n--- actual ---\n"
@@ -451,8 +456,8 @@ TEST_CASE("pi projection drives rebuilt context into the Agent at the fake-Model
     const auto expected_llm = support::read_json(read_fixture_text("projection-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);
-    auto llm_json = canonical_json(cpp_messages_canonical(llm_messages));
-    auto expected_llm_json = canonical_json(canonical_messages(*expected_llm));
+    auto llm_json = comparison_text(cpp_messages_canonical(llm_messages));
+    auto expected_llm_json = comparison_text(canonical_messages(*expected_llm));
     if (llm_json != expected_llm_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] LLM projection mismatch\n--- expected ---\n"
                   << expected_llm_json << "\n--- actual ---\n"
@@ -489,8 +494,8 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
 
     const auto expected = support::read_json(read_fixture_text("projection-branch-context.json"));
     REQUIRE(expected);
-    auto actual_json = canonical_json(cpp_messages_canonical(session_messages));
-    auto expected_json = canonical_json(canonical_messages(*expected));
+    auto actual_json = comparison_text(cpp_messages_canonical(session_messages));
+    auto expected_json = comparison_text(canonical_messages(*expected));
     if (actual_json != expected_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] branch seam mismatch\n--- expected ---\n"
                   << expected_json << "\n--- actual ---\n"
@@ -501,8 +506,8 @@ TEST_CASE("pi branch projection drives rebuilt context into the Agent",
     const auto expected_llm = support::read_json(read_fixture_text("projection-branch-context-llm.json"));
     REQUIRE(expected_llm);
     const auto llm_messages = to_llm_messages(session_messages);
-    auto llm_json = canonical_json(cpp_messages_canonical(llm_messages));
-    auto expected_llm_json = canonical_json(canonical_messages(*expected_llm));
+    auto llm_json = comparison_text(cpp_messages_canonical(llm_messages));
+    auto expected_llm_json = comparison_text(canonical_messages(*expected_llm));
     if (llm_json != expected_llm_json) {
         std::cerr << "\n[SessionRoundTripGoldenTest] branch LLM mismatch\n--- expected ---\n"
                   << expected_llm_json << "\n--- actual ---\n"

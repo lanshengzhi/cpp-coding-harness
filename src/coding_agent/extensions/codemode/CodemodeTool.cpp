@@ -2,8 +2,10 @@
 
 #include <cch/codemode/Source.hpp>
 
+#include <algorithm>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace cch::coding_agent::extensions {
 
@@ -51,12 +53,17 @@ std::string codemode_description(const std::vector<ai::Tool>& nested_tools) {
             const auto& obj = tool.parameters.get<support::JsonValue::object_t>();
             if (const auto props = obj.find("properties");
                     props != obj.end() && props->second.holds<support::JsonValue::object_t>()) {
-                desc += "{ ";
-                bool first = true;
+                // Sorted parameter names: the description text is a stable
+                // contract, so it never depends on the schema's member order.
+                std::vector<std::string> names;
                 for (const auto& [prop_name, _] : props->second.get<support::JsonValue::object_t>()) {
-                    if (!first) desc += ", ";
-                    desc += prop_name;
-                    first = false;
+                    names.push_back(prop_name);
+                }
+                std::sort(names.begin(), names.end());
+                desc += "{ ";
+                for (std::size_t index = 0; index < names.size(); ++index) {
+                    if (index != 0) desc += ", ";
+                    desc += names[index];
                 }
                 desc += " }";
             }

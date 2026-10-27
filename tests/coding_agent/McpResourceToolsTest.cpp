@@ -289,9 +289,12 @@ TEST_CASE("list_mcp_resources without a server lists every page of every server 
         INFO(*mismatch);
     }
 
-    // The tool's model-facing content is the compact JSON payload.
+    // The tool's model-facing content is the compact JSON payload, in the order
+    // the payload object is built: `resources` then `errors`. Before #1149 the
+    // object was a `std::map`, so this text started with the alphabetically
+    // first member and the assertion pinned that container detail.
     const auto text = tool_text(*outcome);
-    CHECK(text.starts_with("{\"errors\":["));
+    CHECK(text.starts_with("{\"resources\":["));
 }
 
 TEST_CASE("list_mcp_resources with a server lists one page and returns its cursor",

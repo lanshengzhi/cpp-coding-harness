@@ -689,10 +689,13 @@ struct ServerReport {
                 {"servers", support::JsonValue{std::move(servers)}},
                 {"errors", support::JsonValue{support::JsonValue::array_t{}}},
         };
-        auto& errors = root.at("errors").get_array();
+        // Fill the errors array before the object is inserted into again: a
+        // reference into a JSON object does not survive a later insertion.
+        support::JsonValue::array_t errors;
         for (const auto& config_error : loaded.errors) {
             errors.emplace_back(config_error);
         }
+        root.insert_or_assign("errors", support::JsonValue{std::move(errors)});
         if (!untrusted_note.empty()) {
             root.emplace("note", untrusted_note);
         }
