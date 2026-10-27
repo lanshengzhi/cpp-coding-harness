@@ -1788,14 +1788,14 @@ TEST_CASE("Workflow onYield continues the admitted run under a successor generat
     const auto await_request = [&](std::binary_semaphore& requested, std::string_view label) {
         if (requested.try_acquire_for(std::chrono::seconds{5})) return;
         // Release any pending stream before failing, so Harness destruction can drain.
-        release_first.release();
+        if (label == "first request") release_first.release();
         release_second.release();
         auto inspection = consume(harness->inspect());
-        INFO("Timed out waiting for " << label);
+        std::string diagnostic = "Timed out waiting for " + std::string{label};
         if (inspection.has_value()) {
             for (const auto& task : inspection.value().tasks) {
-                INFO("task " << task.record.id.value << " kind " << task.record.kind << " record "
-                             << task.record.state.status << " scheduler " << task.state.kind);
+                diagnostic += " task " + std::to_string(task.record.id.value) + " kind " + task.record.kind +
+                              " record " + task.record.state.status + " scheduler " + task.state.kind;
             }
         }
         auto live = storage.find_document(
@@ -1807,12 +1807,12 @@ TEST_CASE("Workflow onYield continues the admitted run under a successor generat
                 if (fields != nullptr && fields->contains("run")) {
                     const auto* run = fields->at("run").as_object();
                     if (run != nullptr && run->contains("task") && run->at("task").as_number()) {
-                        INFO("live.run.task " << *run->at("task").as_number());
+                        diagnostic += " live.run.task " + std::to_string(*run->at("task").as_number());
                     }
                 }
             }
         }
-        FAIL("model request was not reached (check early-settlement mutation when applicable)");
+        FAIL(diagnostic << "; model request was not reached (check early-settlement mutation when applicable)");
     };
     await_request(first_requested, "first request");
 
