@@ -228,12 +228,12 @@
           "../docs/research/pi-v1.3.0/deliveries/1151-revalidation-1101.xml",
           "--output-on-failure"
         ],
-        "testedRevision": "ed8e536c20192d41c670fde420020d176633c963",
-        "recordedAt": "2026-10-27T21:25:09Z",
+        "testedRevision": "0ae22c284122f8b15fa44f024c7cd7f5b680c104",
+        "recordedAt": "2026-10-27T21:30:18Z",
         "selected": 14,
         "junit": {
           "path": "docs/research/pi-v1.3.0/deliveries/1151-revalidation-1101.xml",
-          "sha256": "b88133786a72fc56acb7a8178f96a32cd61190dc094d15dc4a82cf31ff4f3abf"
+          "sha256": "65c64035218a0aae9feece1a09d0d180c81ff023f154798b7a2b2d860ea284cf"
         }
       },
       "rows": [
