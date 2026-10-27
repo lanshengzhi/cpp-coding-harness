@@ -286,7 +286,8 @@ struct SplitUrl {
         std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         const OAuthTokenRequest& request,
-        std::vector<std::pair<std::string, std::string>> params) {
+        std::vector<std::pair<std::string, std::string>> params,
+        std::stop_token stop_token) {
     const std::string url =
             request.metadata ? request.metadata->token_endpoint : origin_of(authorization_server_url) + "/token";
     if (auto insecure = insecure_endpoint(url); insecure) {
@@ -318,9 +319,12 @@ struct SplitUrl {
         }
     }
     auto response = co_await support::detail::await_async_result(
-            http->post(std::move(url), std::move(headers), form_encode(params), std::stop_token{}));
+            http->post(std::move(url), std::move(headers), form_encode(params), stop_token));
     if (!response) {
         co_return std::unexpected(plain_error(std::move(response.error())));
+    }
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(plain_error(support::make_error(support::ErrorCode::Cancelled, "Login cancelled")));
     }
     if (const auto parsed = support::read_json(response->body); parsed) {
         if (const auto* object = support::json_object(*parsed); object != nullptr) {
@@ -352,7 +356,8 @@ struct SplitUrl {
         OAuthTokenRequest request,
         std::string code,
         std::string code_verifier,
-        std::string redirect_url) {
+        std::string redirect_url,
+        std::stop_token stop_token) {
     co_return co_await token_request(std::move(http),
             std::move(authorization_server_url),
             request,
@@ -361,7 +366,8 @@ struct SplitUrl {
                     {"code", std::move(code)},
                     {"code_verifier", std::move(code_verifier)},
                     {"redirect_uri", std::move(redirect_url)},
-            });
+            },
+            stop_token);
 }
 
 /// The refresh grant, in the flow's error channel, with pi's merge of the old
@@ -369,14 +375,16 @@ struct SplitUrl {
 [[nodiscard]] boost::asio::awaitable<FlowResult<OAuthTokenResponse>> refresh_flow(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
-        std::string refresh_token) {
+        std::string refresh_token,
+        std::stop_token stop_token) {
     auto result = co_await token_request(std::move(http),
             std::move(authorization_server_url),
             request,
             {
                     {"grant_type", "refresh_token"},
                     {"refresh_token", refresh_token},
-            });
+            },
+            stop_token);
     if (!result) {
         co_return std::unexpected(std::move(result.error()));
     }
@@ -464,6 +472,9 @@ enum class InvalidateKind {
         std::string redirect_url,
         std::shared_ptr<OAuthHttpClient> http,
         OAuthFlowOptions options) {
+    if (options.stop_token.stop_requested()) {
+        co_return std::unexpected(plain_error(support::make_error(support::ErrorCode::Cancelled, "Login cancelled")));
+    }
     const std::optional<std::string> metadata_url = oauth.auth_server_metadata_url;
     if (metadata_url) {
         if (auto insecure = insecure_endpoint(*metadata_url); insecure) {
@@ -473,10 +484,13 @@ enum class InvalidateKind {
     OAuthDiscoveryOptions discovery;
     discovery.resource_metadata_url = options.resource_metadata_url;
     discovery.authorization_server_metadata_url = metadata_url;
-    auto discovered =
-            co_await support::detail::await_async_result(discover_oauth_server_info(http, server_url, discovery));
+    auto discovered = co_await support::detail::await_async_result(
+            discover_oauth_server_info(http, server_url, discovery, options.stop_token));
     if (!discovered) {
         co_return std::unexpected(plain_error(std::move(discovered.error())));
+    }
+    if (options.stop_token.stop_requested()) {
+        co_return std::unexpected(plain_error(support::make_error(support::ErrorCode::Cancelled, "Login cancelled")));
     }
     const auto& metadata = discovered->authorization_server_metadata;
     auto selected = select_resource(server_url, discovered->resource_metadata);
@@ -524,10 +538,18 @@ enum class InvalidateKind {
         if (options.authorization_code) {
             co_return std::unexpected(plain_error(invalid("OAuth client information is missing during code exchange")));
         }
-        auto registered = co_await support::detail::await_async_result(register_client(
-                http, discovered->authorization_server_url, metadata, client_metadata_for(redirect_url, oauth), scope));
+        auto registered = co_await support::detail::await_async_result(register_client(http,
+                discovered->authorization_server_url,
+                metadata,
+                client_metadata_for(redirect_url, oauth),
+                scope,
+                options.stop_token));
         if (!registered) {
             co_return std::unexpected(plain_error(std::move(registered.error())));
+        }
+        if (options.stop_token.stop_requested()) {
+            co_return std::unexpected(
+                    plain_error(support::make_error(support::ErrorCode::Cancelled, "Login cancelled")));
         }
         client = std::move(*registered);
         working.client_information = *client;
@@ -562,9 +584,14 @@ enum class InvalidateKind {
                 token_inputs,
                 *options.authorization_code,
                 *working.code_verifier,
-                exchange_redirect_url);
+                exchange_redirect_url,
+                options.stop_token);
         if (!tokens) {
             co_return std::unexpected(std::move(tokens.error()));
+        }
+        if (options.stop_token.stop_requested()) {
+            co_return std::unexpected(
+                    plain_error(support::make_error(support::ErrorCode::Cancelled, "Login cancelled")));
         }
         working = state_with_tokens(working, *tokens, scope);
         if (auto saved = persist(); !saved) {
@@ -573,8 +600,11 @@ enum class InvalidateKind {
         co_return OAuthFlowOutcome{.result = OAuthFlowResult::Authorized, .authorization_url = std::nullopt};
     }
     if (!options.skip_refresh && working.tokens && working.tokens->refresh_token) {
-        auto tokens = co_await refresh_flow(
-                http, discovered->authorization_server_url, token_inputs, *working.tokens->refresh_token);
+        auto tokens = co_await refresh_flow(http,
+                discovered->authorization_server_url,
+                token_inputs,
+                *working.tokens->refresh_token,
+                options.stop_token);
         if (!tokens) {
             // pi keeps a plain HTTP failure quiet (the caller then authorizes)
             // and propagates every other failure, including `invalid_grant`.
@@ -582,6 +612,10 @@ enum class InvalidateKind {
                 co_return std::unexpected(std::move(tokens.error()));
             }
         } else {
+            if (options.stop_token.stop_requested()) {
+                co_return std::unexpected(
+                        plain_error(support::make_error(support::ErrorCode::Cancelled, "Login cancelled")));
+            }
             // A refresh without `scope` keeps the scope of the grant (RFC 6749
             // §6).
             working = state_with_tokens(working, *tokens, working.tokens->scope);
@@ -590,6 +624,9 @@ enum class InvalidateKind {
             }
             co_return OAuthFlowOutcome{.result = OAuthFlowResult::Authorized, .authorization_url = std::nullopt};
         }
+    }
+    if (options.stop_token.stop_requested()) {
+        co_return std::unexpected(plain_error(support::make_error(support::ErrorCode::Cancelled, "Login cancelled")));
     }
     // pi `provider.state()`: reuse the stored state, or make one.
     if (!working.oauth_state || working.oauth_state->empty()) {
@@ -709,7 +746,11 @@ boost::asio::awaitable<support::Expected<OAuthClientInformation>> register_clien
         std::string authorization_server_url,
         std::optional<AuthorizationServerMetadata> metadata,
         OAuthClientMetadata client_metadata,
-        std::optional<std::string> scope) {
+        std::optional<std::string> scope,
+        std::stop_token stop_token) {
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+    }
     if (metadata && !metadata->registration_endpoint) {
         co_return std::unexpected(invalid("Authorization server does not support dynamic client registration"));
     }
@@ -752,8 +793,10 @@ boost::asio::awaitable<support::Expected<OAuthClientInformation>> register_clien
             {"Content-Type", "application/json"},
     };
     CCH_TRY(response,
-            co_await support::detail::await_async_result(
-                    http->post(url, std::move(headers), *serialized, std::stop_token{})));
+            co_await support::detail::await_async_result(http->post(url, std::move(headers), *serialized, stop_token)));
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+    }
     if (response.status_code < 200 || response.status_code >= 300) {
         co_return std::unexpected(oauth_error("OAuth dynamic client registration failed with status " +
                                               std::to_string(response.status_code) + ": " + response.body));
@@ -836,13 +879,15 @@ boost::asio::awaitable<support::Expected<OAuthTokenResponse>> exchange_authoriza
         OAuthTokenRequest request,
         std::string code,
         std::string code_verifier,
-        std::string redirect_url) {
+        std::string redirect_url,
+        std::stop_token stop_token) {
     auto result = co_await exchange_code_flow(std::move(http),
             std::move(authorization_server_url),
             std::move(request),
             std::move(code),
             std::move(code_verifier),
-            std::move(redirect_url));
+            std::move(redirect_url),
+            stop_token);
     if (!result) {
         co_return std::unexpected(std::move(result.error().error));
     }
@@ -853,9 +898,13 @@ boost::asio::awaitable<support::Expected<OAuthTokenResponse>> refresh_authorizat
         std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
-        std::string refresh_token) {
-    auto result = co_await refresh_flow(
-            std::move(http), std::move(authorization_server_url), std::move(request), std::move(refresh_token));
+        std::string refresh_token,
+        std::stop_token stop_token) {
+    auto result = co_await refresh_flow(std::move(http),
+            std::move(authorization_server_url),
+            std::move(request),
+            std::move(refresh_token),
+            stop_token);
     if (!result) {
         co_return std::unexpected(std::move(result.error().error));
     }
@@ -875,6 +924,9 @@ boost::asio::awaitable<support::Expected<OAuthFlowOutcome>> authorize_mcp_awaita
         co_return std::move(*attempt);
     }
     const std::string code = attempt.error().oauth_code;
+    if (options.stop_token.stop_requested() || attempt.error().error.code == support::ErrorCode::Cancelled) {
+        co_return std::unexpected(std::move(attempt.error().error));
+    }
     if (code == "invalid_client" || code == "unauthorized_client") {
         if (auto invalidated = invalidate_credentials(store, server_name, server_url, InvalidateKind::All);
                 !invalidated) {
@@ -906,19 +958,21 @@ support::AsyncResult<OAuthClientInformation> register_client(std::shared_ptr<OAu
         std::string authorization_server_url,
         std::optional<AuthorizationServerMetadata> metadata,
         OAuthClientMetadata client_metadata,
-        std::optional<std::string> scope) {
+        std::optional<std::string> scope,
+        std::stop_token stop_token) {
     return support::detail::make_async_result(
             [http = std::move(http),
                     authorization_server_url = std::move(authorization_server_url),
                     metadata = std::move(metadata),
                     client_metadata = std::move(client_metadata),
-                    scope = std::move(
-                            scope)]() mutable -> boost::asio::awaitable<support::Expected<OAuthClientInformation>> {
+                    scope = std::move(scope),
+                    stop_token]() mutable -> boost::asio::awaitable<support::Expected<OAuthClientInformation>> {
                 co_return co_await register_client_awaitable(std::move(http),
                         std::move(authorization_server_url),
                         std::move(metadata),
                         std::move(client_metadata),
-                        std::move(scope));
+                        std::move(scope),
+                        stop_token);
             });
 }
 
@@ -927,36 +981,43 @@ support::AsyncResult<OAuthTokenResponse> exchange_authorization_code(std::shared
         OAuthTokenRequest request,
         std::string code,
         std::string code_verifier,
-        std::string redirect_url) {
+        std::string redirect_url,
+        std::stop_token stop_token) {
     return support::detail::make_async_result(
             [http = std::move(http),
                     authorization_server_url = std::move(authorization_server_url),
                     request = std::move(request),
                     code = std::move(code),
                     code_verifier = std::move(code_verifier),
-                    redirect_url = std::move(
-                            redirect_url)]() mutable -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
+                    redirect_url = std::move(redirect_url),
+                    stop_token]() mutable -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
                 co_return co_await exchange_authorization_code_awaitable(std::move(http),
                         std::move(authorization_server_url),
                         std::move(request),
                         std::move(code),
                         std::move(code_verifier),
-                        std::move(redirect_url));
+                        std::move(redirect_url),
+                        stop_token);
             });
 }
 
 support::AsyncResult<OAuthTokenResponse> refresh_authorization(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
-        std::string refresh_token) {
-    return support::detail::make_async_result([http = std::move(http),
-                                                      authorization_server_url = std::move(authorization_server_url),
-                                                      request = std::move(request),
-                                                      refresh_token = std::move(refresh_token)]() mutable
-                                                      -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
-        co_return co_await refresh_authorization_awaitable(
-                std::move(http), std::move(authorization_server_url), std::move(request), std::move(refresh_token));
-    });
+        std::string refresh_token,
+        std::stop_token stop_token) {
+    return support::detail::make_async_result(
+            [http = std::move(http),
+                    authorization_server_url = std::move(authorization_server_url),
+                    request = std::move(request),
+                    refresh_token = std::move(refresh_token),
+                    stop_token]() mutable -> boost::asio::awaitable<support::Expected<OAuthTokenResponse>> {
+                co_return co_await refresh_authorization_awaitable(std::move(http),
+                        std::move(authorization_server_url),
+                        std::move(request),
+                        std::move(refresh_token),
+                        stop_token);
+            });
 }
 
 support::AsyncResult<OAuthFlowOutcome> authorize_mcp(std::shared_ptr<OAuthStateStore> store,

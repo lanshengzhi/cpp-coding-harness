@@ -70,6 +70,7 @@ struct McpOAuthCallbackSettings {
 struct McpOAuthSignInPrompt {
     std::function<void(const std::string& authorization_url)> show_authorization_url;
     std::function<support::AsyncResult<std::optional<std::string>>(std::stop_token)> prompt_for_redirect_url;
+    std::stop_token stop_token{};
 };
 
 /// pi `signInMcpServer`: sign in to one MCP server through the loopback
@@ -87,6 +88,9 @@ struct McpOAuthSignInRequest {
     /// Defaults to the production `BoostBeastOAuthHttpClient`; tests inject a
     /// scripted one.
     std::shared_ptr<cch::mcp::OAuthHttpClient> http{nullptr};
+    /// Cancels discovery, registration, token exchange, and refresh for this
+    /// sign-in or request-time authorization flow.
+    std::stop_token stop_token{};
     McpOAuthSignInPrompt prompt;
 };
 
@@ -116,7 +120,9 @@ public:
     McpOAuthFlowTokenResolver(const McpOAuthFlowTokenResolver&) = delete;
     McpOAuthFlowTokenResolver& operator=(const McpOAuthFlowTokenResolver&) = delete;
 
-    [[nodiscard]] support::AsyncResult<std::map<std::string, std::string>> current_headers() override;
+    [[nodiscard]] support::AsyncResult<std::map<std::string, std::string>> current_headers(
+            std::stop_token stop_token = {},
+            cch::mcp::RequestAuthPurpose purpose = cch::mcp::RequestAuthPurpose::Operation) override;
 
 private:
     std::shared_ptr<McpAuthStore> store_;

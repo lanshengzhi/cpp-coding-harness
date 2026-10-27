@@ -191,8 +191,10 @@ private:
     /// response body (JSON or SSE). `stop_token` is carried on the request so
     /// the transport can cancel it. `on_body_chunk` observes the response
     /// stream as it arrives (pi `consumeResponseStream`'s progress events).
-    [[nodiscard]] boost::asio::awaitable<support::Expected<support::StreamResponse>> post(
-            std::string_view body, std::stop_token stop_token, support::BodyChunkHandler on_body_chunk = {});
+    [[nodiscard]] boost::asio::awaitable<support::Expected<support::StreamResponse>> post(std::string_view body,
+            std::stop_token stop_token,
+            support::BodyChunkHandler on_body_chunk = {},
+            std::shared_ptr<std::atomic_bool> request_sent = {});
 
     /// The disposition of one server-to-client GET stream attempt (pi
     /// `runGetStream`'s loop body).
@@ -257,13 +259,15 @@ private:
 
     [[nodiscard]] std::map<std::string, std::string> request_headers() const;
     /// Layer, when a request-auth source is configured, the source's current
-    /// headers resolved for this request onto `headers`.
+    /// headers resolved for this request onto `headers` using `stop_token`.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> resolve_headers(
-            std::map<std::string, std::string> headers);
+            std::map<std::string, std::string> headers,
+            std::stop_token stop_token = {},
+            RequestAuthPurpose purpose = RequestAuthPurpose::Operation);
     /// The same headers plus, when a request-auth source is configured, the
     /// source's current headers resolved for this request.
     [[nodiscard]] boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
-    request_headers_for_call();
+    request_headers_for_call(std::stop_token stop_token);
     void capture_session(const support::StreamResponse& response);
     [[nodiscard]] support::Expected<support::JsonValue> interpret_response(
             int id, const support::StreamResponse& response, std::string* matched_raw = nullptr) const;
@@ -293,6 +297,9 @@ private:
     /// The server-to-client stream's cancellation source: `close()` requests
     /// it to abort the GET request and the reconnect wait.
     std::stop_source stream_stop_;
+    /// Cancels in-flight request-auth resolution as well as queued POSTs when
+    /// the client closes; session DELETE uses its separate close-purpose path.
+    std::stop_source close_stop_;
     bool closed_{false};
     NotificationListener notification_listener_;
     ErrorListener error_listener_;

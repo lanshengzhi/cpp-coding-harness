@@ -178,7 +178,8 @@ using RaceOutcome = support::Expected<std::optional<AuthorizationResponse>>;
         const std::string& authorization_url,
         const std::string& redirect_url,
         const McpOAuthSignInPrompt& prompt,
-        std::chrono::milliseconds timeout) {
+        std::chrono::milliseconds timeout,
+        std::stop_token stop_token) {
     std::string authorization_redirect = query_param(authorization_url, "redirect_uri");
     if (authorization_redirect.empty()) {
         authorization_redirect = redirect_url;
@@ -241,6 +242,11 @@ using RaceOutcome = support::Expected<std::optional<AuthorizationResponse>>;
     timer->async_wait([settled](const boost::system::error_code&) {
         settled->try_send(boost::system::error_code{}, RaceOutcome{std::nullopt});
     });
+    std::stop_callback cancellation{stop_token, [settled] {
+                                        settled->try_send(boost::system::error_code{},
+                                                RaceOutcome{std::unexpected(support::make_error(
+                                                        support::ErrorCode::Cancelled, "Login cancelled"))});
+                                    }};
 
     boost::system::error_code receive_error;
     RaceOutcome outcome =
@@ -325,6 +331,9 @@ std::string mcp_oauth_registered_redirect_url(const std::optional<cch::mcp::OAut
 support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
     return support::detail::make_async_result([request = std::move(request)]() mutable
                                                       -> boost::asio::awaitable<support::ExpectedVoid> {
+        if (request.stop_token.stop_requested()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+        }
         auto http = request.http ? request.http : cch::mcp::default_oauth_http_client();
         auto loaded = request.store->load(request.server_name, request.server_url);
         if (!loaded) {
@@ -389,6 +398,7 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
         // scope wins, then the resource's advertised scopes.
         cch::mcp::OAuthFlowOptions flow_options;
         flow_options.scope = request.oauth.scope;
+        flow_options.stop_token = request.stop_token;
 
         auto outcome = co_await support::detail::await_async_result(cch::mcp::authorize_mcp(request.store,
                 request.server_name,
@@ -399,6 +409,9 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
                 flow_options));
         if (!outcome) {
             co_return std::unexpected(std::move(outcome.error()));
+        }
+        if (request.stop_token.stop_requested()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
         }
         if (outcome->result == cch::mcp::OAuthFlowResult::Authorized) {
             co_return support::ExpectedVoid{};
@@ -414,14 +427,19 @@ support::AsyncResult<void> sign_in_mcp_server(McpOAuthSignInRequest request) {
                 *outcome->authorization_url,
                 redirect_url,
                 request.prompt,
-                request.timeout);
+                request.timeout,
+                request.stop_token);
         if (!authorization) {
             co_return std::unexpected(std::move(authorization.error()));
+        }
+        if (request.stop_token.stop_requested()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
         }
         cch::mcp::OAuthFlowOptions exchange;
         exchange.scope = flow_options.scope;
         exchange.authorization_code = authorization->code;
         exchange.iss = authorization->iss;
+        exchange.stop_token = request.stop_token;
         auto authorized = co_await support::detail::await_async_result(cch::mcp::authorize_mcp(
                 request.store, request.server_name, request.server_url, request.oauth, redirect_url, http, exchange));
         if (!authorized) {
@@ -446,13 +464,30 @@ McpOAuthFlowTokenResolver::McpOAuthFlowTokenResolver(McpOAuthFlowTokenResolver&&
 McpOAuthFlowTokenResolver& McpOAuthFlowTokenResolver::operator=(McpOAuthFlowTokenResolver&&) noexcept = default;
 McpOAuthFlowTokenResolver::~McpOAuthFlowTokenResolver() = default;
 
-support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolver::current_headers() {
+support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolver::current_headers(
+        std::stop_token stop_token, cch::mcp::RequestAuthPurpose purpose) {
     return support::detail::make_async_result(
-            [store = store_, server_name = server_name_, server_url = server_url_, oauth = oauth_, http = http_]()
-                    -> boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> {
+            [store = store_,
+                    server_name = server_name_,
+                    server_url = server_url_,
+                    oauth = oauth_,
+                    http = http_,
+                    stop_token,
+                    purpose]() -> boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> {
                 auto loaded = store->load(server_name, server_url);
                 if (!loaded) {
                     co_return std::unexpected(std::move(loaded.error()));
+                }
+                if (purpose == cch::mcp::RequestAuthPurpose::SessionClose) {
+                    if (loaded->has_value()) {
+                        if (auto headers = bearer_headers(**loaded); headers) {
+                            co_return std::move(*headers);
+                        }
+                    }
+                    co_return std::map<std::string, std::string>{};
+                }
+                if (stop_token.stop_requested()) {
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
                 }
                 // The fast path: a stored, unexpired access token is sent with
                 // no network call.
@@ -469,8 +504,18 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthFlowTokenResolv
                 // it discovers the authorization server, registers a client if
                 // none is stored, and refreshes the tokens.
                 const std::string redirect_url = mcp_oauth_registered_redirect_url(*loaded);
-                auto outcome = co_await support::detail::await_async_result(cch::mcp::authorize_mcp(
-                        store, server_name, server_url, oauth, redirect_url, http, cch::mcp::OAuthFlowOptions{}));
+                auto outcome = co_await support::detail::await_async_result(cch::mcp::authorize_mcp(store,
+                        server_name,
+                        server_url,
+                        oauth,
+                        redirect_url,
+                        http,
+                        cch::mcp::OAuthFlowOptions{.scope = std::nullopt,
+                                .authorization_code = std::nullopt,
+                                .iss = std::nullopt,
+                                .resource_metadata_url = std::nullopt,
+                                .skip_refresh = false,
+                                .stop_token = stop_token}));
                 if (!outcome) {
                     co_return std::unexpected(std::move(outcome.error()));
                 }

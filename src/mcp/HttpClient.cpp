@@ -564,9 +564,11 @@ void HttpClientImpl::complete_frame(QueuedFrame& frame, support::Expected<suppor
     }
 }
 
-boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImpl::post(
-        std::string_view body, std::stop_token stop_token, support::BodyChunkHandler on_body_chunk) {
-    CCH_TRY(headers, co_await request_headers_for_call());
+boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImpl::post(std::string_view body,
+        std::stop_token stop_token,
+        support::BodyChunkHandler on_body_chunk,
+        std::shared_ptr<std::atomic_bool> request_sent) {
+    CCH_TRY(headers, co_await request_headers_for_call(stop_token));
     support::StreamRequest request;
     request.method = "POST";
     request.url = config_.url;
@@ -579,6 +581,9 @@ boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImp
     // response headers only; the MCP-layer request deadline lives in
     // `send_request` so progress can re-arm it (pi `armTimeout`).
     request.stop_token = stop_token;
+    if (request_sent) {
+        *request_sent = true;
+    }
     // An empty body handler just buffers the response body (a JSON reply, or
     // the complete SSE response stream); an observed request additionally
     // parses the stream incrementally for its progress events.
@@ -595,13 +600,16 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
     // the transport's deadline covers connection and headers, and the body
     // streams unbounded until completion or cancellation.
     if (on_progress == nullptr) {
-        auto response = co_await post(frame, stop_token, {});
+        auto request_sent = std::make_shared<std::atomic_bool>(false);
+        auto response = co_await post(frame, stop_token, {}, request_sent);
         if (!response) {
             // pi `cancelPending`: a cancellable request that is aborted or times
             // out tells the server through `notifications/cancelled` (with the pi
-            // reason) before the call fails. `initialize` is never cancellable.
+            // reason) before the call fails. A request cancelled while resolving
+            // OAuth headers never reached the server and has no id to cancel.
             const support::ErrorCode code = response.error().code;
-            if (cancellable && (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
+            if (cancellable && request_sent->load() &&
+                    (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
                 co_await notify_cancelled(id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
             }
             co_return std::unexpected(std::move(response.error()));
@@ -630,6 +638,7 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
     auto rearm = std::make_shared<std::atomic_bool>(false);
     auto deadline = std::make_shared<boost::asio::steady_timer>(executor);
     auto post_stop = std::make_shared<std::stop_source>();
+    auto request_sent = std::make_shared<std::atomic_bool>(false);
     // The caller's cancellation aborts the POST as before (ADR 0020).
     std::stop_callback cancellation{stop_token, [post_stop] { post_stop->request_stop(); }};
 
@@ -679,7 +688,9 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
                     post_stop,
                     rearm,
                     deadline,
-                    id]() mutable -> boost::asio::awaitable<void> {
+                    id,
+                    request_sent,
+                    stop_token]() mutable -> boost::asio::awaitable<void> {
                 // Incremental SSE parse of the response stream: a
                 // notifications/progress for this request's token re-arms the
                 // deadline and delivers to the observer (pi
@@ -711,7 +722,11 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
                     }
                     return support::ExpectedVoid{};
                 };
-                auto response = co_await self->post(std::move(body), post_stop->get_token(), std::move(chunk));
+                auto response =
+                        co_await self->post(std::move(body), post_stop->get_token(), std::move(chunk), request_sent);
+                if (response && (stop_token.stop_requested() || self->closed_)) {
+                    response = std::unexpected(detail::cancelled_error(self->config_.name));
+                }
                 if (response && response->body.empty() && !buffered_body->empty()) {
                     response->body = std::move(*buffered_body);
                 }
@@ -739,7 +754,8 @@ boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::se
     }
     if (!response) {
         const support::ErrorCode code = response.error().code;
-        if (cancellable && (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
+        if (cancellable && request_sent->load() &&
+                (code == support::ErrorCode::Cancelled || code == support::ErrorCode::Timeout)) {
             co_await notify_cancelled(id, code == support::ErrorCode::Timeout ? "Request timed out" : "Aborted");
         }
         co_return std::unexpected(std::move(response.error()));
@@ -791,16 +807,33 @@ std::map<std::string, std::string> HttpClientImpl::request_headers() const {
 }
 
 boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> HttpClientImpl::resolve_headers(
-        std::map<std::string, std::string> headers) {
+        std::map<std::string, std::string> headers, std::stop_token stop_token, RequestAuthPurpose purpose) {
+    const bool is_close = purpose == RequestAuthPurpose::SessionClose;
+    if ((!is_close && closed_) || stop_token.stop_requested()) {
+        co_return std::unexpected(detail::cancelled_error(config_.name));
+    }
     if (request_auth_ == nullptr) {
         co_return headers;
     }
+    // Client close cancels refresh just like request cancellation. Session
+    // DELETE gets its own close-purpose resolution and keeps the saved token.
+    std::stop_source auth_stop;
+    std::stop_callback caller_stop(stop_token, [&auth_stop] { auth_stop.request_stop(); });
+    std::stop_callback client_close(close_stop_.get_token(), [&auth_stop, is_close] {
+        if (!is_close) {
+            auth_stop.request_stop();
+        }
+    });
     // Resolve the credential for this call only: a rotated or newly signed-in
     // token is observed without restarting the connection, and a failure is the
     // request's explicit error (never an unauthenticated send).
-    auto resolved = co_await support::detail::await_async_result(request_auth_->current_headers());
+    auto resolved = co_await support::detail::await_async_result(
+            request_auth_->current_headers(auth_stop.get_token(), purpose));
     if (!resolved) {
         co_return std::unexpected(std::move(resolved.error()));
+    }
+    if (stop_token.stop_requested() || (!is_close && (closed_ || close_stop_.stop_requested()))) {
+        co_return std::unexpected(detail::cancelled_error(config_.name));
     }
     for (auto& [name, value] : *resolved) {
         headers.insert_or_assign(std::move(name), std::move(value));
@@ -808,9 +841,9 @@ boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> Ht
     co_return headers;
 }
 
-boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>>
-HttpClientImpl::request_headers_for_call() {
-    co_return co_await resolve_headers(request_headers());
+boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> HttpClientImpl::request_headers_for_call(
+        std::stop_token stop_token) {
+    co_return co_await resolve_headers(request_headers(), stop_token, RequestAuthPurpose::Operation);
 }
 
 void HttpClientImpl::set_notification_listener(NotificationListener listener) {
@@ -1108,7 +1141,7 @@ boost::asio::awaitable<void> HttpClientImpl::delete_session() {
     if (!protocol_version_.empty()) {
         headers["mcp-protocol-version"] = protocol_version_;
     }
-    auto resolved = co_await resolve_headers(std::move(headers));
+    auto resolved = co_await resolve_headers(std::move(headers), {}, RequestAuthPurpose::SessionClose);
     if (!resolved) {
         // Resolving auth headers failed; the session expires on the server.
         co_return;
@@ -1127,6 +1160,7 @@ void HttpClientImpl::close() noexcept {
         return;
     }
     closed_ = true;
+    close_stop_.request_stop();
     stream_stop_.request_stop();
     if (!session_id_.empty()) {
         boost::asio::co_spawn(

@@ -58,10 +58,15 @@ McpOAuthTokenResolver::McpOAuthTokenResolver(McpOAuthTokenResolver&&) noexcept =
 McpOAuthTokenResolver& McpOAuthTokenResolver::operator=(McpOAuthTokenResolver&&) noexcept = default;
 McpOAuthTokenResolver::~McpOAuthTokenResolver() = default;
 
-support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::current_headers() {
+support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::current_headers(
+        std::stop_token stop_token, cch::mcp::RequestAuthPurpose purpose) {
     return support::detail::make_async_result(
-            [store = store_, server_name = server_name_, server_url = server_url_, provider = provider_]()
-                    -> boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> {
+            [store = store_,
+                    server_name = server_name_,
+                    server_url = server_url_,
+                    provider = provider_,
+                    stop_token,
+                    purpose]() -> boost::asio::awaitable<support::Expected<std::map<std::string, std::string>>> {
                 const std::string provider_id = cch::mcp::mcp_oauth_provider_id(server_name);
                 auto state = store->load(server_name, server_url);
                 if (!state) {
@@ -74,11 +79,18 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::
                 if (!credential.has_value()) {
                     co_return std::unexpected(re_login_error(server_name, provider_id, "no stored OAuth credential"));
                 }
+                if (purpose == cch::mcp::RequestAuthPurpose::SessionClose) {
+                    co_return std::map<std::string, std::string>{{"Authorization", "Bearer " + credential->access}};
+                }
+                if (stop_token.stop_requested()) {
+                    co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+                }
                 if (token_expires_soon(*credential)) {
                     // One refresh attempt: a failed refresh (including an
                     // `invalid_grant`) propagates, is never retried, and leaves
                     // the stored state untouched.
-                    auto refreshed = co_await support::detail::await_async_result(provider->refresh(*credential));
+                    auto refreshed =
+                            co_await support::detail::await_async_result(provider->refresh(*credential, stop_token));
                     if (!refreshed) {
                         if (refreshed.error().code == support::ErrorCode::OAuth) {
                             std::string detail = refreshed.error().detail.empty() ? refreshed.error().message
@@ -86,6 +98,10 @@ support::AsyncResult<std::map<std::string, std::string>> McpOAuthTokenResolver::
                             co_return std::unexpected(re_login_error(server_name, provider_id, std::move(detail)));
                         }
                         co_return std::unexpected(std::move(refreshed.error()));
+                    }
+                    if (stop_token.stop_requested()) {
+                        co_return std::unexpected(
+                                support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
                     }
                     auto rotated = cch::mcp::mcp_oauth_state_from_credential(*refreshed, server_url);
                     if (auto saved = store->save(server_name, server_url, rotated); !saved) {

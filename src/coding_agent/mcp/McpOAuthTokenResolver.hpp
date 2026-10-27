@@ -33,7 +33,9 @@ public:
     McpOAuthTokenResolver(const McpOAuthTokenResolver&) = delete;
     McpOAuthTokenResolver& operator=(const McpOAuthTokenResolver&) = delete;
 
-    [[nodiscard]] support::AsyncResult<std::map<std::string, std::string>> current_headers() override;
+    [[nodiscard]] support::AsyncResult<std::map<std::string, std::string>> current_headers(
+            std::stop_token stop_token = {},
+            cch::mcp::RequestAuthPurpose purpose = cch::mcp::RequestAuthPurpose::Operation) override;
 
 private:
     std::shared_ptr<McpAuthStore> store_;

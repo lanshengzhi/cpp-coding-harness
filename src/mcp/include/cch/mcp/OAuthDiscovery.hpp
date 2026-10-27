@@ -14,6 +14,7 @@
 
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -121,7 +122,10 @@ struct OAuthDiscoveryOptions {
 /// path-suffixed one is a miss (4xx or 502) and the server path is not `/`.
 /// The document must parse, else the error is explicit.
 [[nodiscard]] support::AsyncResult<ProtectedResourceMetadata> discover_protected_resource_metadata(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options = {});
+        std::shared_ptr<OAuthHttpClient> http,
+        std::string server_url,
+        OAuthDiscoveryOptions options = {},
+        std::stop_token stop_token = {});
 
 /// pi `discoverAuthorizationServerMetadata`: try the candidate URLs in order
 /// until one answers with metadata; a 4xx or 502 is a miss, any other failure
@@ -131,14 +135,17 @@ struct OAuthDiscoveryOptions {
 [[nodiscard]] support::AsyncResult<std::optional<AuthorizationServerMetadata>> discover_authorization_server_metadata(
         std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
-        OAuthDiscoveryOptions options = {});
+        OAuthDiscoveryOptions options = {},
+        std::stop_token stop_token = {});
 
 /// pi `discoverOAuthServerInfo`: protected-resource discovery (best effort — a
 /// non-network failure is ignored), then the authorization server, which is
 /// `resourceMetadata.authorization_servers[0]` or the server's origin, and its
 /// metadata. A configured `authorization_server_metadata_url` is fetched
 /// instead and its `issuer` is the authorization-server URL.
-[[nodiscard]] support::AsyncResult<OAuthServerInfo> discover_oauth_server_info(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options = {});
+[[nodiscard]] support::AsyncResult<OAuthServerInfo> discover_oauth_server_info(std::shared_ptr<OAuthHttpClient> http,
+        std::string server_url,
+        OAuthDiscoveryOptions options = {},
+        std::stop_token stop_token = {});
 
 } // namespace cch::mcp

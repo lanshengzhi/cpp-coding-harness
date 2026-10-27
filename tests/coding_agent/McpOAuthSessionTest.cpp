@@ -22,6 +22,7 @@
 #include "support/EnvVarGuard.hpp"
 #include "support/FakeOAuthHttpClient.hpp"
 #include "support/Json.hpp"
+#include "support/McpTestKit.hpp"
 #include "support/ReadyResult.hpp"
 #include "support/RuntimeFixture.hpp"
 #include "support/TempWorkspace.hpp"
@@ -312,16 +313,22 @@ class StubRequestAuth final : public cch::mcp::RequestAuthSource {
 public:
     explicit StubRequestAuth(std::string token) : token_(std::move(token)) {}
 
-    [[nodiscard]] support::AsyncResult<std::map<std::string, std::string>> current_headers() override {
+    [[nodiscard]] support::AsyncResult<std::map<std::string, std::string>> current_headers(
+            std::stop_token, cch::mcp::RequestAuthPurpose purpose) override {
         ++calls_;
+        if (purpose == cch::mcp::RequestAuthPurpose::SessionClose) {
+            ++close_calls_;
+        }
         return tests::ready_result(std::map<std::string, std::string>{{"Authorization", "Bearer " + token_}});
     }
 
     [[nodiscard]] int calls() const noexcept { return calls_; }
+    [[nodiscard]] int close_calls() const noexcept { return close_calls_; }
 
 private:
     std::string token_;
     int calls_{0};
+    int close_calls_{0};
 };
 
 // ── real TLS MCP fixture server (mirrors the #873 harness) ───────────────────
@@ -336,7 +343,7 @@ private:
 
 class HttpFixtureServer final {
 public:
-    HttpFixtureServer() {
+    explicit HttpFixtureServer(std::filesystem::path trace_path = {}, std::string expected_delete_authorization = {}) {
         int fds[2]{-1, -1};
         REQUIRE(::pipe(fds) == 0);
         const pid_t child = ::fork();
@@ -348,6 +355,16 @@ public:
             const int devnull = ::open("/dev/null", O_WRONLY);
             if (devnull >= 0) {
                 (void)::dup2(devnull, STDERR_FILENO);
+            }
+            if (!trace_path.empty()) {
+                (void)::setenv("PIKE_MCP_TRACE", trace_path.c_str(), 1);
+            } else {
+                (void)::unsetenv("PIKE_MCP_TRACE");
+            }
+            if (!expected_delete_authorization.empty()) {
+                (void)::setenv("PIKE_MCP_EXPECT_DELETE_AUTHORIZATION", expected_delete_authorization.c_str(), 1);
+            } else {
+                (void)::unsetenv("PIKE_MCP_EXPECT_DELETE_AUTHORIZATION");
             }
             const std::string script = fixture_path("http_server.py");
             const std::string cert = tls_fixture_path("test-server.pem");
@@ -415,7 +432,8 @@ private:
     auto client = tests::run_awaitable(runtime,
             cch::mcp::HttpClient::connect(std::move(config),
                     std::make_shared<support::BoostBeastStreamTransport>(),
-                    std::move(request_auth)));
+                    std::move(request_auth),
+                    cch::mcp::HttpGetStreamOptions{.enabled = false}));
     REQUIRE(client.has_value());
     return *client;
 }
@@ -549,6 +567,113 @@ TEST_CASE("a valid stored MCP OAuth credential resolves the bearer token without
     CHECK(http->requests.empty());
 }
 
+TEST_CASE("a cancelled MCP OAuth refresh stops before the request reaches the MCP server",
+        "[coding_agent][mcp][issue1102][spec]") {
+    const auto fixture = read_replay_fixture();
+    const auto config = server_config_from_fixture(fixture);
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store,
+            oauth_state("old-access",
+                    "stalled-refresh",
+                    ai::current_timestamp_ms() +
+                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
+
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
+    auto resolver =
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+    auto client = connect_http_client(runtime, http_config(server), resolver);
+    seed_state(*store, oauth_state("old-access", "stalled-refresh", ai::current_timestamp_ms() + 1000));
+    http->hold_post_until_stopped = true;
+    auto oauth_request_seen = std::make_shared<bool>(false);
+    http->on_post = [oauth_request_seen](const auto&) { *oauth_request_seen = true; };
+
+    std::stop_source cancel;
+    auto result = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto settled = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
+        boost::asio::co_spawn(
+                executor,
+                [client, settled, token = cancel.get_token()]() -> boost::asio::awaitable<void> {
+                    settled->emplace(co_await support::detail::await_async_result(client->request("tools/call",
+                            tests::tools_call_params("echo", support::JsonValue::object_t{{"text", "never"}}),
+                            {.stop_token = token})));
+                },
+                boost::asio::detached);
+        co_await tests::wait_for(executor, [&] { return *oauth_request_seen; }, std::chrono::seconds{2});
+        cancel.request_stop();
+        co_await tests::wait_for(executor, [&] { return settled->has_value(); }, std::chrono::seconds{2});
+        if (!settled->has_value()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Timeout, "refresh did not cancel"));
+        }
+        co_return std::move(**settled);
+    }());
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == support::ErrorCode::Cancelled);
+    CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
+    CHECK_FALSE(tests::trace_contains(trace, "notifications/cancelled"));
+    CHECK(http->requests.size() == 1);
+    CHECK(http->requests.front().stop_token.stop_requested());
+}
+
+TEST_CASE("closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token",
+        "[coding_agent][mcp][issue1102][spec]") {
+    const auto fixture = read_replay_fixture();
+    const auto config = server_config_from_fixture(fixture);
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace, "Bearer existing-access"};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store,
+            oauth_state("existing-access",
+                    "stalled-refresh",
+                    ai::current_timestamp_ms() +
+                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
+
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    auto provider = std::make_shared<cch::mcp::OAuthProvider>(config, http);
+    auto resolver =
+            std::make_shared<app_mcp::McpOAuthTokenResolver>(store, "echo", "https://echo.example.com/mcp", provider);
+    auto client = connect_http_client(runtime, http_config(server), resolver);
+    seed_state(*store, oauth_state("existing-access", "stalled-refresh", ai::current_timestamp_ms() + 1000));
+    http->hold_post_until_stopped = true;
+    auto oauth_request_seen = std::make_shared<bool>(false);
+    http->on_post = [oauth_request_seen](const auto&) { *oauth_request_seen = true; };
+
+    auto outcome = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<bool>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto request_settled = std::make_shared<bool>(false);
+        boost::asio::co_spawn(
+                executor,
+                [client, request_settled]() -> boost::asio::awaitable<void> {
+                    (void)co_await support::detail::await_async_result(client->request(
+                            "tools/call", tests::tools_call_params("echo", support::JsonValue::object_t{})));
+                    *request_settled = true;
+                },
+                boost::asio::detached);
+        co_await tests::wait_for(executor, [&] { return *oauth_request_seen; }, std::chrono::seconds{2});
+        client->close();
+        co_await tests::wait_for(
+                executor,
+                [&] { return *request_settled && tests::trace_contains(trace, "recv DELETE"); },
+                std::chrono::seconds{2});
+        co_return support::Expected<bool>{
+                *request_settled &&
+                tests::trace_contains(trace, "recv DELETE authorization_present=true authorization_matches=true") &&
+                http->requests.size() == 1 && http->requests.front().stop_token.stop_requested()};
+    }());
+    CHECK(outcome);
+    CHECK(tests::trace_contains(trace, "recv DELETE authorization_present=true authorization_matches=true"));
+    CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
+}
+
 TEST_CASE("a rotated MCP OAuth refresh is persisted before the request continues",
         "[coding_agent][mcp][issue875][spec]") {
     const auto fixture = read_replay_fixture();
@@ -662,6 +787,17 @@ TEST_CASE("the MCP HTTP transport attaches a credential only when the server nee
     CHECK(authorization_header(runtime, authenticated) == "Bearer dummy-access-token");
     CHECK(authorization_header(runtime, authenticated) == "Bearer dummy-access-token");
     CHECK(stub->calls() == before + 2);
+    const int before_close = stub->close_calls();
+    authenticated->close();
+    auto close_observed = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<void>> {
+        co_await tests::wait_for(
+                co_await boost::asio::this_coro::executor,
+                [&] { return stub->close_calls() == before_close + 1; },
+                std::chrono::seconds{2});
+        co_return support::Expected<void>{};
+    }());
+    REQUIRE(close_observed.has_value());
+    CHECK(stub->close_calls() == before_close + 1);
 }
 
 TEST_CASE("a 401 from the MCP server is an explicit re-login error", "[coding_agent][mcp][issue875][spec]") {

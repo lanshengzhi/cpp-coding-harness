@@ -54,6 +54,7 @@ PAGE_SIZE = 1
 # When `PIKE_MCP_TRACE` names a file, the server appends one flushed line per
 # observed event, which the failure-isolation tests poll to assert ordering.
 TRACE = os.environ.get("PIKE_MCP_TRACE")
+EXPECTED_DELETE_AUTHORIZATION = os.environ.get("PIKE_MCP_EXPECT_DELETE_AUTHORIZATION")
 
 
 def trace(line):
@@ -132,8 +133,14 @@ class Handler(BaseHTTPRequestHandler):
         self._raw(405, "text/plain", b"")
 
     def do_DELETE(self):
-        # pi `close()` ends the session with a DELETE; acknowledge it.
-        trace("recv DELETE")
+        # pi `close()` ends the session with a DELETE; acknowledge it. Record
+        # only whether the stored credential was supplied, never its value.
+        authorization = self.headers.get("Authorization")
+        authorization_present = bool(authorization)
+        expected_authorization = EXPECTED_DELETE_AUTHORIZATION
+        authorization_matches = expected_authorization is None or authorization == expected_authorization
+        trace("recv DELETE authorization_present=" + str(authorization_present).lower() +
+              " authorization_matches=" + str(authorization_matches).lower())
         self._raw(200, "application/json", b"")
 
     def do_POST(self):

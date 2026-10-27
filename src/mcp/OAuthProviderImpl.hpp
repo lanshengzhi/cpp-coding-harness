@@ -27,7 +27,8 @@ public:
     OAuthProviderImpl& operator=(const OAuthProviderImpl&) = delete;
 
     [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthCredential>> login(AuthInteraction interaction);
-    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthCredential>> refresh(OAuthCredential credential);
+    [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthCredential>> refresh(
+            OAuthCredential credential, std::stop_token stop_token);
 
 private:
     [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthCredential>> request_token(

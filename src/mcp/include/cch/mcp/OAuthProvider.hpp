@@ -47,7 +47,8 @@ public:
     /// `invalid_grant` (a dead or already-rotated refresh token) is reported as
     /// an OAuth error the caller turns into an explicit re-login error; it is
     /// never retried and never yields an empty credential.
-    [[nodiscard]] support::AsyncResult<OAuthCredential> refresh(OAuthCredential credential);
+    [[nodiscard]] support::AsyncResult<OAuthCredential> refresh(
+            OAuthCredential credential, std::stop_token stop_token = {});
 
 private:
     OAuthServerConfig config_;

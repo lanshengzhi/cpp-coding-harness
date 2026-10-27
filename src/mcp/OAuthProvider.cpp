@@ -345,7 +345,11 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> OAuthProviderImpl::lo
             authorization_code_body(config_, *parsed.code, pkce.verifier, redirect_url), login_stop_token);
 }
 
-boost::asio::awaitable<support::Expected<OAuthCredential>> OAuthProviderImpl::refresh(OAuthCredential credential) {
+boost::asio::awaitable<support::Expected<OAuthCredential>> OAuthProviderImpl::refresh(
+        OAuthCredential credential, std::stop_token stop_token) {
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(login_cancelled());
+    }
     if (auto valid = validate_oauth_server_config(config_); !valid) {
         co_return std::unexpected(std::move(valid.error()));
     }
@@ -353,11 +357,8 @@ boost::asio::awaitable<support::Expected<OAuthCredential>> OAuthProviderImpl::re
         co_return std::unexpected(
                 oauth_error("MCP OAuth credential has no refresh token", "re-authentication is required"));
     }
-    auto response = co_await post_with_login_cancellation(http_client_,
-            config_.token_url,
-            kFormHeaders,
-            refresh_body(config_, credential.refresh),
-            std::stop_token{});
+    auto response = co_await post_with_login_cancellation(
+            http_client_, config_.token_url, kFormHeaders, refresh_body(config_, credential.refresh), stop_token);
     if (!response) {
         co_return std::unexpected(std::move(response.error()));
     }
@@ -411,12 +412,12 @@ support::AsyncResult<OAuthCredential> OAuthProvider::login(AuthInteraction inter
             });
 }
 
-support::AsyncResult<OAuthCredential> OAuthProvider::refresh(OAuthCredential credential) {
+support::AsyncResult<OAuthCredential> OAuthProvider::refresh(OAuthCredential credential, std::stop_token stop_token) {
     return support::detail::make_async_result(
-            [config = config_, http_client = http_client_, credential = std::move(credential)]() mutable
+            [config = config_, http_client = http_client_, credential = std::move(credential), stop_token]() mutable
                     -> boost::asio::awaitable<support::Expected<OAuthCredential>> {
                 OAuthProviderImpl impl(std::move(config), std::move(http_client));
-                co_return co_await impl.refresh(std::move(credential));
+                co_return co_await impl.refresh(std::move(credential), stop_token);
             });
 }
 

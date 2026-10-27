@@ -92,11 +92,11 @@
           },
           {
             "path": "src/mcp/HttpClient.cpp",
-            "sha256": "92a540e334dbafe202ce174e28616c85ec29ad6fa69e1895e32716c848a02ce1"
+            "sha256": "fd48a5ff1a835b215de242b221054d15b5d75513fe525f0863e1022737fa4c3c"
           },
           {
             "path": "src/mcp/HttpClientImpl.hpp",
-            "sha256": "9e2eec4c3bb05fe68bc07ec2b23c7bfa25254e71ef672cd41e4e6cf9d470c695"
+            "sha256": "3845a9bb2253d2ff144c8b0ba934165f7775c71bfa821634a902a7cc455b096f"
           },
           {
             "path": "src/mcp/OrderedResultText.hpp",
@@ -192,7 +192,7 @@
           },
           {
             "path": "fixtures/pi-mcp/http_server.py",
-            "sha256": "5ed97a5698bd8a93d1364d57c4e60885c54c199e9cd681a73706b76d0c56c878"
+            "sha256": "ff568ddc253d66fd25740e2dbfddc32344d838d50f7084817b244833d47d13b9"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1052/structured-content.json",
@@ -255,15 +255,15 @@
             "-L",
             "issue1101",
             "--output-junit",
-            "/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1078/docs/research/pi-v1.3.0/deliveries/1078-registration-1101.xml",
+            "docs/research/pi-v1.3.0/deliveries/1102-revalidation-1101.xml",
             "--output-on-failure"
           ],
-          "testedRevision": "379dbe9dc329017550cbd37aacc13c1fb376eda1",
-          "recordedAt": "2026-10-27T04:57:18Z",
+          "testedRevision": "c79c2a5389f956751175c43f1a4f332bac990cb4",
+          "recordedAt": "2026-10-27T08:58:59Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1078-registration-1101.xml",
-            "sha256": "763f0fe577df8465c7f0ed98088340d71324dda048284ed2d85182ebe87a6dd4"
+            "path": "docs/research/pi-v1.3.0/deliveries/1102-revalidation-1101.xml",
+            "sha256": "faa9983a123bc632697d3c075d29b89a629492b202cc5981ecb8f4236fe98dfb"
           }
         },
         "rows": [

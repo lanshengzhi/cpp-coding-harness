@@ -19,6 +19,7 @@
 
 #include <cctype>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -125,13 +126,15 @@ struct DiscoveryUrl {
 }
 
 [[nodiscard]] boost::asio::awaitable<support::Expected<OAuthHttpResponse>> fetch_metadata(
-        std::shared_ptr<OAuthHttpClient> http, std::string url, std::string protocol_version) {
+        std::shared_ptr<OAuthHttpClient> http,
+        std::string url,
+        std::string protocol_version,
+        std::stop_token stop_token) {
     std::map<std::string, std::string, std::less<>> headers{
             {"Accept", "application/json"},
             {"MCP-Protocol-Version", std::move(protocol_version)},
     };
-    co_return co_await support::detail::await_async_result(
-            http->get(std::move(url), std::move(headers), std::stop_token{}));
+    co_return co_await support::detail::await_async_result(http->get(std::move(url), std::move(headers), stop_token));
 }
 
 /// The parsed JSON of a metadata response body; a body that is not JSON is a
@@ -382,7 +385,13 @@ std::vector<std::string> authorization_server_discovery_urls(std::string_view au
 }
 
 boost::asio::awaitable<support::Expected<ProtectedResourceMetadata>> discover_protected_resource_metadata_awaitable(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
+        std::shared_ptr<OAuthHttpClient> http,
+        std::string server_url,
+        OAuthDiscoveryOptions options,
+        std::stop_token stop_token) {
+    if (stop_token.stop_requested()) {
+        co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+    }
     const auto server = parse_discovery_url(server_url);
     if (!server) {
         co_return std::unexpected(invalid("MCP server URL", server_url));
@@ -391,13 +400,18 @@ boost::asio::awaitable<support::Expected<ProtectedResourceMetadata>> discover_pr
     const std::string first_url =
             configured_url ? *options.resource_metadata_url
                            : server->origin + "/.well-known/oauth-protected-resource" + path_suffix(server->path);
-    CCH_TRY(response, co_await fetch_metadata(http, first_url, options.protocol_version));
+    CCH_TRY(response, co_await fetch_metadata(http, first_url, options.protocol_version, stop_token));
     int status = response.status_code;
     std::string body = std::move(response.body);
     if (!configured_url && server->path != "/" && is_discovery_miss(status)) {
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+        }
         CCH_TRY(retry,
-                co_await fetch_metadata(
-                        http, server->origin + "/.well-known/oauth-protected-resource", options.protocol_version));
+                co_await fetch_metadata(http,
+                        server->origin + "/.well-known/oauth-protected-resource",
+                        options.protocol_version,
+                        stop_token));
         status = retry.status_code;
         body = std::move(retry.body);
     }
@@ -409,10 +423,15 @@ boost::asio::awaitable<support::Expected<ProtectedResourceMetadata>> discover_pr
 }
 
 boost::asio::awaitable<support::Expected<std::optional<AuthorizationServerMetadata>>>
-discover_authorization_server_metadata_awaitable(
-        std::shared_ptr<OAuthHttpClient> http, std::string authorization_server_url, OAuthDiscoveryOptions options) {
+discover_authorization_server_metadata_awaitable(std::shared_ptr<OAuthHttpClient> http,
+        std::string authorization_server_url,
+        OAuthDiscoveryOptions options,
+        std::stop_token stop_token) {
     for (const auto& url : authorization_server_discovery_urls(authorization_server_url)) {
-        CCH_TRY(response, co_await fetch_metadata(http, url, options.protocol_version));
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+        }
+        CCH_TRY(response, co_await fetch_metadata(http, url, options.protocol_version, stop_token));
         if (response.status_code < 200 || response.status_code >= 300) {
             if (is_discovery_miss(response.status_code)) {
                 continue;
@@ -444,9 +463,12 @@ discover_authorization_server_metadata_awaitable(
 }
 
 boost::asio::awaitable<support::Expected<OAuthServerInfo>> discover_oauth_server_info_awaitable(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
+        std::shared_ptr<OAuthHttpClient> http,
+        std::string server_url,
+        OAuthDiscoveryOptions options,
+        std::stop_token stop_token) {
     std::optional<ProtectedResourceMetadata> resource_metadata;
-    auto discovered = co_await discover_protected_resource_metadata_awaitable(http, server_url, options);
+    auto discovered = co_await discover_protected_resource_metadata_awaitable(http, server_url, options, stop_token);
     if (discovered) {
         resource_metadata = std::move(*discovered);
     } else if (discovered.error().code == support::ErrorCode::Network ||
@@ -457,7 +479,10 @@ boost::asio::awaitable<support::Expected<OAuthServerInfo>> discover_oauth_server
     }
     if (options.authorization_server_metadata_url) {
         const std::string& url = *options.authorization_server_metadata_url;
-        CCH_TRY(response, co_await fetch_metadata(http, url, options.protocol_version));
+        if (stop_token.stop_requested()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Cancelled, "Login cancelled"));
+        }
+        CCH_TRY(response, co_await fetch_metadata(http, url, options.protocol_version, stop_token));
         if (response.status_code < 200 || response.status_code >= 300) {
             co_return std::unexpected(
                     metadata_http_error("authorization server metadata from " + url, url, response.status_code));
@@ -480,7 +505,8 @@ boost::asio::awaitable<support::Expected<OAuthServerInfo>> discover_oauth_server
                                                          ? resource_metadata->authorization_servers->front()
                                                          : server->origin + "/";
     CCH_TRY(metadata,
-            co_await discover_authorization_server_metadata_awaitable(http, authorization_server_url, options));
+            co_await discover_authorization_server_metadata_awaitable(
+                    http, authorization_server_url, options, stop_token));
     co_return OAuthServerInfo{
             .authorization_server_url = authorization_server_url,
             .authorization_server_metadata = std::move(metadata),
@@ -489,34 +515,47 @@ boost::asio::awaitable<support::Expected<OAuthServerInfo>> discover_oauth_server
 }
 
 support::AsyncResult<ProtectedResourceMetadata> discover_protected_resource_metadata(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
+        std::shared_ptr<OAuthHttpClient> http,
+        std::string server_url,
+        OAuthDiscoveryOptions options,
+        std::stop_token stop_token) {
     return support::detail::make_async_result(
-            [http = std::move(http), server_url = std::move(server_url), options = std::move(options)]() mutable
-                    -> boost::asio::awaitable<support::Expected<ProtectedResourceMetadata>> {
+            [http = std::move(http),
+                    server_url = std::move(server_url),
+                    options = std::move(options),
+                    stop_token]() mutable -> boost::asio::awaitable<support::Expected<ProtectedResourceMetadata>> {
                 co_return co_await discover_protected_resource_metadata_awaitable(
-                        std::move(http), std::move(server_url), std::move(options));
+                        std::move(http), std::move(server_url), std::move(options), stop_token);
             });
 }
 
 support::AsyncResult<std::optional<AuthorizationServerMetadata>> discover_authorization_server_metadata(
-        std::shared_ptr<OAuthHttpClient> http, std::string authorization_server_url, OAuthDiscoveryOptions options) {
+        std::shared_ptr<OAuthHttpClient> http,
+        std::string authorization_server_url,
+        OAuthDiscoveryOptions options,
+        std::stop_token stop_token) {
     return support::detail::make_async_result(
             [http = std::move(http),
                     authorization_server_url = std::move(authorization_server_url),
-                    options = std::move(options)]() mutable
+                    options = std::move(options),
+                    stop_token]() mutable
                     -> boost::asio::awaitable<support::Expected<std::optional<AuthorizationServerMetadata>>> {
                 co_return co_await discover_authorization_server_metadata_awaitable(
-                        std::move(http), std::move(authorization_server_url), std::move(options));
+                        std::move(http), std::move(authorization_server_url), std::move(options), stop_token);
             });
 }
 
-support::AsyncResult<OAuthServerInfo> discover_oauth_server_info(
-        std::shared_ptr<OAuthHttpClient> http, std::string server_url, OAuthDiscoveryOptions options) {
+support::AsyncResult<OAuthServerInfo> discover_oauth_server_info(std::shared_ptr<OAuthHttpClient> http,
+        std::string server_url,
+        OAuthDiscoveryOptions options,
+        std::stop_token stop_token) {
     return support::detail::make_async_result(
-            [http = std::move(http), server_url = std::move(server_url), options = std::move(options)]() mutable
-                    -> boost::asio::awaitable<support::Expected<OAuthServerInfo>> {
+            [http = std::move(http),
+                    server_url = std::move(server_url),
+                    options = std::move(options),
+                    stop_token]() mutable -> boost::asio::awaitable<support::Expected<OAuthServerInfo>> {
                 co_return co_await discover_oauth_server_info_awaitable(
-                        std::move(http), std::move(server_url), std::move(options));
+                        std::move(http), std::move(server_url), std::move(options), stop_token);
             });
 }
 

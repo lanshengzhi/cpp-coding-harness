@@ -14,6 +14,7 @@
 
 #include <chrono>
 #include <deque>
+#include <functional>
 #include <map>
 #include <optional>
 #include <stop_token>
@@ -54,7 +55,21 @@ public:
         return support::detail::make_async_result(
                 [this, url = std::move(url), headers = std::move(headers), stop_token]() mutable
                         -> boost::asio::awaitable<support::Expected<cch::mcp::OAuthHttpResponse>> {
-                    get_requests.push_back(GetRequest{std::move(url), std::move(headers), stop_token});
+                    get_requests.push_back(GetRequest{url, std::move(headers), stop_token});
+                    if (on_get) {
+                        on_get(get_requests.back());
+                    }
+                    if (hold_get_until_stopped) {
+                        auto executor = co_await boost::asio::this_coro::executor;
+                        auto timer = std::make_shared<boost::asio::steady_timer>(executor, std::chrono::hours{24});
+                        std::stop_callback cancel{stop_token, [timer] { timer->cancel(); }};
+                        boost::system::error_code wait_error;
+                        co_await timer->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+                        if (stop_token.stop_requested()) {
+                            co_return std::unexpected(
+                                    support::make_error(support::ErrorCode::Cancelled, "fake client cancelled"));
+                        }
+                    }
                     auto& queue = get_responses[get_requests.back().url];
                     if (queue.empty()) {
                         co_return std::unexpected(support::make_error(support::ErrorCode::Network,
@@ -81,6 +96,20 @@ public:
                 [this, url = std::move(url), headers = std::move(headers), body = std::move(body), stop_token]() mutable
                         -> boost::asio::awaitable<support::Expected<cch::mcp::OAuthHttpResponse>> {
                     requests.push_back(Request{url, std::move(headers), std::move(body), stop_token});
+                    if (on_post) {
+                        on_post(requests.back());
+                    }
+                    if (hold_post_until_stopped) {
+                        auto executor = co_await boost::asio::this_coro::executor;
+                        auto timer = std::make_shared<boost::asio::steady_timer>(executor, std::chrono::hours{24});
+                        std::stop_callback cancel{stop_token, [timer] { timer->cancel(); }};
+                        boost::system::error_code wait_error;
+                        co_await timer->async_wait(boost::asio::redirect_error(boost::asio::use_awaitable, wait_error));
+                        if (stop_token.stop_requested()) {
+                            co_return std::unexpected(
+                                    support::make_error(support::ErrorCode::Cancelled, "fake client cancelled"));
+                        }
+                    }
                     if (fail_first_n_requests > 0) {
                         --fail_first_n_requests;
                         if (stop_token.stop_requested()) {
@@ -127,6 +156,10 @@ public:
     std::optional<support::Error> failure_error;
     int fail_first_n_requests{0};
     std::chrono::milliseconds respond_delay{0};
+    bool hold_post_until_stopped{false};
+    bool hold_get_until_stopped{false};
+    std::function<void(const Request&)> on_post{};
+    std::function<void(const GetRequest&)> on_get{};
 };
 
 } // namespace cch::tests

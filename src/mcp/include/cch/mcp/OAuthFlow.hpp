@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <optional>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -99,7 +100,8 @@ struct OAuthClientMetadata {
         std::string authorization_server_url,
         std::optional<AuthorizationServerMetadata> metadata,
         OAuthClientMetadata client_metadata,
-        std::optional<std::string> scope);
+        std::optional<std::string> scope,
+        std::stop_token stop_token = {});
 
 /// pi `startAuthorization` result: the URL to open and the PKCE verifier that
 /// belongs to it.
@@ -140,14 +142,16 @@ struct OAuthTokenRequest {
         OAuthTokenRequest request,
         std::string code,
         std::string code_verifier,
-        std::string redirect_url);
+        std::string redirect_url,
+        std::stop_token stop_token = {});
 
 /// pi `refreshAuthorization`: the refresh grant, with the rotated refresh token
 /// merged over the old one so a response that omits it does not lose the grant.
 [[nodiscard]] support::AsyncResult<OAuthTokenResponse> refresh_authorization(std::shared_ptr<OAuthHttpClient> http,
         std::string authorization_server_url,
         OAuthTokenRequest request,
-        std::string refresh_token);
+        std::string refresh_token,
+        std::stop_token stop_token = {});
 
 /// pi `OAuthFlowOptions`, narrowed to what the MCP sign-in and request-time
 /// refresh pass: an explicit scope, the authorization code (and its RFC 9207
@@ -160,6 +164,9 @@ struct OAuthFlowOptions {
     std::optional<std::string> iss;
     std::optional<std::string> resource_metadata_url;
     bool skip_refresh{false};
+    /// Cancels discovery, registration and token requests, and prevents stored
+    /// credential or authorization state from being committed afterwards.
+    std::stop_token stop_token{};
 };
 
 /// pi `OAuthFlowResult`: the flow either has tokens, or needs the user to
