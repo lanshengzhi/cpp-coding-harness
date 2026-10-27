@@ -12,3 +12,6 @@ CMakeUserPresets.json
 __pycache__/
 *.pyc
 artifacts/
+
+# local agent worktrees
+worktrees/
