@@ -220,20 +220,20 @@
       "validation": {
         "command": [
           "ctest",
-          "--preset",
-          "vcpkg",
+          "--test-dir",
+          "build",
           "-L",
           "issue1101",
           "--output-junit",
-          "docs/research/pi-v1.3.0/deliveries/1102-revalidation-1101.xml",
+          "../docs/research/pi-v1.3.0/deliveries/1149-revalidation-1101.xml",
           "--output-on-failure"
         ],
-        "testedRevision": "c79c2a5389f956751175c43f1a4f332bac990cb4",
-        "recordedAt": "2026-10-27T08:58:59Z",
+        "testedRevision": "5be8fb95c01eb387b47d1b99a26d18ad2a392bf6",
+        "recordedAt": "2026-10-27T17:28:32Z",
         "selected": 14,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1102-revalidation-1101.xml",
-          "sha256": "faa9983a123bc632697d3c075d29b89a629492b202cc5981ecb8f4236fe98dfb"
+          "path": "docs/research/pi-v1.3.0/deliveries/1149-revalidation-1101.xml",
+          "sha256": "93b6d17e360503582573af97b7ff6b6c4f0a95a6a5056e5e751a71a9482f8c7d"
         }
       },
       "rows": [
