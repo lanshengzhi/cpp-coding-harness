@@ -1273,7 +1273,7 @@ support::Expected<EntryRecord> Transaction::append_entry(ConversationId conversa
     return record;
 }
 
-support::Expected<std::vector<chord::Json>> Transaction::context_messages(
+support::Expected<Transaction::ContextView> Transaction::context_view(
         ConversationId conversation_id, std::optional<EntryId> at) {
     if (auto rejected = impl_->reject_read("context"); !rejected) return std::unexpected(rejected.error());
     auto entries = impl_->storage->scan_entries(conversation_id, static_cast<std::size_t>(-1));
@@ -1289,12 +1289,12 @@ support::Expected<std::vector<chord::Json>> Transaction::context_messages(
         }
         entries->erase(std::next(selected), entries->end());
     }
-    std::optional<EntryId> head;
+    std::optional<EntryRecord> marker;
     for (const EntryRecord& entry : *entries)
-        if (entry.head.has_value()) head = entry.head;
-    if (head.has_value()) {
-        const auto first =
-                std::ranges::find_if(*entries, [head](const EntryRecord& entry) { return entry.id == *head; });
+        if (entry.head.has_value()) marker = entry;
+    if (marker.has_value()) {
+        const auto first = std::ranges::find_if(
+                *entries, [&marker](const EntryRecord& entry) { return entry.id == *marker->head; });
         if (first == entries->end()) return std::unexpected(validation_error("Context head is not visible"));
         entries->erase(entries->begin(), first);
     }
@@ -1302,14 +1302,31 @@ support::Expected<std::vector<chord::Json>> Transaction::context_messages(
     for (const EntryRecord& entry : *entries)
         for (const ContextEdit& edit : entry.edits)
             edits.insert_or_assign(edit.target.value, edit);
+    // Frozen harness/context.ts deriveRange and selectActive: edits include
+    // dropped markers; the newest marker precedes all non-head range entries.
+    if (marker.has_value()) {
+        std::erase_if(*entries, [](const EntryRecord& entry) { return entry.head.has_value(); });
+        entries->insert(entries->begin(), *marker);
+    }
+    ContextView view{.entries = std::move(*entries), .contributions = {}};
+    for (const EntryRecord& entry : view.entries) {
+        const auto edit = edits.find(entry.id.value);
+        if (edit != edits.end() && edit->second.action == "omit")
+            view.contributions.emplace_back();
+        else
+            view.contributions.push_back(
+                    edit != edits.end() && edit->second.action == "replace" ? edit->second.messages : entry.model);
+    }
+    return view;
+}
+
+support::Expected<std::vector<chord::Json>> Transaction::context_messages(
+        ConversationId conversation_id, std::optional<EntryId> at) {
+    auto view = context_view(conversation_id, at);
+    if (!view) return std::unexpected(view.error());
     std::vector<chord::Json> messages;
     std::vector<std::vector<chord::Json>> open;
-    for (const EntryRecord& entry : *entries) {
-        if (entry.head.has_value() && entry.id != *head) continue;
-        const auto edit = edits.find(entry.id.value);
-        if (edit != edits.end() && edit->second.action == "omit") continue;
-        const std::vector<chord::Json>& contribution =
-                edit != edits.end() && edit->second.action == "replace" ? edit->second.messages : entry.model;
+    for (const auto& contribution : view->contributions) {
         for (const chord::Json& message : contribution) {
             const auto* object = message.as_object();
             if (object == nullptr) continue;
@@ -1340,12 +1357,12 @@ support::Expected<std::vector<chord::Json>> Transaction::conversation_messages(C
     auto entries = impl_->storage->scan_entries(conversation_id, static_cast<std::size_t>(-1));
     if (!entries) return std::unexpected(entries.error());
     std::ranges::reverse(*entries);
-    std::optional<EntryId> head;
+    std::optional<EntryRecord> marker;
     for (const EntryRecord& entry : *entries)
-        if (entry.head.has_value()) head = entry.head;
-    if (head.has_value()) {
-        const auto first =
-                std::ranges::find_if(*entries, [head](const EntryRecord& entry) { return entry.id == *head; });
+        if (entry.head.has_value()) marker = entry;
+    if (marker.has_value()) {
+        const auto first = std::ranges::find_if(
+                *entries, [&marker](const EntryRecord& entry) { return entry.id == *marker->head; });
         if (first == entries->end()) return std::unexpected(validation_error("Context head is not visible"));
         entries->erase(entries->begin(), first);
     }
@@ -1354,14 +1371,15 @@ support::Expected<std::vector<chord::Json>> Transaction::conversation_messages(C
         for (const ContextEdit& edit : entry.edits)
             edits.insert_or_assign(edit.target.value, edit);
     }
+    // Frozen harness/context.ts deriveRange and selectActive retain the newest
+    // marker first while collecting edits from the entire scanned range.
+    if (marker.has_value()) {
+        std::erase_if(*entries, [](const EntryRecord& entry) { return entry.head.has_value(); });
+        entries->insert(entries->begin(), *marker);
+    }
     std::vector<chord::Json> messages;
     std::vector<chord::Json> open;
     for (const EntryRecord& entry : *entries) {
-        if (entry.kind == "pi.reset") {
-            messages.clear();
-            open.clear();
-        }
-        if (entry.head.has_value() && entry.id != *head) continue;
         const auto edit = edits.find(entry.id.value);
         if (edit != edits.end() && edit->second.action == "omit") continue;
         const std::vector<chord::Json>& contribution =
