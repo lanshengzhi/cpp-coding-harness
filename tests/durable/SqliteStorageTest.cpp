@@ -135,7 +135,7 @@ TEST_CASE("SQLite rolls back mid-batch failures and keeps the sequence unchanged
     const auto rolled_back = storage->conversation(ConversationId{.value = 3});
     REQUIRE(rolled_back.has_value());
     CHECK_FALSE(rolled_back->has_value());
-    const auto missing_document = storage->find_document("audit1075.same", std::nullopt);
+    const auto missing_document = storage->find_document("audit1075.same", DocumentAddress{}, DocumentPoint::current());
     REQUIRE(missing_document.has_value());
     CHECK_FALSE(missing_document->has_value());
 
@@ -337,10 +337,10 @@ TEST_CASE("SQLite supports filtered entry scans, document revisions, and retirem
     CHECK((*filtered)[0].id == EntryId{.value = 4});
     CHECK((*filtered)[1].id == EntryId{.value = 3});
 
-    const auto value = storage->document(DocumentId{.value = 12});
+    const auto value = storage->document(DocumentId{.value = 12}, DocumentPoint::current());
     REQUIRE(value.has_value());
     REQUIRE(value->has_value());
-    CHECK(**value == chord::Json{chord::Json::Object{{"revision", chord::Json{2}}}});
+    CHECK((**value).value == chord::Json{chord::Json::Object{{"revision", chord::Json{2}}}});
 
     const std::array retire_document{StorageWrite{.type = "document.retire", .document_id = DocumentId{.value = 12}}};
     const Outcome<Seq> retired = consume(storage->commit(retire_document));
@@ -348,7 +348,7 @@ TEST_CASE("SQLite supports filtered entry scans, document revisions, and retirem
     REQUIRE(retired.has_value());
     CHECK(retired.value() == 5);
 
-    const auto missing = storage->find_document("audit1075.versioned", std::nullopt);
+    const auto missing = storage->find_document("audit1075.versioned", DocumentAddress{}, DocumentPoint::current());
     REQUIRE(missing.has_value());
     CHECK_FALSE(missing->has_value());
 

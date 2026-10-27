@@ -63,14 +63,18 @@ public:
     [[nodiscard]] virtual support::Expected<std::vector<EntryRecord>> scan_entries(
             ConversationId conversation_id, std::size_t limit) = 0;
 
-    /// Look up the incarnation occupying one exact logical address (frozen pi
-    /// `Storage.findDocument`).
+    /// Look up the incarnation occupying one exact logical address at one
+    /// point (frozen pi `Storage.findDocument`). `current` selects the live
+    /// incarnation; an explicit commit selects the incarnation alive then, so a
+    /// retired incarnation stays addressable for as-of reads.
     [[nodiscard]] virtual support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, std::optional<ConversationId> conversation_id) = 0;
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) = 0;
 
-    /// Materialize one specific incarnation by ID (frozen pi
-    /// `Storage.document`).
-    [[nodiscard]] virtual support::Expected<std::optional<chord::Json>> document(DocumentId id) = 0;
+    /// Materialize one specific incarnation by ID at one point (frozen pi
+    /// `Storage.document`). A historical point of a `latest` incarnation is
+    /// rejected: it retains no history.
+    [[nodiscard]] virtual support::Expected<std::optional<StoredDocument>> document(
+            DocumentId id, DocumentPoint at) = 0;
 
     /// Look up the latest complete record for one task (frozen pi
     /// `Storage.task`).
@@ -127,9 +131,9 @@ public:
             ConversationId conversation_id, std::size_t limit) override;
 
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, std::optional<ConversationId> conversation_id) override;
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override;
 
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override;
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override;
 
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override;
 

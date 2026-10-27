@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -12,10 +13,89 @@
 #include <utility>
 #include <variant>
 #include <vector>
+
 namespace cch::durable {
 
 class Storage;
 class TaskDefinition;
+class DocumentDefinitionBuilder;
+class DocumentDefinition;
+
+namespace detail {
+/// Internal construction steps shared by the document definition factories
+/// and the Session; no public caller names it.
+struct DocumentDefinitionAccess;
+
+/// Trusted construction for the built-in harness documents, whose kinds are
+/// compile-time constants and whose scope/history/fork combination is valid
+/// by construction (frozen pi `InboxDoc` / `LiveDoc` / `AgentDoc` /
+/// `ProviderDoc` / `UsageDoc`).
+[[nodiscard]] DocumentDefinition builtin_document(std::string kind,
+        DocumentHistory history,
+        DocumentFork fork,
+        std::move_only_function<chord::Json()> initial,
+        std::move_only_function<bool(const chord::Json&, const chord::OpBatch&, std::int64_t)> checkpoint = {});
+} // namespace detail
+
+/// Builder for the persisted semantics of one document definition (frozen pi
+/// `DocDefinition` / `DocFamilyDefinition`).
+///
+/// The builder is move-only and every setter returns the builder, so a
+/// definition is written as one expression:
+///
+/// ```
+/// define_document(DocumentDefinitionBuilder{"kind"}.version(2).conversation(
+///         DocumentHistory::Rewindable, DocumentFork::AsOf).migrate(...), initial);
+/// ```
+///
+/// Validation happens once, in `define_document`/`define_document_family`: a
+/// definition whose kind is empty, whose version is zero, or whose scope
+/// cannot carry its history/fork semantics is rejected instead of producing a
+/// token that could never be persisted.
+class DocumentDefinitionBuilder {
+public:
+    explicit DocumentDefinitionBuilder(std::string kind);
+    DocumentDefinitionBuilder(DocumentDefinitionBuilder&&) noexcept;
+    DocumentDefinitionBuilder& operator=(DocumentDefinitionBuilder&&) noexcept;
+    ~DocumentDefinitionBuilder();
+
+    DocumentDefinitionBuilder(const DocumentDefinitionBuilder&) = delete;
+    DocumentDefinitionBuilder& operator=(const DocumentDefinitionBuilder&) = delete;
+
+    /// Set the positive stored value-shape version (frozen
+    /// `CommonDocDefinition.version`).
+    DocumentDefinitionBuilder&& version(std::uint32_t value) &&;
+
+    /// Declare a conversation document with its history and fork semantics
+    /// (frozen `LatestConversationSemantics` /
+    /// `RewindableConversationSemantics`).
+    DocumentDefinitionBuilder&& conversation(DocumentHistory history, DocumentFork fork) &&;
+
+    /// Declare a task document (frozen `scope: "task"`).
+    DocumentDefinitionBuilder&& task() &&;
+
+    /// Migrate one stored value written by an older version (frozen
+    /// `CommonDocDefinition.migrate`).
+    DocumentDefinitionBuilder&& migrate(
+            std::move_only_function<chord::Json(const chord::Json&, std::uint32_t)> value) &&;
+
+    /// Select a complete base instead of a delta for one ordinary change
+    /// (frozen `CommonDocDefinition.checkpointWhen`).
+    DocumentDefinitionBuilder&& checkpoint_when(
+            std::move_only_function<bool(const chord::Json&, const chord::OpBatch&, std::int64_t)> value) &&;
+
+private:
+    friend class DocumentDefinition;
+    friend struct detail::DocumentDefinitionAccess;
+    friend support::Expected<DocumentDefinition> define_document(
+            DocumentDefinitionBuilder definition, std::move_only_function<chord::Json()> initial);
+    friend support::Expected<DocumentDefinition> define_document_family(
+            DocumentDefinitionBuilder definition, std::move_only_function<chord::Json(const chord::Json&)> initial);
+
+    struct Impl;
+
+    std::unique_ptr<Impl> impl_;
+};
 
 /// One logical document definition with its initial value (frozen pi
 /// `defineDoc`).
@@ -28,7 +108,8 @@ class TaskDefinition;
 ///
 /// Frozen authority: `CommonDocDefinition.initial(): T` is a method of the
 /// definition, so the initial value is supplied once when the token is
-/// defined, not per access.
+/// defined, not per access. A keyed family definition instead receives the
+/// caller's first seed (frozen `DocFamilyDefinition.initial(seed)`).
 class DocumentDefinition {
 public:
     DocumentDefinition(DocumentDefinition&&) noexcept;
@@ -41,12 +122,55 @@ public:
     /// The stable document definition kind (frozen `DocumentDefinition.kind`).
     [[nodiscard]] const std::string& kind() const noexcept;
 
-    /// The initial value of a newly created incarnation (frozen
+    /// The positive stored value-shape version (frozen
+    /// `DocumentDefinition.version`).
+    [[nodiscard]] std::uint32_t version() const noexcept;
+
+    /// The ownership and lifetime of every incarnation of this kind (frozen
+    /// `DocumentDefinition.scope`).
+    [[nodiscard]] DocumentScope scope() const noexcept;
+
+    /// Whether a conversation incarnation keeps its revisions (frozen
+    /// `DocumentDefinition.history`).
+    [[nodiscard]] DocumentHistory history() const noexcept;
+
+    /// What a conversation fork initializes a copy from (frozen
+    /// `DocumentDefinition.fork`).
+    [[nodiscard]] DocumentFork fork() const noexcept;
+
+    /// Whether this definition names a keyed family member instead of one
+    /// singleton document (frozen `DocFamilyDefinition.family`).
+    [[nodiscard]] bool family() const noexcept;
+
+    /// The initial value of a newly created singleton incarnation (frozen
     /// `DocumentDefinition.initial`).
     [[nodiscard]] chord::Json initial_value() const;
 
+    /// The initial value of a newly created family member, derived from the
+    /// caller's first seed (frozen `DocFamilyDefinition.initial(seed)`).
+    [[nodiscard]] chord::Json initial_value(const chord::Json& seed) const;
+
+    /// Whether this definition supplies a migrate callback (frozen
+    /// `DocumentDefinition.migrate !== undefined`).
+    [[nodiscard]] bool can_migrate() const noexcept;
+
+    /// Migrate one stored value written by an older definition version
+    /// (frozen `DocumentDefinition.migrate`); absent when the definition
+    /// cannot read an older version.
+    [[nodiscard]] std::optional<chord::Json> migrate(const chord::Json& value, std::uint32_t from_version) const;
+
+    /// Whether one ordinary change is stored as a complete base instead of a
+    /// delta (frozen `DocumentDefinition.checkpointWhen`); absent selects the
+    /// default delta behavior.
+    [[nodiscard]] bool checkpoint(
+            const chord::Json& value, const chord::OpBatch& ops, std::int64_t deltas_since_base) const;
+
 private:
-    friend DocumentDefinition define_document(std::string kind, std::move_only_function<chord::Json()> initial);
+    friend struct detail::DocumentDefinitionAccess;
+    friend support::Expected<DocumentDefinition> define_document(
+            DocumentDefinitionBuilder definition, std::move_only_function<chord::Json()> initial);
+    friend support::Expected<DocumentDefinition> define_document_family(
+            DocumentDefinitionBuilder definition, std::move_only_function<chord::Json(const chord::Json&)> initial);
 
     struct Impl;
 
@@ -55,8 +179,22 @@ private:
     std::unique_ptr<Impl> impl_;
 };
 
-/// Define one document kind (frozen pi `defineDoc`). The returned token owns
-/// the identity of `kind`; the caller keeps the only copy.
+/// Define one singleton document kind with its persisted semantics (frozen pi
+/// `defineDoc` of a `DocDefinition`). Rejects an empty kind, a zero version,
+/// history or fork semantics outside conversation scope, and an as-of fork
+/// without rewindable history.
+[[nodiscard]] support::Expected<DocumentDefinition> define_document(
+        DocumentDefinitionBuilder definition, std::move_only_function<chord::Json()> initial);
+
+/// Define one keyed document family (frozen pi `defineDocFamily`); every
+/// member is initialized from the caller's first seed.
+[[nodiscard]] support::Expected<DocumentDefinition> define_document_family(
+        DocumentDefinitionBuilder definition, std::move_only_function<chord::Json(const chord::Json&)> initial);
+
+/// Define one conversation-scoped singleton document kind (frozen pi
+/// `defineDoc` with `scope: "conversation"`). The returned token owns the
+/// identity of `kind`; the caller keeps the only copy. This is the shorthand
+/// for a version-1, latest-only, current-fork definition.
 [[nodiscard]] DocumentDefinition define_document(std::string kind, std::move_only_function<chord::Json()> initial);
 
 /// Select the entry being appended as the first entry of its active context.
@@ -138,9 +276,6 @@ template <typename Data>
 
 /// One logical document address: a Session document has no conversation, a
 /// conversation document names its conversation (frozen pi `DocumentAddress`).
-struct DocumentAddress {
-    std::optional<ConversationId> conversation_id;
-};
 
 /// The transaction surface of one Session commit callback (frozen pi `Tx`).
 ///
@@ -251,7 +386,24 @@ public:
     /// Acquire the draft of one document incarnation, creating the incarnation
     /// when it does not exist yet (frozen pi `Tx.doc`). The returned draft is
     /// a handle: every operation on it fails once the transaction settles.
+    ///
+    /// The address must agree with the definition's scope: a Session
+    /// definition takes an ownerless address, a conversation definition takes
+    /// exactly its conversation, a task definition takes exactly its task.
     [[nodiscard]] support::Expected<chord::Draft> doc(const DocumentDefinition& definition, DocumentAddress address);
+
+    /// Acquire one keyed family member (frozen `Tx.doc` of a family token).
+    /// The member is created from `seed` when it does not exist yet; an
+    /// existing member ignores the seed.
+    [[nodiscard]] support::Expected<chord::Draft> doc(
+            const DocumentDefinition& definition, DocumentAddress address, chord::Json seed);
+
+    /// Retire the current incarnation of one address (frozen pi
+    /// `Tx.retireDoc`). The retirement is published as a canonical root-null
+    /// batch and the address becomes free, so a later `doc()` of the same
+    /// address creates a new incarnation with a new ID. An address with no
+    /// current incarnation stages nothing.
+    support::ExpectedVoid retire_doc(const DocumentDefinition& definition, DocumentAddress address);
 
     /// Create a task (frozen pi `Tx.createTask`).
     ///
@@ -338,6 +490,10 @@ enum class WatchEndReason {
     Cancelled,
     SessionClosed,
     SessionFailed,
+    /// The watched incarnation retired; the watch does not follow a
+    /// replacement incarnation of the same address (frozen `{ reason:
+    /// "retired" }`).
+    Retired,
 };
 
 /// One committed document watch (frozen pi `DocumentWatch`).
@@ -456,6 +612,20 @@ public:
     /// `Session.snapshot`).
     [[nodiscard]] support::AsyncResult<std::optional<chord::Json>> snapshot(
             const DocumentDefinition& definition, DocumentAddress address);
+
+    /// Read the committed value of one rewindable conversation document as of
+    /// one visible entry (frozen pi `Session.snapshotAsOf`).
+    ///
+    /// The entry resolves to the commit that appended it, and the document is
+    /// materialized at that commit. A retired incarnation stays readable there,
+    /// which is what makes history addressable after retirement. An unknown
+    /// entry is rejected; the read itself publishes nothing.
+    [[nodiscard]] support::AsyncResult<std::optional<chord::Json>> snapshot_as_of(
+            const DocumentDefinition& definition, DocumentAddress address, EntryId at);
+
+    /// Materialize one document incarnation by ID at one point (frozen pi
+    /// `Session.document`); absent when the incarnation is not alive there.
+    [[nodiscard]] support::AsyncResult<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at);
 
     /// Acquire a watch bound to one committed document incarnation (frozen pi
     /// `Session.watchDoc`). The acquisition revision is the committed value at

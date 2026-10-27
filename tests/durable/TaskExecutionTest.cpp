@@ -61,12 +61,12 @@ public:
     }
 
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, std::optional<ConversationId> conversation_id) override {
-        return inner_.find_document(kind, conversation_id);
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override {
+        return inner_.find_document(kind, address, at);
     }
 
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override {
-        return inner_.document(id);
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override {
+        return inner_.document(id, at);
     }
 
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_.task(id); }

@@ -57,11 +57,11 @@ public:
         return inner_->scan_entries(conversation_id, limit);
     }
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, std::optional<ConversationId> conversation_id) override {
-        return inner_->find_document(kind, conversation_id);
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override {
+        return inner_->find_document(kind, address, at);
     }
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override {
-        return inner_->document(id);
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override {
+        return inner_->document(id, at);
     }
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_->task(id); }
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
@@ -191,11 +191,12 @@ chord::Json transcript(const std::vector<EntryRecord>& entries) {
 }
 
 chord::Json::Array inbox_items(Storage& storage, ConversationId root) {
-    auto doc_rec = storage.find_document("pi.inbox:v1", root);
+    auto doc_rec =
+            storage.find_document("pi.inbox:v1", DocumentAddress{.conversation_id = root}, DocumentPoint::current());
     if (!doc_rec || !doc_rec->has_value()) return {};
-    auto content = storage.document((*doc_rec)->id);
+    auto content = storage.document((*doc_rec)->id, DocumentPoint::current());
     if (!content || !content->has_value()) return {};
-    const auto* obj = (*content)->as_object();
+    const auto* obj = (*content)->value.as_object();
     if (obj == nullptr) return {};
     const auto it = obj->find("items");
     if (it == obj->end() || it->second.as_array() == nullptr) return {};
@@ -223,9 +224,11 @@ FrozenScenario frozen_reset(std::string_view name) {
 /// The workflow's inbox document definition, used by tests to stage malformed
 /// persisted items the production readers must reject with typed errors.
 DocumentDefinition test_inbox_document() {
-    return define_document(std::string{"pi.inbox:v1"}, std::move_only_function<chord::Json()>{[] {
+    // The same semantics the root seeds pi.inbox:v1 with (frozen pi
+    // `InboxDoc`), or the persisted record fails the scope check.
+    return detail::builtin_document("pi.inbox:v1", DocumentHistory::Latest, DocumentFork::Initial, [] {
         return chord::Json{chord::Json::Object{{"items", chord::Json{chord::Json::Array{}}}}};
-    }});
+    });
 }
 
 chord::Path inbox_items_member() { return chord::Path{chord::path_key("items")}; }
@@ -605,13 +608,14 @@ TEST_CASE("a conversation abort settles the queued input unanswered and aborted,
     CHECK(items[0].as_object()->at("mode") == chord::Json{"write"});
     CHECK(items[0].as_object()->at("id") == chord::Json{static_cast<double>(queued_write.value().id.value)});
 
-    auto live_doc = storage.find_document("pi.live:v1", root.value());
+    auto live_doc = storage.find_document(
+            "pi.live:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
     REQUIRE(live_doc.has_value());
     REQUIRE(live_doc->has_value());
-    auto live_val = storage.document((*live_doc)->id);
+    auto live_val = storage.document((*live_doc)->id, DocumentPoint::current());
     REQUIRE(live_val.has_value());
     REQUIRE(live_val->has_value());
-    CHECK((*live_val)->as_object()->find("run") == (*live_val)->as_object()->end());
+    CHECK((*live_val)->value.as_object()->find("run") == (*live_val)->value.as_object()->end());
 
     held.release();
     REQUIRE(consume(harness->close()).has_value());
@@ -940,13 +944,14 @@ TEST_CASE("a busy steer input queues in steer mode and a conversation abort with
     CHECK(after.value().status == expected.at("after").get_object().at("status").get_string());
     CHECK(after.value().reason == expected.at("after").get_object().at("reason").get_string());
 
-    auto live_doc = storage.find_document("pi.live:v1", root.value());
+    auto live_doc = storage.find_document(
+            "pi.live:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
     REQUIRE(live_doc.has_value());
     REQUIRE(live_doc->has_value());
-    auto live_val = storage.document((*live_doc)->id);
+    auto live_val = storage.document((*live_doc)->id, DocumentPoint::current());
     REQUIRE(live_val.has_value());
     REQUIRE(live_val->has_value());
-    CHECK((*live_val)->as_object()->find("run") == (*live_val)->as_object()->end());
+    CHECK((*live_val)->value.as_object()->find("run") == (*live_val)->value.as_object()->end());
 
     held.release();
     REQUIRE(consume(harness->close()).has_value());
@@ -1352,13 +1357,14 @@ TEST_CASE("conversation abort withdraws queued inputs, keeps queued writes and s
     REQUIRE(items.size() == 1);
     CHECK(items[0].as_object()->at("mode") == chord::Json{"write"});
 
-    auto live_doc = storage.find_document("pi.live:v1", root.value());
+    auto live_doc = storage.find_document(
+            "pi.live:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
     REQUIRE(live_doc.has_value());
     REQUIRE(live_doc->has_value());
-    auto live_val = storage.document((*live_doc)->id);
+    auto live_val = storage.document((*live_doc)->id, DocumentPoint::current());
     REQUIRE(live_val.has_value());
     REQUIRE(live_val->has_value());
-    CHECK((*live_val)->as_object()->find("run") == (*live_val)->as_object()->end());
+    CHECK((*live_val)->value.as_object()->find("run") == (*live_val)->value.as_object()->end());
 
     held.release();
     REQUIRE(consume(harness->close()).has_value());
@@ -1973,13 +1979,14 @@ TEST_CASE("a conversation abort during run rollover settles the follow-up run an
     // entry it was placed at even though run two never answered it.
     REQUIRE(settled_follow_up.value().entry.has_value());
 
-    auto live_doc = storage.find_document("pi.live:v1", root.value());
+    auto live_doc = storage.find_document(
+            "pi.live:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
     REQUIRE(live_doc.has_value());
     REQUIRE(live_doc->has_value());
-    auto live_val = storage.document((*live_doc)->id);
+    auto live_val = storage.document((*live_doc)->id, DocumentPoint::current());
     REQUIRE(live_val.has_value());
     REQUIRE(live_val->has_value());
-    CHECK((*live_val)->as_object()->find("run") == (*live_val)->as_object()->end());
+    CHECK((*live_val)->value.as_object()->find("run") == (*live_val)->value.as_object()->end());
 
     REQUIRE(consume(harness->close()).has_value());
 }

@@ -25,12 +25,22 @@ constexpr std::int64_t kFirstId = 2;
 /// `MemoryStorage.nextSeq`).
 constexpr Seq kFirstSeq = 1;
 
-/// One stored document incarnation with its committed value.
-struct StoredDocument {
+/// One committed document revision: a complete base or one delta after the
+/// newest base (frozen pi `DocumentRevision`).
+struct DocumentRevision {
+    Seq seq{0};
+    std::uint32_t version{1};
+    bool base{true};
+    chord::Json value{};
+    chord::OpBatch ops{};
+};
+
+/// One stored document incarnation with its committed revisions.
+struct StoredDocumentState {
     DocumentRecord record;
-    std::optional<ConversationId> conversation_id;
-    chord::Json value;
-    std::optional<Seq> retired_at;
+    /// The revisions in commit order; a current-only incarnation keeps at most
+    /// the newest base.
+    std::vector<DocumentRevision> revisions;
 };
 
 /// One stored entry with the sequence of the commit that persisted it.
@@ -39,17 +49,59 @@ struct StoredEntryState {
     Seq commit_seq{0};
 };
 
-/// The address key of one document: a Session document and a conversation
-/// document are different documents.
-[[nodiscard]] std::string document_address_key(std::string_view kind, std::optional<ConversationId> conversation_id) {
-    std::string key{kind};
-    key += '|';
-    if (conversation_id.has_value()) {
-        key += std::to_string(conversation_id->value);
-    } else {
-        key += "session";
+/// Whether one incarnation is alive at one point (frozen pi `isAliveAt`):
+/// `current` selects the unretired incarnation, an explicit commit selects the
+/// one whose lifetime covers it.
+[[nodiscard]] bool is_alive_at(const DocumentRecord& record, DocumentPoint at) {
+    if (!at.at.has_value()) {
+        return !record.retired_at.has_value();
     }
-    return key;
+    return record.created_at <= *at.at && (!record.retired_at.has_value() || *at.at < *record.retired_at);
+}
+
+/// The materialized value of one incarnation at one point, replayed from the
+/// newest base at or before that point (frozen pi
+/// `MemoryStorage.materializeDocument`).
+[[nodiscard]] support::Expected<std::optional<StoredDocument>> materialize(
+        const StoredDocumentState& stored, DocumentPoint at) {
+    if (at.at.has_value() && document_is_current_only(stored.record)) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Document " + std::to_string(stored.record.id.value) + " does not retain historical content"));
+    }
+    if (!is_alive_at(stored.record, at)) {
+        return std::optional<StoredDocument>{};
+    }
+    std::vector<const DocumentRevision*> revisions;
+    revisions.reserve(stored.revisions.size());
+    for (const DocumentRevision& revision : stored.revisions) {
+        if (at.at.has_value() && revision.seq > *at.at) {
+            break;
+        }
+        revisions.push_back(&revision);
+    }
+    std::size_t base_index = revisions.size();
+    while (base_index > 0 && !revisions[base_index - 1]->base) {
+        --base_index;
+    }
+    if (base_index == 0) {
+        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                "Document " + std::to_string(stored.record.id.value) + " is missing a required base"));
+    }
+    const DocumentRevision& base = *revisions[base_index - 1];
+    std::vector<chord::OpBatch> batches;
+    batches.reserve(revisions.size() - base_index);
+    for (std::size_t index = base_index; index < revisions.size(); ++index) {
+        batches.push_back(revisions[index]->ops);
+    }
+    auto value = chord::apply_immutable_batches(base.value, batches);
+    if (!value) {
+        return std::unexpected(std::move(value.error()));
+    }
+    return std::optional<StoredDocument>{std::in_place,
+            StoredDocument{.record = stored.record,
+                    .version = base.version,
+                    .value = std::move(*value),
+                    .deltas_since_base = static_cast<std::int64_t>(batches.size())}};
 }
 
 } // namespace
@@ -62,7 +114,7 @@ struct StorageState::Impl {
     Impl(const Impl& other)
         : conversations(other.conversations), conversation_ids(other.conversation_ids), entries(other.entries),
           entry_ids_by_conversation(other.entry_ids_by_conversation), documents(other.documents),
-          document_id_by_address(other.document_id_by_address), tasks(other.tasks), task_ids(other.task_ids),
+          document_ids_by_address(other.document_ids_by_address), tasks(other.tasks), task_ids(other.task_ids),
           submissions(other.submissions), submission_ids(other.submission_ids), next_id(other.next_id),
           next_seq(other.next_seq), closed_message(other.closed_message), closed(other.closed) {}
 
@@ -70,8 +122,10 @@ struct StorageState::Impl {
     std::vector<std::int64_t> conversation_ids;
     std::map<std::int64_t, StoredEntryState> entries;
     std::map<std::int64_t, std::vector<std::int64_t>> entry_ids_by_conversation;
-    std::map<std::int64_t, StoredDocument> documents;
-    std::map<std::string, std::int64_t> document_id_by_address;
+    std::map<std::int64_t, StoredDocumentState> documents;
+    /// Every incarnation ever created at one address, oldest first; the last
+    /// unretired one is the current incarnation.
+    std::map<std::string, std::vector<std::int64_t>> document_ids_by_address;
     std::map<std::int64_t, TaskRecord> tasks;
     std::vector<std::int64_t> task_ids;
     std::map<std::int64_t, SubmissionRecord> submissions;
@@ -102,13 +156,26 @@ struct StorageState::Impl {
         std::vector<std::int64_t> next_conversation_ids = conversation_ids;
         std::map<std::int64_t, StoredEntryState> next_entries = entries;
         std::map<std::int64_t, std::vector<std::int64_t>> next_entry_ids = entry_ids_by_conversation;
-        std::map<std::int64_t, StoredDocument> next_documents = documents;
-        std::map<std::string, std::int64_t> next_document_ids = document_id_by_address;
+        std::map<std::int64_t, StoredDocumentState> next_documents = documents;
+        std::map<std::string, std::vector<std::int64_t>> next_document_ids = document_ids_by_address;
         std::map<std::int64_t, TaskRecord> next_tasks = tasks;
         std::vector<std::int64_t> next_task_ids = task_ids;
         std::map<std::int64_t, SubmissionRecord> next_submissions = submissions;
         std::vector<std::int64_t> next_submission_ids = submission_ids;
         std::int64_t next_id = this->next_id;
+
+        // An incarnation retired by this same batch frees its address for a
+        // new incarnation created in the batch, so the address check must see
+        // the batch's own retirements (frozen pi `checkDocumentActions`).
+        std::vector<std::int64_t> retired_in_batch;
+        for (const StorageWrite& write : detached) {
+            if (write.type == "document.retire" && write.document_id.has_value()) {
+                retired_in_batch.push_back(write.document_id->value);
+            }
+        }
+        const auto retired_by_batch = [&retired_in_batch](std::int64_t id) {
+            return std::ranges::find(retired_in_batch, id) != retired_in_batch.end();
+        };
 
         for (const StorageWrite& write : detached) {
             if (write.type == "conversation") {
@@ -139,29 +206,95 @@ struct StorageState::Impl {
                 next_entries.emplace(record.id.value, StoredEntryState{.record = record, .commit_seq = seq});
                 next_entry_ids[record.conversation_id.value].push_back(record.id.value);
                 next_id = std::max(next_id, record.id.value + 1);
-            } else if (write.type == "document.create") {
-                if (!write.document_record.has_value() || !write.document_value.has_value()) {
-                    return std::unexpected(
-                            support::make_error(support::ErrorCode::Validation, "Document create write is incomplete"));
+            } else if (write.type == "document.create" || write.type == "document.copy") {
+                if (!write.document_record.has_value()) {
+                    return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                            write.type == "document.copy" ? "Document copy write is incomplete"
+                                                          : "Document create write is incomplete"));
                 }
                 DocumentRecord record = *write.document_record;
                 if (next_documents.contains(record.id.value)) {
                     return std::unexpected(
                             support::make_error(support::ErrorCode::Validation, "Document already exists"));
                 }
-                record.created_at = seq;
                 const std::int64_t id = record.id.value;
-                const std::string address_key = document_address_key(record.kind, write.document_conversation_id);
-                if (next_document_ids.contains(address_key)) {
-                    return std::unexpected(support::make_error(
-                            support::ErrorCode::Validation, "Document address already has a current incarnation"));
+                const std::string key = document_address_key(record.kind, record.address());
+                // Only one unretired incarnation may occupy an address, and a
+                // retirement in this batch frees it.
+                for (const std::int64_t other : next_document_ids[key]) {
+                    const auto stored = next_documents.find(other);
+                    if (stored != next_documents.end() && !stored->second.record.retired_at.has_value() &&
+                            !retired_by_batch(other)) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Document address already has a current incarnation"));
+                    }
                 }
-                next_documents.emplace(id,
-                        StoredDocument{.record = std::move(record),
-                                .conversation_id = write.document_conversation_id,
-                                .value = *write.document_value,
-                                .retired_at = std::nullopt});
-                next_document_ids[address_key] = id;
+
+                // A copy persists the source's exact base content at its
+                // selected point, so the new incarnation starts with the
+                // source revision and version (frozen pi `resolveDocumentCopies`).
+                DocumentRevision base;
+                if (write.type == "document.copy") {
+                    if (!write.document_copy_source.has_value()) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Document copy write is incomplete"));
+                    }
+                    const DocumentCopySource& source = *write.document_copy_source;
+                    const bool source_changed_in_batch =
+                            std::ranges::any_of(detached, [&source](const StorageWrite& pending) {
+                                if (pending.type == "document.create" || pending.type == "document.copy") {
+                                    return pending.document_record.has_value() &&
+                                           pending.document_record->id == source.id;
+                                }
+                                return (pending.type == "document.change" || pending.type == "document.retire") &&
+                                       pending.document_id == source.id;
+                            });
+                    if (source_changed_in_batch) {
+                        // The source is changed in the same batch: its persisted
+                        // content is not the content being copied.
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Fork source document " + std::to_string(source.id.value) +
+                                        " is changed in the copy batch"));
+                    }
+                    const auto source_stored = documents.find(source.id.value);
+                    if (source_stored == documents.end()) {
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Fork source document " + std::to_string(source.id.value) + " cannot be read"));
+                    }
+                    auto materialized = materialize(source_stored->second, source.at);
+                    if (!materialized) {
+                        return std::unexpected(std::move(materialized.error()));
+                    }
+                    if (!(*materialized).has_value()) {
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Fork source document " + std::to_string(source.id.value) + " cannot be read"));
+                    }
+                    const DocumentRecord& source_record = source_stored->second.record;
+                    if (source_record.scope() != DocumentScope::Conversation ||
+                            record.scope() != DocumentScope::Conversation || source_record.kind != record.kind ||
+                            source_record.key != record.key || source_record.history != record.history ||
+                            source_record.fork != record.fork) {
+                        return std::unexpected(support::make_error(support::ErrorCode::Validation,
+                                "Fork source document " + std::to_string(source.id.value) +
+                                        " does not match the copied record"));
+                    }
+                    base = DocumentRevision{.seq = seq,
+                            .version = (*materialized)->version,
+                            .base = true,
+                            .value = (*materialized)->value};
+                } else {
+                    if (!write.document_value.has_value()) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Document create write is incomplete"));
+                    }
+                    base = DocumentRevision{.seq = seq,
+                            .version = write.document_version,
+                            .base = true,
+                            .value = *write.document_value};
+                }
+                record.created_at = seq;
+                next_documents.emplace(id, StoredDocumentState{.record = std::move(record), .revisions = {base}});
+                next_document_ids[key].push_back(id);
                 next_id = std::max(next_id, id + 1);
             } else if (write.type == "document.change") {
                 if (!write.document_id.has_value()) {
@@ -172,11 +305,46 @@ struct StorageState::Impl {
                 if (found == next_documents.end()) {
                     return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown document"));
                 }
-                if (!write.document_value.has_value()) {
-                    return std::unexpected(
-                            support::make_error(support::ErrorCode::Validation, "Document change write is incomplete"));
+                if (found->second.record.retired_at.has_value()) {
+                    return std::unexpected(support::make_error(support::ErrorCode::Validation, "Document is retired"));
                 }
-                found->second.value = *write.document_value;
+                if (write.document_ops.empty()) {
+                    if (!write.document_value.has_value()) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Document change write is incomplete"));
+                    }
+                    // A checkpoint base replaces the retained history of a
+                    // current-only incarnation; a rewindable one keeps it so
+                    // as-of reads still reach earlier revisions.
+                    DocumentRevision revision{.seq = seq,
+                            .version = write.document_version,
+                            .base = true,
+                            .value = *write.document_value};
+                    if (document_is_current_only(found->second.record)) {
+                        found->second.revisions.clear();
+                    }
+                    found->second.revisions.push_back(std::move(revision));
+                } else {
+                    // A delta must continue the newest stored revision's
+                    // version, so a version transition is always a base.
+                    if (found->second.revisions.empty()) {
+                        return std::unexpected(
+                                support::make_error(support::ErrorCode::Validation, "Document delta has no base"));
+                    }
+                    if (found->second.revisions.back().version != write.document_version) {
+                        return std::unexpected(support::make_error(
+                                support::ErrorCode::Validation, "Document version transition requires a base"));
+                    }
+                    auto applied = chord::apply_immutable(found->second.revisions.back().value, write.document_ops);
+                    if (!applied) {
+                        return std::unexpected(std::move(applied.error()));
+                    }
+                    found->second.revisions.push_back(DocumentRevision{.seq = seq,
+                            .version = write.document_version,
+                            .base = false,
+                            .value = std::move(*applied),
+                            .ops = write.document_ops});
+                }
             } else if (write.type == "document.retire") {
                 if (!write.document_id.has_value()) {
                     return std::unexpected(
@@ -186,12 +354,14 @@ struct StorageState::Impl {
                 if (found == next_documents.end()) {
                     return std::unexpected(support::make_error(support::ErrorCode::Validation, "Unknown document"));
                 }
-                found->second.retired_at = seq;
-                const std::string address =
-                        document_address_key(found->second.record.kind, found->second.conversation_id);
-                const auto current = next_document_ids.find(address);
-                if (current != next_document_ids.end() && current->second == write.document_id->value) {
-                    next_document_ids.erase(current);
+                if (found->second.record.retired_at.has_value()) {
+                    return std::unexpected(support::make_error(support::ErrorCode::Validation, "Document is retired"));
+                }
+                found->second.record.retired_at = seq;
+                // A current-only incarnation keeps no history, so retirement
+                // drops its revisions; a rewindable one keeps them addressable.
+                if (document_is_current_only(found->second.record)) {
+                    found->second.revisions.clear();
                 }
             } else if (write.type == "task") {
                 if (!write.task.has_value()) {
@@ -238,7 +408,7 @@ struct StorageState::Impl {
         entries = std::move(next_entries);
         entry_ids_by_conversation = std::move(next_entry_ids);
         documents = std::move(next_documents);
-        document_id_by_address = std::move(next_document_ids);
+        document_ids_by_address = std::move(next_document_ids);
         tasks = std::move(next_tasks);
         task_ids = std::move(next_task_ids);
         submissions = std::move(next_submissions);
@@ -372,32 +542,40 @@ support::Expected<std::vector<EntryRecord>> StorageState::scan_entries(
 }
 
 support::Expected<std::optional<DocumentRecord>> StorageState::find_document(
-        std::string_view kind, std::optional<ConversationId> conversation_id) {
+        std::string_view kind, const DocumentAddress& address, DocumentPoint at) {
     std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
-    const auto found = impl_->document_id_by_address.find(document_address_key(kind, conversation_id));
-    if (found == impl_->document_id_by_address.end()) {
+    const auto found = impl_->document_ids_by_address.find(document_address_key(kind, address));
+    if (found == impl_->document_ids_by_address.end()) {
         return std::optional<DocumentRecord>{};
     }
-    const auto document = impl_->documents.find(found->second);
-    if (document == impl_->documents.end()) {
-        return std::optional<DocumentRecord>{};
+    // The IDs are in creation order, so the last alive incarnation at the
+    // point is the one the address selected then (frozen pi
+    // `MemoryStorage.findDocument`).
+    for (auto index = found->second.size(); index > 0; --index) {
+        const auto document = impl_->documents.find(found->second[index - 1]);
+        if (document == impl_->documents.end()) {
+            continue;
+        }
+        if (is_alive_at(document->second.record, at)) {
+            return std::optional<DocumentRecord>{document->second.record};
+        }
     }
-    return std::optional<DocumentRecord>{document->second.record};
+    return std::optional<DocumentRecord>{};
 }
 
-support::Expected<std::optional<chord::Json>> StorageState::document(DocumentId id) {
+support::Expected<std::optional<StoredDocument>> StorageState::document(DocumentId id, DocumentPoint at) {
     std::lock_guard lock(impl_->mutex);
     if (impl_->closed) {
         return std::unexpected(impl_->closed_error());
     }
     const auto found = impl_->documents.find(id.value);
     if (found == impl_->documents.end()) {
-        return std::optional<chord::Json>{};
+        return std::optional<StoredDocument>{};
     }
-    return std::optional<chord::Json>{found->second.value};
+    return materialize(found->second, at);
 }
 
 support::Expected<std::optional<TaskRecord>> StorageState::task(TaskId id) {

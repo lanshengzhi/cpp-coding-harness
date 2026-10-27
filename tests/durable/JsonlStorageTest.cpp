@@ -626,7 +626,6 @@ TEST_CASE("a JSONL checkpoint replaces a current-only sidecar and retirement rem
     // highest public caller available for these two operations.
     const StorageWrite checkpoint{.type = "document.change",
             .document_id = DocumentId{.value = 3},
-            .document_conversation_id = conversation_id,
             .document_value = chord::Json{chord::Json::Object{
                     {"text", chord::Json{std::string{"checkpoint"}}}, {"revision", chord::Json{0}}}}};
     const std::vector<StorageWrite> checkpoint_batch{checkpoint};

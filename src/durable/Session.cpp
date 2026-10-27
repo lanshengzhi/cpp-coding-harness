@@ -3,6 +3,7 @@
 #include <cch/durable/Storage.hpp>
 #include <cch/durable/Task.hpp>
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -19,7 +20,49 @@
 
 namespace cch::durable {
 
+std::string_view document_scope_name(DocumentScope scope) noexcept {
+    switch (scope) {
+    case DocumentScope::Session:
+        return "session";
+    case DocumentScope::Conversation:
+        return "conversation";
+    case DocumentScope::Task:
+        return "task";
+    }
+    return "session";
+}
+
+bool document_is_current_only(const DocumentRecord& record) noexcept {
+    return record.scope() != DocumentScope::Conversation || record.history == DocumentHistory::Latest;
+}
+
+std::string document_address_key(std::string_view kind, const DocumentAddress& address) {
+    std::string key{kind};
+    key += '|';
+    key += document_scope_name(address.scope());
+    key += ':';
+    if (address.task_id.has_value()) {
+        key += std::to_string(address.task_id->value);
+    } else if (address.conversation_id.has_value()) {
+        key += std::to_string(address.conversation_id->value);
+    } else {
+        key += "session";
+    }
+    key += '|';
+    if (address.key.has_value()) {
+        key += "family:";
+        key += *address.key;
+    } else {
+        key += "singleton";
+    }
+    return key;
+}
+
 namespace {
+
+/// The shared checkpoint predicate of one document definition; sharing lets a
+/// staged transaction keep the hook without owning the definition token.
+using DocumentCheckpointFn = std::move_only_function<bool(const chord::Json&, const chord::OpBatch&, std::int64_t)>;
 
 /// The frozen message of a table read after the first table write (frozen pi
 /// `ReadAfterWrite`).
@@ -40,17 +83,112 @@ namespace {
             support::ErrorCode::Session, "Session failed after a storage error; close and reopen it");
 }
 
-/// The address key of one document: a Session document and a conversation
-/// document are different documents.
-[[nodiscard]] std::string address_key(std::string_view kind, std::optional<ConversationId> conversation_id) {
-    std::string key{kind};
-    key += '|';
-    if (conversation_id.has_value()) {
-        key += std::to_string(conversation_id->value);
-    } else {
-        key += "session";
+[[nodiscard]] support::Error validation_error(std::string message) {
+    return support::make_error(support::ErrorCode::Validation, std::move(message));
+}
+
+/// The message of typed access to an incarnation whose persisted scope,
+/// history or fork semantics disagree with the supplied definition (frozen pi
+/// `checkRecordScope`).
+[[nodiscard]] support::Error scope_mismatch_error(const DocumentRecord& record) {
+    return validation_error("Document " + std::to_string(record.id.value) + " (" + record.kind +
+                            ") does not match the supplied definition semantics");
+}
+
+/// The message of typed access to a newer stored version than the definition
+/// can read (frozen pi `checkRecordVersion`).
+[[nodiscard]] support::Error newer_version_error(
+        const DocumentRecord& record, std::uint32_t version, std::uint32_t definition_version) {
+    return validation_error("Document " + std::to_string(record.id.value) + " (" + record.kind +
+                            ") has newer version " + std::to_string(version) + " than " +
+                            std::to_string(definition_version));
+}
+
+/// The message of typed access to an older stored version without a migrate
+/// callback (frozen pi `checkRecordVersion`).
+[[nodiscard]] support::Error migration_required_error(const DocumentRecord& record, std::uint32_t version) {
+    return validation_error("Document " + std::to_string(record.id.value) + " (" + record.kind +
+                            ") requires migration from version " + std::to_string(version));
+}
+
+/// Whether one persisted incarnation matches the scope, history and fork
+/// semantics of the supplied definition (frozen pi `checkRecordScope`).
+[[nodiscard]] support::ExpectedVoid check_record_scope(
+        const DocumentDefinition& definition, const DocumentRecord& record) {
+    if (record.scope() != definition.scope()) {
+        return std::unexpected(scope_mismatch_error(record));
     }
-    return key;
+    if (record.scope() == DocumentScope::Conversation &&
+            (record.history != definition.history() || record.fork != definition.fork())) {
+        return std::unexpected(scope_mismatch_error(record));
+    }
+    return {};
+}
+
+/// Reject a stored version this definition cannot read (frozen pi
+/// `checkRecordVersion`).
+[[nodiscard]] support::ExpectedVoid check_record_version(
+        const DocumentDefinition& definition, const DocumentRecord& record, std::uint32_t version) {
+    if (version > definition.version()) {
+        return std::unexpected(newer_version_error(record, version, definition.version()));
+    }
+    if (version < definition.version() && !definition.can_migrate()) {
+        return std::unexpected(migration_required_error(record, version));
+    }
+    return {};
+}
+
+/// Validate and materialize one detached stored value for typed access
+/// (frozen pi `materializeDocument`). A value written by an older definition
+/// version is migrated in memory; nothing is persisted until the next commit.
+[[nodiscard]] support::Expected<chord::Json> materialize_document(const DocumentDefinition& definition,
+        const DocumentRecord& record,
+        std::uint32_t version,
+        const chord::Json& value) {
+    if (auto scoped = check_record_scope(definition, record); !scoped) {
+        return std::unexpected(std::move(scoped.error()));
+    }
+    if (auto current = check_record_version(definition, record, version); !current) {
+        return std::unexpected(std::move(current.error()));
+    }
+    if (version == definition.version()) {
+        return value;
+    }
+    auto migrated = definition.migrate(value, version);
+    if (!migrated.has_value()) {
+        return std::unexpected(migration_required_error(record, version));
+    }
+    return std::move(*migrated);
+}
+
+/// The record a new incarnation of one address carries (frozen pi
+/// `documentCreate`).
+[[nodiscard]] DocumentRecord document_create_record(
+        const DocumentDefinition& definition, const DocumentAddress& address, DocumentId id) {
+    DocumentRecord record{.id = id, .kind = definition.kind()};
+    record.conversation_id = address.conversation_id;
+    record.task_id = address.task_id;
+    record.key = address.key;
+    if (definition.scope() == DocumentScope::Conversation) {
+        record.history = definition.history();
+        record.fork = definition.fork();
+    }
+    return record;
+}
+
+/// Whether one staged address agrees with the definition's scope (frozen pi
+/// `resolveAddress`).
+[[nodiscard]] support::ExpectedVoid check_address(
+        const DocumentDefinition& definition, const DocumentAddress& address) {
+    if (address.scope() != definition.scope()) {
+        return std::unexpected(validation_error("Document " + definition.kind() + " requires a " +
+                                                std::string{document_scope_name(definition.scope())} + " address"));
+    }
+    if (definition.family() != address.key.has_value()) {
+        return std::unexpected(validation_error("Document " + definition.kind() + " requires " +
+                                                (definition.family() ? "a family key" : "no family key")));
+    }
+    return {};
 }
 
 /// One staged document incarnation: its record, its address, its Chord tracker
@@ -60,8 +198,28 @@ struct StagedDocument {
     DocumentAddress address{};
     std::string kind{};
     chord::Tracker tracker;
-    chord::Change change;
+    /// The open change; absent for a retirement of an incarnation this
+    /// transaction never acquired.
+    std::optional<chord::Change> change{};
     bool created{false};
+    /// The stored definition version the tracked value was materialized from;
+    /// below the definition version after a migration that has not been
+    /// persisted yet.
+    std::uint32_t stored_version{1};
+    /// Deltas stored after the newest base at load time.
+    std::int64_t deltas_since_base{0};
+    /// Whether this staged entry retires the incarnation instead of
+    /// publishing a content change.
+    bool retire{false};
+    /// The definition version the tracked value has (frozen pi
+    /// `DocumentEntry.definition.version`).
+    std::uint32_t definition_version{1};
+    /// The checkpoint predicate of the staged definition (frozen pi
+    /// `CommonDocDefinition.checkpointWhen`).
+    std::shared_ptr<DocumentCheckpointFn> checkpoint{};
+    /// The persisted source of a definition-free copy; present only for a
+    /// fork-copy incarnation this transaction did not create from a value.
+    std::optional<DocumentCopySource> fork_source{};
 };
 
 /// One staged submission change: a settlement, or the placement of a queued
@@ -73,10 +231,19 @@ struct SubmissionChange {
     std::optional<EntryId> placed_entry{std::nullopt};
 };
 
-/// One committed document incarnation the Session knows, by address key.
+/// One committed document incarnation the Session knows, by address key
+/// (frozen pi `LoadedDocument`).
 struct CachedDocument {
     DocumentRecord record{};
     chord::Json value{};
+    /// The definition version the cached value has (frozen pi
+    /// `LoadedDocument.valueVersion`).
+    std::uint32_t value_version{1};
+    /// The persisted definition version; below `value_version` while a
+    /// migration is materialized only in memory (frozen
+    /// `LoadedDocument.storedVersion`).
+    std::uint32_t stored_version{1};
+    std::int64_t deltas_since_base{0};
 };
 
 /// Reject new owned work below an owner that cannot take it (frozen pi
@@ -97,11 +264,72 @@ struct CachedDocument {
 
 } // namespace
 
+// ── DocumentDefinitionBuilder ───────────────────────────────────────────────
+
+struct DocumentDefinitionBuilder::Impl {
+    std::string kind;
+    std::uint32_t version{1};
+    DocumentScope scope{DocumentScope::Session};
+    DocumentHistory history{DocumentHistory::Latest};
+    DocumentFork fork{DocumentFork::Current};
+    std::move_only_function<chord::Json(const chord::Json&, std::uint32_t)> migrate{};
+    std::shared_ptr<DocumentCheckpointFn> checkpoint{};
+};
+
+DocumentDefinitionBuilder::DocumentDefinitionBuilder(std::string kind) : impl_(std::make_unique<Impl>()) {
+    impl_->kind = std::move(kind);
+}
+
+DocumentDefinitionBuilder::DocumentDefinitionBuilder(DocumentDefinitionBuilder&&) noexcept = default;
+
+DocumentDefinitionBuilder& DocumentDefinitionBuilder::operator=(DocumentDefinitionBuilder&&) noexcept = default;
+
+DocumentDefinitionBuilder::~DocumentDefinitionBuilder() = default;
+
+DocumentDefinitionBuilder&& DocumentDefinitionBuilder::version(std::uint32_t value) && {
+    impl_->version = value;
+    return std::move(*this);
+}
+
+DocumentDefinitionBuilder&& DocumentDefinitionBuilder::conversation(DocumentHistory history, DocumentFork fork) && {
+    impl_->scope = DocumentScope::Conversation;
+    impl_->history = history;
+    impl_->fork = fork;
+    return std::move(*this);
+}
+
+DocumentDefinitionBuilder&& DocumentDefinitionBuilder::task() && {
+    impl_->scope = DocumentScope::Task;
+    impl_->history = DocumentHistory::Latest;
+    impl_->fork = DocumentFork::Current;
+    return std::move(*this);
+}
+
+DocumentDefinitionBuilder&& DocumentDefinitionBuilder::migrate(
+        std::move_only_function<chord::Json(const chord::Json&, std::uint32_t)> value) && {
+    impl_->migrate = std::move(value);
+    return std::move(*this);
+}
+
+DocumentDefinitionBuilder&& DocumentDefinitionBuilder::checkpoint_when(
+        std::move_only_function<bool(const chord::Json&, const chord::OpBatch&, std::int64_t)> value) && {
+    impl_->checkpoint = std::make_shared<DocumentCheckpointFn>(std::move(value));
+    return std::move(*this);
+}
+
 // ── DocumentDefinition ──────────────────────────────────────────────────────
 
 struct DocumentDefinition::Impl {
     std::string kind;
-    std::move_only_function<chord::Json()> initial;
+    std::uint32_t version{1};
+    DocumentScope scope{DocumentScope::Session};
+    DocumentHistory history{DocumentHistory::Latest};
+    DocumentFork fork{DocumentFork::Current};
+    bool family{false};
+    std::move_only_function<chord::Json()> initial{};
+    std::move_only_function<chord::Json(const chord::Json&)> family_initial{};
+    std::move_only_function<chord::Json(const chord::Json&, std::uint32_t)> migrate{};
+    std::shared_ptr<DocumentCheckpointFn> checkpoint{};
 };
 
 DocumentDefinition::DocumentDefinition(std::unique_ptr<Impl> impl) : impl_(std::move(impl)) {}
@@ -114,13 +342,169 @@ DocumentDefinition::~DocumentDefinition() = default;
 
 const std::string& DocumentDefinition::kind() const noexcept { return impl_->kind; }
 
+std::uint32_t DocumentDefinition::version() const noexcept { return impl_->version; }
+
+DocumentScope DocumentDefinition::scope() const noexcept { return impl_->scope; }
+
+DocumentHistory DocumentDefinition::history() const noexcept { return impl_->history; }
+
+DocumentFork DocumentDefinition::fork() const noexcept { return impl_->fork; }
+
+bool DocumentDefinition::family() const noexcept { return impl_->family; }
+
 chord::Json DocumentDefinition::initial_value() const { return impl_->initial(); }
 
+chord::Json DocumentDefinition::initial_value(const chord::Json& seed) const { return impl_->family_initial(seed); }
+
+bool DocumentDefinition::can_migrate() const noexcept { return static_cast<bool>(impl_->migrate); }
+
+std::optional<chord::Json> DocumentDefinition::migrate(const chord::Json& value, std::uint32_t from_version) const {
+    if (!impl_->migrate) {
+        return std::nullopt;
+    }
+    return impl_->migrate(value, from_version);
+}
+
+bool DocumentDefinition::checkpoint(
+        const chord::Json& value, const chord::OpBatch& ops, std::int64_t deltas_since_base) const {
+    if (!impl_->checkpoint) {
+        return false;
+    }
+    return (*impl_->checkpoint)(value, ops, deltas_since_base);
+}
+
+namespace detail {
+
+/// The internal construction steps of one document definition token: the
+/// builder's fields become a definition, and the definition factory is the
+/// only caller.
+struct DocumentDefinitionAccess {
+    static std::unique_ptr<DocumentDefinition::Impl> make() { return std::make_unique<DocumentDefinition::Impl>(); }
+
+    static DocumentDefinition wrap(std::unique_ptr<DocumentDefinition::Impl> impl) {
+        return DocumentDefinition{std::move(impl)};
+    }
+
+    [[nodiscard]] static const DocumentDefinitionBuilder::Impl& fields(const DocumentDefinitionBuilder& builder) {
+        return *builder.impl_;
+    }
+
+    /// Reject a definition that could never be persisted (frozen pi
+    /// `validateDefinition` plus the scope semantics the persisted record
+    /// needs).
+    [[nodiscard]] static support::ExpectedVoid validate(const DocumentDefinitionBuilder& builder) {
+        const DocumentDefinitionBuilder::Impl& definition = *builder.impl_;
+        if (definition.kind.empty()) {
+            return std::unexpected(validation_error("Document kind must be a non-empty string"));
+        }
+        if (definition.version < 1) {
+            return std::unexpected(
+                    validation_error("Document " + definition.kind + " version must be a positive integer"));
+        }
+        // Only a conversation document declares history and fork behavior; the
+        // other scopes are current-only and are never copied by a conversation
+        // fork, so declaring them would persist semantics nothing can honor.
+        if (definition.scope != DocumentScope::Conversation &&
+                (definition.history != DocumentHistory::Latest || definition.fork != DocumentFork::Current)) {
+            return std::unexpected(validation_error(
+                    "Document " + definition.kind + " declares history or fork semantics outside conversation scope"));
+        }
+        if (definition.scope == DocumentScope::Conversation && definition.history == DocumentHistory::Latest &&
+                definition.fork == DocumentFork::AsOf) {
+            return std::unexpected(
+                    validation_error("Document " + definition.kind + " cannot fork as-of without rewindable history"));
+        }
+        return {};
+    }
+
+    /// Copy the checkpoint predicate out of a staged definition so a
+    /// transaction can keep the hook without keeping the definition token.
+    [[nodiscard]] static std::shared_ptr<DocumentCheckpointFn> checkpoint_hook(const DocumentDefinition& definition) {
+        return definition.impl_->checkpoint;
+    }
+
+    [[nodiscard]] static std::unique_ptr<DocumentDefinition::Impl> take(
+            DocumentDefinitionBuilder definition, bool family) {
+        auto impl = make();
+        impl->kind = std::move(definition.impl_->kind);
+        impl->version = definition.impl_->version;
+        impl->scope = definition.impl_->scope;
+        impl->history = definition.impl_->history;
+        impl->fork = definition.impl_->fork;
+        impl->family = family;
+        impl->migrate = std::move(definition.impl_->migrate);
+        impl->checkpoint = std::move(definition.impl_->checkpoint);
+        return impl;
+    }
+};
+
+} // namespace detail
+
 DocumentDefinition define_document(std::string kind, std::move_only_function<chord::Json()> initial) {
-    auto impl = std::make_unique<DocumentDefinition::Impl>();
+    auto impl = detail::DocumentDefinitionAccess::make();
     impl->kind = std::move(kind);
+    impl->scope = DocumentScope::Conversation;
+    impl->history = DocumentHistory::Latest;
+    impl->fork = DocumentFork::Current;
     impl->initial = std::move(initial);
-    return DocumentDefinition(std::move(impl));
+    return detail::DocumentDefinitionAccess::wrap(std::move(impl));
+}
+
+namespace detail {
+
+/// Trusted construction for the built-in harness documents: the kind is a
+/// compile-time constant and the scope/history/fork combination is valid by
+/// construction, so `define_document` validation cannot fail (frozen pi
+/// `InboxDoc` / `LiveDoc` / `AgentDoc` / `ProviderDoc` / `UsageDoc`). The
+/// checkpoint predicate selects a complete base instead of a delta (frozen
+/// `CommonDocDefinition.checkpointWhen`).
+DocumentDefinition builtin_document(std::string kind,
+        DocumentHistory history,
+        DocumentFork fork,
+        std::move_only_function<chord::Json()> initial,
+        std::move_only_function<bool(const chord::Json&, const chord::OpBatch&, std::int64_t)> checkpoint) {
+    auto impl = DocumentDefinitionAccess::make();
+    impl->kind = std::move(kind);
+    impl->scope = DocumentScope::Conversation;
+    impl->history = history;
+    impl->fork = fork;
+    impl->initial = std::move(initial);
+    if (checkpoint) {
+        impl->checkpoint = std::make_shared<DocumentCheckpointFn>(std::move(checkpoint));
+    }
+    return DocumentDefinitionAccess::wrap(std::move(impl));
+}
+
+} // namespace detail
+
+support::Expected<DocumentDefinition> define_document(
+        DocumentDefinitionBuilder definition, std::move_only_function<chord::Json()> initial) {
+    if (!initial) {
+        return std::unexpected(
+                validation_error("Document " + detail::DocumentDefinitionAccess::fields(definition).kind +
+                                 " requires an initial value"));
+    }
+    if (auto valid = detail::DocumentDefinitionAccess::validate(definition); !valid) {
+        return std::unexpected(std::move(valid.error()));
+    }
+    auto impl = detail::DocumentDefinitionAccess::take(std::move(definition), false);
+    impl->initial = std::move(initial);
+    return detail::DocumentDefinitionAccess::wrap(std::move(impl));
+}
+
+support::Expected<DocumentDefinition> define_document_family(
+        DocumentDefinitionBuilder definition, std::move_only_function<chord::Json(const chord::Json&)> initial) {
+    if (!initial) {
+        return std::unexpected(
+                validation_error("Document family " + detail::DocumentDefinitionAccess::fields(definition).kind +
+                                 " requires an initial value"));
+    }
+    if (auto valid = detail::DocumentDefinitionAccess::validate(definition); !valid) {
+        return std::unexpected(std::move(valid.error()));
+    }
+    auto impl = detail::DocumentDefinitionAccess::take(std::move(definition), true);
+    impl->family_initial = std::move(initial);
+    return detail::DocumentDefinitionAccess::wrap(std::move(impl));
 }
 
 // ── DocumentWatch ───────────────────────────────────────────────────────────
@@ -131,6 +515,10 @@ struct DocumentWatch::Impl {
     bool stopped{false};
     WatchEndReason end{WatchEndReason::Stopped};
     DocumentFrameListener listener{};
+    /// The definition version the acquisition value was materialized for; an
+    /// observer of another version receives root replacements (frozen pi
+    /// `observedOperations`).
+    std::uint32_t observed_version{1};
     /// The frames committed since the acquisition, in commit order.
     std::vector<DocumentFrame> pending{};
 };
@@ -159,12 +547,27 @@ struct Session::Impl {
         Storage* storage{nullptr};
         std::vector<StorageWrite> writes{};
         std::vector<StagedDocument> documents{};
-        std::vector<chord::Prepared> prepared{};
+        /// The prepared revision of each staged document, aligned with
+        /// `documents`; absent for a retirement of an incarnation this
+        /// transaction never acquired.
+        std::vector<std::optional<chord::Prepared>> prepared{};
         /// Whether each staged document produced a storage write, aligned
         /// with `documents`: a creation always writes; a loaded incarnation
         /// writes only when its prepared delta is non-empty (frozen pi
         /// `Transaction.#assemble`: only a change stores a delta).
         std::vector<bool> document_written{};
+        /// Whether each storage write stores a complete base, aligned with
+        /// `documents`.
+        std::vector<bool> document_base{};
+        /// One published document change and the staged document it belongs
+        /// to, in publication order.
+        struct PublishedDocument {
+            std::size_t index{0};
+            std::size_t change_index{0};
+            /// Whether the stored revision is a complete base.
+            bool base{false};
+        };
+        std::vector<PublishedDocument> published{};
 
         /// Settle the admitted commit: adopt the prepared revisions, publish
         /// the commit, and deliver its document frames. A storage failure
@@ -181,41 +584,86 @@ struct Session::Impl {
             const Seq seq = *outcome;
 
             // The adoption happens after the storage settled the batch: the
-            // committed revision is the adopted one.
+            // committed revision is the adopted one. A creation, a change and
+            // a retirement each publish their own immutable change; an
+            // acquired-but-unchanged incarnation publishes nothing (frozen pi
+            // `Transaction.adopt` and `publishes`).
             std::vector<DocumentCommitChange> document_changes;
             document_changes.reserve(documents.size());
             for (std::size_t index = 0; index < documents.size(); ++index) {
-                // An acquired-but-unchanged document prepared no delta and
-                // writes nothing: it is not adopted, published, or cached
-                // (frozen pi `Transaction.#assemble`).
-                if (!this->document_written[index]) continue;
                 StagedDocument& document = documents[index];
-                const chord::Prepared& prepared = this->prepared[index];
-                auto adopted = document.tracker.adopt(prepared);
-                if (!adopted) {
-                    // The storage already committed; a failed adoption leaves
-                    // memory behind durable state, so the Session fails.
-                    session->fail(std::move(adopted.error()));
-                    return std::unexpected(session->failure_error());
-                }
                 DocumentRecord record = document.record;
                 if (document.created) {
                     record.created_at = seq;
                 }
+                if (document.retire) {
+                    record.retired_at = seq;
+                }
+
+                const std::optional<chord::Prepared>& prepared = this->prepared[index];
+                if (this->document_written[index] && prepared.has_value()) {
+                    auto adopted = document.tracker.adopt(*prepared);
+                    if (!adopted) {
+                        // The storage already committed; a failed adoption
+                        // leaves memory behind durable state, so the Session
+                        // fails.
+                        session->fail(std::move(adopted.error()));
+                        return std::unexpected(session->failure_error());
+                    }
+                }
+
+                if (document.retire) {
+                    // The canonical retirement publication carries no version
+                    // and a JSON null value (frozen pi `Transaction.adopt`).
+                    this->published.push_back(
+                            PublishedDocument{.index = index, .change_index = document_changes.size(), .base = false});
+                    document_changes.push_back(DocumentCommitChange{.record = record,
+                            .conversation_id = document.address.conversation_id,
+                            .value = chord::Json{},
+                            .ops = chord::OpBatch{},
+                            .version = std::nullopt});
+                    continue;
+                }
+                if (!prepared.has_value()) {
+                    continue;
+                }
+                this->published.push_back(PublishedDocument{
+                        .index = index, .change_index = document_changes.size(), .base = this->document_base[index]});
+                if (document.created && document.fork_source.has_value()) {
+                    // A definition-free copy publishes its exact persisted
+                    // source so consumers hydrate through state (frozen pi
+                    // `DocumentCommitChange` of type `document.copy`).
+                    document_changes.push_back(DocumentCommitChange{.record = record,
+                            .conversation_id = document.address.conversation_id,
+                            .value = prepared->value(),
+                            .ops = chord::OpBatch{},
+                            .version = document.definition_version,
+                            .source = document.fork_source});
+                    continue;
+                }
                 document_changes.push_back(DocumentCommitChange{.record = record,
                         .conversation_id = document.address.conversation_id,
-                        .value = prepared.value(),
-                        .ops = document.created ? chord::OpBatch{} : prepared.ops()});
+                        .value = prepared->value(),
+                        .ops = document.created ? chord::OpBatch{} : prepared->ops(),
+                        .version = document.definition_version});
             }
 
-            // The committed document incarnations become observable now.
-            for (std::size_t index = 0, change_index = 0; index < documents.size(); ++index) {
-                if (!this->document_written[index]) continue;
-                const StagedDocument& document = documents[index];
-                const std::string key = address_key(document.kind, document.address.conversation_id);
-                session->cached_documents[key] = CachedDocument{
-                        .record = document_changes[change_index].record, .value = document_changes[change_index].value};
-                ++change_index;
+            // The committed document incarnations become observable now; a
+            // retirement evicts its incarnation so the next acquisition
+            // creates a new one.
+            for (const PublishedDocument& published : this->published) {
+                const StagedDocument& document = documents[published.index];
+                const std::string key = document_address_key(document.kind, document.address);
+                const DocumentCommitChange& change = document_changes[published.change_index];
+                if (document.retire) {
+                    session->cached_documents.erase(key);
+                    continue;
+                }
+                session->cached_documents[key] = CachedDocument{.record = change.record,
+                        .value = change.value,
+                        .value_version = document.definition_version,
+                        .stored_version = document.definition_version,
+                        .deltas_since_base = published.base ? 0 : document.deltas_since_base + 1};
             }
 
             // The publication carries every committed change.
@@ -245,18 +693,44 @@ struct Session::Impl {
             }
 
             // The committed document frames reach every watch of that
-            // incarnation.
+            // incarnation. A retirement delivers its canonical null frame and
+            // then closes the watch with `Retired`; the watch never follows a
+            // replacement incarnation of the same address (frozen pi
+            // `CommittedWatch`).
             for (const DocumentCommitChange& change : document_changes) {
-                const std::string key = address_key(change.record.kind, change.conversation_id);
+                const std::string key = document_address_key(change.record.kind, change.record.address());
                 const auto registered = session->watches.find(key);
                 if (registered == session->watches.end()) {
                     continue;
                 }
+                const bool retired = change.record.retired_at.has_value();
                 for (const std::shared_ptr<DocumentWatch::Impl>& watch : registered->second) {
                     if (watch->stopped) {
                         continue;
                     }
-                    watch->pending.push_back(DocumentFrame{.value = change.value, .ops = change.ops});
+                    // The operations one observer applies for one committed
+                    // change (frozen pi `observedOperations`): a retirement is
+                    // the canonical root-null replacement; an observer of the
+                    // same definition version receives the exact committed
+                    // operations; an observer of another version receives the
+                    // new value as a root replacement.
+                    chord::OpBatch observed;
+                    if (retired) {
+                        observed.push_back(chord::ReplaceOp{.value = chord::Json{}});
+                    } else if (change.version.has_value() && *change.version == watch->observed_version) {
+                        observed = change.ops;
+                    } else {
+                        if (change.version.has_value()) {
+                            watch->observed_version = *change.version;
+                        }
+                        observed.push_back(chord::ReplaceOp{.value = change.value});
+                    }
+                    // A migration-only base changes nothing for an observer of
+                    // the new version (frozen pi `Session.#observeCommits`).
+                    if (observed.empty()) {
+                        continue;
+                    }
+                    watch->pending.push_back(DocumentFrame{.value = change.value, .ops = std::move(observed)});
                     if (!watch->started) {
                         // A watch that is not started yet buffers its frames.
                         continue;
@@ -267,6 +741,14 @@ struct Session::Impl {
                         watch->value = frame.value;
                         watch->listener(frame);
                     }
+                    if (retired) {
+                        watch->stopped = true;
+                        watch->end = WatchEndReason::Retired;
+                        watch->pending.clear();
+                    }
+                }
+                if (retired) {
+                    session->watches.erase(registered);
                 }
             }
 
@@ -410,30 +892,59 @@ struct Session::Impl {
         (void)storage->close();
     }
 
-    /// The committed value of one incarnation, from the cache or the storage.
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> committed_value(
+    /// One committed incarnation as the Session knows it, from the cache or
+    /// the storage (frozen pi `#loadDocument`). A tracker serves only tokens
+    /// of the version its value was materialized for; another version reloads.
+    [[nodiscard]] support::Expected<std::optional<CachedDocument>> load_document(
             const DocumentDefinition& definition, const DocumentAddress& address) {
-        const std::string key = address_key(definition.kind(), address.conversation_id);
+        const std::string key = document_address_key(definition.kind(), address);
         if (const auto cached = cached_documents.find(key); cached != cached_documents.end()) {
-            return std::optional<chord::Json>{cached->second.value};
+            if (cached->second.value_version == definition.version()) {
+                return std::optional<CachedDocument>{cached->second};
+            }
+            cached_documents.erase(cached);
         }
-        auto found = storage->find_document(definition.kind(), address.conversation_id);
+        auto found = storage->find_document(definition.kind(), address, DocumentPoint::current());
         if (!found) {
             return std::unexpected(std::move(found.error()));
         }
         if (!(*found).has_value()) {
-            return std::optional<chord::Json>{};
+            return std::optional<CachedDocument>{};
         }
         const DocumentRecord& record = **found;
-        auto stored = storage->document(record.id);
+        auto stored = storage->document(record.id, DocumentPoint::current());
         if (!stored) {
             return std::unexpected(std::move(stored.error()));
         }
         if (!(*stored).has_value()) {
+            return std::unexpected(validation_error(
+                    "Current document " + std::to_string(record.id.value) + " (" + record.kind + ") cannot be read"));
+        }
+        const StoredDocument& committed = **stored;
+        auto value = materialize_document(definition, committed.record, committed.version, committed.value);
+        if (!value) {
+            return std::unexpected(std::move(value.error()));
+        }
+        CachedDocument loaded{.record = committed.record,
+                .value = std::move(*value),
+                .value_version = definition.version(),
+                .stored_version = committed.version,
+                .deltas_since_base = committed.deltas_since_base};
+        cached_documents[key] = loaded;
+        return std::optional<CachedDocument>{std::move(loaded)};
+    }
+
+    /// The committed value of one incarnation, from the cache or the storage.
+    [[nodiscard]] support::Expected<std::optional<chord::Json>> committed_value(
+            const DocumentDefinition& definition, const DocumentAddress& address) {
+        auto loaded = load_document(definition, address);
+        if (!loaded) {
+            return std::unexpected(std::move(loaded.error()));
+        }
+        if (!(*loaded).has_value()) {
             return std::optional<chord::Json>{};
         }
-        cached_documents[key] = CachedDocument{.record = record, .value = *(*stored)};
-        return std::optional<chord::Json>{std::in_place, *(*stored)};
+        return std::optional<chord::Json>{(*loaded)->value};
     }
 };
 
@@ -447,6 +958,11 @@ struct Transaction::Impl {
     bool sealed{false};
     std::vector<StorageWrite> writes{};
     std::vector<StagedDocument> documents{};
+    /// The newest staged document per address key: one transaction acquires
+    /// one draft per address, and a reacquisition after a staged retirement
+    /// creates the replacement incarnation (frozen pi
+    /// `Tx.#latestDocumentByAddress`).
+    std::map<std::string, std::size_t> latest_documents{};
     /// The submission candidates this transaction created or replaced so far,
     /// by ID (frozen pi `Tx.#submissions`).
     std::map<std::int64_t, SubmissionRecord> staged_submissions{};
@@ -503,6 +1019,61 @@ struct Transaction::Impl {
             }
         }
         return false;
+    }
+
+    /// The staged task write for one task, when this transaction created or
+    /// replaced it.
+    [[nodiscard]] const TaskRecord* staged_task(TaskId id) const {
+        for (const StorageWrite& write : writes) {
+            if (write.type == "task" && write.task.has_value() && write.task->id == id) {
+                return &*write.task;
+            }
+        }
+        return nullptr;
+    }
+
+    /// Validate the owner of one document address (frozen pi
+    /// `Tx.#requireConversation`, `Tx.#currentTask` and
+    /// `Tx.#assertTaskDocumentsOpen`): a conversation document needs an
+    /// existing conversation, and a task document needs a live task.
+    [[nodiscard]] support::ExpectedVoid check_document_owner(const DocumentAddress& address) {
+        if (address.scope() == DocumentScope::Conversation) {
+            if (has_conversation(*address.conversation_id)) {
+                return {};
+            }
+            auto stored = storage->conversation(*address.conversation_id);
+            if (!stored) {
+                return std::unexpected(std::move(stored.error()));
+            }
+            if (!(*stored).has_value()) {
+                return std::unexpected(validation_error(
+                        "Conversation " + std::to_string(address.conversation_id->value) + " does not exist"));
+            }
+            return {};
+        }
+        if (address.scope() == DocumentScope::Task) {
+            if (const TaskRecord* staged = staged_task(*address.task_id); staged != nullptr) {
+                if (staged->state.status == "terminal") {
+                    return std::unexpected(
+                            validation_error("Task " + std::to_string(address.task_id->value) + " is terminal"));
+                }
+                return {};
+            }
+            auto stored = storage->task(*address.task_id);
+            if (!stored) {
+                return std::unexpected(std::move(stored.error()));
+            }
+            if (!(*stored).has_value()) {
+                return std::unexpected(
+                        validation_error("Task " + std::to_string(address.task_id->value) + " does not exist"));
+            }
+            if ((*stored)->state.status == "terminal") {
+                return std::unexpected(
+                        validation_error("Task " + std::to_string(address.task_id->value) + " is terminal"));
+            }
+            return {};
+        }
+        return {};
     }
 };
 
@@ -666,61 +1237,222 @@ support::Expected<chord::Draft> Transaction::doc(const DocumentDefinition& defin
     if (auto rejected = impl_->reject_write(); !rejected) {
         return std::unexpected(std::move(rejected.error()));
     }
-    const std::string key = address_key(definition.kind(), address.conversation_id);
+    if (auto scoped = check_address(definition, address); !scoped) {
+        return std::unexpected(std::move(scoped.error()));
+    }
+    // A family member is created from the caller's first seed; a singleton
+    // definition owns its initial value.
+    if (definition.family()) {
+        return std::unexpected(
+                validation_error("Document " + definition.kind() + " requires a family seed to create a member"));
+    }
+    if (auto owner = impl_->check_document_owner(address); !owner) {
+        return std::unexpected(std::move(owner.error()));
+    }
 
-    // The incarnation is loaded from the committed state when it exists, and
-    // created otherwise. A document write is not a table write: reading and
-    // writing documents stays available after the first table write.
-    std::optional<DocumentRecord> record;
-    chord::Json base;
-    bool created = false;
-    if (impl_->session != nullptr) {
-        if (const auto cached = impl_->session->cached_documents.find(key);
-                cached != impl_->session->cached_documents.end()) {
-            record = cached->second.record;
-            base = cached->second.value;
+    // One transaction acquires one draft per address: a second doc() returns
+    // the same staged draft (frozen pi `Tx.#latestDocumentByAddress`).
+    const std::string key = document_address_key(definition.kind(), address);
+    const auto latest = impl_->latest_documents.find(key);
+    const bool retired_in_tx = latest != impl_->latest_documents.end() && impl_->documents[latest->second].retire;
+    if (latest != impl_->latest_documents.end() && !retired_in_tx) {
+        StagedDocument& staged = impl_->documents[latest->second];
+        if (staged.change.has_value()) {
+            return staged.change->draft();
         }
     }
-    if (!record.has_value()) {
-        auto found = impl_->storage->find_document(definition.kind(), address.conversation_id);
+
+    // The incarnation is loaded from the committed state when it exists, and
+    // created otherwise; a reacquisition after a retirement staged in this
+    // transaction creates the replacement incarnation instead of loading the
+    // retiring one. A document write is not a table write: reading and
+    // writing documents stays available after the first table write.
+    std::optional<CachedDocument> loaded;
+    if (!retired_in_tx && impl_->session != nullptr) {
+        auto found = impl_->session->load_document(definition, address);
         if (!found) {
             return std::unexpected(std::move(found.error()));
         }
-        if ((*found).has_value()) {
-            record = *(*found);
-            auto stored = impl_->storage->document(record->id);
-            if (!stored) {
-                return std::unexpected(std::move(stored.error()));
-            }
-            if ((*stored).has_value()) {
-                base = *(*stored);
-            }
-        } else {
-            auto id = impl_->storage->mint_id();
-            if (!id) {
-                return std::unexpected(std::move(id.error()));
-            }
-            // The frozen backend stamps the incarnation with the sequence of
-            // the commit that created it; the Session does not know that
-            // sequence before the commit settles, so the record keeps the
-            // placeholder and the Session stamps it after the settlement.
-            record = DocumentRecord{.id = DocumentId{.value = *id}, .kind = definition.kind(), .created_at = 0};
-            base = definition.initial_value();
-            created = true;
+        loaded = std::move(*found);
+    }
+
+    chord::Json base;
+    DocumentRecord record;
+    bool created = false;
+    if (loaded.has_value()) {
+        if (auto scoped = check_record_scope(definition, loaded->record); !scoped) {
+            return std::unexpected(std::move(scoped.error()));
         }
+        if (auto current = check_record_version(definition, loaded->record, loaded->stored_version); !current) {
+            return std::unexpected(std::move(current.error()));
+        }
+        record = loaded->record;
+        base = loaded->value;
+    } else {
+        auto id = impl_->storage->mint_id();
+        if (!id) {
+            return std::unexpected(std::move(id.error()));
+        }
+        // The frozen backend stamps the incarnation with the sequence of the
+        // commit that created it; the Session does not know that sequence
+        // before the commit settles, so the record keeps the placeholder and
+        // the Session stamps it after the settlement.
+        record = document_create_record(definition, address, DocumentId{.value = *id});
+        base = definition.initial_value();
+        created = true;
     }
 
     auto tracker = chord::track(std::move(base));
     auto change = tracker.begin_change();
     auto draft = change.draft();
 
-    impl_->documents.push_back(StagedDocument{.record = *record,
-            .address = std::move(address),
+    impl_->documents.push_back(StagedDocument{.record = record,
+            .address = address,
             .kind = definition.kind(),
             .tracker = std::move(tracker),
             .change = std::move(change),
-            .created = created});
+            .created = created,
+            .stored_version = loaded.has_value() ? loaded->stored_version : definition.version(),
+            .deltas_since_base = loaded.has_value() ? loaded->deltas_since_base : 0,
+            .retire = false,
+            .definition_version = definition.version(),
+            .checkpoint = detail::DocumentDefinitionAccess::checkpoint_hook(definition)});
+    impl_->latest_documents[key] = impl_->documents.size() - 1;
     return draft;
+}
+
+support::Expected<chord::Draft> Transaction::doc(
+        const DocumentDefinition& definition, DocumentAddress address, chord::Json seed) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    if (auto scoped = check_address(definition, address); !scoped) {
+        return std::unexpected(std::move(scoped.error()));
+    }
+    if (!definition.family()) {
+        return std::unexpected(validation_error("Document " + definition.kind() + " is not a family"));
+    }
+    if (auto owner = impl_->check_document_owner(address); !owner) {
+        return std::unexpected(std::move(owner.error()));
+    }
+
+    const std::string key = document_address_key(definition.kind(), address);
+    const auto latest = impl_->latest_documents.find(key);
+    const bool retired_in_tx = latest != impl_->latest_documents.end() && impl_->documents[latest->second].retire;
+    if (latest != impl_->latest_documents.end() && !retired_in_tx) {
+        StagedDocument& staged = impl_->documents[latest->second];
+        if (staged.change.has_value()) {
+            return staged.change->draft();
+        }
+    }
+
+    std::optional<CachedDocument> loaded;
+    if (!retired_in_tx && impl_->session != nullptr) {
+        auto found = impl_->session->load_document(definition, address);
+        if (!found) {
+            return std::unexpected(std::move(found.error()));
+        }
+        loaded = std::move(*found);
+    }
+
+    chord::Json base;
+    DocumentRecord record;
+    bool created = false;
+    if (loaded.has_value()) {
+        if (auto scoped = check_record_scope(definition, loaded->record); !scoped) {
+            return std::unexpected(std::move(scoped.error()));
+        }
+        if (auto current = check_record_version(definition, loaded->record, loaded->stored_version); !current) {
+            return std::unexpected(std::move(current.error()));
+        }
+        // An existing member ignores the seed.
+        record = loaded->record;
+        base = loaded->value;
+    } else {
+        auto id = impl_->storage->mint_id();
+        if (!id) {
+            return std::unexpected(std::move(id.error()));
+        }
+        record = document_create_record(definition, address, DocumentId{.value = *id});
+        base = definition.initial_value(seed);
+        created = true;
+    }
+
+    auto tracker = chord::track(std::move(base));
+    auto change = tracker.begin_change();
+    auto draft = change.draft();
+
+    impl_->documents.push_back(StagedDocument{.record = record,
+            .address = address,
+            .kind = definition.kind(),
+            .tracker = std::move(tracker),
+            .change = std::move(change),
+            .created = created,
+            .stored_version = loaded.has_value() ? loaded->stored_version : definition.version(),
+            .deltas_since_base = loaded.has_value() ? loaded->deltas_since_base : 0,
+            .retire = false,
+            .definition_version = definition.version(),
+            .checkpoint = detail::DocumentDefinitionAccess::checkpoint_hook(definition)});
+    impl_->latest_documents[key] = impl_->documents.size() - 1;
+    return draft;
+}
+
+support::ExpectedVoid Transaction::retire_doc(const DocumentDefinition& definition, DocumentAddress address) {
+    if (auto rejected = impl_->reject_write(); !rejected) {
+        return std::unexpected(std::move(rejected.error()));
+    }
+    if (auto scoped = check_address(definition, address); !scoped) {
+        return std::unexpected(std::move(scoped.error()));
+    }
+    // A retirement of an incarnation this transaction acquired persists its
+    // final content first: the retirement is the last revision.
+    for (StagedDocument& document : impl_->documents) {
+        if (document.address != address || document.kind != definition.kind()) {
+            continue;
+        }
+        if (document.retire) {
+            return {};
+        }
+        if (auto scoped = check_record_scope(definition, document.record); !scoped) {
+            return std::unexpected(std::move(scoped.error()));
+        }
+        document.retire = true;
+        impl_->latest_documents[document_address_key(definition.kind(), address)] =
+                static_cast<std::size_t>(&document - impl_->documents.data());
+        return {};
+    }
+
+    if (auto owner = impl_->check_document_owner(address); !owner) {
+        return std::unexpected(std::move(owner.error()));
+    }
+    std::optional<CachedDocument> loaded;
+    if (impl_->session != nullptr) {
+        auto found = impl_->session->load_document(definition, address);
+        if (!found) {
+            return std::unexpected(std::move(found.error()));
+        }
+        loaded = std::move(*found);
+    }
+    if (!loaded.has_value()) {
+        // An address with no current incarnation stages nothing.
+        return {};
+    }
+    if (auto scoped = check_record_scope(definition, loaded->record); !scoped) {
+        return std::unexpected(std::move(scoped.error()));
+    }
+    impl_->documents.push_back(StagedDocument{.record = loaded->record,
+            .address = address,
+            .kind = definition.kind(),
+            .tracker = chord::track(loaded->value),
+            .change = std::nullopt,
+            .created = false,
+            .stored_version = loaded->stored_version,
+            .deltas_since_base = loaded->deltas_since_base,
+            .retire = true,
+            .definition_version = definition.version(),
+            .checkpoint = detail::DocumentDefinitionAccess::checkpoint_hook(definition)});
+    impl_->latest_documents[document_address_key(definition.kind(), address)] = impl_->documents.size() - 1;
+    return {};
 }
 
 support::Expected<TaskId> Transaction::create_task(
@@ -1013,7 +1745,9 @@ support::AsyncResult<void> Session::Impl::commit_now(
         // so no draft escapes the failed transaction.
         transaction.impl_->sealed = true;
         for (StagedDocument& document : transaction.impl_->documents) {
-            document.change.abort();
+            if (document.change.has_value()) {
+                document.change->abort();
+            }
         }
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(outcome.error()))}};
     }
@@ -1025,7 +1759,9 @@ support::AsyncResult<void> Session::Impl::commit_now(
     const auto reject_assembly = [&transaction](support::Error error) {
         transaction.impl_->sealed = true;
         for (StagedDocument& document : transaction.impl_->documents) {
-            document.change.abort();
+            if (document.change.has_value()) {
+                document.change->abort();
+            }
         }
         return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(error))}};
     };
@@ -1111,9 +1847,15 @@ support::AsyncResult<void> Session::Impl::commit_now(
     transaction.impl_->sealed = true;
 
     // The staged documents are prepared before the batch is admitted, so a
-    // prepared draft is never observable before the storage settles it.
+    // prepared draft is never observable before the storage settles it. A
+    // retirement of an incarnation this transaction never acquired has no
+    // change to prepare.
     for (StagedDocument& document : state->documents) {
-        auto prepared = document.change.prepare();
+        if (!document.change.has_value()) {
+            state->prepared.push_back(std::nullopt);
+            continue;
+        }
+        auto prepared = document.change->prepare();
         if (!prepared) {
             return support::AsyncResult<void>{support::ExpectedVoid{std::unexpected(std::move(prepared.error()))}};
         }
@@ -1121,26 +1863,58 @@ support::AsyncResult<void> Session::Impl::commit_now(
     }
 
     // The document writes join the batch. A creation carries the record and
-    // the base value; a change carries the incarnation and the exact
+    // the base value; a copy carries its persisted source instead of content;
+    // a change carries the incarnation and either a complete base or the exact
     // operations. A loaded incarnation that prepared no operations writes
     // nothing, so acquiring a document without modifying it adds no write to
     // the batch (frozen pi `Transaction.#assemble`).
     for (std::size_t index = 0; index < state->documents.size(); ++index) {
-        const StagedDocument& document = state->documents[index];
-        const chord::Prepared& prepared = state->prepared[index];
-        const bool written = document.created || !prepared.ops().empty();
+        StagedDocument& document = state->documents[index];
+        const std::optional<chord::Prepared>& prepared = state->prepared[index];
+        const bool has_change = prepared.has_value();
+        const bool migration_only = !document.created && document.stored_version < document.definition_version;
+        const bool written =
+                document.created || document.retire || migration_only || (has_change && !prepared->ops().empty());
+        // A checkpoint predicate decides whether an ordinary change stores a
+        // complete base instead of a delta (frozen pi `checkpointWhen`). The
+        // predicate runs last, after every validation.
+        const bool checkpoint = !document.created && !migration_only && has_change && !prepared->ops().empty() &&
+                                document.checkpoint != nullptr &&
+                                (*document.checkpoint)(prepared->value(), prepared->ops(), document.deltas_since_base);
+        const bool base = document.created || migration_only || checkpoint;
         state->document_written.push_back(written);
+        state->document_base.push_back(base);
         if (!written) continue;
-        StorageWrite write{.type = document.created ? "document.create" : "document.change"};
-        write.document_conversation_id = document.address.conversation_id;
+        // A retirement applies after any creation of the same incarnation so
+        // the batch is ordered for the storage; the publication stays the
+        // canonical retirement either way (frozen pi `Transaction.#assemble`).
+        const bool born_and_retired = document.created && document.retire;
+        if (document.retire && !born_and_retired) {
+            state->writes.push_back(StorageWrite{.type = "document.retire", .document_id = document.record.id});
+            continue;
+        }
+        if (document.created && document.fork_source.has_value()) {
+            state->writes.push_back(StorageWrite{.type = "document.copy",
+                    .document_record = document.record,
+                    .document_copy_source = document.fork_source,
+                    .document_version = document.definition_version});
+            continue;
+        }
+        StorageWrite write{.type = document.created ? "document.create" : "document.change",
+                .document_version = document.definition_version};
         if (document.created) {
             write.document_record = document.record;
         } else {
             write.document_id = document.record.id;
-            write.document_ops = prepared.ops();
+            if (!base) {
+                write.document_ops = prepared->ops();
+            }
         }
-        write.document_value = prepared.value();
+        write.document_value = prepared->value();
         state->writes.push_back(std::move(write));
+        if (born_and_retired) {
+            state->writes.push_back(StorageWrite{.type = "document.retire", .document_id = document.record.id});
+        }
     }
 
     if (state->writes.empty()) {
@@ -1216,6 +1990,79 @@ support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
     return support::AsyncResult<std::optional<chord::Json>>{std::move(*value)};
 }
 
+support::AsyncResult<std::optional<chord::Json>> Session::snapshot_as_of(
+        const DocumentDefinition& definition, DocumentAddress address, EntryId at) {
+    std::lock_guard lock(impl_->mutation_line);
+    if (impl_->failed) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(session_failed_error())};
+    }
+    if (impl_->closed) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(session_closed_error())};
+    }
+    if (address.scope() != DocumentScope::Conversation) {
+        return support::AsyncResult<std::optional<chord::Json>>{
+                std::unexpected(validation_error("Session.snapshot_as_of() requires a conversation document"))};
+    }
+    if (definition.scope() != DocumentScope::Conversation) {
+        return support::AsyncResult<std::optional<chord::Json>>{
+                std::unexpected(validation_error("Session.snapshot_as_of() requires a conversation document"))};
+    }
+    if (definition.history() != DocumentHistory::Rewindable) {
+        return support::AsyncResult<std::optional<chord::Json>>{
+                std::unexpected(validation_error("Document " + definition.kind() + " does not retain history"))};
+    }
+
+    // The entry resolves to the commit that appended it, and the document is
+    // materialized at that commit (frozen pi `Session.snapshotAsOf`).
+    auto stored_entry = impl_->storage->entry(at);
+    if (!stored_entry) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(std::move(stored_entry.error()))};
+    }
+    if (!(*stored_entry).has_value() || (*stored_entry)->entry.conversation_id != *address.conversation_id) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(
+                validation_error("Entry " + std::to_string(at.value) + " is not visible from conversation " +
+                                 std::to_string(address.conversation_id->value)))};
+    }
+    const Seq commit_seq = (*stored_entry)->commit_seq;
+
+    auto found = impl_->storage->find_document(definition.kind(), address, DocumentPoint::as_of(commit_seq));
+    if (!found) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(std::move(found.error()))};
+    }
+    if (!(*found).has_value()) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::optional<chord::Json>{}};
+    }
+    const DocumentRecord& record = **found;
+    auto stored = impl_->storage->document(record.id, DocumentPoint::as_of(commit_seq));
+    if (!stored) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(std::move(stored.error()))};
+    }
+    if (!(*stored).has_value()) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(validation_error(
+                "Historical document " + std::to_string(record.id.value) + " (" + record.kind + ") cannot be read"))};
+    }
+    auto value = materialize_document(definition, record, (*stored)->version, (*stored)->value);
+    if (!value) {
+        return support::AsyncResult<std::optional<chord::Json>>{std::unexpected(std::move(value.error()))};
+    }
+    return support::AsyncResult<std::optional<chord::Json>>{std::optional<chord::Json>{std::move(*value)}};
+}
+
+support::AsyncResult<std::optional<StoredDocument>> Session::document(DocumentId id, DocumentPoint at) {
+    std::lock_guard lock(impl_->mutation_line);
+    if (impl_->failed) {
+        return support::AsyncResult<std::optional<StoredDocument>>{std::unexpected(session_failed_error())};
+    }
+    if (impl_->closed) {
+        return support::AsyncResult<std::optional<StoredDocument>>{std::unexpected(session_closed_error())};
+    }
+    auto stored = impl_->storage->document(id, at);
+    if (!stored) {
+        return support::AsyncResult<std::optional<StoredDocument>>{std::unexpected(std::move(stored.error()))};
+    }
+    return support::AsyncResult<std::optional<StoredDocument>>{std::move(*stored)};
+}
+
 support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
         const DocumentDefinition& definition, DocumentAddress address) {
     std::lock_guard lock(impl_->mutation_line);
@@ -1225,20 +2072,21 @@ support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
     if (impl_->closed) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(session_closed_error())};
     }
-    auto value = impl_->committed_value(definition, address);
-    if (!value) {
-        return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(std::move(value.error()))};
+    auto loaded = impl_->load_document(definition, address);
+    if (!loaded) {
+        return support::AsyncResult<std::optional<DocumentWatch>>{std::unexpected(std::move(loaded.error()))};
     }
-    if (!value->has_value()) {
+    if (!(*loaded).has_value()) {
         return support::AsyncResult<std::optional<DocumentWatch>>{std::optional<DocumentWatch>{}};
     }
 
     auto watch_impl = std::make_shared<DocumentWatch::Impl>();
-    watch_impl->value = *(*value);
+    watch_impl->value = (*loaded)->value;
+    watch_impl->observed_version = (*loaded)->value_version;
 
     // The watch receives every committed frame of this incarnation from now
     // on; the frames committed before it is started are buffered.
-    const std::string key = address_key(definition.kind(), address.conversation_id);
+    const std::string key = document_address_key(definition.kind(), address);
     impl_->watches[key].push_back(watch_impl);
     return support::AsyncResult<std::optional<DocumentWatch>>{std::optional<DocumentWatch>{DocumentWatch{watch_impl}}};
 }

@@ -111,13 +111,15 @@ public:
         return inner_->scan_conversations(limit);
     }
 
-    [[nodiscard]] support::Expected<std::optional<::cch::durable::DocumentRecord>> find_document(
-            std::string_view kind, std::optional<::cch::durable::ConversationId> conversation_id) override {
-        return inner_->find_document(kind, conversation_id);
+    [[nodiscard]] support::Expected<std::optional<::cch::durable::DocumentRecord>> find_document(std::string_view kind,
+            const ::cch::durable::DocumentAddress& address,
+            ::cch::durable::DocumentPoint at) override {
+        return inner_->find_document(kind, address, at);
     }
 
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(::cch::durable::DocumentId id) override {
-        return inner_->document(id);
+    [[nodiscard]] support::Expected<std::optional<::cch::durable::StoredDocument>> document(
+            ::cch::durable::DocumentId id, ::cch::durable::DocumentPoint at) override {
+        return inner_->document(id, at);
     }
 
     [[nodiscard]] support::Expected<std::optional<::cch::durable::TaskRecord>> task(

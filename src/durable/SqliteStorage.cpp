@@ -83,6 +83,41 @@ constexpr std::string_view kPoisonMessage = "SQLite storage is poisoned and must
     return serialized ? std::move(*serialized) : std::string{};
 }
 
+/// The persisted JSON record of one document incarnation (frozen pi
+/// `DocumentRecord`).
+[[nodiscard]] chord::Json encode_document_record(const DocumentRecord& record, Seq created_at) {
+    chord::Json::Object value{{"id", chord::Json{static_cast<double>(record.id.value)}},
+            {"kind", chord::Json{record.kind}},
+            {"createdAt", chord::Json{static_cast<double>(created_at)}}};
+    if (record.key.has_value()) value.emplace("key", chord::Json{*record.key});
+    chord::Json::Object scope{{"kind", chord::Json{std::string{document_scope_name(record.scope())}}}};
+    if (record.conversation_id.has_value()) {
+        scope.emplace("conversationId", chord::Json{static_cast<double>(record.conversation_id->value)});
+    }
+    if (record.task_id.has_value()) {
+        scope.emplace("taskId", chord::Json{static_cast<double>(record.task_id->value)});
+    }
+    value.emplace("scope", chord::Json{std::move(scope)});
+    if (record.scope() == DocumentScope::Conversation) {
+        value.emplace("history", chord::Json{record.history == DocumentHistory::Rewindable ? "rewindable" : "latest"});
+        switch (record.fork) {
+        case DocumentFork::AsOf:
+            value.emplace("fork", chord::Json{"asOf"});
+            break;
+        case DocumentFork::Initial:
+            value.emplace("fork", chord::Json{"initial"});
+            break;
+        case DocumentFork::Current:
+            value.emplace("fork", chord::Json{"current"});
+            break;
+        }
+    }
+    if (record.retired_at.has_value()) {
+        value.emplace("retiredAt", chord::Json{static_cast<double>(*record.retired_at)});
+    }
+    return chord::Json{std::move(value)};
+}
+
 [[nodiscard]] std::string ops_json(const chord::OpBatch& ops) {
     auto text = support::write_json(ops_value(ops));
     return text ? std::move(*text) : std::string{"[]"};
@@ -456,7 +491,8 @@ struct SqliteStorage::Impl {
         if (!loaded) return loaded;
 
         loaded = load_rows(
-                std::format("SELECT id,kind,created_at,retired_at,owner_id,record FROM {} ORDER BY created_at,id",
+                std::format("SELECT id,kind,created_at,retired_at,owner_id,record,scope_kind,family,key_value FROM "
+                            "{} ORDER BY created_at,id",
                         documents),
                 [this, &revisions, &restore_record_id, &sqlite_integer, &json_int](
                         sqlite3_stmt* row) -> support::ExpectedVoid {
@@ -469,9 +505,6 @@ struct SqliteStorage::Impl {
                     const auto id = object->contains("id") ? sqlite_integer(object->at("id")) : std::nullopt;
                     const auto* kind = object->contains("kind") ? object->at("kind").as_string() : nullptr;
                     if (!id || kind == nullptr) return std::unexpected(corrupt("Invalid persisted document record"));
-                    std::optional<ConversationId> conversation_id;
-                    if (const auto owner = json_int(object, "conversationId"); owner)
-                        conversation_id = ConversationId{*owner};
                     const auto created_at = json_int(object, "createdAt");
                     const auto* stored_kind = reinterpret_cast<const char*>(sqlite3_column_text(row, 1));
                     if (!created_at || *created_at != sqlite3_column_int64(row, 2) ||
@@ -483,18 +516,59 @@ struct SqliteStorage::Impl {
                     if (retired && retired_seq <= *created_at) {
                         return std::unexpected(corrupt("Invalid persisted document retirement sequence"));
                     }
-                    if (object->contains("conversationId") && !conversation_id)
-                        return std::unexpected(corrupt("Invalid persisted document owner"));
-                    const std::int64_t stored_id = sqlite3_column_int64(row, 0);
+                    DocumentRecord record{.id = DocumentId{*id}, .kind = std::string{*kind}};
+                    const std::string* key = object->contains("key") ? object->at("key").as_string() : nullptr;
+                    if (key != nullptr) {
+                        record.key = *key;
+                    }
+                    const auto* scope = object->contains("scope") ? object->at("scope").as_object() : nullptr;
+                    if (scope == nullptr) {
+                        return std::unexpected(corrupt("Invalid persisted document scope"));
+                    }
+                    const std::string* scope_kind = scope->contains("kind") ? scope->at("kind").as_string() : nullptr;
+                    if (scope_kind == nullptr) {
+                        return std::unexpected(corrupt("Invalid persisted document scope"));
+                    }
+                    if (*scope_kind == "conversation") {
+                        const auto owner = json_int(scope, "conversationId");
+                        if (!owner) return std::unexpected(corrupt("Invalid persisted document owner"));
+                        record.conversation_id = ConversationId{*owner};
+                        const std::string* history =
+                                object->contains("history") ? object->at("history").as_string() : nullptr;
+                        if (history != nullptr && *history == "rewindable") {
+                            record.history = DocumentHistory::Rewindable;
+                        }
+                        const std::string* fork = object->contains("fork") ? object->at("fork").as_string() : nullptr;
+                        if (fork != nullptr) {
+                            if (*fork == "asOf") {
+                                record.fork = DocumentFork::AsOf;
+                            } else if (*fork == "initial") {
+                                record.fork = DocumentFork::Initial;
+                            }
+                        }
+                    } else if (*scope_kind == "task") {
+                        const auto owner = json_int(scope, "taskId");
+                        if (!owner) return std::unexpected(corrupt("Invalid persisted document owner"));
+                        record.task_id = TaskId{*owner};
+                    } else if (*scope_kind != "session") {
+                        return std::unexpected(corrupt("Invalid persisted document scope"));
+                    }
                     const std::int64_t stored_owner = sqlite3_column_int64(row, 4);
-                    if (*id != stored_id || (conversation_id && conversation_id->value != stored_owner) ||
-                            (!conversation_id && stored_owner != 0)) {
+                    const auto* owner_kind = reinterpret_cast<const char*>(sqlite3_column_text(row, 6));
+                    const auto* key_value = reinterpret_cast<const char*>(sqlite3_column_text(row, 8));
+                    const std::string_view stored_scope = owner_kind == nullptr ? std::string_view{} : owner_kind;
+                    if (owner_kind == nullptr || stored_scope != document_scope_name(record.scope()) ||
+                            (record.conversation_id && record.conversation_id->value != stored_owner) ||
+                            (record.task_id && record.task_id->value != stored_owner) ||
+                            (!record.conversation_id && !record.task_id && stored_owner != 0) ||
+                            (record.key.has_value() ? (key_value == nullptr || *record.key != key_value)
+                                                    : (key_value != nullptr && *key_value != '\0')) ||
+                            sqlite3_column_int64(row, 7) != (record.key.has_value() ? 1 : 0)) {
                         return std::unexpected(corrupt("Persisted document columns do not match its record"));
                     }
                     if (auto claimed = restore_record_id(*id, "document"); !claimed) return claimed;
                     const std::array create{StorageWrite{.type = "document.create",
-                            .document_record = DocumentRecord{DocumentId{*id}, *kind, *created_at},
-                            .document_conversation_id = conversation_id,
+                            .document_record = record,
                             .document_value = chord::Json{chord::Json::Object{}}}};
                     auto restored = state.restore(create, *created_at);
                     if (!restored) return std::unexpected(std::move(restored.error()));
@@ -540,6 +614,7 @@ struct SqliteStorage::Impl {
                         current_value = std::move(*value);
                         const std::array change{StorageWrite{.type = "document.change",
                                 .document_id = DocumentId{*id},
+                                .document_version = static_cast<std::uint32_t>(version),
                                 .document_value = current_value}};
                         auto changed = state.restore(change, revision_seq);
                         if (!changed) return std::unexpected(std::move(changed.error()));
@@ -809,55 +884,52 @@ struct SqliteStorage::Impl {
                         [&](Statement& statement) { return statement.bind_int(1, write.document_record->id.value); });
                 if (!claim) return fail(std::move(claim.error()));
                 next_id = std::max(next_id, write.document_record->id.value + 1);
-                const std::int64_t owner = write.document_conversation_id ? write.document_conversation_id->value : 0;
-                chord::Json::Object record{{"id", chord::Json{static_cast<double>(write.document_record->id.value)}},
-                        {"kind", chord::Json{write.document_record->kind}},
-                        {"createdAt", chord::Json{static_cast<double>(seq)}}};
-                if (write.document_conversation_id)
-                    record.emplace("conversationId", chord::Json{static_cast<double>(owner)});
-                const std::string record_json = as_string(chord::Json{record});
-                const std::string content = as_string(*write.document_value);
+                const DocumentRecord& created = *write.document_record;
                 auto result = insert(std::format("INSERT INTO "
                                                  "{}(id,kind,family,key_value,scope_kind,owner_id,created_at,retired_"
-                                                 "at,record) VALUES(?1,?2,0,'',?3,?4,?5,NULL,?6)",
+                                                 "at,record) VALUES(?1,?2,?3,?4,?5,?6,?7,NULL,?8)",
                                              table(options.prefix, "documents")),
                         [&](Statement& statement) -> support::ExpectedVoid {
-                            if (auto bound = statement.bind_int(1, write.document_record->id.value); !bound)
+                            if (auto bound = statement.bind_int(1, created.id.value); !bound) return bound;
+                            if (auto bound = statement.bind_text(2, created.kind); !bound) return bound;
+                            if (auto bound = statement.bind_int(3, created.key.has_value() ? 1 : 0); !bound)
                                 return bound;
-                            if (auto bound = statement.bind_text(2, write.document_record->kind); !bound) return bound;
-                            if (auto bound = statement.bind_text(
-                                        3, write.document_conversation_id ? "conversation" : "session");
-                                    !bound)
+                            if (auto bound = statement.bind_text(4, created.key.value_or(std::string{})); !bound)
                                 return bound;
-                            if (auto bound = statement.bind_int(4, owner); !bound) return bound;
-                            if (auto bound = statement.bind_int(5, seq); !bound) return bound;
-                            return statement.bind_text(6, record_json);
+                            if (auto bound = statement.bind_text(5, document_scope_name(created.scope())); !bound)
+                                return bound;
+                            const std::int64_t owner =
+                                    created.task_id.has_value()
+                                            ? created.task_id->value
+                                            : created.conversation_id.value_or(ConversationId{}).value;
+                            if (auto bound = statement.bind_int(6, owner); !bound) return bound;
+                            if (auto bound = statement.bind_int(7, seq); !bound) return bound;
+                            return statement.bind_text(8, as_string(encode_document_record(created, seq)));
                         });
                 if (!result) return fail(std::move(result.error()));
                 result = insert(
-                        std::format("INSERT INTO {}(document_id,seq,kind,version,content) VALUES(?1,?2,'base',1,?3)",
+                        std::format("INSERT INTO {}(document_id,seq,kind,version,content) VALUES(?1,?2,'base',?3,?4)",
                                 table(options.prefix, "document_revisions")),
                         [&](Statement& statement) -> support::ExpectedVoid {
-                            if (auto bound = statement.bind_int(1, write.document_record->id.value); !bound)
-                                return bound;
+                            if (auto bound = statement.bind_int(1, created.id.value); !bound) return bound;
                             if (auto bound = statement.bind_int(2, seq); !bound) return bound;
-                            return statement.bind_text(3, content);
+                            if (auto bound = statement.bind_int(3, write.document_version); !bound) return bound;
+                            return statement.bind_text(4, as_string(*write.document_value));
                         });
                 if (!result) return fail(std::move(result.error()));
             } else if (write.type == "document.change") {
                 const bool base = write.document_ops.empty();
                 const std::string content = base ? as_string(*write.document_value) : ops_json(write.document_ops);
-                auto result =
-                        insert(std::format("INSERT INTO {}(document_id,seq,kind,version,content) VALUES(?1,?2,?3,1,?4)",
-                                       table(options.prefix, "document_revisions")),
-                                [&](Statement& statement) -> support::ExpectedVoid {
-                                    if (auto bound = statement.bind_int(1, write.document_id->value); !bound)
-                                        return bound;
-                                    if (auto bound = statement.bind_int(2, seq); !bound) return bound;
-                                    if (auto bound = statement.bind_text(3, base ? "base" : "delta"); !bound)
-                                        return bound;
-                                    return statement.bind_text(4, content);
-                                });
+                auto result = insert(
+                        std::format("INSERT INTO {}(document_id,seq,kind,version,content) VALUES(?1,?2,?3,?4,?5)",
+                                table(options.prefix, "document_revisions")),
+                        [&](Statement& statement) -> support::ExpectedVoid {
+                            if (auto bound = statement.bind_int(1, write.document_id->value); !bound) return bound;
+                            if (auto bound = statement.bind_int(2, seq); !bound) return bound;
+                            if (auto bound = statement.bind_text(3, base ? "base" : "delta"); !bound) return bound;
+                            if (auto bound = statement.bind_int(4, write.document_version); !bound) return bound;
+                            return statement.bind_text(5, content);
+                        });
                 if (!result) return fail(std::move(result.error()));
             } else if (write.type == "document.retire") {
                 Statement update{database,
@@ -1040,13 +1112,13 @@ support::Expected<std::vector<EntryRecord>> SqliteStorage::scan_entries(Conversa
     return impl_->state.scan_entries(id, limit);
 }
 support::Expected<std::optional<DocumentRecord>> SqliteStorage::find_document(
-        std::string_view kind, std::optional<ConversationId> id) {
+        std::string_view kind, const DocumentAddress& address, DocumentPoint at) {
     if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
-    return impl_->state.find_document(kind, id);
+    return impl_->state.find_document(kind, address, at);
 }
-support::Expected<std::optional<chord::Json>> SqliteStorage::document(DocumentId id) {
+support::Expected<std::optional<StoredDocument>> SqliteStorage::document(DocumentId id, DocumentPoint at) {
     if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));
-    return impl_->state.document(id);
+    return impl_->state.document(id, at);
 }
 support::Expected<std::optional<TaskRecord>> SqliteStorage::task(TaskId id) {
     if (auto error = impl_->unusable(); error) return std::unexpected(std::move(*error));

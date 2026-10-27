@@ -36,13 +36,17 @@ constexpr std::string_view kFramesDocumentKind = "audit1063.frames";
 }
 
 /// The frozen document definition of the captured watch scenarios: the frozen
-/// artifact's initial value is `{value, items, nested}`.
+/// artifact's initial value is `{value, items, nested}` and the frozen
+/// definition is Session-scoped.
 [[nodiscard]] DocumentDefinition frames_document() {
-    return define_document(std::string{kFramesDocumentKind}, std::move_only_function<chord::Json()>{[] {
-        return chord::Json{chord::Json::Object{{"value", chord::Json{0.0}},
-                {"items", chord::Json{chord::Json::Array{chord::Json{std::string{"a"}}}}},
-                {"nested", chord::Json{chord::Json::Object{{"count", chord::Json{0.0}}}}}}};
-    }});
+    auto definition = define_document(
+            DocumentDefinitionBuilder{std::string{kFramesDocumentKind}}, std::move_only_function<chord::Json()>{[] {
+                return chord::Json{chord::Json::Object{{"value", chord::Json{0.0}},
+                        {"items", chord::Json{chord::Json::Array{chord::Json{std::string{"a"}}}}},
+                        {"nested", chord::Json{chord::Json::Object{{"count", chord::Json{0.0}}}}}}};
+            }});
+    REQUIRE(definition.has_value());
+    return std::move(*definition);
 }
 
 /// The path of one member of a document value.

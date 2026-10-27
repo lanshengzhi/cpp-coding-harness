@@ -273,8 +273,69 @@ struct EntryRecord {
     std::optional<TaskId> by_task_id{std::nullopt};
 };
 
+/// The ownership and lifetime of a document (frozen pi `DocumentSemantics`).
+///
+/// Only a conversation document declares `history` and `fork` behavior;
+/// Session and task documents are current-only and are never copied by a
+/// conversation fork.
+enum class DocumentScope {
+    Session,
+    Conversation,
+    Task,
+};
+
+/// Whether a conversation document keeps the revisions an as-of read needs
+/// (frozen `LatestConversationSemantics` / `RewindableConversationSemantics`).
+///
+/// A `latest` document keeps only its current state: a checkpoint base
+/// replaces its history and a historical read is rejected. A `rewindable`
+/// document keeps every revision so an entry's commit can address it.
+enum class DocumentHistory {
+    Latest,
+    Rewindable,
+};
+
+/// What a conversation fork initializes a copied document from (frozen
+/// `DocumentRecord.fork`): the source state as of the fork entry, the source
+/// current state, or the definition's initial value.
+enum class DocumentFork {
+    AsOf,
+    Current,
+    Initial,
+};
+
+/// Exact logical identity of one singleton or keyed family member (frozen pi
+/// `DocumentAddress`).
+///
+/// A Session document names no owner, a conversation document names its
+/// conversation and a task document names its task; `key` selects one family
+/// member. Two addresses are the same document only when the kind, the scope
+/// owner and the key all match, so a Session document and a conversation
+/// document of the same kind never share an incarnation.
+struct DocumentAddress {
+    /// The owning conversation; absent unless the scope is conversation.
+    std::optional<ConversationId> conversation_id{};
+    /// The owning task; absent unless the scope is task.
+    std::optional<TaskId> task_id{};
+    /// The family member key; absent for a singleton document.
+    std::optional<std::string> key{};
+
+    /// The scope this address selects (frozen `DocumentAddress.scope.kind`).
+    [[nodiscard]] DocumentScope scope() const noexcept {
+        if (task_id.has_value()) return DocumentScope::Task;
+        if (conversation_id.has_value()) return DocumentScope::Conversation;
+        return DocumentScope::Session;
+    }
+
+    [[nodiscard]] bool operator==(const DocumentAddress&) const = default;
+};
+
 /// The immutable record of one document incarnation (frozen pi
 /// `DocumentRecord`).
+///
+/// The record is the whole identity of the incarnation: its numeric ID is
+/// never reused, so recreating the same logical document produces a new
+/// record with a new ID, and the retired record stays addressable by ID.
 struct DocumentRecord {
     DocumentId id{};
     /// The stable document definition kind (frozen `DocumentRecord.kind`).
@@ -282,7 +343,83 @@ struct DocumentRecord {
     /// The commit that created the incarnation (frozen
     /// `DocumentRecord.createdAt`).
     Seq created_at{0};
+    /// The owning conversation; absent unless the scope is conversation.
+    std::optional<ConversationId> conversation_id{};
+    /// The owning task; absent unless the scope is task.
+    std::optional<TaskId> task_id{};
+    /// The family member key; absent for a singleton document.
+    std::optional<std::string> key{};
+    /// Whether the incarnation keeps every revision (frozen
+    /// `DocumentRecord.history`); always `latest` outside conversation scope.
+    DocumentHistory history{DocumentHistory::Latest};
+    /// What a conversation fork initializes this incarnation's copy from
+    /// (frozen `DocumentRecord.fork`); always `current` outside conversation
+    /// scope.
+    DocumentFork fork{DocumentFork::Current};
+    /// The commit that retired the incarnation (frozen
+    /// `DocumentRecord.retiredAt`); absent while it is the current incarnation
+    /// of its address.
+    std::optional<Seq> retired_at{};
+
+    /// The logical address this incarnation occupies.
+    [[nodiscard]] DocumentAddress address() const {
+        return DocumentAddress{.conversation_id = conversation_id, .task_id = task_id, .key = key};
+    }
+
+    [[nodiscard]] DocumentScope scope() const noexcept { return address().scope(); }
+
+    [[nodiscard]] bool operator==(const DocumentRecord&) const = default;
 };
+
+/// Current state or one historical commit sequence used for document
+/// membership and content reads (frozen pi `DocumentPoint`).
+struct DocumentPoint {
+    /// Absent selects the current incarnation; present selects the state as of
+    /// that commit sequence.
+    std::optional<Seq> at{};
+
+    [[nodiscard]] static DocumentPoint current() noexcept { return DocumentPoint{}; }
+
+    [[nodiscard]] static DocumentPoint as_of(Seq seq) noexcept { return DocumentPoint{.at = seq}; }
+
+    [[nodiscard]] bool operator==(const DocumentPoint&) const = default;
+};
+
+/// Detached materialized value and stored definition version at one point
+/// (frozen pi `StoredDocument`).
+struct StoredDocument {
+    DocumentRecord record{};
+    /// The definition version the materialized value has.
+    std::uint32_t version{1};
+    /// The materialized value at the selected point.
+    chord::Json value{};
+    /// Deltas replayed after the selected base to materialize `value`.
+    std::int64_t deltas_since_base{0};
+};
+
+/// Exact persisted source selected for a definition-free document copy
+/// (frozen pi `DocumentCopySource`).
+struct DocumentCopySource {
+    DocumentId id{};
+    DocumentPoint at{};
+
+    [[nodiscard]] bool operator==(const DocumentCopySource&) const = default;
+};
+
+/// The stable string identity of one logical document address (frozen pi
+/// `addressId`).
+///
+/// Kind, scope owner and family key are all part of the identity, so the same
+/// kind under different scopes or keys names different documents.
+[[nodiscard]] std::string document_address_key(std::string_view kind, const DocumentAddress& address);
+
+/// The persisted name of one document scope (frozen `scope.kind`).
+[[nodiscard]] std::string_view document_scope_name(DocumentScope scope) noexcept;
+
+/// Whether one incarnation retains only its current state (frozen pi
+/// `isCurrentOnly`): every non-conversation document and every `latest`
+/// conversation document.
+[[nodiscard]] bool document_is_current_only(const DocumentRecord& record) noexcept;
 
 /// One committed table record (frozen pi `TableCommitChange`).
 struct TableCommitChange {
@@ -303,13 +440,20 @@ struct TableCommitChange {
 struct DocumentCommitChange {
     DocumentRecord record{};
     /// The conversation owning the document; absent for a Session document.
+    /// A task document derives it from its task record.
     std::optional<ConversationId> conversation_id{};
-    /// The exact adopted immutable revision (frozen
-    /// `DocumentCommitChange.value`).
+    /// The exact adopted immutable revision, or JSON null when this commit
+    /// retired the incarnation (frozen `DocumentCommitChange.value`).
     chord::Json value{};
     /// The exact adopted operations (frozen `DocumentCommitChange.ops`); empty
-    /// for a creation.
+    /// for a creation and for a retirement.
     chord::OpBatch ops{};
+    /// Definition version of `value`; absent when this commit retired the
+    /// incarnation (frozen `DocumentCommitChange.version`).
+    std::optional<std::uint32_t> version{};
+    /// The persisted source of a definition-free copy publication (frozen
+    /// `DocumentCommitChange` of type `document.copy`); absent otherwise.
+    std::optional<DocumentCopySource> source{};
 };
 
 /// One committed submission change (frozen pi `CommitChange` for a
@@ -337,8 +481,8 @@ struct CommitPublication {
 /// `StorageWrite`).
 struct StorageWrite {
     /// The write kind: `conversation`, `entry`, `task`, `submission`,
-    /// `document.create`, `document.change` or `document.retire` (frozen
-    /// `StorageWrite.type`).
+    /// `document.create`, `document.copy`, `document.change` or
+    /// `document.retire` (frozen `StorageWrite.type`).
     std::string type{};
     /// The conversation record of a `conversation` write.
     std::optional<ConversationRecord> conversation{};
@@ -349,16 +493,20 @@ struct StorageWrite {
     /// The full record of a `submission` write; every submission write
     /// replaces the record.
     std::optional<SubmissionRecord> submission{};
-    /// The document record of a `document.create` write.
+    /// The document record of a `document.create` or `document.copy` write.
     std::optional<DocumentRecord> document_record{};
     /// The incarnation a `document.change` or `document.retire` write targets.
     std::optional<DocumentId> document_id{};
-    /// The conversation owning the document incarnation; absent for a Session
-    /// document. The frozen document scope (frozen `DocumentRecord.scope`).
-    std::optional<ConversationId> document_conversation_id{};
+    /// The persisted source of a `document.copy` write. The backend resolves
+    /// it to the source's exact base content at that point.
+    std::optional<DocumentCopySource> document_copy_source{};
+    /// The definition version of a `document.create` or `document.change`
+    /// write.
+    std::uint32_t document_version{1};
     /// The committed value of a `document.create` or `document.change` write.
     std::optional<chord::Json> document_value{};
-    /// The committed operations of a `document.change` write.
+    /// The committed operations of a `document.change` write; empty selects a
+    /// complete base revision instead of a delta.
     chord::OpBatch document_ops{};
 };
 

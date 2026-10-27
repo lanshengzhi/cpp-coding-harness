@@ -127,17 +127,55 @@ std::string thinking_name(ai::ThinkingLevel level) {
     std::terminate();
 }
 
-std::vector<std::pair<std::string, Json>> initial_documents(const RootOptions& options, std::string provider_session) {
+/// Every stored change of these documents is a complete base (frozen pi
+/// `AgentDoc.checkpointWhen`, `ProviderDoc.checkpointWhen` and
+/// `UsageDoc.checkpointWhen`).
+bool always_checkpoint(const chord::Json&, const chord::OpBatch&, std::int64_t) { return true; }
+
+/// The starting live document of every conversation (frozen pi
+/// `LiveDoc.initial`).
+Json initial_live_value() { return Json{Object{}}; }
+
+/// A complete base whenever nothing runs: no live run publication (frozen pi
+/// `LiveDoc.checkpointWhen`, spec §8.2).
+bool live_idle_checkpoint(const chord::Json& value, const chord::OpBatch&, std::int64_t) {
+    const auto* object = value.as_object();
+    return object == nullptr || object->find("run") == object->end();
+}
+
+/// The definitions the root conversation seeds itself with (frozen pi
+/// `AgentDoc` / `InboxDoc` / `LiveDoc` / `ProviderDoc` / `UsageDoc`). Seeding
+/// reuses the same definitions the runtime reads with, so the stored record
+/// always matches the accessor's scope, history and fork semantics.
+std::vector<DocumentDefinition> initial_document_definitions(const RootOptions& options, std::string provider_session) {
     Object agent;
     if (!options.model.id.empty()) {
         agent.emplace("model", Json{Object{{"provider", options.model.provider}, {"modelId", options.model.id}}});
     }
     if (options.thinking_level) agent.emplace("thinkingLevel", thinking_name(*options.thinking_level));
-    return {{"pi.agent:v1", Json{std::move(agent)}},
-            {"pi.inbox:v1", Json{Object{{"items", Json{Array{}}}}}},
-            {"pi.live:v1", Json{Object{}}},
-            {"pi.provider:v1", Json{Object{{"sessionId", std::move(provider_session)}}}},
-            {"pi.usage:v1", Json{Object{{"models", Json{Object{}}}, {"tools", Json{Object{}}}}}}};
+    std::vector<DocumentDefinition> definitions;
+    definitions.reserve(5);
+    definitions.push_back(detail::builtin_document(
+            "pi.agent:v1",
+            DocumentHistory::Rewindable,
+            DocumentFork::AsOf,
+            [value = Json{std::move(agent)}] { return value; },
+            always_checkpoint));
+    definitions.push_back(inbox_document());
+    definitions.push_back(live_document());
+    definitions.push_back(detail::builtin_document(
+            "pi.provider:v1",
+            DocumentHistory::Latest,
+            DocumentFork::Initial,
+            [session = std::move(provider_session)] { return Json{Object{{"sessionId", Json{session}}}}; },
+            always_checkpoint));
+    definitions.push_back(detail::builtin_document(
+            "pi.usage:v1",
+            DocumentHistory::Latest,
+            DocumentFork::Initial,
+            [] { return Json{Object{{"models", Json{Object{}}}, {"tools", Json{Object{}}}}}; },
+            always_checkpoint));
+    return definitions;
 }
 
 support::Error validation(std::string message) {
@@ -198,8 +236,6 @@ Json initial_inbox_value() { return Json{Object{{"items", Json{Array{}}}}}; }
 
 /// The starting live document of every conversation (frozen pi
 /// `LiveDoc.initial`).
-Json initial_live_value() { return Json{Object{}}; }
-
 /// Working copy of the staged inbox's item array (frozen `readInboxItems`).
 support::Expected<Array> read_inbox_items(chord::Draft& inbox) {
     auto items = inbox.get(inbox_items_path());
@@ -846,9 +882,9 @@ support::AsyncResult<ConversationId> WorkflowRuntime::root(RootOptions options) 
                     if (existing->has_value()) return {};
                     auto record = tx.create_root_conversation();
                     if (!record) return std::unexpected(record.error());
-                    const auto documents = initial_documents(*selected, boost::uuids::to_string(boost::uuids::random_generator{}()));
-                    for (const auto& [kind, initial] : documents) {
-                        auto definition = define_document(kind, [initial] { return initial; });
+                    const auto documents = initial_document_definitions(
+                            *selected, boost::uuids::to_string(boost::uuids::random_generator{}()));
+                    for (const DocumentDefinition& definition : documents) {
                         auto doc = tx.doc(definition, DocumentAddress{.conversation_id = record->id});
                         if (!doc) return std::unexpected(doc.error());
                     }
@@ -1514,29 +1550,49 @@ support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& 
 // ── `LiveDoc`, `endRun`, `withdrawQueuedInputs`, `removeInboxItem`) ────────
 
 DocumentDefinition inbox_document() {
-    return define_document(std::string{kInboxDocKind}, [] { return initial_inbox_value(); });
+    return detail::builtin_document(
+            std::string{kInboxDocKind},
+            DocumentHistory::Latest,
+            DocumentFork::Initial,
+            [] { return initial_inbox_value(); },
+            // A drained inbox stores a complete base instead of a delta
+            // chain (frozen pi `InboxDoc.checkpointWhen`).
+            [](const chord::Json& value, const chord::OpBatch&, std::int64_t) {
+                const auto* object = value.as_object();
+                if (object == nullptr) return true;
+                const auto it = object->find("items");
+                if (it == object->end()) return true;
+                const auto* items = it->second.as_array();
+                return items == nullptr || items->empty();
+            });
 }
 
 DocumentDefinition live_document() {
-    return define_document(std::string{kLiveDocKind}, [] { return initial_live_value(); });
+    return detail::builtin_document(
+            std::string{kLiveDocKind},
+            DocumentHistory::Latest,
+            DocumentFork::Initial,
+            [] { return initial_live_value(); },
+            live_idle_checkpoint);
 }
 
 support::Expected<std::optional<LiveRunState>> committed_live_run(Storage& storage, ConversationId conversation_id) {
-    auto found = storage.find_document(std::string{kLiveDocKind}, conversation_id);
+    auto found = storage.find_document(
+            std::string{kLiveDocKind}, DocumentAddress{.conversation_id = conversation_id}, DocumentPoint::current());
     if (!found) {
         return std::unexpected(found.error());
     }
     if (!found->has_value()) {
         return std::optional<LiveRunState>{};
     }
-    auto doc = storage.document(found->value().id);
+    auto doc = storage.document(found->value().id, DocumentPoint::current());
     if (!doc) {
         return std::unexpected(doc.error());
     }
     if (!doc->has_value()) {
         return std::optional<LiveRunState>{};
     }
-    const auto* value = (**doc).as_object();
+    const auto* value = (**doc).value.as_object();
     if (value == nullptr) {
         return std::unexpected(validation("Live document must be an object"));
     }

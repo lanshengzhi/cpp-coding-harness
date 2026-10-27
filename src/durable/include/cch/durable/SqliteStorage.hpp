@@ -40,8 +40,8 @@ public:
     [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
             ConversationId conversation_id, std::size_t limit) override;
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, std::optional<ConversationId> conversation_id) override;
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override;
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override;
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override;
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override;
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override;
     [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override;

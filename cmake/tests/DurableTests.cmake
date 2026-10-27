@@ -12,6 +12,7 @@ include_guard(GLOBAL)
         tests/durable/FrozenExpectation.cpp
         tests/durable/JsonlStorageTest.cpp
         tests/durable/SqliteStorageTest.cpp
+        tests/durable/DocumentLifecycleTest.cpp
         tests/durable/SessionTransactionTest.cpp
         tests/durable/SessionWatchTest.cpp
         tests/durable/SubmissionStorageTest.cpp

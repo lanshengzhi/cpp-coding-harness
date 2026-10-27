@@ -61,8 +61,8 @@ public:
     [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
             ConversationId conversation_id, std::size_t limit);
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, std::optional<ConversationId> conversation_id);
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id);
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at);
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at);
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id);
     [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit);
     [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id);

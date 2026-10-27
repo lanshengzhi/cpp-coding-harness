@@ -45,9 +45,9 @@ public:
             ConversationId conversation_id, std::size_t limit) override;
 
     [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, std::optional<ConversationId> conversation_id) override;
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override;
 
-    [[nodiscard]] support::Expected<std::optional<chord::Json>> document(DocumentId id) override;
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override;
 
     [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override;
 

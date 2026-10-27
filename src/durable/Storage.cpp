@@ -47,11 +47,13 @@ support::Expected<std::vector<EntryRecord>> MemoryStorage::scan_entries(
 }
 
 support::Expected<std::optional<DocumentRecord>> MemoryStorage::find_document(
-        std::string_view kind, std::optional<ConversationId> conversation_id) {
-    return impl_->find_document(kind, conversation_id);
+        std::string_view kind, const DocumentAddress& address, DocumentPoint at) {
+    return impl_->find_document(kind, address, at);
 }
 
-support::Expected<std::optional<chord::Json>> MemoryStorage::document(DocumentId id) { return impl_->document(id); }
+support::Expected<std::optional<StoredDocument>> MemoryStorage::document(DocumentId id, DocumentPoint at) {
+    return impl_->document(id, at);
+}
 
 support::Expected<std::optional<TaskRecord>> MemoryStorage::task(TaskId id) { return impl_->task(id); }
 

@@ -307,7 +307,8 @@ TEST_CASE("a prepared document draft stays invisible until storage settles its c
             [&publications](const CommitPublication& publication) { publications.push_back(publication); }));
 
     const auto definition = latest_document();
-    const DocumentAddress address{};
+    const ConversationId conversation_id = create_conversation(*session);
+    const DocumentAddress address = conversation_address(conversation_id);
     REQUIRE(run_commit(*session, [&definition, &address](Transaction& transaction) -> support::Expected<void> {
         auto draft = transaction.doc(definition, address);
         if (!draft) {
@@ -315,7 +316,7 @@ TEST_CASE("a prepared document draft stays invisible until storage settles its c
         }
         return draft->set(member_path("text"), chord::Json{std::string{"committed"}});
     }).has_value());
-    REQUIRE(publications.size() == 1);
+    REQUIRE(publications.size() == 2);
 
     storage.hold_next_commit();
     std::optional<support::Expected<void>> settled;
@@ -337,12 +338,12 @@ TEST_CASE("a prepared document draft stays invisible until storage settles its c
     REQUIRE(before_settlement.value().has_value());
     CHECK(*before_settlement.value() == chord::Json{chord::Json::Object{{"text", chord::Json{std::string{"committed"}}},
                                                 {"revision", chord::Json{0}}}});
-    CHECK(publications.size() == 1);
+    CHECK(publications.size() == 2);
 
     storage.release_held_commit();
     REQUIRE(settled.has_value());
     CHECK(settled->has_value());
-    CHECK(publications.size() == 2);
+    CHECK(publications.size() == 3);
 
     auto after_settlement = consume(session->snapshot(definition, address));
     REQUIRE(after_settlement.has_value());
@@ -583,8 +584,10 @@ TEST_CASE("commit callbacks run in serial storage settlement order",
     GatedStorage storage;
     auto session = Session::create(storage);
     const auto definition = latest_document();
-    REQUIRE(run_commit(*session, [&definition](Transaction& transaction) -> support::Expected<void> {
-        auto draft = transaction.doc(definition, DocumentAddress{});
+    const ConversationId conversation_id = create_conversation(*session);
+    const DocumentAddress address = conversation_address(conversation_id);
+    REQUIRE(run_commit(*session, [&definition, &address](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, address);
         if (!draft) {
             return std::unexpected(std::move(draft.error()));
         }
@@ -593,8 +596,8 @@ TEST_CASE("commit callbacks run in serial storage settlement order",
 
     storage.hold_next_commit();
     std::optional<support::Expected<void>> first_result;
-    auto first = session->commit([&definition](Transaction& transaction) -> support::Expected<void> {
-        auto draft = transaction.doc(definition, DocumentAddress{});
+    auto first = session->commit([&definition, &address](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, address);
         if (!draft) {
             return std::unexpected(std::move(draft.error()));
         }
@@ -606,10 +609,10 @@ TEST_CASE("commit callbacks run in serial storage settlement order",
 
     bool second_callback_ran = false;
     std::optional<support::Expected<void>> second_result;
-    auto second =
-            session->commit([&definition, &second_callback_ran](Transaction& transaction) -> support::Expected<void> {
+    auto second = session->commit(
+            [&definition, &address, &second_callback_ran](Transaction& transaction) -> support::Expected<void> {
                 second_callback_ran = true;
-                auto draft = transaction.doc(definition, DocumentAddress{});
+                auto draft = transaction.doc(definition, address);
                 if (!draft) {
                     return std::unexpected(std::move(draft.error()));
                 }
@@ -626,7 +629,7 @@ TEST_CASE("commit callbacks run in serial storage settlement order",
     REQUIRE(second_result.has_value());
     CHECK(second_result->has_value());
     CHECK(second_callback_ran);
-    const auto snapshot = consume(session->snapshot(definition, DocumentAddress{}));
+    const auto snapshot = consume(session->snapshot(definition, address));
     REQUIRE(snapshot.has_value());
     REQUIRE(snapshot.value().has_value());
     const auto* object = (*snapshot.value()).as_object();
@@ -643,10 +646,12 @@ TEST_CASE("close settles queued commits in FIFO order",
     GatedStorage storage;
     auto session = Session::create(storage);
     const auto definition = latest_document();
+    const ConversationId conversation_id = create_conversation(*session);
+    const DocumentAddress address = conversation_address(conversation_id);
     std::size_t publication_count = 0;
     REQUIRE(session->subscribe_commits([&publication_count](const CommitPublication&) { publication_count += 1; }));
-    REQUIRE(run_commit(*session, [&definition](Transaction& transaction) -> support::Expected<void> {
-        auto draft = transaction.doc(definition, DocumentAddress{});
+    REQUIRE(run_commit(*session, [&definition, &address](Transaction& transaction) -> support::Expected<void> {
+        auto draft = transaction.doc(definition, address);
         if (!draft) {
             return std::unexpected(std::move(draft.error()));
         }
@@ -657,10 +662,10 @@ TEST_CASE("close settles queued commits in FIFO order",
     std::vector<std::string> callback_order;
     std::vector<int> completion_order;
     const auto enqueue_update = [&](std::string value, int ordinal) {
-        auto operation = session->commit([&callback_order, &definition, value = std::move(value)](
+        auto operation = session->commit([&callback_order, &definition, &address, value = std::move(value)](
                                                  Transaction& transaction) -> support::Expected<void> {
             callback_order.push_back(value);
-            auto draft = transaction.doc(definition, DocumentAddress{});
+            auto draft = transaction.doc(definition, address);
             if (!draft) {
                 return std::unexpected(std::move(draft.error()));
             }
@@ -683,7 +688,7 @@ TEST_CASE("close settles queued commits in FIFO order",
     CHECK(callback_order == std::vector<std::string>{"first"});
     CHECK(completion_order.empty());
     CHECK(publication_count == 1);
-    CHECK(storage.commit_calls() == 2);
+    CHECK(storage.commit_calls() == 3);
 
     storage.release_held_commit();
     REQUIRE(close_result.has_value());
@@ -691,7 +696,7 @@ TEST_CASE("close settles queued commits in FIFO order",
     CHECK(callback_order == std::vector<std::string>{"first", "second", "third"});
     CHECK(completion_order == std::vector<int>{1, 2, 3});
     CHECK(publication_count == 4);
-    CHECK(storage.commit_calls() == 4);
+    CHECK(storage.commit_calls() == 5);
     CHECK(storage.close_calls() == 1);
     CHECK(session->closed().reason == SessionEndReason::Closed);
 }

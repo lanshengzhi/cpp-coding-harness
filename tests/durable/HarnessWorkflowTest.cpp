@@ -316,13 +316,14 @@ TEST_CASE("Harness creates its root atomically and resolves late registry instal
     chord::Json::Array observed_changes;
     for (const auto& change : root_changes) observed_changes.emplace_back(change);
     CHECK(json_equals(chord::Json{observed_changes}, *frozen_root->member("changes")));
-    auto agent_doc = storage.find_document("pi.agent:v1", root.value());
+    auto agent_doc = storage.find_document(
+            "pi.agent:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
     REQUIRE(agent_doc.has_value());
     REQUIRE(agent_doc->has_value());
-    auto agent = storage.document(agent_doc->value().id);
+    auto agent = storage.document(agent_doc->value().id, DocumentPoint::current());
     REQUIRE(agent.has_value());
     REQUIRE(agent->has_value());
-    CHECK(agent->value().as_object()->at("thinkingLevel") == chord::Json{"high"});
+    CHECK(agent->value().value.as_object()->at("thinkingLevel") == chord::Json{"high"});
 
     Extension second{.name = "second-extension"};
     second.tools.push_back(ToolRegistration{.declaration = ai::Tool{.name = "second"},
