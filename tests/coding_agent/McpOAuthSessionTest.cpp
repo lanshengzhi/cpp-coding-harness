@@ -17,6 +17,7 @@
 #include "support/BoostBeastStreamTransport.hpp"
 #include "coding_agent/mcp/McpAuthStore.hpp"
 #include "coding_agent/mcp/McpOAuthProvider.hpp"
+#include "coding_agent/mcp/McpOAuthSignIn.hpp"
 #include "coding_agent/mcp/McpOAuthTokenResolver.hpp"
 #include "support/AsyncResultBridge.hpp"
 #include "support/EnvVarGuard.hpp"
@@ -31,6 +32,7 @@
 #include <cch/ai/Timestamps.hpp>
 #include <cch/mcp/Auth.hpp>
 #include <cch/mcp/HttpClient.hpp>
+#include <cch/mcp/OAuthConfig.hpp>
 #include <cch/mcp/OAuthFlow.hpp>
 #include <cch/mcp/OAuthProvider.hpp>
 #include <cch/mcp/OAuthServerConfig.hpp>
@@ -303,6 +305,38 @@ void seed_state(app_mcp::McpAuthStore& store, const cch::mcp::OAuthState& state)
     auto stored = store.load("echo", "https://echo.example.com/mcp");
     REQUIRE(stored.has_value());
     return std::move(*stored);
+}
+
+// ── staged-cancellation discovery documents (#1102): the metadata the flow
+// resolver fetches before it registers a client or exchanges a grant ─────────
+
+const std::string kFlowResourceMetadataUrl = "https://echo.example.com/.well-known/oauth-protected-resource/mcp";
+const std::string kFlowAuthorizationMetadataUrl = "https://auth.example.com/.well-known/oauth-authorization-server";
+const std::string kFlowRegistrationUrl = "https://auth.example.com/register";
+const std::string kFlowResourceDocument =
+        R"({"resource":"https://echo.example.com/mcp","authorization_servers":["https://auth.example.com"]})";
+const std::string kFlowAuthorizationServerDocument =
+        R"({"issuer":"https://auth.example.com","authorization_endpoint":"https://auth.example.com/authorize",)"
+        R"("token_endpoint":"https://auth.example.com/token","registration_endpoint":"https://auth.example.com/register",)"
+        R"("response_types_supported":["code"],"code_challenge_methods_supported":["S256"],)"
+        R"("token_endpoint_auth_methods_supported":["none"]})";
+
+/// An expired credential whose client registration is present or absent, so
+/// the flow under a stalled request stops at the discovery or the registration
+/// stage.
+[[nodiscard]] cch::mcp::OAuthState expired_flow_state(bool registered) {
+    cch::mcp::OAuthState state;
+    state.server_url = "https://echo.example.com/mcp";
+    cch::mcp::OAuthTokens tokens;
+    tokens.access_token = "old-access";
+    tokens.token_type = "Bearer";
+    tokens.refresh_token = "stalled-refresh";
+    state.tokens = std::move(tokens);
+    state.tokens_expire_at = ai::current_timestamp_ms() + 1000;
+    if (registered) {
+        state.client_information = cch::mcp::OAuthClientInformation{.client_id = "pike-mcp-test-client"};
+    }
+    return state;
 }
 
 /// Everything but `access` — the part a refresh must preserve or rotate.
@@ -619,6 +653,136 @@ TEST_CASE("a cancelled MCP OAuth refresh stops before the request reaches the MC
     CHECK_FALSE(tests::trace_contains(trace, "notifications/cancelled"));
     CHECK(http->requests.size() == 1);
     CHECK(http->requests.front().stop_token.stop_requested());
+}
+
+TEST_CASE("a cancelled MCP OAuth discovery stops before any registration or token request",
+        "[coding_agent][mcp][issue1102][spec]") {
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store,
+            oauth_state("old-access",
+                    "stalled-refresh",
+                    ai::current_timestamp_ms() +
+                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
+
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", "https://echo.example.com/mcp", cch::mcp::OAuthConfig{}, http);
+    auto client = connect_http_client(runtime, http_config(server), resolver);
+    // The call under test starts from an expired credential, so auth
+    // resolution runs the whole flow; the cancellation lands on the first
+    // discovery request and nothing may follow it.
+    seed_state(*store, expired_flow_state(true));
+    http->hold_get_until_stopped = true;
+    auto discovery_seen = std::make_shared<bool>(false);
+    http->on_get = [discovery_seen](const auto&) { *discovery_seen = true; };
+
+    std::stop_source cancel;
+    auto result = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto settled = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
+        boost::asio::co_spawn(
+                executor,
+                [client, settled, token = cancel.get_token()]() -> boost::asio::awaitable<void> {
+                    settled->emplace(co_await support::detail::await_async_result(client->request("tools/call",
+                            tests::tools_call_params("echo", support::JsonValue::object_t{{"text", "never"}}),
+                            {.stop_token = token})));
+                },
+                boost::asio::detached);
+        co_await tests::wait_for(executor, [&] { return *discovery_seen; }, std::chrono::seconds{2});
+        cancel.request_stop();
+        co_await tests::wait_for(executor, [&] { return settled->has_value(); }, std::chrono::seconds{2});
+        if (!settled->has_value()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Timeout, "discovery did not cancel"));
+        }
+        co_return std::move(**settled);
+    }());
+    REQUIRE_FALSE(result.has_value());
+    // The frozen lifecycle contract records pi's AbortError for a cancelled
+    // operation; this runtime reports it as ErrorCode::Cancelled.
+    CHECK(result.error().code == support::ErrorCode::Cancelled);
+    // Cancellation during protected-resource discovery must be the last
+    // request: no client registration and no token request follows it.
+    REQUIRE(http->get_requests.size() == 1);
+    CHECK(http->get_requests.front().url == kFlowResourceMetadataUrl);
+    CHECK(http->get_requests.front().stop_token.stop_requested());
+    CHECK(http->requests.empty());
+    CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
+    CHECK_FALSE(tests::trace_contains(trace, "notifications/cancelled"));
+}
+
+TEST_CASE("a cancelled MCP OAuth client registration stops before any token request",
+        "[coding_agent][mcp][issue1102][spec]") {
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{trace};
+    auto ca = trust_test_ca();
+    tests::RuntimeFixture runtime;
+    auto store = std::make_shared<app_mcp::McpAuthStore>(workspace.path() / "mcp-auth.json");
+    seed_state(*store,
+            oauth_state("old-access",
+                    "stalled-refresh",
+                    ai::current_timestamp_ms() +
+                            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::hours{24}).count()));
+
+    auto http = std::make_shared<tests::FakeOAuthHttpClient>();
+    http->get_responses[kFlowResourceMetadataUrl] = {{200, kFlowResourceDocument}};
+    http->get_responses[kFlowAuthorizationMetadataUrl] = {{200, kFlowAuthorizationServerDocument}};
+    auto resolver = std::make_shared<app_mcp::McpOAuthFlowTokenResolver>(
+            store, "echo", "https://echo.example.com/mcp", cch::mcp::OAuthConfig{}, http);
+    auto client = connect_http_client(runtime, http_config(server), resolver);
+    // No stored client registration: resolving the call's auth discovers the
+    // authorization server first and then stalls on the registration request.
+    seed_state(*store, expired_flow_state(false));
+    http->hold_post_until_stopped = true;
+    auto registration_seen = std::make_shared<bool>(false);
+    http->on_post = [registration_seen](const auto&) { *registration_seen = true; };
+
+    std::stop_source cancel;
+    auto result = tests::run_awaitable(runtime, [&]() -> boost::asio::awaitable<support::Expected<support::JsonValue>> {
+        const auto executor = co_await boost::asio::this_coro::executor;
+        auto settled = std::make_shared<std::optional<support::Expected<support::JsonValue>>>();
+        boost::asio::co_spawn(
+                executor,
+                [client, settled, token = cancel.get_token()]() -> boost::asio::awaitable<void> {
+                    settled->emplace(co_await support::detail::await_async_result(client->request("tools/call",
+                            tests::tools_call_params("echo", support::JsonValue::object_t{{"text", "never"}}),
+                            {.stop_token = token})));
+                },
+                boost::asio::detached);
+        co_await tests::wait_for(executor, [&] { return *registration_seen; }, std::chrono::seconds{2});
+        cancel.request_stop();
+        co_await tests::wait_for(executor, [&] { return settled->has_value(); }, std::chrono::seconds{2});
+        if (!settled->has_value()) {
+            co_return std::unexpected(support::make_error(support::ErrorCode::Timeout, "registration did not cancel"));
+        }
+        co_return std::move(**settled);
+    }());
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().code == support::ErrorCode::Cancelled);
+    // Discovery ran to completion (the two metadata GETs); the frozen contract
+    // for registration cancellation then requires the held registration
+    // request to be the last one: no token request follows it.
+    CHECK(http->get_requests.size() == 2);
+    REQUIRE(http->requests.size() == 1);
+    CHECK(http->requests.front().url == kFlowRegistrationUrl);
+    CHECK(http->requests.front().stop_token.stop_requested());
+    // A token grant is form-encoded ("grant_type=..."); the registration
+    // document only mentions "grant_types" metadata, which must not match.
+    CHECK(http->requests.front().body.find("grant_type=") == std::string::npos);
+    // Cancellation commits no half-registered state either: the store still
+    // holds exactly the pre-flow credential.
+    const auto stored = read_state(*store);
+    REQUIRE(stored.has_value());
+    CHECK_FALSE(stored->client_information.has_value());
+    REQUIRE(stored->tokens.has_value());
+    CHECK(stored->tokens->access_token == "old-access");
+    CHECK_FALSE(tests::trace_contains(trace, "recv tools/call"));
+    CHECK_FALSE(tests::trace_contains(trace, "notifications/cancelled"));
 }
 
 TEST_CASE("closing an MCP HTTP client during a stalled OAuth refresh deletes the session with the stored token",
