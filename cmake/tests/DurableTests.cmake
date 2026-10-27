@@ -10,6 +10,7 @@ include_guard(GLOBAL)
     add_executable(cch_tests_durable
         tests/Catch2Main.cpp
         tests/durable/FrozenExpectation.cpp
+        tests/durable/JsonObjectOrderTest.cpp
         tests/durable/JsonlStorageTest.cpp
         tests/durable/SqliteStorageTest.cpp
         tests/durable/DocumentLifecycleTest.cpp

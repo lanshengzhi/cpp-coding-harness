@@ -57,7 +57,10 @@ namespace {
 }
 
 void expect_json_equal(const support::JsonValue& actual, std::string_view fixture_name) {
-    auto serialized = support::write_json(actual);
+    // The committed golden is canonical text: object members sorted at every
+    // depth. `write_json` preserves member order (#1149), so the comparison
+    // normalizes explicitly rather than inheriting a container order.
+    auto serialized = support::canonical_json(actual);
     REQUIRE(serialized);
     const auto expected = read_fixture_text(fixture_name);
     if (*serialized != expected) {

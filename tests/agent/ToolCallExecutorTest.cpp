@@ -664,8 +664,12 @@ TEST_CASE("sequential execution coerces and validates the foundational argument 
     REQUIRE(hook_raw_arguments);
     const auto invocation = tool_ptr->first_invocation();
     REQUIRE(invocation);
-    auto hook_json = support::write_json(*hook_arguments);
-    auto invocation_json = support::write_json(invocation->arguments);
+    // The expected literals below are canonical text (members sorted at every
+    // depth), written when the JSON object was a `std::map`. `write_json`
+    // preserves member order (#1149), so the coercion comparison normalizes
+    // explicitly; this assertion is about coerced values, not member order.
+    auto hook_json = support::canonical_json(*hook_arguments);
+    auto invocation_json = support::canonical_json(invocation->arguments);
     REQUIRE(hook_json);
     REQUIRE(invocation_json);
     CHECK(*hook_json ==
@@ -979,7 +983,7 @@ TEST_CASE("composition coercion selects only satisfying branches and validates t
     CHECK(run.result->results[2].is_error);
     const auto invocation = composed_ptr->first_invocation();
     REQUIRE(invocation);
-    auto prepared = support::write_json(invocation->arguments);
+    auto prepared = support::canonical_json(invocation->arguments);
     REQUIRE(prepared);
     CHECK(*prepared == tests::kCompositionExpected);
     CHECK(branch_ptr->invocation_count() == 0);

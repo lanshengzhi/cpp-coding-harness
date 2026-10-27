@@ -584,7 +584,7 @@ Expected<JsonValue> read_json(std::string_view json) {
     return parser.parse_value();
 }
 
-Expected<std::string> write_json(const JsonValue& value) { return write_value(value, MemberOrder::Sorted); }
+Expected<std::string> write_json(const JsonValue& value) { return write_value(value, MemberOrder::Insertion); }
 
 Expected<std::string> canonical_json(const JsonValue& value) { return write_value(value, MemberOrder::Sorted); }
 

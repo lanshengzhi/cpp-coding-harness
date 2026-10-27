@@ -17,10 +17,13 @@ namespace cch::support {
 /// lives in the private serialization layer `support/JsonGlaze.hpp`.
 [[nodiscard]] Expected<JsonValue> read_json(std::string_view json);
 
-/// Serialize the passive `JsonValue` to compact JSON, byte-identical to the
-/// previous `glz::write_json(json_to_glaze(value))` output (see Json.cpp).
-/// Generic DTO serialization (`write_json(const T&)`) lives in the private
-/// serialization layer `support/JsonGlaze.hpp`.
+/// Serialize the passive `JsonValue` to compact JSON. Object members are
+/// emitted in parse/insertion order, which is what the frozen pi wire text
+/// carries: `JSON.stringify` preserves member order, and `pi.system.sections`
+/// round-trips through it unchanged (#1149). Callers that need order-independent
+/// bytes use `canonical_json()` instead. Generic DTO serialization
+/// (`write_json(const T&)`) lives in the private serialization layer
+/// `support/JsonGlaze.hpp`.
 [[nodiscard]] Expected<std::string> write_json(const JsonValue& value);
 
 /// Serialize the passive `JsonValue` with every object's members in sorted key
