@@ -317,6 +317,15 @@ public:
             std::optional<TaskId> by_task_id = std::nullopt,
             std::vector<ContextEdit> edits = {});
 
+    struct ContextView {
+        std::vector<EntryRecord> entries;
+        std::vector<std::vector<chord::Json>> contributions;
+    };
+
+    /// Select active entries and their edited contributions at a point in the conversation.
+    [[nodiscard]] support::Expected<ContextView> context_view(
+            ConversationId conversation_id, std::optional<EntryId> at = std::nullopt);
+
     /// Resolve an entry's model contribution (frozen pi `Tx.context` projection).
     [[nodiscard]] support::Expected<std::vector<chord::Json>> context_messages(
             ConversationId conversation_id, std::optional<EntryId> at = std::nullopt);

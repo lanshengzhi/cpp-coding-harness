@@ -4,7 +4,7 @@
   "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
   "ticket": "1082",
   "family": "audit-1082",
-  "capturedAt": "2026-10-27T11:58:50.864Z",
+  "capturedAt": "2026-10-27T12:17:17.736Z",
   "environment": {
     "platform": "linux",
     "arch": "x64",
@@ -15,12 +15,12 @@
   },
   "generator": {
     "path": "fixtures/pi-v1.3.0/audit-1082/capture-1082.mts",
-    "sha256": "26a7b1a4d5cd0e9e40f865ad8f63b5cba0390321848b19973c11e6cbd8779d59",
+    "sha256": "5a035fb14079e3f1262a63b6aaea62b27c992595e06c56aed239da9fe3b8b1e3",
     "command": "NODE_OPTIONS=--conditions=source PI_CHECKOUT=<pi-checkout> <pi-checkout>/node_modules/.bin/tsx fixtures/pi-v1.3.0/audit-1082/capture-1082.mts",
     "sources": [
       {
         "path": "fixtures/pi-v1.3.0/audit-1082/capture-1082.mts",
-        "sha256": "26a7b1a4d5cd0e9e40f865ad8f63b5cba0390321848b19973c11e6cbd8779d59"
+        "sha256": "5a035fb14079e3f1262a63b6aaea62b27c992595e06c56aed239da9fe3b8b1e3"
       },
       {
         "path": "fixtures/pi-v1.3.0/audit-1082/pi.mts",
@@ -32,8 +32,8 @@
     {
       "path": "contexts.json",
       "family": "audit-1082",
-      "bytes": 12949,
-      "sha256": "b4a6ecc0f1f1efb03a6fb8b9d7841f23d1d16aacb05155633f7e529b2bc4b8da",
+      "bytes": 13121,
+      "sha256": "8955bfff7a1bb54df970008de3b569a4097802b764e384b7e51414d3736043ad",
       "sourceEndpoints": [
         "packages/durable/src/harness/context.ts:readContext,deriveRange,selectActive",
         "packages/durable/src/harness/harness.ts:ConversationImpl.context,fork",
@@ -105,6 +105,9 @@
               ]
             },
             "forkDoc": "at fork",
+            "rootAfterRootWrites": "root changed twice",
+            "rootAfterForkDocumentWrite": "root changed twice",
+            "forkAfterForkDocumentWrite": "fork changed",
             "rootBeforeForkWrite": {
               "entries": [
                 8,
@@ -663,7 +666,7 @@
                   "replace marker"
                 ]
               },
-              "forkDocument": "at fork"
+              "forkDocument": "fork changed"
             }
           },
           "normalizations": [

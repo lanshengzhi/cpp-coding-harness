@@ -34,8 +34,12 @@ for (const [text, value] of [["later one", "root changed once"], ["later two", "
  await msg(text);
 }
 const forkAfterRoot = project(await fork.context(ctx));
+const rootAfterRootWrites = await root.commit(async (tx: any) => (await tx.doc(note, root.id)).text, ctx);
 const forkDoc = await fork.commit(async (tx: any) => (await tx.doc(note, fork.id)).text, ctx);
 const rootBeforeForkWrite = project(await root.context(ctx));
+await fork.commit(async (tx: any) => { (await tx.doc(note, fork.id)).text = "fork changed"; }, ctx);
+const rootAfterForkDocumentWrite = await root.commit(async (tx: any) => (await tx.doc(note, root.id)).text, ctx);
+const forkAfterForkDocumentWrite = await fork.commit(async (tx: any) => (await tx.doc(note, fork.id)).text, ctx);
 await fork.commit((tx: any) => tx.appendEntry(fork.id, { kind: "message", model: [user("branch only")] }), ctx);
 const rootAfterForkWrite = project(await root.context(ctx));
 const forkAfter = project(await fork.context(ctx));
@@ -76,8 +80,8 @@ same(rootBeforeForkWrite, reopened.rootBeforeForkWrite, "reopened root before fo
 same(omitted, reopened.omitted, "reopened omit");
 same(replaced, reopened.replaced, "reopened replace");
 same(headed, reopened.headed, "reopened head");
-if (headed.entries[0] !== marker.id || headed.entries.includes(oldHead.id) || forkDoc !== reopened.forkDocument) throw new Error("head selection or copied document changed");
-const expected = { ids, forkBefore, forkAfterRoot, forkDoc, rootBeforeForkWrite, rootAfterForkWrite, forkAfter, omitted, replaced, atReplace, forkAtReplace, headed, atHead, forkAtHead, reopened };
+if (headed.entries[0] !== marker.id || headed.entries.includes(oldHead.id) || forkAfterForkDocumentWrite !== reopened.forkDocument || rootAfterRootWrites !== rootAfterForkDocumentWrite || forkDoc !== "at fork") throw new Error("head selection or copied document changed");
+const expected = { ids, forkBefore, forkAfterRoot, forkDoc, rootAfterRootWrites, rootAfterForkDocumentWrite, forkAfterForkDocumentWrite, rootBeforeForkWrite, rootAfterForkWrite, forkAfter, omitted, replaced, atReplace, forkAtReplace, headed, atHead, forkAtHead, reopened };
 const capturedAt = new Date().toISOString();
 const environment = { platform: process.platform, arch: process.arch, libc: "glibc", glibcVersion: (process.report!.getReport() as any).header.glibcVersionRuntime, node: process.version, tsx: execFileSync(join(checkout, "node_modules/.bin/tsx"), ["--version"], { encoding: "utf8" }).split("\n")[0].replace(/^tsx v?/, "") };
 const endpoints = ["packages/durable/src/harness/context.ts:readContext,deriveRange,selectActive", "packages/durable/src/harness/harness.ts:ConversationImpl.context,fork", "packages/durable/src/storage/jsonl/node.ts:openNodeJsonlStorage"];
