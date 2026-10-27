@@ -1,5 +1,6 @@
 #include "support/Json.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstddef>
@@ -8,6 +9,7 @@
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <vector>
 
 namespace cch::support {
 namespace {
@@ -461,21 +463,53 @@ struct Parser {
     return out;
 }
 
-[[nodiscard]] std::string write_value(const JsonValue& value) {
-    if (const auto* object = value.get_if<JsonValue::object_t>()) {
-        std::string out = "{";
-        bool first = true;
-        for (const auto& [key, member] : *object) {
-            if (!first) {
-                out += ',';
-            }
-            first = false;
-            out += write_value(JsonValue{key});
-            out += ':';
-            out += write_value(member);
+/// How the serializer orders an object's members. `JsonObject` keeps parse and
+/// insertion order (#1149); the wire form is produced from an explicit choice of
+/// ordering, so canonical text never depends on the container's own order.
+enum class MemberOrder {
+    /// Sorted by key: the canonical form, independent of member order.
+    Sorted,
+    /// Parse/insertion order: the form the frozen pi wire text carries.
+    Insertion,
+};
+
+/// One member reference used by the serializer.
+struct MemberRef {
+    std::string_view key;
+    const JsonValue* value;
+};
+
+[[nodiscard]] std::string write_value(const JsonValue& value, MemberOrder order);
+
+[[nodiscard]] std::string write_object(const std::vector<MemberRef>& members, MemberOrder order) {
+    std::string out = "{";
+    bool first = true;
+    for (const auto& member : members) {
+        if (!first) {
+            out += ',';
         }
-        out += '}';
-        return out;
+        first = false;
+        out += write_value(JsonValue{std::string{member.key}}, order);
+        out += ':';
+        out += write_value(*member.value, order);
+    }
+    out += '}';
+    return out;
+}
+
+[[nodiscard]] std::string write_value(const JsonValue& value, MemberOrder order) {
+    if (const auto* object = value.get_if<JsonValue::object_t>()) {
+        std::vector<MemberRef> members;
+        members.reserve(object->size());
+        for (const auto& [key, member] : *object) {
+            members.push_back(MemberRef{.key = key, .value = &member});
+        }
+        if (order == MemberOrder::Sorted) {
+            std::sort(members.begin(), members.end(), [](const MemberRef& left, const MemberRef& right) {
+                return left.key < right.key;
+            });
+        }
+        return write_object(members, order);
     }
     if (const auto* array = value.get_if<JsonValue::array_t>()) {
         std::string out = "[";
@@ -485,7 +519,7 @@ struct Parser {
                 out += ',';
             }
             first = false;
-            out += write_value(element);
+            out += write_value(element, order);
         }
         out += ']';
         return out;
@@ -550,8 +584,8 @@ Expected<JsonValue> read_json(std::string_view json) {
     return parser.parse_value();
 }
 
-Expected<std::string> write_json(const JsonValue& value) {
-    return write_value(value);
-}
+Expected<std::string> write_json(const JsonValue& value) { return write_value(value, MemberOrder::Sorted); }
+
+Expected<std::string> canonical_json(const JsonValue& value) { return write_value(value, MemberOrder::Sorted); }
 
 } // namespace cch::support

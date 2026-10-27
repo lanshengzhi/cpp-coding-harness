@@ -2,8 +2,11 @@
 
 #include "support/Json.hpp"
 
+#include <algorithm>
 #include <cstddef>
 #include <string>
+#include <string_view>
+#include <vector>
 
 namespace cch::coding_agent::detail {
 
@@ -15,20 +18,27 @@ namespace cch::coding_agent::detail {
         output.push_back('{');
         if (!object->empty()) {
             output.push_back('\n');
-            auto current = object->begin();
-            while (current != object->end()) {
+            // Sorted members: the settings writer's text is canonical, so the
+            // emitted file does not depend on parse or insertion order.
+            std::vector<std::string_view> keys;
+            keys.reserve(object->size());
+            for (const auto& member : *object) {
+                keys.push_back(member.first);
+            }
+            std::sort(keys.begin(), keys.end());
+            for (std::size_t index = 0; index < keys.size(); ++index) {
+                const auto& member = object->at(keys[index]);
                 output.append(indentation + 2, ' ');
-                auto key = support::write_json(support::JsonValue{current->first});
+                auto key = support::write_json(support::JsonValue{std::string{keys[index]}});
                 if (!key) {
                     return std::unexpected(key.error());
                 }
                 output.append(*key);
                 output.append(": ");
-                if (auto appended = append_pretty_json(current->second, output, indentation + 2); !appended) {
+                if (auto appended = append_pretty_json(member, output, indentation + 2); !appended) {
                     return appended;
                 }
-                ++current;
-                if (current != object->end()) {
+                if (index + 1 != keys.size()) {
                     output.push_back(',');
                 }
                 output.push_back('\n');

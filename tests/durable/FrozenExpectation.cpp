@@ -123,11 +123,11 @@ support::JsonValue to_json(const chord::Json& value) { return value.to_support()
 
 bool json_equals(const chord::Json& value, const support::JsonValue& expected) {
     // `support::JsonValue` has no equality operator, so the two values are
-    // compared through their canonical JSON text. Object key order is not
-    // part of a JSON value: `write_json` emits object members in sorted key
-    // order, so the texts compare by value.
-    auto actual_text = support::write_json(value.to_support());
-    auto expected_text = support::write_json(expected);
+    // compared through their canonical JSON text. Object key order is not part
+    // of a JSON value, so the comparison uses the explicit canonical form
+    // rather than relying on any container's iteration order (#1149).
+    auto actual_text = support::canonical_json(value.to_support());
+    auto expected_text = support::canonical_json(expected);
     if (!actual_text || !expected_text) {
         return false;
     }

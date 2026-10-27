@@ -140,7 +140,7 @@
           },
           {
             "path": "src/coding_agent/PrettyJson.hpp",
-            "sha256": "04501dad3e14e9c85337eaf3c4f43ceb28f8f629ed68c92361e5ee9426e58152"
+            "sha256": "e5c49351d47ab80370d0023b804953b2ffdefae986272d85841b973cd570cb70"
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.cpp",
@@ -160,15 +160,15 @@
           },
           {
             "path": "src/support/Json.cpp",
-            "sha256": "95275d76867bb01ad4b4c6f58693674aad997cb88a10a750c6a153f7d4ffe852"
+            "sha256": "ee14802d689780e6eb3448f3b413a2776f98ceb891ef7132eecdff6c95d12039"
           },
           {
             "path": "src/support/Json.hpp",
-            "sha256": "520264602a7fc3689324416aa969ccbe2802b7ac1260fda47a6124119389a4a6"
+            "sha256": "d9aa12b7abe8cb9c58e7c0f0378d3d6fd5d02db522f47850000407c9a30ed88e"
           },
           {
             "path": "src/support/include/cch/support/JsonValue.hpp",
-            "sha256": "35023bef670be8f7f446d35f9369e7c5f38eacff440ef42ec5d7f75744714667"
+            "sha256": "93875a958f5e36e0d41feb68de0fbfc66e4d242b525eed7dc74eaf64b048dbee"
           },
           {
             "path": "src/support/AsyncResultBridge.hpp",
@@ -232,7 +232,7 @@
           },
           {
             "path": "tests/coding_agent/McpStructuredContentTest.cpp",
-            "sha256": "e5ccbcf411c17c81b5fa2491603971cfbf3ee53c1cd58f448b79d726e1d7ae58"
+            "sha256": "cb20fa1227277204769643d369e7dbc222590ffb21dc2a73cfc09ce43660cd62"
           },
           {
             "path": "tests/support/JsonCompare.hpp",

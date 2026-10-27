@@ -76,6 +76,24 @@ TEST_CASE("JsonValue serializer emits sorted keys and compact structure", "[supp
     CHECK(*serialized == R"({"a":true,"b":[1,2],"c":null})");
 }
 
+TEST_CASE("canonical_json sorts object members at every depth", "[support][json][t6][compat-pi]") {
+    const support::JsonValue value = support::JsonValue::object_t{
+            {"b", support::JsonValue{support::JsonValue::object_t{{"z", 1.0}, {"y", 2.0}}}},
+            {"a", true},
+    };
+    const auto canonical = support::canonical_json(value);
+    REQUIRE(canonical);
+    CHECK(*canonical == R"({"a":true,"b":{"y":2,"z":1}})");
+    // Two values that differ only in member order share one canonical text.
+    const support::JsonValue reordered = support::JsonValue::object_t{
+            {"a", true},
+            {"b", support::JsonValue{support::JsonValue::object_t{{"y", 2.0}, {"z", 1.0}}}},
+    };
+    const auto reordered_canonical = support::canonical_json(reordered);
+    REQUIRE(reordered_canonical);
+    CHECK(*reordered_canonical == *canonical);
+}
+
 TEST_CASE("JsonValue parser handles whitespace-only containers like Glaze", "[support][json][t6][compat-pi]") {
     const std::pair<std::string, std::string> cases[] = {
         {"[ ]", "[]"},

@@ -434,8 +434,12 @@ TEST_CASE("MCP structured results match every original frozen audit obligation t
             auto observed = response->value.get_object();
             const auto meta = observed.find("_meta");
             if (meta != observed.end()) {
-                observed.emplace("meta", meta->second);
-                observed.erase(meta);
+                // Rename `_meta` to `meta` in place: copy the value out first,
+                // then replace the key, so no iterator into `observed` survives
+                // a member insertion (#1149).
+                auto meta_value = meta->second;
+                observed.erase("_meta");
+                observed.emplace("meta", std::move(meta_value));
             }
             CHECK_FALSE(tests::json_mismatch(client_expected->second, support::JsonValue{observed}).has_value());
         } else if (!conversion_only) {
