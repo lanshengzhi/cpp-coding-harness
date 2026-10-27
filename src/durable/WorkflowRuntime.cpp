@@ -1,11 +1,6 @@
 #include "StorageEncoding.hpp"
 #include "WorkflowRuntime.hpp"
 
-#include "durable/CommittedContext.hpp"
-#include "durable/Compaction.hpp"
-
-#include <cch/ai/InferenceFailure.hpp>
-#include <cch/ai/StreamEvent.hpp>
 #include <cch/chord/Json.hpp>
 #include <cch/durable/Session.hpp>
 #include <cch/durable/Storage.hpp>
@@ -125,236 +120,6 @@ chord::Json as_chord(Json json) {
     return chord::Json::from_support(json.to_support()).value();
 }
 
-/// The provider-session document, shared by the generation and compaction
-/// tasks (frozen pi `ensureProviderSessionId`).
-chord::DocumentAddress provider_document() {
-    return chord::DocumentAddress{chord::document_key("pi.provider"), chord::SchemaVersion{1}};
-}
-
-/// Parse one persisted model message back into the typed runtime form. The
-/// committed entries carry exactly the shapes the workflow itself writes
-/// (`user_message_json`, `assistant_json`, `tool_result_json`, `system_json`);
-/// anything else is a schema violation rather than a silently skipped block
-/// (#1083 keeps the replay cache honest after a compaction rebuilds it).
-support::Expected<ai::MessageVariant> parse_model_message(const Json& message) {
-    const auto* object = message.as_object();
-    if (object == nullptr) return std::unexpected(validation("A model message must be an object"));
-    const auto role = object->find("role");
-    if (role == object->end() || role->second.as_string() == nullptr) {
-        return std::unexpected(validation("A model message must have a role"));
-    }
-    const std::string& name = *role->second.as_string();
-    const auto timestamp = [&object]() -> ai::TimestampMs {
-        const auto it = object->find("timestamp");
-        if (it == object->end() || it->second.as_number() == nullptr) return 0;
-        return static_cast<ai::TimestampMs>(*it->second.as_number());
-    };
-    auto parse_content_block = [](const Json& block) -> support::Expected<ai::Content> {
-        const auto* block_object = block.as_object();
-        if (block_object == nullptr) return std::unexpected(validation("A content block must be an object"));
-        const auto type = block_object->find("type");
-        if (type == block_object->end() || type->second.as_string() == nullptr) {
-            return std::unexpected(validation("A content block must have a type"));
-        }
-        const std::string& block_type = *type->second.as_string();
-        if (block_type == "text") {
-            const auto text = block_object->find("text");
-            if (text == block_object->end() || text->second.as_string() == nullptr) {
-                return std::unexpected(validation("A text block must have text"));
-            }
-            return ai::Content{ai::TextContent{.text = *text->second.as_string()}};
-        }
-        if (block_type == "image") {
-            ai::ImageContent image{};
-            const auto data = block_object->find("data");
-            if (data != block_object->end() && data->second.as_string() != nullptr) {
-                image.data = *data->second.as_string();
-            }
-            const auto mime = block_object->find("mimeType");
-            if (mime != block_object->end() && mime->second.as_string() != nullptr) {
-                image.mime_type = *mime->second.as_string();
-            }
-            return ai::Content{std::move(image)};
-        }
-        return std::unexpected(validation("A user content block has an unknown type"));
-    };
-    if (name == "user") {
-        ai::UserMessage parsed{.timestamp = timestamp()};
-        const auto content = object->find("content");
-        if (content == object->end()) return std::unexpected(validation("A user message must have content"));
-        if (const std::string* text = content->second.as_string()) {
-            parsed.content = *text;
-            return ai::MessageVariant{std::move(parsed)};
-        }
-        const auto* blocks = content->second.as_array();
-        if (blocks == nullptr) {
-            return std::unexpected(validation("A user message content must be text or blocks"));
-        }
-        std::vector<ai::Content> parsed_blocks;
-        parsed_blocks.reserve(blocks->size());
-        for (const Json& block : *blocks) {
-            auto parsed_block = parse_content_block(block);
-            if (!parsed_block) return std::unexpected(parsed_block.error());
-            parsed_blocks.push_back(std::move(*parsed_block));
-        }
-        parsed.content = std::move(parsed_blocks);
-        return ai::MessageVariant{std::move(parsed)};
-    }
-    if (name == "assistant") {
-        ai::AssistantMessage parsed{.timestamp = timestamp()};
-        if (const auto api = object->find("api"); api != object->end() && api->second.as_string() != nullptr) {
-            parsed.api = *api->second.as_string();
-        }
-        if (const auto provider = object->find("provider");
-                provider != object->end() && provider->second.as_string() != nullptr) {
-            parsed.provider = *provider->second.as_string();
-        }
-        if (const auto model = object->find("model");
-                model != object->end() && model->second.as_string() != nullptr) {
-            parsed.model = *model->second.as_string();
-        }
-        if (const auto stop = object->find("stopReason");
-                stop != object->end() && stop->second.as_string() != nullptr) {
-            if (auto parsed_stop = ai::stop_reason_from_string(*stop->second.as_string())) {
-                parsed.stop_reason = *parsed_stop;
-            }
-        }
-        if (const auto error = object->find("errorMessage");
-                error != object->end() && error->second.as_string() != nullptr) {
-            parsed.error_message = *error->second.as_string();
-        }
-        const auto blocks = object->find("content");
-        const auto* array = blocks == object->end() ? nullptr : blocks->second.as_array();
-        if (array == nullptr) return std::unexpected(validation("An assistant message must have content blocks"));
-        parsed.content.reserve(array->size());
-        for (const Json& block : *array) {
-            const auto* block_object = block.as_object();
-            if (block_object == nullptr) return std::unexpected(validation("A content block must be an object"));
-            const auto type = block_object->find("type");
-            if (type == block_object->end() || type->second.as_string() == nullptr) {
-                return std::unexpected(validation("A content block must have a type"));
-            }
-            const std::string& block_type = *type->second.as_string();
-            if (block_type == "text") {
-                const auto text = block_object->find("text");
-                if (text == block_object->end() || text->second.as_string() == nullptr) {
-                    return std::unexpected(validation("A text block must have text"));
-                }
-                parsed.content.push_back(ai::AssistantContent{ai::TextContent{.text = *text->second.as_string()}});
-            } else if (block_type == "thinking") {
-                ai::ThinkingContent thinking{};
-                const auto text = block_object->find("thinking");
-                if (text != block_object->end() && text->second.as_string() != nullptr) {
-                    thinking.thinking = *text->second.as_string();
-                }
-                parsed.content.push_back(ai::AssistantContent{std::move(thinking)});
-            } else if (block_type == "toolCall") {
-                ai::ToolCallContent call{};
-                const auto id = block_object->find("id");
-                if (id != block_object->end() && id->second.as_string() != nullptr) {
-                    call.id = *id->second.as_string();
-                }
-                const auto call_name = block_object->find("name");
-                if (call_name != block_object->end() && call_name->second.as_string() != nullptr) {
-                    call.name = *call_name->second.as_string();
-                }
-                const auto arguments = block_object->find("arguments");
-                if (arguments != block_object->end() && arguments->second.as_object() != nullptr) {
-                    call.arguments = chord::Json{arguments->second}.to_support();
-                }
-                parsed.content.push_back(ai::AssistantContent{std::move(call)});
-            } else {
-                return std::unexpected(validation("An assistant content block has an unknown type"));
-            }
-        }
-        return ai::MessageVariant{std::move(parsed)};
-    }
-    if (name == "toolResult") {
-        ai::ToolResultMessage parsed{.timestamp = timestamp()};
-        const auto id = object->find("toolCallId");
-        if (id == object->end() || id->second.as_string() == nullptr) {
-            return std::unexpected(validation("A tool result must have a toolCallId"));
-        }
-        parsed.tool_call_id = *id->second.as_string();
-        const auto tool = object->find("toolName");
-        if (tool == object->end() || tool->second.as_string() == nullptr) {
-            return std::unexpected(validation("A tool result must have a toolName"));
-        }
-        parsed.tool_name = *tool->second.as_string();
-        const auto content = object->find("content");
-        const auto* blocks = content == object->end() ? nullptr : content->second.as_array();
-        if (blocks == nullptr) return std::unexpected(validation("A tool result must have content blocks"));
-        parsed.content.reserve(blocks->size());
-        for (const Json& block : *blocks) {
-            auto parsed_block = parse_content_block(block);
-            if (!parsed_block) return std::unexpected(parsed_block.error());
-            parsed.content.push_back(std::move(*parsed_block));
-        }
-        const auto error = object->find("isError");
-        parsed.is_error = error != object->end() && error->second.as_bool() != nullptr && *error->second.as_bool();
-        return ai::MessageVariant{std::move(parsed)};
-    }
-    if (name == "system") {
-        ai::SystemMessage parsed{.timestamp = timestamp()};
-        const auto content = object->find("content");
-        if (content == object->end() || content->second.as_string() == nullptr) {
-            return std::unexpected(validation("A system message must have content"));
-        }
-        parsed.content = *content->second.as_string();
-        if (const auto sections = object->find("sections");
-                sections != object->end() && sections->second.as_object() != nullptr) {
-            for (const auto& [key, value] : *sections->second.as_object()) {
-                ai::SystemMessageSection section{.name = key};
-                if (const std::string* text = value.as_string()) section.text = *text;
-                parsed.sections.push_back(std::move(section));
-            }
-        }
-        if (const auto added = object->find("toolsAdded");
-                added != object->end() && added->second.as_array() != nullptr) {
-            for (const Json& tool : *added->second.as_array()) {
-                const auto* tool_object = tool.as_object();
-                if (tool_object == nullptr) continue;
-                ai::Tool parsed_tool{};
-                if (const auto tool_name = tool_object->find("name");
-                        tool_name != tool_object->end() && tool_name->second.as_string() != nullptr) {
-                    parsed_tool.name = *tool_name->second.as_string();
-                }
-                if (const auto description = tool_object->find("description");
-                        description != tool_object->end() && description->second.as_string() != nullptr) {
-                    parsed_tool.description = *description->second.as_string();
-                }
-                const auto parameters = tool_object->find("parameters");
-                if (parameters != tool_object->end() && parameters->second.as_object() != nullptr) {
-                    parsed_tool.parameters = chord::Json{parameters->second}.to_support();
-                }
-                parsed.tools_added.push_back(std::move(parsed_tool));
-            }
-        }
-        return ai::MessageVariant{std::move(parsed)};
-    }
-    return std::unexpected(validation("A model message has an unknown role"));
-}
-
-/// The structured classification of a terminal stream error, captured from
-/// the error event before the terminal message arrives. The overflow retry
-/// decision reads this structured value only; the diagnostic message text is
-/// never consulted (#1083 contract, frozen pi `isRetryableAssistantError`).
-struct FailureCapture {
-    std::optional<ai::InferenceFailure> inference_failure{};
-};
-
-/// Error text for a generation whose blocking compaction ended without
-/// completing (frozen pi `compactionFailure`).
-std::string compaction_failure_text(const TaskOutcome& outcome) {
-    if (outcome.status == "failed" || outcome.status == "faulted") {
-        return "Compaction failed: " + outcome.error.value_or(TaskOutcomeError{}).message;
-    }
-    if (outcome.status == "orphaned") {
-        return "Compaction failed: " + outcome.reason.value_or("orphaned");
-    }
-    return "Compaction was aborted";
-}
-
 std::string thinking_name(ai::ThinkingLevel level) {
     for (const auto& [model_level, name] : ai::kModelThinkingLevels) {
         (void)model_level;
@@ -416,13 +181,6 @@ std::vector<DocumentDefinition> initial_document_definitions(const RootOptions& 
 
 support::Error validation(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
-}
-
-const Json* member(const Json& value, std::string_view key) {
-    const auto* object = value.as_object();
-    if (object == nullptr) return nullptr;
-    const auto found = object->find(std::string{key});
-    return found == object->end() ? nullptr : &found->second;
 }
 
 support::Expected<std::int64_t> as_integer(const Json& json) {
@@ -1328,14 +1086,10 @@ std::shared_ptr<TaskDefinition> WorkflowRuntime::generation() const noexcept { r
 
 support::Expected<TaskDefinition> WorkflowRuntime::build_definition() {
     TaskDefinitionBuilder builder{"pi.generation", 1};
-    // The frozen v1.3.0 generation alternates `prepare` (compaction resume,
-    // prompt planning, threshold decision) and `request` (stream, tool
-    // rounds, overflow recovery); each phase run is one scheduler round.
-    builder.initial([](const Json&) { return Json{Object{{"phase", "prepare"}, {"attempt", numeric(1)}}}; });
+    builder.initial([](const Json&) { return Json{Object{{"phase", "generate"}}}; });
     // This runtime is owned by Harness::Impl, which joins every execution
-    // before releasing the definition or these callbacks' borrowed pointer.
-    builder.phase("prepare", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
-    builder.phase("request", [this](const TaskRecord& task, TaskRuntime& runtime) { return dispatch(task, runtime); });
+    // before releasing the definition or this callback's borrowed pointer.
+    builder.phase("generate", [this](const TaskRecord& task, TaskRuntime& runtime) { return generate(task, runtime); });
     builder.abort([this](const TaskRecord& task, TaskRuntime& runtime) { return abort_run(task, runtime); });
     return builder.build();
 }
@@ -1805,125 +1559,8 @@ support::AsyncResult<bool> WorkflowRuntime::apply_post_tools_boundary(const Task
             }}};
 }
 
-support::AsyncResult<void> WorkflowRuntime::dispatch(const TaskRecord& task, TaskRuntime& runtime) {
-    const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
-    const std::string_view phase = [checkpoint]() -> std::string_view {
-        if (checkpoint == nullptr) return "prepare";
-        const Json* value = member(*checkpoint, "phase");
-        if (value == nullptr) return "prepare";
-        const std::string* text = value->as_string();
-        return text == nullptr ? std::string_view{"prepare"} : std::string_view{*text};
-    }();
-    if (phase == "request") {
-        auto requested = request(task, runtime);
-        if (!requested) return support::AsyncResult<void>{std::unexpected(requested.error())};
-        return support::AsyncResult<void>{support::ExpectedVoid{}};
-    }
-    auto prepared = prepare(task, runtime);
-    if (!prepared) return support::AsyncResult<void>{std::unexpected(prepared.error())};
-    return support::AsyncResult<void>{support::ExpectedVoid{}};
-}
-
-/// Settle the run's inputs `unanswered/model_error` and fail with `text`
-/// (frozen pi generation `failModelError`).
-support::ExpectedVoid WorkflowRuntime::fail_model_error(
-        const TaskRecord& task, TaskRuntime& runtime, std::string_view text) {
-    const std::string message{text};
-    auto committed = await_result(runtime.commit(
-            [task, message](Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
-                if (!live) return std::unexpected(live.error());
-                auto ended = end_run(tx,
-                        *live,
-                        task.id,
-                        SubmissionSettlement{.status = "unanswered",
-                                .reason = std::string{"model_error"},
-                                .detail = Json{message}});
-                if (!ended) return std::unexpected(ended.error());
-                return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{
-                        .status = "failed",
-                        .error = TaskOutcomeError{
-                                .message = message, .detail = Json{Object{{"reason", "model_error"}}}}})};
-            }));
-    if (!committed) return std::unexpected(committed.error());
-    return {};
-}
-
-/// Rebuild the replay cache and prompt baseline from the committed context
-/// after a compaction landed: the summary marker leads the kept range, and a
-/// head marker with no later `pi.system` entry leaves the baseline empty so
-/// the next preparation appends a complete one (frozen pi `planSystemEntries`).
-support::ExpectedVoid WorkflowRuntime::rebuild_after_compaction(const TaskRecord& task) {
-    auto view = derive_committed_context(storage_, task.conversation_id);
-    if (!view) return std::unexpected(view.error());
-    messages_.clear();
-    messages_.reserve(view->messages.size());
-    for (const Json& message : view->messages) {
-        auto parsed = parse_model_message(message);
-        if (!parsed) return std::unexpected(parsed.error());
-        messages_.push_back(std::move(*parsed));
-    }
-    system_message_.reset();
-    shown_tools_.clear();
-    shown_sections_.clear();
-    const Json* baseline = nullptr;
-    for (const Json& message : view->messages) {
-        const auto* object = message.as_object();
-        if (object == nullptr) continue;
-        const auto role = object->find("role");
-        if (role != object->end() && role->second.as_string() != nullptr && *role->second.as_string() == "system") {
-            baseline = &message;
-        }
-    }
-    if (baseline != nullptr) {
-        auto parsed = parse_model_message(*baseline);
-        if (!parsed) return std::unexpected(parsed.error());
-        const auto* system = std::get_if<ai::SystemMessage>(&*parsed);
-        if (system == nullptr) {
-            return std::unexpected(validation("A pi.system entry must carry a system message"));
-        }
-        for (const ai::SystemMessageSection& section : system->sections) {
-            if (section.text.has_value()) shown_sections_.push_back(section);
-        }
-        shown_tools_ = system->tools_added;
-        system_message_ = *system;
-    }
-    return {};
-}
-
-support::Expected<TaskId> WorkflowRuntime::create_compaction(
-        Transaction& tx, const TaskRecord& task, std::string_view reason, bool background) const {
-    if (compaction_ == nullptr) {
-        return std::unexpected(validation("No compaction definition is installed"));
-    }
-    const Json input{Object{{"reason", std::string{reason}}}};
-    return create_compaction_task(tx,
-            *compaction_,
-            task.conversation_id,
-            input,
-            background ? std::optional<TaskId>{} : std::optional<TaskId>{task.id},
-            background);
-}
-
-void WorkflowRuntime::install_compaction_definition(std::shared_ptr<const TaskDefinition> definition) {
-    compaction_ = std::move(definition);
-}
-
-const ai::Model& WorkflowRuntime::model() const noexcept { return model_; }
-
-bool WorkflowRuntime::model_available(std::string_view provider, std::string_view model_id) const noexcept {
-    // The bounded C++ slice has no model catalog: the Harness model is the
-    // only one that can be served (frozen pi `runtime.models.getModel`).
-    return !model_.id.empty() && model_.id == model_id && model_.provider == provider;
-}
-
-support::Expected<SubmissionId> WorkflowRuntime::admit_compaction_summary(
-        Transaction& tx, ConversationId conversation_id, const SubmissionDraft& draft, std::int64_t now) {
-    // The ordinary admission path is the frozen `placeSummary` contract: a
-    // conversation-owned summary is placed at once when idle, queued to the
-    // next boundary when busy, or settled `stale` when its head target left
-    // the range.
-    return admit_submission(tx, conversation_id, draft, now);
+support::AsyncResult<void> WorkflowRuntime::generate(const TaskRecord& task, TaskRuntime& runtime) {
+    return support::AsyncResult<void>{run(task, runtime)};
 }
 
 WorkflowRuntime::PromptPlan WorkflowRuntime::plan_prompt(const Registry::Snapshot& snapshot,
@@ -1965,7 +1602,7 @@ ai::ToolResultMessage WorkflowRuntime::execute_tool(const ai::ToolCallContent& c
     return result;
 }
 
-support::ExpectedVoid WorkflowRuntime::prepare(const TaskRecord& task, TaskRuntime& runtime) {
+support::ExpectedVoid WorkflowRuntime::run(const TaskRecord& task, TaskRuntime& runtime) {
     auto run = committed_live_run(storage_, task.conversation_id);
     if (!run) {
         return std::unexpected(run.error());
@@ -1976,31 +1613,6 @@ support::ExpectedVoid WorkflowRuntime::prepare(const TaskRecord& task, TaskRunti
     if ((*run)->task != task.id) {
         return std::unexpected(validation("Generation task does not own the conversation run"));
     }
-    const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
-    const std::int64_t attempt = [&]() -> std::int64_t {
-        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "attempt");
-        if (value == nullptr) return 1;
-        auto parsed = as_integer(*value);
-        return parsed ? *parsed : 1;
-    }();
-    const std::optional<TaskId> compacted = [&]() -> std::optional<TaskId> {
-        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "compacted");
-        if (value == nullptr) return std::nullopt;
-        auto parsed = as_integer(*value);
-        if (!parsed) return std::nullopt;
-        return TaskId{.value = *parsed};
-    }();
-    const bool threshold_blocked = [&]() -> bool {
-        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "threshold");
-        return value != nullptr && value->as_bool() != nullptr && *value->as_bool();
-    }();
-    const std::optional<std::string> overflow_text = [&]() -> std::optional<std::string> {
-        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "overflow");
-        if (value == nullptr) return std::nullopt;
-        const std::string* text = value->as_string();
-        return text == nullptr ? std::optional<std::string>{} : std::optional<std::string>{*text};
-    }();
-
     ReplayState& replay = replay_[task.conversation_id.value];
     replay = ReplayState{};
     std::vector<EntryRecord> visible_entries;
@@ -2037,159 +1649,6 @@ support::ExpectedVoid WorkflowRuntime::prepare(const TaskRecord& task, TaskRunti
         if (auto parsed = message_from_json(message); parsed.has_value()) replay.messages.push_back(std::move(*parsed));
     }
 
-    if (compacted.has_value()) {
-        auto outcome = storage_.task(*compacted);
-        if (!outcome) return std::unexpected(outcome.error());
-        if (overflow_text.has_value()) {
-            // The overflow recovery must have appended a summary; otherwise
-            // the original overflow error stands (frozen pi generation
-            // `prepare`).
-            const bool answered = outcome->has_value() && (*outcome)->state.status == "terminal" &&
-                    (*outcome)->outcome.has_value() && (*outcome)->outcome->status == "completed" &&
-                    (*outcome)->outcome->result.has_value() &&
-                    member(*(*outcome)->outcome->result, "entryId") != nullptr;
-            if (!answered) {
-                return fail_model_error(task, runtime, *overflow_text);
-            }
-        } else if (threshold_blocked && outcome->has_value() && (*outcome)->state.status == "terminal" &&
-                (*outcome)->outcome.has_value() && (*outcome)->outcome->status != "completed") {
-            // A threshold compaction that failed left a context it judged too
-            // large: sending it would at best leave no room for the answer
-            // (frozen pi generation `prepare`).
-            return fail_model_error(task, runtime, compaction_failure_text(*(*outcome)->outcome));
-        }
-        auto rebuilt = rebuild_after_compaction(task);
-        if (!rebuilt) return std::unexpected(rebuilt.error());
-    }
-
-    const auto snapshot = registry_.snapshot();
-    auto plan = plan_prompt(snapshot, shown_tools_, shown_sections_, now());
-    const bool replanned = !plan.system.sections.empty() || !plan.system.tools_added.empty();
-    std::vector<Json> planned;
-    if (replanned) planned.push_back(system_json(plan.system));
-
-    // The threshold decision (frozen pi generation `prepare`): `blocking`
-    // above `contextWindow - reserveTokens`, `background` above the
-    // background threshold, and only when range selection finds a cut.
-    enum class Threshold { None, Background, Blocking };
-    Threshold threshold = Threshold::None;
-    auto view = derive_committed_context(storage_, task.conversation_id);
-    if (!view) return std::unexpected(view.error());
-    if (!compacted.has_value() && settings_.compaction.enabled && model_.context_window > 0) {
-        const std::int64_t tokens = estimate_context_tokens(*view, planned);
-        const std::int64_t blocking_line =
-                static_cast<std::int64_t>(model_.context_window) - settings_.compaction.reserve_tokens;
-        const std::int64_t background_line = blocking_line - settings_.compaction.background_tokens;
-        if (tokens > blocking_line) {
-            threshold = Threshold::Blocking;
-        } else if (settings_.compaction.background_tokens > 0 && tokens > background_line) {
-            threshold = Threshold::Background;
-        }
-        if (threshold != Threshold::None && !select_cut(*view, settings_.compaction.keep_recent_tokens).has_value()) {
-            threshold = Threshold::None;
-        }
-    }
-
-    if (threshold == Threshold::Blocking) {
-        // Compact first and prepare again; the transcript is unchanged until
-        // the compaction appends (frozen pi generation `prepare`).
-        auto waited = await_result(runtime.commit(
-                [this, task, attempt](Transaction& tx,
-                        const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                    auto child = create_compaction(tx, task, "threshold", false);
-                    if (!child) return std::unexpected(child.error());
-                    return std::optional<NextTaskState>{NextTaskState::waiting(
-                            Json{Object{{"phase", "prepare"},
-                                    {"attempt", numeric(attempt)},
-                                    {"compacted", numeric(child->value)},
-                                    {"threshold", true}}},
-                            {*child},
-                            JoinPolicy::AllSettled)};
-                }));
-        if (!waited) return std::unexpected(waited.error());
-        return {};
-    }
-
-    auto committed = await_result(runtime.commit(
-            [this, task, attempt, compacted, threshold, plan, replanned](Transaction& tx,
-                    const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                std::optional<EntryId> cutoff;
-                if (replanned) {
-                    auto entry = tx.append_entry(task.conversation_id,
-                            "pi.system",
-                            entry_data(system_json(plan.system)),
-                            std::nullopt,
-                            std::vector<chord::Json>{as_chord(system_json(plan.system))});
-                    if (!entry) return std::unexpected(entry.error());
-                    cutoff = entry->id;
-                } else {
-                    auto newest = tx.scan_entries(task.conversation_id, 1);
-                    if (!newest) return std::unexpected(newest.error());
-                    if (newest->empty()) {
-                        return std::unexpected(validation("Conversation " + std::to_string(task.conversation_id.value) +
-                                " has no entries to send"));
-                    }
-                    cutoff = newest->front().id;
-                }
-                if (threshold == Threshold::Background) {
-                    // One background compaction at a time: checked in this
-                    // commit, so a compaction admitted during preparation
-                    // counts (frozen pi generation `prepare`).
-                    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
-                    if (!live) return std::unexpected(live.error());
-                    auto listed = live_has_compaction(*live);
-                    if (!listed) return std::unexpected(listed.error());
-                    if (!*listed) {
-                        auto child = create_compaction(tx, task, "threshold", true);
-                        if (!child) return std::unexpected(child.error());
-                    }
-                }
-                Object next{{"phase", "request"}, {"attempt", numeric(attempt)}, {"cutoff", numeric(cutoff->value)}};
-                if (compacted.has_value()) next.emplace("compacted", numeric(compacted->value));
-                return std::optional<NextTaskState>{NextTaskState::running(Json{std::move(next)})};
-            }));
-    if (!committed) return std::unexpected(committed.error());
-    if (replanned) {
-        system_message_ = plan.system;
-        for (const auto& section : plan.system.sections) shown_sections_.push_back(section);
-        shown_tools_ = plan.context.tools;
-    }
-    return {};
-}
-
-support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRuntime& runtime) {
-    auto run = committed_live_run(storage_, task.conversation_id);
-    if (!run) {
-        return std::unexpected(run.error());
-    }
-    if (!run->has_value()) {
-        return std::unexpected(validation("Generation task has no run"));
-    }
-    if ((*run)->task != task.id) {
-        return std::unexpected(validation("Generation task does not own the conversation run"));
-    }
-    const Json* checkpoint = task.state.checkpoint ? &*task.state.checkpoint : nullptr;
-    const std::int64_t attempt = [&]() -> std::int64_t {
-        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "attempt");
-        if (value == nullptr) return 1;
-        auto parsed = as_integer(*value);
-        return parsed ? *parsed : 1;
-    }();
-    const std::optional<TaskId> compacted = [&]() -> std::optional<TaskId> {
-        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "compacted");
-        if (value == nullptr) return std::nullopt;
-        auto parsed = as_integer(*value);
-        if (!parsed) return std::nullopt;
-        return TaskId{.value = *parsed};
-    }();
-    const std::optional<EntryId> cutoff = [&]() -> std::optional<EntryId> {
-        const Json* value = checkpoint == nullptr ? nullptr : member(*checkpoint, "cutoff");
-        if (value == nullptr) return std::nullopt;
-        auto parsed = as_integer(*value);
-        if (!parsed) return std::nullopt;
-        return EntryId{.value = *parsed};
-    }();
-
     while (!runtime.stop_token().stop_requested()) {
         const auto snapshot = registry_.snapshot();
         auto plan = plan_prompt(snapshot, replay.shown_tools, replay.shown_sections, now());
@@ -2213,16 +1672,8 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
         auto options = settings_.stream;
         if (thinking_level_) options.reasoning = thinking_level_;
         options.stop_token = runtime.stop_token();
-        // The overflow retry decision reads the structured classification of
-        // the terminal error event; the diagnostic text is never consulted
-        // (#1083 contract, frozen pi `isRetryableAssistantError`).
-        const auto captured = std::make_shared<FailureCapture>();
         auto stream = stream_(model_, std::move(context), options);
-        auto response = await_result(std::move(stream).run([captured](const ai::AssistantStreamEvent& event) -> support::ExpectedVoid {
-            const auto* error = std::get_if<ai::AssistantErrorEvent>(&event);
-            if (error != nullptr) captured->inference_failure = error->inference_failure;
-            return {};
-        }));
+        auto response = await_result(std::move(stream).run([](const ai::AssistantStreamEvent&) -> support::ExpectedVoid { return {}; }));
         if (!response) {
             // A transport failure settles the run's inputs unanswered (frozen
             // pi `failModelError`) and fails the task.
@@ -2302,44 +1753,6 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                 return {};
             }
             continue;
-        }
-        // Overflow recovery: a context-overflow terminal error compacts the
-        // committed context first and retries with the attempt and its
-        // budget intact (frozen pi generation `classify`).
-        std::optional<std::string> overflow_text;
-        if (failed && captured->inference_failure.has_value() &&
-                captured->inference_failure->kind == ai::InferenceFailureKind::ContextOverflow) {
-            overflow_text = response->error_message.value_or("Context overflow");
-        }
-        if (overflow_text.has_value() && !compacted.has_value() && settings_.compaction.enabled && cutoff.has_value()) {
-            auto view = derive_committed_context(storage_, task.conversation_id, cutoff);
-            if (!view) return std::unexpected(view.error());
-            if (select_cut(*view, settings_.compaction.keep_recent_tokens).has_value()) {
-                const std::string text = *overflow_text;
-                auto waited = await_result(runtime.commit(
-                        [this, task, attempt, response = *response, text](Transaction& tx,
-                                const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                            // The error entry lands in the same commit as the
-                            // compaction task (frozen pi generation `classify`).
-                            auto entry = tx.append_entry(task.conversation_id,
-                                    "pi.assistant",
-                                    entry_data(assistant_json(response)),
-                                    std::nullopt,
-                                    std::vector<chord::Json>{as_chord(assistant_json(response))});
-                            if (!entry) return std::unexpected(entry.error());
-                            auto child = create_compaction(tx, task, "overflow", false);
-                            if (!child) return std::unexpected(child.error());
-                            return std::optional<NextTaskState>{NextTaskState::waiting(
-                                    Json{Object{{"phase", "prepare"},
-                                            {"attempt", numeric(attempt)},
-                                            {"compacted", numeric(child->value)},
-                                            {"overflow", text}}},
-                                    {*child},
-                                    JoinPolicy::AllSettled)};
-                        }));
-                if (!waited) return std::unexpected(waited.error());
-                return {};
-            }
         }
         // Final answer, model error, or abort: one commit appends the answer
         // and settles the run at the final boundary (frozen pi `answer`).

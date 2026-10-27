@@ -1,6 +1,5 @@
 #include <cch/durable/Harness.hpp>
 
-#include "durable/Compaction.hpp"
 #include "durable/WorkflowRuntime.hpp"
 
 #include <cch/durable/Records.hpp>
@@ -827,7 +826,6 @@ struct Harness::Impl {
     std::uint64_t registry_sub_id{0};
     std::shared_ptr<std::move_only_function<std::int64_t()>> clock;
     std::unique_ptr<WorkflowRuntime> workflow;
-    std::unique_ptr<CompactionRuntime> compaction;
     std::shared_ptr<TaskDefinition> builtin_generation_task;
     std::unique_ptr<Submission::Registry> submissions;
 
@@ -1216,31 +1214,6 @@ struct Harness::Impl {
         }
     }
 
-    /// Start one manual compaction of a conversation (frozen pi
-    /// `Harness.compact`): conversation-owned and non-background, so a
-    /// blocking state never waits for it.
-    [[nodiscard]] support::Expected<TaskId> compact(
-            ConversationId conversation_id, const std::optional<std::string>& instructions) {
-        if (compaction == nullptr) {
-            return std::unexpected(support::make_error(support::ErrorCode::Validation, "No compaction runtime"));
-        }
-        chord::Json::Object input{{"reason", std::string{"manual"}}};
-        if (instructions.has_value()) input.emplace("instructions", *instructions);
-        auto created = std::make_shared<support::Expected<TaskId>>(
-                std::unexpected(support::make_error(support::ErrorCode::Validation, "Compaction not committed")));
-        const auto committed = await_async_void(session->commit(
-                [this, conversation_id, input = chord::Json{std::move(input)}, created](
-                        Transaction& tx) -> support::ExpectedVoid {
-                    auto task = create_compaction_task(
-                            tx, *compaction->definition(), conversation_id, input, std::nullopt, false);
-                    if (!task) return std::unexpected(task.error());
-                    *created = *task;
-                    return {};
-                }));
-        if (!committed) return std::unexpected(committed.error());
-        return *created;
-    }
-
     support::ExpectedVoid init() {
         if (!options.tasks.empty()) {
             Extension initial_ext{.name = ".harness.tasks", .tasks = std::move(options.tasks)};
@@ -1249,8 +1222,6 @@ struct Harness::Impl {
             }
         }
         workflow = std::make_unique<WorkflowRuntime>(*session, *storage, options, clock);
-        compaction = std::make_unique<CompactionRuntime>(*session, *storage, options, clock, *workflow);
-        workflow->install_compaction_definition(compaction->definition());
         builtin_generation_task = workflow->generation();
         submissions = std::make_unique<Submission::Registry>(*session, *storage);
         registry_sub_id = registry.subscribe([this] {
@@ -2031,11 +2002,6 @@ support::AsyncResult<ConversationRecord> Harness::fork_conversation(Conversation
 
 support::AsyncResult<void> Harness::reset(ConversationId conversation_id, std::optional<std::string> handoff) {
     return impl_->workflow->reset(conversation_id, std::move(handoff));
-}
-
-support::Expected<TaskId> Harness::compact(
-        ConversationId conversation_id, const std::optional<std::string>& instructions) {
-    return impl_->compact(conversation_id, instructions);
 }
 
 support::AsyncResult<Submission> Harness::submit(ConversationId conversation_id, SubmissionDraft draft) {
