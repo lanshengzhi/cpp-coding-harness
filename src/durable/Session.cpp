@@ -1273,49 +1273,167 @@ support::Expected<EntryRecord> Transaction::append_entry(ConversationId conversa
     return record;
 }
 
+namespace {
+std::string_view context_role(const chord::Json& value) {
+    const auto* object = value.as_object();
+    if (!object) return {};
+    auto it = object->find("role");
+    return it != object->end() && it->second.as_string() ? *it->second.as_string() : std::string_view{};
+}
+chord::Json missing_result(const chord::Json& call, const chord::Json& assistant) {
+    const auto* obj = call.as_object();
+    chord::Json::Object result{{"role", "toolResult"},
+            {"toolCallId", obj->at("id")},
+            {"toolName", obj->at("name")},
+            {"content",
+                    chord::Json::Array{chord::Json::Object{{"type", "text"},
+                            {"text", "Tool result unavailable: history ends before this call completed."}}}},
+            {"isError", true},
+            {"details", chord::Json::Object{{"reason", "missing_result"}}}};
+    const auto* source = assistant.as_object();
+    if (source) {
+        auto it = source->find("timestamp");
+        if (it != source->end()) result.emplace("timestamp", it->second);
+    }
+    return chord::Json{std::move(result)};
+}
+std::vector<chord::Json> order_tool_results(const std::vector<chord::Json>& messages) {
+    std::vector<chord::Json> ordered;
+    for (std::size_t index = 0; index < messages.size(); ++index) {
+        const chord::Json& message = messages[index];
+        if (context_role(message) == "toolResult") continue;
+        ordered.push_back(message);
+        if (context_role(message) != "assistant") continue;
+        std::vector<const chord::Json*> calls;
+        if (const auto* content = message.as_object()) {
+            const auto blocks = content->find("content");
+            if (blocks != content->end()) {
+                if (const auto* array = blocks->second.as_array()) {
+                    for (const chord::Json& block : *array) {
+                        const auto* object = block.as_object();
+                        if (object == nullptr) continue;
+                        const auto type = object->find("type");
+                        if (type == object->end() || type->second.as_string() == nullptr) continue;
+                        if (*type->second.as_string() == "toolCall" && object->contains("id") &&
+                                object->contains("name"))
+                            calls.push_back(&block);
+                    }
+                }
+            }
+        }
+        if (calls.empty()) continue;
+        std::map<std::string, std::size_t> results;
+        for (std::size_t next = index + 1; next < messages.size() && context_role(messages[next]) != "assistant";
+                ++next) {
+            const chord::Json& candidate = messages[next];
+            if (context_role(candidate) != "toolResult") continue;
+            const auto* object = candidate.as_object();
+            if (object == nullptr) continue;
+            const auto id = object->find("toolCallId");
+            if (id == object->end()) continue;
+            const std::string* call_id = id->second.as_string();
+            if (call_id == nullptr || results.contains(*call_id)) continue;
+            results.emplace(*call_id, next);
+        }
+        for (const chord::Json* call : calls) {
+            const auto* object = call->as_object();
+            const auto id = object->find("id");
+            const std::string* call_id = id == object->end() ? nullptr : id->second.as_string();
+            const auto found = call_id == nullptr ? results.end() : results.find(*call_id);
+            if (found == results.end()) {
+                ordered.push_back(missing_result(*call, message));
+            } else {
+                ordered.push_back(messages[found->second]);
+            }
+        }
+    }
+    return ordered;
+}
+
+} // namespace
+
 support::Expected<Transaction::ContextView> Transaction::context_view(
         ConversationId conversation_id, std::optional<EntryId> at) {
     if (auto rejected = impl_->reject_read("context"); !rejected) return std::unexpected(rejected.error());
-    auto entries = impl_->storage->scan_entries(conversation_id, static_cast<std::size_t>(-1));
-    if (!entries) return std::unexpected(entries.error());
-    std::ranges::reverse(*entries);
-    if (at.has_value()) {
-        const auto selected =
-                std::ranges::find_if(*entries, [at](const EntryRecord& entry) { return entry.id == *at; });
-        if (selected == entries->end()) {
+    auto visible = impl_->storage->scan_entries(conversation_id, static_cast<std::size_t>(-1));
+    if (!visible) return std::unexpected(visible.error());
+    std::ranges::reverse(*visible);
+    if (at) {
+        auto selected = std::ranges::find_if(*visible, [at](const EntryRecord& e) { return e.id == *at; });
+        if (selected == visible->end())
             return std::unexpected(
                     validation_error("Entry " + std::to_string(at->value) + " is not visible from conversation " +
                                      std::to_string(conversation_id.value)));
-        }
-        entries->erase(std::next(selected), entries->end());
+        visible->erase(std::next(selected), visible->end());
     }
-    std::optional<EntryRecord> marker;
-    for (const EntryRecord& entry : *entries)
-        if (entry.head.has_value()) marker = entry;
-    if (marker.has_value()) {
-        const auto first = std::ranges::find_if(
-                *entries, [&marker](const EntryRecord& entry) { return entry.id == *marker->head; });
-        if (first == entries->end()) return std::unexpected(validation_error("Context head is not visible"));
-        entries->erase(entries->begin(), first);
+    ContextView view;
+    if (visible->empty()) return view;
+    view.tail = visible->back().id;
+    for (const auto& entry : *visible)
+        if (entry.head) view.head = entry;
+    if (view.head) {
+        auto first = std::ranges::find_if(*visible, [&view](const EntryRecord& e) { return e.id == *view.head->head; });
+        if (first == visible->end()) return std::unexpected(validation_error("Context head is not visible"));
+        visible->erase(visible->begin(), first);
     }
     std::map<std::int64_t, ContextEdit> edits;
-    for (const EntryRecord& entry : *entries)
-        for (const ContextEdit& edit : entry.edits)
+    for (const auto& entry : *visible)
+        for (const auto& edit : entry.edits)
             edits.insert_or_assign(edit.target.value, edit);
-    // Frozen harness/context.ts deriveRange and selectActive: edits include
-    // dropped markers; the newest marker precedes all non-head range entries.
-    if (marker.has_value()) {
-        std::erase_if(*entries, [](const EntryRecord& entry) { return entry.head.has_value(); });
-        entries->insert(entries->begin(), *marker);
+    if (view.head) view.entries.push_back(*view.head);
+    for (const auto& entry : *visible)
+        if (!view.head || !entry.head) view.entries.push_back(entry);
+    std::optional<chord::Json> baseline;
+    for (const auto& entry : view.entries) {
+        if (view.head && entry.id.value <= view.head->id.value) continue;
+        if (entry.kind == "pi.system") {
+            for (const auto& msg : entry.model)
+                if (context_role(msg) == "system") {
+                    baseline = msg;
+                    break;
+                }
+            break;
+        }
+        if (!view.head) {
+            bool system = false;
+            for (const auto& msg : entry.model)
+                system |= context_role(msg) == "system";
+            for (const auto& edit : entry.edits)
+                if (edit.action == "replace")
+                    for (const auto& msg : edit.messages)
+                        system |= context_role(msg) == "system";
+            if (system) break;
+        }
     }
-    ContextView view{.entries = std::move(*entries), .contributions = {}};
-    for (const EntryRecord& entry : view.entries) {
-        const auto edit = edits.find(entry.id.value);
-        if (edit != edits.end() && edit->second.action == "omit")
-            view.contributions.emplace_back();
-        else
-            view.contributions.push_back(
-                    edit != edits.end() && edit->second.action == "replace" ? edit->second.messages : entry.model);
+    std::vector<chord::Json> flat;
+    for (const auto& entry : view.entries) {
+        std::vector<chord::Json> contribution;
+        auto edit = edits.find(entry.id.value);
+        if (edit == edits.end() || edit->second.action != "omit") {
+            const auto& source =
+                    edit != edits.end() && edit->second.action == "replace" ? edit->second.messages : entry.model;
+            for (const auto& msg : source) {
+                if (context_role(msg) == "assistant") {
+                    const auto* obj = msg.as_object();
+                    auto stop = obj->find("stopReason");
+                    if (stop != obj->end() && stop->second.as_string() &&
+                            (*stop->second.as_string() == "aborted" || *stop->second.as_string() == "error" ||
+                                    *stop->second.as_string() == "deferred"))
+                        continue;
+                }
+                contribution.push_back(msg);
+                flat.push_back(msg);
+            }
+        }
+        view.contributions.push_back(std::move(contribution));
+    }
+    view.messages = order_tool_results(flat);
+    auto system = std::ranges::find_if(view.messages, [](const auto& msg) { return context_role(msg) == "system"; });
+    if (system != view.messages.end() && system != view.messages.begin()) {
+        bool only_users = std::ranges::all_of(
+                view.messages.begin(), system, [](const auto& msg) { return context_role(msg) == "user"; });
+        if (only_users || (baseline && *baseline == *system))
+            std::rotate(view.messages.begin(), system, std::next(system));
     }
     return view;
 }
@@ -1324,30 +1442,7 @@ support::Expected<std::vector<chord::Json>> Transaction::context_messages(
         ConversationId conversation_id, std::optional<EntryId> at) {
     auto view = context_view(conversation_id, at);
     if (!view) return std::unexpected(view.error());
-    std::vector<chord::Json> messages;
-    std::vector<std::vector<chord::Json>> open;
-    for (const auto& contribution : view->contributions) {
-        for (const chord::Json& message : contribution) {
-            const auto* object = message.as_object();
-            if (object == nullptr) continue;
-            const auto role = object->find("role");
-            if (role == object->end() || role->second.as_string() == nullptr) continue;
-            const std::string& role_name = *role->second.as_string();
-            if (role_name == "assistant") {
-                auto stop_reason = object->find("stopReason");
-                if (stop_reason != object->end() && stop_reason->second.as_string() != nullptr &&
-                        (*stop_reason->second.as_string() == "aborted" || *stop_reason->second.as_string() == "error" ||
-                                *stop_reason->second.as_string() == "deferred"))
-                    continue;
-                if (open.size() > 1) messages.insert(messages.end(), open.begin(), open.end() - 1);
-                open.clear();
-            }
-            open.push_back({message});
-        }
-    }
-    for (const auto& group : open)
-        messages.insert(messages.end(), group.begin(), group.end());
-    return messages;
+    return std::move(view->messages);
 }
 
 support::Expected<std::vector<chord::Json>> Transaction::conversation_messages(ConversationId conversation_id) {
@@ -1357,12 +1452,12 @@ support::Expected<std::vector<chord::Json>> Transaction::conversation_messages(C
     auto entries = impl_->storage->scan_entries(conversation_id, static_cast<std::size_t>(-1));
     if (!entries) return std::unexpected(entries.error());
     std::ranges::reverse(*entries);
-    std::optional<EntryRecord> marker;
+    std::optional<EntryId> head;
     for (const EntryRecord& entry : *entries)
-        if (entry.head.has_value()) marker = entry;
-    if (marker.has_value()) {
-        const auto first = std::ranges::find_if(
-                *entries, [&marker](const EntryRecord& entry) { return entry.id == *marker->head; });
+        if (entry.head.has_value()) head = entry.head;
+    if (head.has_value()) {
+        const auto first =
+                std::ranges::find_if(*entries, [head](const EntryRecord& entry) { return entry.id == *head; });
         if (first == entries->end()) return std::unexpected(validation_error("Context head is not visible"));
         entries->erase(entries->begin(), first);
     }
@@ -1371,15 +1466,14 @@ support::Expected<std::vector<chord::Json>> Transaction::conversation_messages(C
         for (const ContextEdit& edit : entry.edits)
             edits.insert_or_assign(edit.target.value, edit);
     }
-    // Frozen harness/context.ts deriveRange and selectActive retain the newest
-    // marker first while collecting edits from the entire scanned range.
-    if (marker.has_value()) {
-        std::erase_if(*entries, [](const EntryRecord& entry) { return entry.head.has_value(); });
-        entries->insert(entries->begin(), *marker);
-    }
     std::vector<chord::Json> messages;
     std::vector<chord::Json> open;
     for (const EntryRecord& entry : *entries) {
+        if (entry.kind == "pi.reset") {
+            messages.clear();
+            open.clear();
+        }
+        if (entry.head.has_value() && entry.id != *head) continue;
         const auto edit = edits.find(entry.id.value);
         if (edit != edits.end() && edit->second.action == "omit") continue;
         const std::vector<chord::Json>& contribution =

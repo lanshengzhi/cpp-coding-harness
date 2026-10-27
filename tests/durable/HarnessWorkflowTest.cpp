@@ -918,9 +918,9 @@ TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets wi
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(reset_context.at(1))) == "u2");
     std::vector<chord::Json> replayed;
     auto final_messages = harness->commit([&replayed](Transaction& tx) -> support::Expected<void> {
-        auto messages = tx.conversation_messages(ConversationId{.value = 1});
-        if (!messages) return std::unexpected(messages.error());
-        replayed = std::move(*messages);
+        auto view = tx.context_view(ConversationId{.value = 1});
+        if (!view) return std::unexpected(view.error());
+        replayed = std::move(view->messages);
         return {};
     });
     REQUIRE(consume(std::move(final_messages)).has_value());
@@ -931,14 +931,13 @@ TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets wi
     const auto* expected_texts = reset_frozen->array_member("contextTexts");
     REQUIRE(expected_roles != nullptr);
     REQUIRE(expected_texts != nullptr);
-    // Frozen pi's reset context starts with the planned system row; the
-    // durable-owned replay comparison skips that presentation row.
-    REQUIRE(expected_roles->size() == replayed.size() + 1);
-    REQUIRE(expected_texts->size() == replayed.size() + 1);
+    // The committed baseline is part of the shared context view.
+    REQUIRE(expected_roles->size() == replayed.size());
+    REQUIRE(expected_texts->size() == replayed.size());
     CHECK(expected_roles->front().get_string() == "system");
     CHECK(expected_texts->front().get_string() == "system");
     for (std::size_t index = 0; index < replayed.size(); ++index) {
-        const std::size_t expected_index = index + 1;
+        const std::size_t expected_index = index;
         const auto* message = replayed.at(index).as_object();
         REQUIRE(message != nullptr);
         CHECK(message->at("role") == chord::Json{expected_roles->at(expected_index).get_string()});
@@ -955,7 +954,11 @@ TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets wi
                     }
                 }
         }
-        CHECK(chord::Json{text} == chord::Json{expected_texts->at(expected_index).get_string()});
+        if (expected_index == 0) {
+            CHECK(text.empty());
+        } else {
+            CHECK(chord::Json{text} == chord::Json{expected_texts->at(expected_index).get_string()});
+        }
     }
     auto final_entries = storage->scan_entries(root_id, 100);
     REQUIRE(final_entries.has_value());

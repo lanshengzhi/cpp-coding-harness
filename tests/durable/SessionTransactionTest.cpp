@@ -1367,3 +1367,133 @@ TEST_CASE("a commit publishes one sequence and mints increasing ids",
         previous_id = entry_id->value;
     }
 }
+
+TEST_CASE("context views retain head markers and apply edits across visible fork bounds",
+        "[durable][session][issue1083]") {
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    const ConversationId root = create_conversation(*session);
+    auto user = [](std::string text) {
+        return chord::Json{chord::Json::Object{{"role", "user"}, {"content", std::move(text)}}};
+    };
+    EntryId first{}, second{}, marker{}, later{};
+    auto append = [&](std::string kind,
+                          std::vector<chord::Json> messages,
+                          std::optional<EntryHeadVariant> head,
+                          std::vector<ContextEdit> edits,
+                          EntryId& id) {
+        REQUIRE(run_commit(*session, [&](Transaction& tx) -> support::Expected<void> {
+            auto entry = tx.append_entry(root, kind, chord::Json{nullptr}, head, messages, std::nullopt, edits);
+            if (!entry) return std::unexpected(entry.error());
+            id = entry->id;
+            return {};
+        }).has_value());
+    };
+    append("one", {user("one")}, {}, {}, first);
+    append("two", {user("two")}, {}, {}, second);
+    append("marker",
+            {user("summary")},
+            EntryHeadVariant{first},
+            {ContextEdit{.target = second, .action = "replace", .messages = {user("edited")}}},
+            marker);
+    append("later", {user("later")}, {}, {}, later);
+    std::optional<ConversationId> fork;
+    REQUIRE(run_commit(*session, [&](Transaction& tx) -> support::Expected<void> {
+        auto made = tx.fork_conversation(root, marker);
+        if (!made) return std::unexpected(made.error());
+        fork = made->id;
+        return {};
+    }).has_value());
+    REQUIRE(fork.has_value());
+    REQUIRE(run_commit(*session, [&](Transaction& tx) -> support::Expected<void> {
+        auto view = tx.context_view(*fork);
+        if (!view) return std::unexpected(view.error());
+        REQUIRE(view->head.has_value());
+        CHECK(view->head->id == marker);
+        REQUIRE(view->entries.size() == 3);
+        CHECK(view->entries[0].id == marker);
+        CHECK(view->entries[1].id == first);
+        CHECK(view->entries[2].id == second);
+        REQUIRE(view->contributions.size() == 3);
+        CHECK(view->contributions[2] == std::vector<chord::Json>{user("edited")});
+        CHECK(view->messages == std::vector<chord::Json>{user("summary"), user("one"), user("edited")});
+        auto before = tx.context_view(root, second);
+        if (!before) return std::unexpected(before.error());
+        CHECK_FALSE(before->head.has_value());
+        CHECK(before->messages == std::vector<chord::Json>{user("one"), user("two")});
+        auto invisible = tx.context_view(*fork, later);
+        CHECK_FALSE(invisible.has_value());
+        return {};
+    }).has_value());
+}
+
+TEST_CASE("context views synthesize missing tool results and discard unrelated results",
+        "[durable][session][issue1083]") {
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    const ConversationId conversation = create_conversation(*session);
+    const chord::Json assistant{chord::Json::Object{{"role", "assistant"},
+            {"timestamp", 7},
+            {"content",
+                    chord::Json::Array{
+                            chord::Json::Object{{"type", "toolCall"}, {"id", "call"}, {"name", "lookup"}}}}}};
+    const chord::Json unrelated{chord::Json::Object{{"role", "toolResult"}, {"toolCallId", "other"}}};
+    REQUIRE(run_commit(*session, [&](Transaction& tx) -> support::Expected<void> {
+        auto entry = tx.append_entry(conversation, "test", chord::Json{nullptr}, std::nullopt, {assistant, unrelated});
+        if (!entry) return std::unexpected(entry.error());
+        return {};
+    }).has_value());
+    REQUIRE(run_commit(*session, [&](Transaction& tx) -> support::Expected<void> {
+        auto view = tx.context_view(conversation);
+        if (!view) return std::unexpected(view.error());
+        REQUIRE(view->messages.size() == 2);
+        CHECK(view->messages[0] == assistant);
+        const auto& result = *view->messages[1].as_object();
+        CHECK(*result.at("toolCallId").as_string() == "call");
+        CHECK(*result.at("toolName").as_string() == "lookup");
+        CHECK(*result.at("timestamp").as_number() == 7);
+        const auto& content = *result.at("content").as_array();
+        CHECK(*content[0].as_object()->at("text").as_string() ==
+                "Tool result unavailable: history ends before this call completed.");
+        return {};
+    }).has_value());
+}
+
+TEST_CASE("context views lead with the post-head baseline without restoring omitted systems",
+        "[durable][session][issue1083]") {
+    MemoryStorage storage;
+    auto session = Session::create(storage);
+    const auto conversation = create_conversation(*session);
+    auto msg = [](std::string role, std::string content) {
+        return chord::Json{chord::Json::Object{{"role", std::move(role)}, {"content", std::move(content)}}};
+    };
+    EntryId old_system{}, kept{}, marker{}, baseline{};
+    auto append = [&](std::string kind,
+                          chord::Json message,
+                          std::optional<EntryHeadVariant> head,
+                          std::vector<ContextEdit> edits,
+                          EntryId& id) {
+        REQUIRE(run_commit(*session, [&](Transaction& tx) -> support::Expected<void> {
+            auto entry =
+                    tx.append_entry(conversation, kind, chord::Json{nullptr}, head, {message}, std::nullopt, edits);
+            if (!entry) return std::unexpected(entry.error());
+            id = entry->id;
+            return {};
+        }).has_value());
+    };
+    append("pi.system", msg("system", "old"), {}, {}, old_system);
+    append("pi.user", msg("user", "kept"), {}, {}, kept);
+    append("pi.compaction", msg("user", "summary"), EntryHeadVariant{old_system}, {}, marker);
+    append("pi.system", msg("system", "baseline"), {}, {ContextEdit{.target = old_system, .action = "omit"}}, baseline);
+    REQUIRE(run_commit(*session, [&](Transaction& tx) -> support::Expected<void> {
+        auto view = tx.context_view(conversation);
+        if (!view) return std::unexpected(view.error());
+        REQUIRE(view->head.has_value());
+        CHECK(view->head->id == marker);
+        REQUIRE(view->messages.size() == 3);
+        CHECK(view->messages[0] == msg("system", "baseline"));
+        CHECK(view->messages[1] == msg("user", "summary"));
+        CHECK(view->messages[2] == msg("user", "kept"));
+        return {};
+    }).has_value());
+}

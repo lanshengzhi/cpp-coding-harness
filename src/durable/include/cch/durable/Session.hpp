@@ -317,12 +317,16 @@ public:
             std::optional<TaskId> by_task_id = std::nullopt,
             std::vector<ContextEdit> edits = {});
 
+    /// A committed context range and the model contribution of each active entry.
     struct ContextView {
-        std::vector<EntryRecord> entries;
-        std::vector<std::vector<chord::Json>> contributions;
+        std::optional<EntryRecord> head{};
+        std::optional<EntryId> tail{};
+        std::vector<EntryRecord> entries{};
+        std::vector<std::vector<chord::Json>> contributions{};
+        std::vector<chord::Json> messages{};
     };
 
-    /// Select active entries and their edited contributions at a point in the conversation.
+    /// Derive the visible context at the selected entry, or at the latest entry.
     [[nodiscard]] support::Expected<ContextView> context_view(
             ConversationId conversation_id, std::optional<EntryId> at = std::nullopt);
 
