@@ -48,29 +48,38 @@ the cache entirely and captures the inspection inside the line job.
 
 ## 2. Protocol (minimal revision)
 
+Measured facts this revision adds: `AsyncResult` is lazy -- a producer
+runs at consumption (`start`/`co_await`), not at construction (ADR 0040
+header). So the ordering instant of an inspection is its **consumption**,
+and a constructed-but-never-consumed result never touches the line. The
+read admission path's closed error is the literal "Session is closed",
+textually identical to frozen `assertUsable`.
+
 `Harness::inspect()`:
 
 1. Call-time seal: `session->failed()` -> reject with the frozen message
    (unchanged; pinned by merged #1166 tests).
-2. Enqueue a **private line read** -- an internal `Session` primitive with
+2. Consume a **private line read** -- an internal `Session` primitive with
    the same machinery as `read_committed` (reuse `PendingRead`; no new
-   line semantics) but a typed callback and no public surface:
-   `session->read_on_line([this](Storage& store) -> Expected<HarnessInspection>`.
-   (The zero-API fallback is `read_committed` with a caller-supplied result
-   slot; the private seam is preferred for type safety and is what review
-   asked for.)
-3. The job runs on the line with `mutation_line` held. Inside the job:
+   line semantics) but a typed callback and no public surface. Its
+   producer assigns an ordering ticket and enqueues in **one** line-lock
+   critical section: ticket = `turns_enqueued++`, push behind everything
+   with a smaller ticket. (The zero-API fallback is `read_committed`
+   with a caller-supplied result slot; the private seam is preferred.)
+3. The job runs after every turn with a smaller ticket has fully
+   completed (line admission runs jobs one at a time; a turn's job ends
+   only when its settle callback returns). Inside the job:
    a. `session->failed()` again (frozen `#assertHealthy` parity: reject
       with the seal if the session failed between admission and the run).
    b. Take the Harness mutex; copy `active_invocations`, the scheduling
       flags, and the registry snapshot handle.
    c. `store.scan_tasks(256)` (same cap as today) -- while still inside
-      the same job.
+      the same job. The Storage virtual runs under `mutation_line`;
+      wrapped backends must not re-enter the Session (same class as
+      frozen's documented listener contract, see §5).
    d. Derive every row from that one bundle; return the finished
       `HarnessInspection` as the job's result.
-4. The caller consumes the result synchronously. The direct-scan code
-   path and the identity-snapshot code path move *into* the job
-   unchanged in behavior.
+4. The caller consumes the result synchronously.
 
 No settled-view cache, no init scan, no source audit: the job reads
 storage at the line instant, so there is nothing to keep synchronized
@@ -79,14 +88,14 @@ pays the same on `readOnLine`).
 
 ## 3. Why the ordering requirements hold
 
-- **R1 (no later turn).** The capture happens inside the read job. Jobs
-  are mutually exclusive on the line (fact 5) and FIFO by admission
-  (facts 5, 6): every commit enqueued before the call either settled
-  before the job started (its completion ran on the line, before us) or
-  is ahead of us in the queue; every commit enqueued after the call is
-  behind us. The scan and the identity copy inside the job therefore
-  cannot observe a later turn's effects, and cannot miss an earlier
-  turn's effects.
+- **R1 (no later turn).** The ticket-and-enqueue critical section makes
+  the included set exact: turns enqueued before the read's enqueue (same
+  lock acquisition) carry smaller tickets and run strictly before the
+  read job; turns enqueued after carry larger tickets and cannot be
+  admitted before it. No mutex-fairness assumption is used anywhere: the
+  lock serializes ticket assignment and push order directly. The capture
+  inside the job therefore cannot observe a later turn's effects and
+  cannot miss an earlier turn's effects.
 - **R2 (single instant).** Records (one scan), identities, scheduling
   flags, and the registry snapshot are captured inside one job; the only
   interleaving hazard left is invocation cleanup, which runs on execution
@@ -104,18 +113,20 @@ pays the same on `readOnLine`).
 - **Seal/close.** Facts 2 and 3: call-time seal, in-job seal, failure
   drain, closed rejection. All defined, all hang-free.
 
-## 4. Lifetime
+## 4. Lifetime (open item, not measured)
 
-The read job's lifetime is bounded by the synchronous `inspect()` call,
-and the call's lifetime is bounded by the caller, who must own the
-Harness exclusively (the same contract as every synchronous Harness
-method). `~Harness` cannot run concurrently with an in-flight inspect;
-and when it does run, `~Impl -> ~Session` destroys the line with no
-pending jobs because no inspect job can be pending (fact 1 removes the
-v1 drain assumption; caller ownership replaces it). `Harness::close()`
-additionally drains or runs queued reads through the audited close path
-(fact 2/3), so an inspect racing `close()` either runs during the drain
-or rejects with the closed error.
+What is measured: `AsyncResult` is lazy (a producer runs only at
+consumption), the read admission paths reject `failed`/`closed` with
+defined errors, and `reject_pending_line` completes pending reads on
+failure. What is **not** established: that no caller destroys the Harness
+concurrently with an in-flight inspect. `Harness::open`'s documented
+contract today only covers Storage lifetime ("the caller keeps `storage`
+alive until `close()` completes"); nothing states exclusive ownership of
+the handle. v2's lifetime argument is therefore an **assumption to be
+settled before implementation**, by one of: (a) documenting exclusive
+ownership on `Harness` (the norm for this API shape; needs sign-off), or
+(b) proving safety under concurrent destruction. This is deliberately
+not claimed as measured.
 
 ## 5. Reentry
 
@@ -130,15 +141,27 @@ or rejects with the closed error.
   chain hang; ours is an explicit error. Documented deliberately.
 - Stop callbacks currently run on the line (the `[issue1166][reentry]`
   demonstration depends on it), so the owner mark covers the demonstrated
-  cycle. A future change deferring stop delivery off the line must
-  re-examine reentry detection; recorded as a constraint on that change.
+  cycle. What the mark does **not** cover: a callback that delegates to
+  another thread which then synchronously waits on the line -- a cycle
+  the owner mark cannot see. v2 does not claim that class is cycle-free;
+  it is recorded as an open risk, and the reentry-rejection behavior
+  itself is a new public contract that needs authorization before
+  implementation (see below).
+- Frozen precedent for the contract direction: frozen's own listener
+  contracts state "It must not block or call Session operations"
+  (session.ts, sync listeners and close listeners). Rejecting a
+  line-callback reentry with a Validation error extends that documented
+  prohibition to a detected error instead of a hang. Whether the port
+  adopts the rejection, documents the prohibition without detection, or
+  keeps today's incidental behavior is a contract decision for review --
+  the tests below pin the chosen behavior once authorized.
 - Phases and execution-thread code (not line owners) may call inspect.
 
 ## 6. Public discriminating tests
 
 | Item | Test | Today's result |
 |---|---|---|
-| FIFO enqueue order + capture on line | `fifo-order`: hold a commit turn; a user create is enqueued behind it, then inspect; after release the inspection shows the reservation's effects but NOT the later create; a follow-up inspect shows both | RED today (inspect returns without the queued create) |
+| FIFO enqueue order + capture on line | `fifo-order`: hold a commit turn (admission proven by the gate); consume the inspection during the hold; only then enqueue a second task's create; release. The inspection must wait out the hold, include the held turn's effects, and exclude the later create; a follow-up inspect shows both. Ordering is by admission (consumption instant), never by API-call timing. | RED today (inspect blocks on the seal lock only until the held turn settles, then scans; it neither has a defined included set nor a ticket) |
 | R1 regression guard | `capture-on-line`: same shape; if the capture ever moves off the line, the later create leaks into the inspection | RED on any off-line capture |
 | Held turn (C) | existing `[held-release]` (kept) | PIN |
 | Single instant | existing `[stale-scan]`: with the job-captured scan there is no T1/T2 window; expected GREEN | RED today (3/3) |
