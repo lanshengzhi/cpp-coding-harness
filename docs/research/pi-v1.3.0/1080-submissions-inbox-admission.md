@@ -136,6 +136,14 @@ was relaxed to obtain a pass.
 
 Delivery audit validation (2026-10-28, strict no-exception Debug):
 
+- Final clean revision `8304bf612f28adf780a87b7785df0f8fe61b1431`:
+  full build passed; unfiltered CTest selected **3,853**, with **3,852 passed,
+  0 failed, 1 skipped** in 185.86 seconds. All **43** architecture tests
+  passed. The skipped Native TUI differential capture requires its separately
+  selected environment. Logs and JUnit are retained locally at
+  `/tmp/cch-1080-final-build.log`, `/tmp/cch-1080-final.log`, and
+  `/tmp/cch-1080-final.xml`.
+
 - Focused `ctest --preset vcpkg -L issue1080 --timeout 20`: **36 selected,
   36 passed**, including one new case and two strengthened cases.
 - Full preset build and configure/build architecture gates passed. The
@@ -166,7 +174,7 @@ Delivery audit validation (2026-10-28, strict no-exception Debug):
     the restored focused log is `/tmp/cch-1080-restored-focused.log`.
 - An initial parallel fresh-tree build encountered PARITY-6002/6003 while
   Ninja updated dependency evidence; serial retry passed. This separate build
-  gate race is tracked by #1162. A new full validation is required after the
+  gate race is tracked by #1162. The final full validation above follows the
   batch-identification change.
 
 Initial integration revision: `b2714debc`.
