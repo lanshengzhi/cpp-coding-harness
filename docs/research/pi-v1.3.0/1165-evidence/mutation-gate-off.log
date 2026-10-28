@@ -1,0 +1,12 @@
+Mutation: publish-in-completion kept; inspect gate replaced by invocation-first
+derivation (any published identity derives running, pending scans included).
+Run: "scheduler reservation is invisible to a read admitted before its commit".
+Result: PASS (100% tests passed out of 1).
+Interpretation: with the identity published only in the commit completion, the
+settle->publish gap closes within the settle callback itself, so the probe's
+scan-then-snapshot window no longer brackets it during the held-line phase;
+the composite (pending scan + published identity) survives only as a narrow
+post-release interleaving this probe cannot hit deterministically. The gate
+remains the load-bearing defense for that composite; necessity is by
+construction (inspect's scan and identity snapshot are two unsynchronized
+reads) and is separately shown by mutation-gate-only.log.

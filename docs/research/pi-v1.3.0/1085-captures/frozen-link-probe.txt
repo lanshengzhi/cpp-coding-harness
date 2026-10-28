@@ -1,0 +1,4 @@
+symlink opened
+symlink target "complete\npartial"
+hardlink error JsonlCorruptionError Malformed complete task-2.jsonl line 1
+hardlink target "complete\n"

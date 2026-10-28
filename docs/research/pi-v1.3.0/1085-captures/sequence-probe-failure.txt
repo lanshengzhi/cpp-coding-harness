@@ -1,0 +1,141 @@
+UpdateCTestConfiguration  from :/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/DartConfiguration.tcl
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 177
+    Start 177: the C++ Harness continues a pi-created JSONL task
+
+177: Test command: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build/cch_tests_durable "the C++ Harness continues a pi-created JSONL task"
+177: Working Directory: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+177: Test timeout computed to be: 10000000
+177: Filters: "the C++ Harness continues a pi-created JSONL task"
+177: Randomness seeded to: 483752179
+177:
+177: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+177: cch_tests_durable is a Catch2 v3.15.3 host application.
+177: Run with -? for options
+177:
+177: -------------------------------------------------------------------------------
+177: the C++ Harness continues a pi-created JSONL task
+177: -------------------------------------------------------------------------------
+177: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:232
+177: ...............................................................................
+177:
+177: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:287: FAILED:
+177:   REQUIRE( cpp_markers.size() == 3 )
+177: with expansion:
+177:   4 == 3
+177: with messages:
+177:   {"format":1,"type":"commit","seq":1,"writes":[{"type":"conversation","value":
+177:   {"id":1}},{"type":"document.create","record":{"id":2,"kind":"pi.live",
+177:   "scope":{"kind":"conversation","conversationId":1},"history":"latest","fork":
+177:   "initial"},"ordinal":0},{"type":"document.create","record":{"id":3,"kind":
+177:   "pi.inbox","scope":{"kind":"conversation","conversationId":1},"history":
+177:   "latest","fork":"initial"},"ordinal":1},{"type":"document.create","record":
+177:   {"id":4,"kind":"pi.usage","scope":{"kind":"conversation","conversationId":1},
+177:   "history":"latest","fork":"initial"},"ordinal":2},{"type":"document.create",
+177:   "record":{"id":5,"kind":"pi.provider","scope":{"kind":"conversation",
+177:   "conversationId":1},"history":"latest","fork":"initial"},"ordinal":3},
+177:   {"type":"document.create","record":{"id":6,"kind":"pi.agent","scope":{"kind":
+177:   "conversation","conversationId":1},"history":"rewindable","fork":"asOf"},
+177:   "ordinal":4}]}
+177:   {"format":1,"type":"commit","seq":2,"writes":[{"type":"task.sidecar","id":7,
+177:   "ordinal":0}]}
+177:   {"format":1,"type":"commit","seq":3,"writes":[{"type":"task.sidecar","id":7,
+177:   "ordinal":0}]}
+177:   {"format":1,"type":"commit","seq":4,"writes":[{"type":"task.sidecar","id":7,
+177:   "ordinal":0}]}
+177:   {"format":1,"type":"record","seq":2,"ordinal":0,"payload":{"type":"task",
+177:   "value":{"id":7,"conversationId":1,"kind":"audit1085.work","version":1,
+177:   "input":{},"background":false,"abortRequested":false,"state":{"status":
+177:   "pending","checkpoint":{"phase":"start","n":7}}}}}
+177:   {"format":1,"type":"record","seq":3,"ordinal":0,"payload":{"type":"task",
+177:   "value":{"id":7,"conversationId":1,"kind":"audit1085.work","version":1,
+177:   "input":{},"background":false,"abortRequested":false,"startedAt":
+177:   1793194491228,"state":{"status":"running","checkpoint":{"phase":"start","n":
+177:   7}}}}}
+177:   {"format":1,"type":"record","seq":4,"ordinal":0,"payload":{"type":"task",
+177:   "value":{"id":7,"conversationId":1,"kind":"audit1085.work","version":1,
+177:   "input":{},"background":false,"abortRequested":false,"startedAt":
+177:   1793194491228,"state":{"status":"running","checkpoint":{"phase":"finish","n":
+177:   8}}}}}
+177:
+177: ===============================================================================
+177: test cases:  1 |  0 passed | 1 failed
+177: assertions: 18 | 17 passed | 1 failed
+177:
+1/1 Test #177: the C++ Harness continues a pi-created JSONL task ...***Failed    0.01 sec
+Filters: "the C++ Harness continues a pi-created JSONL task"
+Randomness seeded to: 483752179
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+the C++ Harness continues a pi-created JSONL task
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:232
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:287: FAILED:
+  REQUIRE( cpp_markers.size() == 3 )
+with expansion:
+  4 == 3
+with messages:
+  {"format":1,"type":"commit","seq":1,"writes":[{"type":"conversation","value":
+  {"id":1}},{"type":"document.create","record":{"id":2,"kind":"pi.live",
+  "scope":{"kind":"conversation","conversationId":1},"history":"latest","fork":
+  "initial"},"ordinal":0},{"type":"document.create","record":{"id":3,"kind":
+  "pi.inbox","scope":{"kind":"conversation","conversationId":1},"history":
+  "latest","fork":"initial"},"ordinal":1},{"type":"document.create","record":
+  {"id":4,"kind":"pi.usage","scope":{"kind":"conversation","conversationId":1},
+  "history":"latest","fork":"initial"},"ordinal":2},{"type":"document.create",
+  "record":{"id":5,"kind":"pi.provider","scope":{"kind":"conversation",
+  "conversationId":1},"history":"latest","fork":"initial"},"ordinal":3},
+  {"type":"document.create","record":{"id":6,"kind":"pi.agent","scope":{"kind":
+  "conversation","conversationId":1},"history":"rewindable","fork":"asOf"},
+  "ordinal":4}]}
+  {"format":1,"type":"commit","seq":2,"writes":[{"type":"task.sidecar","id":7,
+  "ordinal":0}]}
+  {"format":1,"type":"commit","seq":3,"writes":[{"type":"task.sidecar","id":7,
+  "ordinal":0}]}
+  {"format":1,"type":"commit","seq":4,"writes":[{"type":"task.sidecar","id":7,
+  "ordinal":0}]}
+  {"format":1,"type":"record","seq":2,"ordinal":0,"payload":{"type":"task",
+  "value":{"id":7,"conversationId":1,"kind":"audit1085.work","version":1,
+  "input":{},"background":false,"abortRequested":false,"state":{"status":
+  "pending","checkpoint":{"phase":"start","n":7}}}}}
+  {"format":1,"type":"record","seq":3,"ordinal":0,"payload":{"type":"task",
+  "value":{"id":7,"conversationId":1,"kind":"audit1085.work","version":1,
+  "input":{},"background":false,"abortRequested":false,"startedAt":
+  1793194491228,"state":{"status":"running","checkpoint":{"phase":"start","n":
+  7}}}}}
+  {"format":1,"type":"record","seq":4,"ordinal":0,"payload":{"type":"task",
+  "value":{"id":7,"conversationId":1,"kind":"audit1085.work","version":1,
+  "input":{},"background":false,"abortRequested":false,"startedAt":
+  1793194491228,"state":{"status":"running","checkpoint":{"phase":"finish","n":
+  8}}}}}
+
+===============================================================================
+test cases:  1 |  0 passed | 1 failed
+assertions: 18 | 17 passed | 1 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable      =   0.01 sec*proc (1 test)
+issue1085    =   0.01 sec*proc (1 test)
+jsonl        =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   0.01 sec
+
+The following tests FAILED:
+	177 - the C++ Harness continues a pi-created JSONL task (Failed) durable issue1085 jsonl
+Errors while running CTest

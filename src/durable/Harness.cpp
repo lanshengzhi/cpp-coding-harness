@@ -1,6 +1,9 @@
 #include <cch/durable/Harness.hpp>
 
+#include <cch/durable/detail/SessionLineAccess.hpp>
+
 #include "durable/Compaction.hpp"
+#include "durable/SessionErrors.hpp"
 #include "durable/ViewMounts.hpp"
 #include "durable/WorkflowRuntime.hpp"
 
@@ -958,12 +961,22 @@ struct Harness::Impl {
         return TaskFit{.definition = std::move(def), .migrates = true};
     }
 
-    [[nodiscard]] TaskInspectionState inspect_task(const TaskRecord& record, const Registry::Snapshot& snapshot) const {
-        {
-            std::lock_guard lock(mutex);
-            if (active_invocations.contains(record.id.value)) {
-                return TaskInspectionState{.kind = "running"};
-            }
+    [[nodiscard]] TaskInspectionState inspect_task(
+            const TaskRecord& record, const Registry::Snapshot& snapshot, const std::set<std::int64_t>& invoked) const {
+        // The identity view is one copy taken at the capture instant (issue
+        // #1165): no per-row re-read can pair rows from different instants.
+        // A committed `running` record reports running even after its identity
+        // is erased: a phase that ended abnormally (or a crash-recovered
+        // record) must not be reported ready.
+        if (record.state.status == "running") {
+            return TaskInspectionState{.kind = "running"};
+        }
+        // A committed `pending` record is never promoted by identity alone.
+        // The definition-replacement path writes `running -> pending` and
+        // erases the identity only afterwards; in that window the pair
+        // (pending record, live identity) is coherent state, not a run.
+        if (record.state.status != "pending" && invoked.contains(record.id.value)) {
+            return TaskInspectionState{.kind = "running"};
         }
         if (record.state.status == "completing") {
             return TaskInspectionState{.kind = "completing"};
@@ -997,6 +1010,56 @@ struct Harness::Impl {
             return TaskInspectionState{.kind = "blocked", .reason = "migration_failed", .error = err};
         }
         return TaskInspectionState{.kind = "ready", .migrates = fit.migrates};
+    }
+
+    /// One-instant inspection capture for the line-read seam (issue #1165):
+    /// the storage scan, the scheduling flags, and one identity copy happen
+    /// inside a single line job, so every row derives from one committed
+    /// state. Runs while the mutation line is held; the Harness mutex is
+    /// taken only for the identity copy and released before the scan, the
+    /// same order the commit and close listeners already use.
+    ///
+    /// The capture is bounded: `scan_tasks(256)`, `scan_submissions(256)`
+    /// here and `load_world()`'s 1024-record scan for waiting/abort rows. A
+    /// larger repository is inspected partially by contract; a complete
+    /// committed scan beyond the cap belongs to issue #1088 (see
+    /// `Harness::inspect`).
+    [[nodiscard]] support::Expected<HarnessInspection> capture_inspection(Storage& storage) const {
+        auto scan_res = storage.scan_tasks(256);
+        if (!scan_res) {
+            return std::unexpected(scan_res.error());
+        }
+        auto submissions_res = storage.scan_submissions(256);
+        if (!submissions_res) {
+            return std::unexpected(submissions_res.error());
+        }
+        const auto snapshot = registry.snapshot();
+        HarnessInspection inspection;
+        std::set<std::int64_t> invoked;
+        {
+            std::lock_guard lock(mutex);
+            inspection.scheduling = closed ? "closing" : (enabled ? "running" : "paused");
+            for (const auto& [id, _] : active_invocations) {
+                invoked.insert(id);
+            }
+        }
+        for (const auto& task : *scan_res) {
+            // Terminal records never derive an invocation state: a live or
+            // stale identity must not report a finished task as running.
+            if (task.state.status == "terminal") {
+                continue;
+            }
+            inspection.tasks.push_back(TaskInspection{
+                    .record = task,
+                    .state = inspect_task(task, snapshot, invoked),
+            });
+        }
+        for (const SubmissionRecord& submission : *submissions_res) {
+            if (!submission_settled(submission.status)) {
+                inspection.submissions.push_back(submission);
+            }
+        }
+        return inspection;
     }
 
     [[nodiscard]] TaskResolution resolve_task(const TaskRecord& record, const Registry::Snapshot& snapshot) {
@@ -1271,16 +1334,30 @@ struct Harness::Impl {
         (void)session->subscribe_close([this] {
             std::map<std::int64_t, std::vector<std::shared_ptr<TaskWaiter>>> pending;
             std::map<std::optional<std::int64_t>, std::vector<std::shared_ptr<IdleWaiter>>> pending_idle;
-            const auto error = support::make_error(support::ErrorCode::Validation,
-                    session->failed() ? "Session failed after a storage error; close and reopen it" : "Session is closed");
+            const auto error = session->failed()
+                                       ? session_failed_error()
+                                       : support::make_error(support::ErrorCode::Validation, "Session is closed");
+            // A storage failure closes the Session without running the
+            // Harness shutdown path, so the active invocations are signalled
+            // here — before the failing commit's caller observes the
+            // rejection (frozen pi fail -> close -> beforeClose ->
+            // TaskScheduler.join()). Copy the sources out of the scheduler
+            // mutex first: stop callbacks run after it is released (issue
+            // #1165), and a callback that waits on the Session line is the
+            // documented reentry boundary.
+            std::vector<std::stop_source> sources;
             {
                 std::lock_guard lock(mutex);
                 wait_error = error;
+                for (const auto& [_, stop_src] : active_invocations)
+                    sources.push_back(stop_src);
                 pending = std::move(waiters);
                 waiters.clear();
                 pending_idle = std::move(idle_waiters);
                 idle_waiters.clear();
             }
+            for (auto& source : sources)
+                source.request_stop();
             submissions->reject_all(error);
             observation_mounts.close(session->failed());
             for (auto& [id, completions] : pending) {
@@ -1313,11 +1390,13 @@ struct Harness::Impl {
                             // abort handler runs once the owned work below it
                             // drains (frozen pi commit listener ->
                             // `#invocations.get(id).controller.abort()`).
-                            std::lock_guard lock(mutex);
-                            auto invocation = active_invocations.find(tc->task->id.value);
-                            if (invocation != active_invocations.end()) {
-                                invocation->second.request_stop();
+                            std::optional<std::stop_source> source;
+                            {
+                                std::lock_guard lock(mutex);
+                                auto invocation = active_invocations.find(tc->task->id.value);
+                                if (invocation != active_invocations.end()) source = invocation->second;
                             }
+                            if (source) source->request_stop();
                         }
                     }
                 }
@@ -1334,14 +1413,16 @@ struct Harness::Impl {
     void shutdown() {
         registry.unsubscribe(registry_sub_id);
         registry_sub_id = 0;
+        std::vector<std::stop_source> sources;
         {
             std::lock_guard lock(mutex);
             if (closed) return;
             closed = true;
-            for (auto& [_, stop_src] : active_invocations) {
-                stop_src.request_stop();
-            }
+            for (const auto& [_, stop_src] : active_invocations)
+                sources.push_back(stop_src);
         }
+        for (auto& source : sources)
+            source.request_stop();
         if (worker.joinable()) {
             worker.request_stop();
         }
@@ -1438,6 +1519,14 @@ struct Harness::Impl {
             // A waiting task resumes once every member is terminal; a `failFast`
             // wait whose member failed is handled by `reconcile()`.
             if (task.state.status == "waiting") {
+                {
+                    // A phase that committed `waiting` may still be active;
+                    // resuming it to `pending` under a live identity would let
+                    // a second invocation start (issue #1165). Cleanup dirties
+                    // the scheduler, so the resume happens on a later pass.
+                    std::lock_guard lock(mutex);
+                    if (closed || active_invocations.contains(task.id.value)) continue;
+                }
                 bool all_terminal = true;
                 for (const TaskId member_id : task.state.on) {
                     const TaskRecord* member = world.task(member_id);
@@ -1496,7 +1585,6 @@ struct Harness::Impl {
                     if (closed || active_invocations.contains(task.id.value)) {
                         continue;
                     }
-                    active_invocations[task.id.value] = stop_src;
                 }
 
                 auto tid = task.id;
@@ -1505,6 +1593,11 @@ struct Harness::Impl {
                 // the task's abort invocation already committed terminal. The
                 // reservation must not rewrite the terminal record: Storage
                 // rejects that write and permanently fails the Session.
+                // The flag is stored by the transaction body (on the line) and
+                // loaded by this worker after the commit settles; the
+                // release/acquire pair makes the staged-write observation
+                // ordered before the publication decision. No other thread
+                // touches it.
                 auto reserved = std::make_shared<std::atomic_bool>(false);
                 auto trans_res = await_async_void(
                         session->commit([this, tid, resolved_record = std::move(resolved_record), reserved](
@@ -1529,19 +1622,35 @@ struct Harness::Impl {
                             return written;
                         }));
 
-                if (!trans_res || !reserved->load(std::memory_order_acquire)) {
-                    std::lock_guard l(mutex);
-                    active_invocations.erase(tid.value);
-                    cv.notify_all();
+                if (!trans_res) {
+                    // The reservation commit failed: surface the original
+                    // Storage error to the report sink (issue #1166: the
+                    // failing caller retains the original error) and publish
+                    // nothing. The Session also seals with the frozen message.
+                    report(trans_res.error());
+                    continue;
+                }
+                if (!reserved->load(std::memory_order_acquire)) {
+                    // The reservation body no-oped (the record was no longer
+                    // reservable when the commit ran): publish nothing.
                     continue;
                 }
 
                 {
                     std::lock_guard l(mutex);
                     if (closed) {
-                        active_invocations.erase(tid.value);
+                        // The reservation settled but the Harness closed before
+                        // publication: discard it and never start the phase
+                        // (frozen pi: a held reservation at close).
                         cv.notify_all();
-                    } else {
+                        continue;
+                    }
+                    // Publish the invocation identity only now, after Storage
+                    // settled the reservation commit: an inspection can never
+                    // pair a `pending` record with a live identity, and the
+                    // phase starts only from a published identity (#1165).
+                    active_invocations[tid.value] = stop_src;
+                    {
                         auto finished = std::make_shared<std::atomic_bool>(false);
                         ExecutionThread task_thread;
                         task_thread.finished = finished;
@@ -1571,6 +1680,21 @@ struct Harness::Impl {
             dirty = true;
             cv.notify_all();
         };
+
+        {
+            // A close can land between publication and the first phase
+            // instruction. The execution thread must erase its published
+            // identity, wake the shutdown wait, and return without starting a
+            // phase (frozen pi fail -> close -> beforeClose; the empty-table
+            // shutdown wait depends on this second close path).
+            std::lock_guard lock(mutex);
+            if (closed) {
+                active_invocations.erase(tid.value);
+                dirty = true;
+                cv.notify_all();
+                return;
+            }
+        }
 
         bool reported_replacement = false;
         std::shared_ptr<const TaskDefinition> reported_def;
@@ -1806,35 +1930,44 @@ const TaskDefinition* Harness::task_definition(std::string_view kind) const noex
 }
 
 support::AsyncResult<HarnessInspection> Harness::inspect() {
-    auto scan_res = impl_->storage->scan_tasks(256);
-    if (!scan_res) {
-        return support::AsyncResult<HarnessInspection>{std::unexpected(scan_res.error())};
-    }
-    auto submissions_res = impl_->storage->scan_submissions(256);
-    if (!submissions_res) {
-        return support::AsyncResult<HarnessInspection>{std::unexpected(submissions_res.error())};
-    }
-    const auto snapshot = impl_->registry.snapshot();
-    HarnessInspection inspection;
-    {
-        std::lock_guard lock(impl_->mutex);
-        inspection.scheduling = impl_->closed ? "closing" : (impl_->enabled ? "running" : "paused");
-    }
-    for (const auto& task : *scan_res) {
-        if (task.state.status == "terminal") {
-            continue;
-        }
-        inspection.tasks.push_back(TaskInspection{
-                .record = task,
-                .state = impl_->inspect_task(task, snapshot),
-        });
-    }
-    for (const SubmissionRecord& submission : *submissions_res) {
-        if (!submission_settled(submission.status)) {
-            inspection.submissions.push_back(submission);
-        }
-    }
-    return support::AsyncResult<HarnessInspection>{std::move(inspection)};
+    // The inspection is one line job (issue #1165): it runs after every
+    // commit and read admitted before it has settled and observes one
+    // committed state, instead of scanning on the caller thread. Failure and
+    // close are handled by the seam's admission (frozen `SessionFailed` /
+    // "Session is closed") and, for a read already queued when a commit
+    // fails, by the Session's pending-line rejection.
+    //
+    // Contract notes: inspect must not be called from inside a Session line
+    // callback (commit body, read callback, completion); such a call admits a
+    // job behind its own and self-waits, the same prohibition class as the
+    // frozen listener contracts. A callback that delegates to another thread
+    // which then calls inspect is an unresolved cross-thread cycle risk. The
+    // Harness and its Storage must outlive the operation until its completion
+    // callback returns.
+    return support::AsyncResult<HarnessInspection>{support::AsyncProducer<HarnessInspection, support::Error>{
+            [impl = impl_.get()](support::AsyncCompletion<HarnessInspection, support::Error> completion) noexcept {
+                struct Capture {
+                    std::optional<HarnessInspection> value{};
+                };
+                auto capture = std::make_shared<Capture>();
+                auto read = detail::SessionLineAccess::read_on_line(
+                        *impl->session, [impl, capture](Storage& storage) -> support::Expected<void> {
+                            // No Session method may be called here: this job
+                            // already runs on the mutation line.
+                            auto inspection = impl->capture_inspection(storage);
+                            if (!inspection) return std::unexpected(inspection.error());
+                            capture->value = std::move(*inspection);
+                            return {};
+                        });
+                std::move(read).start(
+                        [capture, completion = std::move(completion)](support::ExpectedVoid outcome) mutable noexcept {
+                            if (!outcome) {
+                                completion(std::unexpected(outcome.error()));
+                                return;
+                            }
+                            completion(std::move(*capture->value));
+                        });
+            }}};
 }
 
 support::AsyncResult<TaskGraph> Harness::task_graph() {
@@ -2135,13 +2268,13 @@ support::AsyncResult<std::string> Harness::abort_task(TaskId id) {
                                 completion(std::unexpected(outcome.error()));
                                 return;
                             }
+                            std::optional<std::stop_source> source;
                             {
                                 std::lock_guard lock(impl->mutex);
                                 auto invocation = impl->active_invocations.find(id.value);
-                                if (invocation != impl->active_invocations.end()) {
-                                    invocation->second.request_stop();
-                                }
+                                if (invocation != impl->active_invocations.end()) source = invocation->second;
                             }
+                            if (source) source->request_stop();
                             impl->cv.notify_all();
                             completion(std::move(*result));
                         });
@@ -2320,15 +2453,16 @@ void Harness::abort_conversation_pass(
         // the reached tasks are waited for directly; otherwise the idle
         // wait covers the ordinary scope only. Ending a held invocation
         // lets its abort handler run (mirrors `abort_task`).
+        std::vector<std::stop_source> sources;
         {
             std::lock_guard lock(impl_->mutex);
             for (const TaskId id : *reached) {
                 auto invocation = impl_->active_invocations.find(id.value);
-                if (invocation != impl_->active_invocations.end()) {
-                    invocation->second.request_stop();
-                }
+                if (invocation != impl_->active_invocations.end()) sources.push_back(invocation->second);
             }
         }
+        for (auto& source : sources)
+            source.request_stop();
         impl_->cv.notify_all();
         pass->pending = pass->background ? reached->size() : 1;
         if (pass->pending == 0) {

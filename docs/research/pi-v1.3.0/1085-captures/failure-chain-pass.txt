@@ -1,0 +1,32 @@
+UpdateCTestConfiguration  from :/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/DartConfiguration.tcl
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 93
+    Start 93: a failed C++ task marker recovers for frozen pi continuation
+
+93: Test command: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build/cch_tests_durable "a failed C++ task marker recovers for frozen pi continuation"
+93: Working Directory: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+93: Test timeout computed to be: 10000000
+93: Filters: "a failed C++ task marker recovers for frozen pi continuation"
+93: Randomness seeded to: 2584504557
+93: ===============================================================================
+93: All tests passed (26 assertions in 1 test case)
+93:
+1/1 Test #93: a failed C++ task marker recovers for frozen pi continuation ...   Passed    2.14 sec
+
+The following tests passed:
+	a failed C++ task marker recovers for frozen pi continuation
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   2.14 sec*proc (1 test)
+issue1085    =   2.14 sec*proc (1 test)
+jsonl        =   2.14 sec*proc (1 test)
+
+Total Test time (real) =   2.15 sec

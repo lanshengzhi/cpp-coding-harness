@@ -52,6 +52,25 @@ public:
     [[nodiscard]] const TaskDefinition* task_definition(std::string_view kind) const noexcept;
 
     /// Inspect scheduling state and live tasks without running task code.
+    ///
+    /// The inspection is one Session-line job: it runs after every commit and
+    /// read admitted before it has settled and observes one committed state.
+    /// Failure and close are reported through the Session's frozen
+    /// `SessionFailed` / "Session is closed" errors.
+    ///
+    /// The inspection captures at most 256 task records per call
+    /// (`Storage::scan_tasks(256)`) and derives `waiting`/abort rows through
+    /// the scheduler's `load_world()` scan (limit 1024). A repository with
+    /// more records is inspected partially; a complete committed scan beyond
+    /// that cap is the observation/views scope of issue #1088.
+    ///
+    /// The producer keeps using the Harness and its Session after this call
+    /// returns, so the Harness and its Storage must outlive the operation
+    /// until its completion callback returns. The callback must not call
+    /// `inspect` (or any Session operation that takes the mutation line) from
+    /// inside a Session line callback: such a call admits a job behind its own
+    /// and self-waits. A callback that delegates to another thread which then
+    /// calls `inspect` is an unresolved cross-thread cycle risk.
     [[nodiscard]] support::AsyncResult<HarnessInspection> inspect();
 
     /// Read every live task and owner edge as a structured graph from

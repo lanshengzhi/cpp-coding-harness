@@ -36,7 +36,7 @@ MANIFEST_SCHEMA = "pike/pi-v1.3.0-audit-evidence/1"
 DEFAULT_FIXTURE_ROOT = Path(__file__).resolve().parents[2] / "fixtures" / "pi-v1.3.0"
 REVISION_PATTERN = re.compile(r"[0-9a-f]{40}")
 DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}")
-FAMILY_PATTERN = re.compile(r"audit-(?P<ticket>[0-9]+)")
+FAMILY_PATTERN = re.compile(r"audit-(?P<ticket>[0-9]+)(?:-(?P<variant>[a-z0-9]+(?:-[a-z0-9]+)*))?")
 SOURCE_ENDPOINT_PATTERN = re.compile(r"packages/[^:]+:.+")
 
 

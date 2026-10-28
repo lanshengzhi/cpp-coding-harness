@@ -1,0 +1,59 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1085",
+  "family": "audit-1085",
+  "capturedAt": "2026-10-28T13:24:32.298Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/harness/harness.ts:Harness.open,resume,waitForTask,close",
+    "packages/durable/src/storage/jsonl/storage.ts:JsonlStorage",
+    "packages/durable/src/tasks.ts:defineTask"
+  ],
+  "scenarios": [
+    {
+      "name": "pi JSONL Harness resumes a pending checkpoint after close and reopen",
+      "inputs": {
+        "task": "audit1085.work",
+        "initial": {
+          "phase": "start",
+          "n": 7
+        },
+        "action": "close, reopen, resume"
+      },
+      "expected": {
+        "id": 7,
+        "files": {
+          "doc-2.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":0,\"payload\":{\"type\":\"document\",\"id\":2,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{}}}}\n",
+          "doc-3.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":1,\"payload\":{\"type\":\"document\",\"id\":3,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"items\":[]}}}}\n",
+          "doc-4.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":2,\"payload\":{\"type\":\"document\",\"id\":4,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"models\":{},\"tools\":{}}}}}\n",
+          "doc-5.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":3,\"payload\":{\"type\":\"document\",\"id\":5,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"sessionId\":\"01a182af-0b9a-7133-b96e-a16ab491344d\"}}}}\n",
+          "doc-6.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":4,\"payload\":{\"type\":\"document\",\"id\":6,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{}}}}\n",
+          "main.jsonl": "{\"format\":1,\"type\":\"commit\",\"seq\":1,\"writes\":[{\"type\":\"conversation\",\"value\":{\"id\":1}},{\"type\":\"document.create\",\"record\":{\"id\":2,\"kind\":\"pi.live\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":1},\"history\":\"latest\",\"fork\":\"initial\"},\"ordinal\":0},{\"type\":\"document.create\",\"record\":{\"id\":3,\"kind\":\"pi.inbox\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":1},\"history\":\"latest\",\"fork\":\"initial\"},\"ordinal\":1},{\"type\":\"document.create\",\"record\":{\"id\":4,\"kind\":\"pi.usage\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":1},\"history\":\"latest\",\"fork\":\"initial\"},\"ordinal\":2},{\"type\":\"document.create\",\"record\":{\"id\":5,\"kind\":\"pi.provider\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":1},\"history\":\"latest\",\"fork\":\"initial\"},\"ordinal\":3},{\"type\":\"document.create\",\"record\":{\"id\":6,\"kind\":\"pi.agent\",\"scope\":{\"kind\":\"conversation\",\"conversationId\":1},\"history\":\"rewindable\",\"fork\":\"asOf\"},\"ordinal\":4}]}\n{\"format\":1,\"type\":\"commit\",\"seq\":2,\"writes\":[{\"type\":\"task.sidecar\",\"id\":7,\"ordinal\":0}]}\n",
+          "task-7.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":2,\"ordinal\":0,\"payload\":{\"type\":\"task\",\"value\":{\"id\":7,\"conversationId\":1,\"kind\":\"audit1085.work\",\"version\":1,\"input\":{},\"background\":false,\"abortRequested\":false,\"state\":{\"status\":\"pending\",\"checkpoint\":{\"phase\":\"start\",\"n\":7}}}}}\n"
+        },
+        "seen": [
+          {
+            "phase": "start",
+            "n": 7
+          }
+        ],
+        "state": {
+          "status": "terminal",
+          "outcome": {
+            "status": "completed",
+            "result": 17
+          }
+        }
+      }
+    }
+  ]
+}

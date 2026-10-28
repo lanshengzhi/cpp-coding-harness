@@ -75,6 +75,8 @@ ROUTES = (
     "excluded",
 )
 DRAFT_KINDS = ("prefactor", "behavior")
+# Primary and variant evidence families share a ticket: audit-<ticket>[-<variant>].
+AUDIT_FAMILY_PATTERN = r"audit-\d+(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?"
 
 
 class ConsolidationError(Exception):
@@ -412,7 +414,7 @@ def build_scenario_index(bundles: dict[str, dict[str, list[str]]]) -> dict[str, 
 
 
 def family_for_artifact(path: str, bundles: dict[str, dict[str, list[str]]]) -> tuple[str, str] | None:
-    match = re.search(r"fixtures/pi-v1\.3\.0/(audit-\d+)/([^/]+)$", path)
+    match = re.search(rf"fixtures/pi-v1\.3\.0/({AUDIT_FAMILY_PATTERN})/([^/]+)$", path)
     if not match:
         return None
     family, artifact = match.group(1), match.group(2)
@@ -1423,7 +1425,7 @@ def check_frontier(
         for prefix in draft.get("coverage", []):
             require(any(row_id.startswith(prefix) for row_id in row_ids), f"{draft['id']}: coverage prefix {prefix} matches no row")
         for capture in draft.get("evidence", {}).get("captures", []):
-            match = re.match(r"fixtures/pi-v1\.3\.0/(audit-\d+)/([^:]+): (.*)$", capture)
+            match = re.match(rf"fixtures/pi-v1\.3\.0/({AUDIT_FAMILY_PATTERN})/([^:]+): (.*)$", capture)
             require(match, f"{draft['id']}: capture is not a registered artifact scenario: {capture}")
             family, artifact, scenario = match.groups()
             names = bundles.get(family, {}).get(artifact)

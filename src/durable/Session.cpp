@@ -3,6 +3,10 @@
 #include <cch/durable/Storage.hpp>
 #include <cch/durable/Task.hpp>
 
+#include <cch/durable/detail/SessionLineAccess.hpp>
+
+#include "durable/SessionErrors.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -77,11 +81,9 @@ using DocumentCheckpointFn = std::move_only_function<bool(const chord::Json&, co
     return support::make_error(support::ErrorCode::Session, "Session is closed");
 }
 
-/// The frozen message of a Session that failed (frozen pi `SessionFailed`).
-[[nodiscard]] support::Error session_failed_error() {
-    return support::make_error(
-            support::ErrorCode::Session, "Session failed after a storage error; close and reopen it");
-}
+/// The frozen message of a Session that failed (frozen pi `SessionFailed`)
+/// lives header-inline in durable/SessionErrors.hpp so every durable TU seals
+/// with the same error.
 
 [[nodiscard]] support::Error validation_error(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
@@ -526,6 +528,23 @@ struct DocumentWatch::Impl {
 // ── Session ─────────────────────────────────────────────────────────────────
 
 struct Session::Impl {
+    /// Producer-side admission for a line read: the frozen failed/closed
+    /// rejection, then the FIFO enqueue, under the mutation line. Shared by
+    /// `read_committed` and the line-read seam.
+    void enqueue_read(std::move_only_function<support::Expected<chord::Json>(Storage&)> read,
+            support::AsyncCompletion<chord::Json, support::Error> completion) {
+        std::lock_guard lock(mutation_line);
+        if (failed) {
+            completion(std::unexpected(session_failed_error()));
+            return;
+        }
+        if (closed) {
+            completion(std::unexpected(session_closed_error()));
+            return;
+        }
+        enqueue_line(PendingRead{.read = std::move(read), .completion = std::move(completion)});
+    }
+
     // Harness callers, task workers and storage completions can enter from
     // different threads. Hold one mutation line across queue changes,
     // preparation, adoption and publication. Reentrancy lets observers enqueue
@@ -2315,34 +2334,36 @@ support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
     return {};
 }
 
-support::AsyncResult<chord::Json> Session::read_committed(
-        std::move_only_function<support::Expected<chord::Json>(Storage&)> read) {
-    std::lock_guard lock(impl_->mutation_line);
-    if (impl_->failed) {
-        return support::AsyncResult<chord::Json>{std::unexpected(session_failed_error())};
+std::optional<support::Error> Session::line_admission_error(Impl& impl) {
+    std::lock_guard lock(impl.mutation_line);
+    if (impl.failed) {
+        return session_failed_error();
     }
-    if (impl_->closed) {
-        return support::AsyncResult<chord::Json>{std::unexpected(session_closed_error())};
+    if (impl.closed) {
+        return session_closed_error();
+    }
+    return std::nullopt;
+}
+
+support::AsyncResult<chord::Json> Session::admit_line_read(
+        Impl& impl, std::move_only_function<support::Expected<chord::Json>(Storage&)> read) {
+    if (auto error = line_admission_error(impl)) {
+        return support::AsyncResult<chord::Json>{std::unexpected(*error)};
     }
     // The read joins the same FIFO line as commits: it runs after every job
     // admitted before it has settled, and a job admitted after it starts only
     // after its completion callback returns (frozen pi
     // `SessionImpl.readOnLine`).
     return support::AsyncResult<chord::Json>{support::AsyncProducer<chord::Json, support::Error>{
-            [session = this, read = std::move(read)](
+            [&impl, read = std::move(read)](
                     support::AsyncCompletion<chord::Json, support::Error> completion) mutable noexcept {
-                std::lock_guard lock(session->impl_->mutation_line);
-                if (session->impl_->failed) {
-                    completion(std::unexpected(session_failed_error()));
-                    return;
-                }
-                if (session->impl_->closed) {
-                    completion(std::unexpected(session_closed_error()));
-                    return;
-                }
-                session->impl_->enqueue_line(
-                        Session::Impl::PendingRead{.read = std::move(read), .completion = std::move(completion)});
+                impl.enqueue_read(std::move(read), std::move(completion));
             }}};
+}
+
+support::AsyncResult<chord::Json> Session::read_committed(
+        std::move_only_function<support::Expected<chord::Json>(Storage&)> read) {
+    return admit_line_read(*impl_, std::move(read));
 }
 
 support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
@@ -2460,6 +2481,34 @@ support::AsyncResult<std::optional<DocumentWatch>> Session::watch_doc(
     const std::string key = document_address_key(definition.kind(), address);
     impl_->watches[key].push_back(watch_impl);
     return support::AsyncResult<std::optional<DocumentWatch>>{std::optional<DocumentWatch>{DocumentWatch{watch_impl}}};
+}
+
+support::AsyncResult<void> detail::SessionLineAccess::read_on_line(
+        Session& session, std::move_only_function<support::Expected<void>(Storage&)> job) {
+    // The job is wrapped into the existing PendingRead variant and admitted
+    // through the same helper as Session::read_committed, so it uses the same
+    // FIFO queue, pump, failure rejection, close drain, and inline-when-idle
+    // completion path. The job runs on the mutation line; it must not call
+    // Session methods that take the line (see the header contract).
+    if (auto error = Session::line_admission_error(*session.impl_)) {
+        return support::AsyncResult<void>{std::unexpected(*error)};
+    }
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [&impl = *session.impl_, job = std::move(job)](
+                    support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                impl.enqueue_read(
+                        [job = std::move(job)](Storage& storage) mutable -> support::Expected<chord::Json> {
+                            auto outcome = job(storage);
+                            if (!outcome) return std::unexpected(outcome.error());
+                            return chord::Json(nullptr);
+                        },
+                        [completion = std::move(completion)](support::Expected<chord::Json> outcome) mutable noexcept {
+                            if (!outcome)
+                                completion(std::unexpected(outcome.error()));
+                            else
+                                completion(support::ExpectedVoid{});
+                        });
+            }}};
 }
 
 } // namespace cch::durable

@@ -26,6 +26,12 @@ namespace detail {
 /// and the Session; no public caller names it.
 struct DocumentDefinitionAccess;
 
+/// Internal mutation-line access for the Harness (issue #1165). A job
+/// admitted through this seam joins the same FIFO line as `read_committed`
+/// and commits and may observe caller-owned runtime state in addition to
+/// committed Storage state; that is why it is not public API.
+struct SessionLineAccess;
+
 /// Trusted construction for the built-in harness documents, whose kinds are
 /// compile-time constants and whose scope/history/fork combination is valid
 /// by construction (frozen pi `InboxDoc` / `LiveDoc` / `AgentDoc` /
@@ -689,7 +695,19 @@ public:
     [[nodiscard]] SessionEnd closed() const noexcept;
 
 private:
+    friend struct detail::SessionLineAccess;
+
     struct Impl;
+
+    /// Frozen failed/closed admission error for a line read, or nothing.
+    /// `read_committed` and `detail::SessionLineAccess::read_on_line` both
+    /// route through it so their admission cannot drift apart.
+    [[nodiscard]] static std::optional<support::Error> line_admission_error(Impl& impl);
+
+    /// Producer for a `read_committed` line read: the producer re-checks
+    /// admission under the mutation line and enqueues the FIFO job.
+    [[nodiscard]] static support::AsyncResult<chord::Json> admit_line_read(
+            Impl& impl, std::move_only_function<support::Expected<chord::Json>(Storage&)> read);
 
     friend class Transaction;
 

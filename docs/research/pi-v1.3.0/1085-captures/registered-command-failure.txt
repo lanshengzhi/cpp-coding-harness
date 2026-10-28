@@ -1,0 +1,8 @@
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/docs/research/pi-v1.3.0/capture-1085-harness.mts:58
+if (!bundle) throw new Error("supply a new evidence output directory");
+                   ^
+
+Error: supply a new evidence output directory
+    at <anonymous> (/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/docs/research/pi-v1.3.0/capture-1085-harness.mts:58:20)
+
+Node.js v26.12.1

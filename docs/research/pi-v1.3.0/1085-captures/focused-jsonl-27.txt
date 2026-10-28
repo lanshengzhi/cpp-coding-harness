@@ -1,0 +1,77 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+      Start 102: a failed C++ task marker recovers for frozen pi continuation
+      Start 191: the C++ Harness continues a pi-created JSONL task
+      Start 166: frozen pi continues a C++ created JSONL task
+      Start  68: a JSONL checkpoint replaces a current-only sidecar and retirement removes it
+ 1/27 Test  #68: a JSONL checkpoint replaces a current-only sidecar and retirement removes it .....................   Passed    0.02 sec
+      Start  19: JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail
+ 2/27 Test  #19: JSONL recovery truncates a torn main marker and an unconfirmed sidecar tail ......................   Passed    0.01 sec
+      Start  71: a JSONL store commits, closes and reopens the same records through the public storage contract
+ 3/27 Test  #71: a JSONL store commits, closes and reopens the same records through the public storage contract ...   Passed    0.01 sec
+      Start  20: JSONL refuses a main marker whose confirmed sidecar record is missing
+ 4/27 Test  #20: JSONL refuses a main marker whose confirmed sidecar record is missing ............................   Passed    0.01 sec
+      Start  69: a JSONL main-marker I/O failure poisons the store while reopen recovers the published prefix
+ 5/27 Test  #69: a JSONL main-marker I/O failure poisons the store while reopen recovers the published prefix .....   Passed    0.01 sec
+      Start  14: JSONL keeps pi.system.sections in written order across a reopen
+ 6/27 Test  #14: JSONL keeps pi.system.sections in written order across a reopen ..................................   Passed    0.01 sec
+      Start 130: a task commit rejects a sidecar that reappears after reclamation
+ 7/27 Test #130: a task commit rejects a sidecar that reappears after reclamation .................................   Passed    0.01 sec
+      Start  70: a JSONL marker failure leaves the sidecar unconfirmed and reopen discards it
+ 8/27 Test  #70: a JSONL marker failure leaves the sidecar unconfirmed and reopen discards it .....................   Passed    0.01 sec
+      Start 118: a reclaimed empty task sidecar allows a later task commit
+ 9/27 Test #118: a reclaimed empty task sidecar allows a later task commit ........................................   Passed    0.01 sec
+      Start  24: JSONL terminal reclamation leaves a substituted sidecar entry intact
+10/27 Test  #24: JSONL terminal reclamation leaves a substituted sidecar entry intact .............................   Passed    0.01 sec
+      Start  22: JSONL task update rejects a replaced sidecar identity
+11/27 Test  #22: JSONL task update rejects a replaced sidecar identity ............................................   Passed    0.01 sec
+      Start  23: JSONL terminal reclamation keeps an external sidecar through a replaced store directory
+12/27 Test  #23: JSONL terminal reclamation keeps an external sidecar through a replaced store directory ..........   Passed    0.01 sec
+      Start 132: a terminal then live task batch is rejected without publication
+13/27 Test #132: a terminal then live task batch is rejected without publication ..................................   Passed    0.01 sec
+      Start  21: JSONL task append rejects external file aliases
+14/27 Test  #21: JSONL task append rejects external file aliases ..................................................   Passed    0.01 sec
+      Start  16: JSONL recovery preserves a hard-linked external file
+15/27 Test  #16: JSONL recovery preserves a hard-linked external file .............................................   Passed    0.00 sec
+      Start 165: failed task sidecar reclamation leaves a published terminal result
+16/27 Test #165: failed task sidecar reclamation leaves a published terminal result ...............................   Passed    0.00 sec
+      Start  18: JSONL recovery tolerates a failed task sidecar reclamation
+17/27 Test  #18: JSONL recovery tolerates a failed task sidecar reclamation .......................................   Passed    0.00 sec
+      Start  15: JSONL recovery opens one task sidecar at a time
+18/27 Test  #15: JSONL recovery opens one task sidecar at a time ..................................................   Passed    0.01 sec
+      Start  17: JSONL recovery rejects a task sidecar symlink without changing its target
+19/27 Test  #17: JSONL recovery rejects a task sidecar symlink without changing its target ........................   Passed    0.01 sec
+      Start 112: a pi JSONL pending task is recovered from its sidecar
+20/27 Test #112: a pi JSONL pending task is recovered from its sidecar ............................................   Passed    0.01 sec
+      Start  67: a JSONL batch preserves ordered task updates and terminal reclamation
+21/27 Test  #67: a JSONL batch preserves ordered task updates and terminal reclamation ............................   Passed    0.01 sec
+      Start 190: terminal task publication reclaims its JSONL sidecar
+22/27 Test #190: terminal task publication reclaims its JSONL sidecar .............................................   Passed    0.01 sec
+      Start 145: an unconfirmed live task sidecar is discarded on JSONL reopen
+23/27 Test #145: an unconfirmed live task sidecar is discarded on JSONL reopen ....................................   Passed    0.01 sec
+      Start 106: a failed terminal marker preserves the live JSONL task on reopen
+24/27 Test #106: a failed terminal marker preserves the live JSONL task on reopen .................................   Passed    0.01 sec
+25/27 Test #166: frozen pi continues a C++ created JSONL task .....................................................   Passed    1.74 sec
+26/27 Test #102: a failed C++ task marker recovers for frozen pi continuation .....................................   Passed    2.62 sec
+27/27 Test #191: the C++ Harness continues a pi-created JSONL task ................................................   Passed    2.62 sec
+
+100% tests passed out of 27
+
+Label Time Summary:
+checkpoint    =   0.02 sec*proc (1 test)
+commit        =   0.01 sec*proc (1 test)
+corruption    =   0.01 sec*proc (1 test)
+durable       =   7.17 sec*proc (27 tests)
+issue1074     =   0.06 sec*proc (6 tests)
+issue1085     =   7.10 sec*proc (20 tests)
+issue1149     =   0.01 sec*proc (1 test)
+jsonl         =   7.17 sec*proc (27 tests)
+ordering      =   0.01 sec*proc (1 test)
+poison        =   0.01 sec*proc (2 tests)
+recovery      =   0.03 sec*proc (3 tests)
+reopen        =   0.01 sec*proc (1 test)
+retire        =   0.02 sec*proc (1 test)
+sidecar       =   0.01 sec*proc (1 test)
+spec          =   0.07 sec*proc (7 tests)
+torn          =   0.01 sec*proc (1 test)
+
+Total Test time (real) =   2.66 sec

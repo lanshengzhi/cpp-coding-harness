@@ -17,12 +17,14 @@ include_guard(GLOBAL)
         tests/durable/DocumentLifecycleTest.cpp
         tests/durable/SessionTransactionTest.cpp
         tests/durable/SessionReadOrderTest.cpp
+        tests/durable/SchedulerVisibilityTest.cpp
         tests/durable/SessionWatchTest.cpp
         tests/durable/SubmissionStorageTest.cpp
         tests/durable/TaskExecutionTest.cpp
         tests/durable/HarnessWorkflowTest.cpp
         tests/durable/HarnessSubmissionsTest.cpp
         tests/durable/HarnessOwnershipTest.cpp
+        tests/durable/HarnessFailureLifecycleTest.cpp
         tests/durable/HarnessObservationTest.cpp
 )
     target_include_directories(cch_tests_durable PRIVATE ${CCH_FORMAL_TEST_INCLUDE_DIRS})

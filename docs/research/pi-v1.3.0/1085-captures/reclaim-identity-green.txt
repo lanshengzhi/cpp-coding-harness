@@ -1,0 +1,18 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+    Start 15: JSONL recovery opens one task sidecar at a time
+    Start 22: JSONL terminal reclamation keeps an external sidecar through a replaced store directory
+    Start 21: JSONL task update rejects a replaced sidecar identity
+    Start 23: JSONL terminal reclamation leaves a substituted sidecar entry intact
+1/4 Test #22: JSONL terminal reclamation keeps an external sidecar through a replaced store directory ...   Passed    0.01 sec
+2/4 Test #15: JSONL recovery opens one task sidecar at a time ...........................................   Passed    0.01 sec
+3/4 Test #21: JSONL task update rejects a replaced sidecar identity .....................................   Passed    0.01 sec
+4/4 Test #23: JSONL terminal reclamation leaves a substituted sidecar entry intact ......................   Passed    0.01 sec
+
+100% tests passed out of 4
+
+Label Time Summary:
+durable      =   0.03 sec*proc (4 tests)
+issue1085    =   0.03 sec*proc (4 tests)
+jsonl        =   0.03 sec*proc (4 tests)
+
+Total Test time (real) =   0.02 sec

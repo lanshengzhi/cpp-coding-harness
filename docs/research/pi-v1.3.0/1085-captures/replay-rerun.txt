@@ -1,0 +1,21 @@
+The registered audit-1085-replay command re-executed from the repository root:
+
+NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH=/tmp/cch-1080-pi-frozen/tsconfig.json /tmp/cch-1080-pi-frozen/node_modules/.bin/tsx docs/research/pi-v1.3.0/capture-1085-replay.mts build/probe-1085-g build/evidence-1085-g
+
+exit 0; it wrote build/evidence-1085-g/harness.json. The registry pins captured bytes,
+so a rerun is not byte-identical; the differences below are the capture timestamp and the
+generated provider session UUID only.
+
+registered sha256 d29db7e5e2b934b7592aeae12708b9513da787ddcd2a8768937ae1683b76f7cb
+rerun      sha256 c22ff2d07e708c55d8b2d204de4376026adb3592dc7276313b4f31a04102cab4
+
+diff --git 1/fixtures/pi-v1.3.0/audit-1085-replay/harness.json 2/build/evidence-1085-g/harness.json
+index d42c04e89..370685f5f 100644
+--- 1/fixtures/pi-v1.3.0/audit-1085-replay/harness.json
++++ 2/build/evidence-1085-g/harness.json
+@@ -7 +7 @@
+-  "capturedAt": "2026-10-28T13:25:53.209Z",
++  "capturedAt": "2026-10-28T14:13:59.286Z",
+@@ -38 +38 @@
+-          "doc-5.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":3,\"payload\":{\"type\":\"document\",\"id\":5,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"sessionId\":\"01a182b0-47a8-7284-82cd-5a1dbb1fd404\"}}}}\n",
++          "doc-5.jsonl": "{\"format\":1,\"type\":\"record\",\"seq\":1,\"ordinal\":3,\"payload\":{\"type\":\"document\",\"id\":5,\"content\":{\"version\":1,\"kind\":\"base\",\"value\":{\"sessionId\":\"01a182dc-5165-7255-b3fd-45a59f667792\"}}}}\n",

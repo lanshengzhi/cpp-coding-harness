@@ -1,0 +1,56 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/build
+    Start 267: a held reservation settles after release: the phase starts and the identity cleans up
+1/7 Test #267: a held reservation settles after release: the phase starts and the identity cleans up .......   Passed    0.00 sec
+    Start 270: a phase that commits waiting while remaining active is reported running
+2/7 Test #270: a phase that commits waiting while remaining active is reported running .....................   Passed    0.00 sec
+    Start 276: a rejected reservation never starts its phase or reports running
+3/7 Test #276: a rejected reservation never starts its phase or reports running ............................   Passed    0.00 sec
+    Start 289: a terminal task is never derived running from a live or stale identity
+4/7 Test #289: a terminal task is never derived running from a live or stale identity ......................   Passed    0.50 sec
+    Start 290: a waiting task is not resumed to pending while its phase is still invoked
+5/7 Test #290: a waiting task is not resumed to pending while its phase is still invoked ...................***Failed    0.00 sec
+Filters: "a waiting task is not resumed to pending while its phase is still invoked"
+Randomness seeded to: 2168506994
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+a waiting task is not resumed to pending while its phase is still invoked
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:271
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:359: FAILED:
+  CHECK_FALSE( non_running_while_invoked.load() )
+with expansion:
+  !true
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 7 | 6 passed | 1 failed
+
+
+    Start 311: closing while a held reservation settles discards the identity and never starts the phase
+6/7 Test #311: closing while a held reservation settles discards the identity and never starts the phase ...   Passed   15.00 sec
+    Start 342: scheduler reservation is invisible to a read admitted before its commit
+7/7 Test #342: scheduler reservation is invisible to a read admitted before its commit .....................   Passed    4.00 sec
+
+86% tests passed, 1 tests failed out of 7
+
+Label Time Summary:
+close-race      =  15.00 sec*proc (1 test)
+durable         =  19.53 sec*proc (7 tests)
+held-release    =   0.00 sec*proc (1 test)
+identity        =   0.50 sec*proc (1 test)
+issue1165       =  19.53 sec*proc (7 tests)
+rejection       =   0.00 sec*proc (1 test)
+resume          =   0.00 sec*proc (1 test)
+waiting         =   0.00 sec*proc (1 test)
+
+Total Test time (real) =  19.66 sec
+
+The following tests FAILED:
+	290 - a waiting task is not resumed to pending while its phase is still invoked (Failed) durable issue1165 resume
+Errors while running CTest

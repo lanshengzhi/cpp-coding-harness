@@ -1,0 +1,21 @@
+Filters: [issue1166] [lock]
+Randomness seeded to: 1987169557
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+shutdown signals a stop callback without holding the scheduler mutex
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1166/tests/durable/HarnessFailureLifecycleTest.cpp:383
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1166/tests/durable/HarnessFailureLifecycleTest.cpp:452: FAILED:
+  CHECK_FALSE( timed_out.load() )
+with expansion:
+  !true
+
+===============================================================================
+test cases:  1 |  0 passed | 1 failed
+assertions: 11 | 10 passed | 1 failed
