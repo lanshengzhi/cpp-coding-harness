@@ -1,0 +1,81 @@
+UpdateCTestConfiguration  from :/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/DartConfiguration.tcl
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 15
+    Start 15: JSONL recovery preserves a hard-linked external file
+
+15: Test command: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build/cch_tests_durable "JSONL recovery preserves a hard-linked external file"
+15: Working Directory: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+15: Test timeout computed to be: 10000000
+15: Filters: "JSONL recovery preserves a hard-linked external file"
+15: Randomness seeded to: 1707775989
+15:
+15: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+15: cch_tests_durable is a Catch2 v3.15.3 host application.
+15: Run with -? for options
+15:
+15: -------------------------------------------------------------------------------
+15: JSONL recovery preserves a hard-linked external file
+15: -------------------------------------------------------------------------------
+15: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:433
+15: ...............................................................................
+15:
+15: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:442: FAILED:
+15:   CHECK( outside.read("user-data") == "complete\npartial" )
+15: with expansion:
+15:   "complete
+15:   "
+15:   ==
+15:   "complete
+15:   partial"
+15:
+15: ===============================================================================
+15: test cases: 1 | 1 failed
+15: assertions: 3 | 2 passed | 1 failed
+15:
+1/1 Test #15: JSONL recovery preserves a hard-linked external file ...***Failed    0.00 sec
+Filters: "JSONL recovery preserves a hard-linked external file"
+Randomness seeded to: 1707775989
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+JSONL recovery preserves a hard-linked external file
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:433
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:442: FAILED:
+  CHECK( outside.read("user-data") == "complete\npartial" )
+with expansion:
+  "complete
+  "
+  ==
+  "complete
+  partial"
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 3 | 2 passed | 1 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable      =   0.00 sec*proc (1 test)
+issue1085    =   0.00 sec*proc (1 test)
+jsonl        =   0.00 sec*proc (1 test)
+
+Total Test time (real) =   0.01 sec
+
+The following tests FAILED:
+	 15 - JSONL recovery preserves a hard-linked external file (Failed) durable issue1085 jsonl
+Errors while running CTest

@@ -417,6 +417,72 @@ class RegistrationTest(unittest.TestCase):
             self.assertEqual(replaced.returncode, 0, replaced.stderr)
             self.assertEqual(run(audit_root, "verify").returncode, 0)
 
+    def test_variant_family_registers_alongside_its_ticket_family(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build_fixture(root)
+            audit_root = root / "fixtures" / "pi-v1.3.0"
+            variant = f"{FAMILY}-replay"
+            shutil.copytree(audit_root / FAMILY, audit_root / variant)
+            manifest_path = audit_root / variant / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["family"] = variant
+            manifest["artifacts"][0]["family"] = variant
+            generator = audit_root / variant / "capture-fixture.mts"
+            generator_path = f"fixtures/pi-v1.3.0/{variant}/{generator.name}"
+            manifest["generator"]["path"] = generator_path
+            manifest["generator"]["sources"] = [
+                {"path": generator_path, "sha256": sha256_bytes(generator.read_bytes())}
+            ]
+            write_json(manifest_path, manifest)
+
+            primary_before = json.loads(
+                (audit_root / "baselines.json").read_text(encoding="utf-8")
+            )["baselines"][BASELINE]["bundles"][FAMILY]
+            registered = run(audit_root, "register", "--manifest", str(manifest_path))
+            self.assertEqual(registered.returncode, 0, registered.stderr)
+            registry = json.loads((audit_root / "baselines.json").read_text(encoding="utf-8"))
+            bundles = registry["baselines"][BASELINE]["bundles"]
+            self.assertIn(FAMILY, bundles)
+            self.assertIn(variant, bundles)
+            self.assertEqual(bundles[FAMILY], primary_before)
+            self.assertEqual(run(audit_root, "verify").returncode, 0)
+            read = run(audit_root, "read", "--family", variant, "--artifact", ARTIFACT)
+            self.assertEqual(read.returncode, 0, read.stderr)
+
+    def test_variant_family_requires_matching_manifest_ticket(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build_fixture(root)
+            audit_root = root / "fixtures" / "pi-v1.3.0"
+            variant = f"{FAMILY}-replay"
+            shutil.copytree(audit_root / FAMILY, audit_root / variant)
+            manifest_path = audit_root / variant / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["family"] = variant
+            manifest["artifacts"][0]["family"] = variant
+            manifest["ticket"] = "9999"
+            write_json(manifest_path, manifest)
+            result = run(audit_root, "check", "--manifest", str(manifest_path))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("ticket does not match family", result.stderr)
+
+    def test_malformed_family_variant_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            build_fixture(root)
+            audit_root = root / "fixtures" / "pi-v1.3.0"
+            malformed = f"{FAMILY}_replay"
+            shutil.copytree(audit_root / FAMILY, audit_root / malformed)
+            manifest_path = audit_root / malformed / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["family"] = malformed
+            manifest["artifacts"][0]["family"] = malformed
+            write_json(manifest_path, manifest)
+            result = run(audit_root, "check", "--manifest", str(manifest_path))
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("invalid audit family", result.stderr)
+
     def test_registration_refuses_an_unverified_bundle(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

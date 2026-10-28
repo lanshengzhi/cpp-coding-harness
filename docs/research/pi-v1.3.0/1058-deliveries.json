@@ -174,11 +174,11 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
-          "sha256": "0dcfafab3886be24770f05b45204e916a370b7a041649e0b6777d8e4be378954"
+          "sha256": "983dc1e522eb3dd51d7128964b7b0316754e87f8d3ba26e567a6c5685f4e8477"
         },
         {
           "path": "scripts/evidence/audit_evidence.py",
-          "sha256": "9c82173bf333e0afe1e8e33b7a653b24e4c33d57e3f55df543883aca84c1ee90"
+          "sha256": "b4597a28d11f8b2aa01234baf51306b5639086438cd3607960e17c733b6fff54"
         },
         {
           "path": "tests/Catch2Main.cpp",
@@ -227,14 +227,14 @@
           "issue1101",
           "--output-on-failure",
           "--output-junit",
-          "/tmp/cch-1103-final-1101.xml"
+          "/tmp/cch-1085-revalidation-1101.xml"
         ],
-        "testedRevision": "d6949f261a43ebfc5eb03700465cb005a2dfdad0",
-        "recordedAt": "2026-10-28T03:28:24Z",
+        "testedRevision": "875099ba918384744a5e88cf1eff7e19cf7b1dbf",
+        "recordedAt": "2026-10-28T14:38:36Z",
         "selected": 14,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1103-final-revalidation-1101.xml",
-          "sha256": "401918b30f7e9654073f639a137f681c7065de9b4df71808330e7fc0acf1b863"
+          "path": "docs/research/pi-v1.3.0/deliveries/1085-revalidation-1101.xml",
+          "sha256": "ac6037f30160895143c7e7fa5b57157cea93eeaa102e2e355f288e189d46226c"
         }
       },
       "rows": [

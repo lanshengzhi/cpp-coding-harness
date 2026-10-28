@@ -1,0 +1,52 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+    Start 130: a task commit rejects a sidecar that reappears after reclamation
+1/1 Test #130: a task commit rejects a sidecar that reappears after reclamation ...***Failed    0.00 sec
+Filters: "a task commit rejects a sidecar that reappears after reclamation"
+Randomness seeded to: 3423567664
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+a task commit rejects a sidecar that reappears after reclamation
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:743
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:766: FAILED:
+  CHECK_FALSE( consume((*storage)->commit(writes)).has_value() )
+with expansion:
+  !true
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:767: FAILED:
+  CHECK( store.read("task-2.jsonl") == "external\n" )
+with expansion:
+  "external
+  {"format":1,"type":"record","seq":1,"ordinal":0,"payload":{"type":"task",
+  "value":{"id":2,"conversationId":0,"kind":"work","version":1,"input":null,
+  "background":false,"abortRequested":false,"state":{"status":"pending",
+  "checkpoint":{"phase":"start"}}}}}
+  "
+  ==
+  "external
+  "
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 8 | 6 passed | 2 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable      =   0.00 sec*proc (1 test)
+issue1085    =   0.00 sec*proc (1 test)
+jsonl        =   0.00 sec*proc (1 test)
+
+Total Test time (real) =   0.04 sec
+
+The following tests FAILED:
+	130 - a task commit rejects a sidecar that reappears after reclamation (Failed) durable issue1085 jsonl
+Errors while running CTest

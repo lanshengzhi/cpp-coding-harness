@@ -1,0 +1,105 @@
+UpdateCTestConfiguration  from :/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/DartConfiguration.tcl
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+Constructing a list of tests
+Done constructing a list of tests
+Updating test list for fixtures
+Added 0 tests to meet fixture requirements
+Checking test dependency graph...
+Checking test dependency graph end
+test 150
+    Start 150: frozen pi continues a C++ created JSONL task
+
+150: Test command: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build/cch_tests_durable "frozen pi continues a C++ created JSONL task"
+150: Working Directory: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+150: Test timeout computed to be: 10000000
+150: Filters: "frozen pi continues a C++ created JSONL task"
+150: Randomness seeded to: 4163202767
+150: /tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:144
+150: 				throw new JsonlCorruptionError(`Invalid terminal task write in ${description}`);
+150: 				      ^
+150:
+150: JsonlCorruptionError: Invalid terminal task write in main.jsonl line 1
+150:     at validateMainOperation (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:144:11)
+150:     at <anonymous> (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:192:39)
+150:     at Array.map (<anonymous>)
+150:     at parseMainMarker (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:192:24)
+150:     at <anonymous> (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:540:4)
+150:     at JsonlStorage.readLines (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:819:24)
+150:     at async JsonlStorage.recover (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:539:16)
+150:     at async JsonlStorage.open (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:274:3)
+150:     at async <anonymous> (/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/docs/research/pi-v1.3.0/continue-1085-harness.mts:17:17)
+150:
+150: Node.js v26.12.1
+150:
+150: ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+150: cch_tests_durable is a Catch2 v3.15.3 host application.
+150: Run with -? for options
+150:
+150: -------------------------------------------------------------------------------
+150: frozen pi continues a C++ created JSONL task
+150: -------------------------------------------------------------------------------
+150: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:275
+150: ...............................................................................
+150:
+150: /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:287: FAILED:
+150:   CHECK( std::system(command.c_str()) == 0 )
+150: with expansion:
+150:   256 (0x100) == 0
+150:
+150: ===============================================================================
+150: test cases: 1 | 1 failed
+150: assertions: 4 | 3 passed | 1 failed
+150:
+1/1 Test #150: frozen pi continues a C++ created JSONL task ...***Failed    1.78 sec
+Filters: "frozen pi continues a C++ created JSONL task"
+Randomness seeded to: 4163202767
+/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:144
+				throw new JsonlCorruptionError(`Invalid terminal task write in ${description}`);
+				      ^
+
+JsonlCorruptionError: Invalid terminal task write in main.jsonl line 1
+    at validateMainOperation (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:144:11)
+    at <anonymous> (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:192:39)
+    at Array.map (<anonymous>)
+    at parseMainMarker (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:192:24)
+    at <anonymous> (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:540:4)
+    at JsonlStorage.readLines (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:819:24)
+    at async JsonlStorage.recover (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:539:16)
+    at async JsonlStorage.open (/tmp/cch-1080-pi-frozen/packages/durable/src/storage/jsonl/storage.ts:274:3)
+    at async <anonymous> (/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/docs/research/pi-v1.3.0/continue-1085-harness.mts:17:17)
+
+Node.js v26.12.1
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+frozen pi continues a C++ created JSONL task
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:275
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:287: FAILED:
+  CHECK( std::system(command.c_str()) == 0 )
+with expansion:
+  256 (0x100) == 0
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 4 | 3 passed | 1 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable      =   1.78 sec*proc (1 test)
+issue1085    =   1.78 sec*proc (1 test)
+jsonl        =   1.78 sec*proc (1 test)
+
+Total Test time (real) =   1.79 sec
+
+The following tests FAILED:
+	150 - frozen pi continues a C++ created JSONL task (Failed) durable issue1085 jsonl
+Errors while running CTest

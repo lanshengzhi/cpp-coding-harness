@@ -1,0 +1,148 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+    Start 23: JSONL terminal reclamation leaves a substituted sidecar entry intact
+    Start 15: JSONL recovery opens one task sidecar at a time
+    Start 21: JSONL task update rejects a replaced sidecar identity
+    Start 22: JSONL terminal reclamation keeps an external sidecar through a replaced store directory
+1/4 Test #21: JSONL task update rejects a replaced sidecar identity .....................................***Failed    0.00 sec
+Filters: "JSONL task update rejects a replaced sidecar identity"
+Randomness seeded to: 1013865632
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+JSONL task update rejects a replaced sidecar identity
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:565
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:583: FAILED:
+  REQUIRE_FALSE( result.has_value() )
+with expansion:
+  !true
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 4 | 3 passed | 1 failed
+
+
+2/4 Test #23: JSONL terminal reclamation leaves a substituted sidecar entry intact ......................***Failed    0.01 sec
+Filters: "JSONL terminal reclamation leaves a substituted sidecar entry intact"
+Randomness seeded to: 554568280
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+JSONL terminal reclamation leaves a substituted sidecar entry intact
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:527
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:560: FAILED:
+  CHECK( std::filesystem::exists(store.path() / "task-2.jsonl", error) )
+with expansion:
+  false
+
+-------------------------------------------------------------------------------
+JSONL terminal reclamation leaves a substituted sidecar entry intact
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:527
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:560: FAILED:
+  CHECK( std::filesystem::exists(store.path() / "task-2.jsonl", error) )
+with expansion:
+  false
+
+-------------------------------------------------------------------------------
+JSONL terminal reclamation leaves a substituted sidecar entry intact
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:527
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:560: FAILED:
+  CHECK( std::filesystem::exists(store.path() / "task-2.jsonl", error) )
+with expansion:
+  false
+
+===============================================================================
+test cases:  1 |  0 passed | 1 failed
+assertions: 30 | 27 passed | 3 failed
+
+
+3/4 Test #22: JSONL terminal reclamation keeps an external sidecar through a replaced store directory ...***Failed    0.01 sec
+Filters: "JSONL terminal reclamation keeps an external sidecar through a replaced store directory"
+Randomness seeded to: 964626199
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+JSONL terminal reclamation keeps an external sidecar through a replaced store
+directory
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:485
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:519: FAILED:
+  CHECK( workspace.read("external/task-2.jsonl") == "outside\n" )
+with expansion:
+  ""
+  ==
+  "outside
+  "
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:520: FAILED:
+  CHECK_FALSE( std::filesystem::exists(moved / "task-2.jsonl", error) )
+with expansion:
+  !true
+
+===============================================================================
+test cases:  1 |  0 passed | 1 failed
+assertions: 14 | 12 passed | 2 failed
+
+
+4/4 Test #15: JSONL recovery opens one task sidecar at a time ...........................................***Failed    0.01 sec
+Filters: "JSONL recovery opens one task sidecar at a time"
+Randomness seeded to: 2439313902
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+JSONL recovery opens one task sidecar at a time
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:602
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/tests/durable/JsonlStorageTest.cpp:625: FAILED:
+  REQUIRE( storage )
+with expansion:
+  {?}
+
+===============================================================================
+test cases:  1 |  0 passed | 1 failed
+assertions: 67 | 66 passed | 1 failed
+
+
+
+0% tests passed, 4 tests failed out of 4
+
+Label Time Summary:
+durable      =   0.02 sec*proc (4 tests)
+issue1085    =   0.02 sec*proc (4 tests)
+jsonl        =   0.02 sec*proc (4 tests)
+
+Total Test time (real) =   0.02 sec
+
+The following tests FAILED:
+	 15 - JSONL recovery opens one task sidecar at a time (Failed) durable issue1085 jsonl
+	 21 - JSONL task update rejects a replaced sidecar identity (Failed) durable issue1085 jsonl
+	 22 - JSONL terminal reclamation keeps an external sidecar through a replaced store directory (Failed) durable issue1085 jsonl
+	 23 - JSONL terminal reclamation leaves a substituted sidecar entry intact (Failed) durable issue1085 jsonl
+Errors while running CTest

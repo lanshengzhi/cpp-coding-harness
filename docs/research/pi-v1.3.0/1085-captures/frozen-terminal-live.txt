@@ -1,0 +1,3 @@
+commit 1
+task {"id":2,"conversationId":1,"kind":"work","version":1,"input":{},"background":false,"abortRequested":false,"state":{"status":"pending","checkpoint":{"phase":"again"}}}
+reopen {"id":2,"conversationId":1,"kind":"work","version":1,"input":{},"background":false,"abortRequested":false,"state":{"status":"pending","checkpoint":{"phase":"again"}}}

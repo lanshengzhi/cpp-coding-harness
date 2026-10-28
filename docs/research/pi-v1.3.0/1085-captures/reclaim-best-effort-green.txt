@@ -1,0 +1,12 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+    Start 18: JSONL recovery tolerates a failed task sidecar reclamation
+1/1 Test #18: JSONL recovery tolerates a failed task sidecar reclamation ...   Passed    0.00 sec
+
+100% tests passed out of 1
+
+Label Time Summary:
+durable      =   0.00 sec*proc (1 test)
+issue1085    =   0.00 sec*proc (1 test)
+jsonl        =   0.00 sec*proc (1 test)
+
+Total Test time (real) =   0.04 sec
