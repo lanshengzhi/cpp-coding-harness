@@ -529,15 +529,27 @@ struct Session::Impl {
     // Harness callers, task workers and storage completions can enter from
     // different threads. Hold one mutation line across queue changes,
     // preparation, adoption and publication. Reentrancy lets observers enqueue
-    // their next commit on this same line; commit_active preserves FIFO order
-    // while asynchronous storage is outstanding. No thread or scheduler is
-    // owned here, and the lock is not held across an asynchronous wait.
+    // their next job on this same line; line_active preserves FIFO order while
+    // an admitted job's asynchronous storage settlement is outstanding. No
+    // thread or scheduler is owned here, and the lock is not held across an
+    // asynchronous wait.
     mutable std::recursive_mutex mutation_line;
 
     struct PendingCommit {
         std::move_only_function<support::Expected<void>(Transaction&)> change{};
         support::AsyncCompletion<void, support::Error> completion{};
     };
+
+    /// One admitted committed read whose turn on the line has not come yet
+    /// (frozen pi `SessionImpl.readOnLine`).
+    struct PendingRead {
+        std::move_only_function<support::Expected<chord::Json>(Storage&)> read{};
+        support::AsyncCompletion<chord::Json, support::Error> completion{};
+    };
+
+    /// One line job waiting behind the active one: a commit or a committed
+    /// read, kept in one FIFO queue so no admitted job overtakes another.
+    using PendingLineJob = std::variant<PendingCommit, PendingRead>;
 
     /// One admitted commit whose batch the storage has not settled yet. The
     /// prepared documents stay alive until the settlement, and the committed
@@ -765,12 +777,12 @@ struct Session::Impl {
     bool close_notified{false};
     bool storage_closed{false};
     bool failed{false};
-    bool commit_active{false};
+    bool line_active{false};
     bool pumping_commits{false};
     bool close_finishing{false};
     bool pump_requested{false};
     std::optional<std::string> failure_message{};
-    std::deque<PendingCommit> pending_commits{};
+    std::deque<PendingLineJob> pending_line{};
     std::vector<support::AsyncCompletion<void, support::Error>> close_completions{};
     std::vector<CommitListener> commit_listeners{};
     std::vector<CloseListener> close_listeners{};
@@ -783,8 +795,8 @@ struct Session::Impl {
     [[nodiscard]] support::Error failure_error() const { return session_failed_error(); }
 
     /// Fail the Session: the failure is final, the close listeners run, and
-    /// the queued commits are rejected in admission order once the committing
-    /// callback has settled.
+    /// the queued line jobs are rejected in admission order once the failing
+    /// job's own completion has been delivered.
     void fail(support::Error error) {
         if (failed) {
             return;
@@ -795,12 +807,14 @@ struct Session::Impl {
         notify_close();
     }
 
-    /// Reject every commit still queued when the Session failed.
-    void reject_pending_commits(const support::Error& error) {
-        while (!pending_commits.empty()) {
-            PendingCommit pending = std::move(pending_commits.front());
-            pending_commits.pop_front();
-            pending.completion(std::unexpected(error));
+    /// Reject every line job still queued when the Session failed. A queued
+    /// read is rejected without running its callback (frozen pi
+    /// `SessionImpl.readOnLine`'s `#assertHealthy`).
+    void reject_pending_line(const support::Error& error) {
+        while (!pending_line.empty()) {
+            PendingLineJob pending = std::move(pending_line.front());
+            pending_line.pop_front();
+            std::visit([&error](auto& job) { job.completion(std::unexpected(error)); }, pending);
         }
     }
 
@@ -808,9 +822,9 @@ struct Session::Impl {
     [[nodiscard]] support::AsyncResult<void> commit_now(
             std::move_only_function<support::Expected<void>(Transaction&)> change);
 
-    /// Close Storage after every admitted commit settles.
+    /// Close Storage after every admitted line job settles.
     void finish_close_if_ready() {
-        if (!closed || close_finishing || pumping_commits || commit_active || !pending_commits.empty()) {
+        if (!closed || close_finishing || pumping_commits || line_active || !pending_line.empty()) {
             return;
         }
         close_finishing = true;
@@ -822,9 +836,9 @@ struct Session::Impl {
         }
     }
 
-    /// Run queued transactions in FIFO order, without recursing when Storage
+    /// Run queued line jobs in FIFO order, without recursing when a job
     /// settles synchronously.
-    void run_next_commit() {
+    void pump_line() {
         if (pumping_commits) {
             pump_requested = true;
             return;
@@ -832,42 +846,62 @@ struct Session::Impl {
         pumping_commits = true;
         do {
             pump_requested = false;
-            if (commit_active || pending_commits.empty()) {
+            if (line_active || pending_line.empty()) {
                 break;
             }
             if (failed) {
-                // Reject in admission order, after the failing commit's own
+                // Reject in admission order, after the failing job's own
                 // completion was delivered.
-                reject_pending_commits(failure_error());
+                reject_pending_line(failure_error());
                 break;
             }
-            commit_active = true;
-            PendingCommit pending = std::move(pending_commits.front());
-            pending_commits.pop_front();
-            std::move(commit_now(std::move(pending.change)))
-                    .start([this, completion = std::move(pending.completion)](
-                                   std::expected<void, support::Error> outcome) mutable noexcept {
-                        std::lock_guard lock(mutation_line);
-                        completion(std::move(outcome));
-                        commit_active = false;
-                        pump_requested = true;
-                        if (!pumping_commits) {
-                            run_next_commit();
-                        }
-                        finish_close_if_ready();
-                    });
-        } while (pump_requested && !commit_active);
+            line_active = true;
+            PendingLineJob pending = std::move(pending_line.front());
+            pending_line.pop_front();
+            std::visit([this](auto&& job) { start_line_job(std::move(job)); }, std::move(pending));
+        } while (pump_requested && !line_active);
         pumping_commits = false;
         if (failed) {
-            reject_pending_commits(failure_error());
+            reject_pending_line(failure_error());
         }
         finish_close_if_ready();
     }
 
-    /// Admit one transaction to the serialized Session line.
-    void enqueue_commit(PendingCommit pending) {
-        pending_commits.push_back(std::move(pending));
-        run_next_commit();
+    /// Admit one job to the serialized Session line.
+    void enqueue_line(PendingLineJob pending) {
+        pending_line.push_back(std::move(pending));
+        pump_line();
+    }
+
+    /// Start one admitted commit: run its transaction and settle its batch,
+    /// then deliver its completion and advance the line from the settlement
+    /// callback, wherever that runs.
+    void start_line_job(PendingCommit pending) {
+        std::move(commit_now(std::move(pending.change)))
+                .start([this, completion = std::move(pending.completion)](
+                               std::expected<void, support::Error> outcome) mutable noexcept {
+                    std::lock_guard lock(mutation_line);
+                    completion(std::move(outcome));
+                    line_active = false;
+                    pump_requested = true;
+                    if (!pumping_commits) {
+                        pump_line();
+                    }
+                    finish_close_if_ready();
+                });
+    }
+
+    /// Run one admitted committed read (frozen pi `SessionImpl.readOnLine`):
+    /// every commit and read admitted before it has settled, so the callback
+    /// observes committed state only, and no publication of a later commit can
+    /// interleave. The callback's own error rejects the read without failing
+    /// the Session, like the committed-read error propagation of the snapshot
+    /// family.
+    void start_line_job(PendingRead pending) {
+        support::Expected<chord::Json> outcome = pending.read(*storage);
+        pending.completion(std::move(outcome));
+        line_active = false;
+        pump_requested = true;
     }
 
     /// Run the close listeners once.
@@ -2031,7 +2065,7 @@ support::AsyncResult<void> Session::commit(std::move_only_function<support::Expe
                     completion(std::unexpected(session_closed_error()));
                     return;
                 }
-                session->impl_->enqueue_commit(
+                session->impl_->enqueue_line(
                         Session::Impl::PendingCommit{.change = std::move(change), .completion = std::move(completion)});
             }}};
 }
@@ -2242,7 +2276,7 @@ support::AsyncResult<void> Session::close() {
     std::lock_guard lock(impl_->mutation_line);
     impl_->closed = true;
     impl_->notify_close();
-    impl_->run_next_commit();
+    impl_->pump_line();
     impl_->finish_close_if_ready();
     if (impl_->storage_closed) {
         return support::AsyncResult<void>{support::ExpectedVoid{}};
@@ -2277,6 +2311,36 @@ support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
     }
     impl_->close_listeners.push_back(std::move(listener));
     return {};
+}
+
+support::AsyncResult<chord::Json> Session::read_committed(
+        std::move_only_function<support::Expected<chord::Json>(Storage&)> read) {
+    std::lock_guard lock(impl_->mutation_line);
+    if (impl_->failed) {
+        return support::AsyncResult<chord::Json>{std::unexpected(session_failed_error())};
+    }
+    if (impl_->closed) {
+        return support::AsyncResult<chord::Json>{std::unexpected(session_closed_error())};
+    }
+    // The read joins the same FIFO line as commits: it runs after every job
+    // admitted before it has settled, and a job admitted after it starts only
+    // after its completion callback returns (frozen pi
+    // `SessionImpl.readOnLine`).
+    return support::AsyncResult<chord::Json>{support::AsyncProducer<chord::Json, support::Error>{
+            [session = this, read = std::move(read)](
+                    support::AsyncCompletion<chord::Json, support::Error> completion) mutable noexcept {
+                std::lock_guard lock(session->impl_->mutation_line);
+                if (session->impl_->failed) {
+                    completion(std::unexpected(session_failed_error()));
+                    return;
+                }
+                if (session->impl_->closed) {
+                    completion(std::unexpected(session_closed_error()));
+                    return;
+                }
+                session->impl_->enqueue_line(
+                        Session::Impl::PendingRead{.read = std::move(read), .completion = std::move(completion)});
+            }}};
 }
 
 support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
