@@ -57,7 +57,11 @@ built successfully and selected 3,931 tests: 3,930 passed, 0 failed, 1 skipped
 `/tmp/cch-1088-full2-ctest.log`. The earlier failure is retained above; it was
 not a flaky rerun.
 
-Merge and merged-tree focused results are recorded after integration.
+Merged into `main` as `18e0fcfcc` (merge result build passed). Merged-tree
+focused checks: `issue1088` 22/22, `issue1165` 15/15, `issue1063` 16/16,
+frozen 5/5, durable 228/228 CTest-selected (three internal skips), consolidation
+2/2, and architecture 43/43. Logs are
+`/tmp/cch-1088-merged-{issue1088,issue1165,issue1063,frozen,durable,consolidation,architecture}.log`.
 
 ## Capability status
 
