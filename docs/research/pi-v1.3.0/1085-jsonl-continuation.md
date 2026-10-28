@@ -1,0 +1,25 @@
+# Issue 1085 JSONL continuation
+
+## Scope
+
+The tests exercise pi-v1.3.0 at `71023aec1546d6d677a65669c5665c0927ce0dd0` and the C++ Durable Harness over JSONL, using public Harness and transaction operations. The frozen checkout is supplied via `PI_CHECKOUT`; the live tests skip when it is absent and validate its clean revision before execution. No third-party plugins run.
+
+## Observations and delivered behavior
+
+Both directions create an unfinished task, queued input submission, and rewindable conversation document in the first runtime, close it, run the same task ID in the second runtime to checkpoint `finish/8`, close, and complete it in the third runtime with result 17. The middle runtime settles the original submission as unanswered with reason `aborted`. The document changes from `n=1` to `n=2` to `n=3`; the last C++ reopen reads current and historical values and the settled submission. In the pi→C++→pi case, pi also reads the original submission ID, request ID, status and reason before completion. Main marker sequences 1–7 and the intermediate task sidecar transitions are checked in that direction; C++→pi→C++ selects the pi document revision by its recorded sequence for historical reads.
+
+Task sidecars are written before their main marker and confirmed by file, sequence and ordinal. Terminal records are inline and their task sidecars are reclaimed only after publication, on a best-effort basis. Recovery rejects missing or mismatched confirmed sidecars, discards an unconfirmed tail, and accepts missing historical task sidecars when a terminal marker supersedes them. One batch with two live updates preserves their ordinal order, and a subsequent live-to-terminal batch reopens terminal after reclamation.
+
+A cross-runtime failure test saves the pi-created main and task sidecar, injects a real C++ main-marker append failure by replacing the main path with a directory, and observes a poisoned store and a longer unconfirmed sidecar. After restoring the original main bytes, C++ reopen truncates that tail and recovers the original pending checkpoint; pi then resumes the same task, and C++ reopens its advanced checkpoint. This is a controlled I/O failure, not a physical crash test. Separate tests check terminal-marker failure and recovery, and terminal reclamation. A failure of reclamation itself has not been injected.
+
+The original registered capture has a reproducibility defect: its recorded command omits a required output-directory argument. Integrity verification succeeds but does not execute this command. The original bytes and pin are preserved; [capture notes](1085-captures/README.md) retain the failure, independent captures and normalization rule. The corrected replay candidate is unregistered because the registry currently permits only one `audit-<ticket>` family per ticket; it is not evidence that the original command can be replayed.
+
+## Validation
+
+Focused JSONL selection after formatting: 15 selected, 15 passed, 0 failed, 0 skipped, with frozen `PI_CHECKOUT` and a 30-second process timeout. The owning shard built under the default strict no-exception preset and the build-phase architecture gate passed. `scripts/format-check.sh 15fd435565a3c0e5d898a2460699c2eafa806b72` passed. Registry integrity verification passed 36 bundles, 91 artifacts and 516 scenarios; it does not validate capture reproducibility or the C++ behavior.
+
+Initial discriminating failures included frozen pi rejecting a C++ inline pending task and C++ rejecting pi's `task.sidecar` marker; each passed after the corresponding sidecar changes. A [sequence-probe failure](1085-captures/sequence-probe-failure.txt) caused by an incorrect test expectation and its [corrected pass](1085-captures/sequence-probe-pass.txt) are retained; the former is not product RED evidence. Full Validation and independent review remain outstanding at the time of this record.
+
+## Remaining boundary
+
+No claim is made for fsync failure, power loss, or multiple processes. These tests do not establish a capability beyond the exercised JSONL continuation slice; no capability status is promoted here.

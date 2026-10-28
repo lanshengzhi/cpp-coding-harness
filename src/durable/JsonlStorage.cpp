@@ -153,9 +153,19 @@ constexpr std::string_view kClosedMessage = "JSONL storage is closed";
     return DocumentId{.value = value};
 }
 
+[[nodiscard]] std::optional<TaskId> task_id_from_file(std::string_view name) {
+    if (!name.starts_with("task-")) return std::nullopt;
+    const auto id = document_id_from_file(std::string{"doc-"} + std::string{name.substr(5)});
+    if (!id) return std::nullopt;
+    return TaskId{.value = id->value};
+}
+
+[[nodiscard]] std::string task_file(TaskId id) { return "task-" + std::to_string(id.value) + ".jsonl"; }
+
 [[nodiscard]] bool is_reclaim_file(std::string_view name) {
-    return name.ends_with(kReclaimSuffix) &&
-           document_id_from_file(name.substr(0, name.size() - kReclaimSuffix.size())).has_value();
+    if (!name.ends_with(kReclaimSuffix)) return false;
+    const auto base = name.substr(0, name.size() - kReclaimSuffix.size());
+    return document_id_from_file(base).has_value() || task_id_from_file(base).has_value();
 }
 
 [[nodiscard]] std::string sidecar_key(std::string_view file, Seq seq, std::int64_t ordinal) {
@@ -322,6 +332,7 @@ struct DocumentContent {
 struct SidecarPayload {
     DocumentId id{};
     DocumentContent content{};
+    std::optional<TaskRecord> task{};
 };
 
 struct SidecarRecord {
@@ -339,6 +350,7 @@ enum class MainKind {
     Conversation,
     Entry,
     Task,
+    TaskSidecar,
     Submission,
     DocumentCreate,
     DocumentCopy,
@@ -351,6 +363,7 @@ struct MainOperation {
     ConversationRecord conversation{};
     EntryRecord entry{};
     TaskRecord task{};
+    TaskId task_id{};
     SubmissionRecord submission{};
     DocumentRecord document_record{};
     DocumentCopySource document_copy_source{};
@@ -418,11 +431,23 @@ struct MainMarker {
     const auto seq = support::json_integer_member(*root, "seq");
     const auto ordinal = support::json_integer_member(*root, "ordinal");
     const auto* payload = support::json_object_member(*root, "payload");
-    if (!seq || *seq < 1 || !ordinal || *ordinal < 0 || !payload ||
-            support::json_string_member(*payload, "type") != std::optional<std::string_view>{"document"}) {
+    if (!seq || *seq < 1 || !ordinal || *ordinal < 0 || !payload) {
         return std::unexpected(
                 corruption("Invalid sidecar record in " + std::string{file} + " line " + std::to_string(line)));
     }
+    const auto type = support::json_string_member(*payload, "type");
+    if (type == std::optional<std::string_view>{"task"}) {
+        const auto* value = support::json_member(*payload, "value");
+        if (value == nullptr) return std::unexpected(corruption("Invalid live task record in " + std::string{file}));
+        auto json = chord::Json::from_support(*value);
+        if (!json) return std::unexpected(std::move(json.error()));
+        auto task = decode_task_record(*json);
+        if (!task || task->state.status == "terminal")
+            return std::unexpected(corruption("Invalid live task record in " + std::string{file}));
+        return SidecarRecord{.seq = *seq, .ordinal = *ordinal, .payload = SidecarPayload{.task = std::move(*task)}};
+    }
+    if (type != std::optional<std::string_view>{"document"})
+        return std::unexpected(corruption("Invalid sidecar record in " + std::string{file}));
     const auto id = support::json_integer_member(*payload, "id");
     const auto* content = support::json_member(*payload, "content");
     if (!id || content == nullptr) {
@@ -638,6 +663,13 @@ struct MainMarker {
         }
         return MainOperation{.kind = MainKind::Task, .task = std::move(*decoded)};
     }
+    if (*type == "task.sidecar") {
+        const auto id = support::json_integer_member(*operation, "id");
+        const auto ordinal = support::json_integer_member(*operation, "ordinal");
+        if (!id || *id < 0 || !ordinal || *ordinal < 0)
+            return std::unexpected(corruption("Invalid task sidecar write in " + std::string{description}));
+        return MainOperation{.kind = MainKind::TaskSidecar, .task_id = TaskId{.value = *id}, .ordinal = *ordinal};
+    }
     if (*type == "submission") {
         const auto* record = support::json_member(*operation, "value");
         if (record == nullptr) {
@@ -744,6 +776,16 @@ struct MainMarker {
 }
 
 [[nodiscard]] std::string sidecar_line(const SidecarRecord& record) {
+    if (record.payload.task) {
+        auto text = support::write_json(object({{"format", support::JsonValue{1}},
+                {"type", support::JsonValue{"record"}},
+                {"seq", number(record.seq)},
+                {"ordinal", number(record.ordinal)},
+                {"payload",
+                        object({{"type", support::JsonValue{"task"}},
+                                {"value", encode_task_record(*record.payload.task).to_support()}})}}));
+        return text ? *text : std::string{};
+    }
     const support::JsonValue value = object({
             {"format", support::JsonValue{1}},
             {"type", support::JsonValue{"record"}},
@@ -814,11 +856,17 @@ struct EncodedCommit {
             main_writes.push_back(
                     object({{"type", support::JsonValue{"entry"}}, {"value", entry_value(*write.entry)}}));
         } else if (write.type == "task") {
-            if (write.task.has_value()) {
+            if (write.task.has_value() && write.task->state.status == "terminal") {
                 main_writes.push_back(object({
                         {"type", support::JsonValue{"task"}},
                         {"value", encode_task_record(*write.task).to_support()},
                 }));
+            } else if (write.task.has_value()) {
+                const auto ordinal = add_sidecar(task_file(write.task->id),
+                        SidecarRecord{.seq = seq, .payload = SidecarPayload{.task = *write.task}});
+                main_writes.push_back(object({{"type", support::JsonValue{"task.sidecar"}},
+                        {"id", number(write.task->id.value)},
+                        {"ordinal", number(ordinal)}}));
             }
         } else if (write.type == "submission") {
             if (write.submission.has_value()) {
@@ -930,6 +978,16 @@ struct EncodedCommit {
     EncodedCommit encoded{.marker = marker_text ? *marker_text + "\n" : std::string{},
             .sidecars = std::move(sidecars),
             .reclamations = {}};
+    // Terminal publication makes a live task sidecar reclaimable. Reclaiming
+    // only after the marker leaves a published result recoverable on failure.
+    std::map<std::int64_t, bool> final_tasks;
+    for (const StorageWrite& write : writes) {
+        if (write.type == "task" && write.task)
+            final_tasks[write.task->id.value] = write.task->state.status == "terminal";
+    }
+    for (const auto& [id, terminal] : final_tasks) {
+        if (terminal) encoded.reclamations[task_file(TaskId{.value = id})] = {};
+    }
     // A current-only incarnation keeps no history, so its sidecar is removed
     // on retirement and replaced by its newest base. A rewindable incarnation
     // keeps its sidecar so as-of reads still reach earlier revisions.
@@ -1013,7 +1071,7 @@ struct JsonlStorage::Impl {
                 error.clear();
                 continue;
             }
-            if (document_id_from_file(name).has_value()) {
+            if (document_id_from_file(name).has_value() || task_id_from_file(name).has_value()) {
                 sidecar_files.push_back(name);
             }
         }
@@ -1051,6 +1109,13 @@ struct JsonlStorage::Impl {
         }
 
         std::set<std::int64_t> retired;
+        std::map<std::int64_t, bool> final_task_live;
+        for (const auto& marker : markers) {
+            for (const auto& operation : marker.writes) {
+                if (operation.kind == MainKind::Task) final_task_live[operation.task.id.value] = false;
+                if (operation.kind == MainKind::TaskSidecar) final_task_live[operation.task_id.value] = true;
+            }
+        }
         std::map<std::int64_t, std::pair<Seq, std::int64_t>> latest_bases;
         for (const MainMarker& marker : markers) {
             for (const MainOperation& operation : marker.writes) {
@@ -1094,6 +1159,25 @@ struct JsonlStorage::Impl {
                     writes.push_back(StorageWrite{.type = "entry", .entry = operation.entry});
                 } else if (operation.kind == MainKind::Task) {
                     writes.push_back(StorageWrite{.type = "task", .task = operation.task});
+                } else if (operation.kind == MainKind::TaskSidecar) {
+                    const auto file = task_file(operation.task_id);
+                    const auto key = sidecar_key(file, marker.seq, operation.ordinal);
+                    if (confirmed.contains(key))
+                        return std::unexpected(corruption("Sidecar record is confirmed more than once"));
+                    const auto found = record_by_key.find(key);
+                    const bool optional = !final_task_live.at(operation.task_id.value);
+                    if (found == record_by_key.end()) {
+                        if (!optional)
+                            return std::unexpected(corruption("Missing confirmed sidecar record " + file +
+                                                              " at sequence " + std::to_string(marker.seq)));
+                    } else {
+                        confirmed.insert(key);
+                        const auto& task = found->second->payload.task;
+                        if (!task || task->id.value != operation.task_id.value)
+                            return std::unexpected(corruption(
+                                    "Confirmed task sidecar data does not match commit " + std::to_string(marker.seq)));
+                        if (!optional) writes.push_back(StorageWrite{.type = "task", .task = *task});
+                    }
                 } else if (operation.kind == MainKind::Submission) {
                     writes.push_back(StorageWrite{.type = "submission", .submission = operation.submission});
                 } else if (operation.kind == MainKind::DocumentRetire) {
@@ -1119,7 +1203,7 @@ struct JsonlStorage::Impl {
                         confirmed.insert(key);
                     }
                     const SidecarRecord* record = found == record_by_key.end() ? nullptr : found->second;
-                    if (record != nullptr && record->payload.id.value != id) {
+                    if (record != nullptr && (record->payload.task.has_value() || record->payload.id.value != id)) {
                         return std::unexpected(corruption(
                                 "Confirmed document sidecar data does not match commit " + std::to_string(marker.seq)));
                     }
@@ -1213,6 +1297,14 @@ struct JsonlStorage::Impl {
                         lines.end());
             }
 
+            if (const auto task_id = task_id_from_file(file)) {
+                const auto final = final_task_live.find(task_id->value);
+                if (lines.empty() || (final != final_task_live.end() && !final->second)) {
+                    std::filesystem::remove(directory / file, error);
+                    error.clear();
+                }
+                continue;
+            }
             const auto id = document_id_from_file(file);
             if (!id) {
                 continue;

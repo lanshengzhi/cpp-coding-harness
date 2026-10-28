@@ -1,3 +1,4 @@
+#include <cch/durable/Harness.hpp>
 #include <cch/durable/JsonlStorage.hpp>
 #include <cch/durable/Session.hpp>
 #include <cch/durable/Storage.hpp>
@@ -11,12 +12,16 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
+#include <condition_variable>
 #include <cstddef>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <mutex>
 #include <utility>
 #include <vector>
 
@@ -146,6 +151,536 @@ void append_text(const std::filesystem::path& path, std::string_view text) {
 }
 
 } // namespace
+
+// The registered pi fixture includes task 6 in a sidecar with a pending
+// checkpoint. This first slice tests public recovery; the fixture itself has
+// no executable Harness definition or submission to establish continuation.
+TEST_CASE("a pi JSONL pending task is recovered from its sidecar", "[durable][jsonl][issue1085]") {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1054/interchange.json",
+            "jsonl store created by pi reopens with unfinished task, documents and checkpoints and continues");
+    REQUIRE(frozen);
+    const auto* fixture = frozen->object_member("fixture");
+    REQUIRE(fixture != nullptr);
+    const auto* files = support::json_array_member(*fixture, "files");
+    REQUIRE(files != nullptr);
+    TempWorkspace workspace;
+    for (const auto& value : *files) {
+        const auto* file = value.get_if<support::JsonValue::object_t>();
+        REQUIRE(file != nullptr);
+        const auto name = support::json_string_member(*file, "name");
+        const auto contents = support::json_string_member(*file, "text");
+        REQUIRE(name);
+        REQUIRE(contents);
+        workspace.write(std::string{*name}, std::string{*contents});
+    }
+    SECTION("missing confirmed task sidecar is rejected") {
+        std::filesystem::remove(workspace.path() / "task-6.jsonl");
+        auto missing = JsonlStorage::open(workspace.path());
+        REQUIRE_FALSE(missing);
+        CHECK(missing.error().message == "Missing confirmed sidecar record task-6.jsonl at sequence 2");
+        return;
+    }
+    SECTION("mismatched sidecar ordinal is rejected") {
+        auto contents = workspace.read("task-6.jsonl");
+        const auto position = contents.find("\"ordinal\":0");
+        REQUIRE(position != std::string::npos);
+        contents.replace(position, std::string{"\"ordinal\":0"}.size(), "\"ordinal\":1");
+        workspace.write("task-6.jsonl", contents);
+        auto mismatch = JsonlStorage::open(workspace.path());
+        REQUIRE_FALSE(mismatch);
+        CHECK(mismatch.error().message == "Missing confirmed sidecar record task-6.jsonl at sequence 2");
+        return;
+    }
+    SECTION("mismatched sidecar sequence is rejected") {
+        auto contents = workspace.read("task-6.jsonl");
+        const auto position = contents.find("\"seq\":2");
+        REQUIRE(position != std::string::npos);
+        contents.replace(position, std::string{"\"seq\":2"}.size(), "\"seq\":3");
+        workspace.write("task-6.jsonl", contents);
+        auto mismatch = JsonlStorage::open(workspace.path());
+        REQUIRE_FALSE(mismatch);
+        CHECK(mismatch.error().message == "Missing confirmed sidecar record task-6.jsonl at sequence 2");
+        return;
+    }
+    SECTION("a confirmed sidecar with a different task id is rejected") {
+        auto contents = workspace.read("task-6.jsonl");
+        const auto position = contents.find("\"id\":6");
+        REQUIRE(position != std::string::npos);
+        contents.replace(position, std::string{"\"id\":6"}.size(), "\"id\":9");
+        workspace.write("task-6.jsonl", contents);
+        auto mismatch = JsonlStorage::open(workspace.path());
+        REQUIRE_FALSE(mismatch);
+        CHECK(mismatch.error().message == "Confirmed task sidecar data does not match commit 2");
+        return;
+    }
+    SECTION("confirmed task is recovered") {
+        auto storage = JsonlStorage::open(workspace.path());
+        if (!storage) UNSCOPED_INFO(storage.error().message);
+        REQUIRE(storage);
+        auto task = (*storage)->task(TaskId{.value = 6});
+        REQUIRE(task);
+        REQUIRE(task->has_value());
+        CHECK((*task)->state.status == "pending");
+        REQUIRE((*task)->state.checkpoint);
+        CHECK(*(*task)->state.checkpoint == chord::Json{chord::Json::Object{{"phase", "start"}, {"n", 7}}});
+        REQUIRE((*storage)->close());
+    }
+}
+
+// The pi Harness created and closed this pending task. Its frozen phase
+// consumes the checkpoint and commits result 17; C++ must execute that work.
+TEST_CASE("the C++ Harness continues a pi-created JSONL task", "[durable][jsonl][issue1085]") {
+    const char* pi_checkout = std::getenv("PI_CHECKOUT");
+    if (pi_checkout == nullptr || *pi_checkout == '\0') SKIP("PI_CHECKOUT is required for frozen pi continuation");
+    const std::filesystem::path checkout{pi_checkout};
+    TempWorkspace workspace;
+    REQUIRE(checkout.string().find_first_of("'\n") == std::string::npos);
+    REQUIRE(workspace.path().string().find_first_of("'\n") == std::string::npos);
+    const std::string prefix = "NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH='" +
+                               (checkout / "tsconfig.json").string() + "' timeout 15 '" +
+                               (checkout / "node_modules/.bin/tsx").string() +
+                               "' '" CCH_SOURCE_DIR "/docs/research/pi-v1.3.0/continue-1085-harness.mts' '" +
+                               workspace.path().string() + "' ";
+    REQUIRE(std::system((prefix + "0 create").c_str()) == 0);
+    auto ids = support::read_json(workspace.read("pi-created.json"));
+    REQUIRE(ids);
+    const TaskId task_id{.value = static_cast<std::int64_t>(ids->at("id").get_number())};
+    const SubmissionId submission_id{.value = static_cast<std::int64_t>(ids->at("submission").get_number())};
+    auto storage = JsonlStorage::open(workspace.path());
+    REQUIRE(storage);
+    auto doc_record = (*storage)->find_document("audit1085.history",
+            DocumentAddress{.conversation_id = ConversationId{.value = 1}},
+            DocumentPoint::current());
+    REQUIRE(doc_record);
+    REQUIRE(doc_record->has_value());
+    const DocumentId doc_id = (*doc_record)->id;
+    auto history = define_document(DocumentDefinitionBuilder{"audit1085.history"}.version(1).conversation(
+                                           DocumentHistory::Rewindable, DocumentFork::AsOf),
+            [] { return chord::Json{chord::Json::Object{{"n", 0}}}; });
+    REQUIRE(history);
+    TaskDefinitionBuilder builder{"audit1085.work", 1};
+    builder.phase("start", [&](const TaskRecord& task, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        const chord::Json expected{chord::Json::Object{{"phase", "start"}, {"n", 7}}};
+        if (!task.state.checkpoint || *task.state.checkpoint != expected)
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Validation, "unexpected checkpoint"))};
+        return runtime.commit(
+                [&](Transaction& tx, const TaskRecord& record) -> support::Expected<std::optional<NextTaskState>> {
+                    auto draft = tx.doc(*history, DocumentAddress{.conversation_id = record.conversation_id});
+                    if (!draft) return std::unexpected(draft.error());
+                    auto changed = draft->set(member_path("n"), chord::Json{2});
+                    if (!changed) return std::unexpected(changed.error());
+                    auto settled = tx.settle_submission(submission_id,
+                            SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+                    if (!settled) return std::unexpected(settled.error());
+                    return NextTaskState::running(chord::Json{chord::Json::Object{{"phase", "finish"}, {"n", 8}}});
+                });
+    });
+    std::mutex gate_mutex;
+    std::condition_variable gate_cv;
+    bool reached = false;
+    bool released = false;
+    builder.phase("finish", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        std::unique_lock lock(gate_mutex);
+        reached = true;
+        gate_cv.notify_all();
+        std::stop_callback wake{runtime.stop_token(), [&] { gate_cv.notify_all(); }};
+        if (!gate_cv.wait_for(
+                    lock, std::chrono::seconds{10}, [&] { return released || runtime.stop_token().stop_requested(); }))
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Timeout, "phase gate timed out"))};
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    });
+    auto definition = builder.build();
+    REQUIRE(definition);
+    std::vector<TaskDefinition> tasks;
+    tasks.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(**storage, HarnessOptions{.tasks = std::move(tasks)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    REQUIRE(consume(harness->open_tasks()).has_value());
+    REQUIRE(harness->resume());
+    bool observed = false;
+    {
+        std::unique_lock lock(gate_mutex);
+        observed = gate_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return reached; });
+        if (!observed) {
+            released = true;
+            gate_cv.notify_all();
+        }
+    }
+    auto closed = consume(harness->close());
+    REQUIRE(observed);
+    REQUIRE(closed.has_value());
+    const auto cpp_markers = json_lines(workspace.read("main.jsonl"));
+    REQUIRE(cpp_markers.size() == 4);
+    CHECK(cpp_markers[0].at("seq").get_number() == 1);
+    CHECK(cpp_markers[1].at("seq").get_number() == 2);
+    CHECK(cpp_markers[2].at("seq").get_number() == 3);
+    CHECK(cpp_markers[3].at("seq").get_number() == 4);
+    const auto cpp_task_lines = json_lines(workspace.read("task-7.jsonl"));
+    REQUIRE(cpp_task_lines.size() == 3);
+    CHECK(cpp_task_lines[1].at("seq").get_number() == 3);
+    CHECK(cpp_task_lines[2].at("seq").get_number() == 4);
+    CHECK(cpp_task_lines[2].at("payload").at("value").at("id").get_number() == 7);
+    REQUIRE(std::system((prefix + std::to_string(task_id.value) + " finish " + std::to_string(submission_id.value))
+                            .c_str()) == 0);
+    const auto final_markers = json_lines(workspace.read("main.jsonl"));
+    REQUIRE(final_markers.size() == 7);
+    for (std::size_t i = 0; i < final_markers.size(); ++i)
+        CHECK(final_markers[i].at("seq").get_number() == static_cast<double>(i + 1));
+    const auto pi_task_lines = json_lines(workspace.read("pi-task-history.txt"));
+    REQUIRE(pi_task_lines.size() == 5);
+    CHECK(pi_task_lines[3].at("seq").get_number() == 5);
+    CHECK(pi_task_lines[3].at("payload").at("value").at("state").at("status").get_string() == "pending");
+    CHECK(pi_task_lines[4].at("seq").get_number() == 6);
+    CHECK(pi_task_lines[4].at("payload").at("value").at("state").at("status").get_string() == "running");
+    CHECK(final_markers[6].at("writes").get_array().at(0).at("type").get_string() == "task");
+    auto reopened = JsonlStorage::open(workspace.path());
+    REQUIRE(reopened);
+    auto task = (*reopened)->task(TaskId{.value = 7});
+    REQUIRE(task);
+    REQUIRE(task->has_value());
+    CHECK((*task)->state.status == "terminal");
+    REQUIRE((*task)->state.outcome);
+    CHECK((*task)->state.outcome->result == chord::Json{17});
+    auto current = (*reopened)->document(doc_id, DocumentPoint::current());
+    auto original = (*reopened)->document(doc_id, DocumentPoint::as_of(2));
+    auto middle = (*reopened)->document(doc_id, DocumentPoint::as_of(4));
+    REQUIRE(current);
+    REQUIRE(original);
+    REQUIRE(middle);
+    REQUIRE(current->has_value());
+    REQUIRE(original->has_value());
+    REQUIRE(middle->has_value());
+    CHECK((*current)->value == chord::Json{chord::Json::Object{{"n", 3}}});
+    CHECK((*original)->value == chord::Json{chord::Json::Object{{"n", 1}}});
+    CHECK((*middle)->value == chord::Json{chord::Json::Object{{"n", 2}}});
+    auto final_submission = (*reopened)->submission(submission_id);
+    REQUIRE(final_submission);
+    REQUIRE(final_submission->has_value());
+    CHECK((*final_submission)->status == "unanswered");
+    REQUIRE((*reopened)->close());
+}
+
+TEST_CASE("a failed C++ task marker recovers for frozen pi continuation", "[durable][jsonl][issue1085]") {
+    const char* pi_checkout = std::getenv("PI_CHECKOUT");
+    if (pi_checkout == nullptr || *pi_checkout == '\0') SKIP("PI_CHECKOUT is required for frozen pi continuation");
+    const std::filesystem::path checkout{pi_checkout};
+    TempWorkspace workspace;
+    REQUIRE(checkout.string().find_first_of("'\n") == std::string::npos);
+    REQUIRE(workspace.path().string().find_first_of("'\n") == std::string::npos);
+    const std::string prefix = "NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH='" +
+                               (checkout / "tsconfig.json").string() + "' timeout 15 '" +
+                               (checkout / "node_modules/.bin/tsx").string() +
+                               "' '" CCH_SOURCE_DIR "/docs/research/pi-v1.3.0/continue-1085-harness.mts' '" +
+                               workspace.path().string() + "' ";
+    REQUIRE(std::system((prefix + "0 create").c_str()) == 0);
+    auto ids = support::read_json(workspace.read("pi-created.json"));
+    REQUIRE(ids);
+    const TaskId id{.value = static_cast<std::int64_t>(ids->at("id").get_number())};
+    auto storage = JsonlStorage::open(workspace.path());
+    REQUIRE(storage);
+    auto original = (*storage)->task(id);
+    REQUIRE(original);
+    REQUIRE(original->has_value());
+    const auto main = workspace.read("main.jsonl");
+    const auto task_file = "task-" + std::to_string(id.value) + ".jsonl";
+    const auto sidecar = workspace.read(task_file);
+    REQUIRE(std::filesystem::remove(workspace.path() / "main.jsonl"));
+    REQUIRE(std::filesystem::create_directory(workspace.path() / "main.jsonl"));
+    auto candidate = **original;
+    candidate.state =
+            TaskState{.status = "running", .checkpoint = chord::Json{chord::Json::Object{{"phase", "wrong"}}}};
+    const std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = candidate}};
+    auto failed = consume((*storage)->commit(writes));
+    REQUIRE_FALSE(failed.has_value());
+    CHECK(failed.error().message == "JSONL storage is poisoned and must be reopened");
+    CHECK(workspace.read(task_file).size() > sidecar.size());
+    REQUIRE(std::filesystem::remove(workspace.path() / "main.jsonl"));
+    workspace.write("main.jsonl", main);
+    auto recovered = JsonlStorage::open(workspace.path());
+    REQUIRE(recovered);
+    auto restored = (*recovered)->task(id);
+    REQUIRE(restored);
+    REQUIRE(restored->has_value());
+    CHECK((*restored)->state.status == "pending");
+    CHECK((*restored)->state.checkpoint == (*original)->state.checkpoint);
+    CHECK(workspace.read(task_file) == sidecar);
+    REQUIRE((*recovered)->close());
+    REQUIRE(std::system((prefix + std::to_string(id.value) + " advance").c_str()) == 0);
+    auto final_storage = JsonlStorage::open(workspace.path());
+    REQUIRE(final_storage);
+    auto continued = (*final_storage)->task(id);
+    REQUIRE(continued);
+    REQUIRE(continued->has_value());
+    CHECK((*continued)->state.checkpoint == chord::Json{chord::Json::Object{{"phase", "finish"}, {"n", 8}}});
+    REQUIRE((*final_storage)->close());
+}
+
+TEST_CASE("an unconfirmed live task sidecar is discarded on JSONL reopen", "[durable][jsonl][issue1085]") {
+    TempWorkspace workspace;
+    auto storage = JsonlStorage::open(workspace.path());
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    const std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    REQUIRE((*storage)->close());
+    const auto original = workspace.read("task-2.jsonl");
+    const auto lines = json_lines(original);
+    REQUIRE(lines.size() == 1);
+    CHECK(lines[0].at("seq").get_number() == 1);
+    CHECK(lines[0].at("ordinal").get_number() == 0);
+    auto unconfirmed = original;
+    const auto pos = unconfirmed.find("\"seq\":1");
+    REQUIRE(pos != std::string::npos);
+    unconfirmed.replace(pos, std::string{"\"seq\":1"}.size(), "\"seq\":2");
+    append_text(workspace.path() / "task-2.jsonl", unconfirmed);
+    auto reopened = JsonlStorage::open(workspace.path());
+    REQUIRE(reopened);
+    auto recovered = (*reopened)->task(TaskId{.value = 2});
+    REQUIRE(recovered);
+    REQUIRE(recovered->has_value());
+    CHECK((*recovered)->state.status == "pending");
+    CHECK(workspace.read("task-2.jsonl") == original);
+    REQUIRE((*reopened)->close());
+}
+
+TEST_CASE("a JSONL batch preserves ordered task updates and terminal reclamation", "[durable][jsonl][issue1085]") {
+    TempWorkspace workspace;
+    auto storage = JsonlStorage::open(workspace.path());
+    REQUIRE(storage);
+    TaskRecord first{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state = TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "one"}}}}};
+    TaskRecord second = first;
+    second.state.checkpoint = chord::Json{chord::Json::Object{{"phase", "two"}}};
+    const std::vector<StorageWrite> writes{
+            StorageWrite{.type = "task", .task = first}, StorageWrite{.type = "task", .task = second}};
+    auto result = consume((*storage)->commit(writes));
+    REQUIRE(result.has_value());
+    const auto sidecar = json_lines(workspace.read("task-2.jsonl"));
+    REQUIRE(sidecar.size() == 2);
+    CHECK(sidecar[0].at("ordinal").get_number() == 0);
+    CHECK(sidecar[1].at("ordinal").get_number() == 1);
+    REQUIRE((*storage)->close());
+    auto reopened = JsonlStorage::open(workspace.path());
+    REQUIRE(reopened);
+    auto recovered = (*reopened)->task(first.id);
+    REQUIRE(recovered);
+    REQUIRE(recovered->has_value());
+    CHECK((*recovered)->state.checkpoint == second.state.checkpoint);
+    auto terminal = second;
+    terminal.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+    const std::vector<StorageWrite> final_batch{
+            StorageWrite{.type = "task", .task = second}, StorageWrite{.type = "task", .task = terminal}};
+    REQUIRE(consume((*reopened)->commit(final_batch)).has_value());
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / "task-2.jsonl"));
+    REQUIRE((*reopened)->close());
+    auto final_storage = JsonlStorage::open(workspace.path());
+    REQUIRE(final_storage);
+    auto final_task = (*final_storage)->task(first.id);
+    REQUIRE(final_task);
+    REQUIRE(final_task->has_value());
+    CHECK((*final_task)->state.status == "terminal");
+    REQUIRE((*final_storage)->close());
+}
+
+TEST_CASE("terminal task publication reclaims its JSONL sidecar", "[durable][jsonl][issue1085]") {
+    TempWorkspace workspace;
+    auto storage = JsonlStorage::open(workspace.path());
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    REQUIRE(std::filesystem::exists(workspace.path() / "task-2.jsonl"));
+    task.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    CHECK_FALSE(std::filesystem::exists(workspace.path() / "task-2.jsonl"));
+    REQUIRE((*storage)->close());
+    auto reopened = JsonlStorage::open(workspace.path());
+    REQUIRE(reopened);
+    auto recovered = (*reopened)->task(TaskId{.value = 2});
+    REQUIRE(recovered);
+    REQUIRE(recovered->has_value());
+    CHECK((*recovered)->state.status == "terminal");
+    REQUIRE((*reopened)->close());
+}
+
+TEST_CASE("a failed terminal marker preserves the live JSONL task on reopen", "[durable][jsonl][issue1085]") {
+    TempWorkspace workspace;
+    auto storage = JsonlStorage::open(workspace.path());
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    const auto main_before = workspace.read("main.jsonl");
+    const auto sidecar_before = workspace.read("task-2.jsonl");
+    REQUIRE(std::filesystem::remove(workspace.path() / "main.jsonl"));
+    REQUIRE(std::filesystem::create_directory(workspace.path() / "main.jsonl"));
+    task.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    const auto result = consume((*storage)->commit(writes));
+    REQUIRE_FALSE(result.has_value());
+    CHECK(result.error().message == "JSONL storage is poisoned and must be reopened");
+    CHECK(workspace.read("task-2.jsonl") == sidecar_before);
+    REQUIRE(std::filesystem::remove(workspace.path() / "main.jsonl"));
+    workspace.write("main.jsonl", main_before);
+    auto reopened = JsonlStorage::open(workspace.path());
+    REQUIRE(reopened);
+    auto recovered = (*reopened)->task(TaskId{.value = 2});
+    REQUIRE(recovered);
+    REQUIRE(recovered->has_value());
+    CHECK((*recovered)->state.status == "pending");
+    REQUIRE((*reopened)->close());
+}
+
+// Pi must open and execute the C++-created pending task, not merely inspect
+// a C++ snapshot. The child process is bounded even on a stalled task.
+TEST_CASE("frozen pi continues a C++ created JSONL task", "[durable][jsonl][issue1085]") {
+    const char* pi_checkout = std::getenv("PI_CHECKOUT");
+    if (pi_checkout == nullptr || *pi_checkout == '\0') SKIP("PI_CHECKOUT is required for frozen pi continuation");
+    TempWorkspace workspace;
+    auto storage = JsonlStorage::open(workspace.path());
+    REQUIRE(storage);
+    TaskDefinitionBuilder initial_builder{"audit1085.work", 1};
+    initial_builder.initial(
+            [](const chord::Json&) { return chord::Json{chord::Json::Object{{"phase", "start"}, {"n", 7}}}; });
+    initial_builder.phase("start", [](const TaskRecord&, TaskRuntime&) -> support::AsyncResult<void> {
+        return support::AsyncResult<void>{
+                std::unexpected(support::make_error(support::ErrorCode::Validation, "must run in pi"))};
+    });
+    auto initial_definition = initial_builder.build();
+    REQUIRE(initial_definition);
+    std::vector<TaskDefinition> initial_tasks;
+    initial_tasks.push_back(std::move(*initial_definition));
+    auto initial_opened = consume(Harness::open(**storage, HarnessOptions{.tasks = std::move(initial_tasks)}));
+    REQUIRE(initial_opened.has_value());
+    auto initial = std::move(initial_opened.value());
+    auto root = consume(initial->root());
+    REQUIRE(root.has_value());
+    auto history = define_document(DocumentDefinitionBuilder{"audit1085.history"}.version(1).conversation(
+                                           DocumentHistory::Rewindable, DocumentFork::AsOf),
+            [] { return chord::Json{chord::Json::Object{{"n", 0}}}; });
+    REQUIRE(history);
+    TaskId task_id{};
+    SubmissionId submission_id{};
+    DocumentId document_id{};
+    REQUIRE(consume(initial->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto created = tx.create_task(*initial->task_definition("audit1085.work"),
+                chord::Json{chord::Json::Object{}},
+                TaskOptions{.conversation_id = root.value()});
+        if (!created) return std::unexpected(created.error());
+        task_id = *created;
+        auto submission = tx.create_submission(SubmissionRecord{.conversation_id = root.value(),
+                .request_id = std::string{"audit1085-request"},
+                .type = "input",
+                .status = "queued"});
+        if (!submission) return std::unexpected(submission.error());
+        submission_id = submission->id;
+        auto draft = tx.doc(*history, DocumentAddress{.conversation_id = root.value()});
+        if (!draft) return std::unexpected(draft.error());
+        auto set = draft->set(member_path("n"), chord::Json{1});
+        if (!set) return std::unexpected(set.error());
+        return {};
+    })).has_value());
+    auto document_record = (*storage)->find_document(
+            "audit1085.history", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
+    REQUIRE(document_record);
+    REQUIRE(document_record->has_value());
+    document_id = (*document_record)->id;
+    REQUIRE(consume(initial->close()).has_value());
+    const std::filesystem::path checkout{pi_checkout};
+    REQUIRE(checkout.string().find_first_of("'\n") == std::string::npos);
+    REQUIRE(workspace.path().string().find_first_of("'\n") == std::string::npos);
+    const std::string command =
+            "NODE_OPTIONS=--conditions=source TSX_TSCONFIG_PATH='" + (checkout / "tsconfig.json").string() +
+            "' timeout 15 '" + (checkout / "node_modules/.bin/tsx").string() +
+            "' '" CCH_SOURCE_DIR "/docs/research/pi-v1.3.0/continue-1085-harness.mts' '" + workspace.path().string() +
+            "' " + std::to_string(task_id.value) + " advance " + std::to_string(submission_id.value);
+    REQUIRE(std::system(command.c_str()) == 0);
+    const auto pi_history = json_lines(workspace.read("doc-" + std::to_string(document_id.value) + ".jsonl"));
+    REQUIRE(pi_history.size() == 2);
+    const auto pi_document_seq = static_cast<Seq>(pi_history.back().at("seq").get_number());
+    auto reopened = JsonlStorage::open(workspace.path());
+    REQUIRE(reopened);
+    TaskDefinitionBuilder builder{"audit1085.work", 1};
+    builder.phase("finish", [&](const TaskRecord& record, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        if (!record.state.checkpoint ||
+                *record.state.checkpoint != chord::Json{chord::Json::Object{{"phase", "finish"}, {"n", 8}}})
+            return support::AsyncResult<void>{
+                    std::unexpected(support::make_error(support::ErrorCode::Validation, "unexpected checkpoint"))};
+        return runtime.commit(
+                [&](Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    auto draft = tx.doc(*history, DocumentAddress{.conversation_id = root.value()});
+                    if (!draft) return std::unexpected(draft.error());
+                    auto changed = draft->set(member_path("n"), chord::Json{3});
+                    if (!changed) return std::unexpected(changed.error());
+                    return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json{17}});
+                });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition);
+    std::vector<TaskDefinition> tasks;
+    tasks.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(**reopened, HarnessOptions{.tasks = std::move(tasks)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    REQUIRE(consume(harness->open_tasks()).has_value());
+    REQUIRE(harness->resume());
+    auto receipt = consume(harness->wait_for_task(task_id));
+    REQUIRE(receipt.has_value());
+    REQUIRE(receipt.value().state.outcome);
+    CHECK(receipt.value().state.outcome->result == chord::Json{17});
+    auto submission = (*reopened)->submission(submission_id);
+    REQUIRE(submission);
+    REQUIRE(submission->has_value());
+    CHECK((*submission)->status == "unanswered");
+    CHECK((*submission)->reason == std::optional<std::string>{"aborted"});
+    CHECK((*submission)->request_id == std::optional<std::string>{"audit1085-request"});
+    auto current_doc = (*reopened)->document(document_id, DocumentPoint::current());
+    REQUIRE(current_doc);
+    REQUIRE(current_doc->has_value());
+    CHECK((*current_doc)->value == chord::Json{chord::Json::Object{{"n", 3}}});
+    auto pi_doc = (*reopened)->document(document_id, DocumentPoint::as_of(pi_document_seq));
+    REQUIRE(pi_doc);
+    REQUIRE(pi_doc->has_value());
+    CHECK((*pi_doc)->value == chord::Json{chord::Json::Object{{"n", 2}}});
+    auto original_doc = (*reopened)->document(document_id, DocumentPoint::as_of(2));
+    REQUIRE(original_doc);
+    REQUIRE(original_doc->has_value());
+    CHECK((*original_doc)->value == chord::Json{chord::Json::Object{{"n", 1}}});
+    REQUIRE(consume(harness->close()).has_value());
+    auto final_storage = JsonlStorage::open(workspace.path());
+    REQUIRE(final_storage);
+    auto final_doc = (*final_storage)->document(document_id, DocumentPoint::current());
+    REQUIRE(final_doc);
+    REQUIRE(final_doc->has_value());
+    CHECK((*final_doc)->value == chord::Json{chord::Json::Object{{"n", 3}}});
+    auto historical_doc = (*final_storage)->document(document_id, DocumentPoint::as_of(pi_document_seq));
+    REQUIRE(historical_doc);
+    REQUIRE(historical_doc->has_value());
+    CHECK((*historical_doc)->value == chord::Json{chord::Json::Object{{"n", 2}}});
+    auto final_submission = (*final_storage)->submission(submission_id);
+    REQUIRE(final_submission);
+    REQUIRE(final_submission->has_value());
+    CHECK((*final_submission)->status == "unanswered");
+    REQUIRE((*final_storage)->close());
+}
 
 // Frozen evidence: fixtures/pi-v1.3.0/audit-1054/jsonl-store.json
 // "a JSONL commit appends every sidecar before the main marker".
