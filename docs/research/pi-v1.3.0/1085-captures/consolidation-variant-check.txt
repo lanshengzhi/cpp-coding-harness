@@ -1,0 +1,15 @@
+consolidation check: PASS
+  - source coverage: 1464 source rows aliased into 1464 consolidated rows
+  - deliveries: 1 rows backed by pinned C++ comparison results
+  - vocabulary/ownership/remaining-work: checked
+  - evidence routes: 440 rows anchored to registered artifacts
+  - scenario coverage: 514 scenarios, 347 named by a row, 55 covered by a referenced artifact, 112 explicit orphan(s), 0 uncovered
+  - groups/overlaps: 8 groups, 6 overlap resolutions
+  - corrections index: 37 items
+  - owner graph: 9 owners, 16 edges, acyclic
+  - implementation frontier: 32 drafts, acyclic and dependency-ordered
+  - migration sequence: 8 steps with removal slices
+  - migration placement: scheduled drafts satisfy transitive prerequisites; negative probe rejected: F7 is placed at M3 before prerequisite P7 at M4
+  - residual reconciliation: 14 trackers
+  - close-out: implemented/specified split, retained boundaries and open blockers present
+  - docs: 36 relative links resolve; ledger and frontier linked

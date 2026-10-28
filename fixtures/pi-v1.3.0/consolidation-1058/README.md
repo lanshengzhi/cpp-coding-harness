@@ -15,6 +15,10 @@ registered artifact containing it. Ambiguous matches fail closed. Include row ID
 baseline directory, and SHA-256 of its verified bytes. Serialize the list as UTF-8 JSON with
 sorted object keys, no extra whitespace, and unescaped Unicode, then SHA-256 those bytes.
 
+In-scope families are the registry's entries, including variants named
+`audit-<ticket>-<variant>`; artifact paths and frontier captures accept the same form. A registered
+scenario that no row routes stays an explicit orphan.
+
 This binds the resolved delivery routing and artifact identity, while dropping byte-level protection
 of unrelated plan fields and formatting. Global classification and orphan coverage remain checked
 by consolidation `check`; other plan changes that do not change the delivery's resolved routing

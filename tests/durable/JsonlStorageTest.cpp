@@ -606,24 +606,23 @@ TEST_CASE("JSONL recovery opens one task sidecar at a time", "[durable][jsonl][i
     // descriptor per sidecar fails deterministically instead of by host limit.
     const rlim_t budget = static_cast<rlim_t>(open_descriptor_count() + 32);
     if (original.rlim_cur > budget) {
-        struct rlimit lowered = original;
-        lowered.rlim_cur = budget;
-        REQUIRE(::setrlimit(RLIMIT_NOFILE, &lowered) == 0);
+        struct rlimit reduced = original;
+        reduced.rlim_cur = budget;
+        (void)::setrlimit(RLIMIT_NOFILE, &reduced);
     }
-    struct RestoreLimit {
-        struct rlimit value;
-        ~RestoreLimit() { (void)::setrlimit(RLIMIT_NOFILE, &value); }
-    } restore{original};
 
+    // A failed assertion does not unwind under the strict no-exception build,
+    // so everything until the restore below records outcomes instead of asserting.
     TempWorkspace store;
     constexpr std::size_t kSidecars = 64;
+    bool created = true;
     for (std::size_t index = 0; index < kSidecars; ++index) {
         std::ofstream sidecar(store.path() / ("task-" + std::to_string(index + 2) + ".jsonl"), std::ios::binary);
-        REQUIRE(sidecar.good());
+        created = sidecar.good() && created;
     }
     auto storage = JsonlStorage::open(store.path());
-    REQUIRE(storage);
-    REQUIRE((*storage)->close());
+    const bool opened = storage.has_value();
+    const bool closed = opened && (*storage)->close().has_value();
     std::error_code error;
     std::size_t remaining = 0;
     for (const auto& entry : std::filesystem::directory_iterator(store.path(), error)) {
@@ -631,8 +630,82 @@ TEST_CASE("JSONL recovery opens one task sidecar at a time", "[durable][jsonl][i
             ++remaining;
         }
     }
-    REQUIRE_FALSE(error);
+    const bool listed = !error;
+
+    // Release the process-wide limit before asserting, whatever the outcome.
+    (void)::setrlimit(RLIMIT_NOFILE, &original);
+
+    REQUIRE(created);
+    REQUIRE(opened);
+    REQUIRE(closed);
+    REQUIRE(listed);
     CHECK(remaining == 0);
+}
+
+TEST_CASE("JSONL recovery tolerates a failed task sidecar reclamation", "[durable][jsonl][issue1085]") {
+    TempWorkspace store;
+    auto storage = JsonlStorage::open(store.path());
+    REQUIRE(storage);
+    TaskRecord task{.id = TaskId{.value = 2},
+            .kind = "work",
+            .version = 1,
+            .state =
+                    TaskState{.status = "pending", .checkpoint = chord::Json{chord::Json::Object{{"phase", "start"}}}}};
+    std::vector<StorageWrite> writes{StorageWrite{.type = "task", .task = task}};
+    REQUIRE(consume((*storage)->commit(writes)).has_value());
+    {
+        std::ofstream probe(store.path() / "reclaim-probe", std::ios::binary);
+        REQUIRE(probe.good());
+    }
+
+    // Reclamation needs write permission on the directory; publication does not.
+    // Root or CAP_DAC_OVERRIDE bypasses the mode, so probe the real syscall and
+    // skip rather than assert on a permissive host.
+    std::error_code error;
+    std::filesystem::permissions(store.path(),
+            std::filesystem::perms::owner_read | std::filesystem::perms::owner_exec |
+                    std::filesystem::perms::group_read | std::filesystem::perms::group_exec |
+                    std::filesystem::perms::others_read | std::filesystem::perms::others_exec,
+            std::filesystem::perm_options::replace,
+            error);
+    REQUIRE_FALSE(error);
+
+    // No assertion may run before the permissions are restored: a failed
+    // REQUIRE does not unwind under the strict no-exception build, which would
+    // leave the directory unreadable to the workspace cleanup.
+    errno = 0;
+    const bool unlink_denied =
+            ::unlink((store.path() / "reclaim-probe").c_str()) != 0 && (errno == EACCES || errno == EPERM);
+    task.state = TaskState{.status = "terminal", .outcome = TaskOutcome{.status = "completed"}};
+    writes = {StorageWrite{.type = "task", .task = task}};
+    const bool committed = consume((*storage)->commit(writes)).has_value();
+    const bool closed = (*storage)->close().has_value();
+    std::error_code exists_error;
+    const bool sidecar_present = std::filesystem::exists(store.path() / "task-2.jsonl", exists_error);
+    auto reopened = JsonlStorage::open(store.path());
+    const bool opened = reopened.has_value();
+    bool terminal = false;
+    bool reopened_closed = false;
+    if (opened) {
+        auto recovered = (*reopened)->task(task.id);
+        terminal = recovered.has_value() && recovered->has_value() && (*recovered)->state.status == "terminal";
+        reopened_closed = (*reopened)->close().has_value();
+    }
+
+    std::error_code restore_error;
+    std::filesystem::permissions(
+            store.path(), std::filesystem::perms::owner_all, std::filesystem::perm_options::replace, restore_error);
+    REQUIRE_FALSE(restore_error);
+    if (!unlink_denied) {
+        SKIP("unlink permission denial is unavailable for this process; skipping the reclamation fixture");
+    }
+
+    REQUIRE(committed);
+    REQUIRE(closed);
+    CHECK(sidecar_present);
+    REQUIRE(opened);
+    CHECK(terminal);
+    REQUIRE(reopened_closed);
 }
 
 TEST_CASE("an unconfirmed live task sidecar is discarded on JSONL reopen", "[durable][jsonl][issue1085]") {

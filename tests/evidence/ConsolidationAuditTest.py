@@ -341,6 +341,29 @@ class ScenarioCoverageTest(unittest.TestCase):
         self.plan = load(PLAN)
         self.ledger = load(LEDGER)
 
+    def test_indexes_a_registered_variant_family(self) -> None:
+        bundles = {"audit-1085-replay": {"harness.json": ["resumes after reopen"]}}
+        self.assertEqual(
+            consolidate.family_for_artifact(
+                "fixtures/pi-v1.3.0/audit-1085-replay/harness.json", bundles
+            ),
+            ("audit-1085-replay", "harness.json"),
+        )
+        self.assertIsNone(
+            consolidate.family_for_artifact("fixtures/pi-v1.3.0/audit-1085-replay/other.json", bundles)
+        )
+
+    def test_frontier_accepts_a_variant_family_capture(self) -> None:
+        frontier = copy.deepcopy(load(consolidate.FRONTIER_PATH))
+        bundles = consolidate.build_bundle_index()
+        scenario = next(iter(bundles["audit-1085-replay"]["harness.json"]))
+        draft = frontier["drafts"][0]
+        draft.setdefault("evidence", {})["captures"] = [
+            f"fixtures/pi-v1.3.0/audit-1085-replay/harness.json: {scenario}"
+        ]
+        notes = consolidate.check_frontier(frontier, self.ledger, bundles)
+        self.assertTrue(notes)
+
     def test_build_reuses_the_supplied_bundle_scenario_index(self) -> None:
         bundles = consolidate.build_bundle_index()
         scenario_index = consolidate.build_scenario_index(bundles)

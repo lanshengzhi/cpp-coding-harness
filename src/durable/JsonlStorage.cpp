@@ -1442,9 +1442,10 @@ struct JsonlStorage::Impl {
             if (const auto task_id = task_id_from_file(file)) {
                 const auto final = final_task_live.find(task_id->value);
                 if (lines.empty() || (final != final_task_live.end() && !final->second)) {
-                    if (auto reclaimed = reclaim_task_file(directory_fd.get(), file, task_identities); !reclaimed) {
-                        return std::unexpected(std::move(reclaimed.error()));
-                    }
+                    // Published state is already established; a cleanup failure
+                    // leaves the sidecar for a later retry instead of hiding it
+                    // behind an open failure.
+                    (void)reclaim_task_file(directory_fd.get(), file, task_identities);
                 }
                 continue;
             }
