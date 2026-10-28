@@ -18,7 +18,9 @@ The original registered capture has a reproducibility defect: its recorded comma
 
 Focused JSONL selection after formatting: 28 selected, 28 passed, 0 failed, 0 skipped; the full run is captured in [focused-jsonl-28.txt](1085-captures/focused-jsonl-28.txt), with frozen `PI_CHECKOUT` and a 60-second process timeout. The owning shard built under the default strict no-exception preset and the build-phase architecture gate passed. `scripts/format-check.sh 15fd435565a3c0e5d898a2460699c2eafa806b72` passed. Registry integrity verification passed 37 bundles, 92 artifacts and 517 scenarios after the replay registration; it does not validate capture reproducibility or the C++ behavior.
 
-Initial discriminating failures included frozen pi rejecting a C++ inline pending task and C++ rejecting pi's `task.sidecar` marker; each passed after the corresponding sidecar changes. A [sequence-probe failure](1085-captures/sequence-probe-failure.txt) caused by an incorrect test expectation and its [corrected pass](1085-captures/sequence-probe-pass.txt) are retained; the former is not product RED evidence. Full Validation and independent review remain outstanding at the time of this record.
+Initial discriminating failures included frozen pi rejecting a C++ inline pending task and C++ rejecting pi's `task.sidecar` marker; each passed after the corresponding sidecar changes. A [sequence-probe failure](1085-captures/sequence-probe-failure.txt) caused by an incorrect test expectation and its [corrected pass](1085-captures/sequence-probe-pass.txt) are retained; the former is not product RED evidence.
+
+Full Validation on `b2c93a446` (the tree merged as `cbf11d251`) selected 3,895, passed 3,894, failed 0 and skipped 1 (the Native TUI differential capture), exit 0. The merged tree's focused `[jsonl]` selection passed 28/28 and the `issue1085` label passed 21/21; the two evidence suites passed 2/2 and the consolidation check passed. Independent Standards and Spec reviews passed after the final P2 fixes, including the vanished-sidecar case and capture.
 
 ## Remaining boundary
 
