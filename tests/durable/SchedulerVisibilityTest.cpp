@@ -125,20 +125,24 @@ TEST_CASE("scheduler reservation is invisible to a read admitted before its comm
     std::atomic_bool entered{false};
     std::atomic_bool release{false};
     std::atomic_bool inconsistent{false};
-    std::jthread holder([&] {
-        static_cast<void>(consume(harness->session().read_committed([&](Storage&) -> support::Expected<chord::Json> {
-            entered.store(true);
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
-            while (!release.load() && std::chrono::steady_clock::now() < deadline)
-                std::this_thread::yield();
-            return chord::Json(nullptr);
-        })));
+    // The holder and probe borrow the flags, storage, and harness by
+    // reference; both threads are joined before any of them leave scope, and
+    // their internal loops are bounded by the same `release` flag.
+    std::jthread holder([&harness, &entered, &release] {
+        static_cast<void>(consume(
+                harness->session().read_committed([&entered, &release](Storage&) -> support::Expected<chord::Json> {
+                    entered.store(true);
+                    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+                    while (!release.load() && std::chrono::steady_clock::now() < deadline)
+                        std::this_thread::yield();
+                    return chord::Json(nullptr);
+                })));
     });
     const auto start_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     while (!entered.load() && std::chrono::steady_clock::now() < start_deadline)
         std::this_thread::yield();
     const bool did_enter = entered.load();
-    std::jthread probe([&] {
+    std::jthread probe([&did_enter, &harness, &release, &inconsistent, &storage, &id] {
         if (!did_enter || !harness->resume()) return;
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
         while (!release.load() && std::chrono::steady_clock::now() < deadline) {
@@ -162,9 +166,9 @@ TEST_CASE("scheduler reservation is invisible to a read admitted before its comm
     release.store(true);
     holder.join();
     probe.join();
-    REQUIRE(did_enter);
+    CHECK(did_enter);
     CHECK_FALSE(inconsistent.load());
-    REQUIRE(consume(harness->close()).has_value());
+    CHECK(consume(harness->close()).has_value());
 }
 
 // The frozen waiting contract (three independent frozen runs, issue #1165):
@@ -179,29 +183,34 @@ TEST_CASE("a phase that commits waiting while remaining active is reported runni
     std::atomic_bool observed_running_while_waiting{false};
     auto builder = TaskDefinitionBuilder("audit1165.waiting", 1);
     builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
-    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        if (waiting_committed.load()) {
-            // The scheduler resumed the parked wait: finish so close can drain.
-            return runtime.commit(
-                    [](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                        return NextTaskState::terminal(TaskOutcome{.status = "completed"});
-                    });
-        }
-        auto committed = consume(
-                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                    return NextTaskState::waiting(
-                            chord::Json(chord::Json::Object{{"phase", "parked"}}), {}, JoinPolicy::AllSettled);
-                }));
-        if (!committed.has_value()) {
-            return support::AsyncResult<void>{std::unexpected(committed.error())};
-        }
-        waiting_committed.store(true);
-        // The invocation stays active while the record is committed waiting.
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        while (!release_phase.load() && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::yield();
-        return support::AsyncResult<void>{support::ExpectedVoid{}};
-    });
+    // The phase runs on a harness execution thread and borrows the flags by
+    // reference; the harness is closed (joining that thread) before the flags
+    // leave scope, so every callback run sees live state.
+    builder.phase("run",
+            [&waiting_committed, &release_phase](
+                    const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+                if (waiting_committed.load()) {
+                    // The scheduler resumed the parked wait: finish so close can drain.
+                    return runtime.commit(
+                            [](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                                return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+                            });
+                }
+                auto committed = consume(runtime.commit(
+                        [](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                            return NextTaskState::waiting(
+                                    chord::Json(chord::Json::Object{{"phase", "parked"}}), {}, JoinPolicy::AllSettled);
+                        }));
+                if (!committed.has_value()) {
+                    return support::AsyncResult<void>{std::unexpected(committed.error())};
+                }
+                waiting_committed.store(true);
+                // The invocation stays active while the record is committed waiting.
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                while (!release_phase.load() && std::chrono::steady_clock::now() < deadline)
+                    std::this_thread::yield();
+                return support::AsyncResult<void>{support::ExpectedVoid{}};
+            });
     auto definition = builder.build();
     REQUIRE(definition.has_value());
     std::vector<TaskDefinition> definitions;
@@ -250,9 +259,109 @@ TEST_CASE("a phase that commits waiting while remaining active is reported runni
     }
     const auto close_outcome = consume(harness->close());
 
-    REQUIRE(observed_running_while_waiting.load());
-    REQUIRE(terminal);
-    REQUIRE(close_outcome.has_value());
+    CHECK(observed_running_while_waiting.load());
+    CHECK(terminal);
+    CHECK(close_outcome.has_value());
+}
+
+// The waiting -> pending resume races the invocation end (issue #1165,
+// dual-axis review): the waiting commit dirties the scheduler while the
+// execution thread is still between that commit and ending its invocation,
+// so the resume used to commit `pending` with a live identity — and the
+// pending gate then under-reported the live phase. The scheduler now skips
+// the resume until the identity is gone; this case pins the transition.
+TEST_CASE("a waiting task is not resumed to pending while its phase is still invoked", "[durable][issue1165][resume]") {
+    MemoryStorage storage;
+    std::atomic_bool waiting_committed{false};
+    std::atomic_bool release_phase{false};
+    std::atomic_bool non_running_while_invoked{false};
+    std::atomic_bool saw_pending_while_invoked{false};
+    auto builder = TaskDefinitionBuilder("audit1165.resume", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    // The phase borrows the flags by reference and runs on a harness
+    // execution thread; close() joins it before the flags leave scope.
+    builder.phase("run",
+            [&waiting_committed, &release_phase](
+                    const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+                if (waiting_committed.load()) {
+                    // The scheduler resumed the parked wait: finish so close can drain.
+                    return runtime.commit(
+                            [](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                                return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+                            });
+                }
+                auto committed = consume(runtime.commit(
+                        [](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                            return NextTaskState::waiting(
+                                    chord::Json(chord::Json::Object{{"phase", "parked"}}), {}, JoinPolicy::AllSettled);
+                        }));
+                if (!committed.has_value()) {
+                    return support::AsyncResult<void>{std::unexpected(committed.error())};
+                }
+                waiting_committed.store(true);
+                // Stay invoked well past the scheduler's dirty pass so the resume
+                // race window is certainly observed.
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+                while (!release_phase.load() && std::chrono::steady_clock::now() < deadline)
+                    std::this_thread::yield();
+                return support::AsyncResult<void>{support::ExpectedVoid{}};
+            });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.resume"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+
+    // Watch the invoked window: if the record flips back to `pending` while
+    // the phase is active, inspect must still derive running (frozen pi
+    // consults the identity first). Pre-fix this window produced a committed
+    // `pending` record with a live identity and a non-running report.
+    const auto watch_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (!saw_pending_while_invoked.load() && std::chrono::steady_clock::now() < watch_deadline) {
+        if (!waiting_committed.load()) {
+            std::this_thread::yield();
+            continue;
+        }
+        auto record = storage.task(id);
+        if (record && record->has_value() && (*record)->state.status == "pending") {
+            saw_pending_while_invoked.store(true);
+        }
+        auto inspection = consume(harness->inspect());
+        if (inspection.has_value()) {
+            for (const auto& row : inspection.value().tasks) {
+                if (row.record.id == id && row.state.kind != "running") {
+                    non_running_while_invoked.store(true);
+                }
+            }
+        }
+        std::this_thread::yield();
+    }
+    release_phase.store(true);
+
+    bool terminal = false;
+    const auto terminal_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!terminal && std::chrono::steady_clock::now() < terminal_deadline) {
+        auto record = storage.task(id);
+        if (record && record->has_value() && (*record)->state.status == "terminal") {
+            terminal = true;
+        }
+        std::this_thread::yield();
+    }
+    const auto close_outcome = consume(harness->close());
+
+    CHECK_FALSE(non_running_while_invoked.load());
+    CHECK(terminal);
+    CHECK(close_outcome.has_value());
 }
 
 // A reservation commit the Storage rejects must never publish a running
@@ -265,7 +374,9 @@ TEST_CASE("a rejected reservation never starts its phase or reports running", "[
     std::atomic_bool phase_ready{false};
     auto builder = TaskDefinitionBuilder("audit1165.rejected", 1);
     builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
-    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+    // The phase borrows the flag by reference and runs on a harness execution
+    // thread; close() joins it before the flag leaves scope.
+    builder.phase("run", [&phase_ready](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
         phase_ready.store(true);
         return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
             return NextTaskState::terminal(TaskOutcome{.status = "completed"});
@@ -310,10 +421,10 @@ TEST_CASE("a rejected reservation never starts its phase or reports running", "[
     }
     const auto close_outcome = consume(harness->close());
 
-    REQUIRE(sealed);
+    CHECK(sealed);
     CHECK_FALSE(reported_running.load());
     CHECK_FALSE(phase_ready.load());
-    REQUIRE(close_outcome.has_value());
+    CHECK(close_outcome.has_value());
 }
 
 // Terminal cleanup leaves no identity the inspection can mistake for running:
@@ -327,25 +438,29 @@ TEST_CASE("a terminal task is never derived running from a live or stale identit
     std::atomic_bool violation{false};
     auto builder = TaskDefinitionBuilder("audit1165.identity", 1);
     builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
-    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        auto committed = consume(
-                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                    return NextTaskState::terminal(TaskOutcome{.status = "completed"});
-                }));
-        if (!committed.has_value()) {
-            return support::AsyncResult<void>{std::unexpected(committed.error())};
-        }
-        terminal_committed.store(true);
-        // The invocation remains registered until the phase returns; hold that
-        // window open so the inspection below races a live identity against a
-        // terminal record.
-        identity_still_live.store(true);
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-        while (std::chrono::steady_clock::now() < deadline)
-            std::this_thread::yield();
-        identity_still_live.store(false);
-        return support::AsyncResult<void>{support::ExpectedVoid{}};
-    });
+    // The phase borrows the flags by reference and runs on a harness execution
+    // thread; close() joins it before the flags leave scope.
+    builder.phase("run",
+            [&terminal_committed, &identity_still_live](
+                    const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+                auto committed = consume(runtime.commit(
+                        [](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+                        }));
+                if (!committed.has_value()) {
+                    return support::AsyncResult<void>{std::unexpected(committed.error())};
+                }
+                terminal_committed.store(true);
+                // The invocation remains registered until the phase returns; hold that
+                // window open so the inspection below races a live identity against a
+                // terminal record.
+                identity_still_live.store(true);
+                const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+                while (std::chrono::steady_clock::now() < deadline)
+                    std::this_thread::yield();
+                identity_still_live.store(false);
+                return support::AsyncResult<void>{support::ExpectedVoid{}};
+            });
     auto definition = builder.build();
     REQUIRE(definition.has_value());
     std::vector<TaskDefinition> definitions;
@@ -383,10 +498,175 @@ TEST_CASE("a terminal task is never derived running from a live or stale identit
     auto record = storage.task(id);
     const auto close_outcome = consume(harness->close());
 
-    REQUIRE(terminal_committed.load());
+    CHECK(terminal_committed.load());
     REQUIRE(record.has_value());
     REQUIRE(record->has_value());
     CHECK((*record)->state.status == "terminal");
     CHECK_FALSE(violation.load());
-    REQUIRE(close_outcome.has_value());
+    CHECK(close_outcome.has_value());
+}
+
+// Held-commit lifecycle, release side (issue #1165 acceptance): once the line
+// holder releases, the queued reservation settles, the phase starts on the
+// published identity (inspect reports running while the record is committed
+// running), and the identity cleans up when the phase settles the task
+// terminal — no stale running row afterwards.
+TEST_CASE("a held reservation settles after release: the phase starts and the identity cleans up",
+        "[durable][issue1165][held-release]") {
+    MemoryStorage storage;
+    std::atomic_bool entered{false};
+    std::atomic_bool release{false};
+    std::atomic_bool observed_running{false};
+    std::atomic_bool stale_identity{false};
+    auto builder = TaskDefinitionBuilder("audit1165.held-release", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    builder.phase("run", [](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.held-release"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    // The holder borrows the flags and harness by reference and is joined
+    // before they leave scope; its internal loop is bounded by `release`.
+    std::jthread holder([&harness, &entered, &release] {
+        static_cast<void>(consume(
+                harness->session().read_committed([&entered, &release](Storage&) -> support::Expected<chord::Json> {
+                    entered.store(true);
+                    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+                    while (!release.load() && std::chrono::steady_clock::now() < deadline)
+                        std::this_thread::yield();
+                    return chord::Json(nullptr);
+                })));
+    });
+    const auto start_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!entered.load() && std::chrono::steady_clock::now() < start_deadline)
+        std::this_thread::yield();
+    const bool did_enter = entered.load();
+    REQUIRE(harness->resume().has_value());
+
+    // While the commit is held the record stays pending with no running
+    // report (the reservation is not yet settled); release and watch the
+    // startup, then the cleanup.
+    release.store(true);
+    holder.join();
+
+    bool terminal = false;
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!terminal && std::chrono::steady_clock::now() < deadline) {
+        auto record = storage.task(id);
+        const bool record_terminal = record && record->has_value() && (*record)->state.status == "terminal";
+        auto inspection = consume(harness->inspect());
+        if (inspection.has_value()) {
+            for (const auto& row : inspection.value().tasks) {
+                if (row.record.id != id) {
+                    continue;
+                }
+                if (record_terminal) {
+                    stale_identity.store(true);
+                } else if (row.record.state.status == "running" && row.state.kind == "running") {
+                    observed_running.store(true);
+                }
+            }
+        }
+        if (record_terminal) {
+            terminal = true;
+        }
+        std::this_thread::yield();
+    }
+    const auto close_outcome = consume(harness->close());
+
+    CHECK(did_enter);
+    CHECK(observed_running.load());
+    CHECK(terminal);
+    CHECK_FALSE(stale_identity.load());
+    CHECK(close_outcome.has_value());
+}
+
+// Close race (issue #1165 acceptance): a reservation commit still queued
+// behind a held Session line when shutdown begins must be discarded by its
+// completion, never start its phase, and let close drain without a hang.
+TEST_CASE("closing while a held reservation settles discards the identity and never starts the phase",
+        "[durable][issue1165][close-race]") {
+    MemoryStorage storage;
+    std::atomic_bool entered{false};
+    std::atomic_bool release{false};
+    std::atomic_bool phase_ready{false};
+    std::atomic_bool close_done{false};
+    auto builder = TaskDefinitionBuilder("audit1165.close-race", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    // The phase borrows the flag by reference and runs on a harness execution
+    // thread; close() joins it before the flag leaves scope.
+    builder.phase("run", [&phase_ready](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        phase_ready.store(true);
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.close-race"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    // The holder and closer borrow the flags and harness by reference and are
+    // joined before they leave scope; the holder's loop is bounded by
+    // `release` and by its own deadline, so the joins below are reached.
+    std::jthread holder([&harness, &entered, &release] {
+        static_cast<void>(consume(
+                harness->session().read_committed([&entered, &release](Storage&) -> support::Expected<chord::Json> {
+                    entered.store(true);
+                    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+                    while (!release.load() && std::chrono::steady_clock::now() < deadline)
+                        std::this_thread::yield();
+                    return chord::Json(nullptr);
+                })));
+    });
+    const auto start_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!entered.load() && std::chrono::steady_clock::now() < start_deadline)
+        std::this_thread::yield();
+    const bool did_enter = entered.load();
+    REQUIRE(harness->resume().has_value());
+    std::jthread closer([&harness, &close_done] { close_done.store(consume(harness->close()).has_value()); });
+
+    // Wait for the public scheduling state to flip to "closing" so the held
+    // reservation's completion deterministically observes `closed` and
+    // discards the identity.
+    bool saw_closing = false;
+    const auto closing_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!saw_closing && std::chrono::steady_clock::now() < closing_deadline) {
+        auto inspection = consume(harness->inspect());
+        if (inspection.has_value() && inspection.value().scheduling == "closing") {
+            saw_closing = true;
+        }
+        std::this_thread::yield();
+    }
+    release.store(true);
+    holder.join();
+    closer.join();
+
+    CHECK(did_enter);
+    CHECK(saw_closing);
+    CHECK_FALSE(phase_ready.load());
+    CHECK(close_done.load());
 }

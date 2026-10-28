@@ -1473,6 +1473,20 @@ struct Harness::Impl {
                     if (member == nullptr || task_live(*member)) all_terminal = false;
                 }
                 if (!all_terminal) continue;
+                // A phase that committed `waiting` can still be active: that
+                // commit dirties the scheduler while the execution thread is
+                // still between the commit and ending its invocation.
+                // Resuming now would commit `pending` with a live identity —
+                // the exact composite `inspect` must not pair (frozen pi ends
+                // the invocation in the turn the record parks, so its resume
+                // never races one). Cleanup dirties the scheduler again, so
+                // the next pass resumes the task once the identity is gone.
+                {
+                    std::lock_guard lock(mutex);
+                    if (active_invocations.contains(task.id.value)) {
+                        continue;
+                    }
+                }
                 (void)await_async_void(session->commit([id = task.id](Transaction& tx) -> support::ExpectedVoid {
                     auto cur = tx.task(id);
                     if (!cur || !cur->has_value()) return {};
@@ -1561,17 +1575,33 @@ struct Harness::Impl {
                 }))
                         .start([this, tid, stop_src, reserved, &settle_mutex, &settle_cv, &settled](
                                        support::ExpectedVoid outcome) mutable noexcept {
-                            if (outcome.has_value() && reserved->load(std::memory_order_acquire)) {
+                            if (outcome.has_value() &&
+                                    // `reserved` is stored with release
+                                    // inside the transaction, which may run
+                                    // on a different thread than this
+                                    // completion for a deferred backend; the
+                                    // acquire pairs with that store. The
+                                    // invocation's cross-thread publication
+                                    // happens via the scheduler mutex below
+                                    // (CODING_STANDARDS §9.13).
+                                    reserved->load(std::memory_order_acquire)) {
                                 std::lock_guard lock(mutex);
                                 if (!closed) {
                                     active_invocations[tid.value] = stop_src;
                                 }
                             }
+                            // Notify while holding `settle_mutex`: the
+                            // waiting schedule_step thread can only leave its
+                            // wait and destroy these stack objects after
+                            // re-acquiring the mutex, which happens strictly
+                            // after this callback's notify_one() has returned
+                            // (CODING_STANDARDS §6.2/§7.5 borrowed-stack
+                            // lifetime).
                             {
                                 std::lock_guard lock(settle_mutex);
                                 settled = true;
+                                settle_cv.notify_one();
                             }
-                            settle_cv.notify_one();
                         });
                 {
                     std::unique_lock lock(settle_mutex);

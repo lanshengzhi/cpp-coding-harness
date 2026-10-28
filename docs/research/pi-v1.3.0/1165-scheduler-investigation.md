@@ -111,12 +111,13 @@ still needs the ownership/lock prerequisite followed by the reservation and
 inspection change; a separately scoped lock/lifetime prerequisite is a possible
 split, but it must retain the still-open Session-line reentry problem.
 
-## Status update: implemented (pending Full Validation)
+## Status update: implemented, reviewed, revised
 
 The reservation visibility fix landed on `ticket/1165` on top of the merged
-#1166 failure-signaling work (merge `91e30d0cf`). The stop-source copy-out
-candidate recorded above was adopted and merged by #1166 (`f787d03f7`); the
-superseded lock/close/failure/reentry probes were removed from
+#1166 failure-signaling work (merge `91e30d0cf`, fix commit `5057091d3`,
+review revision in flight). The stop-source copy-out candidate recorded above
+was adopted and merged by #1166 (`f787d03f7`); the superseded
+lock/close/failure/reentry probes were removed from
 `SchedulerVisibilityTest.cpp` in favor of the reviewed
 `HarnessFailureLifecycleTest.cpp`. The candidate publication and snapshot
 design described above is what shipped:
@@ -137,34 +138,94 @@ design described above is what shipped:
    remains active (frozen waiting contract); an identity is never used to
    derive running for a scan that still sees `pending`, because the
    identity reflects a commit newer than the record it would annotate.
+3. **Waiting-resume guard** (added in review revision). The
+   `waiting -> pending` resume skips tasks with a live invocation. Without
+   it the resume — dirtied by the waiting commit itself — committed
+   `pending` while the phase was still active, reviving the exact composite
+   the gate excludes. Frozen pi ends the invocation in the turn the record
+   parks, so its resume never races one; cleanup dirties the scheduler
+   again, so the guarded resume fires on the next pass. With the guard, a
+   committed `pending` record with a live identity is unreachable, and the
+   status gate becomes a coherent observation.
 
-Lock order stays Session line -> Harness mutex (the completion runs on the
-line and takes the mutex; no path holds the mutex while entering Session or
-invoking stop/user callbacks). No new threads, no unbounded waits, gates
-released before joins.
+Lock order stays Session line -> Harness mutex; no path holds the mutex
+while entering Session or invoking stop/user callbacks. The completion
+notifies its settle wait under the lock so the borrowed stack
+synchronization objects outlive the notification (CODING_STANDARDS
+§6.2/§7.5); `reserved` keeps its release/acquire pair because the
+transaction and completion may run on different threads for a deferred
+backend (§9.13).
+
+### Review round 1 (dual-axis, both BLOCK) and resolutions
+
+- *Standards P1 — borrowed stack sync objects, notify after unlock.* Fixed:
+  notify under the lock; destruction strictly follows the waiter's
+  re-acquisition.
+- *Standards P2 — implicit captures, memory-order justification, REQUIRE vs
+  CHECK.* Fixed: explicit captures with lifetime comments, §9.13 comment at
+  the `reserved` load, post-drain behavioral assertions converted to CHECK
+  (§11.3); setup preconditions that guard dereferences stay REQUIRE.
+- *Spec P1 — resume race hides a live invocation behind the pending gate.*
+  Confirmed with a bounded RED (`resume-race-red.log`): the record flipped
+  to `pending` while the phase was invoked and inspect derived a non-running
+  state. Fixed by the waiting-resume guard; the regression case pins it.
+- *Spec P1 — held async reservation, no-op, close coverage.* Added
+  `held-release` (startup + cleanup after the line releases) and
+  `close-race` (reservation queued behind a held line while shutdown
+  begins: identity discarded, phase never starts, close drains). The
+  reservation no-op is pinned by the pre-existing
+  `HarnessOwnershipTest.cpp` "a stale reservation skips a task whose abort
+  terminal already landed" (terminal lands inside the held reservation
+  window; the transaction no-ops; the scheduler survives with the terminal
+  record intact).
+- *Spec P1 — "queue inspect on the line; the direct scan can composite
+  states that never existed."* Disproof by state-pair analysis, not by test
+  pass: after the gate and the resume guard, every reportable
+  (scanned status, identity snapshot) cell corresponds to a real instant —
+  `running` rows derive from the scan; `waiting`/`completing` + identity
+  derive running and exist while the phase is active (frozen contract);
+  `waiting`/`completing` without identity exist once the invocation ends;
+  `pending` + identity is unreachable post-guard except as the pre-settle
+  stale scan, which the gate rejects. No fabricated state is reportable.
+  A FIFO inspect additionally cannot be implemented within this issue's
+  scope: a synchronous line wait from the demonstrated stop-callback
+  reentry window (`[issue1166][reentry]`, recorded) would wait on the very
+  line its own callback holds (unbounded self-deadlock), and the Harness
+  lifetime contract for a line-pending inspect (`~Harness` does not drain
+  pending line reads) is unproven. Queued inspect remains #1088-coordinated
+  scope, documented below.
+- *Spec P2 — preserve reproducible frozen evidence; record #1088
+  coordination.* The frozen waiting probe and its three original logs are
+  preserved under `1165-evidence/frozen-waiting/` with a README (frozen
+  checkout `71023aec`, re-run instructions), re-confirmed 3/3 fresh on
+  2026-10-28. Coordination with #1088 is recorded here and relayed through
+  the orchestrator: #1088 owns the FIFO/complete-scan inspection upgrade and
+  must apply the `session->failed()` seal at its observation entry (per the
+  #1166 boundary note); this change leaves `Harness::inspect()` a direct
+  scan with its 256-task cap.
 
 ### Evidence (`docs/research/pi-v1.3.0/1165-evidence/`)
 
 - `reservation-red-merged-main.log` — the held-reservation probe fails on
   merged main (pre-fix), discriminating RED.
-- `reservation-green3.log` — `[issue1165|issue1166]` 10/10, three runs.
-- `durable-shard.log` — full durable shard 175/175.
-- `mutation-gate-off.log` — publication moved but gate removed: the probe
-  passes; the settle->publish gap closes inside the settle callback, so
-  this probe can no longer bracket it. The gate's necessity is by
-  construction (scan and identity snapshot are two unsynchronized reads)
-  and by `mutation-gate-only.log`.
-- `mutation-gate-only.log` — old pre-commit registration with the new gate:
-  the probe passes; the gate alone suppresses the symptom. The publication
-  move is pinned by the frozen parity contract and the #1088 line-time
-  observation seam, not by this probe.
+- `resume-race-red.log` — the waiting-resume race fails pre-guard, bounded
+  RED for the review-confirmed defect.
+- `reservation-green3.log` — `[issue1165|issue1166]` 13/13, three runs
+  (post-revision).
+- `durable-shard.log` — full durable shard 178/178 (post-revision).
+- `mutation-gate-off.log` / `mutation-gate-only.log` — the two mutation
+  directions with honest interpretation (see Review round 1 in the first
+  delivery; unchanged).
+- `frozen-waiting/` — preserved runnable frozen probe, original + fresh
+  logs.
 
-New public tests in `tests/durable/SchedulerVisibilityTest.cpp`: the held
-reservation probe (kept), waiting-while-phase-active (frozen contract),
-rejected reservation (no phase start, sealed inspect), and terminal identity
-cleanup (no live-work row while the identity is still registered against a
-terminal record). All follow the release-then-assert discipline from the
-#1166 `-fno-exceptions` findings.
+### Validation state
+
+Focused: post-revision `[issue1165|issue1166]` 13/13 x3, durable shard
+178/178, format gate clean, Parity Architecture Gate build phase PASS.
+Full Validation: 3878/3878 passed, 1 pre-existing skip, exit 0 on
+`5057091d3` (pre-revision); the review revision rebuilds the durable shard
+only and needs a fresh Full Validation window before delivery.
 
 ### Residuals carried forward (unchanged, documented, not claimed fixed)
 
@@ -176,11 +237,5 @@ terminal record). All follow the release-then-assert discipline from the
   Storage backend that synchronously re-entered Session from `task()` would
   oppose the line->mutex order; no backend does, and frozen pi carries the
   same exposure. `wait_for_idle` completes outside the mutex already.
-- Queued/asynchronous `inspect` was not implemented: the Harness lifetime
-  contract for a Session-line-pending inspect remains unproven
-  (`~Harness` does not drain pending line reads), and a blocking FIFO
-  inspect would deadlock in the demonstrated stop-callback reentry window.
-  The direct-scan inspect with the derivation gate is the smallest sound
-  change.
-- `Harness::inspect()` keeps its direct-scan semantics and 256-task cap;
-  complete-scan and FIFO inspection belong to #1088's observation scope.
+- Queued/asynchronous `inspect` was not implemented (see the Spec P1
+  disproof above); it is #1088-coordinated scope.
