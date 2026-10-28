@@ -813,6 +813,10 @@ TEST_CASE("a failed busy admission persists neither its submission nor its inbox
     REQUIRE(held.reached.try_acquire_for(std::chrono::seconds(5)));
 
     const auto before = inbox_items(storage, root.value());
+    auto inbox_before = storage.find_document(
+            "pi.inbox:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
+    REQUIRE(inbox_before.has_value());
+    REQUIRE(inbox_before->has_value());
     auto submissions_before = storage.scan_submissions(100);
     REQUIRE(submissions_before.has_value());
     bool observed_close = false;
@@ -829,6 +833,22 @@ TEST_CASE("a failed busy admission persists neither its submission nor its inbox
     storage.fail_next_commit("injected admission failure");
     auto rejected = consume(harness->submit(root.value(), text_input("failed", std::nullopt, "failed-request")));
     CHECK_FALSE(rejected.has_value());
+    const auto& failed_batch = storage.failed_writes();
+    REQUIRE(failed_batch.size() == 2);
+    const auto* submission = failed_batch[0].type == "submission" ? &failed_batch[0] : &failed_batch[1];
+    const auto* inbox = failed_batch[0].type == "document.change" ? &failed_batch[0] : &failed_batch[1];
+    REQUIRE(submission->type == "submission");
+    REQUIRE(submission->submission.has_value());
+    CHECK(submission->submission->request_id == std::optional<std::string>{"failed-request"});
+    REQUIRE(inbox->type == "document.change");
+    CHECK(inbox->document_id == std::optional<DocumentId>{(*inbox_before)->id});
+    bool changes_items = false;
+    for (const auto& op : inbox->document_ops) {
+        if (const auto* set = std::get_if<chord::SetOp>(&op); set != nullptr && !set->path.empty()) {
+            if (const auto* key = std::get_if<chord::PathKey>(&set->path[0])) changes_items |= key->key == "items";
+        }
+    }
+    CHECK(changes_items);
     CHECK(observed_close);
     CHECK(harness->session().failed());
     auto subsequent = consume(harness->submit(root.value(), text_input("after failure")));

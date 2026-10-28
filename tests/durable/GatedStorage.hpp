@@ -62,6 +62,11 @@ public:
     /// Observe the inner backend just before Session closes it after a failure.
     void on_close(std::function<void(::cch::durable::Storage&)> observer) { close_observer_ = std::move(observer); }
 
+    /// The last batch rejected by the fault injector.
+    [[nodiscard]] const std::vector<::cch::durable::StorageWrite>& failed_writes() const noexcept {
+        return failed_writes_;
+    }
+
     /// The number of `commit()` calls this double received.
     [[nodiscard]] std::size_t commit_calls() const noexcept { return commit_calls_; }
 
@@ -75,6 +80,7 @@ public:
             std::span<const ::cch::durable::StorageWrite> writes) override {
         commit_calls_ += 1;
         if (failure_.has_value()) {
+            failed_writes_.assign(writes.begin(), writes.end());
             std::string message = std::move(*failure_);
             failure_.reset();
             return support::AsyncResult<::cch::durable::Seq>{support::Expected<::cch::durable::Seq>{
@@ -189,6 +195,7 @@ private:
     std::unique_ptr<::cch::durable::MemoryStorage> inner_;
     std::optional<Held> held_;
     std::optional<std::string> failure_;
+    std::vector<::cch::durable::StorageWrite> failed_writes_;
     std::function<void(::cch::durable::Storage&)> close_observer_;
     bool hold_armed_{false};
     std::size_t permits_{0};
