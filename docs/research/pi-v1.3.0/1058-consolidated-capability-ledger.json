@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "dfb372ee8dd35bafb632424a789b5eef9b872b850971aad6db7e9321fa28b0ee"
+            "sha256": "819b16dcc7a14cfe52099c7aaa9d1b84a59cc752c090300ba3ed983ad06bd77f"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -254,20 +254,20 @@
         "validation": {
           "command": [
             "ctest",
-            "--test-dir",
-            "build",
+            "--preset",
+            "vcpkg",
             "-L",
             "issue1101",
+            "--output-on-failure",
             "--output-junit",
-            "/tmp/1152-issue1101-final.xml",
-            "--output-on-failure"
+            "/tmp/cch-1089-1101.xml"
           ],
-          "testedRevision": "633f44df9f4293f430ad53a9834218a8ea54a777",
-          "recordedAt": "2026-10-27T21:59:02Z",
+          "testedRevision": "517fb5eb610d58131f3682c68d90cfc1043b5118",
+          "recordedAt": "2026-10-28T00:47:55Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1152-revalidation-1101.xml",
-            "sha256": "b656fa290dc3e370cb2ebb85a7dd5a1abb967f23ba1a86c5aae3b2179322211b"
+            "path": "docs/research/pi-v1.3.0/deliveries/1089-revalidation-1101.xml",
+            "sha256": "8f3fb0d2ee0e2d4e6186e0aabb1aa4c594382ce7d639b588517ac21e0027dc0e"
           }
         },
         "rows": [
@@ -652,6 +652,8 @@
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
+        "audit-1089/environment.json:watch covers creation after return and stops callbacks after close",
+        "audit-1089/environment.json:normal exit cancellation and timeout have distinct shell outcomes",
         "audit-1050/input-standalone.json:input-placeholder-reversal-and-custom-styling",
         "audit-1050/input-standalone.json:input-raw-lf-submission-and-rebound-submit",
         "audit-1050/input-standalone.json:input-narrow-unicode-scroll-and-cursor",
@@ -755,10 +757,7 @@
         "audit-1152/structured-text.json:nested",
         "audit-1152/structured-text.json:strings"
       ],
-      "uncovered": [
-        "audit-1089/environment.json:watch covers creation after return and stops callbacks after close",
-        "audit-1089/environment.json:normal exit cancellation and timeout have distinct shell outcomes"
-      ]
+      "uncovered": []
     }
   },
   "sourceAliases": {
@@ -2888,6 +2887,26 @@
     }
   ],
   "orphanScenarios": [
+    {
+      "family": "audit-1089",
+      "artifact": "environment.json",
+      "scenario": "watch covers creation after return and stops callbacks after close",
+      "reason": "Captured by #1089 after the #1058 ledger; no #1056 ledger row routes to this new artifact.",
+      "rows": [
+        "cch_durable:node-env-watch"
+      ],
+      "disposition": "The durable environment watch test exercises these observations; this classification does not promote the row."
+    },
+    {
+      "family": "audit-1089",
+      "artifact": "environment.json",
+      "scenario": "normal exit cancellation and timeout have distinct shell outcomes",
+      "reason": "Captured by #1089 after the #1058 ledger; no #1056 ledger row routes to this new artifact.",
+      "rows": [
+        "cch_durable:node-exec"
+      ],
+      "disposition": "The durable environment process test exercises these outcomes; this classification does not promote the row."
+    },
     {
       "family": "audit-1050",
       "artifact": "input-standalone.json",
