@@ -980,8 +980,10 @@ TEST_CASE("C++ creates a SQLite store, pi advances it, and C++ finishes it",
     TaskId task_id{};
     SubmissionId submission_id{};
     Outcome<void> committed;
+    // consume waits for the callback to complete; all captured locals outlive it.
     if (root.has_value())
-        committed = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
+        committed = consume(harness->session().commit([&harness, &root, &history, &task_id, &submission_id](
+                                                              Transaction& tx) -> support::Expected<void> {
             auto created = tx.create_task(*harness->task_definition(kIssue1086TaskKind),
                     chord::Json{chord::Json::Object{{"n", chord::Json{7}}}},
                     TaskOptions{.conversation_id = root.value()});
@@ -1119,7 +1121,9 @@ TEST_CASE("a failed C++ commit on a pi SQLite store rolls back and pi still cont
                     " BEGIN SELECT RAISE(ABORT, 'injected 1086 task failure'); END");
     auto session = Session::create(*storage);
     bool callback_ran = false;
-    auto failed = consume(session->commit([&](Transaction& tx) -> support::Expected<void> {
+    // consume waits for the callback to complete; all captured locals outlive it.
+    auto failed = consume(session->commit([&callback_ran, &history, &address, &task_record, &ids](
+                                                  Transaction& tx) -> support::Expected<void> {
         callback_ran = true;
         auto draft = tx.doc(*history, address);
         if (!draft) return std::unexpected(draft.error());
