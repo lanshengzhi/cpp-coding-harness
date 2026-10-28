@@ -189,8 +189,8 @@ constexpr std::string_view kCrossOriginHeaders[] = {
         for (std::size_t index = 0; index < colon; ++index) {
             const unsigned char character = static_cast<unsigned char>(value[index]);
             const bool first_alpha = index == 0 && std::isalpha(character) != 0;
-            const bool scheme_char = std::isalnum(character) != 0 || character == '+' || character == '-' ||
-                                     character == '.';
+            const bool scheme_char =
+                    std::isalnum(character) != 0 || character == '+' || character == '-' || character == '.';
             if (!first_alpha && !scheme_char) {
                 return std::nullopt;
             }
@@ -213,16 +213,16 @@ constexpr std::string_view kCrossOriginHeaders[] = {
         auto parsed = parse_url(location);
         if (!parsed.valid) {
             return std::unexpected(support::make_error(support::ErrorCode::Process,
-                    "invalid redirect location", "rejected URL: " + std::string{location}));
+                    "invalid redirect location",
+                    "rejected URL: " + std::string{location}));
         }
         return std::string{location};
     }
 
     const auto current = parse_url(current_url);
     if (!current.valid) {
-        return std::unexpected(support::make_error(support::ErrorCode::Process,
-                "invalid redirect base URL",
-                "rejected URL: " + std::string{current_url}));
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, "invalid redirect base URL", "rejected URL: " + std::string{current_url}));
     }
     if (location.empty()) {
         // An empty reference resolves to the current URL without its query or
@@ -239,9 +239,8 @@ constexpr std::string_view kCrossOriginHeaders[] = {
         return current.origin + current.path + std::string{location};
     }
     const auto last_slash = current.path.find_last_of('/');
-    const std::string base = last_slash == std::string::npos
-                                     ? current.origin + "/"
-                                     : current.origin + current.path.substr(0, last_slash + 1);
+    const std::string base = last_slash == std::string::npos ? current.origin + "/"
+                                                             : current.origin + current.path.substr(0, last_slash + 1);
     std::string merged_input = base;
     merged_input.append(location.data(), location.size());
     std::string merged = remove_dot_segments(merged_input);
@@ -754,8 +753,7 @@ boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImp
             // a retry, so `Process` keeps it out of connect's transient gate.
             co_return std::unexpected(support::make_error(support::ErrorCode::Process,
                     "redirect count exceeded",
-                    "MCP server '" + config_.name + "' exceeded " + std::to_string(kMaxRedirectCount) +
-                            " redirects"));
+                    "MCP server '" + config_.name + "' exceeded " + std::to_string(kMaxRedirectCount) + " redirects"));
         }
         ++redirect_count;
         const int status = response->head.status_code;

@@ -24,9 +24,8 @@ support::ExpectedVoid validate_http_server_config(const HttpServerConfig& config
                 "MCP server '" + config.name + "' url must be an http or https URL",
                 config.url.empty() ? "missing URL" : "rejected URL: " + config.url));
     }
-    const std::string_view authority =
-            std::string_view{config.url}.substr(https ? std::string_view{"https://"}.size()
-                                                      : std::string_view{"http://"}.size());
+    const std::string_view authority = std::string_view{config.url}.substr(
+            https ? std::string_view{"https://"}.size() : std::string_view{"http://"}.size());
     const auto slash = authority.find('/');
     const std::string_view host_port = slash == std::string_view::npos ? authority : authority.substr(0, slash);
     // `http://?query` or `http://#fragment` have an empty host: pi's

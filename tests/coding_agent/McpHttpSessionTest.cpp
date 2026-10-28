@@ -552,13 +552,14 @@ TEST_CASE("HTTPS transport rejects an untrusted certificate", "[coding_agent][mc
     // SSL_CERT_FILE pointing at the committed test CA (`trust_test_ca`).
     tests::TempWorkspace workspace;
     const auto empty_ca = workspace.path() / "empty-ca.pem";
-    { std::ofstream create(empty_ca); }
+    {
+        std::ofstream create(empty_ca);
+    }
     const tests::EnvVarGuard untrusted{"SSL_CERT_FILE", empty_ca.string()};
     HttpFixtureServer server;
     tests::RuntimeFixture runtime;
 
-    auto refused = tests::run_awaitable(
-            runtime,
+    auto refused = tests::run_awaitable(runtime,
             cch::mcp::HttpClient::connect(http_config(server), std::make_shared<support::BoostBeastStreamTransport>()));
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == support::ErrorCode::Network);
