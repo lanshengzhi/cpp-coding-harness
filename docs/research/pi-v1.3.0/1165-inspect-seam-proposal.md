@@ -1,156 +1,212 @@
-# #1165 private line-read seam proposal (for review; nothing implemented)
+# #1165 private line-read seam proposal v2 (variant B; review draft, nothing implemented)
 
-Companion to `1165-inspect-protocol-design.md`. Answers the review's four
-requests: the seam's concrete diff, lifetime ownership, complete
-failure/close rules, and the scope of frozen's listener no-reentry
-prohibition. No production code is changed by this document.
+Variant A (routing inspect through public `Session::read_committed`) is
+REJECTED and recorded as rejected: that method's public contract says the
+callback "reads committed Storage state only", so sampling harness runtime
+state there is a contract violation, and bundling F3/C2 behavior changes
+into the stale-scan fix is not acceptable. This revision is design only.
 
-## 1. Seam
+## 1. Seam shape: the package's existing detail-access pattern
 
-Frozen's equivalent is `Session.readOnLine`, explicitly marked `Internal:`
-(session.ts:234) and used by frozen `Harness` for inspection-class reads
-(harness.ts:248 `#inspectTask` family). Our port keeps the same package
-boundary: the seam is not public API.
+The durable package already exposes internal access through a friended
+`detail::*Access` struct: `Session.hpp` forward-declares
+`detail::DocumentDefinitionAccess`, friends it, and `Session.cpp` owns its
+definition (`Session.cpp:381`). Variant B uses the same pattern with a
+detail header so `Harness.cpp` can call it:
 
-### Variant A (recommended first slice): zero new API, only `Harness.cpp`
-
-`Harness::inspect()` routes its existing capture through the existing
-`Session::read_committed`, with a caller-side result slot:
+**New header** `src/durable/include/cch/durable/detail/SessionLineAccess.hpp`
 
 ```cpp
-support::AsyncResult<HarnessInspection> Harness::inspect() {
-    if (impl_->session->failed())                      // F1, unchanged
-        return support::AsyncResult<HarnessInspection>{std::unexpected(session_failed_error())};
-    if (impl_->session->closed())                      // C2/C4: frozen assertUsable text
-        return support::AsyncResult<HarnessInspection>{std::unexpected(
-            support::make_error(support::ErrorCode::Session, "Session is closed"))};
+#pragma once
 
-    struct Slot {
-        std::optional<HarnessInspection> value{};
-        std::optional<support::Error> capture_error{};
-    } slot;
+#include <cch/durable/Session.hpp>
+#include <cch/durable/Storage.hpp>
+#include <cch/support/AsyncResult.hpp>
+#include <cch/support/Error.hpp>
 
-    auto read = impl_->session->read_committed(
-            [&slot, this](const std::map<TaskId, TaskRecord>&) -> support::Expected<chord::Json> {
-                if (impl_->session->failed())          // F2: frozen #assertHealthy parity
-                    return std::unexpected(session_failed_error());
-                slot.value = impl_->capture_inspection_on_line(); // mutex copy + scan + derive
-                if (!slot.value) {                     // F3: capture failure
-                    slot.capture_error = ...;
-                    return std::unexpected(*slot.capture_error);
-                }
-                return chord::Json(nullptr);
-            });
-    auto outcome = consume(std::move(read));           // caller blocks; job runs on the line
-    if (!outcome) {
-        if (slot.capture_error) return AsyncResult<HarnessInspection>{std::unexpected(*slot.capture_error)};
-        return AsyncResult<HarnessInspection>{std::unexpected(outcome.error())};  // F4 seal
+#include <functional>
+
+namespace cch::durable::detail {
+
+/// Internal, non-public line access for the Harness (issue #1165). A job
+/// admitted here joins the same mutation-line FIFO as `read_committed` and
+/// commits: it runs after every job admitted before it has settled, and no
+/// job admitted after it starts before its completion callback returns.
+/// Unlike the public `read_committed`, the job may sample caller-owned
+/// runtime state as well as committed Storage state; that is the point of
+/// the seam, and it is why it is not public API. Admission rejects a
+/// failed Session with the frozen failure message and a closed Session
+/// with the frozen closed message; a job error rejects the operation
+/// without failing the Session (same rule as committed reads).
+struct SessionLineAccess {
+    static support::AsyncResult<void> read_on_line(
+            Session& session, std::move_only_function<support::Expected<void>(Storage&)> job);
+};
+
+} // namespace cch::durable::detail
+```
+
+**`Session.hpp`** (private surface only; no public API change)
+
+```cpp
+namespace detail {
+struct DocumentDefinitionAccess;
+struct SessionLineAccess;          // + this forward declaration
+}
+...
+class Session {
+    ...
+private:
+    friend struct detail::SessionLineAccess;   // + this friend
+    ...
+};
+```
+
+**`Session.cpp`** (implementation; reuses `PendingRead` verbatim)
+
+```cpp
+support::AsyncResult<void> detail::SessionLineAccess::read_on_line(
+        Session& session, std::move_only_function<support::Expected<void>(Storage&)> job) {
+    auto& impl = *session.impl_;
+    std::lock_guard lock(impl.mutation_line);
+    if (impl.failed) {
+        return support::AsyncResult<void>{std::unexpected(session_failed_error())};
     }
-    return support::AsyncResult<HarnessInspection>{std::move(*slot.value)};
+    if (impl.closed) {
+        return support::AsyncResult<void>{std::unexpected(session_closed_error())};
+    }
+    // Same producer shape as Session::read_committed (Session.cpp:2316):
+    // the job is wrapped into the existing PendingRead variant, so it uses
+    // the same queue, pump, failure rejection, close drain, and
+    // inline-when-idle completion path. No new line kind, no new queue.
+    return support::AsyncResult<void>{support::AsyncProducer<void, support::Error>{
+            [session = &session, job = std::move(job)](
+                    support::AsyncCompletion<void, support::Error> completion) mutable noexcept {
+                auto& impl = *session->impl_;
+                std::lock_guard lock(impl.mutation_line);
+                if (impl.failed) {
+                    completion(std::unexpected(session_failed_error()));
+                    return;
+                }
+                if (impl.closed) {
+                    completion(std::unexpected(session_closed_error()));
+                    return;
+                }
+                impl.enqueue_line(Session::Impl::PendingRead{
+                        .read = [job = std::move(job)](Storage& storage) -> support::Expected<chord::Json> {
+                            auto outcome = job(storage);
+                            if (!outcome)
+                                return std::unexpected(outcome.error());
+                            return chord::Json(nullptr);
+                        },
+                        .completion = [completion = std::move(completion)](
+                                              support::Expected<chord::Json> outcome) mutable noexcept {
+                            if (!outcome)
+                                completion(std::unexpected(outcome.error()));
+                            else
+                                completion(support::ExpectedVoid{});
+                        }});
+            }}};
 }
 ```
 
-`capture_inspection_on_line()` is today's scan + single-identity-copy +
-derive, moved verbatim (the identity copy already takes the Harness mutex
-alone and the scan already runs outside it -- verified in current
-`Harness::inspect`; no new lock ordering).
+**`Harness.cpp`** (producer shape, no blocking, no latch)
 
-Behavior changes this introduces (each needs sign-off, listed in §5):
-the inspection is line-queued (the intended fix); a capture failure now
-seals the session like any failed read (frozen-aligned; today inspect
-does not seal); post-close inspect reports "Session is closed"; an
-inspect called from inside a line callback self-waits -- the same hazard
-class `read_committed` already has today, not a new one.
+```cpp
+support::AsyncResult<HarnessInspection> Harness::inspect() {
+    return support::AsyncResult<HarnessInspection>{support::AsyncProducer<HarnessInspection, support::Error>{
+            [impl = impl_.get()](support::AsyncCompletion<HarnessInspection, support::Error> completion) noexcept {
+                struct Capture {
+                    std::optional<HarnessInspection> value{};
+                };
+                auto capture = std::make_shared<Capture>();
+                auto read = detail::SessionLineAccess::read_on_line(
+                        *impl->session, [impl, capture](Storage& storage) -> support::Expected<void> {
+                            if (impl->session->failed())
+                                return std::unexpected(session_failed_error());
+                            capture->value = impl->capture_inspection(storage); // today's body, one instant
+                            return {};
+                        });
+                std::move(read).start([capture, completion = std::move(completion)](
+                                              support::ExpectedVoid outcome) mutable noexcept {
+                    if (!outcome)
+                        completion(std::unexpected(outcome.error()));
+                    else
+                        completion(std::move(*capture->value));
+                });
+            }}};
+}
+```
 
-### Variant B (follow-up refactor, not the first slice)
+`capture_inspection(Storage&)` is today's inspect body moved verbatim
+(failed-gate, scan, single identity copy under the Harness mutex, derive)
+minus its `AsyncResult` wrapper; the mutex is released before the scan
+exactly as today, so the lock order (line -> Harness mutex -> storage
+outside the mutex) and the reentry surface are unchanged from today's
+commit turns, which also call Storage under the line.
 
-A typed `Session` internal read (friend `class Harness`, private method
-on `Impl`, type-erased callback because `HarnessInspection` cannot be
-named in `Session.hpp` without a cycle), plus a monotonic
-`turns_enqueued` counter assigned with the enqueue in one line-lock
-critical section for the ticket-ordered included set (fifo-order). Needs
-its own authorization; variant A deliberately does not implement
-ticketing.
+## 2. Same PendingRead/FIFO, failure, close, drain semantics (proof by reuse)
 
-## 2. Lifetime ownership
+| Property | Basis |
+|---|---|
+| FIFO position | the job IS a `PendingRead` in the existing `pending_line` deque; `enqueue_line`/`pump_line` are untouched |
+| Admission checks | identical failed/closed checks as `Session::read_committed` (both at call time and at producer run) |
+| Failure while queued | `reject_pending_line` completes the pending read with the seal (audited; pinned by `[seal-waiting]`) |
+| Job error | rejects the operation WITHOUT failing the Session -- the documented committed-read rule (`start_line_job(PendingRead)`, Session.cpp:571) |
+| Close with queued read | the close drain runs pending line jobs while Storage is still open (`finish_close_if_ready` path); unchanged |
+| Inline when idle | same inline completion as `read_committed` |
+| No new machinery | no new queue, no new thread, no new lock, no new line kind |
 
-| Referent | Owner | Why it outlives the read job |
-|---|---|---|
-| `Session::Impl` | `Harness::Impl` | the job exists only between `consume` start and completion; `consume` bounds the synchronous `inspect()` call; the caller owns the Harness handle (see open item) |
-| `Storage&` | caller of `Harness::open` | documented: "The caller keeps `storage` alive until `close()` completes" |
-| result `Slot` | caller thread's stack | bounded by `consume` |
-| registry snapshot | `shared_ptr`, self-contained | value-captured |
-| identity set | value copy | no aliasing |
+## 3. Public behavior changes this slice needs signed off
 
-Open item (restated, not measured): nothing in the current API docs
-forbids destroying a Harness concurrently with an in-flight call. The
-slice's safety rests on documenting exclusive ownership of the handle
-(sign-off required), same as every synchronous method on this class.
+- **S1 (the fix):** `Harness::inspect` becomes a pending, line-ordered
+  operation: it waits for every job admitted before it and observes one
+  committed state. Today it scans immediately on the caller thread.
+- **S2:** post-close inspect reports the frozen "Session is closed"
+  instead of the storage backend's closed error (the seam's admission
+  check). Frozen parity, but a public behavior change; the alternative
+  is a deliberate closed-passthrough that preserves today's backend
+  error -- not recommended.
+- **S3 (new hazard, needs a decision):** an inspect called from inside a
+  line callback (commit body, read callback, completion) would queue
+  behind its own job and self-wait. Today it merely scans. Options:
+  (a) document the prohibition in `inspect`'s contract (frozen
+  listener-style); (b) have the seam detect the line-owner thread (one
+  thread-id set around job execution, seam-local) and reject with a
+  Validation error. Recommendation: (b), contained entirely in the seam,
+  with sign-off; shipping a new silent deadlock is worse.
+- **S4 (documentation):** `inspect`'s contract must state that the
+  Harness must outlive the operation until its completion returns (the
+  same duty `read_committed` already documents for the Session). This is
+  documentation, not proof; D1 (concurrent destruction) remains an open
+  item and is not claimed safe.
 
-## 3. Failure and close rules (complete)
+Not in this slice: ticketing/`fifo-order` included-set ordering
+(`[fifo-order-probe]` stays out of the suite), close-drain (racy pass
+remains non-evidence), and any change to `read_committed` or its
+contract.
 
-- **F1** `failed()` at `inspect()` entry -> the #1166 seal. (Today; pinned.)
-- **F2** session fails after admission but before the job runs -> in-job
-  `failed()` check -> seal. (Frozen `#assertHealthy` parity.)
-- **F3** the capture's storage access fails -> the read completes with
-  that error and the session seals (read-failure propagation, ADR 0040 /
-  #1166). Divergence from today (inspect errors do not seal), flagged.
-- **F4** a commit fails while a read is queued -> `reject_pending_line`
-  completes the pending read with the seal. (Audited path.)
-- **C1** `close()` with a queued read -> close's drain runs it while
-  storage is still open -> value.
-- **C2** `inspect()` after `close()` completed -> "Session is closed".
-- **C3** `inspect()` racing `close()`: a read admitted before the close
-  turn runs during the drain; the read job holds the line, so `close()`
-  blocks on the line lock until the capture finishes.
-- **C4** admission finds the session closed -> "Session is closed".
-- **D1** `~Harness` without `close()` while an inspect is in flight ->
-  excluded by the to-be-documented exclusive-ownership contract; open
-  item, not claimed safe.
+## 4. Rebuild plan (old production is not approved)
 
-## 4. Frozen listener no-reentry scope (exact)
+Implementation starts from the merge base `15fd43556`, not from the
+unapproved production state:
 
-- `subscribeCommits`: "It must not block or call Session operations; a
-  throw is reported." (session.ts:544)
-- `subscribeClose`: "It must not block or call Session operations; a
-  throw is reported." (session.ts:563)
-- host callbacks run under "must not fail its caller" (session.ts:875).
-- `readOnLine` is `Internal:` (session.ts:234); its `#enqueue` tail-chain
-  makes an in-job await of a later position structurally unresolvable.
+- `5057091d3` (reservation publication) and `15724cd09` (waiting-resume
+  guard) are explicitly DROPPED, not retained by default. Their pins
+  (`waiting-active`, the reservation-identity tests, the waiting-resume
+  lifecycle tests) must be re-scoped: the merge-base behavior returns
+  until a replacement is specified.
+- The seam fixes capture coherence (`[stale-scan]`); it does NOT fix
+  reservation visibility, because the invocation identity is still
+  registered before its reservation settles at `15fd43556`. That
+  behavior needs its own re-specification and sign-off -- it is the
+  original #1165 defect and is out of the first slice.
+- The WIP tests and evidence on this branch are the reviewable record;
+  the implementation branch carries the slice plus the re-scoped pins.
 
-Scope: frozen DOCUMENTS the prohibition for session listeners and host
-callbacks; every line callback is covered structurally and silently by
-the tail-chain. Frozen does not add a separate text for harness-side
-invocation stop delivery; the same structural prohibition applies. Our
-port already documents the equivalent obligation for SchedulerHooks
-(issue #1166 notes). A DETECTED reentry rejection (Validation error via a
-line-owner mark) would be a new behavior beyond frozen's documented
-prohibition; it is not part of variant A.
+## 5. Slice verification plan
 
-## 5. The authorized minimal slice (stale-scan RED -> GREEN)
-
-Precondition scheme, established from code:
-
-1. Lock order: caller thread -> Session `mutation_line` (via the
-   PendingRead job) -> Harness mutex (brief identity copy only) ->
-   storage virtual scan outside the Harness mutex. Verified: today's
-   inspect already scans outside the mutex, and commit turns already call
-   storage under the line, so no lock order or reentry surface is new.
-2. Coherence: `run_task_execution`'s cleanup erases an identity only
-   after that invocation's final commit COMPLETED (the phase or abort
-   handler awaited it); the completion ran on the line; a read job is
-   mutually exclusive with line jobs. So at capture time either the
-   terminal record settled before our job (scan sees terminal) or the
-   erase happens strictly after our copy (identity still live). The
-   stale-scan mixed instant is structurally excluded. The early-cleanup
-   paths that erase without a terminal (abort reservation, missing task)
-   leave today's derive semantics untouched -- parity, not a new hazard.
-3. Changeset: `Harness::inspect` only (variant A). No `Session.cpp`
-   change, no public header change, no new threads or locks.
-4. Sign-offs required before implementing: line-queued inspect; F3
-   seal-on-capture-failure (frozen-aligned); C2 message; D1 ownership
-   wording.
-5. Tests: stale-scan GREEN, closed-admission GREEN, fifo-order-probe
-   unhidden and deterministic GREEN, seal-waiting and held pins still
-   green, then bounded focused runs. Full Validation only when
-   authorized.
+`[stale-scan]` GREEN; `[closed-admission]` GREEN (S2 signed);
+`[seal-waiting]` and held pins still green; `[fifo-order-probe]` run
+manually as evidence only; bounded focused runs per slice. Full
+Validation only on authorization.
