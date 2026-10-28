@@ -1,0 +1,22 @@
+Filters: [issue1165-failure]
+Randomness seeded to: 2261359504
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+storage failure signals an active invocation
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:348
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:393: FAILED:
+  CHECK( signalled_before_failure_return )
+with expansion:
+  false
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 9 | 8 passed | 1 failed
+

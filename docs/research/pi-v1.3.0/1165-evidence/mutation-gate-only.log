@@ -1,0 +1,11 @@
+Mutation: pre-commit registration restored (old publication point); the new
+inspect gate kept (invocation-derived running rejected for pending scans).
+Run: "scheduler reservation is invisible to a read admitted before its commit".
+Result: PASS (100% tests passed out of 1).
+Interpretation: the gate alone suppresses the user-visible symptom even with
+the identity pre-published. The publication move into the commit completion is
+nonetheless required by the frozen parity contract (frozen pi registers the
+invocation within the Session commit turn, so a read admitted before the
+reservation cannot observe the identity) and by the #1088 line-time
+observation seam; the probe pins the symptom, the frozen evidence pins the
+publication point.

@@ -1,0 +1,10 @@
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:175: FAILED:
+  CHECK_FALSE( inconsistent.load() )
+with expansion:
+  !true
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 6 | 5 passed | 1 failed
+

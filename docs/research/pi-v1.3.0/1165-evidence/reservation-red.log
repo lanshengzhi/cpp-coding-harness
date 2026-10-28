@@ -1,0 +1,22 @@
+Filters: [issue1165]
+Randomness seeded to: 3857328118
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+scheduler reservation is invisible to a read admitted before its commit
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:20
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:81: FAILED:
+  CHECK_FALSE( inconsistent.load() )
+with expansion:
+  !true
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 6 | 5 passed | 1 failed
+
