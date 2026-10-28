@@ -79,6 +79,7 @@ int run_effect(const std::filesystem::path& directory, int ready_fd, bool first)
         auto tasks = (*storage)->scan_tasks(100);
         if (!tasks || tasks->size() != 1) return 15;
         id = tasks->front().id;
+        if (!consume(harness->open_tasks()).has_value()) return 20;
         auto record = consume(harness->get_task(id));
         if (!record.has_value() || !record.value() || record.value()->state.status != "pending") return 16;
     }
