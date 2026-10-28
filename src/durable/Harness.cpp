@@ -1306,11 +1306,13 @@ struct Harness::Impl {
                             // abort handler runs once the owned work below it
                             // drains (frozen pi commit listener ->
                             // `#invocations.get(id).controller.abort()`).
-                            std::lock_guard lock(mutex);
-                            auto invocation = active_invocations.find(tc->task->id.value);
-                            if (invocation != active_invocations.end()) {
-                                invocation->second.request_stop();
+                            std::optional<std::stop_source> source;
+                            {
+                                std::lock_guard lock(mutex);
+                                auto invocation = active_invocations.find(tc->task->id.value);
+                                if (invocation != active_invocations.end()) source = invocation->second;
                             }
+                            if (source) source->request_stop();
                         }
                     }
                 }
@@ -1327,14 +1329,16 @@ struct Harness::Impl {
     void shutdown() {
         registry.unsubscribe(registry_sub_id);
         registry_sub_id = 0;
+        std::vector<std::stop_source> sources;
         {
             std::lock_guard lock(mutex);
             if (closed) return;
             closed = true;
-            for (auto& [_, stop_src] : active_invocations) {
-                stop_src.request_stop();
-            }
+            for (const auto& [_, stop_src] : active_invocations)
+                sources.push_back(stop_src);
         }
+        for (auto& source : sources)
+            source.request_stop();
         if (worker.joinable()) {
             worker.request_stop();
         }
@@ -2014,13 +2018,13 @@ support::AsyncResult<std::string> Harness::abort_task(TaskId id) {
                                 completion(std::unexpected(outcome.error()));
                                 return;
                             }
+                            std::optional<std::stop_source> source;
                             {
                                 std::lock_guard lock(impl->mutex);
                                 auto invocation = impl->active_invocations.find(id.value);
-                                if (invocation != impl->active_invocations.end()) {
-                                    invocation->second.request_stop();
-                                }
+                                if (invocation != impl->active_invocations.end()) source = invocation->second;
                             }
+                            if (source) source->request_stop();
                             impl->cv.notify_all();
                             completion(std::move(*result));
                         });
@@ -2199,15 +2203,16 @@ void Harness::abort_conversation_pass(
         // the reached tasks are waited for directly; otherwise the idle
         // wait covers the ordinary scope only. Ending a held invocation
         // lets its abort handler run (mirrors `abort_task`).
+        std::vector<std::stop_source> sources;
         {
             std::lock_guard lock(impl_->mutex);
             for (const TaskId id : *reached) {
                 auto invocation = impl_->active_invocations.find(id.value);
-                if (invocation != impl_->active_invocations.end()) {
-                    invocation->second.request_stop();
-                }
+                if (invocation != impl_->active_invocations.end()) sources.push_back(invocation->second);
             }
         }
+        for (auto& source : sources)
+            source.request_stop();
         impl_->cv.notify_all();
         pass->pending = pass->background ? reached->size() : 1;
         if (pass->pending == 0) {
