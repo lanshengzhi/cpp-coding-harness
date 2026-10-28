@@ -54,3 +54,14 @@ the commit fails closed and its bytes stay unchanged.
 `PI_CHECKOUT=/tmp/cch-1080-pi-frozen ctest --preset vcpkg --output-on-failure
 -L jsonl` run at `d3feb4bbe0fcb42c121dbcbc9805f0b64435873a`: 27 selected, 27
 passed, 0 failed, 0 skipped.
+
+[focused-jsonl-28.txt](focused-jsonl-28.txt) is the same full run at
+`96afca4f1e86129382d8b8e7a4e55b0d61135c31` after adding the vanished-sidecar
+case: 28 selected, 28 passed, 0 failed, 0 skipped. The 27-test capture above
+predates that case and is retained as history.
+
+[vanished-sidecar-red.txt](vanished-sidecar-red.txt) and
+[vanished-sidecar-green.txt](vanished-sidecar-green.txt) cover a live update
+after the sidecar is deleted externally. The pre-fix `O_CREAT` path also
+poisons on the new inode but recreates an empty file; the test fails on the
+file-existence assertion. The fixed path omits `O_CREAT` and leaves no file.
