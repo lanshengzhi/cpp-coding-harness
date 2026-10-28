@@ -96,6 +96,10 @@ public:
     /// `ConversationViews` snapshot): the conversation record, the visible
     /// entries with the retained head marker, and the five built-in
     /// documents keyed by full kind. Rejects a missing conversation.
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session after
+    /// this call returns. The Harness and its Session must outlive the
+    /// operation until its completion callback returns.
     [[nodiscard]] support::AsyncResult<chord::Json> conversation_view(ConversationId conversation_id);
 
     /// Watch one conversation's committed view, delivering one exact frame
