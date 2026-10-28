@@ -1,0 +1,173 @@
+{
+  "name": "aborted",
+  "frames": [
+    [
+      [
+        "s",
+        [
+          "docs",
+          "pi.live",
+          "run"
+        ],
+        {
+          "taskId": 9,
+          "inputs": [
+            8
+          ]
+        }
+      ],
+      [
+        "p",
+        [
+          "entries"
+        ],
+        0,
+        0,
+        [
+          {
+            "model": [
+              {
+                "role": "user",
+                "content": "hi",
+                "timestamp": 1793171763172
+              }
+            ],
+            "kind": "pi.user",
+            "id": 7,
+            "conversationId": 1
+          }
+        ]
+      ]
+    ],
+    [
+      [
+        "s",
+        [
+          "docs",
+          "pi.live",
+          "generation"
+        ],
+        {
+          "attempt": 1
+        }
+      ]
+    ],
+    [
+      [
+        "d",
+        [
+          "docs",
+          "pi.live",
+          "run"
+        ]
+      ],
+      [
+        "d",
+        [
+          "docs",
+          "pi.live",
+          "generation"
+        ]
+      ],
+      [
+        "s",
+        [
+          "docs",
+          "pi.usage",
+          "models",
+          "faux/faux-1"
+        ],
+        {
+          "input": 2,
+          "output": 2,
+          "cacheRead": 0,
+          "cacheWrite": 2,
+          "totalTokens": 6,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0,
+            "total": 0
+          }
+        }
+      ],
+      [
+        "p",
+        [
+          "entries"
+        ],
+        1,
+        0,
+        [
+          {
+            "model": [
+              {
+                "role": "assistant",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "partial"
+                  }
+                ],
+                "api": "faux:1793171763159:g2yfcb1xnx8",
+                "provider": "faux",
+                "model": "faux-1",
+                "usage": {
+                  "input": 2,
+                  "output": 2,
+                  "cacheRead": 0,
+                  "cacheWrite": 2,
+                  "totalTokens": 6,
+                  "cost": {
+                    "input": 0,
+                    "output": 0,
+                    "cacheRead": 0,
+                    "cacheWrite": 0,
+                    "total": 0
+                  }
+                },
+                "stopReason": "aborted",
+                "errorMessage": "provider aborted",
+                "timestamp": 1793171763160
+              }
+            ],
+            "kind": "pi.assistant",
+            "id": 10,
+            "conversationId": 1,
+            "byTaskId": 9
+          }
+        ]
+      ]
+    ]
+  ],
+  "finalLive": {},
+  "usage": {
+    "models": {
+      "faux/faux-1": {
+        "input": 2,
+        "output": 2,
+        "cacheRead": 0,
+        "cacheWrite": 2,
+        "totalTokens": 6,
+        "cost": {
+          "input": 0,
+          "output": 0,
+          "cacheRead": 0,
+          "cacheWrite": 0,
+          "total": 0
+        }
+      }
+    },
+    "tools": {}
+  },
+  "settled": {
+    "conversationId": 1,
+    "type": "input",
+    "status": "unanswered",
+    "entry": 7,
+    "id": 8,
+    "reason": "model_error",
+    "detail": "provider aborted"
+  }
+}

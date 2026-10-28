@@ -766,8 +766,7 @@ support::AsyncResult<void> CompactionRuntime::Impl::select(const TaskRecord& tas
     return support::AsyncResult<void>{support::ExpectedVoid{}};
 }
 
-namespace {
-support::ExpectedVoid record_summary_usage(
+support::ExpectedVoid record_model_usage(
         Transaction& tx, ConversationId conversation, const ai::AssistantMessage& message) {
     auto definition = detail::builtin_document(
             "pi.usage:v1",
@@ -811,7 +810,6 @@ support::ExpectedVoid record_summary_usage(
     total.insert_or_assign("cost", Json{std::move(cost)});
     return doc->set(path, Json{std::move(total)});
 }
-} // namespace
 
 support::AsyncResult<void> CompactionRuntime::Impl::summarize(const TaskRecord& task, TaskRuntime& runtime) {
     if (runtime.stop_token().stop_requested()) {
@@ -918,7 +916,7 @@ support::AsyncResult<void> CompactionRuntime::Impl::summarize(const TaskRecord& 
                                                 response = *response,
                                                 now = now()](Transaction& tx,
                                                 const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                auto usage = record_summary_usage(tx, task.conversation_id, response);
+                auto usage = record_model_usage(tx, task.conversation_id, response);
                 if (!usage) return std::unexpected(usage.error());
                 auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
                 if (!live) return std::unexpected(live.error());

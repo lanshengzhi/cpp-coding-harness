@@ -20,6 +20,7 @@
 #include <ranges>
 #include <mutex>
 #include <semaphore>
+#include <stop_token>
 #include <string>
 #include <thread>
 #include <vector>
@@ -2684,6 +2685,680 @@ TEST_CASE(
             CHECK(text.find("\"entryId\"") != std::string::npos);
         }
     }
+}
+
+namespace {
+
+// ── issue1163 helpers: public-seam observations of the live generation ─────
+// ── lifecycle and the usage ledger ─────────────────────────────────────────
+
+/// The committed pi.live value of one conversation, when the record exists.
+std::optional<chord::Json> live_document_value(Storage& storage, ConversationId root) {
+    auto doc = storage.find_document("pi.live:v1", DocumentAddress{.conversation_id = root}, DocumentPoint::current());
+    if (!doc || !doc->has_value()) return std::nullopt;
+    auto value = storage.document((**doc).id, DocumentPoint::current());
+    if (!value || !value->has_value()) return std::nullopt;
+    return (**value).value;
+}
+
+/// The committed generation attempt of one conversation, when published.
+std::optional<std::int64_t> live_generation_attempt(Storage& storage, ConversationId root) {
+    auto live = live_document_value(storage, root);
+    if (!live) return std::nullopt;
+    const auto* object = live->as_object();
+    if (object == nullptr) return std::nullopt;
+    const auto generation = object->find("generation");
+    if (generation == object->end()) return std::nullopt;
+    const auto* attempt = generation->second.as_object();
+    if (attempt == nullptr) return std::nullopt;
+    const auto* number = attempt->at("attempt").as_number();
+    if (number == nullptr) return std::nullopt;
+    return static_cast<std::int64_t>(*number);
+}
+
+/// One committed `pi.usage` models bucket counter for `test/model`.
+std::optional<double> usage_counter(Storage& storage, ConversationId root, std::string_view counter) {
+    auto doc = storage.find_document("pi.usage:v1", DocumentAddress{.conversation_id = root}, DocumentPoint::current());
+    if (!doc || !doc->has_value()) return std::nullopt;
+    auto value = storage.document((**doc).id, DocumentPoint::current());
+    if (!value || !value->has_value()) return std::nullopt;
+    const auto* object = (**value).value.as_object();
+    if (object == nullptr) return std::nullopt;
+    const auto models = object->find("models");
+    if (models == object->end()) return std::nullopt;
+    const auto* bucket = models->second.as_object();
+    if (bucket == nullptr) return std::nullopt;
+    const auto model = bucket->find("test/model");
+    if (model == bucket->end()) return std::nullopt;
+    const auto* usage = model->second.as_object();
+    if (usage == nullptr) return std::nullopt;
+    const auto found = usage->find(std::string{counter});
+    if (found == usage->end()) return std::nullopt;
+    const auto* number = found->second.as_number();
+    if (number == nullptr) return std::nullopt;
+    return *number;
+}
+
+} // namespace
+
+TEST_CASE("generation publishes the attempt before the model stream and usage with the final answer",
+        "[durable][workflow][issue1163]") {
+    MemoryStorage storage;
+    std::optional<ConversationId> root_id{};
+    std::binary_semaphore entered{0};
+    std::binary_semaphore release{0};
+    std::mutex observed_mutex;
+    std::vector<std::optional<std::int64_t>> observed_attempts;
+    HarnessOptions options;
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        return ai::ModelStream{ai::ModelStreamProducer{
+                [&](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) mutable noexcept {
+                    {
+                        std::lock_guard lock(observed_mutex);
+                        // The publication commit has settled before the stream
+                        // factory runs; this observation cannot race it.
+                        observed_attempts.push_back(
+                                root_id ? live_generation_attempt(storage, *root_id) : std::optional<std::int64_t>{});
+                    }
+                    entered.release();
+                    if (!release.try_acquire_for(std::chrono::seconds{10})) {
+                        done(std::unexpected(support::make_error(support::ErrorCode::Cancelled, "held too long")));
+                        return;
+                    }
+                    auto answer = ai::assistant_text_message("finished");
+                    answer.provider = "test";
+                    answer.model = "model";
+                    answer.usage.input = 7;
+                    answer.usage.output = 2;
+                    answer.usage.cache_read = 1;
+                    answer.usage.total_tokens = 10;
+                    auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!delivered)
+                        done(std::unexpected(delivered.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    root_id = root.value();
+    auto definition = detail::builtin_document("pi.live:v1", DocumentHistory::Latest, DocumentFork::Initial, [] {
+        return chord::Json{chord::Json::Object{}};
+    });
+    auto acquired = consume(harness->session().watch_doc(definition, DocumentAddress{.conversation_id = root.value()}));
+    REQUIRE(acquired.has_value());
+    REQUIRE(acquired.value().has_value());
+    auto& watch = *acquired.value();
+    const chord::Json initial = watch.value();
+    std::mutex frames_mutex;
+    std::vector<DocumentFrame> frames;
+    std::atomic_int atomic_answer_commits{0};
+    REQUIRE(watch.start([&](DocumentFrame frame) {
+        std::lock_guard lock(frames_mutex);
+        frames.push_back(std::move(frame));
+    }));
+    REQUIRE(harness->session().subscribe_commits([&](const CommitPublication& publication) {
+        bool answer = false;
+        bool usage = false;
+        for (const auto& change : publication.changes) {
+            if (const auto* table = std::get_if<TableCommitChange>(&change)) {
+                if (table->type == "entry" && table->conversation_id == root.value()) answer = true;
+            }
+            if (const auto* doc = std::get_if<DocumentCommitChange>(&change)) {
+                if (doc->record.kind == "pi.usage:v1" && doc->conversation_id == root.value()) usage = true;
+            }
+        }
+        if (answer && usage) ++atomic_answer_commits;
+    }));
+    auto admitted = consume(harness->submit(root.value(), text_input("hi")));
+    REQUIRE(admitted.has_value());
+    REQUIRE(entered.try_acquire_for(std::chrono::seconds{5}));
+    {
+        std::lock_guard lock(observed_mutex);
+        REQUIRE(observed_attempts.size() == 1);
+        REQUIRE(observed_attempts.front().has_value());
+        CHECK(*observed_attempts.front() == 1);
+    }
+    // The run is still live mid-stream: the attempt stays published.
+    auto mid_attempt = live_generation_attempt(storage, root.value());
+    REQUIRE(mid_attempt.has_value());
+    CHECK(*mid_attempt == 1);
+    release.release();
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    // The final answer cleared the live document entirely.
+    auto live = live_document_value(storage, root.value());
+    REQUIRE(live.has_value());
+    CHECK(live->as_object()->find("generation") == live->as_object()->end());
+    CHECK(live->as_object()->find("run") == live->as_object()->end());
+    CHECK(usage_counter(storage, root.value(), "input") == 7);
+    CHECK(usage_counter(storage, root.value(), "output") == 2);
+    CHECK(usage_counter(storage, root.value(), "cacheRead") == 1);
+    CHECK(usage_counter(storage, root.value(), "totalTokens") == 10);
+    CHECK(atomic_answer_commits == 1);
+    {
+        std::lock_guard lock(frames_mutex);
+        REQUIRE(frames.size() == 3);
+        chord::Json replay = initial;
+        for (const auto& frame : frames) {
+            CHECK_FALSE(frame.ops.empty());
+            auto applied = chord::apply_immutable(replay, frame.ops);
+            REQUIRE(applied.has_value());
+            replay = std::move(*applied);
+            CHECK(replay == frame.value);
+        }
+        CHECK(replay == *live);
+        const auto* generation = frames[1].value.as_object()->at("generation").as_object();
+        REQUIRE(generation != nullptr);
+        CHECK(*generation->at("attempt").as_number() == 1);
+    }
+    CHECK(watch.stop() == WatchEndReason::Stopped);
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    REQUIRE(entries->size() == 2);
+    const auto* answer = entry_model(entries->front()).as_object();
+    REQUIRE(answer != nullptr);
+    REQUIRE(answer->contains("usage"));
+    CHECK(*answer->at("usage").as_object()->at("input").as_number() == 7);
+    CHECK(*answer->at("stopReason").as_string() == "stop");
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("generation accumulates usage across a committed retry", "[durable][workflow][issue1163]") {
+    MemoryStorage storage;
+    std::optional<ConversationId> root_id{};
+    std::mutex observed_mutex;
+    std::vector<std::optional<std::int64_t>> observed_attempts;
+    std::atomic_int requests{0};
+    HarnessOptions options;
+    options.settings.compaction.enabled = false;
+    options.settings.retry.max_retries = 1;
+    options.settings.retry.base_delay_ms = 1;
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        return ai::ModelStream{ai::ModelStreamProducer{[&, turn = ++requests](ai::AssistantEventSink sink,
+                                                               ai::ModelStreamCompletion done) mutable noexcept {
+            {
+                std::lock_guard lock(observed_mutex);
+                observed_attempts.push_back(
+                        root_id ? live_generation_attempt(storage, *root_id) : std::optional<std::int64_t>{});
+            }
+            auto answer = ai::assistant_text_message(turn == 1 ? "" : "finished");
+            answer.provider = "test";
+            answer.model = "model";
+            if (turn == 1) {
+                answer.stop_reason = ai::AssistantStopReason::Error;
+                answer.error_message = "overloaded";
+                answer.usage.input = 3;
+                answer.usage.output = 1;
+                answer.usage.total_tokens = 4;
+                auto result = sink(ai::AssistantErrorEvent{.reason = answer.stop_reason,
+                        .error = answer,
+                        .inference_failure = ai::InferenceFailure{.kind = ai::InferenceFailureKind::RateLimited}});
+                if (!result) {
+                    done(std::unexpected(result.error()));
+                    return;
+                }
+            } else {
+                answer.usage.input = 7;
+                answer.usage.output = 2;
+                answer.usage.cache_read = 1;
+                answer.usage.total_tokens = 10;
+                auto result = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                if (!result) {
+                    done(std::unexpected(result.error()));
+                    return;
+                }
+            }
+            done(std::move(answer));
+        }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    root_id = root.value();
+    auto admitted = consume(harness->submit(root.value(), text_input("hi")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    CHECK(requests == 2);
+    // The retry publishes its own attempt before the second stream.
+    {
+        std::lock_guard lock(observed_mutex);
+        REQUIRE(observed_attempts.size() == 2);
+        REQUIRE(observed_attempts[0].has_value());
+        REQUIRE(observed_attempts[1].has_value());
+        CHECK(*observed_attempts[0] == 1);
+        CHECK(*observed_attempts[1] == 2);
+    }
+    // One ledger holds both attempts' usage.
+    CHECK(usage_counter(storage, root.value(), "input") == 10);
+    CHECK(usage_counter(storage, root.value(), "output") == 3);
+    CHECK(usage_counter(storage, root.value(), "cacheRead") == 1);
+    CHECK(usage_counter(storage, root.value(), "totalTokens") == 14);
+    auto live = live_document_value(storage, root.value());
+    REQUIRE(live.has_value());
+    CHECK(live->as_object()->empty());
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    REQUIRE(std::ranges::count_if(*entries, [](const auto& entry) { return entry.kind == "pi.assistant"; }) == 2);
+    for (const auto& entry : *entries) {
+        if (entry.kind != "pi.assistant") continue;
+        CHECK(entry_model(entry).as_object()->contains("usage"));
+    }
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE(
+        "generation clears the attempt for a tool round and accumulates its usage", "[durable][workflow][issue1163]") {
+    MemoryStorage storage;
+    std::optional<ConversationId> root_id{};
+    Registry registry;
+    std::binary_semaphore tool_entered{0};
+    std::binary_semaphore tool_release{0};
+    Extension extension{.name = "audit-tools"};
+    extension.tools.push_back(ToolRegistration{
+            .declaration = ai::Tool{.name = "echo", .description = "Echo the text argument back"},
+            .execute = [&](support::JsonValue arguments, std::stop_token) {
+                tool_entered.release();
+                if (!tool_release.try_acquire_for(std::chrono::seconds{10}))
+                    return support::AsyncResult<std::vector<ai::Content>>{
+                            std::unexpected(support::make_error(support::ErrorCode::Cancelled, "held too long"))};
+                return support::AsyncResult<std::vector<ai::Content>>{
+                        std::vector<ai::Content>{ai::text_content("echo:" + arguments.at("text").get_string())}};
+            }});
+    REQUIRE(registry.install(std::move(extension)).has_value());
+    std::mutex observed_mutex;
+    std::vector<std::optional<std::int64_t>> observed_attempts;
+    std::atomic_int requests{0};
+    HarnessOptions options{.registry = &registry};
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        return ai::ModelStream{ai::ModelStreamProducer{
+                [&, turn = ++requests](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) mutable noexcept {
+                    {
+                        std::lock_guard lock(observed_mutex);
+                        observed_attempts.push_back(
+                                root_id ? live_generation_attempt(storage, *root_id) : std::optional<std::int64_t>{});
+                    }
+                    auto answer = ai::assistant_text_message("finished");
+                    answer.provider = "test";
+                    answer.model = "model";
+                    if (turn == 1) {
+                        answer.content = {ai::ToolCallContent{.id = "call-1",
+                                .name = "echo",
+                                .arguments = support::JsonValue{support::JsonValue::object_t{{"text", "hello"}}}}};
+                        answer.stop_reason = ai::AssistantStopReason::ToolUse;
+                        answer.usage.input = 4;
+                        answer.usage.output = 1;
+                        answer.usage.total_tokens = 5;
+                    } else {
+                        answer.usage.input = 6;
+                        answer.usage.output = 3;
+                        answer.usage.cache_write = 2;
+                        answer.usage.total_tokens = 11;
+                    }
+                    auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!delivered)
+                        done(std::unexpected(delivered.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    root_id = root.value();
+    auto admitted = consume(harness->submit(root.value(), text_input("run the echo tool")));
+    REQUIRE(admitted.has_value());
+    // The tool answer commit clears the published attempt while the run
+    // continues: observed while the tool itself is blocked.
+    REQUIRE(tool_entered.try_acquire_for(std::chrono::seconds{5}));
+    {
+        auto live = live_document_value(storage, root.value());
+        REQUIRE(live.has_value());
+        const auto* object = live->as_object();
+        CHECK(object->contains("run"));
+        CHECK(object->find("generation") == object->end());
+    }
+    tool_release.release();
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    CHECK(requests == 2);
+    // The successor request republished the attempt before its stream.
+    {
+        std::lock_guard lock(observed_mutex);
+        REQUIRE(observed_attempts.size() == 2);
+        REQUIRE(observed_attempts[0].has_value());
+        REQUIRE(observed_attempts[1].has_value());
+        CHECK(*observed_attempts[0] == 1);
+        CHECK(*observed_attempts[1] == 1);
+    }
+    CHECK(usage_counter(storage, root.value(), "input") == 10);
+    CHECK(usage_counter(storage, root.value(), "output") == 4);
+    CHECK(usage_counter(storage, root.value(), "cacheWrite") == 2);
+    CHECK(usage_counter(storage, root.value(), "totalTokens") == 16);
+    auto live = live_document_value(storage, root.value());
+    REQUIRE(live.has_value());
+    CHECK(live->as_object()->empty());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a provider-aborted response settles as a model error with its entry and usage",
+        "[durable][workflow][issue1163]") {
+    MemoryStorage storage;
+    HarnessOptions options;
+    options.settings.compaction.enabled = false;
+    options.stream = [](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        return ai::ModelStream{
+                ai::ModelStreamProducer{[](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                    auto answer = ai::assistant_text_message("partial");
+                    answer.provider = "test";
+                    answer.model = "model";
+                    answer.usage.input = 5;
+                    answer.usage.output = 1;
+                    answer.usage.total_tokens = 6;
+                    answer.stop_reason = ai::AssistantStopReason::Aborted;
+                    answer.error_message = "provider aborted";
+                    auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!delivered)
+                        done(std::unexpected(delivered.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("hi")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "unanswered");
+    REQUIRE(settled.value().reason.has_value());
+    CHECK(*settled.value().reason == "model_error");
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    REQUIRE(entries->size() == 2);
+    const auto* aborted = entry_model(entries->front()).as_object();
+    REQUIRE(aborted != nullptr);
+    CHECK(*aborted->at("stopReason").as_string() == "aborted");
+    REQUIRE(aborted->contains("usage"));
+    CHECK(*aborted->at("usage").as_object()->at("input").as_number() == 5);
+    CHECK(usage_counter(storage, root.value(), "input") == 5);
+    auto live = live_document_value(storage, root.value());
+    REQUIRE(live.has_value());
+    CHECK(live->as_object()->empty());
+    auto tasks = storage.scan_tasks(100);
+    REQUIRE(tasks.has_value());
+    const auto task = std::ranges::find_if(*tasks, [&](const auto& record) {
+        return record.kind == "pi.generation" && record.conversation_id == root.value();
+    });
+    REQUIRE(task != tasks->end());
+    REQUIRE(task->state.outcome.has_value());
+    CHECK(task->state.outcome->status == "failed");
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("aborting a run clears the published attempt without recording an answer", "[durable][workflow][issue1163]") {
+    MemoryStorage storage;
+    std::binary_semaphore entered{0};
+    std::mutex stop_mutex;
+    std::condition_variable stop_cv;
+    bool released = false;
+    HarnessOptions options;
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions s) {
+        return ai::ModelStream{ai::ModelStreamProducer{
+                [&, stop = s.stop_token](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) mutable noexcept {
+                    entered.release();
+                    std::stop_callback cb(stop, [&]() {
+                        {
+                            std::lock_guard lock(stop_mutex);
+                            released = true;
+                        }
+                        stop_cv.notify_all();
+                    });
+                    std::unique_lock lock(stop_mutex);
+                    const bool awakened = stop_cv.wait_for(
+                            lock, std::chrono::seconds{3}, [&] { return released || stop.stop_requested(); });
+                    if (!awakened || stop.stop_requested()) {
+                        done(std::unexpected(support::make_error(support::ErrorCode::Cancelled, "aborted")));
+                        return;
+                    }
+                    auto answer = ai::assistant_text_message("finished");
+                    answer.provider = "test";
+                    answer.model = "model";
+                    answer.usage.input = 7;
+                    answer.usage.total_tokens = 7;
+                    auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!delivered)
+                        done(std::unexpected(delivered.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("hi")));
+    REQUIRE(admitted.has_value());
+    REQUIRE(entered.try_acquire_for(std::chrono::seconds{5}));
+    // The attempt is published while the stream runs.
+    auto mid_attempt = live_generation_attempt(storage, root.value());
+    REQUIRE(mid_attempt.has_value());
+    CHECK(*mid_attempt == 1);
+    const auto live_definition =
+            detail::builtin_document("pi.live:v1", DocumentHistory::Latest, DocumentFork::Initial, [] {
+                return chord::Json{chord::Json::Object{}};
+            });
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto live = tx.doc(live_definition, DocumentAddress{.conversation_id = root.value()});
+        if (!live) return std::unexpected(live.error());
+        auto tools = live->set(chord::Path{chord::path_key("tools")}, chord::Json{chord::Json::Array{}});
+        if (!tools) return std::unexpected(tools.error());
+        return live->set(chord::Path{chord::path_key("nestedTools")}, chord::Json{chord::Json::Array{}});
+    })).has_value());
+    auto seeded = live_document_value(storage, root.value());
+    REQUIRE(seeded.has_value());
+    CHECK(seeded->as_object()->contains("tools"));
+    CHECK(seeded->as_object()->contains("nestedTools"));
+    REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "unanswered");
+    REQUIRE(settled.value().reason.has_value());
+    CHECK(*settled.value().reason == "aborted");
+    auto live = live_document_value(storage, root.value());
+    REQUIRE(live.has_value());
+    CHECK_FALSE(live->as_object()->contains("generation"));
+    CHECK_FALSE(live->as_object()->contains("tools"));
+    CHECK_FALSE(live->as_object()->contains("nestedTools"));
+    CHECK(live->as_object()->empty());
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    CHECK(std::ranges::none_of(*entries, [](const auto& entry) { return entry.kind == "pi.assistant"; }));
+    CHECK_FALSE(usage_counter(storage, root.value(), "input").has_value());
+    auto tasks = storage.scan_tasks(100);
+    REQUIRE(tasks.has_value());
+    const auto task = std::ranges::find_if(*tasks, [&](const auto& record) {
+        return record.kind == "pi.generation" && record.conversation_id == root.value();
+    });
+    REQUIRE(task != tasks->end());
+    REQUIRE(task->state.outcome.has_value());
+    CHECK(task->state.outcome->status == "aborted");
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a committed partial converts to an aborted entry with usage in the attempt publication",
+        "[durable][workflow][issue1163]") {
+    MemoryStorage storage;
+    // The same record the root seeds pi.live:v1 with; the test stages one
+    // committed partial through the public commit seam, the state an
+    // interrupted attempt of a reopened host could leave behind.
+    DocumentDefinition live_definition =
+            detail::builtin_document("pi.live:v1", DocumentHistory::Latest, DocumentFork::Initial, [] {
+                return chord::Json{chord::Json::Object{}};
+            });
+    chord::Json partial{chord::Json::Object{{"role", chord::Json{"assistant"}},
+            {"content",
+                    chord::Json{chord::Json::Array{chord::Json{
+                            chord::Json::Object{{"type", chord::Json{"text"}}, {"text", chord::Json{"partial"}}}}}}},
+            {"provider", chord::Json{"test"}},
+            {"model", chord::Json{"model"}},
+            {"usage",
+                    chord::Json{chord::Json::Object{{"input", chord::Json{5.0}},
+                            {"output", chord::Json{1.0}},
+                            {"cacheRead", chord::Json{0.0}},
+                            {"cacheWrite", chord::Json{0.0}},
+                            {"totalTokens", chord::Json{6.0}},
+                            {"cost",
+                                    chord::Json{chord::Json::Object{{"input", chord::Json{0.0}},
+                                            {"output", chord::Json{0.0}},
+                                            {"cacheRead", chord::Json{0.0}},
+                                            {"cacheWrite", chord::Json{0.0}},
+                                            {"total", chord::Json{0.0}}}}}}}},
+            {"stopReason", chord::Json{"length"}},
+            {"timestamp", chord::Json{1.0}}}};
+    std::optional<ConversationId> root_id{};
+    std::mutex observed_mutex;
+    std::vector<std::size_t> observed_user_entries;
+    HarnessOptions options;
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        return ai::ModelStream{ai::ModelStreamProducer{
+                [&](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) mutable noexcept {
+                    {
+                        std::lock_guard lock(observed_mutex);
+                        // The partial converted in the publication commit,
+                        // before this stream ran.
+                        if (root_id) {
+                            auto entries = storage.scan_entries(*root_id, 100);
+                            observed_user_entries.push_back(entries ? entries->size() : 0);
+                        } else {
+                            observed_user_entries.push_back(0);
+                        }
+                    }
+                    auto answer = ai::assistant_text_message("finished");
+                    answer.provider = "test";
+                    answer.model = "model";
+                    answer.usage.input = 7;
+                    answer.usage.total_tokens = 7;
+                    auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!delivered)
+                        done(std::unexpected(delivered.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    root_id = root.value();
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto live = tx.doc(live_definition, DocumentAddress{.conversation_id = root.value()});
+        if (!live) return std::unexpected(live.error());
+        auto set = live->set(chord::Path{chord::path_key("generation")},
+                chord::Json{chord::Json::Object{{"attempt", chord::Json{1}}, {"message", partial}}});
+        if (!set) return std::unexpected(set.error());
+        return {};
+    })).has_value());
+    auto admitted = consume(harness->submit(root.value(), text_input("hi")));
+    REQUIRE(admitted.has_value());
+    auto settled = consume(admitted.value().wait());
+    REQUIRE(settled.has_value());
+    CHECK(settled.value().status == "done");
+    {
+        std::lock_guard lock(observed_mutex);
+        REQUIRE(observed_user_entries.size() == 1);
+        // user + converted partial, published before the stream invocation.
+        CHECK(observed_user_entries.front() == 2);
+    }
+    auto entries = storage.scan_entries(root.value(), 100);
+    REQUIRE(entries.has_value());
+    REQUIRE(entries->size() == 3);
+    const auto* converted = entry_model((*entries)[1]).as_object();
+    REQUIRE(converted != nullptr);
+    CHECK(*converted->at("stopReason").as_string() == "aborted");
+    REQUIRE(converted->contains("usage"));
+    CHECK(*converted->at("usage").as_object()->at("input").as_number() == 5);
+    // Both the converted partial and the final answer are in the ledger.
+    CHECK(usage_counter(storage, root.value(), "input") == 12);
+    CHECK(usage_counter(storage, root.value(), "totalTokens") == 13);
+    auto live = live_document_value(storage, root.value());
+    REQUIRE(live.has_value());
+    CHECK(live->as_object()->empty());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+TEST_CASE("a failed attempt publication commit never invokes the model stream", "[durable][workflow][issue1163]") {
+    GatedStorage storage;
+    std::atomic_int requests{0};
+    HarnessOptions options;
+    options.stream = [&](ai::Model, ai::AiContext, ai::SimpleStreamOptions) {
+        ++requests;
+        return ai::ModelStream{
+                ai::ModelStreamProducer{[](ai::AssistantEventSink sink, ai::ModelStreamCompletion done) noexcept {
+                    auto answer = ai::assistant_text_message("finished");
+                    auto delivered = sink(ai::AssistantDoneEvent{.reason = answer.stop_reason, .message = answer});
+                    if (!delivered)
+                        done(std::unexpected(delivered.error()));
+                    else
+                        done(std::move(answer));
+                }}};
+    };
+    auto opened = consume(Harness::open(storage, std::move(options)));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
+    REQUIRE(root.has_value());
+    auto live_record = storage.find_document(
+            "pi.live:v1", DocumentAddress{.conversation_id = root.value()}, DocumentPoint::current());
+    REQUIRE(live_record.has_value());
+    REQUIRE(live_record->has_value());
+    const auto live_id = (**live_record).id;
+    std::atomic_bool armed{false};
+    REQUIRE(harness->session().subscribe_commits([&](const CommitPublication& publication) {
+        for (const auto& change : publication.changes) {
+            const auto* table = std::get_if<TableCommitChange>(&change);
+            if (!table || !table->task || table->task->kind != "pi.generation" || !table->task->state.checkpoint)
+                continue;
+            const auto* checkpoint = table->task->state.checkpoint->as_object();
+            if (!checkpoint) continue;
+            const auto phase = checkpoint->find("phase");
+            if (phase != checkpoint->end() && phase->second.as_string() && *phase->second.as_string() == "request" &&
+                    !armed.exchange(true)) {
+                storage.fail_next_commit("disk vanished");
+            }
+        }
+    }));
+    auto admitted = consume(harness->submit(root.value(), text_input("hi")));
+    REQUIRE(admitted.has_value());
+    auto receipt = consume(admitted.value().wait());
+    CHECK_FALSE(receipt.has_value());
+    CHECK(armed);
+    // Inspect the rejected batch itself: an unrelated scheduler commit is not
+    // evidence that request publication failed.
+    const auto& rejected = storage.failed_writes();
+    REQUIRE(std::ranges::any_of(rejected, [&](const StorageWrite& write) {
+        return write.type == "document.change" && write.document_id == live_id;
+    }));
+    CHECK(requests == 0);
+    CHECK_FALSE(live_generation_attempt(storage, root.value()).has_value());
+    CHECK(harness->session().failed());
+    REQUIRE(consume(harness->close()).has_value());
 }
 
 } // namespace cch::tests::durable

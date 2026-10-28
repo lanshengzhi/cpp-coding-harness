@@ -55,6 +55,11 @@ struct CompactionStatusRecord {
         std::optional<TaskId> owner,
         bool background);
 
+/// Add one assistant response's model usage to the conversation ledger in the
+/// transaction that records it (frozen pi `recordUsage`).
+[[nodiscard]] support::ExpectedVoid record_model_usage(
+        Transaction& tx, ConversationId conversation, const ai::AssistantMessage& message);
+
 /// Harness-owned durable compaction runtime: the built-in `pi.compaction`
 /// task definition and its phase handlers. Session, Storage, registry
 /// options, the clock and the workflow runtime outlive every operation and
