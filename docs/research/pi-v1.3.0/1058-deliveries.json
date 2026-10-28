@@ -174,7 +174,7 @@
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-          "sha256": "819b16dcc7a14cfe52099c7aaa9d1b84a59cc752c090300ba3ed983ad06bd77f"
+          "sha256": "9514d35e0dafd5c959200a23afb8c9edb5b245f55155a469107ebd01d999118c"
         },
         {
           "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -230,14 +230,14 @@
           "issue1101",
           "--output-on-failure",
           "--output-junit",
-          "/tmp/cch-1089-1101.xml"
+          "docs/research/pi-v1.3.0/deliveries/1089-integration-1101.xml"
         ],
-        "testedRevision": "517fb5eb610d58131f3682c68d90cfc1043b5118",
-        "recordedAt": "2026-10-28T00:47:55Z",
+        "testedRevision": "a4a075aac9e4ec8e646d1de69ebcd831a59bd7a4",
+        "recordedAt": "2026-10-28T00:50:14Z",
         "selected": 14,
         "junit": {
-          "path": "docs/research/pi-v1.3.0/deliveries/1089-revalidation-1101.xml",
-          "sha256": "8f3fb0d2ee0e2d4e6186e0aabb1aa4c594382ce7d639b588517ac21e0027dc0e"
+          "path": "docs/research/pi-v1.3.0/deliveries/1089-integration-1101.xml",
+          "sha256": "faca732fe982e2d78c6169385e2b0d2fb282e1d608cdc86581ef7beafc62d235"
         }
       },
       "rows": [

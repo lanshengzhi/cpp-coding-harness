@@ -204,7 +204,7 @@
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidation-plan.json",
-            "sha256": "819b16dcc7a14cfe52099c7aaa9d1b84a59cc752c090300ba3ed983ad06bd77f"
+            "sha256": "9514d35e0dafd5c959200a23afb8c9edb5b245f55155a469107ebd01d999118c"
           },
           {
             "path": "fixtures/pi-v1.3.0/consolidation-1058/consolidate_audits.py",
@@ -260,14 +260,14 @@
             "issue1101",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/cch-1089-1101.xml"
+            "docs/research/pi-v1.3.0/deliveries/1089-integration-1101.xml"
           ],
-          "testedRevision": "517fb5eb610d58131f3682c68d90cfc1043b5118",
-          "recordedAt": "2026-10-28T00:47:55Z",
+          "testedRevision": "a4a075aac9e4ec8e646d1de69ebcd831a59bd7a4",
+          "recordedAt": "2026-10-28T00:50:14Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1089-revalidation-1101.xml",
-            "sha256": "8f3fb0d2ee0e2d4e6186e0aabb1aa4c594382ce7d639b588517ac21e0027dc0e"
+            "path": "docs/research/pi-v1.3.0/deliveries/1089-integration-1101.xml",
+            "sha256": "faca732fe982e2d78c6169385e2b0d2fb282e1d608cdc86581ef7beafc62d235"
           }
         },
         "rows": [
@@ -648,7 +648,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 506,
+      "scenarios": 512,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -755,7 +755,13 @@
         "audit-1152/structured-text.json:numbers",
         "audit-1152/structured-text.json:reverse",
         "audit-1152/structured-text.json:nested",
-        "audit-1152/structured-text.json:strings"
+        "audit-1152/structured-text.json:strings",
+        "audit-1087/registry-hooks.json:a generation onYield continuation hands the admitted run to a successor generation task",
+        "audit-1087/registry-hooks.json:an afterTool hook replaces the committed tool result",
+        "audit-1087/registry-hooks.json:beforeTool hooks run in extension order and the last rewrite executes",
+        "audit-1087/registry-hooks.json:a throwing beforeTool blocks the call and the run still settles",
+        "audit-1087/registry-hooks.json:replacing and uninstalling an extension changes the next request's tool hooks",
+        "audit-1087/registry-hooks.json:afterTool observes the model's call while the rewritten arguments execute"
       ],
       "uncovered": []
     }
@@ -3974,6 +3980,66 @@
         "cch_mcp:mcp-tools-call-structured"
       ],
       "disposition": "Compared byte-for-byte by the frozen review artifact test; does not independently promote the row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "a generation onYield continuation hands the admitted run to a successor generation task",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:generation-onYield"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "an afterTool hook replaces the committed tool result",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "beforeTool hooks run in extension order and the last rewrite executes",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "a throwing beforeTool blocks the call and the run still settles",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "replacing and uninstalling an extension changes the next request's tool hooks",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:registry-transition"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1087",
+      "artifact": "registry-hooks.json",
+      "scenario": "afterTool observes the model's call while the rewritten arguments execute",
+      "reason": "Captured by #1087 after the consolidated ledger; no #1056 source row routes to this artifact. The public durable Harness test consumes the observation.",
+      "rows": [
+        "cch_durable:tool-hooks"
+      ],
+      "disposition": "Compared by tests/durable/HarnessWorkflowTest.cpp; this observation alone does not promote the referenced ledger row."
     }
   ],
   "correctionsIndex": [
