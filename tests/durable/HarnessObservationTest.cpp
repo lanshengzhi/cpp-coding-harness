@@ -30,6 +30,7 @@
 #include <mutex>
 #include <optional>
 #include <sstream>
+#include <stop_token>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -1087,6 +1088,64 @@ TEST_CASE("inspection does not combine an uncommitted reservation with a pending
     REQUIRE(consume(harness->close()).has_value());
 }
 
+TEST_CASE("stop callback waiting for a reentrant committed read blocks its publication line",
+        "[durable][observation][issue1088][reentry-probe]") {
+    MemoryStorage storage;
+    std::atomic_bool phase_ready{false};
+    std::atomic_bool callback_entered{false};
+    std::atomic_bool read_completed{false};
+    std::atomic_bool callback_timed_out{false};
+    auto builder = TaskDefinitionBuilder("audit1088.reentry", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    Harness* harness_ptr = nullptr;
+    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        std::stop_callback callback(runtime.stop_token(), [&] {
+            callback_entered.store(true);
+            std::move(harness_ptr->session().read_committed([](Storage&) -> support::Expected<chord::Json> {
+                return chord::Json(nullptr);
+            })).start([&](support::Expected<chord::Json>) noexcept { read_completed.store(true); });
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+            while (!read_completed.load() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+            callback_timed_out.store(!read_completed.load());
+        });
+        phase_ready.store(true);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+        while (!runtime.stop_token().stop_requested() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    });
+    builder.abort([](const TaskRecord&, TaskRuntime& runtime) {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "aborted"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    harness_ptr = harness.get();
+    TaskId task_id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1088.reentry"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        task_id = *task;
+        return {};
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!phase_ready.load() && std::chrono::steady_clock::now() < deadline) std::this_thread::yield();
+    REQUIRE(phase_ready.load());
+    const auto outcome = consume(harness->abort_task(task_id));
+    CHECK(outcome.has_value());
+    CHECK(callback_entered.load());
+    CHECK(callback_timed_out.load());
+    CHECK(read_completed.load());
+    REQUIRE(consume(harness->close()).has_value());
+}
+
 TEST_CASE("a watch callback already running may finish after stop", "[durable][observation][issue1088]") {
     MemoryStorage storage;
     auto opened = consume(Harness::open(storage, HarnessOptions{}));
@@ -1225,18 +1284,6 @@ TEST_CASE("a failed session ends structural watches without changing committed s
 }
 
 namespace {
-
-[[nodiscard]] ai::ModelStream text_reply() {
-    return ai::ModelStream{ai::ModelStreamProducer{
-            [](ai::AssistantEventSink sink, ai::ModelStreamCompletion completion) noexcept {
-                auto message = ai::assistant_text_message("finished");
-                auto delivered = sink(ai::AssistantDoneEvent{.reason = message.stop_reason, .message = message});
-                if (!delivered)
-                    completion(std::unexpected(delivered.error()));
-                else
-                    completion(std::move(message));
-            }}};
-}
 
 [[nodiscard]] SubmissionDraft text_input(std::string text) {
     return SubmissionDraft{

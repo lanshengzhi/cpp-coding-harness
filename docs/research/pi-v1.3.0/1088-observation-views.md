@@ -76,8 +76,37 @@ boundary. Full-table scans copy O(n) records; the strengthened scan contract req
 implementations to return complete pages rather than silently truncate them.
 Each scan is a single read; separate calls are not automatically atomic.
 
-Before delivery, resolve or explicitly coordinate the #1163 integration
-blocker; verify the remaining observation and concurrency cases; run focused
+After merging main at `49850636`, the #1163 generation change made the frozen
+conversation-watch comparison pass. The bounded combined #1088/#1164 selection
+at merge commit `8165824` selected 21 tests: 20 passed, one failed, none
+skipped. The remaining failure was the reservation inconsistency described
+above. Raw output: `/tmp/cch-1088-merge-tests.log`. The passing frozen case
+replays every observed frame; this result does not verify every remaining
+observation boundary.
+
+Additional bounded probes expose constraints on a reservation fix. A public
+frozen-pi task commits a waiting record while its phase remains active; inspect
+reports record `waiting` and derived `running` in three runs
+(`/tmp/cch-1088-frozen-waiting-{1,2,3}.log`). Thus record status alone cannot
+replace invocation state. A C++ stop callback started a committed read and
+waited 500 ms; the read completed only after the callback returned, because
+publication retained the active Session line. The bounded reproducer is in
+`HarnessObservationTest.cpp`; `/tmp/cch-1088-reentry.log` records its result.
+This is an existing reentrancy risk, not evidence of an actual unbounded hang.
+Frozen abort, close, and injected Storage failure probes each ran three times:
+abort signalled synchronously before its reentrant inspection and abort settled;
+close and failure signalled before reentrant inspection rejected and before the
+outer operation settled. Logs and probe sources are under `/tmp/cch-1088-frozen-*`.
+JavaScript promise callbacks cannot establish parity for a synchronously blocking
+C++ stop callback. External concurrent Storage writers are not serialized by a
+Session. A safe shared snapshot and reservation lifecycle, including lock order,
+cleanup and callback reentrancy, remain unresolved. Issue #1165 owns the
+reservation and invocation observation lifecycle and blocks #1088. The watch
+claim-to-entry race, complete Storage scan compatibility and backend coverage,
+SQLite reopen failure, architecture and Full Validation, and evidence-supported
+capability ledger updates also remain unverified.
+
+Before delivery, verify the remaining observation and concurrency cases; run focused
 validation and the required architecture checks; coordinate repository Full
 Validation; and record the actual results. Only evidence-supported capability
 rows may be promoted. Consolidation must be regenerated and checked after plan
