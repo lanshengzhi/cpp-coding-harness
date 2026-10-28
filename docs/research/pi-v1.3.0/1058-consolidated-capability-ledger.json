@@ -648,7 +648,7 @@
     ],
     "missingObservationRows": 1019,
     "scenarioCoverage": {
-      "scenarios": 504,
+      "scenarios": 506,
       "scenarioNamed": 347,
       "artifactCovered": 55,
       "orphaned": [
@@ -755,7 +755,10 @@
         "audit-1152/structured-text.json:nested",
         "audit-1152/structured-text.json:strings"
       ],
-      "uncovered": []
+      "uncovered": [
+        "audit-1089/environment.json:watch covers creation after return and stops callbacks after close",
+        "audit-1089/environment.json:normal exit cancellation and timeout have distinct shell outcomes"
+      ]
     }
   },
   "sourceAliases": {
