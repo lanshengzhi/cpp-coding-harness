@@ -2,8 +2,9 @@
 
 This work implements conversation views, document-change frames, the task graph,
 and inspection as projections of committed state. Focused observation cases
-pass, but it remains unverified as a delivery: the required architecture and
-repository Full Validation receipts have not been completed.
+and the architecture selection pass, but it remains unverified as a delivery:
+repository Full Validation and evidence-supported capability-ledger updates
+have not been completed.
 
 `Session::read_committed` is the public counterpart of frozen pi's `readOnLine`.
 Hydration and watch registration run together on the Session mutation line, so
@@ -72,7 +73,11 @@ inconsistent pair. The independently threaded read-order probe now passes via
 mutex still need a lock-order review before nesting that mutex with the
 mutation line; that is a static risk, not a reproduced deadlock. Failure and
 close ordering for the barrier are covered by the merged #1165/#1166 tests.
-Architecture receipts and repository Full Validation remain outstanding.
+The architecture selection passed on the final code: `ctest --preset vcpkg
+-L architecture` selected 43, passed 43, 0 failed, exit 0, after a full
+`cmake --build --preset vcpkg` (JUnit `/tmp/cch-1088-architecture.xml`, raw
+`/tmp/cch-1088-architecture.log`). Repository Full Validation remains
+outstanding.
 
 Watch cancellation's cross-thread claim-to-entry race is resolved. A watcher
 now has an `Idle`/`Claimed`/`Entered`/`Stopped` admission state guarded by the
@@ -138,13 +143,26 @@ sources are under `/tmp/cch-1088-frozen-*`. JavaScript promise callbacks
 cannot establish parity for a synchronously blocking C++ stop callback.
 External concurrent Storage writers are not serialized by a Session, and
 silent short-paging by a third-party backend is not runtime-detectable; the
-Storage contract requires an error instead. SQLite reopen-failure coverage,
-architecture and Full Validation, and evidence-supported capability ledger
-updates remain unverified.
+Storage contract requires an error instead.
 
-Before delivery, verify the remaining observation and concurrency cases; run
-the required architecture checks; coordinate repository Full Validation; and
-record the actual results. Only evidence-supported capability
-rows may be promoted. Consolidation must be regenerated and checked after plan
-changes, and any delivery record requires its reviewed inputs, frozen scenario
-mapping, revision and validation receipt. No such receipt has yet been created.
+SQLite reopen-failure coverage is not a separate #1088 observation contract:
+reopen consistency is covered by `[inspect-complete]`
+(`tests/durable/HarnessObservationTest.cpp:816`: Memory, SQLite and JSONL
+reopen, 257 rows, before == after) and by `a reopened Harness derives every
+observation from committed records without running task code` (`:586`).
+Failed-commit rollback and sequence preservation across reopen are covered by
+`tests/durable/SqliteStorageTest.cpp:110`; failed-Session trigger rollback,
+reopen and recovery are covered by `tests/durable/SqliteStorageTest.cpp:159`;
+failed-Session watch termination and rejection by the observation APIs are
+covered by `[durable][observation][failure][issue1088]`
+(`tests/durable/HarnessObservationTest.cpp:1685`). `[inspect-scan-error]`
+(`tests/durable/HarnessObservationTest.cpp:941`) covers a backend that cannot
+serve the complete scan, not a reopen failure. No combined failure+reopen test
+is claimed.
+
+Before delivery, verify the remaining observation and concurrency cases and
+coordinate repository Full Validation; record the actual results. Only
+evidence-supported capability rows may be promoted. Consolidation must be
+regenerated and checked after plan changes, and any delivery record requires
+its reviewed inputs, frozen scenario mapping, revision and validation receipt.
+No such receipt has yet been created.
