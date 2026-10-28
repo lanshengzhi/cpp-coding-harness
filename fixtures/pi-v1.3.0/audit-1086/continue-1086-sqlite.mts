@@ -18,7 +18,7 @@ if (!directory) throw new Error("missing SQLite directory");
 const { Harness, defineTask, defineDoc, createRegistry } = await import(join(checkout, "packages/durable/src/index.ts"));
 const { openNodeSqliteStorage } = await import(join(checkout, "packages/durable/src/storage/sqlite/node.ts"));
 const { BACKGROUND_CONTEXT: context } = await import(join(checkout, "packages/chord/src/context/index.ts"));
-const TASK_KIND = "audit1086.work\"\\é";
+const TASK_KIND = "audit1086.work\"\\é\u001f";
 const DOC_KIND = "audit1086.history\"\\é";
 const REQUEST_ID = "audit1086/request\"\\é";
 const withoutStartTime = (task: any) => {

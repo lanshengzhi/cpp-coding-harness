@@ -85,6 +85,8 @@ constexpr std::string_view kPoisonMessage = "SQLite storage is poisoned and must
 
 /// Encode one indexed string column exactly as frozen pi `encodeIndexedString`
 /// (`JSON.stringify`): the column stores a JSON string, not the raw value.
+/// The shared JSON writer uses uppercase hex for control escapes, whereas pi's
+/// JSON.stringify uses lowercase; SQLite's indexed equality is byte-sensitive.
 [[nodiscard]] std::string encode_indexed_string(std::string_view value) {
     constexpr std::string_view kHexDigits = "0123456789abcdef";
     std::string encoded;

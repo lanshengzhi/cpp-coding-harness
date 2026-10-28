@@ -82,7 +82,7 @@ constexpr std::string_view kIssue1086Scenario =
 // Every indexed string carries a quote, a backslash and a non-ASCII code point
 // so the SQLite columns exercise frozen pi's `JSON.stringify` encoding rather
 // than a plain quoted or raw spelling.
-constexpr std::string_view kIssue1086TaskKind = "audit1086.work\"\\é";
+constexpr std::string_view kIssue1086TaskKind = "audit1086.work\"\\é\x1f";
 constexpr std::string_view kIssue1086DocumentKind = "audit1086.history\"\\é";
 constexpr std::string_view kIssue1086RequestId = "audit1086/request\"\\é";
 
@@ -225,11 +225,27 @@ void run_pi_sqlite(const std::filesystem::path& directory,
     if (!opened.has_value()) return std::unexpected(opened.error());
     auto harness = std::move(opened.value());
     auto opened_tasks = consume(harness->open_tasks());
-    if (!opened_tasks.has_value()) return std::unexpected(opened_tasks.error());
+    if (!opened_tasks.has_value()) {
+        auto closed = consume(harness->close());
+        (void)closed;
+        return std::unexpected(opened_tasks.error());
+    }
     if (!harness->resume()) {
+        auto closed = consume(harness->close());
+        (void)closed;
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "C++ Harness resume was rejected"));
     }
-    auto receipt = consume(harness->wait_for_task(task_id));
+    std::stop_source deadline;
+    std::mutex timer_mutex;
+    std::condition_variable_any timer_cv;
+    std::jthread timer([&](std::stop_token stop) {
+        std::unique_lock lock(timer_mutex);
+        if (!timer_cv.wait_for(lock, stop, std::chrono::seconds{10}, [] { return false; }) && !stop.stop_requested())
+            deadline.request_stop();
+    });
+    auto receipt = consume(harness->wait_for_task(task_id, deadline.get_token()));
+    timer.request_stop();
+    timer.join();
     auto closed = consume(harness->close());
     if (!receipt.has_value()) return std::unexpected(receipt.error());
     if (!closed.has_value()) return std::unexpected(closed.error());
@@ -786,7 +802,9 @@ TEST_CASE("a pi SQLite store reopens in C++ with unfinished task, documents and 
 }
 
 TEST_CASE("pi creates a SQLite store, C++ continues it, and pi finishes it",
-        "[durable][sqlite][issue1086][continuation]") {
+        "[durable][sqlite][issue1086][continuation][issue1086live]") {
+    const char* checkout = std::getenv("PI_CHECKOUT");
+    if (checkout == nullptr || *checkout == '\0') SKIP("PI_CHECKOUT is required for live pi continuation");
     TempWorkspace workspace;
     run_pi_sqlite(workspace.path(), "create");
     const PiSqliteIds ids = read_pi_sqlite_ids(workspace.path());
@@ -933,7 +951,9 @@ TEST_CASE("pi creates a SQLite store, C++ continues it, and pi finishes it",
 }
 
 TEST_CASE("C++ creates a SQLite store, pi advances it, and C++ finishes it",
-        "[durable][sqlite][issue1086][continuation]") {
+        "[durable][sqlite][issue1086][continuation][issue1086live]") {
+    const char* checkout = std::getenv("PI_CHECKOUT");
+    if (checkout == nullptr || *checkout == '\0') SKIP("PI_CHECKOUT is required for live pi continuation");
     TempWorkspace workspace;
     const auto path = workspace.path() / "storage.sqlite";
     auto opened = SqliteStorage::open(path);
@@ -1057,7 +1077,9 @@ TEST_CASE("C++ creates a SQLite store, pi advances it, and C++ finishes it",
 }
 
 TEST_CASE("a failed C++ commit on a pi SQLite store rolls back and pi still continues",
-        "[durable][sqlite][issue1086][continuation]") {
+        "[durable][sqlite][issue1086][continuation][issue1086live]") {
+    const char* checkout = std::getenv("PI_CHECKOUT");
+    if (checkout == nullptr || *checkout == '\0') SKIP("PI_CHECKOUT is required for live pi continuation");
     TempWorkspace workspace;
     run_pi_sqlite(workspace.path(), "create");
     const PiSqliteIds ids = read_pi_sqlite_ids(workspace.path());
