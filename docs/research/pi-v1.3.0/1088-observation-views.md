@@ -11,7 +11,7 @@ Hydration and watch registration run together on the Session mutation line, so
 a publication cannot fall between those steps. View mounts advance from commit
 publications; they introduce no display scheduler and do not execute task phases.
 
-A controlled public-caller test uses `Harness::commit` to write
+A controlled public-caller test uses `Harness::session().commit` to write
 `live.generation`, then commits its removal and a usage update. It checks every
 frame by applying its ops to the prior value, checks that tampered ops fail that
 comparison, and compares the final frame with fresh hydration. This exercises
@@ -75,33 +75,43 @@ mutation line; that is a static risk, not a reproduced deadlock. Failure and
 close ordering for the barrier are covered by the merged #1165/#1166 tests.
 The architecture selection passed on the final code: `ctest --preset vcpkg
 -L architecture` selected 43, passed 43, 0 failed, exit 0, after a full
-`cmake --build --preset vcpkg` (JUnit `/tmp/cch-1088-architecture.xml`, raw
-`/tmp/cch-1088-architecture.log`). Repository Full Validation remains
-outstanding.
+`cmake --build --preset vcpkg` (JUnit `/tmp/cch-1088-final-architecture.xml`,
+raw `/tmp/cch-1088-final-architecture.log`). Repository Full Validation
+remains outstanding.
 
 Watch cancellation's cross-thread claim-to-entry race is resolved. A watcher
-now has an `Idle`/`Claimed`/`Entered`/`Stopped` admission state guarded by the
-mount mutex; `stop()` marks the stop and waits only while a delivery is
-`Claimed`, never for an `Entered` callback to finish. A delivery that observes
-the stop before entering cancels and notifies; one that enters first may finish
-after `stop()` returns. The deterministic `[watch-claim-race]` case pauses the
-publication thread between claim and entry, marks the stop, then releases the
-publication: RED observed one callback after stop (`CHECK(calls.load() == 0)`
-reported `1 == 0` at the then-line 1572), GREEN observes none. `[watch-self-stop]`
-proves an entered callback may stop its own watch without deadlocking. The
-private hook is null-safe and test-scoped; no public API changed. A test-only
-follow-up (`67c406e6f`) replaced the assertion-driven wait and busy-yield hook
-with a condition-variable gate, installed the hook only after the watch exists,
-and releases/joins/clears before either `FAIL` or the final checks. Evidence:
-`/tmp/cch-1088-watch-red.log`, `/tmp/cch-1088-watch-green.log` and
-`/tmp/cch-1088-watch-hygiene-green.log`. Focused after GREEN: `issue1088`
-20/20, `issue1165` 15/15, `issue1063` 16/16, `[watch]` 7/7, and the durable
-shard 226 selected (223 passed, 3 skipped, 0 failed). `stop()` still does not
-join a running callback, and cross-watch stop cycles are not claimed.
+has an `Idle`/`Claimed`/`Entered`/`Stopped` admission state guarded by the mount
+mutex. `stop()` marks the stop and transitions `Idle` or `Claimed` directly to
+`Stopped`; it never waits for a delivery to observe the cancellation and never
+waits for an `Entered` callback to finish. A claimed delivery rechecks the
+stop, cancels, and does not call its listener; one that entered first may
+finish after `stop()` returns. The deterministic `[watch-claim-race]` case
+pauses the publication thread between claim and entry, waits for `stop()` to
+return while the publication is still paused, then releases it and observes no
+callback. `[watch-self-stop]` proves an entered callback may stop its own watch
+without deadlocking. The private hook is null-safe, test-scoped, and not a
+public contract. A test-only follow-up (`67c406e6f`) replaced the
+assertion-driven wait and busy-yield hook with a condition-variable gate,
+installed the hook only after the watch exists, and releases/joins/clears
+before either `FAIL` or the final checks. Review follow-up removed the
+`std::condition_variable` from production `stop()`/`end_watchers`, added the
+moved-from `ViewWatch::value()` guard, replaced `std::stoll` with
+`std::from_chars`, documented the async lifetime contract on the public graph
+and watch declarations, and removed the unasked `Harness::commit` delegate.
+Evidence: `/tmp/cch-1088-watch-red.log`, `/tmp/cch-1088-watch-green.log`,
+`/tmp/cch-1088-watch-hygiene-green.log`, and
+`/tmp/cch-1088-final-{watch,issue1088,issue1165,issue1063,durable}.log`.
+Focused after the review follow-up: `issue1088` 22/22, `issue1165` 15/15,
+`issue1063` 16/16, `[watch]` 8/8, and the durable shard 228 selected (225
+passed, 3 skipped, 0 failed). The new `[watch-move]` and
+`[task-graph-decode]` cases cover the moved-from value and malformed/overflow
+key errors. `stop()` still does not join a running callback, and cross-watch
+stop cycles are not claimed.
 
 The complete frozen split/integration selection passed: `ctest --preset vcpkg
 -L frozen` selected 5 and passed 5, exit 0, with JUnit output in
-`/tmp/cch-1088-frozen.xml` and raw output in `/tmp/cch-1088-frozen.log`. The
+`/tmp/cch-1088-final-frozen.xml` and raw output in
+`/tmp/cch-1088-final-frozen.log`. The
 selection is the four registered observation scenarios (conversation watch,
 inspect states, placed-submission inspection, task graph) plus the audit-1054
 SQLite schema baseline; the four #1088 scenarios are 4/4 and the schema
@@ -147,16 +157,16 @@ Storage contract requires an error instead.
 
 SQLite reopen-failure coverage is not a separate #1088 observation contract:
 reopen consistency is covered by `[inspect-complete]`
-(`tests/durable/HarnessObservationTest.cpp:816`: Memory, SQLite and JSONL
+(`tests/durable/HarnessObservationTest.cpp:817`: Memory, SQLite and JSONL
 reopen, 257 rows, before == after) and by `a reopened Harness derives every
-observation from committed records without running task code` (`:586`).
+observation from committed records without running task code` (`:587`).
 Failed-commit rollback and sequence preservation across reopen are covered by
 `tests/durable/SqliteStorageTest.cpp:110`; failed-Session trigger rollback,
 reopen and recovery are covered by `tests/durable/SqliteStorageTest.cpp:159`;
 failed-Session watch termination and rejection by the observation APIs are
 covered by `[durable][observation][failure][issue1088]`
-(`tests/durable/HarnessObservationTest.cpp:1685`). `[inspect-scan-error]`
-(`tests/durable/HarnessObservationTest.cpp:941`) covers a backend that cannot
+(`tests/durable/HarnessObservationTest.cpp:1740`). `[inspect-scan-error]`
+(`tests/durable/HarnessObservationTest.cpp:942`) covers a backend that cannot
 serve the complete scan, not a reopen failure. No combined failure+reopen test
 is claimed.
 
