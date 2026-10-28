@@ -1,0 +1,67 @@
+{
+  "schema": "pike/pi-v1.3.0-audit-evidence/1",
+  "baseline": "pi-v1.3.0",
+  "revision": "71023aec1546d6d677a65669c5665c0927ce0dd0",
+  "ticket": "1089",
+  "family": "audit-1089",
+  "capturedAt": "2026-10-27T23:01:57.374Z",
+  "environment": {
+    "platform": "linux",
+    "arch": "x64",
+    "libc": "glibc",
+    "glibcVersion": "2.44",
+    "node": "v26.12.1",
+    "tsx": "4.22.1"
+  },
+  "sourceEndpoints": [
+    "packages/durable/src/env/node.ts:NodeExecutionEnv.watch,exec",
+    "packages/durable/src/env/node-watch.ts:NodeFileWatcher.close"
+  ],
+  "scenarios": [
+    {
+      "name": "watch covers creation after return and stops callbacks after close",
+      "inputs": {
+        "target": "missing file",
+        "mutations": [
+          "create after watch returns",
+          "write after close"
+        ]
+      },
+      "expected": {
+        "observedAfterReturn": true,
+        "callbacksStableAfterClose": true,
+        "mode": "native"
+      },
+      "normalizations": [
+        "temporary paths omitted"
+      ]
+    },
+    {
+      "name": "normal exit cancellation and timeout have distinct shell outcomes",
+      "inputs": {
+        "normalExit": 7,
+        "cancelledCommand": "wait after readiness output",
+        "timeoutSeconds": 0.1
+      },
+      "expected": {
+        "normal": {
+          "ok": true,
+          "exitCode": 7
+        },
+        "cancelled": {
+          "ok": false,
+          "code": "aborted",
+          "message": "aborted"
+        },
+        "timeout": {
+          "ok": false,
+          "code": "timeout",
+          "message": "timeout:0.1"
+        }
+      },
+      "normalizations": [
+        "process identifiers omitted"
+      ]
+    }
+  ]
+}
