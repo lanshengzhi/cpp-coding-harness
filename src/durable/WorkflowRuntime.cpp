@@ -2900,7 +2900,11 @@ support::ExpectedVoid end_run(
     }
     // Every terminal run also clears the generation state, including a run
     // already handed to a successor (frozen pi `endRun`).
-    return live.erase(live_generation_path());
+    auto generation = live.erase(live_generation_path());
+    if (!generation) return std::unexpected(generation.error());
+    auto tools = live.erase(chord::Path{chord::path_key("tools")});
+    if (!tools) return std::unexpected(tools.error());
+    return live.erase(chord::Path{chord::path_key("nestedTools")});
 }
 
 support::ExpectedVoid withdraw_queued_inputs(Transaction& tx, chord::Draft& inbox) {

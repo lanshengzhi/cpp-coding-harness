@@ -3159,6 +3159,21 @@ TEST_CASE("aborting a run clears the published attempt without recording an answ
     auto mid_attempt = live_generation_attempt(storage, root.value());
     REQUIRE(mid_attempt.has_value());
     CHECK(*mid_attempt == 1);
+    const auto live_definition =
+            detail::builtin_document("pi.live:v1", DocumentHistory::Latest, DocumentFork::Initial, [] {
+                return chord::Json{chord::Json::Object{}};
+            });
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto live = tx.doc(live_definition, DocumentAddress{.conversation_id = root.value()});
+        if (!live) return std::unexpected(live.error());
+        auto tools = live->set(chord::Path{chord::path_key("tools")}, chord::Json{chord::Json::Array{}});
+        if (!tools) return std::unexpected(tools.error());
+        return live->set(chord::Path{chord::path_key("nestedTools")}, chord::Json{chord::Json::Array{}});
+    })).has_value());
+    auto seeded = live_document_value(storage, root.value());
+    REQUIRE(seeded.has_value());
+    CHECK(seeded->as_object()->contains("tools"));
+    CHECK(seeded->as_object()->contains("nestedTools"));
     REQUIRE(consume(harness->abort_conversation(root.value())).has_value());
     auto settled = consume(admitted.value().wait());
     REQUIRE(settled.has_value());
@@ -3167,6 +3182,9 @@ TEST_CASE("aborting a run clears the published attempt without recording an answ
     CHECK(*settled.value().reason == "aborted");
     auto live = live_document_value(storage, root.value());
     REQUIRE(live.has_value());
+    CHECK_FALSE(live->as_object()->contains("generation"));
+    CHECK_FALSE(live->as_object()->contains("tools"));
+    CHECK_FALSE(live->as_object()->contains("nestedTools"));
     CHECK(live->as_object()->empty());
     auto entries = storage.scan_entries(root.value(), 100);
     REQUIRE(entries.has_value());
