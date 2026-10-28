@@ -21,6 +21,7 @@
 #include "durable/FrozenExpectation.hpp"
 #include "durable/GatedStorage.hpp"
 #include "durable/ObservationTestHooks.hpp"
+#include "durable/ViewMounts.hpp"
 #include "durable/Outcome.hpp"
 
 #include <catch2/catch_test_macros.hpp>
@@ -462,7 +463,7 @@ struct CompleteScanRows {
     if (seed) {
         std::vector<TaskId> ids;
         ids.reserve(258);
-        REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
             const TaskDefinition* definition = harness->task_definition("audit1088.complete");
             if (definition == nullptr) {
                 return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
@@ -477,7 +478,7 @@ struct CompleteScanRows {
         })).has_value());
         REQUIRE(ids.size() == 258);
 
-        REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
             auto current = tx.task(ids.back());
             if (!current) return std::unexpected(current.error());
             if (!current->has_value()) {
@@ -603,7 +604,7 @@ TEST_CASE("a reopened Harness derives every observation from committed records w
         auto harness = std::move(opened.value());
         const auto root = consume(harness->root());
         REQUIRE(root.has_value());
-        REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             const TaskDefinition* definition = harness->task_definition("audit1088.witness");
             if (definition == nullptr) {
                 return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
@@ -627,7 +628,7 @@ TEST_CASE("a reopened Harness derives every observation from committed records w
                 [] { return chord::Json(); }, [](const chord::Json&, const chord::OpBatch&, std::int64_t) {
                     return true;
                 });
-        auto doc_commit = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto doc_commit = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             auto draft = tx.doc(agent_doc, DocumentAddress{.conversation_id = root.value()});
             if (!draft) return std::unexpected(std::move(draft.error()));
             if (auto set = draft->set(chord::Path{chord::path_key("observed")}, chord::Json(true)); !set) {
@@ -882,7 +883,7 @@ TEST_CASE("inspection derives every waiting member beyond the ownership scan cap
     REQUIRE(root.has_value());
 
     TaskId parent{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const TaskDefinition* definition = harness->task_definition("audit1088.world-complete");
         if (definition == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
@@ -896,7 +897,7 @@ TEST_CASE("inspection derives every waiting member beyond the ownership scan cap
     constexpr int kChildren = 1100;
     std::vector<TaskId> children;
     children.reserve(kChildren);
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const TaskDefinition* definition = harness->task_definition("audit1088.world-complete");
         if (definition == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
@@ -912,7 +913,7 @@ TEST_CASE("inspection derives every waiting member beyond the ownership scan cap
 
     // An abort mark makes the parent report the live owned work it waits for;
     // no abort handler runs because the Harness stays paused.
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto current = tx.task(parent);
         if (!current) return std::unexpected(current.error());
         if (!current->has_value()) {
@@ -949,7 +950,7 @@ TEST_CASE("inspection fails loudly when storage cannot serve the complete scan",
     auto harness = std::move(opened.value());
     const auto root = consume(harness->root());
     REQUIRE(root.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const TaskDefinition* definition = harness->task_definition("audit1088.scan-error");
         if (definition == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
@@ -1000,7 +1001,7 @@ TEST_CASE("a task-graph watch delivers exact frames and a cancelled subscription
 
     // One commit creates the parent: exactly one frame.
     TaskId parent_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         const TaskDefinition* definition = harness->task_definition("audit1088.parent");
         if (definition == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing parent definition"));
@@ -1066,7 +1067,7 @@ TEST_CASE("a task-graph watch delivers exact frames and a cancelled subscription
     // watch keeps receiving exactly the later commits.
     CHECK(second.value().stop() == WatchEndReason::Stopped);
     TaskId later_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto later = tx.create_task(*child_definition, chord::Json(chord::Json::Object{{"n", chord::Json(9.0)}}),
                 TaskOptions{.conversation_id = root.value()});
         if (!later) return std::unexpected(later.error());
@@ -1135,7 +1136,7 @@ TEST_CASE("a conversation view watch delivers exact frames, rolls back invisibly
 
     // Commit 1: append one entry.
     EntryId first_entry_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(
                 root.value(), "pi.user", chord::Json(chord::Json::Object{{"text", chord::Json("one")}}));
         if (!entry) return std::unexpected(entry.error());
@@ -1144,7 +1145,7 @@ TEST_CASE("a conversation view watch delivers exact frames, rolls back invisibly
     })).has_value());
 
     // Commit 2: change the built-in agent document.
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto draft = tx.doc(agent_doc, DocumentAddress{.conversation_id = root.value()});
         if (!draft) return std::unexpected(std::move(draft.error()));
         if (auto set = draft->set(chord::Path{chord::path_key("model")}, chord::Json("witness")); !set) {
@@ -1154,7 +1155,7 @@ TEST_CASE("a conversation view watch delivers exact frames, rolls back invisibly
     })).has_value());
 
     // Commit 3: append a head entry cutting the retained prefix.
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(root.value(), "pi.user",
                 chord::Json(chord::Json::Object{{"text", chord::Json("two")}}), EntryHeadVariant{first_entry_id});
         if (!entry) return std::unexpected(entry.error());
@@ -1163,7 +1164,7 @@ TEST_CASE("a conversation view watch delivers exact frames, rolls back invisibly
 
     // Commit 4: roll back after staging a write; the transaction rejects and
     // publishes nothing.
-    const auto rolled_back = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    const auto rolled_back = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(
                 root.value(), "pi.user", chord::Json(chord::Json::Object{{"text", chord::Json("ghost")}}));
         if (!entry) return std::unexpected(entry.error());
@@ -1214,7 +1215,7 @@ TEST_CASE("a conversation view watch delivers exact frames, rolls back invisibly
     // watch keeps receiving exactly one frame per touching commit, and the
     // cancelled watch keeps its last delivered revision.
     CHECK(second.value().stop() == WatchEndReason::Stopped);
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(
                 root.value(), "pi.user", chord::Json(chord::Json::Object{{"text", chord::Json("three")}}));
         if (!entry) return std::unexpected(entry.error());
@@ -1257,7 +1258,7 @@ TEST_CASE("stopping or replacing a watch prevents callbacks that have not starte
     auto second = consume(harness->watch_conversation(root.value(), [&](ViewFrame) { ++second_calls; }));
     REQUIRE(second.has_value());
     second_watch = &second.value();
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(root.value(), "pi.user", chord::Json(chord::Json::Object{}));
         if (!entry) return std::unexpected(entry.error());
         return {};
@@ -1274,7 +1275,7 @@ TEST_CASE("stopping or replacing a watch prevents callbacks that have not starte
     REQUIRE(replacement.has_value());
     target.value() = std::move(replacement.value());
     second_watch = nullptr;
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(root.value(), "pi.user", chord::Json(chord::Json::Object{}));
         if (!entry) return std::unexpected(entry.error());
         return {};
@@ -1351,9 +1352,10 @@ TEST_CASE("inspection does not combine an uncommitted reservation with a pending
     const auto root = consume(harness->root());
     REQUIRE(root.has_value());
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         const auto* definition = harness->task_definition("audit1088.reservation");
-        if (!definition) return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
+        if (!definition)
+            return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing definition"));
         auto task = tx.create_task(*definition, chord::Json(chord::Json::Object{}),
                 TaskOptions{.conversation_id = root.value()});
         if (!task) return std::unexpected(task.error());
@@ -1451,7 +1453,7 @@ TEST_CASE("stop callback waiting for a reentrant committed read blocks its publi
     auto harness = std::move(opened.value());
     harness_ptr = harness.get();
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1088.reentry"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         task_id = *task;
@@ -1487,7 +1489,7 @@ TEST_CASE("a watch callback already running may finish after stop", "[durable][o
     }));
     REQUIRE(watch.has_value());
     std::jthread writer([&] {
-        static_cast<void>(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        static_cast<void>(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             auto entry = tx.append_entry(root.value(), "pi.user", chord::Json(chord::Json::Object{}));
             if (!entry) return std::unexpected(entry.error());
             return {};
@@ -1505,11 +1507,12 @@ TEST_CASE("a watch callback already running may finish after stop", "[durable][o
 }
 
 // Discriminating case (ticket #1088): a stop that arrives after a delivery is
-// admitted but before its listener is entered must cancel that delivery. The
-// private hook pauses exactly in that window; the stop thread records that it
-// marked the watch stopped, then releases the publication thread. Without the
-// admission state the listener runs after stop() returned; with it the
-// delivery observes the stop and is cancelled.
+// admitted but before its listener is entered must cancel that delivery, and
+// stop() must return while the publication is still paused. The private hook
+// pauses exactly in that window; the test waits for stop() to finish before it
+// releases the publication thread. Without the no-wait transition stop() cannot
+// return while the publication is paused; with it the delivery observes the
+// stop on its recheck and is cancelled.
 TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
         "[durable][observation][issue1088][watch-claim-race]") {
     MemoryStorage storage;
@@ -1523,7 +1526,7 @@ TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
         std::mutex mutex;
         std::condition_variable cv;
         bool claimed{false};
-        bool stop_marked{false};
+        bool stop_done{false};
         bool release{false};
     };
     Gate gate;
@@ -1541,19 +1544,15 @@ TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
     // Install only after the watch exists: a failed acquisition cannot leave
     // the global hook installed.
     HookGuard hook([&gate](const testing::ViewDispatchHookPoint point) {
+        if (point != testing::ViewDispatchHookPoint::AfterClaim) return;
         std::unique_lock lock(gate.mutex);
-        if (point == testing::ViewDispatchHookPoint::AfterClaim) {
-            gate.claimed = true;
-            gate.cv.notify_all();
-            gate.cv.wait_for(lock, std::chrono::seconds(10), [&gate] { return gate.release; });
-            return;
-        }
-        gate.stop_marked = true;
+        gate.claimed = true;
         gate.cv.notify_all();
+        gate.cv.wait_for(lock, std::chrono::seconds(10), [&gate] { return gate.release; });
     });
 
     std::jthread writer([&] {
-        static_cast<void>(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        static_cast<void>(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             auto entry = tx.append_entry(root.value(), "pi.user", chord::Json(chord::Json::Object{}));
             if (!entry) return std::unexpected(entry.error());
             return {};
@@ -1579,13 +1578,26 @@ TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
         cleanup();
         FAIL("timed out waiting for claimed watch delivery");
     }
-    stopper = std::jthread([&] { reason.store(static_cast<int>(watch.value().stop())); });
-    if (!wait_gate(&Gate::stop_marked)) {
+    stopper = std::jthread([&] {
+        reason.store(static_cast<int>(watch.value().stop()));
+        {
+            std::lock_guard lock(gate.mutex);
+            gate.stop_done = true;
+        }
+        gate.cv.notify_all();
+    });
+    if (!wait_gate(&Gate::stop_done)) {
         cleanup();
-        FAIL("timed out waiting for stop mark before callback entry");
+        FAIL("timed out waiting for stop to return while the publication is paused");
+    }
+    bool released_before_stop = false;
+    {
+        std::lock_guard lock(gate.mutex);
+        released_before_stop = gate.release;
     }
     cleanup();
 
+    CHECK_FALSE(released_before_stop);
     CHECK(calls.load() == 0);
     CHECK(reason.load() == static_cast<int>(WatchEndReason::Stopped));
     CHECK(watch.value().stop() == WatchEndReason::Stopped);
@@ -1613,7 +1625,7 @@ TEST_CASE("a watch may stop itself from its callback without deadlock",
     }));
     REQUIRE(watch.has_value());
     watch_ptr = &watch.value();
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(root.value(), "pi.user", chord::Json(chord::Json::Object{}));
         if (!entry) return std::unexpected(entry.error());
         return {};
@@ -1623,6 +1635,49 @@ TEST_CASE("a watch may stop itself from its callback without deadlock",
     CHECK(reason.load() == static_cast<int>(WatchEndReason::Stopped));
     CHECK(watch.value().stop() == WatchEndReason::Stopped);
     REQUIRE(consume(harness->close()).has_value());
+}
+
+// A moved-from watch is a valid empty handle: reading it returns the
+// documented empty value instead of dereferencing a null implementation.
+TEST_CASE("a moved-from watch returns an empty value and stops as a no-op",
+        "[durable][observation][issue1088][watch-move]") {
+    MemoryStorage storage;
+    auto opened = consume(Harness::open(storage, HarnessOptions{}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    const auto root = consume(harness->root());
+    REQUIRE(root.has_value());
+    auto watch = consume(harness->watch_conversation(root.value(), [](ViewFrame) {}));
+    REQUIRE(watch.has_value());
+
+    ViewWatch moved = std::move(watch.value());
+    CHECK(watch.value().value().is_null());
+    CHECK(watch.value().stop() == WatchEndReason::Stopped);
+    CHECK(moved.stop() == WatchEndReason::Stopped);
+    REQUIRE(consume(harness->close()).has_value());
+}
+
+// A malformed or out-of-range task key is a Validation error, not an
+// exception escaping the no-exception task-graph decoder.
+TEST_CASE("task graph decoding rejects malformed and overflowing task ids",
+        "[durable][observation][issue1088][task-graph-decode]") {
+    const auto graph_with_key = [](std::string key) {
+        chord::Json::Object tasks;
+        tasks.emplace(std::move(key), chord::Json(chord::Json::Object{}));
+        return chord::Json(chord::Json::Object{{"tasks", chord::Json(std::move(tasks))}});
+    };
+    SECTION("malformed") {
+        const auto decoded = decode_task_graph(graph_with_key("not-a-task"));
+        REQUIRE_FALSE(decoded.has_value());
+        CHECK(decoded.error().code == support::ErrorCode::Validation);
+        CHECK(decoded.error().message.find("not a valid task id") != std::string::npos);
+    }
+    SECTION("overflow") {
+        const auto decoded = decode_task_graph(graph_with_key("9223372036854775808"));
+        REQUIRE_FALSE(decoded.has_value());
+        CHECK(decoded.error().code == support::ErrorCode::Validation);
+        CHECK(decoded.error().message.find("not a valid task id") != std::string::npos);
+    }
 }
 
 // Exercise the observation seam with real committed mutations shaped like the
@@ -1646,7 +1701,7 @@ TEST_CASE("conversation watch observes committed generation and usage changes",
     auto watch = consume(harness->watch_conversation(root.value(), recorder->listener()));
     REQUIRE(watch.has_value());
     const auto initial = watch.value().value();
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto doc = tx.doc(live, DocumentAddress{.conversation_id = root.value()});
         if (!doc) return std::unexpected(doc.error());
         auto set = doc->set({chord::path_key("generation")},
@@ -1654,7 +1709,7 @@ TEST_CASE("conversation watch observes committed generation and usage changes",
         if (!set) return std::unexpected(set.error());
         return {};
     })).has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto doc = tx.doc(live, DocumentAddress{.conversation_id = root.value()});
         if (!doc) return std::unexpected(doc.error());
         auto removed = doc->erase({chord::path_key("generation")});
@@ -1700,7 +1755,7 @@ TEST_CASE("a failed session ends structural watches without changing committed s
     REQUIRE(view_watch.has_value());
 
     storage->fail_next_commit("disk vanished");
-    const auto failed = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    const auto failed = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto entry = tx.append_entry(
                 root.value(), "pi.user", chord::Json(chord::Json::Object{{"text", chord::Json("doomed")}}));
         if (!entry) return std::unexpected(entry.error());
@@ -1914,7 +1969,7 @@ TEST_CASE("frozen observation: the task graph follows owner edges, owned convers
         CHECK(watch.value().value() == empty_graph_value());
 
         TaskId parent_id{};
-        REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             const TaskDefinition* definition = harness->task_definition("audit1088.parent");
             if (definition == nullptr) {
                 return std::unexpected(support::make_error(support::ErrorCode::Validation, "missing parent definition"));
@@ -2026,7 +2081,7 @@ TEST_CASE("frozen observation: inspect derives ready, running, waiting and block
             auto harness = std::move(opened.value());
             const auto root = consume(harness->root());
             REQUIRE(root.has_value());
-            REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+            REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
                 const TaskDefinition* gate = harness->task_definition("audit.inspect-gate");
                 const TaskDefinition* dependent = harness->task_definition("audit.inspect-dependent");
                 const TaskDefinition* missing = harness->task_definition("audit.inspect-missing");

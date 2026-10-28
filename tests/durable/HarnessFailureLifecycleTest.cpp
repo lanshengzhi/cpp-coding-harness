@@ -224,7 +224,7 @@ TEST_CASE("a storage failure signals the active invocation before the failing co
     harness_ptr = harness.get();
     const auto root = consume(harness->root());
     REQUIRE(root.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1166.failure"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         return {};
@@ -233,7 +233,7 @@ TEST_CASE("a storage failure signals the active invocation before the failing co
     REQUIRE(wait_for(phase_ready, std::chrono::seconds(5)));
 
     record_event("fail-call");
-    const auto outcome = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    const auto outcome = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto entry = tx.append_entry(root.value(), "audit1166.fail", chord::Json(nullptr));
         if (!entry) return std::unexpected(entry.error());
         return {};
@@ -254,7 +254,7 @@ TEST_CASE("a storage failure signals the active invocation before the failing co
     // Record the sealing probes now; assert after the harness is closed.
     // Frozen `commit-rejected`: the caller keeps the ORIGINAL storage error,
     // while every later operation reports the sealed-session message.
-    const auto later = consume(harness->commit([](Transaction& tx) -> support::ExpectedVoid {
+    const auto later = consume(harness->session().commit([](Transaction& tx) -> support::ExpectedVoid {
         auto conversation = tx.create_conversation();
         if (!conversation) return std::unexpected(conversation.error());
         return {};
@@ -289,7 +289,7 @@ TEST_CASE("a task that completes normally leaves no running identity behind", "[
     auto harness = std::move(opened.value());
     REQUIRE(harness->task_definition("audit1166.failure") != nullptr);
     TaskId id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1166.failure"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -356,7 +356,7 @@ TEST_CASE("aborting a task signals its active invocation and leaves no running i
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1166.abort"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -436,7 +436,7 @@ TEST_CASE("shutdown signals a stop callback without holding the scheduler mutex"
     auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1166.lock"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         return {};
@@ -455,7 +455,7 @@ TEST_CASE("shutdown signals a stop callback without holding the scheduler mutex"
                     })
                     .has_value());
     std::jthread holder([&] {
-        static_cast<void>(consume(harness->commit([](Transaction& tx) -> support::ExpectedVoid {
+        static_cast<void>(consume(harness->session().commit([](Transaction& tx) -> support::ExpectedVoid {
             auto conversation = tx.create_conversation();
             if (!conversation) return std::unexpected(conversation.error());
             return {};
@@ -513,7 +513,7 @@ TEST_CASE("closing the harness signals an active invocation and waits for its st
     auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1166.close"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         return {};
@@ -583,7 +583,7 @@ TEST_CASE("a stop callback that waits for a committed read is served only after 
     auto harness = std::move(opened.value());
     harness_ptr = harness.get();
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1166.reentry"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         task_id = *task;

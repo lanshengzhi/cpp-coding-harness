@@ -181,7 +181,7 @@ TEST_CASE("TaskExecution: multi-phase counter task advances checkpoints and comm
     TaskId task_id;
     chord::Json::Object input;
     input.emplace("to", 3.0);
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto& registered_def = harness->session(); // compile check
         (void)registered_def;
         // Lookup definition from harness
@@ -297,7 +297,7 @@ TEST_CASE("TaskExecution: task memo survives checkpoint replacement and is clear
     TaskId task_id;
     chord::Json::Object input;
     input.emplace("amount", 7.0);
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit1076.memo"), chord::Json(input));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
@@ -373,7 +373,7 @@ TEST_CASE("TaskExecution: task commits typed failed outcome with error detail an
     auto harness = std::move(harness_res.value());
 
     TaskId task_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit1076.fail"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
@@ -470,7 +470,7 @@ TEST_CASE("TaskExecution: abort_task marks running task and executes abort handl
     REQUIRE(harness_res.has_value());
     auto harness = std::move(harness_res.value());
     TaskId task_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit1076.abort"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
         task_id = *created;
@@ -538,7 +538,7 @@ TEST_CASE("TaskExecution: abort handler may commit a failed terminal outcome", "
     auto harness = std::move(harness_res.value());
 
     TaskId task_id;
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(
                 *harness->task_definition("audit1076.abort-failure"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
@@ -587,7 +587,7 @@ TEST_CASE(
         auto harness_res = consume(Harness::open(*storage, HarnessOptions{.tasks = std::move(tasks)}));
         REQUIRE(harness_res.has_value());
         auto harness = std::move(harness_res.value());
-        auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
             auto created = tx.create_task(
                     *TaskDefinitionBuilder("audit1076.orphan", 1).build(), chord::Json(chord::Json::Object{}));
             if (!created) return std::unexpected(created.error());
@@ -653,7 +653,7 @@ TEST_CASE("TaskExecution: phase returning without durable progress faults the ta
     auto harness = std::move(harness_res.value());
 
     TaskId task_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created =
                 tx.create_task(*harness->task_definition("audit1076.no-progress"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
@@ -753,7 +753,7 @@ TEST_CASE("TaskExecution: resuming interrupted task continues from checkpoint wi
         REQUIRE(harness_res.has_value());
         auto harness = std::move(harness_res.value());
 
-        auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
             auto created =
                     tx.create_task(*harness->task_definition("audit1076.resume"), chord::Json(chord::Json::Object{}));
             if (!created) return std::unexpected(created.error());
@@ -891,7 +891,7 @@ TEST_CASE("TaskExecution: terminal record and receipt are committed in the same 
     auto harness = std::move(harness_res.value());
 
     TaskId task_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created =
                 tx.create_task(*harness->task_definition("audit1076.atomic"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
@@ -1016,7 +1016,7 @@ TEST_CASE("TaskExecution: abort handler error faults the task with the handler m
     auto harness = std::move(harness_res.value());
 
     TaskId task_id;
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created =
                 tx.create_task(*harness->task_definition("audit1076.abort-error"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
@@ -1069,7 +1069,7 @@ TEST_CASE("TaskExecution: abort handler returning without a terminal outcome fau
     auto harness = std::move(harness_res.value());
 
     TaskId task_id;
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(
                 *harness->task_definition("audit1076.abort-no-outcome"), chord::Json(chord::Json::Object{}));
         if (!created) return std::unexpected(created.error());
@@ -1185,7 +1185,7 @@ TEST_CASE("TaskExecution: reservation migrates a stored definition before runnin
     REQUIRE(root_res.has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* v1_def = harness->task_definition("audit.versioned");
         if (v1_def == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
@@ -1285,7 +1285,7 @@ TEST_CASE("TaskExecution: a task with no installed definition stays pending and 
     REQUIRE(root_res.has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* def = harness->task_definition("audit.versioned");
         if (def == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
@@ -1356,7 +1356,7 @@ TEST_CASE("TaskExecution: a task whose stored version is newer than the installe
     REQUIRE(root_res.has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* def = harness->task_definition("audit.versioned");
         if (def == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
@@ -1436,7 +1436,7 @@ TEST_CASE("TaskExecution: a failed migration is reported once and leaves the tas
     REQUIRE(root_res.has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* def = harness->task_definition("audit.versioned");
         if (def == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
@@ -1534,7 +1534,7 @@ TEST_CASE("TaskExecution: aborting a task blocked by too-old or failed-migration
     REQUIRE(root_res.has_value());
 
     TaskId too_old_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* def = harness->task_definition("audit.versioned");
         if (def == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
@@ -1554,7 +1554,7 @@ TEST_CASE("TaskExecution: aborting a task blocked by too-old or failed-migration
     REQUIRE(registry.install(std::move(ext_v1)).has_value());
 
     TaskId failed_mig_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* def = harness->task_definition("audit.versioned");
         if (def == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.versioned"));
@@ -1704,7 +1704,7 @@ TEST_CASE("TaskExecution: a running task hands over to a newer definition at a p
     REQUIRE(root_res.has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* def = harness->task_definition("audit.handover");
         if (def == nullptr) {
             return std::unexpected(support::make_error(support::ErrorCode::Validation, "Missing audit.handover"));
@@ -1838,7 +1838,7 @@ TEST_CASE("TaskExecution: a running task keeps its old definition when a replace
     auto harness = std::move(harness_res.value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.keep-old"), chord::Json{nullptr});
         if (!created) return std::unexpected(created.error());
         task_id = *created;
@@ -1989,7 +1989,7 @@ TEST_CASE(
     REQUIRE(root_res.has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(
                 *registered_hooked, chord::Json{nullptr}, TaskOptions{.conversation_id = root_res.value()});
         if (!created) return std::unexpected(created.error());
@@ -2111,7 +2111,7 @@ TEST_CASE(
     REQUIRE(registry.install(std::move(ext_second)).has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*registered_hooked, chord::Json{nullptr});
         if (!created) return std::unexpected(created.error());
         task_id = *created;
@@ -2208,7 +2208,7 @@ TEST_CASE("TaskExecution: replacing an extension in place preserves hook order w
     REQUIRE(registry.install(make_hook_ext("ext-b", "b-v2")).has_value());
 
     TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*def, chord::Json{nullptr});
         if (!created) return std::unexpected(created.error());
         task_id = *created;

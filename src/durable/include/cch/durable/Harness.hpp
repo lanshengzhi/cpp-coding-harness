@@ -77,10 +77,19 @@ public:
 
     /// Read every live task and owner edge as a structured graph from
     /// committed records (frozen pi `Harness.taskGraph`).
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session after
+    /// this call returns. The Harness and its Session must outlive the
+    /// operation until its completion callback returns.
     [[nodiscard]] support::AsyncResult<TaskGraph> task_graph();
 
     /// Watch the task graph, delivering one exact frame per committed
     /// revision (frozen pi `WatchHandle` over the `TaskGraphView`).
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session until
+    /// the acquisition completes. The Harness and its Session must outlive the
+    /// operation until its completion callback returns; the returned watch
+    /// owns its mount independently of the Harness afterwards.
     [[nodiscard]] support::AsyncResult<ViewWatch> watch_task_graph(ViewFrameListener listener);
 
     /// Hydrate one conversation's committed view (frozen pi
@@ -92,12 +101,13 @@ public:
     /// Watch one conversation's committed view, delivering one exact frame
     /// per committed revision touching it (frozen pi `WatchHandle` over the
     /// `ConversationViews`). Rejects a missing conversation.
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session until
+    /// the acquisition completes. The Harness and its Session must outlive the
+    /// operation until its completion callback returns; the returned watch
+    /// owns its mount independently of the Harness afterwards.
     [[nodiscard]] support::AsyncResult<ViewWatch> watch_conversation(
             ConversationId conversation_id, ViewFrameListener listener);
-
-    /// Run one atomic transaction on the Session.
-    [[nodiscard]] support::AsyncResult<void> commit(
-            std::move_only_function<support::Expected<void>(Transaction&)> change);
 
     /// Start one manual compaction of a conversation (frozen pi
     /// `Harness.compact`): a conversation-owned, non-background task that a

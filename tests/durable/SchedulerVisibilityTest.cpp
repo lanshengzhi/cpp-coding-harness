@@ -210,7 +210,7 @@ TEST_CASE("scheduler reservation is invisible to a read admitted before its comm
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.reservation"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -313,7 +313,7 @@ TEST_CASE("a phase that commits waiting while remaining active is reported runni
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.waiting"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -418,7 +418,7 @@ TEST_CASE("a waiting task is not resumed to pending while its phase is still inv
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.resume"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -510,7 +510,7 @@ TEST_CASE("a rejected reservation never starts its phase or reports running", "[
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.rejected"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -607,7 +607,7 @@ TEST_CASE("a terminal task is never derived running from a live or stale identit
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.identity"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -893,7 +893,7 @@ TEST_CASE("a held reservation commit stays unreserved until it settles", "[durab
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.held"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -1026,7 +1026,7 @@ TEST_CASE("closing with a held reservation commit discards the identity and neve
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.held"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -1117,7 +1117,7 @@ TEST_CASE(
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.stale-scan"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -1178,7 +1178,7 @@ TEST_CASE(
     while (!phase_returned.load() && std::chrono::steady_clock::now() < returned_deadline)
         std::this_thread::yield();
     REQUIRE(phase_returned.load());
-    REQUIRE(consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([id](Transaction& tx) -> support::ExpectedVoid {
         auto cur = tx.task(id);
         if (!cur || !cur->has_value()) return {};
         TaskRecord record = **cur;
@@ -1221,7 +1221,7 @@ namespace {
 }
 
 [[nodiscard]] bool create_task_by_kind(Harness& harness, std::string_view kind) {
-    return consume(harness.commit([&](Transaction& tx) -> support::ExpectedVoid {
+    return consume(harness.session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto created = tx.create_task(*harness.task_definition(kind), chord::Json(nullptr));
         if (!created) return std::unexpected(created.error());
         return {};
@@ -1381,7 +1381,7 @@ TEST_CASE("a committed pending record is never promoted by a live identity", "[d
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.pending-identity"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -1391,7 +1391,7 @@ TEST_CASE("a committed pending record is never promoted by a live identity", "[d
     REQUIRE(wait_until([&entered] { return entered.load(); }));
     // The phase is parked: its identity is live and the record is `running`.
     // Write `pending` directly, reproducing the replacement window.
-    REQUIRE(consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([id](Transaction& tx) -> support::ExpectedVoid {
         auto cur = tx.task(id);
         if (!cur || !cur->has_value()) return {};
         TaskRecord record = **cur;
@@ -1433,7 +1433,7 @@ TEST_CASE("a stale scheduling snapshot reserves nothing and starts no phase", "[
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.noop"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -1442,7 +1442,7 @@ TEST_CASE("a stale scheduling snapshot reserves nothing and starts no phase", "[
     // Commit terminal while the scheduler is still paused, then resume: every
     // pass now sees the stale pending view and attempts a reservation the
     // transaction body must refuse.
-    REQUIRE(consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([id](Transaction& tx) -> support::ExpectedVoid {
         auto cur = tx.task(id);
         if (!cur || !cur->has_value()) return {};
         TaskRecord record = **cur;
@@ -1520,7 +1520,7 @@ TEST_CASE(
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.running-record"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -1528,7 +1528,7 @@ TEST_CASE(
     })).has_value());
     // The harness stays paused: the record is committed `running` directly,
     // with no invocation in flight and no identity to consult.
-    REQUIRE(consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([id](Transaction& tx) -> support::ExpectedVoid {
         auto cur = tx.task(id);
         if (!cur || !cur->has_value()) return {};
         TaskRecord record = **cur;
@@ -1560,7 +1560,7 @@ TEST_CASE("a held inspection scan blocks a later terminal commit until it settle
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
-    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(harness->session().commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
         auto task = tx.create_task(*harness->task_definition("audit1165.stale-line"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
         id = *task;
@@ -1613,7 +1613,7 @@ TEST_CASE("a held inspection scan blocks a later terminal commit until it settle
     std::optional<bool> commit_settled;
     std::atomic_bool commit_done{false};
     std::thread committer{[&harness, &commit_settled, &commit_done, id] {
-        commit_settled = consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+        commit_settled = consume(harness->session().commit([id](Transaction& tx) -> support::ExpectedVoid {
             auto cur = tx.task(id);
             if (!cur || !cur->has_value()) return {};
             TaskRecord record = **cur;

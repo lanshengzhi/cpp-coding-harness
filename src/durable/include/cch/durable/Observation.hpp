@@ -98,14 +98,16 @@ public:
 
     /// A copy of the acquisition revision, or of the latest delivered
     /// revision once frames have been delivered (frozen pi
-    /// `CommittedWatch.value`).
+    /// `CommittedWatch.value`). A moved-from watch has no mount and returns
+    /// an empty JSON value.
     [[nodiscard]] chord::Json value() const;
 
     /// Idempotently stop future deliveries and return this watch's terminal
     /// result (frozen pi `WatchHandle.stop`). A stop that arrives before a
-    /// callback is admitted cancels that delivery; a callback already entered
-    /// may finish after this returns, because stopping never joins a running
-    /// callback. Cross-watch stop cycles are not supported.
+    /// callback is admitted cancels that delivery and returns without waiting
+    /// for the cancellation to be observed; a callback already entered may
+    /// finish after this returns, because stopping never waits for or joins a
+    /// running callback. Cross-watch stop cycles are not supported.
     [[nodiscard]] WatchEndReason stop();
 
     /// Opaque state; defined in the module's private sources.

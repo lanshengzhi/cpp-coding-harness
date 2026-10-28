@@ -282,7 +282,7 @@ TEST_CASE("reordering sections past a head marker keeps the offered order", "[du
     // An old `pi.system` entry and a head marker make the next preparation take
     // the post-head baseline branch.
     EntryId marker{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto old = tx.append_entry(root.value(),
                 "pi.system",
                 system_entry_data(chord::Json::Object{{"a", chord::Json{"1"}}, {"b", chord::Json{"2"}}}),
