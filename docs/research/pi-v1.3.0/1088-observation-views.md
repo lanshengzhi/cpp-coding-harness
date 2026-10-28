@@ -81,15 +81,31 @@ mount mutex; `stop()` marks the stop and waits only while a delivery is
 the stop before entering cancels and notifies; one that enters first may finish
 after `stop()` returns. The deterministic `[watch-claim-race]` case pauses the
 publication thread between claim and entry, marks the stop, then releases the
-publication: RED observed one callback after stop (`1 == 0` at
-`HarnessObservationTest.cpp:1572`), GREEN observes none. `[watch-self-stop]`
+publication: RED observed one callback after stop (`CHECK(calls.load() == 0)`
+reported `1 == 0` at the then-line 1572), GREEN observes none. `[watch-self-stop]`
 proves an entered callback may stop its own watch without deadlocking. The
-private hook is null-safe and test-scoped; no public API changed. Evidence:
-`/tmp/cch-1088-watch-red.log` and `/tmp/cch-1088-watch-green.log`. Focused
-after GREEN: `issue1088` 20/20, `issue1165` 15/15, `issue1063` 16/16,
-`[watch]` 7/7, and the durable shard 226 selected (223 passed, 3 skipped,
-0 failed). `stop()` still does not join a running callback, and cross-watch
-stop cycles are not claimed. Full-table scans copy O(n) records; the strengthened scan contract
+private hook is null-safe and test-scoped; no public API changed. A test-only
+follow-up (`67c406e6f`) replaced the assertion-driven wait and busy-yield hook
+with a condition-variable gate, installed the hook only after the watch exists,
+and releases/joins/clears before either `FAIL` or the final checks. Evidence:
+`/tmp/cch-1088-watch-red.log`, `/tmp/cch-1088-watch-green.log` and
+`/tmp/cch-1088-watch-hygiene-green.log`. Focused after GREEN: `issue1088`
+20/20, `issue1165` 15/15, `issue1063` 16/16, `[watch]` 7/7, and the durable
+shard 226 selected (223 passed, 3 skipped, 0 failed). `stop()` still does not
+join a running callback, and cross-watch stop cycles are not claimed.
+
+The complete frozen split/integration selection passed: `ctest --preset vcpkg
+-L frozen` selected 5 and passed 5, exit 0, with JUnit output in
+`/tmp/cch-1088-frozen.xml` and raw output in `/tmp/cch-1088-frozen.log`. The
+selection is the four registered observation scenarios (conversation watch,
+inspect states, placed-submission inspection, task graph) plus the audit-1054
+SQLite schema baseline; the four #1088 scenarios are 4/4 and the schema
+baseline is 1/1. No frozen expectation was changed. This proves those five
+registered scenarios at the current checkout, not every remaining capability
+row, the event stream, SQLite reopen failure, architecture receipts, or
+repository Full Validation.
+
+Full-table scans copy O(n) records; the strengthened scan contract
 requires third-party Storage implementations to return complete pages rather
 than silently truncate them. Each scan is a single read; separate calls are
 not automatically atomic.
