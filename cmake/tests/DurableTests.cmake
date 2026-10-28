@@ -37,5 +37,8 @@ include_guard(GLOBAL)
         CCH_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
 )
     target_compile_options(cch_tests_durable PRIVATE ${CCH_WARNING_OPTIONS})
-    catch_discover_tests(cch_tests_durable ADD_TAGS_AS_LABELS)
+    # Bound the whole live continuation process, including Harness operations whose
+    # completion or cleanup cannot be interrupted by a waiter's stop token.
+    catch_discover_tests(cch_tests_durable TEST_SPEC "~[issue1086live]" ADD_TAGS_AS_LABELS)
+    catch_discover_tests(cch_tests_durable TEST_SPEC "[issue1086live]" PROPERTIES TIMEOUT 90 ADD_TAGS_AS_LABELS)
     add_dependencies(cch_tests_durable ${CCH_PARITY_BUILD_GATE_TARGET})

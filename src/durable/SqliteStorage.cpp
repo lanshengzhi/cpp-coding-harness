@@ -83,6 +83,83 @@ constexpr std::string_view kPoisonMessage = "SQLite storage is poisoned and must
     return serialized ? std::move(*serialized) : std::string{};
 }
 
+/// Encode one indexed string column exactly as frozen pi `encodeIndexedString`
+/// (`JSON.stringify`): the column stores a JSON string, not the raw value.
+/// The shared JSON writer uses uppercase hex for control escapes, whereas pi's
+/// JSON.stringify uses lowercase; SQLite's indexed equality is byte-sensitive.
+[[nodiscard]] std::string encode_indexed_string(std::string_view value) {
+    constexpr std::string_view kHexDigits = "0123456789abcdef";
+    std::string encoded;
+    encoded.reserve(value.size() + 2);
+    encoded.push_back('"');
+    for (const unsigned char byte : value) {
+        switch (byte) {
+        case '"':
+            encoded += "\\\"";
+            break;
+        case '\\':
+            encoded += "\\\\";
+            break;
+        case '\b':
+            encoded += "\\b";
+            break;
+        case '\f':
+            encoded += "\\f";
+            break;
+        case '\n':
+            encoded += "\\n";
+            break;
+        case '\r':
+            encoded += "\\r";
+            break;
+        case '\t':
+            encoded += "\\t";
+            break;
+        default:
+            if (byte < 0x20U) {
+                encoded += "\\u00";
+                encoded.push_back(kHexDigits[byte >> 4U]);
+                encoded.push_back(kHexDigits[byte & 0x0FU]);
+            } else {
+                encoded.push_back(static_cast<char>(byte));
+            }
+            break;
+        }
+    }
+    encoded.push_back('"');
+    return encoded;
+}
+
+/// Decode one indexed string column. A malformed value, a non-string JSON
+/// value, or trailing text is rejected; there is no raw-value fallback.
+[[nodiscard]] std::optional<std::string> decode_indexed_string(std::string_view text) {
+    if (text.size() < 2 || text.front() != '"') return std::nullopt;
+    bool escaped = false;
+    std::size_t closing = std::string_view::npos;
+    for (std::size_t i = 1; i < text.size(); ++i) {
+        const char value = text[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (value == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (value == '"') {
+            closing = i;
+            break;
+        }
+        if (static_cast<unsigned char>(value) < 0x20U) return std::nullopt;
+    }
+    if (closing == std::string_view::npos || closing + 1 != text.size()) return std::nullopt;
+    auto parsed = support::read_json(text);
+    if (!parsed) return std::nullopt;
+    const auto* value = parsed->get_if<std::string>();
+    if (value == nullptr) return std::nullopt;
+    return *value;
+}
+
 /// The persisted JSON record of one document incarnation (frozen pi
 /// `DocumentRecord`).
 [[nodiscard]] chord::Json encode_document_record(const DocumentRecord& record, Seq created_at) {
@@ -532,9 +609,11 @@ struct SqliteStorage::Impl {
                     const auto* kind = object->contains("kind") ? object->at("kind").as_string() : nullptr;
                     if (!id || kind == nullptr) return std::unexpected(corrupt("Invalid persisted document record"));
                     const auto created_at = json_int(object, "createdAt");
-                    const auto* stored_kind = reinterpret_cast<const char*>(sqlite3_column_text(row, 1));
+                    const auto* stored_kind_text = reinterpret_cast<const char*>(sqlite3_column_text(row, 1));
+                    const auto stored_kind = stored_kind_text == nullptr ? std::optional<std::string>{}
+                                                                         : decode_indexed_string(stored_kind_text);
                     if (!created_at || *created_at != sqlite3_column_int64(row, 2) ||
-                            *id != sqlite3_column_int64(row, 0) || stored_kind == nullptr || *kind != stored_kind) {
+                            *id != sqlite3_column_int64(row, 0) || !stored_kind || *kind != *stored_kind) {
                         return std::unexpected(corrupt("Persisted document columns do not match its record"));
                     }
                     const bool retired = sqlite3_column_type(row, 3) != SQLITE_NULL;
@@ -581,14 +660,15 @@ struct SqliteStorage::Impl {
                     }
                     const std::int64_t stored_owner = sqlite3_column_int64(row, 4);
                     const auto* owner_kind = reinterpret_cast<const char*>(sqlite3_column_text(row, 6));
-                    const auto* key_value = reinterpret_cast<const char*>(sqlite3_column_text(row, 8));
+                    const auto* key_text = reinterpret_cast<const char*>(sqlite3_column_text(row, 8));
+                    const auto key_value =
+                            key_text == nullptr ? std::optional<std::string>{} : decode_indexed_string(key_text);
                     const std::string_view stored_scope = owner_kind == nullptr ? std::string_view{} : owner_kind;
                     if (owner_kind == nullptr || stored_scope != document_scope_name(record.scope()) ||
                             (record.conversation_id && record.conversation_id->value != stored_owner) ||
                             (record.task_id && record.task_id->value != stored_owner) ||
-                            (!record.conversation_id && !record.task_id && stored_owner != 0) ||
-                            (record.key.has_value() ? (key_value == nullptr || *record.key != key_value)
-                                                    : (key_value != nullptr && *key_value != '\0')) ||
+                            (!record.conversation_id && !record.task_id && stored_owner != 0) || !key_value ||
+                            *key_value != record.key.value_or(std::string{}) ||
                             sqlite3_column_int64(row, 7) != (record.key.has_value() ? 1 : 0)) {
                         return std::unexpected(corrupt("Persisted document columns do not match its record"));
                     }
@@ -675,6 +755,12 @@ struct SqliteStorage::Impl {
                     if (decoded->id.value != id) {
                         return std::unexpected(corrupt("Persisted task ID mismatch"));
                     }
+                    const auto* stored_kind_text = reinterpret_cast<const char*>(sqlite3_column_text(row, 2));
+                    const auto stored_kind = stored_kind_text == nullptr ? std::optional<std::string>{}
+                                                                         : decode_indexed_string(stored_kind_text);
+                    if (!stored_kind || *stored_kind != decoded->kind) {
+                        return std::unexpected(corrupt("Persisted task columns do not match its record"));
+                    }
                     const std::array write{StorageWrite{.type = "task", .task = *decoded}};
                     auto restored = state.restore(write, 1);
                     if (!restored) return std::unexpected(std::move(restored.error()));
@@ -701,9 +787,14 @@ struct SqliteStorage::Impl {
                         return std::unexpected(corrupt("Persisted submission columns do not match its record"));
                     }
                     const auto* stored_request = reinterpret_cast<const char*>(sqlite3_column_text(row, 2));
-                    const std::optional<std::string> request_column =
-                            stored_request == nullptr ? std::optional<std::string>{}
-                                                      : std::optional<std::string>{std::string{stored_request}};
+                    std::optional<std::string> request_column;
+                    if (stored_request != nullptr) {
+                        auto decoded_request = decode_indexed_string(stored_request);
+                        if (!decoded_request) {
+                            return std::unexpected(corrupt("Persisted submission columns do not match its record"));
+                        }
+                        request_column = std::move(*decoded_request);
+                    }
                     if (decoded->request_id != request_column) {
                         return std::unexpected(corrupt("Persisted submission columns do not match its record"));
                     }
@@ -930,10 +1021,13 @@ struct SqliteStorage::Impl {
                                              table(options.prefix, "documents")),
                         [&](Statement& statement) -> support::ExpectedVoid {
                             if (auto bound = statement.bind_int(1, created.id.value); !bound) return bound;
-                            if (auto bound = statement.bind_text(2, created.kind); !bound) return bound;
+                            if (auto bound = statement.bind_text(2, encode_indexed_string(created.kind)); !bound)
+                                return bound;
                             if (auto bound = statement.bind_int(3, created.key.has_value() ? 1 : 0); !bound)
                                 return bound;
-                            if (auto bound = statement.bind_text(4, created.key.value_or(std::string{})); !bound)
+                            if (auto bound = statement.bind_text(
+                                        4, encode_indexed_string(created.key.value_or(std::string{})));
+                                    !bound)
                                 return bound;
                             if (auto bound = statement.bind_text(5, document_scope_name(created.scope())); !bound)
                                 return bound;
@@ -999,7 +1093,8 @@ struct SqliteStorage::Impl {
                         [&](Statement& statement) -> support::ExpectedVoid {
                             if (auto bound = statement.bind_int(1, task.id.value); !bound) return bound;
                             if (auto bound = statement.bind_int(2, task.conversation_id.value); !bound) return bound;
-                            if (auto bound = statement.bind_text(3, task.kind); !bound) return bound;
+                            if (auto bound = statement.bind_text(3, encode_indexed_string(task.kind)); !bound)
+                                return bound;
                             if (auto bound = statement.bind_text(4, task.state.status); !bound) return bound;
                             if (auto bound = statement.bind_int(5, task.abort_requested ? 1 : 0); !bound) return bound;
                             if (auto bound = statement.bind_int(6, task.background ? 1 : 0); !bound) return bound;
@@ -1036,7 +1131,9 @@ struct SqliteStorage::Impl {
                             if (auto bound = statement.bind_int(2, submission.conversation_id.value); !bound)
                                 return bound;
                             if (submission.request_id.has_value()) {
-                                if (auto bound = statement.bind_text(3, *submission.request_id); !bound) return bound;
+                                if (auto bound = statement.bind_text(3, encode_indexed_string(*submission.request_id));
+                                        !bound)
+                                    return bound;
                             } else {
                                 if (auto bound = statement.bind_null(3); !bound) return bound;
                             }
