@@ -49,3 +49,8 @@ the sidecar without failing against the removed identity. [replacement-red.txt](
 and [replacement-green.txt](replacement-green.txt) cover the follow-on window:
 a regular file that reappears after reclamation must not be adopted and appended;
 the commit fails closed and its bytes stay unchanged.
+
+[focused-jsonl-27.txt](focused-jsonl-27.txt) is the full
+`PI_CHECKOUT=/tmp/cch-1080-pi-frozen ctest --preset vcpkg --output-on-failure
+-L jsonl` run at `d3feb4bbe0fcb42c121dbcbc9805f0b64435873a`: 27 selected, 27
+passed, 0 failed, 0 skipped.
