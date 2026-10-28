@@ -1,5 +1,7 @@
 #include <cch/durable/Harness.hpp>
 
+#include <cch/durable/detail/SessionLineAccess.hpp>
+
 #include "durable/Compaction.hpp"
 #include "durable/SessionErrors.hpp"
 #include "durable/WorkflowRuntime.hpp"
@@ -954,28 +956,11 @@ struct Harness::Impl {
         return TaskFit{.definition = std::move(def), .migrates = true};
     }
 
-    /// Derive one task's inspection state from its scanned record and one
-    /// snapshot of the published invocation identities (taken by `inspect`
-    /// under the scheduler mutex).
     [[nodiscard]] TaskInspectionState inspect_task(
             const TaskRecord& record, const Registry::Snapshot& snapshot, const std::set<std::int64_t>& invoked) const {
-        // A committed running record is running on its own. The reservation
-        // completion publishes the invocation in the same Session line turn
-        // that settles this record, so a direct scan may race the publication
-        // either way without ever pairing the identity with a record that
-        // predates it (issue #1165).
-        if (record.state.status == "running") {
-            return TaskInspectionState{.kind = "running"};
-        }
-        // An invocation published with a settled reservation derives running
-        // for a parked or held record whose phase remains active (frozen pi
-        // `#inspectTask` consults invocations first; the frozen waiting probe
-        // observes `record.status=waiting` with `state.kind=running`). A scan
-        // that still sees `pending` predates the reservation commit: the
-        // identity reflects a commit newer than the record it would annotate,
-        // and deriving running there would report a state that never
-        // coexisted with the scan.
-        if (record.state.status != "pending" && invoked.contains(record.id.value)) {
+        // The identity view is one copy taken at the capture instant (issue
+        // #1165): no per-row re-read can pair rows from different instants.
+        if (invoked.contains(record.id.value)) {
             return TaskInspectionState{.kind = "running"};
         }
         if (record.state.status == "completing") {
@@ -1010,6 +995,41 @@ struct Harness::Impl {
             return TaskInspectionState{.kind = "blocked", .reason = "migration_failed", .error = err};
         }
         return TaskInspectionState{.kind = "ready", .migrates = fit.migrates};
+    }
+
+    /// One-instant inspection capture for the line-read seam (issue #1165):
+    /// the storage scan, the scheduling flags, and one identity copy happen
+    /// inside a single line job, so every row derives from one committed
+    /// state. Runs while the mutation line is held; the Harness mutex is
+    /// taken only for the identity copy and released before the scan, the
+    /// same order the commit and close listeners already use.
+    [[nodiscard]] support::Expected<HarnessInspection> capture_inspection(Storage& storage) const {
+        auto scan_res = storage.scan_tasks(256);
+        if (!scan_res) {
+            return std::unexpected(scan_res.error());
+        }
+        const auto snapshot = registry.snapshot();
+        HarnessInspection inspection;
+        std::set<std::int64_t> invoked;
+        {
+            std::lock_guard lock(mutex);
+            inspection.scheduling = closed ? "closing" : (enabled ? "running" : "paused");
+            for (const auto& [id, _] : active_invocations) {
+                invoked.insert(id);
+            }
+        }
+        for (const auto& task : *scan_res) {
+            // Terminal records never derive an invocation state: a live or
+            // stale identity must not report a finished task as running.
+            if (task.state.status == "terminal") {
+                continue;
+            }
+            inspection.tasks.push_back(TaskInspection{
+                    .record = task,
+                    .state = inspect_task(task, snapshot, invoked),
+            });
+        }
+        return inspection;
     }
 
     [[nodiscard]] TaskResolution resolve_task(const TaskRecord& record, const Registry::Snapshot& snapshot) {
@@ -1473,20 +1493,6 @@ struct Harness::Impl {
                     if (member == nullptr || task_live(*member)) all_terminal = false;
                 }
                 if (!all_terminal) continue;
-                // A phase that committed `waiting` can still be active: that
-                // commit dirties the scheduler while the execution thread is
-                // still between the commit and ending its invocation.
-                // Resuming now would commit `pending` with a live identity —
-                // the exact composite `inspect` must not pair (frozen pi ends
-                // the invocation in the turn the record parks, so its resume
-                // never races one). Cleanup dirties the scheduler again, so
-                // the next pass resumes the task once the identity is gone.
-                {
-                    std::lock_guard lock(mutex);
-                    if (active_invocations.contains(task.id.value)) {
-                        continue;
-                    }
-                }
                 (void)await_async_void(session->commit([id = task.id](Transaction& tx) -> support::ExpectedVoid {
                     auto cur = tx.task(id);
                     if (!cur || !cur->has_value()) return {};
@@ -1534,6 +1540,14 @@ struct Harness::Impl {
                 }
 
                 std::stop_source stop_src;
+                {
+                    std::lock_guard lock(mutex);
+                    if (closed || active_invocations.contains(task.id.value)) {
+                        continue;
+                    }
+                    active_invocations[task.id.value] = stop_src;
+                }
+
                 auto tid = task.id;
                 TaskRecord resolved_record = std::move(resolution.record);
                 // A stale scheduling snapshot can reach this reservation after
@@ -1541,87 +1555,42 @@ struct Harness::Impl {
                 // reservation must not rewrite the terminal record: Storage
                 // rejects that write and permanently fails the Session.
                 auto reserved = std::make_shared<std::atomic_bool>(false);
-                // The reservation stays private until its commit settles. The
-                // commit completion runs on the Session line after Storage
-                // settlement, while the line is still active and before any
-                // read admitted later starts (frozen pi registers the
-                // invocation inside its commit turn): it publishes the
-                // invocation identity there, or discards it on failure,
-                // no-op, or close. An inspect scan that still sees `pending`
-                // then never pairs with the published identity (issue #1165).
-                std::mutex settle_mutex;
-                std::condition_variable settle_cv;
-                bool settled = false;
-                std::move(session->commit([this, tid, resolved_record = std::move(resolved_record), reserved](
-                                                  Transaction& tx) -> support::ExpectedVoid {
-                    auto cur_opt = tx.task(tid);
-                    if (!cur_opt || !cur_opt->has_value()) return {};
-                    auto cur = *cur_opt.value();
-                    if (cur.state.status == "terminal") return {};
-                    // A marked task may be reserved from any live
-                    // status for its abort invocation; the abort
-                    // commit then replaces the whole state.
-                    if (cur.state.status != "pending" && !cur.abort_requested) return {};
-                    cur.version = resolved_record.version;
-                    cur.input = resolved_record.input;
-                    cur.state.checkpoint = resolved_record.state.checkpoint;
-                    cur.state.status = "running";
-                    if (!cur.started_at.has_value()) {
-                        cur.started_at = current_time(clock);
-                    }
-                    auto written = tx.set_task(cur);
-                    if (written) reserved->store(true, std::memory_order_release);
-                    return written;
-                }))
-                        .start([this, tid, stop_src, reserved, &settle_mutex, &settle_cv, &settled](
-                                       support::ExpectedVoid outcome) mutable noexcept {
-                            if (outcome.has_value() &&
-                                    // `reserved` is stored with release
-                                    // inside the transaction, which may run
-                                    // on a different thread than this
-                                    // completion for a deferred backend; the
-                                    // acquire pairs with that store. The
-                                    // invocation's cross-thread publication
-                                    // happens via the scheduler mutex below
-                                    // (CODING_STANDARDS §9.13).
-                                    reserved->load(std::memory_order_acquire)) {
-                                std::lock_guard lock(mutex);
-                                if (!closed) {
-                                    active_invocations[tid.value] = stop_src;
-                                }
+                auto trans_res = await_async_void(
+                        session->commit([this, tid, resolved_record = std::move(resolved_record), reserved](
+                                                Transaction& tx) -> support::ExpectedVoid {
+                            auto cur_opt = tx.task(tid);
+                            if (!cur_opt || !cur_opt->has_value()) return {};
+                            auto cur = *cur_opt.value();
+                            if (cur.state.status == "terminal") return {};
+                            // A marked task may be reserved from any live
+                            // status for its abort invocation; the abort
+                            // commit then replaces the whole state.
+                            if (cur.state.status != "pending" && !cur.abort_requested) return {};
+                            cur.version = resolved_record.version;
+                            cur.input = resolved_record.input;
+                            cur.state.checkpoint = resolved_record.state.checkpoint;
+                            cur.state.status = "running";
+                            if (!cur.started_at.has_value()) {
+                                cur.started_at = current_time(clock);
                             }
-                            // Notify while holding `settle_mutex`: the
-                            // waiting schedule_step thread can only leave its
-                            // wait and destroy these stack objects after
-                            // re-acquiring the mutex, which happens strictly
-                            // after this callback's notify_one() has returned
-                            // (CODING_STANDARDS §6.2/§7.5 borrowed-stack
-                            // lifetime).
-                            {
-                                std::lock_guard lock(settle_mutex);
-                                settled = true;
-                                settle_cv.notify_one();
-                            }
-                        });
-                {
-                    std::unique_lock lock(settle_mutex);
-                    settle_cv.wait(lock, [&] { return settled; });
+                            auto written = tx.set_task(cur);
+                            if (written) reserved->store(true, std::memory_order_release);
+                            return written;
+                        }));
+
+                if (!trans_res || !reserved->load(std::memory_order_acquire)) {
+                    std::lock_guard l(mutex);
+                    active_invocations.erase(tid.value);
+                    cv.notify_all();
+                    continue;
                 }
 
                 {
                     std::lock_guard l(mutex);
                     if (closed) {
-                        // The reservation settled but shutdown won the race:
-                        // discard the identity so the empty-map wait and the
-                        // execution-thread drain can finish.
                         active_invocations.erase(tid.value);
                         cv.notify_all();
-                    } else if (auto invocation = active_invocations.find(tid.value);
-                            invocation != active_invocations.end()) {
-                        // The completion published the reservation: start the
-                        // phase on the published identity's shared stop state.
-                        // A failed, no-op'd, or closed-out reservation never
-                        // reached the map, so there is nothing to start.
+                    } else {
                         auto finished = std::make_shared<std::atomic_bool>(false);
                         ExecutionThread task_thread;
                         task_thread.finished = finished;
@@ -1629,7 +1598,7 @@ struct Harness::Impl {
                                                                  tid,
                                                                  def = std::move(resolution.fit.definition),
                                                                  phase_snapshot = *snapshot_opt,
-                                                                 stop_src = invocation->second,
+                                                                 stop_src,
                                                                  finished]() mutable {
                             run_task_execution(tid, std::move(def), std::move(phase_snapshot), stop_src);
                             finished->store(true, std::memory_order_release);
@@ -1886,41 +1855,44 @@ const TaskDefinition* Harness::task_definition(std::string_view kind) const noex
 }
 
 support::AsyncResult<HarnessInspection> Harness::inspect() {
-    // A failed Session seals every later operation, including the direct
-    // scan, with the frozen failure message (frozen pi `SessionFailed`);
-    // the raw storage is healthy enough to scan, so without this gate a
-    // caller would observe post-failure state instead of the seal.
-    if (impl_->session->failed()) {
-        return support::AsyncResult<HarnessInspection>{std::unexpected(session_failed_error())};
-    }
-    auto scan_res = impl_->storage->scan_tasks(256);
-    if (!scan_res) {
-        return support::AsyncResult<HarnessInspection>{std::unexpected(scan_res.error())};
-    }
-    const auto snapshot = impl_->registry.snapshot();
-    HarnessInspection inspection;
-    // One snapshot of the published invocation identities, taken with the
-    // same lock acquisition as the scheduling state: every row below derives
-    // from this single identity view instead of re-reading the map per task
-    // at a different instant (issue #1165).
-    std::set<std::int64_t> invoked;
-    {
-        std::lock_guard lock(impl_->mutex);
-        inspection.scheduling = impl_->closed ? "closing" : (impl_->enabled ? "running" : "paused");
-        for (const auto& [id, _] : impl_->active_invocations) {
-            invoked.insert(id);
-        }
-    }
-    for (const auto& task : *scan_res) {
-        if (task.state.status == "terminal") {
-            continue;
-        }
-        inspection.tasks.push_back(TaskInspection{
-                .record = task,
-                .state = impl_->inspect_task(task, snapshot, invoked),
-        });
-    }
-    return support::AsyncResult<HarnessInspection>{std::move(inspection)};
+    // The inspection is one line job (issue #1165): it runs after every
+    // commit and read admitted before it has settled and observes one
+    // committed state, instead of scanning on the caller thread. Failure and
+    // close are handled by the seam's admission (frozen `SessionFailed` /
+    // "Session is closed") and, for a read already queued when a commit
+    // fails, by the Session's pending-line rejection.
+    //
+    // Contract notes: inspect must not be called from inside a Session line
+    // callback (commit body, read callback, completion); such a call admits a
+    // job behind its own and self-waits, the same prohibition class as the
+    // frozen listener contracts. A callback that delegates to another thread
+    // which then calls inspect is an unresolved cross-thread cycle risk. The
+    // Harness and its Storage must outlive the operation until its completion
+    // callback returns.
+    return support::AsyncResult<HarnessInspection>{support::AsyncProducer<HarnessInspection, support::Error>{
+            [impl = impl_.get()](support::AsyncCompletion<HarnessInspection, support::Error> completion) noexcept {
+                struct Capture {
+                    std::optional<HarnessInspection> value{};
+                };
+                auto capture = std::make_shared<Capture>();
+                auto read = detail::SessionLineAccess::read_on_line(
+                        *impl->session, [impl, capture](Storage& storage) -> support::Expected<void> {
+                            // No Session method may be called here: this job
+                            // already runs on the mutation line.
+                            auto inspection = impl->capture_inspection(storage);
+                            if (!inspection) return std::unexpected(inspection.error());
+                            capture->value = std::move(*inspection);
+                            return {};
+                        });
+                std::move(read).start(
+                        [capture, completion = std::move(completion)](support::ExpectedVoid outcome) mutable noexcept {
+                            if (!outcome) {
+                                completion(std::unexpected(outcome.error()));
+                                return;
+                            }
+                            completion(std::move(*capture->value));
+                        });
+            }}};
 }
 
 support::AsyncResult<void> Harness::commit(std::move_only_function<support::Expected<void>(Transaction&)> change) {

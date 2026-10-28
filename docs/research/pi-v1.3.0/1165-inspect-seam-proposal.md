@@ -250,9 +250,31 @@ unapproved production state:
 - The WIP tests and evidence on this branch are the reviewable record;
   the implementation branch carries the slice plus the re-scoped pins.
 
-## 5. Slice verification plan
+## 5. Slice verification plan (implemented; see the implementation commit)
 
-`[stale-scan]` GREEN; `[closed-admission]` GREEN (S2 signed);
-`[seal-waiting]` and held pins still green; `[fifo-order-probe]` run
-manually as evidence only; bounded focused runs per slice. Full
-Validation only on authorization.
+Implemented on the approved rebuild base: the seam, S1, S2, S4 docs.
+Measured results:
+
+- `[stale-scan-line]` GREEN 5/5 deterministic: while the inspection's scan
+  is held inside its line job, a terminal commit started on another thread
+  is line-blocked (record still pending, commit unsettled), and after the
+  release the inspection's row still reflects the record it observed while
+  the raw record settles terminal.
+- `[closed-admission]` GREEN (S2).
+- `[held-release]`, `[seal-waiting]`, `[close-drain]`, `[waiting]`,
+  `[resume]`, `[identity]` all green.
+- `[stale-scan]` is the HISTORICAL direct-scan RED and is hidden
+  (`[.][stale-scan-legacy]`): under the seam the held scan owns the line,
+  so its own terminal commit can never settle before the release and the
+  test would deadlock by construction.
+- `[reservation-visibility]` remains RED: the seam makes the capture one
+  instant but does not change identity registration timing. The dropped
+  production's rejection pin is hidden (`[.][rejection-legacy]`) because
+  it was written against 5057091d3's reservation-commit shape.
+
+Coherence claim corrected by the test design: the seam guarantees
+record-instant coherence for line-owned writes and blocks later commits
+for the scan's whole duration. It does NOT serialize identity erasure
+against a scan already in flight (cleanup runs on execution threads under
+the Harness mutex), so the record/identity pairing skew remains part of
+the out-of-slice reservation-visibility work.
