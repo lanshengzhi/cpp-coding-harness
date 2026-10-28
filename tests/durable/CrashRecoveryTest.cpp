@@ -73,6 +73,10 @@ TaskDefinition effect_task(const std::filesystem::path& directory, int ready_fd,
 }
 
 int run_effect(const std::filesystem::path& directory, int ready_fd, bool first, bool third = false) {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
+            "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once");
+    if (!frozen) return 21;
+    const auto& expected = frozen->expected();
     auto storage = SqliteStorage::open(directory / "store.sqlite");
     if (!storage) return 12;
     std::vector<TaskDefinition> definitions;
@@ -95,17 +99,24 @@ int run_effect(const std::filesystem::path& directory, int ready_fd, bool first,
         id = tasks->front().id;
         if (!consume(harness->open_tasks()).has_value()) return 20;
         auto record = consume(harness->get_task(id));
-        if (!record.has_value() || !record.value() || record.value()->state.status != (third ? "terminal" : "pending"))
+        if (!record.has_value() || !record.value() ||
+                record.value()->state.status != (third ? expected.at("terminalAfterThird").get_string()
+                                                       : expected.at("afterOpen").at("status").get_string()))
             return 16;
+        if (!third &&
+                (!record.value()->state.checkpoint ||
+                        !json_equals(*record.value()->state.checkpoint, expected.at("afterOpen").at("checkpoint")) ||
+                        record.value()->started_at.has_value() !=
+                                expected.at("afterOpen").at("startedAtPresent").get_boolean()))
+            return 22;
     }
     if (!harness->resume()) return 17;
     auto outcome = consume(harness->wait_for_task(id));
-    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
-            "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once");
-    if (!frozen.has_value()) return 21;
-    if (!outcome.has_value() || outcome.value().state.status != "terminal" || !outcome.value().state.outcome ||
-            outcome.value().state.outcome->status != "completed" || !outcome.value().state.outcome->result ||
-            !json_equals(*outcome.value().state.outcome->result, frozen->expected().at("outcome").at("result")))
+    if (!outcome.has_value() || outcome.value().state.status != expected.at("terminalAfterThird").get_string() ||
+            !outcome.value().state.outcome ||
+            outcome.value().state.outcome->status != expected.at("outcome").at("status").get_string() ||
+            !outcome.value().state.outcome->result ||
+            !json_equals(*outcome.value().state.outcome->result, expected.at("outcome").at("result")))
         return 18;
     if (!consume(harness->close()).has_value()) return 19;
     return 0;
@@ -159,6 +170,12 @@ TaskDefinition lifecycle_task(const std::filesystem::path& directory, int ready_
 }
 
 int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool first, bool abort_case) {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
+            abort_case
+                    ? "an abort mark survives a killed process and only the abort handler runs after reopen"
+                    : "a killed process after a terminal commit does not rerun the task or duplicate the submission");
+    if (!frozen) return 30;
+    const auto& expected = frozen->expected();
     auto storage = SqliteStorage::open(directory / "store.sqlite");
     if (!storage) return 32;
     std::vector<TaskDefinition> definitions;
@@ -182,8 +199,14 @@ int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool fir
         if (!consume(harness->open_tasks()).has_value()) return 36;
         auto record = consume(harness->get_task(id));
         if (!record.has_value() || !record.value()) return 37;
-        if (abort_case && (record.value()->state.status != "pending" || !record.value()->abort_requested)) return 38;
-        if (!abort_case && record.value()->state.status != "terminal") return 39;
+        if (abort_case &&
+                (record.value()->state.status != expected.at("afterOpen").at("status").get_string() ||
+                        record.value()->abort_requested !=
+                                expected.at("afterOpen").at("abortRequested").get_boolean() ||
+                        !record.value()->state.checkpoint ||
+                        !json_equals(*record.value()->state.checkpoint, expected.at("afterOpen").at("checkpoint"))))
+            return 38;
+        if (!abort_case && record.value()->state.status != expected.at("taskStatus").get_string()) return 39;
     }
     if (!abort_case) {
         auto root = consume(harness->root());
@@ -195,7 +218,7 @@ int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool fir
         append_log(directory / "terminal-ids", std::to_string(submission.value().id.value));
         auto records = (*storage)->scan_submissions(100);
         if (!records || records->size() != 1 || records->front().id != submission.value().id ||
-                records->front().status != "done")
+                records->front().status != expected.at("submissionStatus").get_string())
             return 49;
     }
     if (!harness->resume()) return 40;
@@ -213,10 +236,10 @@ int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool fir
     auto outcome = consume(harness->wait_for_task(id));
     if (!outcome.has_value() || !outcome.value().state.outcome) return 42;
     const auto& receipt = *outcome.value().state.outcome;
-    if (receipt.status != (abort_case ? "aborted" : "completed")) return 43;
-    if (abort_case && receipt.reason != "recovered") return 44;
-    if (!abort_case && (!receipt.result || !receipt.result->as_string() || *receipt.result->as_string() != "once"))
-        return 45;
+    const auto& frozen_outcome = expected.at("outcome");
+    if (receipt.status != frozen_outcome.at("status").get_string()) return 43;
+    if (abort_case && (!receipt.reason || *receipt.reason != frozen_outcome.at("reason").get_string())) return 44;
+    if (!abort_case && (!receipt.result || !json_equals(*receipt.result, frozen_outcome.at("result")))) return 45;
     if (first) signal_boundary(ready_fd);
     if (!consume(harness->close()).has_value()) return 46;
     return 0;
@@ -228,6 +251,11 @@ SubmissionDraft crash_input() {
 }
 
 int run_generation(const std::filesystem::path& directory, int ready_fd, bool first, bool third = false) {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
+            "a killed process leaves an admitted input and its generation task recoverable without a duplicate "
+            "submission");
+    if (!frozen) return 65;
+    const auto& expected = frozen->expected();
     auto storage = SqliteStorage::open(directory / "store.sqlite");
     if (!storage) return 51;
     HarnessOptions options;
@@ -250,6 +278,14 @@ int run_generation(const std::filesystem::path& directory, int ready_fd, bool fi
     auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
     if (!root.has_value()) return 53;
     if (!first && !consume(harness->open_tasks()).has_value()) return 54;
+    if (!first && !third) {
+        auto inspection = consume(harness->inspect());
+        if (!inspection.has_value() || inspection.value().scheduling != expected.at("schedulingAfterOpen").get_string())
+            return 68;
+        const auto& frozen_task = expected.at("taskAfterOpen").get_array().front();
+        if (inspection.value().tasks.size() != 1) return 69;
+        if (inspection.value().tasks.front().state.kind != frozen_task.at("inspection").get_string()) return 70;
+    }
     auto submission = consume(harness->submit(root.value(), crash_input()));
     if (!submission.has_value()) return 55;
     append_log(directory / "generation-ids", std::to_string(submission.value().id.value));
@@ -262,25 +298,46 @@ int run_generation(const std::filesystem::path& directory, int ready_fd, bool fi
     }
     auto all = (*storage)->scan_submissions(100);
     if (!all || all->size() != 1 || all->front().id != submission.value().id ||
-            all->front().status != (third ? "done" : "placed"))
+            all->front().status != (third ? expected.at("settledAfterThird").get_string()
+                                          : expected.at("submissionAfterOpen").at("status").get_string()) ||
+            all->front().request_id != expected.at("submissionAfterOpen").at("requestId").get_string())
         return 58;
     auto tasks = (*storage)->scan_tasks(100);
-    if (!tasks || tasks->size() != 1 || tasks->front().kind != "pi.generation" ||
-            tasks->front().state.status != (third ? "terminal" : "pending"))
+    if (!tasks || tasks->size() != 1 ||
+            tasks->front().kind != expected.at("taskAfterOpen").get_array().front().at("kind").get_string() ||
+            tasks->front().state.status !=
+                    (third ? "terminal"
+                           : expected.at("taskAfterOpen").get_array().front().at("recordStatus").get_string()))
         return 59;
+    if (!third) {
+        const auto& frozen_task = expected.at("taskAfterOpen").get_array().front();
+        if (tasks->front().abort_requested != frozen_task.at("abortRequested").get_boolean()) return 71;
+        if (!tasks->front().state.checkpoint || !tasks->front().state.checkpoint->as_object() ||
+                !tasks->front().state.checkpoint->as_object()->contains("phase") ||
+                !tasks->front().state.checkpoint->as_object()->at("phase").as_string() ||
+                *tasks->front().state.checkpoint->as_object()->at("phase").as_string() !=
+                        frozen_task.at("checkpointPhase").get_string())
+            return 72;
+    }
     if (!harness->resume()) return 60;
     auto settled = consume(submission.value().wait());
-    if (!settled.has_value() || settled.value().status != "done" || !settled.value().answer) return 61;
+    if (!settled.has_value() ||
+            settled.value().status != (third ? expected.at("settledAfterThird").get_string()
+                                             : expected.at("settled").at("status").get_string()) ||
+            settled.value().answer.has_value() != expected.at("settled").at("hasAnswer").get_boolean())
+        return 61;
     auto view = consume(harness->conversation_view(root.value()));
     if (!view.has_value() || !view.value().as_object()) return 62;
     const auto* entries = view.value().as_object()->at("entries").as_array();
     if (!entries) return 62;
     std::ofstream transcript(directory / (third ? "transcript-third" : "transcript"));
+    std::size_t answer_count = 0;
     for (const auto& entry : *entries) {
         const auto* record = entry.as_object();
         if (!record || !record->contains("kind") || !record->at("kind").as_string()) return 63;
         const auto& kind = *record->at("kind").as_string();
         if (kind != "pi.user" && kind != "pi.assistant") continue;
+        if (kind == "pi.assistant") ++answer_count;
         const auto* envelope = record->at("data").as_object();
         if (!envelope || !envelope->contains("model")) return 63;
         const auto* messages = envelope->at("model").as_array();
@@ -301,6 +358,7 @@ int run_generation(const std::filesystem::path& directory, int ready_fd, bool fi
         transcript << kind << ':' << text << '\n';
     }
     transcript.close();
+    if (third && static_cast<double>(answer_count) != expected.at("answerCountAfterThird").get_number()) return 66;
     if (!consume(harness->close()).has_value()) return 64;
     return 0;
 }
