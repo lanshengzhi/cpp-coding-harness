@@ -184,7 +184,7 @@ private:
     /// with a Location are re-issued — 301/302 POST and 303 rewrite to GET —
     /// a cross-origin hop erases the credential headers (Authorization never
     /// leaks across origins), only http(s) Locations are followable, and the
-    /// chain fails with a Network error after 20 redirects. A 3xx without a
+    /// chain fails with a Process error after 20 redirects. A 3xx without a
     /// Location is returned untouched. `request.headers` is the caller's
     /// already-resolved set, replayed across the hops like pi's
     /// `authorizedFetch`.

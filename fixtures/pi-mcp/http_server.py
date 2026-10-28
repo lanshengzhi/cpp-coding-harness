@@ -72,6 +72,7 @@ PAGE_SIZE = 1
 # observed event, which the failure-isolation tests poll to assert ordering.
 TRACE = os.environ.get("PIKE_MCP_TRACE")
 EXPECTED_DELETE_AUTHORIZATION = os.environ.get("PIKE_MCP_EXPECT_DELETE_AUTHORIZATION")
+REDIRECT_PATH = os.environ.get("PIKE_MCP_REDIRECT_PATH")
 REDIRECT_TARGET = os.environ.get("PIKE_MCP_REDIRECT_TARGET")
 REDIRECT_LOCATION = os.environ.get("PIKE_MCP_REDIRECT_LOCATION", "ftp://127.0.0.1/mcp")
 REQUIRE_AUTHORIZATION = os.environ.get("PIKE_MCP_REQUIRE_AUTHORIZATION")
@@ -181,6 +182,7 @@ class Handler(BaseHTTPRequestHandler):
         rid = message.get("id")
         trace("recv " + str(method) + " id=" + str(rid) +
               " authorization_present=" + str(bool(self.headers.get("Authorization"))).lower())
+        trace("request-path " + self.path)
         if REQUIRE_AUTHORIZATION and not self.headers.get("Authorization"):
             # The frozen cross-origin redirect target answers 401 when the
             # redirect hop stripped the credential (audit-1052
@@ -309,7 +311,9 @@ class Handler(BaseHTTPRequestHandler):
         # fixture never serves a JSON-RPC reply from these paths.
         status = 307
         target = None
-        if self.path == "/redirect-same":
+        if REDIRECT_PATH and self.path == REDIRECT_PATH:
+            target = REDIRECT_TARGET
+        elif self.path == "/redirect-same":
             target = "/mcp"
         elif self.path == "/redirect-cross":
             target = REDIRECT_TARGET or "/mcp"

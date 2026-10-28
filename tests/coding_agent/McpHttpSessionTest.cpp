@@ -568,22 +568,25 @@ TEST_CASE("HTTPS transport rejects an untrusted certificate", "[coding_agent][mc
 TEST_CASE("a same-origin redirect is followed and keeps the request auth header",
         "[coding_agent][mcp][issue1103][spec]") {
     // audit-1052 `transports.json`, same-named scenario: the 307 is followed,
-    // the POST is re-sent to /mcp, and `Authorization: Bearer static` is
+    // the POST is re-sent to the resolved target, and `Authorization: Bearer static` is
     // preserved. This case replaces the former refusal of every redirect
     // (ADR 0054, superseded for MCP by ADR 0075).
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
-    HttpFixtureServer server{{.trace_path = trace, .tls = false}};
+    HttpFixtureServer server{{.trace_path = trace,
+            .tls = false,
+            .env = {{"PIKE_MCP_REDIRECT_PATH", "/a/b"}, {"PIKE_MCP_REDIRECT_TARGET", "next"}}}};
     tests::RuntimeFixture runtime;
 
     auto config = http_config(server);
-    config.url = url_origin(server.url()) + "/redirect-same";
+    config.url = url_origin(server.url()) + "/a/b";
     config.headers["Authorization"] = "Bearer static";
     auto client = connect_http_client(runtime, std::move(config));
 
     // The initialize followed the hop: the connection is live and the target
     // saw the credential.
-    CHECK(tests::trace_contains(trace, "redirect /redirect-same -> /mcp"));
+    CHECK(tests::trace_contains(trace, "redirect /a/b -> next"));
+    CHECK(tests::trace_contains(trace, "request-path /a/next"));
     CHECK(tests::trace_contains(trace, "recv initialize id=1 authorization_present=true"));
 
     // The credential arrived at the same-origin target, verbatim.
@@ -592,6 +595,33 @@ TEST_CASE("a same-origin redirect is followed and keeps the request auth header"
     REQUIRE(observed.has_value());
     CHECK(observed->at("authorization").get_string() == "Bearer static");
     client->close();
+}
+
+TEST_CASE("relative redirect references resolve against the current URL", "[coding_agent][mcp][issue1103][spec]") {
+    struct RedirectCase {
+        const char* from;
+        const char* location;
+        const char* expected;
+    };
+    const RedirectCase cases[] = {
+            {"/a/b", "/abs", "/abs"},
+            {"/a/b/c", "../up", "/a/up"},
+            {"/a/b", "?q=1", "/a/b?q=1"},
+    };
+    for (const auto& example : cases) {
+        INFO(example.location);
+        tests::TempWorkspace workspace;
+        const auto trace = workspace.path() / "trace.log";
+        HttpFixtureServer server{{.trace_path = trace,
+                .tls = false,
+                .env = {{"PIKE_MCP_REDIRECT_PATH", example.from}, {"PIKE_MCP_REDIRECT_TARGET", example.location}}}};
+        tests::RuntimeFixture runtime;
+        auto config = http_config(server);
+        config.url = url_origin(server.url()) + example.from;
+        auto client = connect_http_client(runtime, std::move(config));
+        CHECK(tests::trace_contains(trace, std::string{"request-path "} + example.expected));
+        client->close();
+    }
 }
 
 TEST_CASE("cross-origin redirect is followed without Authorization and is rejected",
@@ -606,7 +636,8 @@ TEST_CASE("cross-origin redirect is followed without Authorization and is reject
     // client that leaked the credential would instead complete initialize.
     HttpFixtureServer target{
             {.trace_path = target_trace, .tls = false, .env = {{"PIKE_MCP_REQUIRE_AUTHORIZATION", "1"}}}};
-    HttpFixtureServer source{{.tls = false, .env = {{"PIKE_MCP_REDIRECT_TARGET", target.url()}}}};
+    const std::string scheme_relative = target.url().substr(std::string{"http:"}.size());
+    HttpFixtureServer source{{.tls = false, .env = {{"PIKE_MCP_REDIRECT_TARGET", scheme_relative}}}};
     tests::RuntimeFixture runtime;
 
     auto config = http_config(source);

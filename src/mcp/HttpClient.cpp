@@ -239,8 +239,7 @@ constexpr std::string_view kCrossOriginHeaders[] = {
         return current.origin + current.path + std::string{location};
     }
     const auto last_slash = current.path.find_last_of('/');
-    const std::string base = last_slash == std::string::npos ? current.origin + "/"
-                                                             : current.origin + current.path.substr(0, last_slash + 1);
+    const std::string base = last_slash == std::string::npos ? "/" : current.path.substr(0, last_slash + 1);
     std::string merged_input = base;
     merged_input.append(location.data(), location.size());
     std::string merged = remove_dot_segments(merged_input);
