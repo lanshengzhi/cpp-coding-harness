@@ -190,13 +190,16 @@ backend (§9.13).
   `waiting`/`completing` without identity exist once the invocation ends;
   `pending` + identity is unreachable post-guard except as the pre-settle
   stale scan, which the gate rejects. No fabricated state is reportable.
-  A FIFO inspect additionally cannot be implemented within this issue's
-  scope: a synchronous line wait from the demonstrated stop-callback
-  reentry window (`[issue1166][reentry]`, recorded) would wait on the very
-  line its own callback holds (unbounded self-deadlock), and the Harness
-  lifetime contract for a line-pending inspect (`~Harness` does not drain
-  pending line reads) is unproven. Queued inspect remains #1088-coordinated
-  scope, documented below.
+  Round 1 assessment (superseded): a FIFO inspect "cannot be implemented
+  within this issue's scope" because a synchronous line wait from the
+  demonstrated stop-callback reentry window (`[issue1166][reentry]`,
+  recorded) would wait on the very line its own callback holds, and the
+  Harness lifetime contract for a line-pending inspect was unproven. Both
+  were addressed in this issue: the line-job seam (`detail::SessionLineAccess`,
+  `2d9823ba1`) captures the inspection inside a line job with the
+  documented no-line-callback-reentry prohibition and the Harness lifetime
+  duty, and the reservation-visibility slice followed. Only a complete
+  committed scan beyond the 256/1024 caps remains #1088-coordinated scope.
 - *Spec P2 — preserve reproducible frozen evidence; record #1088
   coordination.* The frozen waiting probe and its three original logs are
   preserved under `1165-evidence/frozen-waiting/` with a README (frozen
@@ -204,8 +207,10 @@ backend (§9.13).
   2026-10-28. Coordination with #1088 is recorded here and relayed through
   the orchestrator: #1088 owns the FIFO/complete-scan inspection upgrade and
   must apply the `session->failed()` seal at its observation entry (per the
-  #1166 boundary note); this change leaves `Harness::inspect()` a direct
-  scan with its 256-task cap.
+  #1166 boundary note). At the time of that assessment this change left
+  `Harness::inspect()` a direct scan with its 256-task cap; the line-job
+  seam later landed in this issue, and only the complete-scan-beyond-cap
+  part remains #1088 scope.
 
 ### Evidence (`docs/research/pi-v1.3.0/1165-evidence/`)
 

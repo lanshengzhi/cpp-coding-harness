@@ -963,8 +963,9 @@ TEST_CASE("a held reservation commit stays unreserved until it settles", "[durab
                 if (record_terminal) {
                     // Invariant only: the capture skips terminal records, so
                     // this can never fire. It does NOT discriminate late
-                    // publication -- [held-release] covers that by holding
-                    // the reservation write itself.
+                    // publication (the inspector is queued behind the held
+                    // commit here, so publication timing is not observable);
+                    // [rejection] carries that discrimination.
                     terminal_row_seen.store(true);
                 } else if (row.record.state.status == "running" && row.state.kind == "running") {
                     observed_running.store(true);
@@ -1462,8 +1463,10 @@ TEST_CASE("a stale scheduling snapshot reserves nothing and starts no phase", "[
 
     // The scheduler really ran against the stale view, and the reservation
     // body refused: no running write reached Storage and the Session stayed
-    // healthy. If the terminal guard were removed, the write would be
-    // attempted, MemoryStorage would reject it, and the Session would fail.
+    // healthy. If both guards were removed, the write would be attempted,
+    // MemoryStorage would reject it, and the Session would fail (removing
+    // only the terminal guard is still caught by the reservable-status
+    // guard, as the mutation check showed).
     CHECK(scans_after > scans_before);
     CHECK_FALSE(wrote_running);
     CHECK_FALSE(session_failed);
