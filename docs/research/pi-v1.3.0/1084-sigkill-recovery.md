@@ -17,7 +17,7 @@ The effect is idempotent because the example uses a stable application key; the 
 
 The first test was committed as `498597a` and failed 1/1: the recovered child observed `running` rather than `pending`, and the effect call count stayed one. Frozen pi's scheduler reconciles running tasks during open; the C++ public API documents an explicit `Harness::open_tasks()` step. Commit `bafa085` added that step and the test passed. This remains an observable open-timing difference, not a claim of automatic-open parity. No production change was made.
 
-The focused selection `ctest --preset vcpkg -L issue1084 --timeout 60 --output-on-failure` selected and passed **3/3** cases (four boundaries), in 0.08 seconds. The default Debug durable shard build passed the build-phase Parity Architecture Gate under strict no-exception mode. The architecture selection passed **36/36** in 590.74 seconds; the warning gate accounted for 541.02 seconds. Full Validation was not run under the task's explicit restriction.
+The initial shard-only architecture selection passed **36/36** in 590.74 seconds; it omitted seven architecture cases from the unbuilt CLI architecture shard. After building the full default Debug preset, `ctest --preset vcpkg -L architecture --output-on-failure` selected and passed **43/43** in 53.68 seconds. The default Debug durable shard build also passed the build-phase Parity Architecture Gate under strict no-exception mode. After review fixes, `ctest --preset vcpkg -L issue1084 --output-on-failure` selected and passed **4/4** cases in 0.17 seconds. Full Validation remains pending authorization before delivery.
 
 ## Capability status
 

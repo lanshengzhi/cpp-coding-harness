@@ -13,15 +13,19 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <cerrno>
 #include <chrono>
+#include <condition_variable>
 #include <csignal>
 #include <filesystem>
 #include <fstream>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include <poll.h>
+#include <sys/prctl.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -30,6 +34,13 @@ using namespace cch::durable;
 using namespace cch::tests::durable;
 
 namespace {
+
+pid_t fork_child() {
+    const pid_t parent = ::getpid();
+    const pid_t child = ::fork();
+    if (child == 0 && (::prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || ::getppid() != parent)) _exit(90);
+    return child;
+}
 
 TaskDefinition effect_task(const std::filesystem::path& directory, int ready_fd, bool block) {
     TaskDefinitionBuilder builder("audit1055.effect");
@@ -54,13 +65,14 @@ TaskDefinition effect_task(const std::filesystem::path& directory, int ready_fd,
                 ::pause();
         }
         return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-            return NextTaskState::terminal(TaskOutcome{.status = "completed", .result = chord::Json(70.0)});
+            return NextTaskState::terminal(TaskOutcome{
+                    .status = "completed", .result = chord::Json(chord::Json::Object{{"receipt", chord::Json(70.0)}})});
         });
     });
     return std::move(*builder.build());
 }
 
-int run_effect(const std::filesystem::path& directory, int ready_fd, bool first) {
+int run_effect(const std::filesystem::path& directory, int ready_fd, bool first, bool third = false) {
     auto storage = SqliteStorage::open(directory / "store.sqlite");
     if (!storage) return 12;
     std::vector<TaskDefinition> definitions;
@@ -83,14 +95,17 @@ int run_effect(const std::filesystem::path& directory, int ready_fd, bool first)
         id = tasks->front().id;
         if (!consume(harness->open_tasks()).has_value()) return 20;
         auto record = consume(harness->get_task(id));
-        if (!record.has_value() || !record.value() || record.value()->state.status != "pending") return 16;
+        if (!record.has_value() || !record.value() || record.value()->state.status != (third ? "terminal" : "pending"))
+            return 16;
     }
     if (!harness->resume()) return 17;
     auto outcome = consume(harness->wait_for_task(id));
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
+            "a killed process resumes an intent/effect/outcome task from its checkpoint and applies the effect once");
+    if (!frozen.has_value()) return 21;
     if (!outcome.has_value() || outcome.value().state.status != "terminal" || !outcome.value().state.outcome ||
             outcome.value().state.outcome->status != "completed" || !outcome.value().state.outcome->result ||
-            !outcome.value().state.outcome->result->as_number() ||
-            *outcome.value().state.outcome->result->as_number() != 70.0)
+            !json_equals(*outcome.value().state.outcome->result, frozen->expected().at("outcome").at("result")))
         return 18;
     if (!consume(harness->close()).has_value()) return 19;
     return 0;
@@ -115,8 +130,17 @@ TaskDefinition lifecycle_task(const std::filesystem::path& directory, int ready_
             "run", [directory, abort_case](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
                 append_log(directory / "events", "run");
                 if (abort_case) {
-                    while (!runtime.stop_token().stop_requested())
-                        std::this_thread::yield();
+                    std::mutex mutex;
+                    std::condition_variable cv;
+                    std::stop_callback wake(runtime.stop_token(), [&mutex, &cv] {
+                        std::lock_guard lock(mutex);
+                        cv.notify_all();
+                    });
+                    std::unique_lock lock(mutex);
+                    if (!cv.wait_for(lock, std::chrono::seconds(5), [&runtime] {
+                            return runtime.stop_token().stop_requested();
+                        }))
+                        _exit(91);
                     return support::AsyncResult<void>{support::ExpectedVoid{}};
                 }
                 return runtime.commit([](Transaction&,
@@ -168,6 +192,7 @@ int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool fir
                 .body = WriteSubmissionDraft{.entry = WriteEntry{.kind = "test.terminal"}}};
         auto submission = consume(harness->submit(root.value(), std::move(draft)));
         if (!submission.has_value()) return 48;
+        append_log(directory / "terminal-ids", std::to_string(submission.value().id.value));
         auto records = (*storage)->scan_submissions(100);
         if (!records || records->size() != 1 || records->front().id != submission.value().id ||
                 records->front().status != "done")
@@ -180,7 +205,9 @@ int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool fir
         while (!std::filesystem::exists(directory / "events", error) && !error &&
                 std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
-        if (error || !std::filesystem::exists(directory / "events", error) || error) return 50;
+        if (error) return 50;
+        const bool reached = std::filesystem::exists(directory / "events", error);
+        if (error || !reached) return 50;
         if (!consume(harness->abort_task(id)).has_value()) return 41;
     }
     auto outcome = consume(harness->wait_for_task(id));
@@ -225,6 +252,7 @@ int run_generation(const std::filesystem::path& directory, int ready_fd, bool fi
     if (!first && !consume(harness->open_tasks()).has_value()) return 54;
     auto submission = consume(harness->submit(root.value(), crash_input()));
     if (!submission.has_value()) return 55;
+    append_log(directory / "generation-ids", std::to_string(submission.value().id.value));
     if (first) {
         if (!harness->resume()) return 56;
         // The request handler signals after admission and before model completion.
@@ -243,17 +271,57 @@ int run_generation(const std::filesystem::path& directory, int ready_fd, bool fi
     if (!harness->resume()) return 60;
     auto settled = consume(submission.value().wait());
     if (!settled.has_value() || settled.value().status != "done" || !settled.value().answer) return 61;
-    auto entries = (*storage)->scan_entries(root.value(), 100);
+    auto view = consume(harness->conversation_view(root.value()));
+    if (!view.has_value() || !view.value().as_object()) return 62;
+    const auto* entries = view.value().as_object()->at("entries").as_array();
     if (!entries) return 62;
-    int users = 0;
-    int answers = 0;
+    std::ofstream transcript(directory / (third ? "transcript-third" : "transcript"));
     for (const auto& entry : *entries) {
-        if (entry.kind == "pi.user") ++users;
-        if (entry.kind == "pi.assistant") ++answers;
+        const auto* record = entry.as_object();
+        if (!record || !record->contains("kind") || !record->at("kind").as_string()) return 63;
+        const auto& kind = *record->at("kind").as_string();
+        if (kind != "pi.user" && kind != "pi.assistant") continue;
+        const auto* envelope = record->at("data").as_object();
+        if (!envelope || !envelope->contains("model")) return 63;
+        const auto* messages = envelope->at("model").as_array();
+        if (!messages || messages->empty()) return 63;
+        const auto* message = messages->front().as_object();
+        if (!message || !message->contains("content")) return 63;
+        const auto& content = message->at("content");
+        std::string text;
+        if (content.as_string())
+            text = *content.as_string();
+        else if (const auto* blocks = content.as_array()) {
+            for (const auto& block : *blocks) {
+                const auto* object = block.as_object();
+                if (object && object->contains("text") && object->at("text").as_string())
+                    text += *object->at("text").as_string();
+            }
+        }
+        transcript << kind << ':' << text << '\n';
     }
-    if (users != 1 || answers != 1) return 63;
+    transcript.close();
     if (!consume(harness->close()).has_value()) return 64;
     return 0;
+}
+
+bool receive_boundary(int fd) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+    pollfd ready{.fd = fd, .events = POLLIN, .revents = 0};
+    while (std::chrono::steady_clock::now() < deadline) {
+        const auto remaining =
+                std::chrono::duration_cast<std::chrono::milliseconds>(deadline - std::chrono::steady_clock::now());
+        const int result = ::poll(&ready, 1, static_cast<int>(remaining.count()));
+        if (result < 0 && errno == EINTR) continue;
+        if (result <= 0 || (ready.revents & POLLIN) == 0) return false;
+        char marker = 0;
+        ssize_t received;
+        do {
+            received = ::read(fd, &marker, 1);
+        } while (received < 0 && errno == EINTR);
+        return received == 1 && marker == 'R';
+    }
+    return false;
 }
 
 struct ChildResult {
@@ -263,6 +331,7 @@ struct ChildResult {
 
 ChildResult reap_bounded(pid_t child) {
     ChildResult result;
+    if (child <= 0) return result;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
     while (std::chrono::steady_clock::now() < deadline) {
         const auto waited = ::waitpid(child, &result.status, WNOHANG);
@@ -270,11 +339,36 @@ ChildResult reap_bounded(pid_t child) {
             result.exited = true;
             return result;
         }
-        if (waited < 0) return result;
+        if (waited < 0 && errno != EINTR) return result;
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
     (void)::kill(child, SIGKILL);
-    result.exited = ::waitpid(child, &result.status, 0) == child;
+    const auto reap_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < reap_deadline) {
+        const auto waited = ::waitpid(child, &result.status, WNOHANG);
+        if (waited == child) {
+            result.exited = true;
+            return result;
+        }
+        if (waited < 0 && errno != EINTR) return result;
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    return result;
+}
+
+std::vector<std::string> read_lines(const std::filesystem::path& path) {
+    std::ifstream in(path);
+    std::vector<std::string> result;
+    std::string line;
+    while (std::getline(in, line))
+        result.push_back(line);
+    return result;
+}
+
+std::vector<std::string> frozen_lines(const support::JsonValue& value) {
+    std::vector<std::string> result;
+    for (const auto& item : value.get_array())
+        result.push_back(item.get_string());
     return result;
 }
 
@@ -298,28 +392,38 @@ TEST_CASE("a killed effect worker retries its idempotent application after reope
     REQUIRE(::pipe(pipe_fds) == 0);
     support::UniqueFd reader(pipe_fds[0]);
     support::UniqueFd writer(pipe_fds[1]);
-    const pid_t worker = ::fork();
-    REQUIRE(worker >= 0);
+    const pid_t worker = fork_child();
     if (worker == 0) {
         reader.reset();
         _exit(run_effect(workspace.path(), writer.get(), true));
     }
+    REQUIRE(worker > 0);
     writer.reset();
-    pollfd ready{.fd = reader.get(), .events = POLLIN, .revents = 0};
-    const bool signalled = ::poll(&ready, 1, 10000) == 1 && (ready.revents & POLLIN) != 0;
-    char marker = 0;
-    const bool got_marker = signalled && ::read(reader.get(), &marker, 1) == 1 && marker == 'R';
-    const bool killed = ::kill(worker, SIGKILL) == 0;
+    const bool got_marker = receive_boundary(reader.get());
+    const bool killed = worker > 0 && ::kill(worker, SIGKILL) == 0;
     const auto killed_result = reap_bounded(worker);
     const auto calls_after_crash = line_count(workspace.path() / "calls");
     const auto applied_after_crash = line_count(workspace.path() / "applied");
     pid_t recovery = -1;
     ChildResult recovered;
     if (got_marker && killed_result.exited) {
-        recovery = ::fork();
+        recovery = fork_child();
         if (recovery == 0) _exit(run_effect(workspace.path(), -1, false));
         if (recovery > 0) recovered = reap_bounded(recovery);
     }
+    const auto calls_after_resume = line_count(workspace.path() / "calls");
+    const auto applied_after_resume = line_count(workspace.path() / "applied");
+    pid_t third = -1;
+    ChildResult third_result;
+    if (recovered.exited && WIFEXITED(recovered.status) && WEXITSTATUS(recovered.status) == 0) {
+        third = fork_child();
+        if (third == 0) _exit(run_effect(workspace.path(), -1, false, true));
+        if (third > 0) third_result = reap_bounded(third);
+    }
+    CHECK(third > 0);
+    CHECK(third_result.exited);
+    CHECK(WIFEXITED(third_result.status));
+    CHECK(WEXITSTATUS(third_result.status) == 0);
     CHECK(got_marker);
     CHECK(killed);
     CHECK(killed_result.exited);
@@ -332,60 +436,69 @@ TEST_CASE("a killed effect worker retries its idempotent application after reope
     CHECK(recovered.exited);
     CHECK(WIFEXITED(recovered.status));
     CHECK(WEXITSTATUS(recovered.status) == 0);
-    CHECK(line_count(workspace.path() / "calls") == expected.at("effectAfterResume").at("calls").get_number());
-    CHECK(line_count(workspace.path() / "applied") == expected.at("effectAfterResume").at("applied").get_number());
+    CHECK(calls_after_resume == expected.at("effectAfterResume").at("calls").get_number());
+    CHECK(applied_after_resume == expected.at("effectAfterResume").at("applied").get_number());
+    CHECK(line_count(workspace.path() / "calls") == expected.at("effectAfterThird").at("calls").get_number());
+    CHECK(line_count(workspace.path() / "applied") == expected.at("effectAfterThird").at("applied").get_number());
 }
 
-TEST_CASE("killed lifecycle workers retain terminal outcomes and abort marks", "[durable][issue1084]") {
-    for (const bool abort_case : {false, true}) {
-        const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
-                abort_case ? "an abort mark survives a killed process and only the abort handler runs after reopen"
-                           : "a killed process after a terminal commit does not rerun the task or duplicate the "
-                             "submission");
-        REQUIRE(frozen.has_value());
-        cch::tests::TempWorkspace workspace;
-        int fds[2];
-        REQUIRE(::pipe(fds) == 0);
-        support::UniqueFd reader(fds[0]);
-        support::UniqueFd writer(fds[1]);
-        const pid_t worker = ::fork();
-        REQUIRE(worker >= 0);
-        if (worker == 0) {
-            reader.reset();
-            _exit(run_lifecycle(workspace.path(), writer.get(), true, abort_case));
-        }
-        writer.reset();
-        pollfd ready{.fd = reader.get(), .events = POLLIN, .revents = 0};
-        const bool signalled = ::poll(&ready, 1, 10000) == 1 && (ready.revents & POLLIN) != 0;
-        char marker = 0;
-        const bool got_marker = signalled && ::read(reader.get(), &marker, 1) == 1 && marker == 'R';
-        const bool killed = ::kill(worker, SIGKILL) == 0;
-        const auto killed_result = reap_bounded(worker);
-        const auto before = line_count(workspace.path() / "events");
-        pid_t recovery = -1;
-        ChildResult recovered;
-        if (got_marker && killed_result.exited) {
-            recovery = ::fork();
-            if (recovery == 0) _exit(run_lifecycle(workspace.path(), -1, false, abort_case));
-            if (recovery > 0) recovered = reap_bounded(recovery);
-        }
-        INFO("abort case: " << abort_case);
-        CHECK(got_marker);
-        CHECK(killed);
-        CHECK(killed_result.exited);
-        CHECK(WIFSIGNALED(killed_result.status));
-        CHECK(WTERMSIG(killed_result.status) == SIGKILL);
-        const auto& expected = frozen->expected().get_object();
-        CHECK(before == expected.at("workerLog").get_array().size());
-        CHECK(recovery > 0);
-        CHECK(recovered.exited);
-        CHECK(WIFEXITED(recovered.status));
-        CHECK(WEXITSTATUS(recovered.status) == 0);
-        CHECK(line_count(workspace.path() / "events") ==
-                before + (abort_case ? expected.at("reopenedLog").get_array().size()
-                                     : expected.at("rerunLog").get_array().size()));
+void check_lifecycle_recovery(bool abort_case) {
+    const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
+            abort_case ? "an abort mark survives a killed process and only the abort handler runs after reopen"
+                       : "a killed process after a terminal commit does not rerun the task or duplicate the "
+                         "submission");
+    REQUIRE(frozen.has_value());
+    cch::tests::TempWorkspace workspace;
+    int fds[2];
+    REQUIRE(::pipe(fds) == 0);
+    support::UniqueFd reader(fds[0]);
+    support::UniqueFd writer(fds[1]);
+    const pid_t worker = fork_child();
+    if (worker == 0) {
+        reader.reset();
+        _exit(run_lifecycle(workspace.path(), writer.get(), true, abort_case));
+    }
+    REQUIRE(worker > 0);
+    writer.reset();
+    const bool got_marker = receive_boundary(reader.get());
+    const bool killed = worker > 0 && ::kill(worker, SIGKILL) == 0;
+    const auto killed_result = reap_bounded(worker);
+    const auto before = read_lines(workspace.path() / "events");
+    pid_t recovery = -1;
+    ChildResult recovered;
+    if (got_marker && killed_result.exited) {
+        recovery = fork_child();
+        if (recovery == 0) _exit(run_lifecycle(workspace.path(), -1, false, abort_case));
+        if (recovery > 0) recovered = reap_bounded(recovery);
+    }
+    INFO("abort case: " << abort_case);
+    CHECK(got_marker);
+    CHECK(killed);
+    CHECK(killed_result.exited);
+    CHECK(WIFSIGNALED(killed_result.status));
+    CHECK(WTERMSIG(killed_result.status) == SIGKILL);
+    const auto& expected = frozen->expected().get_object();
+    CHECK(before == frozen_lines(expected.at("workerLog")));
+    CHECK(recovery > 0);
+    CHECK(recovered.exited);
+    CHECK(WIFEXITED(recovered.status));
+    CHECK(WEXITSTATUS(recovered.status) == 0);
+    auto expected_events = before;
+    const auto reopened = frozen_lines(expected.at(abort_case ? "reopenedLog" : "rerunLog"));
+    expected_events.insert(expected_events.end(), reopened.begin(), reopened.end());
+    CHECK(read_lines(workspace.path() / "events") == expected_events);
+    if (!abort_case) {
+        const auto ids = read_lines(workspace.path() / "terminal-ids");
+        CHECK(ids.size() == 2);
+        if (ids.size() == 2) CHECK((ids[0] == ids[1]) == expected.at("duplicateSameId").get_boolean());
     }
 }
+
+TEST_CASE("a killed terminal worker does not rerun after reopen", "[durable][issue1084]") {
+    check_lifecycle_recovery(false);
+}
+
+TEST_CASE("a killed abort worker retains its abort mark", "[durable][issue1084]") { check_lifecycle_recovery(true); }
 
 TEST_CASE("a killed generation worker recovers admission without a duplicate", "[durable][issue1084]") {
     const auto frozen = FrozenScenario::load("fixtures/pi-v1.3.0/audit-1055/crash-recovery.json",
@@ -397,30 +510,27 @@ TEST_CASE("a killed generation worker recovers admission without a duplicate", "
     REQUIRE(::pipe(fds) == 0);
     support::UniqueFd reader(fds[0]);
     support::UniqueFd writer(fds[1]);
-    const pid_t worker = ::fork();
-    REQUIRE(worker >= 0);
+    const pid_t worker = fork_child();
     if (worker == 0) {
         reader.reset();
         _exit(run_generation(workspace.path(), writer.get(), true));
     }
+    REQUIRE(worker > 0);
     writer.reset();
-    pollfd ready{.fd = reader.get(), .events = POLLIN, .revents = 0};
-    const bool signalled = ::poll(&ready, 1, 10000) == 1 && (ready.revents & POLLIN) != 0;
-    char marker = 0;
-    const bool got_marker = signalled && ::read(reader.get(), &marker, 1) == 1 && marker == 'R';
-    const bool killed = ::kill(worker, SIGKILL) == 0;
+    const bool got_marker = receive_boundary(reader.get());
+    const bool killed = worker > 0 && ::kill(worker, SIGKILL) == 0;
     const auto killed_result = reap_bounded(worker);
     pid_t recovery = -1;
     ChildResult recovered;
     if (got_marker && killed_result.exited) {
-        recovery = ::fork();
+        recovery = fork_child();
         if (recovery == 0) _exit(run_generation(workspace.path(), -1, false));
         if (recovery > 0) recovered = reap_bounded(recovery);
     }
     pid_t third = -1;
     ChildResult third_result;
     if (recovered.exited && WIFEXITED(recovered.status) && WEXITSTATUS(recovered.status) == 0) {
-        third = ::fork();
+        third = fork_child();
         if (third == 0) _exit(run_generation(workspace.path(), -1, false, true));
         if (third > 0) third_result = reap_bounded(third);
     }
@@ -437,6 +547,12 @@ TEST_CASE("a killed generation worker recovers admission without a duplicate", "
     CHECK(recovered.exited);
     CHECK(WIFEXITED(recovered.status));
     CHECK(WEXITSTATUS(recovered.status) == 0);
-    CHECK(frozen->expected().at("duplicateSameId").get_boolean());
+    const auto ids = read_lines(workspace.path() / "generation-ids");
+    CHECK(ids.size() == 3);
+    if (ids.size() == 3)
+        CHECK((ids[0] == ids[1] && ids[1] == ids[2]) == frozen->expected().at("duplicateSameId").get_boolean());
+    CHECK(read_lines(workspace.path() / "transcript") == frozen_lines(frozen->expected().at("transcriptAfterSettle")));
+    CHECK(read_lines(workspace.path() / "transcript-third") ==
+            frozen_lines(frozen->expected().at("transcriptAfterSettle")));
     CHECK(line_count(workspace.path() / "requests") == 2);
 }
