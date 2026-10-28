@@ -418,6 +418,30 @@ TEST_CASE("a failed C++ task marker recovers for frozen pi continuation", "[dura
     REQUIRE((*final_storage)->close());
 }
 
+TEST_CASE("JSONL recovery rejects a task sidecar symlink without changing its target", "[durable][jsonl][issue1085]") {
+    TempWorkspace store;
+    TempWorkspace outside;
+    outside.write("user-data", "complete\npartial");
+    std::error_code error;
+    std::filesystem::create_symlink(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
+    REQUIRE_FALSE(error);
+    auto opened = JsonlStorage::open(store.path());
+    CHECK_FALSE(opened.has_value());
+    CHECK(outside.read("user-data") == "complete\npartial");
+}
+
+TEST_CASE("JSONL recovery preserves a hard-linked external file", "[durable][jsonl][issue1085]") {
+    TempWorkspace store;
+    TempWorkspace outside;
+    outside.write("user-data", "complete\npartial");
+    std::error_code error;
+    std::filesystem::create_hard_link(outside.path() / "user-data", store.path() / "task-2.jsonl", error);
+    REQUIRE_FALSE(error);
+    auto opened = JsonlStorage::open(store.path());
+    CHECK_FALSE(opened.has_value());
+    CHECK(outside.read("user-data") == "complete\npartial");
+}
+
 TEST_CASE("an unconfirmed live task sidecar is discarded on JSONL reopen", "[durable][jsonl][issue1085]") {
     TempWorkspace workspace;
     auto storage = JsonlStorage::open(workspace.path());
