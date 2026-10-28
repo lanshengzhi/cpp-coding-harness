@@ -26,6 +26,16 @@ The reservation commit's completion is the only publication site:
 
 ## 2. Synchronization primitive (no stack capture)
 
+Implemented variant (approved as "equivalent no-dangling synchronization"):
+the reservation commit is awaited on the worker, and publication, the
+`closed` check, and the execution-thread spawn happen in **one** Harness
+mutex critical section after settlement -- so there is no waiter and no
+window between publication and phase start. The execution thread additionally
+checks `closed` under the Harness mutex before its first phase instruction
+and erases its identity if the Harness closed in between. The shared-state
+design below remains the fallback if the spawn point ever moves off the
+worker.
+
 The old implementation captured a stack `condition_variable`/flag by
 reference in the settle completion, which is a notify-after-unlock and
 destruction race (first review's finding). This slice uses a **shared

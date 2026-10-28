@@ -963,6 +963,13 @@ struct Harness::Impl {
         if (invoked.contains(record.id.value)) {
             return TaskInspectionState{.kind = "running"};
         }
+        // A committed `running` record reports running even after its identity
+        // is erased: a phase that ended abnormally (or a crash-recovered
+        // record) must not be reported ready. Frozen `#inspectTask` checks the
+        // invocation first and then the record's own running status.
+        if (record.state.status == "running") {
+            return TaskInspectionState{.kind = "running"};
+        }
         if (record.state.status == "completing") {
             return TaskInspectionState{.kind = "completing"};
         }
@@ -1487,6 +1494,14 @@ struct Harness::Impl {
             // A waiting task resumes once every member is terminal; a `failFast`
             // wait whose member failed is handled by `reconcile()`.
             if (task.state.status == "waiting") {
+                {
+                    // A phase that committed `waiting` may still be active;
+                    // resuming it to `pending` under a live identity would let
+                    // a second invocation start (issue #1165). Cleanup dirties
+                    // the scheduler, so the resume happens on a later pass.
+                    std::lock_guard lock(mutex);
+                    if (closed || active_invocations.contains(task.id.value)) continue;
+                }
                 bool all_terminal = true;
                 for (const TaskId member_id : task.state.on) {
                     const TaskRecord* member = world.task(member_id);
@@ -1545,7 +1560,6 @@ struct Harness::Impl {
                     if (closed || active_invocations.contains(task.id.value)) {
                         continue;
                     }
-                    active_invocations[task.id.value] = stop_src;
                 }
 
                 auto tid = task.id;
@@ -1579,18 +1593,26 @@ struct Harness::Impl {
                         }));
 
                 if (!trans_res || !reserved->load(std::memory_order_acquire)) {
-                    std::lock_guard l(mutex);
-                    active_invocations.erase(tid.value);
-                    cv.notify_all();
+                    // The reservation was rejected, failed, or no-oped before
+                    // settlement; no identity was ever published (issue #1165).
                     continue;
                 }
 
                 {
                     std::lock_guard l(mutex);
                     if (closed) {
-                        active_invocations.erase(tid.value);
+                        // The reservation settled but the Harness closed before
+                        // publication: discard it and never start the phase
+                        // (frozen pi: a held reservation at close).
                         cv.notify_all();
-                    } else {
+                        continue;
+                    }
+                    // Publish the invocation identity only now, after Storage
+                    // settled the reservation commit: an inspection can never
+                    // pair a `pending` record with a live identity, and the
+                    // phase starts only from a published identity (#1165).
+                    active_invocations[tid.value] = stop_src;
+                    {
                         auto finished = std::make_shared<std::atomic_bool>(false);
                         ExecutionThread task_thread;
                         task_thread.finished = finished;
@@ -1620,6 +1642,21 @@ struct Harness::Impl {
             dirty = true;
             cv.notify_all();
         };
+
+        {
+            // A close can land between publication and the first phase
+            // instruction. The execution thread must erase its published
+            // identity, wake the shutdown wait, and return without starting a
+            // phase (frozen pi fail -> close -> beforeClose; the empty-table
+            // shutdown wait depends on this second close path).
+            std::lock_guard lock(mutex);
+            if (closed) {
+                active_invocations.erase(tid.value);
+                dirty = true;
+                cv.notify_all();
+                return;
+            }
+        }
 
         bool reported_replacement = false;
         std::shared_ptr<const TaskDefinition> reported_def;

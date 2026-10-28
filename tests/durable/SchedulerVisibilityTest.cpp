@@ -373,13 +373,11 @@ TEST_CASE("a waiting task is not resumed to pending while its phase is still inv
 // identity and never start its phase: the commit failure seals the Session
 // (issue #1166), and inspect rejects with the frozen failure message instead
 // of scanning a record the scheduler has not actually reserved.
-// OUT-OF-SLICE pin from the dropped production: this test was written
-// against 5057091d3's reservation-commit shape (identity published in the
-// reservation completion). At the approved rebuild base the claim commit
-// carries a different write set, so the injected rejection no longer matches
-// and the expected seal never lands. Reservation failure signaling will be
-// re-specified together with reservation visibility (seam proposal section 4).
-TEST_CASE("a rejected reservation never starts its phase or reports running", "[.][rejection-legacy]") {
+// The rejected-reservation contract survives the rebuild: a reservation
+// whose Storage write fails seals the Session (#1166), the phase never
+// starts, and inspect never reports a running identity. It passes again now
+// that publication happens in the reservation completion (issue #1165).
+TEST_CASE("a rejected reservation never starts its phase or reports running", "[durable][issue1165][rejection]") {
     MemoryStorage memory;
     RejectReservationStorage storage(memory);
     std::atomic_bool phase_ready{false};
@@ -1436,6 +1434,43 @@ TEST_CASE("scheduler inspect after close reports the defined closed error", "[du
     auto outcome = consume(harness->inspect());
     REQUIRE_FALSE(outcome.has_value());
     CHECK(outcome.error().message == "Session is closed");
+}
+
+// A committed `running` record reports running even when no invocation is
+// live: the identity is not the only running source (frozen `#inspectTask`
+// checks the invocation first and then the record's running status). Without
+// the record rule, a phase that ended abnormally -- or a crash-recovered
+// record -- would be reported ready.
+TEST_CASE(
+        "a committed running record reports running without a live identity", "[durable][issue1165][running-record]") {
+    MemoryStorage storage;
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(make_terminal_task("audit1165.running-record"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.running-record"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    // The harness stays paused: the record is committed `running` directly,
+    // with no invocation in flight and no identity to consult.
+    REQUIRE(consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+        auto cur = tx.task(id);
+        if (!cur || !cur->has_value()) return {};
+        TaskRecord record = **cur;
+        record.state.status = "running";
+        return tx.set_task(std::move(record));
+    })).has_value());
+    const auto inspection = consume(harness->inspect());
+    REQUIRE(inspection.has_value());
+    const auto state = inspection_row_state(inspection.value(), "audit1165.running-record");
+    REQUIRE(state.has_value());
+    CHECK(*state == "running");
+    CHECK(consume(harness->close()).has_value());
 }
 
 // Seam-era coherence (issue #1165): while the inspection's scan is held

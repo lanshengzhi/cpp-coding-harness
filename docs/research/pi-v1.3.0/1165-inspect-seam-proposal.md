@@ -267,10 +267,13 @@ Measured results:
   (`[.][stale-scan-legacy]`): under the seam the held scan owns the line,
   so its own terminal commit can never settle before the release and the
   test would deadlock by construction.
-- `[reservation-visibility]` remains RED: the seam makes the capture one
-  instant but does not change identity registration timing. The dropped
-  production's rejection pin is hidden (`[.][rejection-legacy]`) because
-  it was written against 5057091d3's reservation-commit shape.
+- `[reservation-visibility]` was RED at this slice's SHA (the seam makes
+  the capture one instant but does not change identity registration
+  timing) and is fixed by the follow-up reservation-visibility slice
+  (`1165-reservation-visibility-design.md`): publication moved into the
+  reservation completion, after Storage settlement.
+- The rejection pin is visible again (`[rejection]`): it passes with the
+  restored publication point.
 
 Coherence claim corrected by the test design: the seam guarantees
 record-instant coherence for line-owned writes and blocks later commits
