@@ -89,7 +89,8 @@ and lock tests passed 23, failed 0, skipped 0. The existing Session close-drain
 case selected 1 and passed 1 (14 assertions). The durable shard build and its
 build-phase architecture gate passed. These are probe results, not full
 validation or a parity claim. Modified C++ abort/close/failure ordering,
-identity cleanup, callback lifetime and mutation evidence remain outstanding.
+identity cleanup, callback lifetime and mutation evidence were later
+addressed in the delivered slice; see Status update and Validation state.
 The logs `1165-evidence/reservation-red.log`, `lock-before.log`,
 `lock-after.log`, `reentry-after.log`, `close-gated.log`, `failure-red.log`,
 and `failure-main-red.log` retain the discriminating runs. Their original
@@ -229,11 +230,20 @@ backend (§9.13).
 
 ### Validation state
 
-Focused: post-revision `[issue1165|issue1166]` 13/13 x3, durable shard
-178/178, format gate clean, Parity Architecture Gate build phase PASS.
-Full Validation: 3878/3878 passed, 1 pre-existing skip, exit 0 on
-`5057091d3` (pre-revision); the review revision rebuilds the durable shard
-only and needs a fresh Full Validation window before delivery.
+Delivered at `bf8dd9617` (merged as `8ff88d64a`). Post-revision focused
+`[issue1165|issue1166]` passed 21/21 (534 assertions), the durable shard
+passed 186/186 (5,735 assertions), `cch_warning_gate` passed 2/2, and the
+focused `[no-op]`/`[inspect-cap]`/`[rejection]` selection passed 3/3; format
+and the Parity Architecture Gate build phase passed.
+
+Full Validation on the branch selected 3,889, passed 3,888, failed 0 and
+skipped 1 (the Native TUI differential), exit 0. On the merge result
+(`8ff88d64a`) the first Full selected 3,910 and failed two TUI cases
+(`Process Terminal atomic stop ...` and `a timed-out query ...`) while the
+Native TUI differential skipped; each failed case then passed five isolated
+runs, and a second Full on the same merge tree passed 3,909/3,910 with the
+same skip and exit 0. Both results are retained; the first failures are not
+attributed to #1165, and no root cause is inferred from the passing reruns.
 
 ### Round 3: review slice pins and the deterministic stale-scan RED (WIP)
 
