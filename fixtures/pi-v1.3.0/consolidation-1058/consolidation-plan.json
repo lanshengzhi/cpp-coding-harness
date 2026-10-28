@@ -1907,6 +1907,22 @@
       "disposition": "Compared by tests/durable/JsonlStorageTest.cpp and docs/research/pi-v1.3.0/1085-jsonl-continuation.md; this observation alone does not promote the referenced ledger row."
     },
     {
+      "family": "audit-1086",
+      "artifact": "interchange.json",
+      "scenario": "pi creates a SQLite store with an unfinished task, document and checkpoint",
+      "reason": "Captured by #1086 after the consolidated ledger; no #1056 source row routes to this artifact.",
+      "rows": ["cch_durable:task-recovery"],
+      "disposition": "Frozen pi observation recorded alongside live continuation tests in tests/durable/SqliteStorageTest.cpp; the tests do not directly consume this scenario. This observation alone does not promote the referenced ledger row."
+    },
+    {
+      "family": "audit-1086",
+      "artifact": "interchange.json",
+      "scenario": "C++ creates a SQLite store that pi reopens, indexes and advances",
+      "reason": "Captured by #1086 after the consolidated ledger; no #1056 source row routes to this artifact.",
+      "rows": ["cch_durable:task-recovery"],
+      "disposition": "Frozen pi observation on a C++-created input, recorded alongside live continuation tests in tests/durable/SqliteStorageTest.cpp; the tests do not directly consume this scenario. This observation alone does not promote the referenced ledger row."
+    },
+    {
       "family": "audit-1085-replay",
       "artifact": "harness.json",
       "scenario": "pi JSONL Harness resumes a pending checkpoint after close and reopen",
