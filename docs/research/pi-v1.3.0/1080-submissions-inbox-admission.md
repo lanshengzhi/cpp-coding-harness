@@ -2,9 +2,9 @@
 
 ## Scope
 
-Implement B22 / F4 on the local
-`integration/1080-submission-inbox-admission` branch against **pi-v1.3.0 /
-71023aec1546d6d677a65669c5665c0927ce0dd0**, Linux x86-64 with glibc.
+B22 / F4 was integrated into `main` by merge `bc35299b9` against
+**pi-v1.3.0 / 71023aec1546d6d677a65669c5665c0927ce0dd0**, Linux x86-64
+with glibc. The subsequent delivery audit is recorded below.
 The public caller is the independent `cch::durable::Harness`; the ordinary
 application Session and `pike --resume` retain their existing storage path.
 
@@ -56,6 +56,37 @@ accepting two successful final reads as evidence of atomicity. Storage tests in
 [SubmissionStorageTest.cpp](../../../tests/durable/SubmissionStorageTest.cpp)
 cover staged resolution and backend persistence separately from Harness policy.
 
+### Delivery audit after integration
+
+The issue had no delivery comment when this audit began. The existing public
+`Harness` boundary test compares the postTools/final transcript and answer
+identities; the successful queued-admission test records both the submission
+and inbox change in one storage batch. Those cases are retained.
+
+- The same-key/different-payload test previously checked identity, zero new
+  batches and inbox size, but did not count work. It now also counts one
+  submission, one user transcript entry and one assistant answer after the
+  original settles.
+- The conversation-abort test loaded its registered frozen scenario but did
+  not compare its values. It now compares the before and after statuses,
+  reasons and retained inbox mode against that observation; the queued input
+  is unanswered/aborted while the queued write remains queued. Loading a
+  fixture alone was not a frozen comparison.
+- The new failed busy-admission case observes the backend immediately before
+  the failed Session closes it: neither a submission for the request nor an
+  inbox change is visible. The fault double records the rejected batch; the
+  test checks the request ID and the actual inbox document's `items` change,
+  establishing that the injected failure hit the intended admission. It also
+  checks the failed Session rejects a later submission. Together with the
+  successful same-batch case this covers
+  submission-granularity atomicity and a discriminating failure through the
+  public caller. The fault double rejects the entire batch before delegating;
+  it does not simulate a physical write failing midway. Backend rollback is
+  covered separately by #1074 and #1075.
+
+No new frozen observation or capability-status claim is needed for these
+comparisons. The existing audit-1080 observations remain the authority.
+
 ### Review corrections
 
 The final review-fix merge is `1ed33cf66` (implementation commit `dff0672e1`).
@@ -102,6 +133,49 @@ made the ordering deterministic and completed the test. No timeout or assertion
 was relaxed to obtain a pass.
 
 ## Validation
+
+Delivery audit validation (2026-10-28, strict no-exception Debug):
+
+- Final clean revision `8304bf612f28adf780a87b7785df0f8fe61b1431`:
+  full build passed; unfiltered CTest selected **3,853**, with **3,852 passed,
+  0 failed, 1 skipped** in 185.86 seconds. All **43** architecture tests
+  passed. The skipped Native TUI differential capture requires its separately
+  selected environment. Logs and JUnit are retained locally at
+  `/tmp/cch-1080-final-build.log`, `/tmp/cch-1080-final.log`, and
+  `/tmp/cch-1080-final.xml`.
+
+- Focused `ctest --preset vcpkg -L issue1080 --timeout 20`: **36 selected,
+  36 passed**, including one new case and two strengthened cases.
+- Full preset build and configure/build architecture gates passed. The
+  unfiltered full run selected **3,853**: **3,851 passed, 1 failed, 1
+  skipped** in 747.44 seconds. Architecture tests, including the warning
+  gate, passed. This is not a passing full validation.
+- The failure was `Native TUI fullscreen scroll-to-end indicator paints on a
+  direct-fullscreen launch while the transcript is scrolled` (#1039): after
+  the indicator click, an expected scrollbar edge was absent. Ten isolated
+  repeats passed; the cause remains undetermined. The Native TUI differential
+  capture was skipped. Original full log and JUnit are retained locally at
+  `/tmp/cch-1080-full.log` and `/tmp/cch-1080-full.xml`; isolated rerun log is
+  `/tmp/cch-1080-tui-repeat.log`.
+- The rejected-batch identification was added after that full run. The
+  `issue1080` selection passed **36/36** before and after the following
+  temporary production mutations; the source was restored, rebuilt, and the
+  worktree was clean. These are discriminating probes, not new frozen
+  observations:
+  - Bypassing the request-key lookup branch produced two submissions and two
+    final user entries. The submission count and final user count both failed,
+    along with identity, batch count, status and inbox assertions. The final
+    assistant count did not fail; no claim is made for that predicate.
+  - Removing the queued-write exclusion from conversation abort caused the
+    write to settle `unanswered` with a reason and disappear from the inbox.
+    The frozen queued status, absent reason and inbox size checks failed.
+  - Both targeted cases completed without timeout. Their local logs are
+    `/tmp/cch-1080-mut-dedup.log` and `/tmp/cch-1080-mut-abort.log`;
+    the restored focused log is `/tmp/cch-1080-restored-focused.log`.
+- An initial parallel fresh-tree build encountered PARITY-6002/6003 while
+  Ninja updated dependency evidence; serial retry passed. This separate build
+  gate race is tracked by #1162. The final full validation above follows the
+  batch-identification change.
 
 Initial integration revision: `b2714debc`.
 
@@ -163,4 +237,5 @@ Workflow reopen/recovery (#1082), dynamic registry hooks (#1087), and full
 views/task graph/inspect (#1088) remain separate slices. This delivery makes no
 power-loss, fsync-failure, multiprocess, historical Pike import, or real terminal
 emulator claim. Magpie-only AI access and the XDG state root remain unchanged.
-#1044 remains open. Work is local until separately authorized for publication.
+#1044 remains open. The implementation is integrated; this delivery audit
+remains on its local ticket branch pending integration and acceptance.
