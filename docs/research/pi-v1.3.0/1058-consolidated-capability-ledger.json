@@ -92,11 +92,11 @@
           },
           {
             "path": "src/mcp/HttpClient.cpp",
-            "sha256": "76f51b1190e828fc701b093978a2a272383ac6be31f57e66bd832ca5735dce1d"
+            "sha256": "ef6aeda9e120efb96c8d7309a9a35e3661a8c1a2f945eb7b82dcaf1a232c4dc2"
           },
           {
             "path": "src/mcp/HttpClientImpl.hpp",
-            "sha256": "a11775b5074146cec27889f5375c920df117f3a19b8082a5495cb5ba641cc3b6"
+            "sha256": "fbcc3ed56bca8e42f20c9abd18a667c4f7e96e8d886fdb15df7a120c4e4f51c6"
           },
           {
             "path": "src/mcp/ProtocolInternal.hpp",
@@ -120,11 +120,11 @@
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpClient.hpp",
-            "sha256": "d68213a3850e66b7bc1e410fb313eb597ae8c50e4990a84be8c55bb278e82cf4"
+            "sha256": "03c6c8ba29a0219658346b8fc18799235ef9d62a7860dd213b1c92c2add677c2"
           },
           {
             "path": "src/mcp/include/cch/mcp/HttpServerConfig.hpp",
-            "sha256": "a2c4d1fc342dbea9677c0c315c31f338fd9d03a92394b0447190da8cebe26607"
+            "sha256": "6d8ef1cafe4df55e659f92c0622571c43b9d5ed888dbc4ca90505cb894fb166e"
           },
           {
             "path": "src/coding_agent/mcp/McpExtensionToolSource.cpp",
@@ -132,7 +132,7 @@
           },
           {
             "path": "src/coding_agent/mcp/McpExtensionToolSource.hpp",
-            "sha256": "0ffd4d2b38d3617f92a40a503cffc123075174ae4bfed98e47e5551c4aa0a42a"
+            "sha256": "e8b901d11aac678a47881d2669419d7e3f86d207dc8d527b1c941307fc6650e7"
           },
           {
             "path": "src/coding_agent/PrettyJson.hpp",
@@ -144,7 +144,7 @@
           },
           {
             "path": "src/coding_agent/runtime/McpProductionAdapters.hpp",
-            "sha256": "e71b1c2d610248b6be03ec483b05739fd675b52675e00685672043f250861d24"
+            "sha256": "de212ea0d9fc091c3c8421c21f1721441feac879fc46923d1e593a7b4251c902"
           },
           {
             "path": "src/coding_agent/runtime/McpSessionManager.cpp",
@@ -188,7 +188,7 @@
           },
           {
             "path": "fixtures/pi-mcp/http_server.py",
-            "sha256": "ff568ddc253d66fd25740e2dbfddc32344d838d50f7084817b244833d47d13b9"
+            "sha256": "26d5529bfb328c2c5519de52e53041af3a4e9770d6d6c9813f3d40f61b0fc41e"
           },
           {
             "path": "fixtures/pi-v1.3.0/audit-1052/structured-content.json",
@@ -220,7 +220,7 @@
           },
           {
             "path": "tests/coding_agent/McpHttpSessionTest.cpp",
-            "sha256": "8dc544f3a1d6b3781db5b706c1c9a1a6d827e1db609809cfbab011f54bd11e86"
+            "sha256": "117e1ac2e07771c1d2435cae543303225786cc4149171232079ecb7fa7adf511"
           },
           {
             "path": "tests/coding_agent/McpStructuredContentTest.cpp",
@@ -236,7 +236,7 @@
           },
           {
             "path": "tests/support/McpTestKit.hpp",
-            "sha256": "aa2dc284c0b79b70021fcd8cfb82996e88af7ed82c7be550dfc471f9ca57e1a1"
+            "sha256": "06ab36bb65c056096a599f696cbe416003ede98f2567f87d30f5118c33d20f1d"
           },
           {
             "path": "src/mcp/StructuredResultText.hpp",
@@ -256,14 +256,14 @@
             "issue1101",
             "--output-on-failure",
             "--output-junit",
-            "/tmp/cch-1155-1101.xml"
+            "/tmp/cch-1103-1101.xml"
           ],
-          "testedRevision": "250c8729c04a74617cb57a3431f1cac1b09058ee",
-          "recordedAt": "2026-10-28T01:09:14Z",
+          "testedRevision": "44972a90846fa0a9c453d13fbbd518d7567722ff",
+          "recordedAt": "2026-10-28T03:04:46Z",
           "selected": 14,
           "junit": {
-            "path": "docs/research/pi-v1.3.0/deliveries/1155-revalidation-1101.xml",
-            "sha256": "710c49df368e47911f24e2b3ce2b3cf700d2655e4a7faed0b50c99f54c2712ae"
+            "path": "docs/research/pi-v1.3.0/deliveries/1103-revalidation-1101.xml",
+            "sha256": "0ab687504a433328fae5bf079e9251f57464b618288b0d4b319717a1c3308081"
           }
         },
         "rows": [
