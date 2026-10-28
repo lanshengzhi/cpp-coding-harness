@@ -92,7 +92,10 @@ validation or a parity claim. Modified C++ abort/close/failure ordering,
 identity cleanup, callback lifetime and mutation evidence remain outstanding.
 The logs `1165-evidence/reservation-red.log`, `lock-before.log`,
 `lock-after.log`, `reentry-after.log`, `close-gated.log`, `failure-red.log`,
-and `failure-main-red.log` retain the discriminating runs.
+and `failure-main-red.log` retain the discriminating runs. Their original
+filter tags no longer exist in the tree, so they are historical and not
+reproducible as-is; `1165-evidence/README.md` indexes every log with its
+original filter and current status.
 
 The copied `std::stop_source` retains the old invocation's shared stop-state
 identity, so it cannot directly signal a newly allocated replacement source.
@@ -273,3 +276,15 @@ discriminating tests only.
   same exposure. `wait_for_idle` completes outside the mutex already.
 - Queued/asynchronous `inspect` was not implemented (see the Spec P1
   disproof above); it is #1088-coordinated scope.
+
+## Inspection scan cap (issue #1088 hand-off)
+
+`Harness::inspect` captures at most 256 task records per call
+(`Storage::scan_tasks(256)` in `capture_inspection`) and derives
+`waiting`/abort rows through the scheduler's `load_world()` scan (limit
+1024). A repository with more records is inspected partially: #1165 does
+not claim a complete committed inspection beyond that cap. The public
+`inspect` contract states the bound and points at #1088 (observation and
+views) for completeness beyond it, and `[inspect-cap]` pins the boundary
+(257 committed tasks -> 256 inspected rows) so the behavior is a
+documented bound rather than an implicit unbounded scan.

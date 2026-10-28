@@ -1013,6 +1013,11 @@ struct Harness::Impl {
     /// state. Runs while the mutation line is held; the Harness mutex is
     /// taken only for the identity copy and released before the scan, the
     /// same order the commit and close listeners already use.
+    ///
+    /// The capture is bounded: `scan_tasks(256)` here and `load_world()`'s
+    /// 1024-record scan for waiting/abort rows. A larger repository is
+    /// inspected partially by contract; a complete committed scan beyond the
+    /// cap belongs to issue #1088 (see `Harness::inspect`).
     [[nodiscard]] support::Expected<HarnessInspection> capture_inspection(Storage& storage) const {
         auto scan_res = storage.scan_tasks(256);
         if (!scan_res) {
@@ -1571,6 +1576,11 @@ struct Harness::Impl {
                 // the task's abort invocation already committed terminal. The
                 // reservation must not rewrite the terminal record: Storage
                 // rejects that write and permanently fails the Session.
+                // The flag is stored by the transaction body (on the line) and
+                // loaded by this worker after the commit settles; the
+                // release/acquire pair makes the staged-write observation
+                // ordered before the publication decision. No other thread
+                // touches it.
                 auto reserved = std::make_shared<std::atomic_bool>(false);
                 auto trans_res = await_async_void(
                         session->commit([this, tid, resolved_record = std::move(resolved_record), reserved](
@@ -1595,9 +1605,17 @@ struct Harness::Impl {
                             return written;
                         }));
 
-                if (!trans_res || !reserved->load(std::memory_order_acquire)) {
-                    // The reservation was rejected, failed, or no-oped before
-                    // settlement; no identity was ever published (issue #1165).
+                if (!trans_res) {
+                    // The reservation commit failed: surface the original
+                    // Storage error to the report sink (issue #1166: the
+                    // failing caller retains the original error) and publish
+                    // nothing. The Session also seals with the frozen message.
+                    report(trans_res.error());
+                    continue;
+                }
+                if (!reserved->load(std::memory_order_acquire)) {
+                    // The reservation body no-oped (the record was no longer
+                    // reservable when the commit ran): publish nothing.
                     continue;
                 }
 

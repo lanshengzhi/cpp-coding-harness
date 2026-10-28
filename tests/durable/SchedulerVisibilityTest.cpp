@@ -93,6 +93,81 @@ public:
 private:
     Storage& inner_; // outlives this wrapper
 };
+/// Serves a stale `pending` view of one kind's terminal records on every
+/// scan, as a scheduler that scanned before another writer committed
+/// terminal would see the world. Used to reach the reservation
+/// commit's no-op guard deterministically.
+class StalePendingViewStorage final : public Storage {
+public:
+    StalePendingViewStorage(Storage& inner, std::string kind) : inner_(inner), kind_(std::move(kind)) {}
+
+    [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
+        return inner_.commit(writes);
+    }
+
+    [[nodiscard]] support::Expected<std::int64_t> mint_id() override { return inner_.mint_id(); }
+
+    [[nodiscard]] support::Expected<std::optional<ConversationRecord>> conversation(ConversationId id) override {
+        return inner_.conversation(id);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<StoredEntry>> entry(EntryId id) override { return inner_.entry(id); }
+
+    [[nodiscard]] support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit) override {
+        return inner_.scan_conversations(limit);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
+            ConversationId conversation_id, std::size_t limit) override {
+        return inner_.scan_entries(conversation_id, limit);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<DocumentRecord>> scan_conversation_documents(
+            ConversationId conversation_id, DocumentPoint at, std::size_t limit) override {
+        return inner_.scan_conversation_documents(conversation_id, at, limit);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override {
+        return inner_.find_document(kind, address, at);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override {
+        return inner_.document(id, at);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_.task(id); }
+
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
+        auto scanned = inner_.scan_tasks(limit);
+        if (!scanned) return scanned;
+        for (auto& record : *scanned) {
+            if (record.kind == kind_ && record.state.status == "terminal") {
+                record.state.status = "pending";
+            }
+        }
+        return scanned;
+    }
+
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override {
+        return inner_.submission(id);
+    }
+
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id) override {
+        return inner_.submission_by_request(conversation_id, request_id);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) override {
+        return inner_.scan_submissions(limit);
+    }
+
+    [[nodiscard]] support::ExpectedVoid close() override { return inner_.close(); }
+
+private:
+    Storage& inner_; // outlives this wrapper
+    std::string kind_;
+};
 } // namespace
 
 // The original visibility defect (issue #1165), fixed by the
@@ -264,10 +339,20 @@ TEST_CASE("a phase that commits waiting while remaining active is reported runni
         }
         std::this_thread::yield();
     }
+    // Return to a non-running derived state: once the invocation ended and
+    // the task settled terminal, the inspection does not offer it as live
+    // work at all (terminal records are skipped before any derive).
+    const auto final_inspection = consume(harness->inspect());
+    REQUIRE(final_inspection.has_value());
+    bool terminal_row_seen = false;
+    for (const auto& row : final_inspection.value().tasks) {
+        if (row.record.id == id) terminal_row_seen = true;
+    }
     const auto close_outcome = consume(harness->close());
 
     CHECK(observed_running_while_waiting.load());
     CHECK(terminal);
+    CHECK_FALSE(terminal_row_seen);
     CHECK(close_outcome.has_value());
 }
 
@@ -329,10 +414,11 @@ TEST_CASE("a waiting task is not resumed to pending while its phase is still inv
     })).has_value());
     REQUIRE(harness->resume().has_value());
 
-    // Watch the invoked window: if the record flips back to `pending` while
-    // the phase is active, inspect must still derive running (frozen pi
-    // consults the identity first). Pre-fix this window produced a committed
-    // `pending` record with a live identity and a non-running report.
+    // Watch the invoked window: the resume guard must keep a parked wait from
+    // flipping back to `pending` while its phase is active. If it ever flips,
+    // inspect reports non-running by design -- a committed `pending` record
+    // is never promoted by identity alone -- so the observation is asserted
+    // below as an invariant of the guard.
     const auto watch_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
     while (!saw_pending_while_invoked.load() && std::chrono::steady_clock::now() < watch_deadline) {
         if (!waiting_committed.load()) {
@@ -401,7 +487,14 @@ TEST_CASE("a rejected reservation never starts its phase or reports running", "[
     REQUIRE(definition.has_value());
     std::vector<TaskDefinition> definitions;
     definitions.push_back(std::move(*definition));
-    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    std::mutex reports_mutex;
+    std::vector<std::string> reports;
+    auto opened = consume(Harness::open(storage,
+            HarnessOptions{.tasks = std::move(definitions),
+                    .on_report = [&reports_mutex, &reports](const support::Error& error) {
+                        std::lock_guard lock(reports_mutex);
+                        reports.push_back(error.message);
+                    }}));
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
     TaskId id{};
@@ -434,9 +527,27 @@ TEST_CASE("a rejected reservation never starts its phase or reports running", "[
         }
         std::this_thread::yield();
     }
+    // #1166: the failing caller retains the original Storage error. The
+    // scheduler is the caller here, so it reports the injected message while
+    // the Session seals with the frozen failure text.
+    const auto report_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    bool report_seen = false;
+    while (!report_seen && std::chrono::steady_clock::now() < report_deadline) {
+        std::lock_guard lock(reports_mutex);
+        report_seen = !reports.empty();
+        std::this_thread::yield();
+    }
+    bool reported_original = false;
+    {
+        std::lock_guard lock(reports_mutex);
+        for (const auto& message : reports) {
+            if (message == "injected 1165 reservation failure") reported_original = true;
+        }
+    }
     const auto close_outcome = consume(harness->close());
 
     CHECK(sealed);
+    CHECK(reported_original);
     CHECK_FALSE(reported_running.load());
     CHECK_FALSE(phase_ready.load());
     CHECK(close_outcome.has_value());
@@ -621,122 +732,6 @@ private:
     std::atomic_bool fail_on_release_{false};
 };
 
-/// Event-order recorder for issue #1165 admission-ordered inspect evidence.
-/// Wraps a Storage and appends every observed task-write sighting, task-write
-/// completion (after delegation), scan entry, and gate release to one
-/// mutex-protected sequence. Tests assert pure event ORDER plus outcome
-/// content -- no started-flags, timers, or mutex-fairness assumptions. A
-/// configured create kind can be held until released, like
-/// HeldReservationStorage.
-class SequenceRecordingStorage final : public Storage {
-public:
-    explicit SequenceRecordingStorage(Storage& inner) : inner_(inner) {}
-
-    void hold_kind(std::string kind) { hold_kind_ = std::move(kind); }
-    void arm() noexcept { armed.store(true, std::memory_order_release); }
-    void release() noexcept {
-        record("released");
-        released.store(true, std::memory_order_release);
-    }
-    [[nodiscard]] bool w_seen(std::string_view kind) const {
-        std::lock_guard lock(events_mutex_);
-        for (const auto& event : events_) {
-            if (event.rfind("w:" + std::string(kind), 0) == 0) return true;
-        }
-        return false;
-    }
-    [[nodiscard]] std::size_t event_index(std::string_view event) const {
-        std::lock_guard lock(events_mutex_);
-        for (std::size_t i = 0; i < events_.size(); ++i) {
-            if (events_[i] == event) return i;
-        }
-        return npos;
-    }
-    static constexpr std::size_t npos = static_cast<std::size_t>(-1);
-
-    [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
-        bool holds = false;
-        std::string held_kind;
-        if (armed.load(std::memory_order_acquire)) {
-            for (const auto& write : writes) {
-                if (write.type == "task" && write.task.has_value() && write.task->kind == hold_kind_ &&
-                        write.task->state.status == "running") {
-                    holds = true;
-                    held_kind = write.task->kind;
-                }
-            }
-        }
-        if (holds) {
-            record("w:" + held_kind + ":running");
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
-            while (!released.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
-                std::this_thread::yield();
-            auto result = inner_.commit(writes);
-            record("w-done:" + held_kind);
-            return result;
-        }
-        for (const auto& write : writes) {
-            if (write.type == "task" && write.task.has_value())
-                record("w:" + write.task->kind + ":" + write.task->state.status);
-        }
-        return inner_.commit(writes);
-    }
-
-    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
-        record("scan");
-        return inner_.scan_tasks(limit);
-    }
-
-    [[nodiscard]] support::Expected<std::int64_t> mint_id() override { return inner_.mint_id(); }
-    [[nodiscard]] support::Expected<std::optional<ConversationRecord>> conversation(ConversationId id) override {
-        return inner_.conversation(id);
-    }
-    [[nodiscard]] support::Expected<std::optional<StoredEntry>> entry(EntryId id) override { return inner_.entry(id); }
-    [[nodiscard]] support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit) override {
-        return inner_.scan_conversations(limit);
-    }
-    [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
-            ConversationId conversation_id, std::size_t limit) override {
-        return inner_.scan_entries(conversation_id, limit);
-    }
-    [[nodiscard]] support::Expected<std::vector<DocumentRecord>> scan_conversation_documents(
-            ConversationId conversation_id, DocumentPoint at, std::size_t limit) override {
-        return inner_.scan_conversation_documents(conversation_id, at, limit);
-    }
-    [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
-            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override {
-        return inner_.find_document(kind, address, at);
-    }
-    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(DocumentId id, DocumentPoint at) override {
-        return inner_.document(id, at);
-    }
-    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_.task(id); }
-    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override {
-        return inner_.submission(id);
-    }
-    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
-            ConversationId conversation_id, std::string_view request_id) override {
-        return inner_.submission_by_request(conversation_id, request_id);
-    }
-    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) override {
-        return inner_.scan_submissions(limit);
-    }
-    [[nodiscard]] support::ExpectedVoid close() override { return inner_.close(); }
-
-private:
-    void record(std::string event) const {
-        std::lock_guard lock(events_mutex_);
-        events_.push_back(std::move(event));
-    }
-
-    Storage& inner_; // outlives this wrapper
-    std::string hold_kind_;
-    std::atomic_bool armed{false};
-    std::atomic_bool released{false};
-    mutable std::mutex events_mutex_;
-    mutable std::vector<std::string> events_;
-};
-
 /// Models a slow-read Storage backend: after arming, every `scan_tasks`
 /// call (limit <= 256, the scheduler/inspect scan size) whose result
 /// contains the target kind still `waiting` observes the live rows, then
@@ -851,10 +846,9 @@ private:
 // Held asynchronous reservation, release side (issue #1165 acceptance). The
 // gate blocks the reservation commit inside Storage::commit: the commit is
 // admitted (proven by `commit_seen`) but unsettled. While the turn is held
-// the Session line is blocked, and inspect's seal check
-// (`Session::failed()`) waits on the line, so an inspect started during the
-// hold cannot return before the reservation settles -- the same FIFO wait a
-// frozen pi `readOnLine` read would spend behind the held commit turn. After
+// the Session line is blocked, so inspect's line job queues behind it and
+// cannot run before the reservation settles -- the same FIFO wait a frozen
+// pi `readOnLine` read spends behind a held commit turn. After
 // the release the settled reservation is truthfully visible: the record is
 // committed running, inspect reports running, and the phase (gated so the
 // transient cannot be missed) starts on the published identity and cleans it
@@ -864,7 +858,7 @@ TEST_CASE("a held reservation commit stays unreserved until it settles", "[durab
     HeldReservationStorage storage(memory);
     std::atomic_bool release_phase{false};
     std::atomic_bool observed_running{false};
-    std::atomic_bool stale_identity{false};
+    std::atomic_bool terminal_row_seen{false};
     auto builder = TaskDefinitionBuilder("audit1165.held", 1);
     builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
     // The phase borrows the flag by reference and runs on a harness execution
@@ -956,7 +950,9 @@ TEST_CASE("a held reservation commit stays unreserved until it settles", "[durab
                     continue;
                 }
                 if (record_terminal) {
-                    stale_identity.store(true);
+                    // A terminal record must never appear as a row: the
+                    // capture skips it before any derive.
+                    terminal_row_seen.store(true);
                 } else if (row.record.state.status == "running" && row.state.kind == "running") {
                     observed_running.store(true);
                     release_phase.store(true);
@@ -973,7 +969,7 @@ TEST_CASE("a held reservation commit stays unreserved until it settles", "[durab
     CHECK(held_row_running.load());
     CHECK(observed_running.load());
     CHECK(terminal);
-    CHECK_FALSE(stale_identity.load());
+    CHECK_FALSE(terminal_row_seen.load());
     CHECK(close_outcome.has_value());
 }
 
@@ -1209,22 +1205,6 @@ namespace {
     return std::move(*definition);
 }
 
-[[nodiscard]] TaskDefinition make_parked_task(std::string kind, const std::atomic_bool& park) {
-    auto builder = TaskDefinitionBuilder(std::move(kind), 1);
-    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
-    builder.phase("run", [&park](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
-        while (!park.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::yield();
-        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
-        });
-    });
-    auto definition = builder.build();
-    REQUIRE(definition.has_value());
-    return std::move(*definition);
-}
-
 [[nodiscard]] bool create_task_by_kind(Harness& harness, std::string_view kind) {
     return consume(harness.commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto created = tx.create_task(*harness.task_definition(kind), chord::Json(nullptr));
@@ -1257,92 +1237,6 @@ template <typename Predicate>
 }
 } // namespace
 
-// Included-set definition (issue #1165 protocol work, design doc section 6).
-// Evidence is pure event ORDER from SequenceRecordingStorage plus outcome
-// content -- no started-flags, timers, or mutex-fairness assumptions. What
-// Storage can observe is the read's capture (its scan), not its Session-line
-// enqueue: a read leaves no storage trace before it runs. The property under
-// test is therefore stated at the capture instant, which is observable:
-//   reviewed protocol: w:held:running < w-done:held < scan < w:fifo-b:*
-//   (the read job runs after the held turn fully settles and before the
-//    later create's turn executes), and the inspection includes the held
-//    task's effects while excluding the later create.
-//   today:             w:held:running < scan < released
-//   (the direct scan runs while the held turn is still unsettled), and the
-//    inspection lacks the held task's effects -- the undefined included set.
-// Design-constraint test (issue #1165): from the PUBLIC seam the Session-line
-// admission of a read is unobservable -- a read leaves no storage trace until
-// it runs -- and today's capture instant is bimodal (the held turn sometimes
-// holds the line lock during its storage flight, sometimes not), so this test
-// cannot be a deterministic RED today. It is written for the reviewed
-// protocol's world (queued read -> capture deterministically after the held
-// turn settles) and hidden until the private seam lands; the suite's
-// deterministic REDs are [stale-scan] and [closed-admission]. See
-// 1165-evidence/fifo-order-admission-evidence.log for the recorded modes.
-TEST_CASE("scheduler inspect has a defined admission-ordered included set", "[.][fifo-order-probe]") {
-    MemoryStorage memory;
-    SequenceRecordingStorage storage{memory};
-    storage.hold_kind("audit1165.held");
-    std::atomic_bool unpark{false};
-    std::vector<TaskDefinition> definitions;
-    definitions.push_back(make_parked_task("audit1165.held", unpark));
-    definitions.push_back(make_terminal_task("audit1165.fifo-b"));
-    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
-    REQUIRE(opened.has_value());
-    auto harness = std::move(opened.value());
-
-    REQUIRE(create_task_by_kind(*harness, "audit1165.held"));
-    storage.arm();
-    REQUIRE(harness->resume().has_value());
-    const bool held_admitted = wait_until([&storage] { return storage.w_seen("audit1165.held"); });
-    if (!held_admitted) storage.release(); // keep teardown off a stranded worker on the failure path
-    REQUIRE(held_admitted);
-
-    std::optional<Outcome<HarnessInspection>> outcome;
-    std::thread inspect_thread{[&] { outcome = consume(harness->inspect()); }};
-    // Event-ordered world detection, not timing: today's direct scan always
-    // reaches Storage during the hold; under the reviewed protocol the read
-    // job is queued behind the held turn and cannot scan before the release.
-    const bool scan_during_hold =
-            wait_until([&storage] { return storage.event_index("scan") != SequenceRecordingStorage::npos; },
-                    std::chrono::seconds(2));
-    const bool later_create_enqueued = create_task_by_kind(*harness, "audit1165.fifo-b");
-    storage.release();
-    if (inspect_thread.joinable()) inspect_thread.join();
-    const bool follow_up_ok = [&] {
-        auto later = consume(harness->inspect());
-        return later.has_value() && inspection_has_row(later.value(), "audit1165.held") &&
-               inspection_has_row(later.value(), "audit1165.fifo-b");
-    }();
-    const bool close_outcome = consume(harness->close()).has_value();
-
-    const auto scan_at = storage.event_index("scan");
-    const auto held_done_at = storage.event_index("w-done:audit1165.held");
-    const auto released_at = storage.event_index("released");
-    const auto later_at = storage.event_index("w:audit1165.fifo-b:waiting");
-    REQUIRE(outcome.has_value());
-    REQUIRE(outcome->has_value());
-    const auto held_state = inspection_row_state(outcome->value(), "audit1165.held");
-    REQUIRE(held_state.has_value());
-    CHECK_FALSE(inspection_has_row(outcome->value(), "audit1165.fifo-b"));
-    if (scan_during_hold) {
-        // Today's direct scan: the capture demonstrably ran mid-hold (the
-        // scan event preceded the release and the held turn's completion),
-        // so the row cannot carry the reservation's running effect.
-        CHECK(scan_at < released_at);
-        CHECK(*held_state != "running");
-    } else {
-        // The reviewed protocol: the capture ran inside a line job after the
-        // held turn fully settled (so the parked phase reads running) and
-        // before the later create's turn.
-        CHECK(held_done_at != SequenceRecordingStorage::npos);
-        CHECK(held_done_at < scan_at);
-        CHECK((later_at == SequenceRecordingStorage::npos || scan_at < later_at));
-        CHECK(*held_state == "running");
-    }
-    unpark.store(true, std::memory_order_release);
-}
-
 // Seal delivery (issue #1166 boundary): an inspection consumed while a held
 // commit is in flight must observe the session seal when that commit's
 // storage write fails. Guards the reject/drain path for a read that was
@@ -1366,9 +1260,13 @@ TEST_CASE(
     storage.fail_on_release();
 
     std::optional<Outcome<HarnessInspection>> outcome;
-    std::thread inspect_thread{[&] { outcome = consume(harness->inspect()); }};
+    std::atomic_bool inspect_done{false};
+    std::thread inspect_thread{[&] {
+        outcome = consume(harness->inspect());
+        inspect_done.store(true, std::memory_order_release);
+    }};
     const auto held_wait_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (outcome.has_value() == false && std::chrono::steady_clock::now() < held_wait_deadline)
+    while (!inspect_done.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < held_wait_deadline)
         std::this_thread::yield();
     storage.release();
     if (inspect_thread.joinable()) inspect_thread.join();
@@ -1409,9 +1307,13 @@ TEST_CASE("scheduler inspect does not fail inside closed storage after close", "
     std::optional<Outcome<HarnessInspection>> outcome;
     std::thread inspect_thread{[&] { outcome = consume(harness->inspect()); }};
     std::optional<bool> close_outcome;
-    std::thread close_thread{[&] { close_outcome = consume(harness->close()).has_value(); }};
+    std::atomic_bool close_done{false};
+    std::thread close_thread{[&] {
+        close_outcome = consume(harness->close()).has_value();
+        close_done.store(true, std::memory_order_release);
+    }};
     const auto held_wait_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (close_outcome.has_value() == false && std::chrono::steady_clock::now() < held_wait_deadline)
+    while (!close_done.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < held_wait_deadline)
         std::this_thread::yield();
     storage.release();
     if (inspect_thread.joinable()) inspect_thread.join();
@@ -1498,11 +1400,96 @@ TEST_CASE("a committed pending record is never promoted by a live identity", "[d
     CHECK(consume(harness->close()).has_value());
 }
 
+// A stale scheduling snapshot (issue #1165): the scheduler scans a record as
+// `pending`, another writer commits it terminal, and the reservation commit
+// then no-ops in its transaction body -- nothing is published and no phase
+// starts. StalePendingViewStorage serves the stale view so the reservation
+// attempt is deterministic instead of a timing race.
+TEST_CASE("a stale scheduling snapshot reserves nothing and starts no phase", "[durable][issue1165][no-op]") {
+    MemoryStorage memory;
+    StalePendingViewStorage storage(memory, "audit1165.noop");
+    std::atomic_bool phase_ready{false};
+    auto builder = TaskDefinitionBuilder("audit1165.noop", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    builder.phase("run", [&phase_ready](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        phase_ready.store(true);
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.noop"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    // Commit terminal while the scheduler is still paused, then resume: every
+    // pass now sees the stale pending view and attempts a reservation the
+    // transaction body must refuse.
+    REQUIRE(consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+        auto cur = tx.task(id);
+        if (!cur || !cur->has_value()) return {};
+        TaskRecord record = **cur;
+        record.state.status = "terminal";
+        record.state.outcome = TaskOutcome{.status = "completed"};
+        return tx.set_task(std::move(record));
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+    // Bounded observation window covering several scheduler passes.
+    const auto window_end = std::chrono::steady_clock::now() + std::chrono::milliseconds(300);
+    while (std::chrono::steady_clock::now() < window_end)
+        std::this_thread::yield();
+    const auto final_record = memory.task(id);
+    const auto close_outcome = consume(harness->close());
+
+    CHECK_FALSE(phase_ready.load());
+    REQUIRE(final_record.has_value());
+    CHECK(final_record->has_value());
+    CHECK((*final_record)->state.status == "terminal");
+    CHECK(close_outcome.has_value());
+}
+
+// Inspection scan cap (issue #1165 / #1088 hand-off): capture_inspection
+// scans at most 256 task records per call, so a larger repository is
+// inspected partially by contract. This pins the documented bound instead of
+// an implicit unbounded scan; a complete committed scan beyond the cap is the
+// observation/views scope of #1088 (public contract and investigation doc).
+TEST_CASE("inspection captures at most the documented scan cap", "[durable][issue1165][inspect-cap]") {
+    MemoryStorage storage;
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(make_terminal_task("audit1165.cap"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    for (int index = 0; index < 257; ++index) {
+        REQUIRE(create_task_by_kind(*harness, "audit1165.cap"));
+    }
+    const auto inspection = consume(harness->inspect());
+    REQUIRE(inspection.has_value());
+    CHECK(inspection.value().tasks.size() == 256);
+    CHECK(consume(harness->close()).has_value());
+}
+
 // A committed `running` record reports running even when no invocation is
-// live: the identity is not the only running source (frozen `#inspectTask`
-// checks the invocation first and then the record's running status). Without
-// the record rule, a phase that ended abnormally -- or a crash-recovered
-// record -- would be reported ready.
+// live: the identity is not the only running source. Without the record
+// rule, a phase that ended abnormally -- or a crash-recovered record --
+// would be reported ready.
+//
+// Port divergence (frozen `scheduler.ts` `#inspectTask`, pi-v1.3.0): frozen
+// checks the invocation table first and derives a running record without an
+// invocation through `#waitingOn`/`#fit`, which can report `ready`. The port
+// adds the committed-running rule because an identity-less running record is
+// reachable here (definition-replacement window, abnormal phase end,
+// crash-recovered record) and `ready` would invite a second dispatch of a
+// record whose effects may still exist.
 TEST_CASE(
         "a committed running record reports running without a live identity", "[durable][issue1165][running-record]") {
     MemoryStorage storage;
@@ -1603,7 +1590,8 @@ TEST_CASE("a held inspection scan blocks a later terminal commit until it settle
     // A terminal commit from another thread must queue behind the held
     // inspection and stay unpublished while the scan is held.
     std::optional<bool> commit_settled;
-    std::thread committer{[&harness, &commit_settled, id] {
+    std::atomic_bool commit_done{false};
+    std::thread committer{[&harness, &commit_settled, &commit_done, id] {
         commit_settled = consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
             auto cur = tx.task(id);
             if (!cur || !cur->has_value()) return {};
@@ -1613,11 +1601,12 @@ TEST_CASE("a held inspection scan blocks a later terminal commit until it settle
             record.state.outcome = TaskOutcome{.status = "completed"};
             return tx.set_task(std::move(record));
         })).has_value();
+        commit_done.store(true, std::memory_order_release);
     }};
     const auto blocked_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (!commit_settled.has_value() && std::chrono::steady_clock::now() < blocked_deadline)
+    while (!commit_done.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < blocked_deadline)
         std::this_thread::yield();
-    const bool commit_blocked = !commit_settled.has_value();
+    const bool commit_blocked = !commit_done.load(std::memory_order_acquire);
     const auto record_while_held = memory.task(id);
 
     storage.release();

@@ -699,6 +699,16 @@ private:
 
     struct Impl;
 
+    /// Frozen failed/closed admission error for a line read, or nothing.
+    /// `read_committed` and `detail::SessionLineAccess::read_on_line` both
+    /// route through it so their admission cannot drift apart.
+    [[nodiscard]] static std::optional<support::Error> line_admission_error(Impl& impl);
+
+    /// Producer for a `read_committed` line read: the producer re-checks
+    /// admission under the mutation line and enqueues the FIFO job.
+    [[nodiscard]] static support::AsyncResult<chord::Json> admit_line_read(
+            Impl& impl, std::move_only_function<support::Expected<chord::Json>(Storage&)> read);
+
     friend class Transaction;
 
     explicit Session(std::unique_ptr<Impl> impl);
