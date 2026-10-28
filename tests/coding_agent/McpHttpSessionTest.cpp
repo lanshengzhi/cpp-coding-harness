@@ -603,9 +603,8 @@ TEST_CASE("cross-origin redirect is followed without Authorization and is reject
     const auto target_trace = workspace.path() / "target-trace.log";
     // The frozen target answers 401 when the stripped request arrives; a
     // client that leaked the credential would instead complete initialize.
-    HttpFixtureServer target{{.trace_path = target_trace,
-            .tls = false,
-            .env = {{"PIKE_MCP_REQUIRE_AUTHORIZATION", "1"}}}};
+    HttpFixtureServer target{
+            {.trace_path = target_trace, .tls = false, .env = {{"PIKE_MCP_REQUIRE_AUTHORIZATION", "1"}}}};
     HttpFixtureServer source{{.tls = false, .env = {{"PIKE_MCP_REDIRECT_TARGET", target.url()}}}};
     tests::RuntimeFixture runtime;
 
