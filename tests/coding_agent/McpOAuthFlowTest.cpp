@@ -434,6 +434,31 @@ TEST_CASE("an authorization code from another issuer never reaches the token end
     CHECK(harness.http->requests.front().url == kTokenUrl);
 }
 
+TEST_CASE("authorization server metadata naming another issuer stops before any token request",
+        "[coding_agent][mcp][issue1103][spec]") {
+    // The discovery-side half of the frozen issuer rule (audit-1052
+    // `oauth-lifecycle.json`, "authorization response from another issuer is
+    // rejected before token exchange"): metadata whose issuer differs from
+    // the authorization server URL is rejected during discovery, so the flow
+    // ends before registration or token exchange. The POST log is the proof
+    // that the token request never happens — only discovery GETs occurred.
+    Harness harness;
+    tests::RuntimeFixture runtime;
+    harness.authorization_server_document =
+            R"({"issuer":"https://attacker.example.com","authorization_endpoint":"https://attacker.example.com/authorize",)" +
+            std::string{R"("token_endpoint":"https://attacker.example.com/token",)"} +
+            std::string{R"("response_types_supported":["code"]})"};
+
+    auto outcome = harness.run(runtime);
+    REQUIRE_FALSE(outcome.has_value());
+    CHECK(outcome.error().code == support::ErrorCode::OAuth);
+    CHECK(outcome.error().message.find("OAuth issuer mismatch") != std::string::npos);
+    CHECK(outcome.error().message.find("https://attacker.example.com") != std::string::npos);
+    // No registration or token POST left the client; discovery did.
+    CHECK(harness.http->requests.empty());
+    CHECK_FALSE(harness.http->get_requests.empty());
+}
+
 TEST_CASE("a server that does not support the authorization code grant or PKCE S256 is rejected",
         "[coding_agent][mcp][issue884][spec]") {
     Harness harness;

@@ -10,8 +10,18 @@
 // session's surface" with "a session assembled without the server does not
 // expose them": a tool's existence is not what makes it visible, registration
 // at assembly is. The separation cases pin the transport's explicit failures:
-// a non-TLS URL is rejected at registration, a 200 with a non-MCP body is not
-// success, a non-TLS redirect is refused, and an HTTP error status surfaces.
+// a non-http(s) URL is rejected at registration, a 200 with a non-MCP body is
+// not success, an HTTP error status surfaces, and an untrusted certificate is
+// refused.
+//
+// The pi-v1.3.0 transport slice (#1103, ADR 0075 supersedes ADR 0054's
+// TLS-only/no-redirect rules for MCP) drives the frozen audit-1052
+// `transports.json` observations through the public client over loopback
+// fixtures: plain HTTP connects, a same-origin 307 keeps the request
+// Authorization, a cross-origin 307 is followed without it (the target's 401
+// surfaces as the re-login error), and the fetch redirect ceiling and
+// non-HTTP(S) Location rule fail explicitly. Each new case names the
+// registered observation or frozen undici rule it compares.
 
 #include "ai/ModelStreamBridge.hpp"
 #include "support/BoostBeastStreamTransport.hpp"
@@ -84,12 +94,21 @@ using namespace std::chrono_literals;
     return std::string{CCH_SOURCE_DIR} + "/tests/ai/providers/tls/" + std::string{name};
 }
 
-/// One real TLS MCP server on an ephemeral loopback port. The child prints
+/// Spawn options for one real MCP fixture server: TLS under the committed test
+/// PKI or plain HTTP (both frozen-accepted schemes), an optional request
+/// trace, and extra child environment for the redirect/authorization switches.
+struct HttpFixtureOptions {
+    std::filesystem::path trace_path{};
+    bool tls{true};
+    std::vector<std::pair<std::string, std::string>> env{};
+};
+
+/// One real HTTP(S) MCP server on an ephemeral loopback port. The child prints
 /// `PORT=<n>` on stdout once it is listening; the destructor terminates and
 /// reaps it on every scope-exit path, so no server survives a test.
 class HttpFixtureServer final {
 public:
-    explicit HttpFixtureServer(std::string trace_path = {}) {
+    explicit HttpFixtureServer(HttpFixtureOptions options = {}) {
         int fds[2]{-1, -1};
         REQUIRE(::pipe(fds) == 0);
         const pid_t child = ::fork();
@@ -102,20 +121,27 @@ public:
             if (devnull >= 0) {
                 (void)::dup2(devnull, STDERR_FILENO);
             }
-            if (!trace_path.empty()) {
-                (void)::setenv("PIKE_MCP_TRACE", trace_path.c_str(), 1);
+            if (!options.trace_path.empty()) {
+                (void)::setenv("PIKE_MCP_TRACE", options.trace_path.string().c_str(), 1);
+            }
+            for (const auto& [name, value] : options.env) {
+                (void)::setenv(name.c_str(), value.c_str(), 1);
             }
             const std::string script = fixture_path("http_server.py");
-            const std::string cert = tls_fixture_path("test-server.pem");
-            const std::string key = tls_fixture_path("test-server-key.pem");
-            ::execlp("python3",
-                    "python3",
-                    script.c_str(),
-                    "--cert",
-                    cert.c_str(),
-                    "--key",
-                    key.c_str(),
-                    static_cast<char*>(nullptr));
+            if (options.tls) {
+                const std::string cert = tls_fixture_path("test-server.pem");
+                const std::string key = tls_fixture_path("test-server-key.pem");
+                ::execlp("python3",
+                        "python3",
+                        script.c_str(),
+                        "--cert",
+                        cert.c_str(),
+                        "--key",
+                        key.c_str(),
+                        static_cast<char*>(nullptr));
+            } else {
+                ::execlp("python3", "python3", script.c_str(), static_cast<char*>(nullptr));
+            }
             ::_exit(127);
         }
         pid_ = child;
@@ -133,7 +159,7 @@ public:
         const std::string_view digits{line.data() + 5, line.size() - 5};
         int port = 0;
         REQUIRE(std::from_chars(digits.data(), digits.data() + digits.size(), port).ec == std::errc{});
-        url_ = "https://127.0.0.1:" + std::to_string(port) + "/mcp";
+        url_ = (options.tls ? "https://127.0.0.1:" : "http://127.0.0.1:") + std::to_string(port) + "/mcp";
     }
 
     HttpFixtureServer(const HttpFixtureServer&) = delete;
@@ -153,6 +179,15 @@ private:
     pid_t pid_{-1};
     std::string url_;
 };
+
+/// The `scheme://authority` of an absolute fixture URL, for building
+/// redirect entrypoints on the same origin.
+[[nodiscard]] std::string url_origin(std::string_view url) {
+    const auto scheme_end = url.find("://");
+    REQUIRE(scheme_end != std::string_view::npos);
+    const auto path_start = url.find('/', scheme_end + 3);
+    return std::string{url.substr(0, path_start)};
+}
 
 /// Trust the committed test CA for the duration of a case so the reused HTTPS
 /// transport accepts the loopback server's certificate.
@@ -428,25 +463,32 @@ TEST_CASE("an MCP HTTP tool answered over an SSE stream is called like any other
     session->close();
 }
 
-TEST_CASE("a non-TLS MCP HTTP URL is rejected at registration", "[coding_agent][mcp][issue873][spec]") {
-    coding_agent::mcp::McpHttpServerConfig insecure;
-    insecure.name = "insecure";
-    insecure.url = "http://127.0.0.1:9/mcp";
+TEST_CASE("an MCP HTTP URL must be http or https", "[coding_agent][mcp][issue873][issue1103][spec]") {
+    // pi v1.3.0 `validateMcpServerConfig` (audit-1052 `transports.json`,
+    // "application config accepts http and https but rejects another scheme"):
+    // both `http` and `https` URLs are accepted — the plain-HTTP connect case
+    // below is the acceptance half — and any other scheme is rejected at
+    // registration with pi's message. This case replaces the former TLS-only
+    // refusal (ADR 0054, superseded for MCP by ADR 0075), which asserted an
+    // `http://` URL was rejected here; the frozen behavior accepts it.
+    coding_agent::mcp::McpHttpServerConfig rejected;
+    rejected.name = "rejected";
+    rejected.url = "ftp://127.0.0.1/mcp";
 
-    auto valid = cch::mcp::validate_http_server_config(insecure);
+    auto valid = cch::mcp::validate_http_server_config(rejected);
     REQUIRE_FALSE(valid.has_value());
     CHECK(valid.error().code == support::ErrorCode::Validation);
-    CHECK(valid.error().message.find("https") != std::string::npos);
+    CHECK(valid.error().message.find("url must be an http or https URL") != std::string::npos);
 
     tests::RuntimeFixture runtime;
     // The gate runs before any socket work, so no server is needed.
     auto refused = tests::run_awaitable(
-            runtime, cch::mcp::HttpClient::connect(insecure, std::make_shared<support::BoostBeastStreamTransport>()));
+            runtime, cch::mcp::HttpClient::connect(rejected, std::make_shared<support::BoostBeastStreamTransport>()));
     REQUIRE_FALSE(refused.has_value());
     CHECK(refused.error().code == support::ErrorCode::Validation);
 
     // Session Assembly fails explicitly rather than dropping the configured
-    // server or falling back to plaintext.
+    // server.
     tests::TempWorkspace workspace;
     const tests::EnvVarGuard home{"HOME", (workspace.path() / "agent").string()};
     tests::ModelsSessionOptions options;
@@ -454,14 +496,14 @@ TEST_CASE("a non-TLS MCP HTTP URL is rejected at registration", "[coding_agent][
     options.workspace = workspace.path();
     options.request_model = tests::scripted_request_model("fake", "fake-model");
     options.execution_runtime_target = runtime.make_target();
-    options.mcp_http_servers = {insecure};
+    options.mcp_http_servers = {rejected};
     auto models = tests::models_from_provider(std::make_shared<McpToolRoundProvider>(
             "mcp__echo__echo", support::JsonValue{support::JsonValue::object_t{}}));
     auto created = runtime.run(coding_agent::create_agent_session_async(
             std::move(options), std::nullopt, tests::cli_fake_overrides(std::move(models))));
     REQUIRE_FALSE(created.has_value());
     CHECK(created.error().code == support::ErrorCode::Validation);
-    CHECK(created.error().message.find("insecure") != std::string::npos);
+    CHECK(created.error().message.find("rejected") != std::string::npos);
 }
 
 TEST_CASE("an HTTP 200 with a non-MCP body is not success", "[coding_agent][mcp][issue873][protocol]") {
@@ -479,19 +521,198 @@ TEST_CASE("an HTTP 200 with a non-MCP body is not success", "[coding_agent][mcp]
     CHECK(response.error().detail.find("no matching id") != std::string::npos);
 }
 
-TEST_CASE("an HTTP redirect to a non-TLS target is refused", "[coding_agent][mcp][issue873][protocol]") {
-    HttpFixtureServer server;
-    auto ca = trust_test_ca();
+TEST_CASE("streamable HTTP transport connects over plain http", "[coding_agent][mcp][issue1103][spec]") {
+    // audit-1052 `transports.json`, same-named scenario: the frozen client
+    // connects over `http`, the initialize POST is answered 200, and the
+    // `notifications/initialized` POST is answered 202.
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{{.trace_path = trace, .tls = false}};
     tests::RuntimeFixture runtime;
 
     auto client = connect_http_client(runtime, http_config(server));
-    auto response =
-            tests::run_awaitable(runtime, support::detail::await_async_result(client->request("debug/redirect")));
+    CHECK(client->server_name() == "echo");
 
-    REQUIRE_FALSE(response.has_value());
-    CHECK(response.error().message.find("redirect") != std::string::npos);
-    CHECK(response.error().detail.find("never follows a redirect") != std::string::npos);
-    CHECK(response.error().detail.find("http://127.0.0.1:1/mcp") != std::string::npos);
+    const auto listed =
+            tests::run_awaitable(runtime, support::detail::await_async_result(client->request("tools/list")));
+    REQUIRE(listed.has_value());
+
+    // The connect succeeded, which requires the initialize 200; both requests
+    // arrived at the plain-HTTP fixture in pi's order.
+    CHECK(tests::trace_contains(trace, "recv initialize id=1"));
+    CHECK(tests::trace_contains(trace, "recv notifications/initialized id=None"));
+    client->close();
+}
+
+TEST_CASE("HTTPS transport rejects an untrusted certificate", "[coding_agent][mcp][issue1103][spec]") {
+    // audit-1052 `transports.json`, same-named scenario: with the default
+    // trust store the self-signed loopback certificate is refused and
+    // certificate validation stays platform-enforced (ADR 0075). The trusted
+    // half is the acceptance pair: every TLS fixture case connects only with
+    // SSL_CERT_FILE pointing at the committed test CA (`trust_test_ca`).
+    tests::TempWorkspace workspace;
+    const auto empty_ca = workspace.path() / "empty-ca.pem";
+    {
+        std::ofstream create(empty_ca);
+    }
+    const tests::EnvVarGuard untrusted{"SSL_CERT_FILE", empty_ca.string()};
+    HttpFixtureServer server;
+    tests::RuntimeFixture runtime;
+
+    auto refused = tests::run_awaitable(runtime,
+            cch::mcp::HttpClient::connect(http_config(server), std::make_shared<support::BoostBeastStreamTransport>()));
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == support::ErrorCode::Network);
+}
+
+TEST_CASE("a same-origin redirect is followed and keeps the request auth header",
+        "[coding_agent][mcp][issue1103][spec]") {
+    // audit-1052 `transports.json`, same-named scenario: the 307 is followed,
+    // the POST is re-sent to the resolved target, and `Authorization: Bearer static` is
+    // preserved. This case replaces the former refusal of every redirect
+    // (ADR 0054, superseded for MCP by ADR 0075).
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{{.trace_path = trace,
+            .tls = false,
+            .env = {{"PIKE_MCP_REDIRECT_PATH", "/a/b"}, {"PIKE_MCP_REDIRECT_TARGET", "next"}}}};
+    tests::RuntimeFixture runtime;
+
+    auto config = http_config(server);
+    config.url = url_origin(server.url()) + "/a/b";
+    config.headers["Authorization"] = "Bearer static";
+    auto client = connect_http_client(runtime, std::move(config));
+
+    // The initialize followed the hop: the connection is live and the target
+    // saw the credential.
+    CHECK(tests::trace_contains(trace, "redirect /a/b -> next"));
+    CHECK(tests::trace_contains(trace, "request-path /a/next"));
+    CHECK(tests::trace_contains(trace, "recv initialize id=1 authorization_present=true"));
+
+    // The credential arrived at the same-origin target, verbatim.
+    auto observed = tests::run_awaitable(
+            runtime, support::detail::await_async_result(client->request("debug/authorization_present")));
+    REQUIRE(observed.has_value());
+    CHECK(observed->at("authorization").get_string() == "Bearer static");
+    client->close();
+}
+
+TEST_CASE("relative redirect references resolve against the current URL", "[coding_agent][mcp][issue1103][spec]") {
+    struct RedirectCase {
+        const char* from;
+        const char* location;
+        const char* expected;
+    };
+    const RedirectCase cases[] = {
+            {"/a/b", "/abs", "/abs"},
+            {"/a/b/c", "../up", "/a/up"},
+            {"/a/b", "?q=1", "/a/b?q=1"},
+    };
+    for (const auto& example : cases) {
+        INFO(example.location);
+        tests::TempWorkspace workspace;
+        const auto trace = workspace.path() / "trace.log";
+        HttpFixtureServer server{{.trace_path = trace,
+                .tls = false,
+                .env = {{"PIKE_MCP_REDIRECT_PATH", example.from}, {"PIKE_MCP_REDIRECT_TARGET", example.location}}}};
+        tests::RuntimeFixture runtime;
+        auto config = http_config(server);
+        config.url = url_origin(server.url()) + example.from;
+        auto client = connect_http_client(runtime, std::move(config));
+        CHECK(tests::trace_contains(trace, std::string{"request-path "} + example.expected));
+        client->close();
+    }
+}
+
+TEST_CASE("cross-origin redirect is followed without Authorization and is rejected",
+        "[coding_agent][mcp][issue1103][spec]") {
+    // audit-1052 `transports.json`, same-named scenario: the source 307 keeps
+    // the caller's Authorization, the cross-origin hop strips it, the target
+    // answers 401, and the client surfaces the rejection as the re-login
+    // error (pi `McpAuthRequiredError`, "MCP server requires authentication").
+    tests::TempWorkspace workspace;
+    const auto target_trace = workspace.path() / "target-trace.log";
+    // The frozen target answers 401 when the stripped request arrives; a
+    // client that leaked the credential would instead complete initialize.
+    HttpFixtureServer target{
+            {.trace_path = target_trace, .tls = false, .env = {{"PIKE_MCP_REQUIRE_AUTHORIZATION", "1"}}}};
+    const std::string scheme_relative = target.url().substr(std::string{"http:"}.size());
+    HttpFixtureServer source{{.tls = false, .env = {{"PIKE_MCP_REDIRECT_TARGET", scheme_relative}}}};
+    tests::RuntimeFixture runtime;
+
+    auto config = http_config(source);
+    config.url = url_origin(source.url()) + "/redirect-cross";
+    config.headers["Authorization"] = "Bearer static";
+    auto refused = tests::run_awaitable(runtime,
+            cch::mcp::HttpClient::connect(std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
+
+    // The target's trace is the wire proof that no Authorization crossed the
+    // origin: exactly the initialize POST arrived, with the header absent.
+    CHECK(tests::trace_line_count(target_trace, "recv initialize") == 1);
+    CHECK(tests::trace_contains(target_trace, "recv initialize id=1 authorization_present=false"));
+
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == support::ErrorCode::OAuth);
+    CHECK(refused.error().message.find("Authentication failed") != std::string::npos);
+    CHECK(refused.error().detail.find("HTTP 401") != std::string::npos);
+}
+
+TEST_CASE("a redirect chain beyond the fetch ceiling fails explicitly", "[coding_agent][mcp][issue1103][protocol]") {
+    // Frozen undici `httpRedirectFetch`: `request.redirectCount === 20` is a
+    // network error "redirect count exceeded". A client without the ceiling
+    // would hang or loop forever on /redirect-loop.
+    tests::TempWorkspace workspace;
+    const auto trace = workspace.path() / "trace.log";
+    HttpFixtureServer server{{.trace_path = trace, .tls = false}};
+    tests::RuntimeFixture runtime;
+
+    auto config = http_config(server);
+    config.url = url_origin(server.url()) + "/redirect-loop";
+    auto refused = tests::run_awaitable(runtime,
+            cch::mcp::HttpClient::connect(std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
+
+    REQUIRE_FALSE(refused.has_value());
+    // Deterministic fetch-policy failure: `Process` (not the retried
+    // `Network`) — pi rejects the fetch without a connect retry.
+    CHECK(refused.error().code == support::ErrorCode::Process);
+    CHECK(refused.error().message.find("redirect count exceeded") != std::string::npos);
+    // Twenty hops are allowed, the 21st redirect answers the ceiling: the
+    // fixture saw the initial request plus the twenty re-issues.
+    CHECK(tests::trace_line_count(trace, "redirect /redirect-loop -> /redirect-loop") == 21);
+}
+
+TEST_CASE("a redirect to a non-HTTP(S) Location is a network error", "[coding_agent][mcp][issue1103][protocol]") {
+    // Frozen undici `httpRedirectFetch` step 6: a Location whose scheme is not
+    // HTTP(S) fails the fetch ("URL scheme must be a HTTP(S) scheme") rather
+    // than being followed or silently surfaced as a status.
+    HttpFixtureServer server{{.tls = false, .env = {{"PIKE_MCP_REDIRECT_LOCATION", "ftp://127.0.0.1/mcp"}}}};
+    tests::RuntimeFixture runtime;
+
+    auto config = http_config(server);
+    config.url = url_origin(server.url()) + "/redirect-scheme";
+    auto refused = tests::run_awaitable(runtime,
+            cch::mcp::HttpClient::connect(std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
+
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == support::ErrorCode::Process);
+    CHECK(refused.error().message.find("URL scheme must be a HTTP(S) scheme") != std::string::npos);
+}
+
+TEST_CASE("a redirect without a Location surfaces the status explicitly", "[coding_agent][mcp][issue1103][protocol]") {
+    // Frozen undici `responseLocationURL`: a redirect status without a
+    // Location is returned to the caller untouched, so the MCP layer reports
+    // the status instead of following anything.
+    HttpFixtureServer server{{.tls = false}};
+    tests::RuntimeFixture runtime;
+
+    auto config = http_config(server);
+    config.url = url_origin(server.url()) + "/redirect-no-location";
+    auto refused = tests::run_awaitable(runtime,
+            cch::mcp::HttpClient::connect(std::move(config), std::make_shared<support::BoostBeastStreamTransport>()));
+
+    REQUIRE_FALSE(refused.has_value());
+    CHECK(refused.error().code == support::ErrorCode::Process);
+    CHECK(refused.error().message.find("302") != std::string::npos);
 }
 
 TEST_CASE("an MCP HTTP server error status surfaces as an explicit error", "[coding_agent][mcp][issue873][protocol]") {
@@ -553,7 +774,7 @@ TEST_CASE("cancelling an in-flight MCP HTTP call surfaces the cancellation error
         "[coding_agent][mcp][issue872][spec]") {
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
-    HttpFixtureServer server{trace};
+    HttpFixtureServer server{{.trace_path = trace}};
     auto ca = trust_test_ca();
     tests::RuntimeFixture runtime;
 
@@ -578,7 +799,7 @@ TEST_CASE("cancelling an in-flight MCP HTTP call tells the server with notificat
         "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
-    HttpFixtureServer server{trace};
+    HttpFixtureServer server{{.trace_path = trace}};
     auto ca = trust_test_ca();
     tests::RuntimeFixture runtime;
 
@@ -600,7 +821,7 @@ TEST_CASE("a timed-out MCP HTTP call tells the server with the pi timeout reason
         "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
-    HttpFixtureServer server{trace};
+    HttpFixtureServer server{{.trace_path = trace}};
     auto ca = trust_test_ca();
     tests::RuntimeFixture runtime;
 
@@ -623,7 +844,7 @@ TEST_CASE("a timed-out MCP HTTP call tells the server with the pi timeout reason
 TEST_CASE("a failed MCP HTTP call does not emit notifications/cancelled", "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
-    HttpFixtureServer server{trace};
+    HttpFixtureServer server{{.trace_path = trace}};
     auto ca = trust_test_ca();
     tests::RuntimeFixture runtime;
 
@@ -643,7 +864,7 @@ TEST_CASE("a request already cancelled before it is sent does not emit notificat
         "[coding_agent][mcp][issue884][spec]") {
     tests::TempWorkspace workspace;
     const auto trace = workspace.path() / "trace.log";
-    HttpFixtureServer server{trace};
+    HttpFixtureServer server{{.trace_path = trace}};
     auto ca = trust_test_ca();
     tests::RuntimeFixture runtime;
 

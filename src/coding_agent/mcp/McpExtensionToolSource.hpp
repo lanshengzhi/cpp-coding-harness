@@ -114,9 +114,10 @@ public:
     connect_stdio(McpStdioServerConfig config);
 
     /// Connect `config` over the streamable HTTP transport, handshake, and
-    /// list the tools. The URL is TLS-only (ADR 0054): a non-`https://` URL is
-    /// rejected at registration, and a network, status, or handshake failure
-    /// is returned as an explicit error. When `request_auth` is present the
+    /// list the tools. The URL must be `http` or `https` (ADR 0054's TLS-only
+    /// rule is superseded for MCP by ADR 0075); any other scheme is rejected
+    /// at registration, and a network, status, or handshake failure is
+    /// returned as an explicit error. When `request_auth` is present the
     /// request-time headers it resolves (an OAuth access token, spec #865
     /// ticket #875) are attached to every POST; a missing credential or a
     /// failed refresh fails the connection explicitly.

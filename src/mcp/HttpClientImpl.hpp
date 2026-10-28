@@ -178,6 +178,18 @@ private:
             std::stop_token stop_token,
             support::BodyChunkHandler on_body_chunk = {},
             std::shared_ptr<std::atomic_bool> request_sent = {});
+    /// One HTTP exchange through the reused transport with the frozen pi-v1.3.0
+    /// platform fetch redirect semantics (undici `httpRedirectFetch`,
+    /// audit-1052 `transports.json`): the statuses {301, 302, 303, 307, 308}
+    /// with a Location are re-issued — 301/302 POST and 303 rewrite to GET —
+    /// a cross-origin hop erases the credential headers (Authorization never
+    /// leaks across origins), only http(s) Locations are followable, and the
+    /// chain fails with a Process error after 20 redirects. A 3xx without a
+    /// Location is returned untouched. `request.headers` is the caller's
+    /// already-resolved set, replayed across the hops like pi's
+    /// `authorizedFetch`.
+    [[nodiscard]] boost::asio::awaitable<support::Expected<support::StreamResponse>> stream_with_redirects(
+            support::StreamRequest request, support::BodyChunkHandler on_body_chunk);
 
     /// The disposition of one server-to-client GET stream attempt (pi
     /// `runGetStream`'s loop body).

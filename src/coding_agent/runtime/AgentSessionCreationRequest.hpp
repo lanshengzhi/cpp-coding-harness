@@ -177,10 +177,10 @@ struct AgentSessionCreationRequest {
     /// the in-session surface supply explicit servers here.
     std::vector<mcp::McpStdioServerConfig> mcp_servers;
     /// The MCP streamable-http servers this session connects (spec #865,
-    /// ticket #873). Registration is TLS-only (ADR 0054): every URL is
-    /// validated at assembly, a non-`https://` URL is rejected with an
-    /// explicit Validation error, and the transport never falls back to
-    /// plaintext. Each configured server is connected, handshaken, and
+    /// ticket #873). Registration accepts `http`/`https` URLs (ADR 0054's
+    /// TLS-only rule is superseded for MCP by ADR 0075): every URL is
+    /// validated at assembly and any other scheme is rejected with an
+    /// explicit Validation error. Each configured server is connected, handshaken, and
     /// converted into one Extension Tool Source, so its tools join the same
     /// registry as the built-ins. Empty in production until the server-
     /// management slice (#876) persists a configured list.
