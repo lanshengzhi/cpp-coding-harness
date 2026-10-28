@@ -1,0 +1,35 @@
+Filters: [issue1166] [failure]
+Randomness seeded to: 1310682055
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+a storage failure signals the active invocation before the failing commit
+returns
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1166/tests/durable/HarnessFailureLifecycleTest.cpp:155
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1166/tests/durable/HarnessFailureLifecycleTest.cpp:229: FAILED:
+  CHECK( events == std::vector<std::string>({"phase", "fail-call", "storage-reject", "abort-enter", "inspect-rejected", "abort-return", "commit-rejected"}) )
+with expansion:
+  { "phase", "fail-call", "storage-reject", "commit-rejected" }
+  ==
+  { "phase", "fail-call", "storage-reject", "abort-enter", "inspect-rejected",
+  "abort-return", "commit-rejected" }
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1166/tests/durable/HarnessFailureLifecycleTest.cpp:238: FAILED:
+  CHECK( signalled_before_failure_return )
+with expansion:
+  false
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1166/tests/durable/HarnessFailureLifecycleTest.cpp:239: FAILED:
+  REQUIRE( callback_inspect_error.has_value() )
+with expansion:
+  false
+
+===============================================================================
+test cases:  1 | 1 failed
+assertions: 11 | 8 passed | 3 failed

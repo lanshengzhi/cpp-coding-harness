@@ -1,6 +1,7 @@
 #include <cch/durable/Harness.hpp>
 
 #include "durable/Compaction.hpp"
+#include "durable/SessionErrors.hpp"
 #include "durable/WorkflowRuntime.hpp"
 
 #include <cch/durable/Records.hpp>
@@ -1266,16 +1267,30 @@ struct Harness::Impl {
         (void)session->subscribe_close([this] {
             std::map<std::int64_t, std::vector<std::shared_ptr<TaskWaiter>>> pending;
             std::map<std::optional<std::int64_t>, std::vector<std::shared_ptr<IdleWaiter>>> pending_idle;
-            const auto error = support::make_error(support::ErrorCode::Validation,
-                    session->failed() ? "Session failed after a storage error; close and reopen it" : "Session is closed");
+            const auto error = session->failed()
+                                       ? session_failed_error()
+                                       : support::make_error(support::ErrorCode::Validation, "Session is closed");
+            // A storage failure closes the Session without running the
+            // Harness shutdown path, so the active invocations are signalled
+            // here — before the failing commit's caller observes the
+            // rejection (frozen pi fail -> close -> beforeClose ->
+            // TaskScheduler.join()). Copy the sources out of the scheduler
+            // mutex first: stop callbacks run after it is released (issue
+            // #1165), and a callback that waits on the Session line is the
+            // documented reentry boundary.
+            std::vector<std::stop_source> sources;
             {
                 std::lock_guard lock(mutex);
                 wait_error = error;
+                for (const auto& [_, stop_src] : active_invocations)
+                    sources.push_back(stop_src);
                 pending = std::move(waiters);
                 waiters.clear();
                 pending_idle = std::move(idle_waiters);
                 idle_waiters.clear();
             }
+            for (auto& source : sources)
+                source.request_stop();
             submissions->reject_all(error);
             for (auto& [id, completions] : pending) {
                 (void)id;
@@ -1306,11 +1321,13 @@ struct Harness::Impl {
                             // abort handler runs once the owned work below it
                             // drains (frozen pi commit listener ->
                             // `#invocations.get(id).controller.abort()`).
-                            std::lock_guard lock(mutex);
-                            auto invocation = active_invocations.find(tc->task->id.value);
-                            if (invocation != active_invocations.end()) {
-                                invocation->second.request_stop();
+                            std::optional<std::stop_source> source;
+                            {
+                                std::lock_guard lock(mutex);
+                                auto invocation = active_invocations.find(tc->task->id.value);
+                                if (invocation != active_invocations.end()) source = invocation->second;
                             }
+                            if (source) source->request_stop();
                         }
                     }
                 }
@@ -1327,14 +1344,16 @@ struct Harness::Impl {
     void shutdown() {
         registry.unsubscribe(registry_sub_id);
         registry_sub_id = 0;
+        std::vector<std::stop_source> sources;
         {
             std::lock_guard lock(mutex);
             if (closed) return;
             closed = true;
-            for (auto& [_, stop_src] : active_invocations) {
-                stop_src.request_stop();
-            }
+            for (const auto& [_, stop_src] : active_invocations)
+                sources.push_back(stop_src);
         }
+        for (auto& source : sources)
+            source.request_stop();
         if (worker.joinable()) {
             worker.request_stop();
         }
@@ -1799,6 +1818,13 @@ const TaskDefinition* Harness::task_definition(std::string_view kind) const noex
 }
 
 support::AsyncResult<HarnessInspection> Harness::inspect() {
+    // A failed Session seals every later operation, including the direct
+    // scan, with the frozen failure message (frozen pi `SessionFailed`);
+    // the raw storage is healthy enough to scan, so without this gate a
+    // caller would observe post-failure state instead of the seal.
+    if (impl_->session->failed()) {
+        return support::AsyncResult<HarnessInspection>{std::unexpected(session_failed_error())};
+    }
     auto scan_res = impl_->storage->scan_tasks(256);
     if (!scan_res) {
         return support::AsyncResult<HarnessInspection>{std::unexpected(scan_res.error())};
@@ -2014,13 +2040,13 @@ support::AsyncResult<std::string> Harness::abort_task(TaskId id) {
                                 completion(std::unexpected(outcome.error()));
                                 return;
                             }
+                            std::optional<std::stop_source> source;
                             {
                                 std::lock_guard lock(impl->mutex);
                                 auto invocation = impl->active_invocations.find(id.value);
-                                if (invocation != impl->active_invocations.end()) {
-                                    invocation->second.request_stop();
-                                }
+                                if (invocation != impl->active_invocations.end()) source = invocation->second;
                             }
+                            if (source) source->request_stop();
                             impl->cv.notify_all();
                             completion(std::move(*result));
                         });
@@ -2199,15 +2225,16 @@ void Harness::abort_conversation_pass(
         // the reached tasks are waited for directly; otherwise the idle
         // wait covers the ordinary scope only. Ending a held invocation
         // lets its abort handler run (mirrors `abort_task`).
+        std::vector<std::stop_source> sources;
         {
             std::lock_guard lock(impl_->mutex);
             for (const TaskId id : *reached) {
                 auto invocation = impl_->active_invocations.find(id.value);
-                if (invocation != impl_->active_invocations.end()) {
-                    invocation->second.request_stop();
-                }
+                if (invocation != impl_->active_invocations.end()) sources.push_back(invocation->second);
             }
         }
+        for (auto& source : sources)
+            source.request_stop();
         impl_->cv.notify_all();
         pass->pending = pass->background ? reached->size() : 1;
         if (pass->pending == 0) {
