@@ -1,0 +1,16 @@
+# fifo-order RED evidence (3 runs, production unchanged at 15724cd09)
+--- run 1 ---
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1151: FAILED:
+  CHECK_FALSE( early_return )
+with expansion:
+  !true
+--- run 2 ---
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1151: FAILED:
+  CHECK_FALSE( early_return )
+with expansion:
+  !true
+--- run 3 ---
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1151: FAILED:
+  CHECK_FALSE( early_return )
+with expansion:
+  !true

@@ -523,6 +523,8 @@ public:
     void arm() noexcept { armed.store(true, std::memory_order_release); }
     [[nodiscard]] bool commit_seen() const noexcept { return commit_seen_.load(std::memory_order_acquire); }
     void release() noexcept { released.store(true, std::memory_order_release); }
+    /// Fail the held commit (instead of letting it delegate) once released.
+    void fail_on_release() noexcept { fail_on_release_.store(true, std::memory_order_release); }
 
     [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
         bool holds_reservation = false;
@@ -535,13 +537,14 @@ public:
             }
         }
         if (holds_reservation) {
-            std::fprintf(stderr,
-                    "DBG gate t=%.3f: holding reservation commit\n",
-                    std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count());
             commit_seen_.store(true, std::memory_order_release);
             const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
             while (!released.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
                 std::this_thread::yield();
+            if (fail_on_release_.load(std::memory_order_acquire)) {
+                return support::AsyncResult<Seq>{std::unexpected(
+                        support::make_error(support::ErrorCode::Process, "injected held-commit failure"))};
+            }
         }
         return inner_.commit(writes);
     }
@@ -603,6 +606,7 @@ private:
     std::atomic_bool armed{false};
     std::atomic_bool commit_seen_{false};
     std::atomic_bool released{false};
+    std::atomic_bool fail_on_release_{false};
 };
 
 /// Models a slow-read Storage backend: after arming, every `scan_tasks`
@@ -1054,4 +1058,203 @@ TEST_CASE("a slow scan does not pair a pre-cleanup record with a post-cleanup id
     CHECK_FALSE(row_violation.load());
     CHECK(close_outcome.has_value());
     static_cast<void>(saw_row);
+}
+
+namespace {
+[[nodiscard]] TaskDefinition make_terminal_task(std::string kind) {
+    auto builder = TaskDefinitionBuilder(std::move(kind), 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    builder.phase("run", [](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    return std::move(*definition);
+}
+
+[[nodiscard]] bool create_task_by_kind(Harness& harness, std::string_view kind) {
+    return consume(harness.commit([&](Transaction& tx) -> support::ExpectedVoid {
+        const auto created = tx.create_task(*harness.task_definition(kind), chord::Json(nullptr));
+        if (!created) return std::unexpected(created.error());
+        return {};
+    })).has_value();
+}
+
+[[nodiscard]] bool inspection_has_row(const HarnessInspection& inspection, std::string_view kind) {
+    for (const auto& row : inspection.tasks) {
+        if (row.record.kind == kind)
+            return true;
+    }
+    return false;
+}
+
+template <typename Predicate>
+[[nodiscard]] bool wait_until(Predicate&& predicate, std::chrono::seconds budget = std::chrono::seconds(10)) {
+    const auto deadline = std::chrono::steady_clock::now() + budget;
+    while (!predicate() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::yield();
+    return predicate();
+}
+} // namespace
+
+// Included-set definition (issue #1165 protocol work, design doc §6): an
+// inspection consumed while a commit turn is held must wait out the hold,
+// include the held turn's effects, and exclude a task whose create is
+// enqueued only after the inspection's consumption. The create is enqueued
+// while the turn is still held, so producer timing cannot decide the order;
+// only a defined admission set does. The stored order violations record
+// whether this run observed the undefined-included-set behavior (today) or
+// the ticket-defined one (after the reviewed protocol lands).
+TEST_CASE("scheduler inspect has a defined admission-ordered included set", "[durable][issue1165][fifo-order]") {
+    MemoryStorage memory;
+    HeldReservationStorage storage{memory};
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(make_terminal_task("audit1165.held"));
+    definitions.push_back(make_terminal_task("audit1165.fifo-b"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+
+    REQUIRE(create_task_by_kind(*harness, "audit1165.held"));
+    storage.arm();
+    REQUIRE(harness->resume().has_value());
+    const bool reservation_admitted = wait_until([&storage] { return storage.commit_seen(); });
+    if (!reservation_admitted)
+        storage.release(); // keep teardown off a stranded worker on the failure path
+    REQUIRE(reservation_admitted);
+
+    std::atomic<bool> consumed{false};
+    std::optional<Outcome<HarnessInspection>> outcome;
+    std::thread inspect_thread{[&] {
+        outcome = consume(harness->inspect());
+        consumed.store(true, std::memory_order_release);
+    }};
+    const auto held_wait_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (!consumed.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < held_wait_deadline)
+        std::this_thread::yield();
+    // The create below is enqueued strictly after the inspection's
+    // consumption began and while the held turn still owns the line.
+    const bool create_enqueued = create_task_by_kind(*harness, "audit1165.fifo-b");
+    const bool early_return = consumed.load(std::memory_order_acquire);
+    storage.release();
+    if (inspect_thread.joinable())
+        inspect_thread.join();
+    const bool follow_up_ok = [&] {
+        auto later = consume(harness->inspect());
+        return later.has_value() && inspection_has_row(later.value(), "audit1165.held") &&
+               inspection_has_row(later.value(), "audit1165.fifo-b");
+    }();
+    const bool close_outcome = consume(harness->close()).has_value();
+    REQUIRE(create_enqueued);
+    CHECK_FALSE(early_return);
+    REQUIRE(outcome.has_value());
+    REQUIRE(outcome->has_value());
+    CHECK(inspection_has_row(outcome->value(), "audit1165.held"));
+    CHECK_FALSE(inspection_has_row(outcome->value(), "audit1165.fifo-b"));
+    CHECK(close_outcome);
+    CHECK(follow_up_ok);
+}
+
+// Seal delivery (issue #1166 boundary): an inspection consumed while a held
+// commit is in flight must observe the session seal when that commit's
+// storage write fails. Guards the reject/drain path for a read that was
+// already waiting when the failure landed.
+TEST_CASE("scheduler inspect consumed before a failure observes the session seal", "[durable][issue1165][seal-waiting]") {
+    MemoryStorage memory;
+    HeldReservationStorage storage{memory};
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(make_terminal_task("audit1165.held"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+
+    REQUIRE(create_task_by_kind(*harness, "audit1165.held"));
+    storage.arm();
+    REQUIRE(harness->resume().has_value());
+    const bool reservation_admitted = wait_until([&storage] { return storage.commit_seen(); });
+    if (!reservation_admitted)
+        storage.release(); // keep teardown off a stranded worker on the failure path
+    REQUIRE(reservation_admitted);
+    storage.fail_on_release();
+
+    std::optional<Outcome<HarnessInspection>> outcome;
+    std::thread inspect_thread{[&] { outcome = consume(harness->inspect()); }};
+    const auto held_wait_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (outcome.has_value() == false && std::chrono::steady_clock::now() < held_wait_deadline)
+        std::this_thread::yield();
+    storage.release();
+    if (inspect_thread.joinable())
+        inspect_thread.join();
+    const bool close_outcome = consume(harness->close()).has_value();
+    REQUIRE(outcome.has_value());
+    REQUIRE_FALSE(outcome->has_value());
+    CHECK(outcome->error().message == "Session failed after a storage error; close and reopen it");
+    const bool sealed_after = [&] {
+        auto again = consume(harness->inspect());
+        return !again.has_value();
+    }();
+    CHECK(close_outcome);
+    CHECK(sealed_after);
+}
+
+// Close boundary (issue #1165 protocol work): an inspection consumed while a
+// commit turn is held must not outlive close() only to fail inside a closed
+// storage. Either close's drain runs it (a value) or admission rejects it
+// with the defined closed error. Today it returns the storage-closed error,
+// so this RED pins the drain contract.
+TEST_CASE("scheduler inspect does not fail inside closed storage after close", "[durable][issue1165][close-drain]") {
+    MemoryStorage memory;
+    HeldReservationStorage storage{memory};
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(make_terminal_task("audit1165.held"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+
+    REQUIRE(create_task_by_kind(*harness, "audit1165.held"));
+    storage.arm();
+    REQUIRE(harness->resume().has_value());
+    const bool reservation_admitted = wait_until([&storage] { return storage.commit_seen(); });
+    if (!reservation_admitted)
+        storage.release(); // keep teardown off a stranded worker on the failure path
+    REQUIRE(reservation_admitted);
+
+    std::optional<Outcome<HarnessInspection>> outcome;
+    std::thread inspect_thread{[&] { outcome = consume(harness->inspect()); }};
+    std::optional<bool> close_outcome;
+    std::thread close_thread{[&] { close_outcome = consume(harness->close()).has_value(); }};
+    const auto held_wait_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
+    while (close_outcome.has_value() == false && std::chrono::steady_clock::now() < held_wait_deadline)
+        std::this_thread::yield();
+    storage.release();
+    if (inspect_thread.joinable())
+        inspect_thread.join();
+    if (close_thread.joinable())
+        close_thread.join();
+    REQUIRE(outcome.has_value());
+    // Contract: ran during close's drain (a value) or rejected at/after close
+    // with the defined closed error -- never a raw storage error.
+    const bool defined = outcome->has_value() || outcome->error().message == "Session is closed";
+    CHECK(defined);
+    REQUIRE(close_outcome.has_value());
+    CHECK(*close_outcome);
+}
+
+// Closed-admission parity: after close(), inspect must reject with the
+// frozen `assertUsable` message ("Session is closed") instead of whatever
+// the storage backend reports from its closed state.
+TEST_CASE("scheduler inspect after close reports the defined closed error", "[durable][issue1165][closed-admission]") {
+    MemoryStorage storage;
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(make_terminal_task("audit1165.held"));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+
+    REQUIRE(consume(harness->close()).has_value());
+    auto outcome = consume(harness->inspect());
+    REQUIRE_FALSE(outcome.has_value());
+    CHECK(outcome.error().message == "Session is closed");
 }
