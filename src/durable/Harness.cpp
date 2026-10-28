@@ -960,14 +960,17 @@ struct Harness::Impl {
             const TaskRecord& record, const Registry::Snapshot& snapshot, const std::set<std::int64_t>& invoked) const {
         // The identity view is one copy taken at the capture instant (issue
         // #1165): no per-row re-read can pair rows from different instants.
-        if (invoked.contains(record.id.value)) {
-            return TaskInspectionState{.kind = "running"};
-        }
         // A committed `running` record reports running even after its identity
         // is erased: a phase that ended abnormally (or a crash-recovered
-        // record) must not be reported ready. Frozen `#inspectTask` checks the
-        // invocation first and then the record's own running status.
+        // record) must not be reported ready.
         if (record.state.status == "running") {
+            return TaskInspectionState{.kind = "running"};
+        }
+        // A committed `pending` record is never promoted by identity alone.
+        // The definition-replacement path writes `running -> pending` and
+        // erases the identity only afterwards; in that window the pair
+        // (pending record, live identity) is coherent state, not a run.
+        if (record.state.status != "pending" && invoked.contains(record.id.value)) {
             return TaskInspectionState{.kind = "running"};
         }
         if (record.state.status == "completing") {

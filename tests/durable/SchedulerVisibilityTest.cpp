@@ -1436,6 +1436,62 @@ TEST_CASE("scheduler inspect after close reports the defined closed error", "[du
     CHECK(outcome.error().message == "Session is closed");
 }
 
+// The definition-replacement path commits `running -> pending` and only then
+// erases the invocation identity (Harness.cpp run_task_execution). In that
+// window a committed `pending` record coexists with a live identity, and a
+// pending record must never be promoted to running by identity alone. The
+// same state is constructed deterministically here: the parked phase keeps
+// its identity, and a public commit writes `pending`.
+TEST_CASE("a committed pending record is never promoted by a live identity", "[durable][issue1165][pending-identity]") {
+    MemoryStorage storage;
+    std::atomic_bool entered{false};
+    std::atomic_bool release{false};
+    auto builder = TaskDefinitionBuilder("audit1165.pending-identity", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    builder.phase("run", [&entered, &release](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        entered.store(true);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
+        while (!release.load() && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&harness, &id](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.pending-identity"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+    REQUIRE(wait_until([&entered] { return entered.load(); }));
+    // The phase is parked: its identity is live and the record is `running`.
+    // Write `pending` directly, reproducing the replacement window.
+    REQUIRE(consume(harness->commit([id](Transaction& tx) -> support::ExpectedVoid {
+        auto cur = tx.task(id);
+        if (!cur || !cur->has_value()) return {};
+        TaskRecord record = **cur;
+        if (record.state.status != "running") return {};
+        record.state.status = "pending";
+        return tx.set_task(std::move(record));
+    })).has_value());
+    const auto inspection = consume(harness->inspect());
+    REQUIRE(inspection.has_value());
+    const auto state = inspection_row_state(inspection.value(), "audit1165.pending-identity");
+    REQUIRE(state.has_value());
+    CHECK(*state == "ready");
+    release.store(true);
+    CHECK(consume(harness->close()).has_value());
+}
+
 // A committed `running` record reports running even when no invocation is
 // live: the identity is not the only running source (frozen `#inspectTask`
 // checks the invocation first and then the record's running status). Without

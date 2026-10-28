@@ -84,6 +84,7 @@ auto reservation = std::make_shared<ReservationState>();
 | reservation commit fails | discard; Session seals (#1166); thread wakes, ends without a phase; cleanup erases an absent identity (no-op) |
 | commit no-ops (record not running) | discard; thread ends; scheduler re-evaluates the task on its next pass |
 | close during the commit | the close drain runs the commit; completion sees closing/closed -> discard; phase never starts (`[close-held]`) |
+| close after the start check | not claimed windowless: close signals every published identity's stop source before the phase body runs, and the phase's own commits reject once the Session closes, so the phase unwinds through the abort/failure path |
 | close before admission | commit rejected at admission; discard |
 | shutdown | `shutdown()` marks closed and notifies; the completion of any admitted commit always runs (line settle/drain), so every waiter terminates. `active_invocations` only ever contains published identities, so the shutdown wait cannot be held by an unpublished reservation |
 
@@ -98,10 +99,23 @@ the identity is gone.
 
 ## 6. Inspection consistency
 
-With late publication the incoherent pair is impossible: the identity is
-published only after the record committed `running`, so a capture seeing
-`pending` cannot see a live identity. The capture keeps the seam's
-one-instant copy; `terminal` records are skipped before any derive.
+With late publication the reservation-time incoherent pair is impossible:
+the identity is published only after the record committed `running`. One
+other window still produces (committed `pending`, live identity) as
+coherent state: the definition-replacement path writes `running ->
+pending` and erases the identity only afterwards. The derive therefore
+keeps the explicit order
+
+1. `record.status == "running"` -> running (identity not required;
+   abnormal phase end / crash-recovered record);
+2. `record.status != "pending" && identity live` -> running (a parked
+   `waiting` phase, an abort-marked live task);
+3. otherwise derive (`completing`, waiting-on, fit, ready).
+
+A committed `pending` record is never promoted by identity alone;
+`[pending-identity]` discriminates it (RED as `running` without rule 2's
+pending guard, GREEN as `ready` with it). `terminal` records are skipped
+before any derive; the capture keeps the seam's one-instant copy.
 
 ## 7. Verification plan
 
