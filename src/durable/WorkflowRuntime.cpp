@@ -113,10 +113,32 @@ Json system_json(const ai::SystemMessage& message) {
     return Json{std::move(result)};
 }
 
+Json usage_json(const ai::Usage& usage) {
+    Object cost{{"input", Json{usage.cost.input}},
+            {"output", Json{usage.cost.output}},
+            {"cacheRead", Json{usage.cost.cache_read}},
+            {"cacheWrite", Json{usage.cost.cache_write}},
+            {"total", Json{usage.cost.total}}};
+    Object result{{"input", numeric(usage.input)},
+            {"output", numeric(usage.output)},
+            {"cacheRead", numeric(usage.cache_read)},
+            {"cacheWrite", numeric(usage.cache_write)},
+            {"totalTokens", numeric(usage.total_tokens)},
+            {"cost", Json{std::move(cost)}}};
+    if (usage.cache_write_1h) result.emplace("cacheWrite1h", numeric(*usage.cache_write_1h));
+    if (usage.reasoning) result.emplace("reasoning", numeric(*usage.reasoning));
+    return Json{std::move(result)};
+}
+
 Json assistant_json(const ai::AssistantMessage& message) {
-    Object result{{"role", "assistant"}, {"content", blocks_json(message.content)},
-            {"api", message.api}, {"provider", message.provider}, {"model", message.model},
-            {"stopReason", ai::stop_reason_to_string(message.stop_reason)}, {"timestamp", numeric(message.timestamp)}};
+    Object result{{"role", "assistant"},
+            {"content", blocks_json(message.content)},
+            {"api", message.api},
+            {"provider", message.provider},
+            {"model", message.model},
+            {"usage", usage_json(message.usage)},
+            {"stopReason", ai::stop_reason_to_string(message.stop_reason)},
+            {"timestamp", numeric(message.timestamp)}};
     if (message.error_message) result.emplace("errorMessage", *message.error_message);
     return Json{std::move(result)};
 }
@@ -137,6 +159,14 @@ Json entry_data(Json message, std::optional<TaskId> task = std::nullopt) {
 
 chord::Json as_chord(Json json) {
     return chord::Json::from_support(json.to_support()).value();
+}
+
+support::Expected<EntryRecord> append_assistant(
+        Transaction& tx, ConversationId id, const ai::AssistantMessage& message) {
+    auto usage = record_model_usage(tx, id, message);
+    if (!usage) return std::unexpected(usage.error());
+    auto json = assistant_json(message);
+    return tx.append_entry(id, "pi.assistant", entry_data(json), std::nullopt, {as_chord(json)});
 }
 
 struct FailureCapture {
@@ -232,6 +262,67 @@ support::Expected<std::int64_t> as_integer(const Json& json) {
         return std::unexpected(validation("Expected an integer field"));
     }
     return static_cast<std::int64_t>(*number);
+}
+
+support::ExpectedVoid convert_partial(Transaction& tx, chord::Draft& live, ConversationId id) {
+    auto generation = live.get(chord::Path{chord::path_key("generation")});
+    if (!generation) return std::unexpected(generation.error());
+    if (!generation->has_value()) return {};
+    const Json* partial = member(**generation, "message");
+    if (!partial) return {};
+    Json message = *partial;
+    auto* object = message.as_object();
+    const auto* provider = member(message, "provider");
+    const auto* model = member(message, "model");
+    const auto* usage = member(message, "usage");
+    if (!object || !provider || !provider->as_string() || !model || !model->as_string() || !usage)
+        return std::unexpected(validation("Invalid committed partial assistant message"));
+    ai::AssistantMessage parsed;
+    parsed.provider = *provider->as_string();
+    parsed.model = *model->as_string();
+    auto counter = [&](std::string_view name, std::int64_t& out) -> support::ExpectedVoid {
+        const auto* value = member(*usage, name);
+        if (!value) return std::unexpected(validation("Partial assistant usage is missing a counter"));
+        auto number = as_integer(*value);
+        if (!number) return std::unexpected(number.error());
+        out = *number;
+        return {};
+    };
+    for (auto [name, field] : {std::pair{"input", &parsed.usage.input},
+                 {"output", &parsed.usage.output},
+                 {"cacheRead", &parsed.usage.cache_read},
+                 {"cacheWrite", &parsed.usage.cache_write},
+                 {"totalTokens", &parsed.usage.total_tokens}}) {
+        auto result = counter(name, *field);
+        if (!result) return result;
+    }
+    for (auto [name, field] :
+            {std::pair{"cacheWrite1h", &parsed.usage.cache_write_1h}, {"reasoning", &parsed.usage.reasoning}}) {
+        if (const auto* value = member(*usage, name)) {
+            auto number = as_integer(*value);
+            if (!number) return std::unexpected(number.error());
+            *field = *number;
+        }
+    }
+    const auto* cost = member(*usage, "cost");
+    if (!cost) return std::unexpected(validation("Partial assistant usage is missing cost"));
+    for (auto [name, field] : {std::pair{"input", &parsed.usage.cost.input},
+                 {"output", &parsed.usage.cost.output},
+                 {"cacheRead", &parsed.usage.cost.cache_read},
+                 {"cacheWrite", &parsed.usage.cost.cache_write},
+                 {"total", &parsed.usage.cost.total}}) {
+        const auto* value = member(*cost, name);
+        if (!value || !value->as_number()) return std::unexpected(validation("Invalid partial assistant cost"));
+        *field = *value->as_number();
+    }
+    auto recorded = record_model_usage(tx, id, parsed);
+    if (!recorded) return recorded;
+    Object updated = *object;
+    updated.insert_or_assign("stopReason", Json{"aborted"});
+    message = Json{std::move(updated)};
+    auto entry = tx.append_entry(id, "pi.assistant", entry_data(message), std::nullopt, {as_chord(message)});
+    if (!entry) return std::unexpected(entry.error());
+    return {};
 }
 
 support::Expected<std::int64_t> integer_field(const Json& json, std::string_view field) {
@@ -459,6 +550,7 @@ constexpr std::string_view kGenerationTaskKind{"pi.generation"};
 chord::Path inbox_items_path() { return chord::Path{chord::path_key("items")}; }
 
 chord::Path live_run_path() { return chord::Path{chord::path_key("run")}; }
+chord::Path live_generation_path() { return chord::Path{chord::path_key("generation")}; }
 
 /// The starting inbox of every conversation; `root()` creates the same
 /// incarnation lazily (frozen pi `InboxDoc.initial`).
@@ -1626,6 +1718,13 @@ support::AsyncResult<void> WorkflowRuntime::abort_run(const TaskRecord& task, Ta
         if (!live) {
             return std::unexpected(live.error());
         }
+        // A committed partial left by the aborted attempt converts to an
+        // aborted assistant entry in the same transaction (frozen pi
+        // generation `abort`).
+        auto converted = convert_partial(tx, *live, task.conversation_id);
+        if (!converted) {
+            return std::unexpected(converted.error());
+        }
         auto ended = end_run(
                 tx, *live, task.id, SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
         if (!ended) {
@@ -2368,6 +2467,18 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
     };
 
     while (!runtime.stop_token().stop_requested()) {
+        // Publish before deriving the request context or invoking the stream.
+        auto published = await_result(runtime.commit(
+                [task, attempt](Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                    if (!live) return std::unexpected(live.error());
+                    auto converted = convert_partial(tx, *live, task.conversation_id);
+                    if (!converted) return std::unexpected(converted.error());
+                    auto set = live->set(live_generation_path(), Json{Object{{"attempt", numeric(attempt)}}});
+                    if (!set) return std::unexpected(set.error());
+                    return std::nullopt;
+                }));
+        if (!published) return std::unexpected(published.error());
         const auto snapshot = registry_.snapshot();
         auto loaded = load_view();
         if (!loaded) return std::unexpected(loaded.error());
@@ -2453,12 +2564,15 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
             auto committed = await_result(
                     runtime.commit([id = task.conversation_id, response = *response](Transaction& tx,
                                            const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-                        auto entry = tx.append_entry(id,
-                                "pi.assistant",
-                                entry_data(assistant_json(response)),
-                                std::nullopt,
-                                std::vector<chord::Json>{as_chord(assistant_json(response))});
+                        auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = id});
+                        if (!live) return std::unexpected(live.error());
+                        auto entry = append_assistant(tx, id, response);
                         if (!entry) return std::unexpected(entry.error());
+                        // The tool-calling answer clears the generation state
+                        // in the same commit that records it (frozen pi
+                        // generation `startToolRound`).
+                        auto cleared = live->erase(live_generation_path());
+                        if (!cleared) return std::unexpected(cleared.error());
                         return std::nullopt;
                     }));
             if (!committed) return committed;
@@ -2519,12 +2633,13 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                                                const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
                             // The error entry lands in the same commit as the
                             // compaction task (frozen pi generation `classify`).
-                            auto entry = tx.append_entry(task.conversation_id,
-                                    "pi.assistant",
-                                    entry_data(assistant_json(response)),
-                                    std::nullopt,
-                                    std::vector<chord::Json>{as_chord(assistant_json(response))});
+                            auto live =
+                                    tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
+                            if (!live) return std::unexpected(live.error());
+                            auto entry = append_assistant(tx, task.conversation_id, response);
                             if (!entry) return std::unexpected(entry.error());
+                            auto cleared = live->erase(live_generation_path());
+                            if (!cleared) return std::unexpected(cleared.error());
                             auto child = create_compaction(tx, task, "overflow", false);
                             if (!child) return std::unexpected(child.error());
                             return std::optional<NextTaskState>{
@@ -2552,11 +2667,7 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                                            const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
                         auto live = tx.doc(live_document(), DocumentAddress{.conversation_id = task.conversation_id});
                         if (!live) return std::unexpected(live.error());
-                        auto entry = tx.append_entry(task.conversation_id,
-                                "pi.assistant",
-                                entry_data(assistant_json(response)),
-                                std::nullopt,
-                                std::vector<chord::Json>{as_chord(assistant_json(response))});
+                        auto entry = append_assistant(tx, task.conversation_id, response);
                         if (!entry) return std::unexpected(entry.error());
                         auto set = live->set(chord::Path{chord::path_key("generation")},
                                 Json{Object{{"attempt", numeric(attempt)},
@@ -2575,6 +2686,7 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
         // and settles the run at the final boundary (frozen pi `answer`). The
         // `onYield` continuation is decided before the commit, so a hook may
         // read committed state and share the task's memos.
+        const bool runtime_aborted = aborted && runtime.stop_token().stop_requested();
         auto continuation = std::make_shared<std::optional<Json>>();
         if (!aborted && !failed) {
             auto decided = on_yield(snapshot, assistant_json(*response), runtime);
@@ -2582,8 +2694,14 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
             *continuation = std::move(*decided);
         }
         auto outcome = await_result(runtime.commit(
-                [id = task.conversation_id, task, response = *response, aborted, failed, continuation, this](
-                        Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                [id = task.conversation_id,
+                        task,
+                        response = *response,
+                        aborted,
+                        runtime_aborted,
+                        failed,
+                        continuation,
+                        this](Transaction& tx, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
                     const DocumentAddress address{.conversation_id = id};
                     // A boundary reads the table before the commit's first
                     // table write (frozen pi `prepareBoundary`).
@@ -2604,20 +2722,42 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                         return std::unexpected(live.error());
                     }
                     if (aborted) {
+                        if (runtime_aborted) {
+                            // The abort invocation settles the run (frozen pi
+                            // generation `abort`); this loop only unwinds.
+                            auto ended = end_run(tx,
+                                    *live,
+                                    task.id,
+                                    SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+                            if (!ended) {
+                                return std::unexpected(ended.error());
+                            }
+                            return std::optional<NextTaskState>{
+                                    NextTaskState::terminal(TaskOutcome{.status = "aborted"})};
+                        }
+                        // A provider-returned aborted response without a
+                        // runtime cancellation is a terminal model error: the
+                        // message still lands in the transcript and the usage
+                        // ledger (frozen pi generation `classify`).
+                        auto entry = append_assistant(tx, id, response);
+                        if (!entry) {
+                            return std::unexpected(entry.error());
+                        }
+                        const std::string message =
+                                response.error_message.value_or("Model response ended with stop reason aborted");
                         auto ended = end_run(tx,
                                 *live,
                                 task.id,
-                                SubmissionSettlement{.status = "unanswered", .reason = std::string{"aborted"}});
+                                SubmissionSettlement{.status = "unanswered",
+                                        .reason = std::string{"model_error"},
+                                        .detail = Json{message}});
                         if (!ended) {
                             return std::unexpected(ended.error());
                         }
-                        return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{.status = "aborted"})};
+                        return std::optional<NextTaskState>{NextTaskState::terminal(
+                                TaskOutcome{.status = "failed", .error = TaskOutcomeError{.message = message}})};
                     }
-                    auto entry = tx.append_entry(id,
-                            "pi.assistant",
-                            entry_data(assistant_json(response)),
-                            std::nullopt,
-                            std::vector<chord::Json>{as_chord(assistant_json(response))});
+                    auto entry = append_assistant(tx, id, response);
                     if (!entry) {
                         return std::unexpected(entry.error());
                     }
@@ -2655,6 +2795,11 @@ support::ExpectedVoid WorkflowRuntime::request(const TaskRecord& task, TaskRunti
                         if (!appended) return std::unexpected(appended.error());
                         auto handed = hand_over(tx, id, *live, *generation_);
                         if (!handed) return std::unexpected(handed.error());
+                        // The continuation hands the admitted run to a
+                        // successor generation, which publishes its own
+                        // attempt (frozen pi generation `answer`).
+                        auto cleared = live->erase(live_generation_path());
+                        if (!cleared) return std::unexpected(cleared.error());
                         return std::optional<NextTaskState>{NextTaskState::terminal(TaskOutcome{
                                 .status = "completed", .result = Json{Object{{"entryId", numeric(entry->id.value)}}}})};
                     }
@@ -2743,16 +2888,19 @@ support::ExpectedVoid end_run(
     if (!run) {
         return std::unexpected(run.error());
     }
-    if (!run->has_value() || (*run)->task != task) {
-        return {};
-    }
-    for (const SubmissionId input : (*run)->inputs) {
-        auto settled = tx.settle_submission(input, settlement);
-        if (!settled) {
-            return std::unexpected(settled.error());
+    if (run->has_value() && (*run)->task == task) {
+        for (const SubmissionId input : (*run)->inputs) {
+            auto settled = tx.settle_submission(input, settlement);
+            if (!settled) {
+                return std::unexpected(settled.error());
+            }
         }
+        auto erased = live.erase(live_run_path());
+        if (!erased) return std::unexpected(erased.error());
     }
-    return live.erase(live_run_path());
+    // Every terminal run also clears the generation state, including a run
+    // already handed to a successor (frozen pi `endRun`).
+    return live.erase(live_generation_path());
 }
 
 support::ExpectedVoid withdraw_queued_inputs(Transaction& tx, chord::Draft& inbox) {
