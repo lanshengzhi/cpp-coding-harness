@@ -331,10 +331,15 @@ support::Expected<ShellResult> LocalEnvironment::exec(
 }
 } // namespace
 
-// Private test seam: invoked synchronously after preparation, before commit.
+namespace testing {
+// Deterministic test-only interleaving seam, invoked synchronously after the
+// write is prepared and before it is committed. A decorator cannot provide
+// this point because the vulnerable check and rename live inside one write
+// implementation; production paths must use local_environment instead.
 std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::function<void()> hook) {
     return std::make_shared<LocalEnvironment>(std::move(cwd), std::move(hook));
 }
+} // namespace testing
 
 std::shared_ptr<Environment> local_environment(std::string cwd) {
     return std::make_shared<LocalEnvironment>(std::move(cwd));

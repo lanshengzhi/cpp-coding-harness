@@ -24,9 +24,9 @@
 #include <thread>
 #include <vector>
 
-namespace cch::durable {
+namespace cch::durable::testing {
 std::shared_ptr<Environment> local_environment_before_rename(std::string cwd, std::function<void()> hook);
-} // namespace cch::durable
+} // namespace cch::durable::testing
 
 namespace cch::tests::durable {
 using namespace cch::durable;
@@ -235,7 +235,7 @@ TEST_CASE("Durable writes remain anchored when paths are swapped", "[durable][en
     workspace.write("safe/file", "original");
     workspace.write("outside/file", "protected");
     SECTION("parent replaced with symlink") {
-        auto env = local_environment_before_rename(root.string(), [&] {
+        auto env = cch::durable::testing::local_environment_before_rename(root.string(), [&] {
             fs::rename(root / "safe", root / "moved");
             fs::create_directory_symlink(root / "outside", root / "safe");
         });
@@ -244,7 +244,7 @@ TEST_CASE("Durable writes remain anchored when paths are swapped", "[durable][en
         CHECK(workspace.read("moved/file") == "new");
     }
     SECTION("final component replaced with symlink") {
-        auto env = local_environment_before_rename(root.string(), [&] {
+        auto env = cch::durable::testing::local_environment_before_rename(root.string(), [&] {
             fs::remove(root / "safe/file");
             fs::create_symlink(root / "outside/file", root / "safe/file");
         });
