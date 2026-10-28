@@ -1,4 +1,4 @@
-# #1165 reservation-visibility slice design (small; for review, nothing implemented)
+# #1165 reservation-visibility slice design (implemented at 98d1d8433)
 
 Second slice on top of the landed line-read seam (`2d9823ba1`). The seam
 made inspection a one-instant line capture; this slice fixes the original
@@ -7,22 +7,27 @@ reservation commit settles, so a capture can pair a still-`pending`
 record with a live identity and derive `running`.
 `[reservation-visibility]` stays RED and visible until this slice lands.
 
-## 1. Publication point
+## 1. Publication point (as implemented)
 
-The reservation commit's completion is the only publication site:
+The worker awaits the reservation commit; publication happens after the
+await returns, in one Harness-mutex critical section together with the
+`closed` check and the execution-thread spawn:
 
-- It runs on the Session line, inside the commit settlement
-  (`start_line_job(PendingCommit)` completion), after Storage settled and
-  the record is committed.
-- Publication decision, evaluated on the line in this order:
-  1. outcome is an error -> **discard** (the Session also seals, #1166).
-  2. the Harness is closing/closed -> **discard** (frozen: a held
-     reservation at close never starts its phase; `[close-held]` pins it).
-  3. the committed record read back is not `running` for this task ->
-     **discard** (no-op: task already terminal/aborted/not pending).
-  4. otherwise -> **publish**: insert the identity into
-     `active_invocations` and mark the state `Published`.
-- The execution thread never starts the phase before `Published`.
+1. the commit settled with an error -> **discard** (the Session also
+   seals, #1166);
+2. the commit no-oped (the transaction body found the record no longer
+   `pending` and not abort-marked, so its `tx.set_task` never ran and the
+   `reserved` flag stayed false) -> **discard**;
+3. the Harness is closing/closed at publication -> **discard** (frozen: a
+   held reservation at close never starts its phase; `[close-held]`);
+4. otherwise -> **publish** the identity and spawn the execution thread
+   in the same critical section.
+
+There is no additional line-side readback: the settle outcome plus the
+`reserved` flag (set only when the transaction staged the write) decide
+publication, so no extra Storage read can fail and no decision is left
+unset. The execution thread starts only after publication, and its first
+instruction re-checks `closed` under the mutex.
 
 ## 2. Synchronization primitive (no stack capture)
 
@@ -117,15 +122,19 @@ A committed `pending` record is never promoted by identity alone;
 pending guard, GREEN as `ready` with it). `terminal` records are skipped
 before any derive; the capture keeps the seam's one-instant copy.
 
-## 7. Verification plan
+## 7. Verification results
 
-- `[reservation-visibility]` stays RED and visible until the slice
-  lands (RED evidence preserved under `1165-evidence/`).
-- GREEN set after the slice: `[reservation-visibility]`,
-  `[waiting]`, `[resume]`, `[identity]`, `[held-release]`,
-  `[seal-waiting]`, `[stale-scan-line]`, `[closed-admission]`,
-  `[close-held]`.
-- Re-evaluate the hidden `[rejection-legacy]` pin against the restored
-  commit shape; unhide if it matches, otherwise keep it documented.
+- `[reservation-visibility]` was RED at `2d9823ba1` (10/10
+  deterministic, log preserved under `1165-evidence/`) and is GREEN
+  now. That case is also protected by the seam's line linearization, so
+  late publication's own discrimination is carried by
+  `[held-release]` (a held reservation publishes nothing until it
+  settles), `[rejection]` (a rejected reservation publishes nothing and
+  seals) and `[pending-identity]` (a committed pending record is never
+  promoted by a live identity).
+- Green set after the slice: `[reservation-visibility]`, `[waiting]`,
+  `[resume]`, `[identity]`, `[held-release]`, `[seal-waiting]`,
+  `[stale-scan-line]`, `[closed-admission]`, `[close-held]`,
+  `[running-record]`, `[pending-identity]`, `[rejection]`.
 - Bounded focused runs only; gate release precedes every join; no Full
   Validation until a later authorization.

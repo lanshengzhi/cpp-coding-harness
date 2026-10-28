@@ -95,14 +95,16 @@ private:
 };
 } // namespace
 
-// The original visibility defect (issue #1165), now the documented OUT-OF-SLICE
-// RED: at the approved rebuild base the scheduler registers the invocation
-// before its reservation commit settles, so an inspection whose scan observes
-// the still-`pending` record derives `running` from a live identity. The
-// line-read seam makes the capture one instant but does not change identity
-// registration timing, so this stays red until reservation-visibility
-// publication is re-specified and signed off (see the seam proposal, section
-// 4). Kept visible on purpose: it is the issue's core defect, not a stale pin.
+// The original visibility defect (issue #1165), fixed by the
+// reservation-visibility slice. History: at the rebuild base the scheduler
+// registered the invocation before its reservation commit settled, so an
+// inspection whose scan observed the still-`pending` record derived
+// `running` from a live identity (RED 10/10, log preserved under
+// 1165-evidence/reservation-visibility-red-seam.log). Publication now
+// happens only after settlement, so this case is green; the seam's line
+// linearization also contributes here, and late publication's independent
+// discrimination lives in [held-release], [rejection] and
+// [pending-identity].
 TEST_CASE("scheduler reservation is invisible to a read admitted before its commit",
         "[durable][issue1165][reservation-visibility]") {
     MemoryStorage storage;
@@ -364,6 +366,10 @@ TEST_CASE("a waiting task is not resumed to pending while its phase is still inv
     }
     const auto close_outcome = consume(harness->close());
 
+    // The resume guard must keep a parked wait from flipping back to
+    // `pending` while its phase is still invoked; the watch loop above
+    // observes the window, so a regression surfaces here.
+    CHECK_FALSE(saw_pending_while_invoked.load());
     CHECK_FALSE(non_running_while_invoked.load());
     CHECK(terminal);
     CHECK(close_outcome.has_value());

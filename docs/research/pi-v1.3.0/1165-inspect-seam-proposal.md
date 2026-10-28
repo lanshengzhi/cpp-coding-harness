@@ -1,4 +1,4 @@
-# #1165 private line-read seam proposal v2 (variant B; review draft, nothing implemented)
+# #1165 private line-read seam proposal v2 (variant B; implemented at 2d9823ba1)
 
 Variant A (routing inspect through public `Session::read_committed`) is
 REJECTED and recorded as rejected: that method's public contract says the
