@@ -114,6 +114,12 @@ class DeliveryEvidenceTest(unittest.TestCase):
     def test_routing_digest_is_stable_and_binds_row_scenario_and_artifact(self) -> None:
         digest = consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts)
         self.assertEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
+        self.artifacts["audit-9999/unrelated.json"] = b'{"scenarios":[{"name":"unrelated"}]}'
+        self.assertEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
+        self.artifacts["audit-9999/unrelated.json"] = b'{"scenarios":[{"name":"preserves null"}]}'
+        with self.assertRaisesRegex(consolidate.ConsolidationError, "ambiguous"):
+            consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts)
+        del self.artifacts["audit-9999/unrelated.json"]
         self.rows[0]["id"] = self.claim["id"] = "cch_mcp:other"
         self.assertNotEqual(digest, consolidate.delivery_routing_digest(self.rows, self.record["rows"], self.artifacts))
         self.rows[0]["id"] = self.claim["id"] = "cch_mcp:example"

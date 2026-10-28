@@ -624,6 +624,8 @@ def delivery_routing_digest(rows: list[dict], claims: list[dict], artifacts: dic
         for scenario in sorted(set(row["comparisonScenarios"])):
             matches = sorted(path for path, names in scenarios.items() if scenario in names)
             require(matches, f"{row['id']}: scenario has no registered artifact: {scenario}")
+            require(preferred in matches or len(matches) == 1,
+                    f"{row['id']}: scenario {scenario} is ambiguous across {matches}")
             path = preferred if preferred in matches else matches[0]
             mappings.append({"scenario": scenario, "artifact": path,
                              "sha256": hashlib.sha256(artifacts[path]).hexdigest()})

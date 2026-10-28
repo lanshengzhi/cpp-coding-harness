@@ -10,8 +10,8 @@ Do not pin the entire `consolidation-plan.json`: it is shared classification boo
 unrelated families add routes and orphans. Instead each receipt pins `routingSha256`, derived
 from pre-delivery rows and verified registry artifacts, without using the receipt's comparisons.
 Sort claimed row IDs and each row's unique scenario names. For each scenario, select the row's
-pre-delivery evidence artifact if it contains that scenario; otherwise select the lexically first
-registered artifact containing it. Include row ID, scenario name, artifact path relative to the
+pre-delivery evidence artifact if it contains that scenario; otherwise require exactly one
+registered artifact containing it. Ambiguous matches fail closed. Include row ID, scenario name, artifact path relative to the
 baseline directory, and SHA-256 of its verified bytes. Serialize the list as UTF-8 JSON with
 sorted object keys, no extra whitespace, and unescaped Unicode, then SHA-256 those bytes.
 
