@@ -59,6 +59,19 @@ public:
     /// Fail the next commit with `message` and no durable effect.
     void fail_next_commit(std::string message) { failure_ = std::move(message); }
 
+    /// Fail the commit currently held by `hold_next_commit()` with `message`
+    /// and no durable effect. With no commit held this behaves like
+    /// `fail_next_commit`, so arm/fail ordering cannot hang a test.
+    void fail_held_commit(std::string message) {
+        if (!held_.has_value()) {
+            failure_ = std::move(message);
+            return;
+        }
+        Held held{std::move(*held_)};
+        held_.reset();
+        held.completion(std::unexpected(support::make_error(support::ErrorCode::Process, std::move(message))));
+    }
+
     /// Observe the inner backend just before Session closes it after a failure.
     void on_close(std::function<void(::cch::durable::Storage&)> observer) { close_observer_ = std::move(observer); }
 
