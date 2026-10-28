@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import re
 import sys
@@ -607,6 +608,30 @@ def passed_delivery_tests(validation: dict) -> set[str]:
     return names
 
 
+def delivery_routing_digest(rows: list[dict], claims: list[dict], artifacts: dict[str, bytes]) -> str:
+    """Hash each claimed row's pre-delivery scenarios and their registered artifact identities."""
+    by_id = {row["id"]: row for row in rows}
+    scenarios = {
+        path: {item["name"] for item in json.loads(data)["scenarios"]}
+        for path, data in artifacts.items()
+    }
+    routing = []
+    for claim in sorted(claims, key=lambda item: item["id"]):
+        row = by_id[claim["id"]]
+        evidence = row.get("auditStatus", {}).get("evidence", row.get("evidence", {}))
+        preferred = (evidence.get("artifact") or "").removeprefix("fixtures/pi-v1.3.0/")
+        mappings = []
+        for scenario in sorted(set(row["comparisonScenarios"])):
+            matches = sorted(path for path, names in scenarios.items() if scenario in names)
+            require(matches, f"{row['id']}: scenario has no registered artifact: {scenario}")
+            path = preferred if preferred in matches else matches[0]
+            mappings.append({"scenario": scenario, "artifact": path,
+                             "sha256": hashlib.sha256(artifacts[path]).hexdigest()})
+        routing.append({"row": row["id"], "scenarios": mappings})
+    return hashlib.sha256(json.dumps(routing, sort_keys=True, ensure_ascii=False,
+                                     separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
 def delivery_updates(rows: list[dict], deliveries: dict) -> dict[str, dict]:
     """Accept explicit whole-row comparisons; audit bytes and membership stay unchanged.
 
@@ -692,6 +717,8 @@ def delivery_updates(rows: list[dict], deliveries: dict) -> dict[str, dict]:
                 "remainingWork": None,
                 "notes": f"Delivered by #{record['ticket']}; whole-row comparisons and remaining boundaries: {record['report']}",
             }
+        require(record.get("routingSha256") == delivery_routing_digest(rows, claims, artifacts),
+                f"{identity}: delivery routing digest mismatch")
     return updates
 
 
