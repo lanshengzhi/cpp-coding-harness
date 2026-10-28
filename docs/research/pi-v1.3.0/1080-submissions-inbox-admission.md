@@ -74,8 +74,11 @@ and inbox change in one storage batch. Those cases are retained.
   fixture alone was not a frozen comparison.
 - The new failed busy-admission case observes the backend immediately before
   the failed Session closes it: neither a submission for the request nor an
-  inbox change is visible. It also checks the failed Session rejects a later
-  submission. Together with the successful same-batch case this covers
+  inbox change is visible. The fault double records the rejected batch; the
+  test checks the request ID and the actual inbox document's `items` change,
+  establishing that the injected failure hit the intended admission. It also
+  checks the failed Session rejects a later submission. Together with the
+  successful same-batch case this covers
   submission-granularity atomicity and a discriminating failure through the
   public caller. The fault double rejects the entire batch before delegating;
   it does not simulate a physical write failing midway. Backend rollback is
@@ -146,9 +149,25 @@ Delivery audit validation (2026-10-28, strict no-exception Debug):
   capture was skipped. Original full log and JUnit are retained locally at
   `/tmp/cch-1080-full.log` and `/tmp/cch-1080-full.xml`; isolated rerun log is
   `/tmp/cch-1080-tui-repeat.log`.
+- The rejected-batch identification was added after that full run. The
+  `issue1080` selection passed **36/36** before and after the following
+  temporary production mutations; the source was restored, rebuilt, and the
+  worktree was clean. These are discriminating probes, not new frozen
+  observations:
+  - Bypassing the request-key lookup branch produced two submissions and two
+    final user entries. The submission count and final user count both failed,
+    along with identity, batch count, status and inbox assertions. The final
+    assistant count did not fail; no claim is made for that predicate.
+  - Removing the queued-write exclusion from conversation abort caused the
+    write to settle `unanswered` with a reason and disappear from the inbox.
+    The frozen queued status, absent reason and inbox size checks failed.
+  - Both targeted cases completed without timeout. Their local logs are
+    `/tmp/cch-1080-mut-dedup.log` and `/tmp/cch-1080-mut-abort.log`;
+    the restored focused log is `/tmp/cch-1080-restored-focused.log`.
 - An initial parallel fresh-tree build encountered PARITY-6002/6003 while
   Ninja updated dependency evidence; serial retry passed. This separate build
-  gate race is tracked by #1162.
+  gate race is tracked by #1162. A new full validation is required after the
+  batch-identification change.
 
 Initial integration revision: `b2714debc`.
 
