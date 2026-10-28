@@ -5,6 +5,7 @@
 #include <cch/support/Error.hpp>
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
 #include <span>
 #include <string_view>
@@ -54,8 +55,12 @@ public:
     /// it (frozen pi `Storage.entry`).
     [[nodiscard]] virtual support::Expected<std::optional<StoredEntry>> entry(EntryId id) = 0;
 
-    /// Scan the conversations, oldest first, returning at most `limit`
-    /// conversations (frozen pi `Storage.scanConversations`).
+    /// Scan conversations, oldest first (frozen pi `Storage.scanConversations`).
+    /// A successful result contains exactly `min(limit, committed record count)`
+    /// records. A limit of `SIZE_MAX` requests every committed record. An
+    /// implementation that cannot serve the requested limit must return an
+    /// error; it must not silently return a shorter page. Each scan is one
+    /// read, not an atomic snapshot across another writer or process.
     [[nodiscard]] virtual support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit) = 0;
 
     /// Scan the visible entries of one conversation, newest first, returning at
@@ -85,8 +90,12 @@ public:
     /// `Storage.task`).
     [[nodiscard]] virtual support::Expected<std::optional<TaskRecord>> task(TaskId id) = 0;
 
-    /// Scan task records, oldest first, returning at most `limit` tasks (frozen
-    /// pi `Storage.scanTasks`).
+    /// Scan task records, oldest first (frozen pi `Storage.scanTasks`). A
+    /// successful result contains exactly `min(limit, committed record count)`
+    /// records. A limit of `SIZE_MAX` requests every committed record. An
+    /// implementation that cannot serve the requested limit must return an
+    /// error; it must not silently return a shorter page. Each scan is one
+    /// read, not an atomic snapshot across another writer or process.
     [[nodiscard]] virtual support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) = 0;
 
     /// Look up the latest complete record for one submission (frozen pi
@@ -98,9 +107,13 @@ public:
     [[nodiscard]] virtual support::Expected<std::optional<SubmissionRecord>> submission_by_request(
             ConversationId conversation_id, std::string_view request_id) = 0;
 
-    /// Scan submission records, oldest first, returning at most `limit`
-    /// submissions (frozen pi `Storage.scanSubmissions`; the C++ mirror scans
-    /// every status).
+    /// Scan submission records, oldest first (frozen pi `Storage.scanSubmissions`;
+    /// the C++ mirror scans every status). A successful result contains exactly
+    /// `min(limit, committed record count)` records. A limit of `SIZE_MAX`
+    /// requests every committed record. An implementation that cannot serve the
+    /// requested limit must return an error; it must not silently return a
+    /// shorter page. Each scan is one read, not an atomic snapshot across
+    /// another writer or process.
     [[nodiscard]] virtual support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) = 0;
 
     /// Release backend resources; all later operations must reject (frozen pi

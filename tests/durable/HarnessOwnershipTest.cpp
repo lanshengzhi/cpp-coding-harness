@@ -401,7 +401,7 @@ TEST_CASE("a failFast join aborts live siblings and the parent reads ordered ter
     REQUIRE(root.has_value());
 
     TaskId parent_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.join-parent"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});
@@ -481,7 +481,7 @@ TEST_CASE("an allSettled join lets surviving siblings finish and still reads ord
     REQUIRE(root.has_value());
 
     TaskId parent_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.join-parent"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});
@@ -607,7 +607,7 @@ TEST_CASE("aborting a parent runs descendants' abort handlers before the parent 
     auto root = consume(harness->root());
     REQUIRE(root.has_value());
 
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.cascade-parent"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});
@@ -696,7 +696,7 @@ TEST_CASE("cancelling a wait cancels only the waiter; the persistent task keeps 
     REQUIRE(root.has_value());
 
     TaskId task_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(
                 *harness->task_definition("audit.slow"), chord::Json{}, TaskOptions{.conversation_id = root.value()});
         if (!created) return std::unexpected(created.error());
@@ -781,7 +781,7 @@ TEST_CASE("a conversation abort keeps live background work while a direct abort 
 
     TaskId foreground_id;
     TaskId background_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto foreground = tx.create_task(*harness->task_definition("audit.bg-foreground"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});
@@ -872,7 +872,7 @@ TEST_CASE("a stale reservation skips a task whose abort terminal already landed"
     REQUIRE(root.has_value());
 
     TaskId target_id;
-    auto created = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto created = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto* stale_def = harness->task_definition("audit.reservation-stale");
         const auto* target_def = harness->task_definition("audit.reservation-target");
         if (stale_def == nullptr || target_def == nullptr) {
@@ -890,7 +890,7 @@ TEST_CASE("a stale reservation skips a task whose abort terminal already landed"
 
     // The scheduler scan sees this live, abort-marked record. Its abort
     // terminal is committed later, after the scan but before the reservation.
-    auto marked = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto marked = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto cur = tx.task(target_id);
         if (!cur) return std::unexpected(cur.error());
         if (!cur->has_value()) {
@@ -920,7 +920,7 @@ TEST_CASE("a stale reservation skips a task whose abort terminal already landed"
             "the scheduler to scan the target and enter the stale reservation window");
 
     TaskId after_id;
-    auto terminal = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto terminal = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto cur = tx.task(target_id);
         if (!cur) return std::unexpected(cur.error());
         if (!cur->has_value()) {
@@ -983,7 +983,7 @@ TEST_CASE("a stale reservation skips a task whose abort terminal already landed"
     }
     REQUIRE(aborted.has_value());
     CHECK_FALSE(harness->session().failed());
-    REQUIRE(consume(harness->commit([](Transaction&) -> support::ExpectedVoid { return {}; })).has_value());
+    REQUIRE(consume(harness->session().commit([](Transaction&) -> support::ExpectedVoid { return {}; })).has_value());
 
     REQUIRE(consume(harness->close()).has_value());
 }
@@ -1007,7 +1007,7 @@ TEST_CASE("a background-crossing conversation abort reaches and waits for a live
     REQUIRE(root.has_value());
 
     TaskId background_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.bg-cross"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value(), .background = true});
@@ -1067,7 +1067,7 @@ TEST_CASE("an idle wait resolves with live background work and holds on a live f
     REQUIRE(root.has_value());
 
     TaskId background_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto foreground = tx.create_task(*harness->task_definition("audit.idle-foreground"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});
@@ -1087,7 +1087,7 @@ TEST_CASE("an idle wait resolves with live background work and holds on a live f
 
     // A background-only ownerless scope is already idle while it runs.
     ConversationId other_id;
-    auto other_commit = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto other_commit = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_conversation();
         if (!created) return std::unexpected(created.error());
         other_id = created->id;
@@ -1183,7 +1183,7 @@ TEST_CASE("a child task and a task-owned conversation are rejected for a termina
     REQUIRE(root.has_value());
 
     TaskId parent_id;
-    auto parent_commit = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto parent_commit = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.own-parent"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});
@@ -1197,7 +1197,7 @@ TEST_CASE("a child task and a task-owned conversation are rejected for a termina
     REQUIRE(consume(harness->wait_for_task(parent_id)).has_value());
 
     ConversationId other_id;
-    auto other_commit = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto other_commit = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_conversation();
         if (!created) return std::unexpected(created.error());
         other_id = created->id;
@@ -1212,7 +1212,7 @@ TEST_CASE("a child task and a task-owned conversation are rejected for a termina
     // pi's sequence position, so the C++ side interpolates its own id into
     // the same template (SessionTransactionTest's frozen-template discipline).
     const auto attempt = [&](auto run) -> std::string {
-        auto outcome = consume(harness->commit(std::move(run)));
+        auto outcome = consume(harness->session().commit(std::move(run)));
         if (outcome.has_value()) return "accepted";
         return outcome.error().message;
     };
@@ -1265,7 +1265,7 @@ TEST_CASE("a child task and a task-owned conversation are rejected for a termina
 
     // A live owner takes a child and a task-owned conversation names it.
     TaskId live_parent;
-    auto live_commit = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto live_commit = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.own-live"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});
@@ -1277,7 +1277,7 @@ TEST_CASE("a child task and a task-owned conversation are rejected for a termina
 
     TaskId accepted_child;
     std::optional<ConversationRecord> accepted_conversation;
-    auto accept_commit = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto accept_commit = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto child = tx.create_task(
                 *harness->task_definition("audit.own-child"), chord::Json{}, TaskOptions{.owner = live_parent});
         if (!child) return std::unexpected(child.error());
@@ -1373,7 +1373,7 @@ TEST_CASE("a completing owner holds its terminal outcome until ordinary owned wo
     REQUIRE(root.has_value());
 
     TaskId parent_id;
-    auto commit_res = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    auto commit_res = consume(harness->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*harness->task_definition("audit.hold-parent"),
                 chord::Json{},
                 TaskOptions{.conversation_id = root.value()});

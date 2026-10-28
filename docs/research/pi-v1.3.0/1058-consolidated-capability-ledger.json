@@ -2890,6 +2890,11 @@
       "id": "limit-registration-integrity",
       "statement": "Serial registry registration proves bundle integrity only; it never makes a row C++-verified.",
       "authority": "/tmp/cch-1044-context/1057-merged.json provenanceNormalizationsFor1058[0]"
+    },
+    {
+      "id": "limit-1088-watch-events-exclusion",
+      "statement": "#1088 delivers the conversation view, document-change view, task graph and ready/running/waiting/blocked inspection as projections of committed records; the agent event stream (ledger row cch_durable:event-stream / frozen pi WatchEvents) is explicitly excluded because it is not derived from committed records and the ticket's reuse list does not include it. The exclusion does not affect #1088's acceptance criteria, which name only the conversation view, document changes, task graph, and task states.",
+      "authority": "issue #1088 orchestrator direction (2026-10-28): watchEvents exclusion must land in the delivery notes and the ledger remaining boundary"
     }
   ],
   "orphanScenarios": [

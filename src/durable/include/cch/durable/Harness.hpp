@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/durable/Observation.hpp>
 #include <cch/durable/Records.hpp>
 #include <cch/durable/Session.hpp>
 #include <cch/durable/Storage.hpp>
@@ -57,11 +58,13 @@ public:
     /// Failure and close are reported through the Session's frozen
     /// `SessionFailed` / "Session is closed" errors.
     ///
-    /// The inspection captures at most 256 task records per call
-    /// (`Storage::scan_tasks(256)`) and derives `waiting`/abort rows through
-    /// the scheduler's `load_world()` scan (limit 1024). A repository with
-    /// more records is inspected partially; a complete committed scan beyond
-    /// that cap is the observation/views scope of issue #1088.
+    /// The inspection captures every committed task and unsettled submission
+    /// in that job (issue #1088), and derives `waiting`/abort membership from
+    /// the same capture. The former #1165 bounds of 256 task records and a
+    /// 1024-record ownership scan are historical; they no longer truncate an
+    /// inspection. The capture is not an atomic snapshot across an external
+    /// Storage writer or another process: the Session line orders this
+    /// Session's own commits and reads.
     ///
     /// The producer keeps using the Harness and its Session after this call
     /// returns, so the Harness and its Storage must outlive the operation
@@ -72,9 +75,43 @@ public:
     /// calls `inspect` is an unresolved cross-thread cycle risk.
     [[nodiscard]] support::AsyncResult<HarnessInspection> inspect();
 
-    /// Run one atomic transaction on the Session.
-    [[nodiscard]] support::AsyncResult<void> commit(
-            std::move_only_function<support::Expected<void>(Transaction&)> change);
+    /// Read every live task and owner edge as a structured graph from
+    /// committed records (frozen pi `Harness.taskGraph`).
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session after
+    /// this call returns. The Harness and its Session must outlive the
+    /// operation until its completion callback returns.
+    [[nodiscard]] support::AsyncResult<TaskGraph> task_graph();
+
+    /// Watch the task graph, delivering one exact frame per committed
+    /// revision (frozen pi `WatchHandle` over the `TaskGraphView`).
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session until
+    /// the acquisition completes. The Harness and its Session must outlive the
+    /// operation until its completion callback returns; the returned watch
+    /// owns its mount independently of the Harness afterwards.
+    [[nodiscard]] support::AsyncResult<ViewWatch> watch_task_graph(ViewFrameListener listener);
+
+    /// Hydrate one conversation's committed view (frozen pi
+    /// `ConversationViews` snapshot): the conversation record, the visible
+    /// entries with the retained head marker, and the five built-in
+    /// documents keyed by full kind. Rejects a missing conversation.
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session after
+    /// this call returns. The Harness and its Session must outlive the
+    /// operation until its completion callback returns.
+    [[nodiscard]] support::AsyncResult<chord::Json> conversation_view(ConversationId conversation_id);
+
+    /// Watch one conversation's committed view, delivering one exact frame
+    /// per committed revision touching it (frozen pi `WatchHandle` over the
+    /// `ConversationViews`). Rejects a missing conversation.
+    ///
+    /// Lifetime: the producer dereferences this Harness and its Session until
+    /// the acquisition completes. The Harness and its Session must outlive the
+    /// operation until its completion callback returns; the returned watch
+    /// owns its mount independently of the Harness afterwards.
+    [[nodiscard]] support::AsyncResult<ViewWatch> watch_conversation(
+            ConversationId conversation_id, ViewFrameListener listener);
 
     /// Start one manual compaction of a conversation (frozen pi
     /// `Harness.compact`): a conversation-owned, non-background task that a

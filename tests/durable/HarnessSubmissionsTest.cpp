@@ -240,16 +240,17 @@ chord::Path inbox_items_member() { return chord::Path{chord::path_key("items")};
 
 /// Replace the persisted inbox items with one staged document write.
 Outcome<void> set_inbox_items(Harness& harness, ConversationId root, chord::Json::Array items) {
-    return consume(harness.commit([root, items = std::move(items)](Transaction& tx) mutable -> support::Expected<void> {
-        auto inbox = tx.doc(test_inbox_document(), DocumentAddress{.conversation_id = root});
-        if (!inbox) {
-            return std::unexpected(std::move(inbox.error()));
-        }
-        if (auto set = inbox->set(inbox_items_member(), chord::Json{std::move(items)}); !set) {
-            return std::unexpected(std::move(set.error()));
-        }
-        return {};
-    }));
+    return consume(harness.session().commit(
+            [root, items = std::move(items)](Transaction& tx) mutable -> support::Expected<void> {
+                auto inbox = tx.doc(test_inbox_document(), DocumentAddress{.conversation_id = root});
+                if (!inbox) {
+                    return std::unexpected(std::move(inbox.error()));
+                }
+                if (auto set = inbox->set(inbox_items_member(), chord::Json{std::move(items)}); !set) {
+                    return std::unexpected(std::move(set.error()));
+                }
+                return {};
+            }));
 }
 
 /// Whether a persisted inbox item is a write whose entry pins `head: "self"`.
@@ -1804,7 +1805,8 @@ TEST_CASE("a write pinned before a head marker buried behind more than 4096 newe
     // newer headless entries; the boundary head lookup must grow its page and
     // still find the marker instead of silently dropping the stale pin.
     constexpr int kHeadlessEntries = 4096 + 4;
-    auto appended = consume(harness->commit([root_id = root.value()](Transaction& tx) -> support::Expected<void> {
+    auto appended = consume(harness->session().commit([root_id = root.value()](
+                                                              Transaction& tx) -> support::Expected<void> {
         for (int i = 0; i < kHeadlessEntries; ++i) {
             auto entry = tx.append_entry(root_id,
                     "audit.headless",
@@ -1920,14 +1922,14 @@ TEST_CASE("a malformed persisted inbox item fails conversation abort with a type
 
     SubmissionId queued_id;
     // consume keeps queued_id alive through this commit's completion.
-    REQUIRE(consume(
-            harness->commit([conversation = root.value(), &queued_id](Transaction& tx) -> support::ExpectedVoid {
-                auto queued = tx.create_submission(
-                        SubmissionRecord{.conversation_id = conversation, .type = "input", .status = "queued"});
-                if (!queued) return std::unexpected(queued.error());
-                queued_id = queued->id;
-                return {};
-            })).has_value());
+    REQUIRE(consume(harness->session().commit([conversation = root.value(), &queued_id](
+                                                      Transaction& tx) -> support::ExpectedVoid {
+        auto queued = tx.create_submission(
+                SubmissionRecord{.conversation_id = conversation, .type = "input", .status = "queued"});
+        if (!queued) return std::unexpected(queued.error());
+        queued_id = queued->id;
+        return {};
+    })).has_value());
     REQUIRE(set_inbox_items(*harness, root.value(), chord::Json::Array{chord::Json{42.0}}).has_value());
     auto rejected = consume(harness->abort_submission(queued_id, root.value()));
     REQUIRE_FALSE(rejected.has_value());

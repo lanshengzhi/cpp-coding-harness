@@ -222,6 +222,10 @@ struct HarnessInspection {
     /// "paused", "running", or "closing".
     std::string scheduling{};
     std::vector<TaskInspection> tasks{};
+    /// Every unsettled submission record, oldest first (frozen pi
+    /// `HarnessInspection.submissions`); a settled submission leaves the
+    /// inspection with its waiter receipt.
+    std::vector<SubmissionRecord> submissions{};
 
     [[nodiscard]] bool operator==(const HarnessInspection&) const = default;
 };
@@ -451,6 +455,12 @@ struct TableCommitChange {
     std::optional<EntryId> entry_id{};
     /// The task the record carries; absent for a conversation or entry record.
     std::optional<TaskId> task_id{};
+    /// The full conversation record of a conversation commit change (frozen
+    /// `CommitChange` value); absent for an entry or task record.
+    std::optional<ConversationRecord> conversation{};
+    /// The full entry record of an entry commit change (frozen
+    /// `CommitChange` value); absent for a conversation or task record.
+    std::optional<EntryRecord> entry{};
     /// The full task record of a task commit change.
     std::optional<TaskRecord> task{};
 };

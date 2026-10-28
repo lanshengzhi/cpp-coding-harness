@@ -703,11 +703,13 @@ struct Session::Impl {
                 if (write.type == "conversation" && write.conversation.has_value()) {
                     publication.changes.push_back(TableCommitChange{.type = "conversation",
                             .conversation_id = write.conversation->id,
-                            .entry_id = std::nullopt});
+                            .entry_id = std::nullopt,
+                            .conversation = write.conversation});
                 } else if (write.type == "entry" && write.entry.has_value()) {
                     publication.changes.push_back(TableCommitChange{.type = "entry",
                             .conversation_id = write.entry->conversation_id,
-                            .entry_id = write.entry->id});
+                            .entry_id = write.entry->id,
+                            .entry = write.entry});
                 } else if (write.type == "task" && write.task.has_value()) {
                     publication.changes.push_back(TableCommitChange{.type = "task",
                             .conversation_id = write.task->conversation_id,

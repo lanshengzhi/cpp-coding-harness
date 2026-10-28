@@ -199,8 +199,9 @@ backend (§9.13).
   were addressed in this issue: the line-job seam (`detail::SessionLineAccess`,
   `2d9823ba1`) captures the inspection inside a line job with the
   documented no-line-callback-reentry prohibition and the Harness lifetime
-  duty, and the reservation-visibility slice followed. Only a complete
-  committed scan beyond the 256/1024 caps remains #1088-coordinated scope.
+  duty, and the reservation-visibility slice followed. The complete
+  committed scan beyond the 256/1024 caps was later completed by #1088 at
+  `8bef3d93e`.
 - *Spec P2 — preserve reproducible frozen evidence; record #1088
   coordination.* The frozen waiting probe and its three original logs are
   preserved under `1165-evidence/frozen-waiting/` with a README (frozen
@@ -290,17 +291,22 @@ discriminating tests only.
   oppose the line->mutex order; no backend does, and frozen pi carries the
   same exposure. `wait_for_idle` completes outside the mutex already.
 - The queued line-job `inspect` is implemented (the seam and the
-  reservation-visibility slice). Only a complete committed scan beyond the
-  256/1024 caps remains #1088-coordinated scope.
+  reservation-visibility slice); #1088 completed the committed scan beyond
+  the 256/1024 caps at `8bef3d93e`.
 
-## Inspection scan cap (issue #1088 hand-off)
+## Inspection scan cap (issue #1088 hand-off, historical)
 
-`Harness::inspect` captures at most 256 task records per call
-(`Storage::scan_tasks(256)` in `capture_inspection`) and derives
+> Historical record: #1088 completed this scan. `Harness::inspect` now
+> requests the complete committed set (`SIZE_MAX`) in one line job and
+> derives ownership from one shared `World`; `[inspect-cap]` was replaced by
+> `[inspect-complete]`. The 256/1024 bounds below are retained as the #1165
+> boundary record, not current behavior.
+
+Before #1088, `Harness::inspect` captured at most 256 task records per call
+(`Storage::scan_tasks(256)` in `capture_inspection`) and derived
 `waiting`/abort rows through the scheduler's `load_world()` scan (limit
-1024). A repository with more records is inspected partially: #1165 does
-not claim a complete committed inspection beyond that cap. The public
-`inspect` contract states the bound and points at #1088 (observation and
-views) for completeness beyond it, and `[inspect-cap]` pins the boundary
-(257 committed tasks -> 256 inspected rows) so the behavior is a
-documented bound rather than an implicit unbounded scan.
+1024). A repository with more records was inspected partially: #1165 did
+not claim a complete committed inspection beyond that cap. The #1165 capture
+used `[inspect-cap]` to pin the boundary (257 committed tasks -> 256
+inspected rows); #1088 replaced it with `[inspect-complete]` and now requests
+the complete committed set.

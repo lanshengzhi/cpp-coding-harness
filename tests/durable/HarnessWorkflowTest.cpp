@@ -374,7 +374,7 @@ TEST_CASE("manual compaction decline makes no summary request or marker", "[dura
     REQUIRE(registry.install(std::move(extension)).has_value());
     auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
     REQUIRE(root.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         for (const auto* text : {"old history", "recent history"}) {
             auto entry = tx.append_entry(root.value(),
                     "test.message",
@@ -450,7 +450,7 @@ TEST_CASE("threshold compaction precedes the protected model request", "[durable
     auto root = consume(harness->root(RootOptions{
             .model = ai::Model{.id = "model", .provider = "test", .context_window = 50, .max_tokens = 100}}));
     REQUIRE(root.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         for (const auto* text : {"old history that is large enough to exceed the model threshold", "recent message"}) {
             auto entry = tx.append_entry(root.value(),
                     "test.message",
@@ -526,7 +526,7 @@ TEST_CASE("background compaction allows the generation to finish before summary"
     auto root = consume(harness->root(RootOptions{
             .model = ai::Model{.id = "model", .provider = "test", .context_window = 1000, .max_tokens = 100}}));
     REQUIRE(root.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         for (const auto* text : {"old history", "recent history"}) {
             auto entry = tx.append_entry(root.value(),
                     "test.message",
@@ -614,7 +614,7 @@ TEST_CASE("overflow compacts before retrying the original request", "[durable][w
     auto root = consume(
             harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test", .max_tokens = 100}}));
     REQUIRE(root.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         for (const auto* text : {"old history", "recent history"}) {
             auto entry = tx.append_entry(root.value(),
                     "test.message",
@@ -712,7 +712,7 @@ TEST_CASE("compaction retries structured failures with committed backoff and sto
     auto root = consume(
             harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test", .max_tokens = 100}}));
     REQUIRE(root.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         for (const auto* text : {"old history", "recent history"}) {
             auto entry = tx.append_entry(root.value(),
                     "test.message",
@@ -800,7 +800,7 @@ TEST_CASE("generation writes a post-head system baseline with paired omissions",
     REQUIRE(root.has_value());
     EntryId old_system{};
     EntryId marker{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto old = tx.append_entry(root.value(),
                 "pi.system",
                 chord::Json{chord::Json::Object{}},
@@ -1277,7 +1277,7 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
                           std::optional<EntryHeadVariant> head = {},
                           std::vector<ContextEdit> edits = {}) {
         std::optional<EntryId> id;
-        auto result = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto result = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             auto entry = tx.append_entry(conversation,
                     "test.message",
                     chord::Json{chord::Json::Object{}},
@@ -1295,7 +1295,7 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
     };
     auto view = [&](ConversationId conversation, std::optional<EntryId> at = {}) {
         std::vector<chord::Json> result;
-        auto committed = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto committed = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             auto messages = tx.context_messages(conversation, at);
             if (!messages) return std::unexpected(messages.error());
             result = std::move(*messages);
@@ -1310,7 +1310,7 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
         REQUIRE(expected != nullptr);
         const auto& ids = expected->at("entries").get_array();
         const auto& contributions = expected->at("contributions").get_array();
-        auto result = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto result = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             auto actual = tx.context_view(conversation, at);
             if (!actual) return std::unexpected(actual.error());
             REQUIRE(actual->entries.size() == ids.size());
@@ -1339,7 +1339,7 @@ TEST_CASE("Session preserves edited context and fork views across reopen", "[dur
                     [] { return chord::Json{chord::Json::Object{{"value", "initial"}}}; }});
     REQUIRE(definition.has_value());
     auto set_document = [&](ConversationId conversation, std::string value) {
-        auto result = consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+        auto result = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
             auto doc = tx.doc(*definition, DocumentAddress{.conversation_id = conversation});
             if (!doc) return std::unexpected(doc.error());
             return doc->set(chord::Path{chord::path_key("value")}, chord::Json{value});
@@ -1599,7 +1599,7 @@ TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets wi
                     [] { return chord::Json{chord::Json::Object{{"value", chord::Json{"initial"}}}}; }});
     REQUIRE(doc_definition.has_value());
     std::optional<EntryId> selected;
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto marker = tx.append_entry(root_id, "issue1082.marker", chord::Json{chord::Json::Object{}});
         if (!marker) return std::unexpected(marker.error());
         selected = marker->id;
@@ -1608,7 +1608,7 @@ TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets wi
         return doc->set(chord::Path{chord::path_key("value")}, chord::Json{"at-selected"});
     })).has_value());
     REQUIRE(selected.has_value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto doc = tx.doc(*doc_definition, DocumentAddress{.conversation_id = root_id});
         if (!doc) return std::unexpected(doc.error());
         return doc->set(chord::Path{chord::path_key("value")}, chord::Json{"current"});
@@ -1709,7 +1709,7 @@ TEST_CASE("Harness forks selected ancestry, copies as-of documents and resets wi
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(reset_context.at(0))) == "carry this forward");
     CHECK(ai::text_from_user_message(std::get<ai::UserMessage>(reset_context.at(1))) == "u2");
     std::vector<chord::Json> replayed;
-    auto final_messages = harness->commit([&replayed](Transaction& tx) -> support::Expected<void> {
+    auto final_messages = harness->session().commit([&replayed](Transaction& tx) -> support::Expected<void> {
         auto view = tx.context_view(ConversationId{.value = 1});
         if (!view) return std::unexpected(view.error());
         replayed = std::move(view->messages);
@@ -3163,7 +3163,7 @@ TEST_CASE("aborting a run clears the published attempt without recording an answ
             detail::builtin_document("pi.live:v1", DocumentHistory::Latest, DocumentFork::Initial, [] {
                 return chord::Json{chord::Json::Object{}};
             });
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto live = tx.doc(live_definition, DocumentAddress{.conversation_id = root.value()});
         if (!live) return std::unexpected(live.error());
         auto tools = live->set(chord::Path{chord::path_key("tools")}, chord::Json{chord::Json::Array{}});
@@ -3267,7 +3267,7 @@ TEST_CASE("a committed partial converts to an aborted entry with usage in the at
     auto root = consume(harness->root(RootOptions{.model = ai::Model{.id = "model", .provider = "test"}}));
     REQUIRE(root.has_value());
     root_id = root.value();
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
+    REQUIRE(consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
         auto live = tx.doc(live_definition, DocumentAddress{.conversation_id = root.value()});
         if (!live) return std::unexpected(live.error());
         auto set = live->set(chord::Path{chord::path_key("generation")},

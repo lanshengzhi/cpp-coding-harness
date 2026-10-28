@@ -1035,7 +1035,7 @@ TEST_CASE("frozen pi continues a C++ created JSONL task", "[durable][jsonl][issu
     TaskId task_id{};
     SubmissionId submission_id{};
     DocumentId document_id{};
-    REQUIRE(consume(initial->commit([&](Transaction& tx) -> support::ExpectedVoid {
+    REQUIRE(consume(initial->session().commit([&](Transaction& tx) -> support::ExpectedVoid {
         auto created = tx.create_task(*initial->task_definition("audit1085.work"),
                 chord::Json{chord::Json::Object{}},
                 TaskOptions{.conversation_id = root.value()});
