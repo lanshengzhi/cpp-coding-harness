@@ -635,6 +635,18 @@ public:
     /// Observe the end of the Session (frozen pi `Session.subscribeClose`).
     [[nodiscard]] support::ExpectedVoid subscribe_close(CloseListener listener);
 
+    /// Run one committed read atomically on the Session mutation line
+    /// (frozen pi `SessionImpl.readOnLine`). The callback observes every
+    /// commit settled before it and no publication of a later one, so a
+    /// read-and-register observation (hydrate a view, then attach its
+    /// commit listener) loses no publication and admits no duplicate frame.
+    /// This is the frozen `readOnLine` primitive, not a test hook: view
+    /// mounts and inspection snapshots derive their acquisition revision
+    /// through it. The callback must read committed Storage state only; it
+    /// must not enqueue commits, directly or indirectly.
+    [[nodiscard]] support::AsyncResult<chord::Json> read_committed(
+            std::move_only_function<support::Expected<chord::Json>(Storage&)> read);
+
     /// Read the committed value of one document without creating it (frozen pi
     /// `Session.snapshot`).
     [[nodiscard]] support::AsyncResult<std::optional<chord::Json>> snapshot(

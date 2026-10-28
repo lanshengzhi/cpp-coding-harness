@@ -1,6 +1,7 @@
 #include <cch/durable/Harness.hpp>
 
 #include "durable/Compaction.hpp"
+#include "durable/ViewMounts.hpp"
 #include "durable/WorkflowRuntime.hpp"
 
 #include <cch/durable/Records.hpp>
@@ -830,6 +831,10 @@ struct Harness::Impl {
     std::unique_ptr<CompactionRuntime> compaction;
     std::shared_ptr<TaskDefinition> builtin_generation_task;
     std::unique_ptr<Submission::Registry> submissions;
+    /// The conversation-view and task-graph mounts derived from committed
+    /// state on the Session's commit-publication line. A read-only
+    /// projection: no thread, timer, or second scheduler.
+    ViewMountRegistry observation_mounts;
 
     struct ExecutionThread {
         std::thread thread;
@@ -1277,6 +1282,7 @@ struct Harness::Impl {
                 idle_waiters.clear();
             }
             submissions->reject_all(error);
+            observation_mounts.close(session->failed());
             for (auto& [id, completions] : pending) {
                 (void)id;
                 for (const std::shared_ptr<TaskWaiter>& waiter : completions) {
@@ -1296,6 +1302,7 @@ struct Harness::Impl {
         });
         (void)session->subscribe_commits([this](const CommitPublication& pub) {
             submissions->observe(pub);
+            observation_mounts.advance(pub);
             for (const auto& change : pub.changes) {
                 if (const auto* tc = std::get_if<TableCommitChange>(&change)) {
                     if (tc->type == "task" && tc->task.has_value()) {
@@ -1803,6 +1810,10 @@ support::AsyncResult<HarnessInspection> Harness::inspect() {
     if (!scan_res) {
         return support::AsyncResult<HarnessInspection>{std::unexpected(scan_res.error())};
     }
+    auto submissions_res = impl_->storage->scan_submissions(256);
+    if (!submissions_res) {
+        return support::AsyncResult<HarnessInspection>{std::unexpected(submissions_res.error())};
+    }
     const auto snapshot = impl_->registry.snapshot();
     HarnessInspection inspection;
     {
@@ -1818,7 +1829,117 @@ support::AsyncResult<HarnessInspection> Harness::inspect() {
                 .state = impl_->inspect_task(task, snapshot),
         });
     }
+    for (const SubmissionRecord& submission : *submissions_res) {
+        if (!submission_settled(submission.status)) {
+            inspection.submissions.push_back(submission);
+        }
+    }
     return support::AsyncResult<HarnessInspection>{std::move(inspection)};
+}
+
+support::AsyncResult<TaskGraph> Harness::task_graph() {
+    return support::AsyncResult<TaskGraph>{support::AsyncProducer<TaskGraph, support::Error>{
+            [this](support::AsyncCompletion<TaskGraph, support::Error> completion) mutable noexcept {
+                support::AsyncResult<chord::Json> read = impl_->session->read_committed(
+                        [](Storage& storage) -> support::Expected<chord::Json> {
+                            return hydrate_task_graph(storage);
+                        });
+                std::move(read).start(
+                        [completion = std::move(completion)](support::Expected<chord::Json> result) mutable noexcept {
+                            if (!result) {
+                                completion(std::unexpected(std::move(result.error())));
+                                return;
+                            }
+                            auto graph = decode_task_graph(*result);
+                            if (!graph) {
+                                completion(std::unexpected(std::move(graph.error())));
+                                return;
+                            }
+                            completion(std::move(*graph));
+                        });
+            }}};
+}
+
+support::AsyncResult<ViewWatch> Harness::watch_task_graph(ViewFrameListener listener) {
+    return support::AsyncResult<ViewWatch>{support::AsyncProducer<ViewWatch, support::Error>{
+            [this, listener = std::move(listener)](
+                    support::AsyncCompletion<ViewWatch, support::Error> completion) mutable noexcept {
+                // The watch handle escapes the line-held read through this
+                // box; the acquisition revision and the watcher registration
+                // admit no interleaved publication.
+                auto box = std::make_shared<std::optional<ViewWatch>>();
+                support::AsyncResult<chord::Json> read = impl_->session->read_committed(
+                        [this, box, listener = std::move(listener)](
+                                Storage& storage) mutable -> support::Expected<chord::Json> {
+                            auto hydrated = hydrate_task_graph(storage);
+                            if (!hydrated) {
+                                return std::unexpected(std::move(hydrated.error()));
+                            }
+                            std::shared_ptr<ViewMount> mount = impl_->observation_mounts.task_graph_mount(*hydrated);
+                            box->emplace(ViewWatch::attach(std::move(mount), std::move(listener)));
+                            return *hydrated;
+                        });
+                std::move(read).start(
+                        [box, completion = std::move(completion)](
+                                support::Expected<chord::Json> result) mutable noexcept {
+                            if (!result) {
+                                completion(std::unexpected(std::move(result.error())));
+                                return;
+                            }
+                            if (!box->has_value()) {
+                                completion(std::unexpected(support::make_error(support::ErrorCode::Session,
+                                        "task-graph watch produced no watch")));
+                                return;
+                            }
+                            completion(std::move(box->value()));
+                        });
+            }}};
+}
+
+support::AsyncResult<chord::Json> Harness::conversation_view(ConversationId conversation_id) {
+    return impl_->session->read_committed(
+            [conversation_id](Storage& storage) -> support::Expected<chord::Json> {
+                auto hydrated = hydrate_conversation_view(storage, conversation_id);
+                if (!hydrated) {
+                    return std::unexpected(std::move(hydrated.error()));
+                }
+                return std::move(hydrated->value);
+            });
+}
+
+support::AsyncResult<ViewWatch> Harness::watch_conversation(
+        ConversationId conversation_id, ViewFrameListener listener) {
+    return support::AsyncResult<ViewWatch>{support::AsyncProducer<ViewWatch, support::Error>{
+            [this, conversation_id, listener = std::move(listener)](
+                    support::AsyncCompletion<ViewWatch, support::Error> completion) mutable noexcept {
+                auto box = std::make_shared<std::optional<ViewWatch>>();
+                support::AsyncResult<chord::Json> read = impl_->session->read_committed(
+                        [this, conversation_id, box, listener = std::move(listener)](
+                                Storage& storage) mutable -> support::Expected<chord::Json> {
+                            auto hydrated = hydrate_conversation_view(storage, conversation_id);
+                            if (!hydrated) {
+                                return std::unexpected(std::move(hydrated.error()));
+                            }
+                            std::shared_ptr<ViewMount> mount =
+                                    impl_->observation_mounts.conversation_mount(conversation_id, *hydrated);
+                            box->emplace(ViewWatch::attach(std::move(mount), std::move(listener)));
+                            return std::move(hydrated->value);
+                        });
+                std::move(read).start(
+                        [box, completion = std::move(completion)](
+                                support::Expected<chord::Json> result) mutable noexcept {
+                            if (!result) {
+                                completion(std::unexpected(std::move(result.error())));
+                                return;
+                            }
+                            if (!box->has_value()) {
+                                completion(std::unexpected(support::make_error(support::ErrorCode::Session,
+                                        "conversation watch produced no watch")));
+                                return;
+                            }
+                            completion(std::move(box->value()));
+                        });
+            }}};
 }
 
 support::AsyncResult<void> Harness::commit(std::move_only_function<support::Expected<void>(Transaction&)> change) {

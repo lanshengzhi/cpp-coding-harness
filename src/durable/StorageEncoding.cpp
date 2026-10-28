@@ -452,6 +452,43 @@ chord::Json encode_conversation_record(const ConversationRecord& conversation) {
     return chord::Json(std::move(obj));
 }
 
+chord::Json encode_entry_record(const EntryRecord& entry) {
+    chord::Json::Object obj;
+    obj.emplace("id", chord::Json(static_cast<double>(entry.id.value)));
+    obj.emplace("conversationId", chord::Json(static_cast<double>(entry.conversation_id.value)));
+    obj.emplace("kind", chord::Json(entry.kind));
+    obj.emplace("data", entry.data);
+    if (entry.head.has_value()) {
+        obj.emplace("head", chord::Json(static_cast<double>(entry.head->value)));
+    }
+    if (!entry.model.empty()) {
+        chord::Json::Array model;
+        for (const chord::Json& message : entry.model) {
+            model.push_back(message);
+        }
+        obj.emplace("model", chord::Json(std::move(model)));
+    }
+    if (entry.by_task_id.has_value()) {
+        obj.emplace("byTaskId", chord::Json(static_cast<double>(entry.by_task_id->value)));
+    }
+    if (!entry.edits.empty()) {
+        chord::Json::Array edits;
+        for (const ContextEdit& edit : entry.edits) {
+            chord::Json::Array messages;
+            for (const chord::Json& message : edit.messages) {
+                messages.push_back(message);
+            }
+            chord::Json::Object value;
+            value.emplace("target", chord::Json(static_cast<double>(edit.target.value)));
+            value.emplace("action", chord::Json(edit.action));
+            value.emplace("messages", chord::Json(std::move(messages)));
+            edits.emplace_back(chord::Json(std::move(value)));
+        }
+        obj.emplace("edits", chord::Json(std::move(edits)));
+    }
+    return chord::Json(std::move(obj));
+}
+
 support::Expected<ConversationRecord> decode_conversation_record(const chord::Json& json) {
     const auto* obj = json.as_object();
     if (obj == nullptr) {

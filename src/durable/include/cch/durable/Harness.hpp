@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cch/durable/Observation.hpp>
 #include <cch/durable/Records.hpp>
 #include <cch/durable/Session.hpp>
 #include <cch/durable/Storage.hpp>
@@ -52,6 +53,26 @@ public:
 
     /// Inspect scheduling state and live tasks without running task code.
     [[nodiscard]] support::AsyncResult<HarnessInspection> inspect();
+
+    /// Read every live task and owner edge as a structured graph from
+    /// committed records (frozen pi `Harness.taskGraph`).
+    [[nodiscard]] support::AsyncResult<TaskGraph> task_graph();
+
+    /// Watch the task graph, delivering one exact frame per committed
+    /// revision (frozen pi `WatchHandle` over the `TaskGraphView`).
+    [[nodiscard]] support::AsyncResult<ViewWatch> watch_task_graph(ViewFrameListener listener);
+
+    /// Hydrate one conversation's committed view (frozen pi
+    /// `ConversationViews` snapshot): the conversation record, the visible
+    /// entries with the retained head marker, and the five built-in
+    /// documents keyed by full kind. Rejects a missing conversation.
+    [[nodiscard]] support::AsyncResult<chord::Json> conversation_view(ConversationId conversation_id);
+
+    /// Watch one conversation's committed view, delivering one exact frame
+    /// per committed revision touching it (frozen pi `WatchHandle` over the
+    /// `ConversationViews`). Rejects a missing conversation.
+    [[nodiscard]] support::AsyncResult<ViewWatch> watch_conversation(
+            ConversationId conversation_id, ViewFrameListener listener);
 
     /// Run one atomic transaction on the Session.
     [[nodiscard]] support::AsyncResult<void> commit(

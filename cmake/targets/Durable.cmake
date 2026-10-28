@@ -24,6 +24,7 @@ cch_parity_declare_target(
         src/durable/Compaction.cpp
         src/durable/Harness.cpp
         src/durable/JsonlStorage.cpp
+        src/durable/Observation.cpp
         src/durable/SqliteStorage.cpp
         src/durable/Session.cpp
         src/durable/Storage.cpp

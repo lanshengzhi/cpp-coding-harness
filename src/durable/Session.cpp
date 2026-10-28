@@ -672,11 +672,13 @@ struct Session::Impl {
                 if (write.type == "conversation" && write.conversation.has_value()) {
                     publication.changes.push_back(TableCommitChange{.type = "conversation",
                             .conversation_id = write.conversation->id,
-                            .entry_id = std::nullopt});
+                            .entry_id = std::nullopt,
+                            .conversation = write.conversation});
                 } else if (write.type == "entry" && write.entry.has_value()) {
                     publication.changes.push_back(TableCommitChange{.type = "entry",
                             .conversation_id = write.entry->conversation_id,
-                            .entry_id = write.entry->id});
+                            .entry_id = write.entry->id,
+                            .entry = write.entry});
                 } else if (write.type == "task" && write.task.has_value()) {
                     publication.changes.push_back(TableCommitChange{.type = "task",
                             .conversation_id = write.task->conversation_id,
@@ -2277,6 +2279,27 @@ support::ExpectedVoid Session::subscribe_close(CloseListener listener) {
     }
     impl_->close_listeners.push_back(std::move(listener));
     return {};
+}
+
+support::AsyncResult<chord::Json> Session::read_committed(
+        std::move_only_function<support::Expected<chord::Json>(Storage&)> read) {
+    // The read holds the mutation line, exactly like `snapshot()`: every
+    // commit settled before it is visible and no publication of a later
+    // commit can interleave, so a caller that attaches an observation inside
+    // the callback starts from a revision consistent with every frame it
+    // will later receive (frozen pi `SessionImpl.readOnLine`).
+    std::lock_guard lock(impl_->mutation_line);
+    if (impl_->failed) {
+        return support::AsyncResult<chord::Json>{std::unexpected(session_failed_error())};
+    }
+    if (impl_->closed) {
+        return support::AsyncResult<chord::Json>{std::unexpected(session_closed_error())};
+    }
+    auto value = read(*impl_->storage);
+    if (!value) {
+        return support::AsyncResult<chord::Json>{std::unexpected(std::move(value.error()))};
+    }
+    return support::AsyncResult<chord::Json>{std::move(*value)};
 }
 
 support::AsyncResult<std::optional<chord::Json>> Session::snapshot(
