@@ -122,8 +122,11 @@ support::AsyncResult<HarnessInspection> Harness::inspect() {
                 auto capture = std::make_shared<Capture>();
                 auto read = detail::SessionLineAccess::read_on_line(
                         *impl->session, [impl, capture](Storage& storage) -> support::Expected<void> {
-                            if (impl->session->failed())
-                                return std::unexpected(session_failed_error());
+                            // No Session method may be called here: failed()/
+                            // closed() take mutation_line (Session.cpp:2030/
+                            // 2037), and this job already runs on that line.
+                            // Failure and close are covered by admission and
+                            // reject_pending_line (section 2).
                             capture->value = impl->capture_inspection(storage); // today's body, one instant
                             return {};
                         });
@@ -138,12 +141,21 @@ support::AsyncResult<HarnessInspection> Harness::inspect() {
 }
 ```
 
-`capture_inspection(Storage&)` is today's inspect body moved verbatim
-(failed-gate, scan, single identity copy under the Harness mutex, derive)
-minus its `AsyncResult` wrapper; the mutex is released before the scan
-exactly as today, so the lock order (line -> Harness mutex -> storage
-outside the mutex) and the reentry surface are unchanged from today's
-commit turns, which also call Storage under the line.
+### Capture body, line by line (today's `Harness::inspect` minus the failed gate)
+
+| Today's line | In the job | Instant / lock |
+|---|---|---|
+| `if (impl_->session->failed())` | **DELETED from the job** | Session `failed()` takes `mutation_line` (Session.cpp:2030); the job already holds it. Admission checks `failed`/`closed` at call and at producer run; a failure while queued is delivered by `reject_pending_line`. The eager call-time check also disappears: `inspect()` is now a producer, and admission runs at consumption -- the same observable outcome. |
+| `impl_->storage->scan_tasks(256)` | `storage.scan_tasks(256)` via the job parameter | line held, Harness mutex NOT held (same as today) |
+| `impl_->registry.snapshot()` | unchanged | plain member read, no lock |
+| `{ std::lock_guard lock(impl_->mutex); scheduling = closed/enabled; copy active_invocations }` | unchanged | line -> Harness mutex (the only new edge; matches the existing commit/close listener edge) |
+| per-row `impl_->inspect_task(task, snapshot, invoked)` | unchanged | pure function, no locks |
+| build `HarnessInspection` | unchanged | -- |
+
+So the lock order is: session line -> Harness mutex (brief) -> Storage
+scan outside the Harness mutex. That matches today's commit turns (which
+call Storage under the line) and today's commit listener (which takes the
+Harness mutex from the line).
 
 ## 2. Same PendingRead/FIFO, failure, close, drain semantics (proof by reuse)
 
@@ -167,14 +179,14 @@ commit turns, which also call Storage under the line.
   check). Frozen parity, but a public behavior change; the alternative
   is a deliberate closed-passthrough that preserves today's backend
   error -- not recommended.
-- **S3 (new hazard, needs a decision):** an inspect called from inside a
-  line callback (commit body, read callback, completion) would queue
-  behind its own job and self-wait. Today it merely scans. Options:
-  (a) document the prohibition in `inspect`'s contract (frozen
-  listener-style); (b) have the seam detect the line-owner thread (one
-  thread-id set around job execution, seam-local) and reject with a
-  Validation error. Recommendation: (b), contained entirely in the seam,
-  with sign-off; shipping a new silent deadlock is worse.
+- **S3 (documentation only in this slice):** `inspect`'s contract states
+  that it must not be called from inside a Session line callback (commit
+  body, read callback, completion): such a call queues behind its own job
+  and self-waits. This is the same prohibition class as frozen's
+  listener contracts. No thread-mark detection is implemented: it would
+  cover only same-thread reentry, create false safety, and is new public
+  behavior. A callback that delegates to another thread which then calls
+  inspect remains an UNRESOLVED cross-thread cycle risk.
 - **S4 (documentation):** `inspect`'s contract must state that the
   Harness must outlive the operation until its completion returns (the
   same duty `read_committed` already documents for the Session). This is
@@ -185,6 +197,40 @@ Not in this slice: ticketing/`fifo-order` included-set ordering
 (`[fifo-order-probe]` stays out of the suite), close-drain (racy pass
 remains non-evidence), and any change to `read_committed` or its
 contract.
+
+## 3b. No Harness-mutex -> line edge exists (call-path audit)
+
+The new inspect job adds the edge line -> Harness mutex. Inversion would
+require some path that holds the Harness mutex while waiting on the
+session line. Every Harness-mutex hold site was audited:
+
+| Site | Holds mutex while | Calls Session/Storage? |
+|---|---|---|
+| `run_worker` wait (Harness.cpp:1397) | cv.wait on `stop/closed/dirty` | no; mutex released while waiting |
+| `schedule_step`/`reconcile` guards (1481, 1517, 1343 listener, 1116 idle) | short state checks | no; `session->commit` is called strictly OUTSIDE these scopes |
+| `notify_waiters` (1094), `settle_idle` (1116) | state erase/move | no; completions run after the scope |
+| commit listener (1320-1355) | identity lookup | runs ON the line -> line->mutex, the same direction as inspect |
+| close listener (1280) | flags/notify | no Session call |
+| `shutdown` wait (1382) | cv.wait `active_invocations.empty()` + joins | mutex released while waiting; joins only after the predicate holds, so no thread still needs the mutex |
+| `settle_orphaned`/`settle_faulted` (1051/1071) | nothing: `session->commit` runs outside any mutex scope | -- |
+
+Conclusion: no path holds the Harness mutex while enqueueing or waiting
+on a line job, so line -> Harness mutex cannot invert against an
+existing Harness-mutex -> line wait.
+
+### `AsyncResult::start` semantics and blocking
+
+- Ready result (admission rejected `failed`/`closed`): `start` delivers
+  the completion inline on the caller thread; no line interaction.
+- Pending result, idle line: the producer enqueues and `pump_line` runs
+  the job inline; the completion chain runs nested on the caller thread
+  under the line lock (recursive; no other lock is held).
+- Pending result, busy line: the producer blocks on `mutation_line`
+  until the active job settles -- exactly the existing
+  `Session::read_committed` producer behavior (Session.cpp:2316), and
+  commits block the same way. The producer contains no loop or
+  unbounded wait of its own; a hung Storage stalls it exactly as it
+  stalls every commit today.
 
 ## 4. Rebuild plan (old production is not approved)
 
