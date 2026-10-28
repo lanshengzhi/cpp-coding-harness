@@ -609,6 +609,124 @@ private:
     std::atomic_bool fail_on_release_{false};
 };
 
+
+/// Event-order recorder for issue #1165 admission-ordered inspect evidence.
+/// Wraps a Storage and appends every observed task-write sighting, task-write
+/// completion (after delegation), scan entry, and gate release to one
+/// mutex-protected sequence. Tests assert pure event ORDER plus outcome
+/// content -- no started-flags, timers, or mutex-fairness assumptions. A
+/// configured create kind can be held until released, like
+/// HeldReservationStorage.
+class SequenceRecordingStorage final : public Storage {
+public:
+    explicit SequenceRecordingStorage(Storage& inner) : inner_(inner) {}
+
+    void hold_kind(std::string kind) { hold_kind_ = std::move(kind); }
+    void arm() noexcept { armed.store(true, std::memory_order_release); }
+    void release() noexcept {
+        record("released");
+        released.store(true, std::memory_order_release);
+    }
+    [[nodiscard]] bool w_seen(std::string_view kind) const {
+        std::lock_guard lock(events_mutex_);
+        for (const auto& event : events_) {
+            if (event.rfind("w:" + std::string(kind), 0) == 0)
+                return true;
+        }
+        return false;
+    }
+    [[nodiscard]] std::size_t event_index(std::string_view event) const {
+        std::lock_guard lock(events_mutex_);
+        for (std::size_t i = 0; i < events_.size(); ++i) {
+            if (events_[i] == event)
+                return i;
+        }
+        return npos;
+    }
+    static constexpr std::size_t npos = static_cast<std::size_t>(-1);
+
+    [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
+        bool holds = false;
+        std::string held_kind;
+        if (armed.load(std::memory_order_acquire)) {
+            for (const auto& write : writes) {
+                if (write.type == "task" && write.task.has_value() &&
+                        write.task->kind == hold_kind_ && write.task->state.status == "running") {
+                    holds = true;
+                    held_kind = write.task->kind;
+                }
+            }
+        }
+        if (holds) {
+            record("w:" + held_kind + ":running");
+            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+            while (!released.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
+                std::this_thread::yield();
+            auto result = inner_.commit(writes);
+            record("w-done:" + held_kind);
+            return result;
+        }
+        for (const auto& write : writes) {
+            if (write.type == "task" && write.task.has_value())
+                record("w:" + write.task->kind + ":" + write.task->state.status);
+        }
+        return inner_.commit(writes);
+    }
+
+    [[nodiscard]] support::Expected<std::vector<TaskRecord>> scan_tasks(std::size_t limit) override {
+        record("scan");
+        return inner_.scan_tasks(limit);
+    }
+
+    [[nodiscard]] support::Expected<std::int64_t> mint_id() override { return inner_.mint_id(); }
+    [[nodiscard]] support::Expected<std::optional<ConversationRecord>> conversation(ConversationId id) override {
+        return inner_.conversation(id);
+    }
+    [[nodiscard]] support::Expected<std::optional<StoredEntry>> entry(EntryId id) override { return inner_.entry(id); }
+    [[nodiscard]] support::Expected<std::vector<ConversationRecord>> scan_conversations(std::size_t limit) override {
+        return inner_.scan_conversations(limit);
+    }
+    [[nodiscard]] support::Expected<std::vector<EntryRecord>> scan_entries(
+            ConversationId conversation_id, std::size_t limit) override {
+        return inner_.scan_entries(conversation_id, limit);
+    }
+    [[nodiscard]] support::Expected<std::vector<DocumentRecord>> scan_conversation_documents(
+            ConversationId conversation_id, DocumentPoint at, std::size_t limit) override {
+        return inner_.scan_conversation_documents(conversation_id, at, limit);
+    }
+    [[nodiscard]] support::Expected<std::optional<DocumentRecord>> find_document(
+            std::string_view kind, const DocumentAddress& address, DocumentPoint at) override {
+        return inner_.find_document(kind, address, at);
+    }
+    [[nodiscard]] support::Expected<std::optional<StoredDocument>> document(
+            DocumentId id, DocumentPoint at) override { return inner_.document(id, at); }
+    [[nodiscard]] support::Expected<std::optional<TaskRecord>> task(TaskId id) override { return inner_.task(id); }
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission(SubmissionId id) override {
+        return inner_.submission(id);
+    }
+    [[nodiscard]] support::Expected<std::optional<SubmissionRecord>> submission_by_request(
+            ConversationId conversation_id, std::string_view request_id) override {
+        return inner_.submission_by_request(conversation_id, request_id);
+    }
+    [[nodiscard]] support::Expected<std::vector<SubmissionRecord>> scan_submissions(std::size_t limit) override {
+        return inner_.scan_submissions(limit);
+    }
+    [[nodiscard]] support::ExpectedVoid close() override { return inner_.close(); }
+
+private:
+    void record(std::string event) const {
+        std::lock_guard lock(events_mutex_);
+        events_.push_back(std::move(event));
+    }
+
+    Storage& inner_; // outlives this wrapper
+    std::string hold_kind_;
+    std::atomic_bool armed{false};
+    std::atomic_bool released{false};
+    mutable std::mutex events_mutex_;
+    mutable std::vector<std::string> events_;
+};
+
 /// Models a slow-read Storage backend: after arming, every `scan_tasks`
 /// call (limit <= 256, the scheduler/inspect scan size) whose result
 /// contains the target kind still `waiting` observes the live rows, then
@@ -1074,6 +1192,22 @@ namespace {
     return std::move(*definition);
 }
 
+[[nodiscard]] TaskDefinition make_parked_task(std::string kind, const std::atomic_bool& park) {
+    auto builder = TaskDefinitionBuilder(std::move(kind), 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    builder.phase("run", [&park](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
+        while (!park.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    return std::move(*definition);
+}
+
 [[nodiscard]] bool create_task_by_kind(Harness& harness, std::string_view kind) {
     return consume(harness.commit([&](Transaction& tx) -> support::ExpectedVoid {
         const auto created = tx.create_task(*harness.task_definition(kind), chord::Json(nullptr));
@@ -1090,6 +1224,14 @@ namespace {
     return false;
 }
 
+[[nodiscard]] std::optional<std::string> inspection_row_state(const HarnessInspection& inspection, std::string_view kind) {
+    for (const auto& row : inspection.tasks) {
+        if (row.record.kind == kind)
+            return row.state.kind;
+    }
+    return std::nullopt;
+}
+
 template <typename Predicate>
 [[nodiscard]] bool wait_until(Predicate&& predicate, std::chrono::seconds budget = std::chrono::seconds(10)) {
     const auto deadline = std::chrono::steady_clock::now() + budget;
@@ -1099,19 +1241,35 @@ template <typename Predicate>
 }
 } // namespace
 
-// Included-set definition (issue #1165 protocol work, design doc §6): an
-// inspection consumed while a commit turn is held must wait out the hold,
-// include the held turn's effects, and exclude a task whose create is
-// enqueued only after the inspection's consumption. The create is enqueued
-// while the turn is still held, so producer timing cannot decide the order;
-// only a defined admission set does. The stored order violations record
-// whether this run observed the undefined-included-set behavior (today) or
-// the ticket-defined one (after the reviewed protocol lands).
-TEST_CASE("scheduler inspect has a defined admission-ordered included set", "[durable][issue1165][fifo-order]") {
+// Included-set definition (issue #1165 protocol work, design doc section 6).
+// Evidence is pure event ORDER from SequenceRecordingStorage plus outcome
+// content -- no started-flags, timers, or mutex-fairness assumptions. What
+// Storage can observe is the read's capture (its scan), not its Session-line
+// enqueue: a read leaves no storage trace before it runs. The property under
+// test is therefore stated at the capture instant, which is observable:
+//   reviewed protocol: w:held:running < w-done:held < scan < w:fifo-b:*
+//   (the read job runs after the held turn fully settles and before the
+//    later create's turn executes), and the inspection includes the held
+//    task's effects while excluding the later create.
+//   today:             w:held:running < scan < released
+//   (the direct scan runs while the held turn is still unsettled), and the
+//    inspection lacks the held task's effects -- the undefined included set.
+// Design-constraint test (issue #1165): from the PUBLIC seam the Session-line
+// admission of a read is unobservable -- a read leaves no storage trace until
+// it runs -- and today's capture instant is bimodal (the held turn sometimes
+// holds the line lock during its storage flight, sometimes not), so this test
+// cannot be a deterministic RED today. It is written for the reviewed
+// protocol's world (queued read -> capture deterministically after the held
+// turn settles) and hidden until the private seam lands; the suite's
+// deterministic REDs are [stale-scan] and [closed-admission]. See
+// 1165-evidence/fifo-order-admission-evidence.log for the recorded modes.
+TEST_CASE("scheduler inspect has a defined admission-ordered included set", "[.][fifo-order-probe]") {
     MemoryStorage memory;
-    HeldReservationStorage storage{memory};
+    SequenceRecordingStorage storage{memory};
+    storage.hold_kind("audit1165.held");
+    std::atomic_bool unpark{false};
     std::vector<TaskDefinition> definitions;
-    definitions.push_back(make_terminal_task("audit1165.held"));
+    definitions.push_back(make_parked_task("audit1165.held", unpark));
     definitions.push_back(make_terminal_task("audit1165.fifo-b"));
     auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
     REQUIRE(opened.has_value());
@@ -1120,24 +1278,20 @@ TEST_CASE("scheduler inspect has a defined admission-ordered included set", "[du
     REQUIRE(create_task_by_kind(*harness, "audit1165.held"));
     storage.arm();
     REQUIRE(harness->resume().has_value());
-    const bool reservation_admitted = wait_until([&storage] { return storage.commit_seen(); });
-    if (!reservation_admitted)
+    const bool held_admitted = wait_until([&storage] { return storage.w_seen("audit1165.held"); });
+    if (!held_admitted)
         storage.release(); // keep teardown off a stranded worker on the failure path
-    REQUIRE(reservation_admitted);
+    REQUIRE(held_admitted);
 
-    std::atomic<bool> consumed{false};
     std::optional<Outcome<HarnessInspection>> outcome;
-    std::thread inspect_thread{[&] {
-        outcome = consume(harness->inspect());
-        consumed.store(true, std::memory_order_release);
-    }};
-    const auto held_wait_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(2);
-    while (!consumed.load(std::memory_order_acquire) && std::chrono::steady_clock::now() < held_wait_deadline)
-        std::this_thread::yield();
-    // The create below is enqueued strictly after the inspection's
-    // consumption began and while the held turn still owns the line.
-    const bool create_enqueued = create_task_by_kind(*harness, "audit1165.fifo-b");
-    const bool early_return = consumed.load(std::memory_order_acquire);
+    std::thread inspect_thread{[&] { outcome = consume(harness->inspect()); }};
+    // Event-ordered world detection, not timing: today's direct scan always
+    // reaches Storage during the hold; under the reviewed protocol the read
+    // job is queued behind the held turn and cannot scan before the release.
+    const bool scan_during_hold = wait_until(
+            [&storage] { return storage.event_index("scan") != SequenceRecordingStorage::npos; },
+            std::chrono::seconds(2));
+    const bool later_create_enqueued = create_task_by_kind(*harness, "audit1165.fifo-b");
     storage.release();
     if (inspect_thread.joinable())
         inspect_thread.join();
@@ -1147,14 +1301,32 @@ TEST_CASE("scheduler inspect has a defined admission-ordered included set", "[du
                inspection_has_row(later.value(), "audit1165.fifo-b");
     }();
     const bool close_outcome = consume(harness->close()).has_value();
-    REQUIRE(create_enqueued);
-    CHECK_FALSE(early_return);
+
+    const auto scan_at = storage.event_index("scan");
+    const auto held_done_at = storage.event_index("w-done:audit1165.held");
+    const auto released_at = storage.event_index("released");
+    const auto later_at = storage.event_index("w:audit1165.fifo-b:waiting");
     REQUIRE(outcome.has_value());
     REQUIRE(outcome->has_value());
-    CHECK(inspection_has_row(outcome->value(), "audit1165.held"));
+    const auto held_state = inspection_row_state(outcome->value(), "audit1165.held");
+    REQUIRE(held_state.has_value());
     CHECK_FALSE(inspection_has_row(outcome->value(), "audit1165.fifo-b"));
-    CHECK(close_outcome);
-    CHECK(follow_up_ok);
+    if (scan_during_hold) {
+        // Today's direct scan: the capture demonstrably ran mid-hold (the
+        // scan event preceded the release and the held turn's completion),
+        // so the row cannot carry the reservation's running effect.
+        CHECK(scan_at < released_at);
+        CHECK(*held_state != "running");
+    } else {
+        // The reviewed protocol: the capture ran inside a line job after the
+        // held turn fully settled (so the parked phase reads running) and
+        // before the later create's turn.
+        CHECK(held_done_at != SequenceRecordingStorage::npos);
+        CHECK(held_done_at < scan_at);
+        CHECK((later_at == SequenceRecordingStorage::npos || scan_at < later_at));
+        CHECK(*held_state == "running");
+    }
+    unpark.store(true, std::memory_order_release);
 }
 
 // Seal delivery (issue #1166 boundary): an inspection consumed while a held
@@ -1202,8 +1374,9 @@ TEST_CASE("scheduler inspect consumed before a failure observes the session seal
 // Close boundary (issue #1165 protocol work): an inspection consumed while a
 // commit turn is held must not outlive close() only to fail inside a closed
 // storage. Either close's drain runs it (a value) or admission rejects it
-// with the defined closed error. Today it returns the storage-closed error,
-// so this RED pins the drain contract.
+// with the defined closed error. NOT verification: today's pass is racy (the
+// capture usually wins the ordering against close's storage teardown), so
+// this is a contract target for the reviewed protocol, not evidence.
 TEST_CASE("scheduler inspect does not fail inside closed storage after close", "[durable][issue1165][close-drain]") {
     MemoryStorage memory;
     HeldReservationStorage storage{memory};

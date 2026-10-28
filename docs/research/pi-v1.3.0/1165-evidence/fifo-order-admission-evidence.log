@@ -1,0 +1,23 @@
+# fifo-order admission evidence: 6 runs on unchanged production (15724cd09)
+# mode b = scan event preceded release (capture mid-hold, undefined included set)
+# mode a = scan event followed the held turn completion (answer right by scheduling luck)
+--- run 1 ---
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1313: FAILED:
+with expansion:
+--- run 2 ---
+All tests passed (12 assertions in 1 test case)
+--- run 3 ---
+All tests passed (12 assertions in 1 test case)
+--- run 4 ---
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1313: FAILED:
+with expansion:
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1319: FAILED:
+with expansion:
+--- run 5 ---
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1313: FAILED:
+with expansion:
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1319: FAILED:
+with expansion:
+--- run 6 ---
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1313: FAILED:
+with expansion:
