@@ -62,7 +62,7 @@
         },
         {
           "path": "src/mcp/HttpClient.cpp",
-          "sha256": "ef6aeda9e120efb96c8d7309a9a35e3661a8c1a2f945eb7b82dcaf1a232c4dc2"
+          "sha256": "e51f9a755bce18884317fd04c661d4db45d2c32a154e499f26dc9dcf6459eea2"
         },
         {
           "path": "src/mcp/HttpClientImpl.hpp",
@@ -190,7 +190,7 @@
         },
         {
           "path": "tests/coding_agent/McpHttpSessionTest.cpp",
-          "sha256": "117e1ac2e07771c1d2435cae543303225786cc4149171232079ecb7fa7adf511"
+          "sha256": "5f805cb11dfccd72827d3c5ed5956d151e8e333fc4cd2a57bd61b4e9564238a2"
         },
         {
           "path": "tests/coding_agent/McpStructuredContentTest.cpp",
