@@ -1,6 +1,8 @@
-// MCP streamable-http registration gate (ADR 0054): a configured MCP server
-// URL is accepted only in its `https://` form, rejected here at registration,
-// and the transport never falls back to plaintext or follows a redirect.
+// MCP streamable-http registration gate (pi v1.3.0 `validateMcpServerConfig`,
+// ADR 0075): a configured MCP server URL is accepted in its `http://` or
+// `https://` form and rejected here at registration for any other scheme,
+// with pi's message. Plain HTTP is the frozen upstream behavior; certificate
+// validation on HTTPS stays platform-enforced downstream in the transport.
 
 #include <cch/mcp/HttpServerConfig.hpp>
 
@@ -15,15 +17,20 @@ support::ExpectedVoid validate_http_server_config(const HttpServerConfig& config
     if (config.name.empty()) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation, "MCP server has no name"));
     }
-    if (!config.url.starts_with("https://")) {
+    const bool http = config.url.starts_with("http://");
+    const bool https = config.url.starts_with("https://");
+    if (!http && !https) {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
-                "MCP server '" + config.name + "' URL must use https:// (TLS-only)",
+                "MCP server '" + config.name + "' url must be an http or https URL",
                 config.url.empty() ? "missing URL" : "rejected URL: " + config.url));
     }
-    const std::string_view authority = std::string_view{config.url}.substr(std::string_view{"https://"}.size());
+    const std::string_view authority = std::string_view{config.url}.substr(
+            https ? std::string_view{"https://"}.size() : std::string_view{"http://"}.size());
     const auto slash = authority.find('/');
     const std::string_view host_port = slash == std::string_view::npos ? authority : authority.substr(0, slash);
-    if (host_port.empty()) {
+    // `http://?query` or `http://#fragment` have an empty host: pi's
+    // `new URL(value)` parses them with an empty hostname and is rejected.
+    if (host_port.empty() || host_port.front() == '?' || host_port.front() == '#') {
         return std::unexpected(support::make_error(support::ErrorCode::Validation,
                 "MCP server '" + config.name + "' URL is missing a host",
                 "rejected URL: " + config.url));

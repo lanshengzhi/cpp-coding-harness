@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""MCP streamable-http TLS test server (spec #865, ticket #873 fixture).
+"""MCP streamable-http test server (spec #865, ticket #873 fixture; pi-v1.3.0
+transport slice #1103 added plain-HTTP and redirect endpoints).
 
-A self-contained HTTPS MCP server for the streamable-http transport. The
+A self-contained HTTP(S) MCP server for the streamable-http transport. The
 protocol shape mirrors pi v1.0.4
 `packages/mcp/src/transports/streamable-http.ts` for the request path: one
 JSON-RPC POST per request, an `application/json` or `text/event-stream`
@@ -9,9 +10,26 @@ response, and an `mcp-session-id` the client must echo on every request after
 `initialize`.
 
 `--cert`/`--key` secure the listener (the committed test PKI under
-`tests/ai/providers/tls/`; SAN IP 127.0.0.1, DNS localhost). The server binds
-an ephemeral loopback port and prints `PORT=<n>` on stdout so the test can
-reach it. It is never reachable from outside the loopback interface.
+`tests/ai/providers/tls/`; SAN IP 127.0.0.1, DNS localhost); without them the
+server listens in plain HTTP (frozen pi-v1.3.0 accepts both schemes). The
+server binds an ephemeral loopback port and prints `PORT=<n>` on stdout so the
+test can reach it. It is never reachable from outside the loopback interface.
+
+Redirect endpoints exercise the frozen fetch redirect semantics (audit-1052
+`transports.json`, undici `httpRedirectFetch`):
+
+  /redirect-same          any request 307 -> this server's /mcp
+  /redirect-cross         any request 307 -> PIKE_MCP_REDIRECT_TARGET
+  /redirect-loop          any request 307 -> /redirect-loop (never settles)
+  /redirect-scheme        any request 307 -> PIKE_MCP_REDIRECT_LOCATION
+  /redirect-no-location   302 without a Location header
+
+When `PIKE_MCP_REQUIRE_AUTHORIZATION` is set, every POST without an
+`Authorization` header is answered 401 (the frozen cross-origin redirect
+target's behavior), so a test can prove the cross-origin hop stripped the
+credential. When `PIKE_MCP_TRACE` names a file, the server appends one flushed
+line per observed event; the `recv` line records whether an Authorization
+header was present (never its value).
 
 Methods (`tools/list` reports one tool per page with `nextCursor`):
 
@@ -33,7 +51,6 @@ Debug methods exercise the separation cases:
 
   debug/non_mcp_body          200 application/json that is not a JSON-RPC reply
   debug/http_status           500 with a plain error body
-  debug/redirect              302 whose Location is a non-TLS `http://` target
   debug/json_rpc_error        a well-formed JSON-RPC error response
   debug/authorization_present JSON-RPC result carrying the received Authorization header
   debug/unauthorized          401 with a `WWW-Authenticate: Bearer` challenge
@@ -55,6 +72,10 @@ PAGE_SIZE = 1
 # observed event, which the failure-isolation tests poll to assert ordering.
 TRACE = os.environ.get("PIKE_MCP_TRACE")
 EXPECTED_DELETE_AUTHORIZATION = os.environ.get("PIKE_MCP_EXPECT_DELETE_AUTHORIZATION")
+REDIRECT_PATH = os.environ.get("PIKE_MCP_REDIRECT_PATH")
+REDIRECT_TARGET = os.environ.get("PIKE_MCP_REDIRECT_TARGET")
+REDIRECT_LOCATION = os.environ.get("PIKE_MCP_REDIRECT_LOCATION", "ftp://127.0.0.1/mcp")
+REQUIRE_AUTHORIZATION = os.environ.get("PIKE_MCP_REQUIRE_AUTHORIZATION")
 
 
 def trace(line):
@@ -127,6 +148,9 @@ class Handler(BaseHTTPRequestHandler):
         pass
 
     def do_GET(self):
+        # Redirect paths answer every method, including the GET stream probe.
+        if self._redirect():
+            return
         # The fixture offers no server-to-client GET stream: 405 is the
         # transport's "feature absent" answer (pi `openSseStream`).
         trace("recv GET")
@@ -152,9 +176,20 @@ class Handler(BaseHTTPRequestHandler):
             self._raw(400, "application/json", b'{"error":"invalid json"}')
             return
 
+        if self._redirect():
+            return
         method = message.get("method")
         rid = message.get("id")
-        trace("recv " + str(method) + " id=" + str(rid))
+        trace("recv " + str(method) + " id=" + str(rid) +
+              " authorization_present=" + str(bool(self.headers.get("Authorization"))).lower())
+        trace("request-path " + self.path)
+        if REQUIRE_AUTHORIZATION and not self.headers.get("Authorization"):
+            # The frozen cross-origin redirect target answers 401 when the
+            # redirect hop stripped the credential (audit-1052
+            # `transports.json`); a client that leaked Authorization reaches
+            # the dispatcher instead, which is the observable difference.
+            self._unauthorized(rid, {})
+            return
         if method == "notifications/cancelled":
             # A cancelled request must name the id and carry the pi reason
             # (`Aborted` / `Request timed out`); trace them so a test can diff
@@ -179,7 +214,6 @@ class Handler(BaseHTTPRequestHandler):
             "tools/call": self._tools_call,
             "debug/non_mcp_body": self._non_mcp_body,
             "debug/http_status": self._http_status,
-            "debug/redirect": self._redirect,
             "debug/json_rpc_error": self._json_rpc_error,
             "debug/authorization_present": self._authorization_present,
             "debug/unauthorized": self._unauthorized,
@@ -271,11 +305,33 @@ class Handler(BaseHTTPRequestHandler):
     def _http_status(self, rid, _params):
         self._raw(500, "text/plain", b"boom")
 
-    def _redirect(self, rid, _params):
-        self.send_response(302)
-        self.send_header("Location", "http://127.0.0.1:1/mcp")
+    def _redirect(self):
+        # One redirect hop for the request path, keyed by the request path. The
+        # client must re-issue the request itself (fetch semantics); the
+        # fixture never serves a JSON-RPC reply from these paths.
+        status = 307
+        target = None
+        if REDIRECT_PATH and self.path == REDIRECT_PATH:
+            target = REDIRECT_TARGET
+        elif self.path == "/redirect-same":
+            target = "/mcp"
+        elif self.path == "/redirect-cross":
+            target = REDIRECT_TARGET or "/mcp"
+        elif self.path == "/redirect-loop":
+            target = "/redirect-loop"
+        elif self.path == "/redirect-scheme":
+            target = REDIRECT_LOCATION
+        elif self.path == "/redirect-no-location":
+            status = 302
+        else:
+            return False
+        trace("redirect " + self.path + " -> " + str(target))
+        self.send_response(status)
+        if target is not None:
+            self.send_header("Location", target)
         self.send_header("Content-Length", "0")
         self.end_headers()
+        return True
 
     def _json_rpc_error(self, rid, _params):
         self._json(rid, error={"code": -32000, "message": "server exploded"})
@@ -318,15 +374,15 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--cert", required=True)
-    parser.add_argument("--key", required=True)
+    parser.add_argument("--cert")
+    parser.add_argument("--key")
     args = parser.parse_args()
 
-    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-    context.load_cert_chain(args.cert, args.key)
-
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-    server.socket = context.wrap_socket(server.socket, server_side=True)
+    if args.cert is not None or args.key is not None:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(args.cert, args.key)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
     print("PORT=%d" % server.server_address[1], flush=True)
     server.serve_forever()
 

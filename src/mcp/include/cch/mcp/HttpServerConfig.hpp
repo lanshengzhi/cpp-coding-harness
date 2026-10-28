@@ -17,9 +17,10 @@ struct HttpServerConfig {
     /// pi server name: the namespace of the server's tools and the identity
     /// used in diagnostics.
     std::string name;
-    /// The server endpoint. The current support boundary is TLS-only
-    /// (ADR 0054): an `https://` URL is the only accepted form; plain HTTP and
-    /// redirect handling are a later transport slice.
+    /// The server endpoint. pi v1.3.0 accepts `http://` and `https://` here
+    /// (ADR 0075 supersedes ADR 0054's TLS-only rule for MCP); any other
+    /// scheme is rejected at registration with pi's message. HTTPS
+    /// certificate validation stays platform-enforced in the transport.
     std::string url;
     /// Extra request headers layered on every JSON-RPC POST (pi `headers`),
     /// for example an `Authorization` bearer token.
@@ -30,10 +31,9 @@ struct HttpServerConfig {
     std::chrono::milliseconds request_timeout{std::chrono::milliseconds{30000}};
 };
 
-/// Registration-time TLS gate (ADR 0054): the URL must be a well-formed
-/// `https://` endpoint. A non-TLS URL is rejected here with a Validation
-/// error; the transport never falls back to plaintext and never follows a
-/// redirect to a non-TLS target.
+/// Registration-time URL gate (pi `validateMcpServerConfig`): the URL must be
+/// a well-formed `http://` or `https://` endpoint. Any other scheme is
+/// rejected here with a Validation error before any socket work.
 [[nodiscard]] support::ExpectedVoid validate_http_server_config(const HttpServerConfig& config);
 
 } // namespace cch::mcp

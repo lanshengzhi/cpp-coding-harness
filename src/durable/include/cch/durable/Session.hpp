@@ -591,10 +591,10 @@ struct SessionEnd {
 /// One durable Session kernel over one storage backend (frozen pi `Session`).
 ///
 /// The Session owns one mutation line: every commit callback, preparation,
-/// storage settlement, adoption and publication runs while that line is held,
-/// and only committed state is observable. The line runs in the one
-/// serialized execution domain the caller chooses; this package owns no
-/// thread, loop or scheduler.
+/// storage settlement, adoption and publication, and every committed read
+/// runs while that line is held, and only committed state is observable. The
+/// line runs in the one serialized execution domain the caller chooses; this
+/// package owns no thread, loop or scheduler.
 ///
 /// Storage failures are final. The first error a storage method reports fails
 /// the Session: that call gets the error, every later call and every storage
@@ -635,15 +635,20 @@ public:
     /// Observe the end of the Session (frozen pi `Session.subscribeClose`).
     [[nodiscard]] support::ExpectedVoid subscribe_close(CloseListener listener);
 
-    /// Run one committed read atomically on the Session mutation line
-    /// (frozen pi `SessionImpl.readOnLine`). The callback observes every
-    /// commit settled before it and no publication of a later one, so a
-    /// read-and-register observation (hydrate a view, then attach its
-    /// commit listener) loses no publication and admits no duplicate frame.
-    /// This is the frozen `readOnLine` primitive, not a test hook: view
-    /// mounts and inspection snapshots derive their acquisition revision
-    /// through it. The callback must read committed Storage state only; it
-    /// must not enqueue commits, directly or indirectly.
+    /// Run one committed read on the Session mutation line (frozen pi
+    /// `SessionImpl.readOnLine`). The read joins the same FIFO line as
+    /// commits: it runs only after every commit and read admitted before it
+    /// has settled, it observes every commit settled before it, and no
+    /// operation admitted after it starts before its completion callback
+    /// returns. A Session that fails while the read waits rejects the read
+    /// with the frozen SessionFailed message without running the callback; a
+    /// read admitted after close is rejected with the frozen "Session is
+    /// closed" message. The callback reads committed Storage state only and
+    /// must not enqueue commits, directly or indirectly; it runs while the
+    /// mutation line is held. The read can complete inline when the line is
+    /// idle; a read admitted from an active completion waits until that
+    /// completion returns. The Session and its Storage must outlive the
+    /// operation until its completion callback returns.
     [[nodiscard]] support::AsyncResult<chord::Json> read_committed(
             std::move_only_function<support::Expected<chord::Json>(Storage&)> read);
 

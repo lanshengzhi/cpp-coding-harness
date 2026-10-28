@@ -5,9 +5,12 @@
 // `application/json` or `text/event-stream` response, and an `mcp-session-id`
 // captured from the server and echoed on later requests, plus the long-lived
 // server-to-client GET stream (pi `runGetStream`) opened after
-// `notifications/initialized`. The HTTPS round trip itself reuses the existing
-// outbound client transport (`support::StreamTransport`, ADR 0054); this
-// file owns only the MCP protocol and opens no second HTTP stack.
+// `notifications/initialized`. The HTTP(S) round trip itself reuses the
+// existing outbound client transport (`support::StreamTransport`, ADR 0054;
+// the TLS-only/no-redirect restrictions of that ADR are superseded for MCP by
+// ADR 0075); this file owns only the MCP protocol and opens no second HTTP
+// stack. Request redirects follow the frozen pi-v1.3.0 platform fetch
+// semantics (undici `httpRedirectFetch`, audit-1052 `transports.json`).
 //
 // The wire machinery is private to cch_mcp; callers use the
 // <cch/mcp/HttpClient.hpp> interface.
@@ -17,6 +20,7 @@
 #include "StructuredResultText.hpp"
 
 #include <cch/mcp/Auth.hpp>
+#include <cch/mcp/Url.hpp>
 
 #include "support/AsyncResultBridge.hpp"
 #include "support/BoostBeastStreamTransport.hpp"
@@ -78,6 +82,173 @@ constexpr std::size_t kErrorBodyChars = 500;
     return {};
 }
 
+/// Case-insensitive header erase: the request map mixes the caller's config
+/// header spelling with the auth source's, so the redirect hop cannot erase
+/// by exact key.
+void erase_header(std::map<std::string, std::string>& headers, std::string_view name) {
+    const std::string wanted = lowercase(name);
+    for (auto iterator = headers.begin(); iterator != headers.end();) {
+        if (lowercase(iterator->first) == wanted) {
+            iterator = headers.erase(iterator);
+        } else {
+            ++iterator;
+        }
+    }
+}
+
+/// pi fetch's redirect statuses (undici `redirectStatus`, frozen
+/// `lib/web/fetch/constants.js`): only these are followed; any other status,
+/// including other 3xx ones, is returned to the caller untouched.
+[[nodiscard]] bool is_redirect_status(int status) {
+    return status == 301 || status == 302 || status == 303 || status == 307 || status == 308;
+}
+
+/// pi fetch's redirect ceiling: undici `httpRedirectFetch` fails the fetch
+/// when `request.redirectCount === 20` (frozen `lib/web/fetch/index.js`).
+inline constexpr int kMaxRedirectCount = 20;
+
+/// pi fetch's request-body headers, dropped when the redirect rewrites the
+/// request to `GET` (undici `requestBodyHeader`, frozen constants).
+constexpr std::string_view kRequestBodyHeaders[] = {
+        "content-encoding",
+        "content-language",
+        "content-location",
+        "content-type",
+        "content-length",
+};
+
+/// pi fetch's CORS non-wildcard request headers, dropped when the redirect
+/// crosses an origin (undici `httpRedirectFetch` step 13, frozen index).
+constexpr std::string_view kCrossOriginHeaders[] = {
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "host",
+};
+
+/// RFC 3986 §5.2.4 `remove_dot_segments`, applied to a resolved relative
+/// redirect path so `../`-style Locations cannot escape the base directory.
+[[nodiscard]] std::string remove_dot_segments(std::string_view path) {
+    std::string output;
+    output.reserve(path.size());
+    while (!path.empty()) {
+        if (path.starts_with("../")) {
+            path.remove_prefix(3);
+        } else if (path.starts_with("./")) {
+            path.remove_prefix(2);
+        } else if (path.starts_with("/./")) {
+            path.remove_prefix(2);
+        } else if (path == "/.") {
+            path.remove_prefix(1);
+        } else if (path.starts_with("/../")) {
+            path.remove_prefix(3);
+            if (const auto last = output.find_last_of('/'); last != std::string::npos) {
+                output.erase(last);
+            } else {
+                output.clear();
+            }
+        } else if (path == "/..") {
+            path.remove_prefix(2);
+            if (const auto last = output.find_last_of('/'); last != std::string::npos) {
+                output.erase(last);
+            } else {
+                output.clear();
+            }
+        } else if (path == "." || path == "..") {
+            path.remove_prefix(path.size());
+        } else {
+            std::size_t end = path.starts_with('/') ? 1 : 0;
+            const auto next = path.find('/', end);
+            end = next == std::string_view::npos ? path.size() : next;
+            output.append(path.substr(0, end));
+            path.remove_prefix(end);
+        }
+    }
+    return output;
+}
+
+/// pi fetch's Location resolution (undici `responseLocationURL` + the WHATWG
+/// `new URL(location, currentURL)` it defers to): the fragment is dropped;
+/// absolute, scheme-relative, origin-relative, query-only, and merged
+/// relative forms all resolve against the current request URL. Only
+/// `http`/`https` targets are followable — anything else is the fetch network
+/// error "URL scheme must be a HTTP(S) scheme".
+[[nodiscard]] support::Expected<std::string> resolve_redirect_location(
+        std::string_view current_url, std::string_view location) {
+    const auto strip_fragment = [](std::string_view value) {
+        const auto hash = value.find('#');
+        return hash == std::string_view::npos ? value : value.substr(0, hash);
+    };
+    location = strip_fragment(location);
+
+    const auto absolute_scheme = [](std::string_view value) -> std::optional<std::string_view> {
+        const auto colon = value.find(':');
+        if (colon == std::string_view::npos || colon == 0) {
+            return std::nullopt;
+        }
+        for (std::size_t index = 0; index < colon; ++index) {
+            const unsigned char character = static_cast<unsigned char>(value[index]);
+            const bool first_alpha = index == 0 && std::isalpha(character) != 0;
+            const bool scheme_char =
+                    std::isalnum(character) != 0 || character == '+' || character == '-' || character == '.';
+            if (!first_alpha && !scheme_char) {
+                return std::nullopt;
+            }
+        }
+        return value.substr(0, colon);
+    };
+
+    if (const auto scheme = absolute_scheme(location)) {
+        std::string lowered{*scheme};
+        std::ranges::transform(lowered, lowered.begin(), [](unsigned char character) {
+            return static_cast<char>(std::tolower(character));
+        });
+        if (lowered != "http" && lowered != "https") {
+            // Deterministic fetch-policy failure: pi rejects the fetch without
+            // a retry, so `Process` keeps it out of connect's transient gate.
+            return std::unexpected(support::make_error(support::ErrorCode::Process,
+                    "URL scheme must be a HTTP(S) scheme",
+                    "rejected redirect Location: " + std::string{location}));
+        }
+        auto parsed = parse_url(location);
+        if (!parsed.valid) {
+            return std::unexpected(support::make_error(support::ErrorCode::Process,
+                    "invalid redirect location",
+                    "rejected URL: " + std::string{location}));
+        }
+        return std::string{location};
+    }
+
+    const auto current = parse_url(current_url);
+    if (!current.valid) {
+        return std::unexpected(support::make_error(
+                support::ErrorCode::Process, "invalid redirect base URL", "rejected URL: " + std::string{current_url}));
+    }
+    if (location.empty()) {
+        // An empty reference resolves to the current URL without its query or
+        // fragment, exactly like `new URL("", base)`.
+        return current.origin + current.path;
+    }
+    if (location.starts_with("//")) {
+        return current.scheme + ":" + std::string{location};
+    }
+    if (location.starts_with("/")) {
+        return current.origin + remove_dot_segments(location);
+    }
+    if (location.starts_with("?")) {
+        return current.origin + current.path + std::string{location};
+    }
+    const auto last_slash = current.path.find_last_of('/');
+    const std::string base = last_slash == std::string::npos ? "/" : current.path.substr(0, last_slash + 1);
+    std::string merged_input = base;
+    merged_input.append(location.data(), location.size());
+    std::string merged = remove_dot_segments(merged_input);
+    if (merged.empty()) {
+        merged = "/";
+    }
+    return current.origin + merged;
+}
+
 /// The media type of a response, lowercased and stripped of its parameters.
 [[nodiscard]] std::string normalized_content_type(const std::map<std::string, std::string>& headers) {
     std::string type = header_value(headers, "content-type");
@@ -95,16 +266,18 @@ constexpr std::size_t kErrorBodyChars = 500;
     return std::ranges::any_of(text, [](unsigned char character) { return std::isspace(character) == 0; });
 }
 
-/// Non-2xx (and redirect) status diagnostics. A redirect is never followed:
-/// streamable-http is TLS-only (ADR 0054), so following `Location` could
-/// downgrade the connection to plaintext.
+/// Non-2xx status diagnostics. Redirect statuses (301/302/303/307/308) are
+/// followed by the request path before this is reached; one that is left here
+/// carries no followable Location, so the status is reported like any other
+/// non-2xx (pi fetch returns such a response to the caller untouched).
 [[nodiscard]] support::Error http_status_error(
         const std::string& server, const support::StreamResponse& response, bool session_known = false) {
     const int status = response.head.status_code;
     if (status == 401) {
         // A rejected credential is an explicit re-login error (never a silent
         // unauthenticated retry), reusing the shared `/login` guidance the
-        // Models auth path produces.
+        // Models auth path produces. pi surfaces the same rejection as
+        // `McpAuthRequiredError` ("MCP server requires authentication").
         return support::make_error(support::ErrorCode::OAuth,
                 format_oauth_reauthenticate_message(mcp_oauth_provider_id(server)),
                 "MCP server '" + server + "' rejected the request (HTTP 401)");
@@ -115,15 +288,6 @@ constexpr std::size_t kErrorBodyChars = 500;
         return support::make_error(support::ErrorCode::Process,
                 "MCP session expired",
                 "MCP server '" + server + "' returned 404 for existing session");
-    }
-    if (status >= 300 && status < 400) {
-        std::string detail = "MCP streamable-http is TLS-only (ADR 0054) and never follows a redirect";
-        if (const std::string location = header_value(response.head.headers, "location"); !location.empty()) {
-            detail += "; Location: " + location;
-        }
-        return support::make_error(support::ErrorCode::Process,
-                "MCP server '" + server + "' refused an HTTP redirect (" + std::to_string(status) + ")",
-                std::move(detail));
     }
     std::string body = response.body;
     if (body.size() > kErrorBodyChars) {
@@ -542,6 +706,80 @@ void HttpClientImpl::complete_frame(QueuedFrame& frame, support::Expected<suppor
     }
 }
 
+boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImpl::stream_with_redirects(
+        support::StreamRequest request, support::BodyChunkHandler on_body_chunk) {
+    // pi v1.3.0 follows redirects with the platform fetch semantics (frozen
+    // undici `httpRedirectFetch`, audit-1052 `transports.json`): the statuses
+    // {301, 302, 303, 307, 308} with a Location are re-issued, 301/302 POST and
+    // 303 rewrite to GET, and a cross-origin hop drops the credential headers.
+    // The redirect count ceiling, the http(s)-only Location rule, and the
+    // error strings are undici's. The caller resolves the auth headers once
+    // per request, replayed across the hops exactly like pi's
+    // `authorizedFetch`.
+    int redirect_count = 0;
+    // The chunk handler is move-only, so each attempt forwards through a
+    // shared holder. An absent handler must reach the transport as absent:
+    // it is the buffered-body signal. The transport never invokes the handler
+    // for a non-2xx response, so an intermediate redirect body cannot inject
+    // events either way.
+    auto chunk_handler = std::make_shared<support::BodyChunkHandler>(std::move(on_body_chunk));
+    const auto forward_chunk = [chunk_handler](std::string_view bytes) -> support::ExpectedVoid {
+        return (*chunk_handler)(bytes);
+    };
+    const auto attempt_handler = [&]() -> support::BodyChunkHandler {
+        if (*chunk_handler) {
+            return support::BodyChunkHandler{forward_chunk};
+        }
+        return {};
+    };
+    for (;;) {
+        auto response = co_await transport_->async_stream(request, attempt_handler());
+        if (!response) {
+            co_return std::unexpected(std::move(response.error()));
+        }
+        if (!is_redirect_status(response->head.status_code)) {
+            co_return response;
+        }
+        const std::string location = header_value(response->head.headers, "location");
+        if (location.empty()) {
+            // pi fetch: a response without a Location URL is returned to the
+            // caller untouched, so the status surfaces as an explicit error.
+            co_return response;
+        }
+        CCH_TRY(target, resolve_redirect_location(request.url, location));
+        if (redirect_count == kMaxRedirectCount) {
+            // Deterministic fetch-policy failure: pi rejects the fetch without
+            // a retry, so `Process` keeps it out of connect's transient gate.
+            co_return std::unexpected(support::make_error(support::ErrorCode::Process,
+                    "redirect count exceeded",
+                    "MCP server '" + config_.name + "' exceeded " + std::to_string(kMaxRedirectCount) + " redirects"));
+        }
+        ++redirect_count;
+        const int status = response->head.status_code;
+        const bool rewrite_to_get = ((status == 301 || status == 302) && request.method == "POST") ||
+                                    (status == 303 && request.method != "GET" && request.method != "HEAD");
+        if (rewrite_to_get) {
+            request.method = "GET";
+            request.body.clear();
+            for (const std::string_view name : kRequestBodyHeaders) {
+                erase_header(request.headers, name);
+            }
+        }
+        const auto previous = parse_url(request.url);
+        const auto next = parse_url(target);
+        if (!previous.valid || !next.valid || previous.origin != next.origin) {
+            // Cross-origin (or unparseable) hop: the fetch redirect rules drop
+            // the credential headers so Authorization never leaks to another
+            // origin (audit-1052 "cross-origin redirect is followed without
+            // Authorization and is rejected").
+            for (const std::string_view name : kCrossOriginHeaders) {
+                erase_header(request.headers, name);
+            }
+        }
+        request.url = std::move(target);
+    }
+}
+
 boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImpl::post(std::string_view body,
         std::stop_token stop_token,
         support::BodyChunkHandler on_body_chunk,
@@ -562,10 +800,7 @@ boost::asio::awaitable<support::Expected<support::StreamResponse>> HttpClientImp
     if (request_sent) {
         *request_sent = true;
     }
-    // An empty body handler just buffers the response body (a JSON reply, or
-    // the complete SSE response stream); an observed request additionally
-    // parses the stream incrementally for its progress events.
-    co_return co_await transport_->async_stream(request, std::move(on_body_chunk));
+    co_return co_await stream_with_redirects(std::move(request), std::move(on_body_chunk));
 }
 
 boost::asio::awaitable<support::Expected<support::JsonValue>> HttpClientImpl::send_request(
@@ -967,6 +1202,9 @@ boost::asio::awaitable<std::pair<HttpClientImpl::GetStreamAttempt, support::Erro
     // governed by `close()`'s cancellation.
     request.timeout = config_.request_timeout;
     request.stop_token = stream_stop_.get_token();
+    // The GET stream is one fetch call like any other: redirects are followed
+    // with the shared rules, and a cross-origin hop strips the credential
+    // headers too.
 
     GetStreamSseReader reader;
     auto on_chunk = [&reader, &cursor, this](std::string_view bytes) -> support::ExpectedVoid {
@@ -994,7 +1232,7 @@ boost::asio::awaitable<std::pair<HttpClientImpl::GetStreamAttempt, support::Erro
         return {};
     };
 
-    auto response = co_await transport_->async_stream(request, on_chunk);
+    auto response = co_await stream_with_redirects(std::move(request), std::move(on_chunk));
     if (!response) {
         co_return std::pair{
                 stream_stop_.stop_requested() ? GetStreamAttempt::FatalFailure : GetStreamAttempt::RetryableFailure,
@@ -1118,7 +1356,7 @@ boost::asio::awaitable<void> HttpClientImpl::delete_session() {
     request.headers = std::move(*resolved);
     // pi `close`: a 1 s bound on the session DELETE; the outcome is ignored.
     request.timeout = std::chrono::milliseconds{1000};
-    (void)co_await transport_->async_stream(request, {});
+    (void)co_await stream_with_redirects(std::move(request), {});
 }
 
 void HttpClientImpl::close() noexcept {

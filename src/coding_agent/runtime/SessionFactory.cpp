@@ -236,7 +236,8 @@ struct AssemblyPlan {
     /// `--exclude-tools` intent applied to the discovered tool set at assembly.
     ToolSelection tool_selection;
     /// Configured MCP streamable-http servers (spec #865, ticket #873).
-    /// Assembly validates each URL at registration (TLS-only, ADR 0054),
+    /// Assembly validates each URL at registration (`http`/`https` accepted;
+    /// ADR 0054's TLS-only rule is superseded for MCP by ADR 0075),
     /// connects it, and appends the resulting Extension Tool Source before the
     /// sources are loaded.
     std::vector<mcp::McpHttpServerConfig> mcp_http_servers;
@@ -1671,11 +1672,12 @@ struct PreparedAssemblyTarget final {
     }
 
     // MCP streamable-http servers (spec #865, ticket #873): the URL is
-    // validated at registration (TLS-only, ADR 0054) before any connection is
-    // attempted, then the server is connected and its tools listed. A
-    // non-https:// URL, an unreachable server, or a server that does not speak
-    // MCP fails Session Assembly explicitly — a configured server is never
-    // silently dropped and the transport never falls back to plaintext.
+    // validated at registration (http/https accepted; ADR 0054's TLS-only rule
+    // is superseded for MCP by ADR 0075) before any connection is attempted,
+    // then the server is connected and its tools listed. A URL with any other
+    // scheme, an unreachable server, or a server that does not speak MCP fails
+    // Session Assembly explicitly — a configured server is never silently
+    // dropped.
     //
     // An OAuth-configured server (spec #882, ticket #884) resolves its access
     // token at request time from `<agentDir>/mcp-auth.json` through a
