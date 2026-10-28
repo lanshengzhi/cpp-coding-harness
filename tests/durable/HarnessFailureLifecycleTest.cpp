@@ -53,8 +53,8 @@ public:
         for (const auto& write : writes) {
             if (write.entry && write.entry->kind == rejected_entry_kind_) {
                 if (on_reject_) on_reject_();
-                return support::AsyncResult<Seq>{std::unexpected(
-                        support::make_error(support::ErrorCode::Process, "injected 1166 failure"))};
+                return support::AsyncResult<Seq>{
+                        std::unexpected(support::make_error(support::ErrorCode::Process, "injected 1166 failure"))};
             }
         }
         return inner_.commit(writes);
@@ -264,12 +264,12 @@ TEST_CASE("a storage failure signals the active invocation before the failing co
     CHECK(closed.has_value());
 
     CHECK(events == std::vector<std::string>({"phase",
-            "fail-call",
-            "storage-reject",
-            "abort-enter",
-            "inspect-rejected",
-            "abort-return",
-            "commit-rejected"}));
+                            "fail-call",
+                            "storage-reject",
+                            "abort-enter",
+                            "inspect-rejected",
+                            "abort-return",
+                            "commit-rejected"}));
     REQUIRE_FALSE(outcome.has_value());
     CHECK(outcome.error().message == "injected 1166 failure");
     CHECK(signalled_before_failure_return);
@@ -282,8 +282,7 @@ TEST_CASE("a storage failure signals the active invocation before the failing co
     CHECK(stop_observed_by_phase.load());
 }
 
-TEST_CASE("a task that completes normally leaves no running identity behind",
-        "[durable][issue1166][lifecycle][spec]") {
+TEST_CASE("a task that completes normally leaves no running identity behind", "[durable][issue1166][lifecycle][spec]") {
     MemoryStorage memory;
     auto opened = consume(Harness::open(memory, HarnessOptions{.tasks = failure_task_definitions()}));
     REQUIRE(opened.has_value());
@@ -405,8 +404,7 @@ TEST_CASE("aborting a task signals its active invocation and leaves no running i
 // and the callback's bounded wait expired (RED: in-lock signalling; the
 // candidate's copy-outside-then-signal makes the listener's `resume()`
 // proceed, so no timeout occurs).
-TEST_CASE("shutdown signals a stop callback without holding the scheduler mutex",
-        "[durable][issue1166][lock][spec]") {
+TEST_CASE("shutdown signals a stop callback without holding the scheduler mutex", "[durable][issue1166][lock][spec]") {
     MemoryStorage storage;
     std::atomic_bool phase_ready{false};
     std::atomic_bool stop_entered{false};
@@ -524,9 +522,7 @@ TEST_CASE("closing the harness signals an active invocation and waits for its st
     REQUIRE(wait_for(phase_ready, std::chrono::seconds(5)));
 
     std::atomic_bool close_success{false};
-    std::jthread closer([&] {
-        close_success.store(consume(harness->close()).has_value());
-    });
+    std::jthread closer([&] { close_success.store(consume(harness->close()).has_value()); });
     REQUIRE(wait_for(callback_entered, std::chrono::seconds(5)));
     // Close must not settle while the stop callback still runs.
     CHECK_FALSE(callback_finished.load());

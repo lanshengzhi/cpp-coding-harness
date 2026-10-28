@@ -1267,9 +1267,9 @@ struct Harness::Impl {
         (void)session->subscribe_close([this] {
             std::map<std::int64_t, std::vector<std::shared_ptr<TaskWaiter>>> pending;
             std::map<std::optional<std::int64_t>, std::vector<std::shared_ptr<IdleWaiter>>> pending_idle;
-            const auto error = session->failed() ? session_failed_error()
-                                                   : support::make_error(
-                                                           support::ErrorCode::Validation, "Session is closed");
+            const auto error = session->failed()
+                                       ? session_failed_error()
+                                       : support::make_error(support::ErrorCode::Validation, "Session is closed");
             // A storage failure closes the Session without running the
             // Harness shutdown path, so the active invocations are signalled
             // here — before the failing commit's caller observes the
