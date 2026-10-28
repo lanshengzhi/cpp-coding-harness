@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -1519,9 +1520,11 @@ TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
     REQUIRE(root.has_value());
 
     struct Gate {
-        std::atomic_bool claimed{false};
-        std::atomic_bool stop_marked{false};
-        std::atomic_bool release{false};
+        std::mutex mutex;
+        std::condition_variable cv;
+        bool claimed{false};
+        bool stop_marked{false};
+        bool release{false};
     };
     Gate gate;
     std::atomic_int calls{0};
@@ -1533,19 +1536,21 @@ TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
         HookGuard(const HookGuard&) = delete;
         HookGuard& operator=(const HookGuard&) = delete;
     };
-    HookGuard hook([&gate](const testing::ViewDispatchHookPoint point) {
-        if (point == testing::ViewDispatchHookPoint::AfterClaim) {
-            gate.claimed.store(true);
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-            while (!gate.release.load() && std::chrono::steady_clock::now() < deadline) {
-                std::this_thread::yield();
-            }
-            return;
-        }
-        gate.stop_marked.store(true);
-    });
     auto watch = consume(harness->watch_conversation(root.value(), [&](ViewFrame) { ++calls; }));
     REQUIRE(watch.has_value());
+    // Install only after the watch exists: a failed acquisition cannot leave
+    // the global hook installed.
+    HookGuard hook([&gate](const testing::ViewDispatchHookPoint point) {
+        std::unique_lock lock(gate.mutex);
+        if (point == testing::ViewDispatchHookPoint::AfterClaim) {
+            gate.claimed = true;
+            gate.cv.notify_all();
+            gate.cv.wait_for(lock, std::chrono::seconds(10), [&gate] { return gate.release; });
+            return;
+        }
+        gate.stop_marked = true;
+        gate.cv.notify_all();
+    });
 
     std::jthread writer([&] {
         static_cast<void>(consume(harness->commit([&](Transaction& tx) -> support::Expected<void> {
@@ -1555,19 +1560,31 @@ TEST_CASE("stopping a watch cancels a delivery claimed before callback entry",
         })));
     });
     std::jthread stopper;
-    // Declared last so it releases the paused publication thread before the
-    // thread joins below, including on a failed assertion.
-    struct ReleaseGuard final {
-        Gate& gate;
-        ~ReleaseGuard() { gate.release.store(true); }
-    } release_guard{gate};
+    const auto cleanup = [&] {
+        {
+            std::lock_guard lock(gate.mutex);
+            gate.release = true;
+        }
+        gate.cv.notify_all();
+        if (stopper.joinable()) stopper.join();
+        if (writer.joinable()) writer.join();
+        testing::clear_view_dispatch_hook();
+    };
+    const auto wait_gate = [&](const bool Gate::* member) {
+        std::unique_lock lock(gate.mutex);
+        return gate.cv.wait_for(lock, std::chrono::seconds(10), [&] { return gate.*member; });
+    };
 
-    wait_until([&] { return gate.claimed.load(); }, "claimed watch delivery");
+    if (!wait_gate(&Gate::claimed)) {
+        cleanup();
+        FAIL("timed out waiting for claimed watch delivery");
+    }
     stopper = std::jthread([&] { reason.store(static_cast<int>(watch.value().stop())); });
-    wait_until([&] { return gate.stop_marked.load(); }, "stop mark before callback entry");
-    gate.release.store(true);
-    writer.join();
-    stopper.join();
+    if (!wait_gate(&Gate::stop_marked)) {
+        cleanup();
+        FAIL("timed out waiting for stop mark before callback entry");
+    }
+    cleanup();
 
     CHECK(calls.load() == 0);
     CHECK(reason.load() == static_cast<int>(WatchEndReason::Stopped));
