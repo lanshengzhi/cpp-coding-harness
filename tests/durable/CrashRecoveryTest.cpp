@@ -176,8 +176,11 @@ int run_lifecycle(const std::filesystem::path& directory, int ready_fd, bool fir
     if (!harness->resume()) return 40;
     if (first && abort_case) {
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        while (!std::filesystem::exists(directory / "events") && std::chrono::steady_clock::now() < deadline)
+        std::error_code error;
+        while (!std::filesystem::exists(directory / "events", error) && !error &&
+                std::chrono::steady_clock::now() < deadline)
             std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        if (error || !std::filesystem::exists(directory / "events", error) || error) return 50;
         if (!consume(harness->abort_task(id)).has_value()) return 41;
     }
     auto outcome = consume(harness->wait_for_task(id));
