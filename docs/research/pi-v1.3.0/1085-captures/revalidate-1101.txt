@@ -1,0 +1,41 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1085/build
+      Start  200: cch_mcp call_tool preserves actual wire object order for structuredContent
+      Start  202: cch_mcp stdio client preserves every JSON structuredContent type from tools/call
+ 1/14 Test  #202: cch_mcp stdio client preserves every JSON structuredContent type from tools/call ..................   Passed    0.11 sec
+      Start  311: MCP structured results match every original frozen audit obligation through real public callers
+ 2/14 Test  #311: MCP structured results match every original frozen audit obligation through real public callers ...   Passed    0.09 sec
+      Start  625: an MCP HTTP tools/call preserves actual wire structuredContent order
+ 3/14 Test  #200: cch_mcp call_tool preserves actual wire object order for structuredContent ........................   Passed    0.37 sec
+      Start  633: an MCP tools/call distinguishes missing structuredContent from JSON null
+ 4/14 Test  #633: an MCP tools/call distinguishes missing structuredContent from JSON null ..........................   Passed    0.05 sec
+      Start  634: an MCP tools/call falls back for empty content and adds pi's isError text
+ 5/14 Test  #634: an MCP tools/call falls back for empty content and adds pi's isError text .........................   Passed    0.05 sec
+      Start  635: an MCP tools/call keeps non-empty content separate from structuredContent
+ 6/14 Test  #635: an MCP tools/call keeps non-empty content separate from structuredContent .........................   Passed    0.05 sec
+      Start  636: an MCP tools/call object structuredContent survives conversion with content absent
+ 7/14 Test  #636: an MCP tools/call object structuredContent survives conversion with content absent ................   Passed    0.05 sec
+      Start  637: an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects
+ 8/14 Test  #637: an MCP tools/call preserves actual wire order for reverse, nested and integer-key objects .........   Passed    0.05 sec
+      Start  638: an MCP tools/call preserves every primitive and array structuredContent when content is absent
+ 9/14 Test  #638: an MCP tools/call preserves every primitive and array structuredContent when content is absent ....   Passed    0.05 sec
+      Start  639: an MCP tools/call rejects wrong content and malformed results at the public caller
+10/14 Test  #639: an MCP tools/call rejects wrong content and malformed results at the public caller ................   Passed    0.05 sec
+      Start  640: an MCP tools/call renders every JSON number shape exactly as JSON.stringify
+11/14 Test  #640: an MCP tools/call renders every JSON number shape exactly as JSON.stringify .......................   Passed    0.06 sec
+      Start  641: an MCP tools/call renders structuredContent numbers exactly as JSON.stringify
+12/14 Test  #641: an MCP tools/call renders structuredContent numbers exactly as JSON.stringify .....................   Passed    0.05 sec
+      Start 1254: the frozen review artifact matches every actual fixture observation
+13/14 Test  #625: an MCP HTTP tools/call preserves actual wire structuredContent order ..............................   Passed    0.63 sec
+14/14 Test #1254: the frozen review artifact matches every actual fixture observation ...............................   Passed    0.08 sec
+
+100% tests passed out of 14
+
+Label Time Summary:
+coding_agent    =   1.25 sec*proc (12 tests)
+issue1101       =   1.72 sec*proc (14 tests)
+issue873        =   0.63 sec*proc (1 test)
+mcp             =   1.72 sec*proc (14 tests)
+owner           =   0.47 sec*proc (2 tests)
+spec            =   1.72 sec*proc (14 tests)
+
+Total Test time (real) =   0.93 sec

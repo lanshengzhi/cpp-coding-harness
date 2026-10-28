@@ -26,3 +26,18 @@ C++-written pending task before sidecar publication was implemented. The test
 subsequently passed with pi actually executing it. It does not establish the
 full issue: an uninterrupted task across both transitions, submission settlement,
 document history and failure/recovery remain to be verified.
+
+[reclaim-best-effort-red.txt](reclaim-best-effort-red.txt) and
+[reclaim-best-effort-green.txt](reclaim-best-effort-green.txt) show that a
+recovery-time sidecar reclamation failure used to fail the reopen even though
+the terminal marker was already published; recovery now leaves the sidecar for
+a later retry. The fixture probes whether directory permissions actually deny
+`unlink` and skips when the process bypasses them.
+
+[consolidation-variant-check.txt](consolidation-variant-check.txt) records the
+consolidated ledger check after variant families became indexable. Because
+`scripts/evidence/audit_evidence.py` and the consolidation tool are pinned
+inputs of the `1101-structured-content` delivery, the delivery was revalidated
+at `875099ba918384744a5e88cf1eff7e19cf7b1dbf`; [revalidate-1101.txt](revalidate-1101.txt)
+records the 14 passing tests and the receipt now points at
+`deliveries/1085-revalidation-1101.xml`.
