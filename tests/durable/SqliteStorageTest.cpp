@@ -238,7 +238,7 @@ void run_pi_sqlite(const std::filesystem::path& directory,
     std::stop_source deadline;
     std::mutex timer_mutex;
     std::condition_variable_any timer_cv;
-    std::jthread timer([&](std::stop_token stop) {
+    std::jthread timer([&timer_mutex, &timer_cv, &deadline](std::stop_token stop) {
         std::unique_lock lock(timer_mutex);
         if (!timer_cv.wait_for(lock, stop, std::chrono::seconds{10}, [] { return false; }) && !stop.stop_requested())
             deadline.request_stop();
@@ -892,10 +892,10 @@ TEST_CASE("pi creates a SQLite store, C++ continues it, and pi finishes it",
     if (!harness_opened.has_value()) FAIL(harness_opened.error().message << ": " << harness_opened.error().detail);
     REQUIRE(harness_opened.has_value());
     auto harness = std::move(harness_opened.value());
-    REQUIRE(consume(harness->open_tasks()).has_value());
-    REQUIRE(harness->resume());
+    auto opened_tasks = consume(harness->open_tasks());
+    const bool resumed = opened_tasks.has_value() && harness->resume();
     bool observed = false;
-    {
+    if (resumed) {
         std::unique_lock lock(gate_mutex);
         observed = gate_cv.wait_for(lock, std::chrono::seconds{5}, [&] { return reached; });
         if (!observed) {
@@ -904,10 +904,12 @@ TEST_CASE("pi creates a SQLite store, C++ continues it, and pi finishes it",
         }
     }
     auto closed = consume(harness->close());
-    REQUIRE(observed);
-    REQUIRE(closed.has_value());
     harness.reset();
     storage.reset();
+    REQUIRE(opened_tasks.has_value());
+    REQUIRE(resumed);
+    REQUIRE(observed);
+    REQUIRE(closed.has_value());
 
     run_pi_sqlite(workspace.path(), "finish", ids.task, ids.submission, ids.conversation);
 
@@ -947,7 +949,7 @@ TEST_CASE("pi creates a SQLite store, C++ continues it, and pi finishes it",
     CHECK((*final_submission)->status == "unanswered");
     CHECK((*final_submission)->reason == "aborted");
     CHECK((*final_submission)->request_id == kIssue1086RequestId);
-    REQUIRE(storage->close().has_value());
+    CHECK(storage->close().has_value());
 }
 
 TEST_CASE("C++ creates a SQLite store, pi advances it, and C++ finishes it",
@@ -974,39 +976,43 @@ TEST_CASE("C++ creates a SQLite store, pi advances it, and C++ finishes it",
     REQUIRE(harness_opened.has_value());
     auto harness = std::move(harness_opened.value());
     auto root = consume(harness->root());
-    REQUIRE(root.has_value());
 
     TaskId task_id{};
     SubmissionId submission_id{};
-    auto committed = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
-        auto created = tx.create_task(*harness->task_definition(kIssue1086TaskKind),
-                chord::Json{chord::Json::Object{{"n", chord::Json{7}}}},
-                TaskOptions{.conversation_id = root.value()});
-        if (!created) return std::unexpected(created.error());
-        task_id = *created;
-        auto submission = tx.create_submission(SubmissionRecord{.conversation_id = root.value(),
-                .request_id = std::string{kIssue1086RequestId},
-                .type = "input",
-                .status = "queued"});
-        if (!submission) return std::unexpected(submission.error());
-        submission_id = submission->id;
-        auto draft = tx.doc(*history, DocumentAddress{.conversation_id = root.value()});
-        if (!draft) return std::unexpected(draft.error());
-        if (auto changed = draft->set(member_path("n"), chord::Json{1}); !changed)
-            return std::unexpected(changed.error());
-        return {};
-    }));
+    Outcome<void> committed;
+    if (root.has_value())
+        committed = consume(harness->session().commit([&](Transaction& tx) -> support::Expected<void> {
+            auto created = tx.create_task(*harness->task_definition(kIssue1086TaskKind),
+                    chord::Json{chord::Json::Object{{"n", chord::Json{7}}}},
+                    TaskOptions{.conversation_id = root.value()});
+            if (!created) return std::unexpected(created.error());
+            task_id = *created;
+            auto submission = tx.create_submission(SubmissionRecord{.conversation_id = root.value(),
+                    .request_id = std::string{kIssue1086RequestId},
+                    .type = "input",
+                    .status = "queued"});
+            if (!submission) return std::unexpected(submission.error());
+            submission_id = submission->id;
+            auto draft = tx.doc(*history, DocumentAddress{.conversation_id = root.value()});
+            if (!draft) return std::unexpected(draft.error());
+            if (auto changed = draft->set(member_path("n"), chord::Json{1}); !changed)
+                return std::unexpected(changed.error());
+            return {};
+        }));
+    auto closed = consume(harness->close());
+    harness.reset();
+    auto storage_closed = storage->close();
+    storage.reset();
+    REQUIRE(root.has_value());
     if (!committed.has_value()) FAIL(committed.error().message << ": " << committed.error().detail);
     REQUIRE(committed.has_value());
-    auto closed = consume(harness->close());
     REQUIRE(closed.has_value());
+    REQUIRE(storage_closed.has_value());
     if (const char* capture = std::getenv("CCH_1086_CPP_STORE_OUT"); capture != nullptr) {
         std::error_code error;
         std::filesystem::copy_file(path, capture, std::filesystem::copy_options::overwrite_existing, error);
         REQUIRE_FALSE(error);
     }
-    harness.reset();
-    storage.reset();
 
     run_pi_sqlite(workspace.path(), "advance", task_id, submission_id, root.value());
 
@@ -1073,7 +1079,7 @@ TEST_CASE("C++ creates a SQLite store, pi advances it, and C++ finishes it",
     REQUIRE(middle->has_value());
     CHECK((*first)->value == chord::Json{chord::Json::Object{{"n", chord::Json{1}}}});
     CHECK((*middle)->value == chord::Json{chord::Json::Object{{"n", chord::Json{2}}}});
-    REQUIRE(storage->close().has_value());
+    CHECK(storage->close().has_value());
 }
 
 TEST_CASE("a failed C++ commit on a pi SQLite store rolls back and pi still continues",
@@ -1212,5 +1218,5 @@ TEST_CASE("a failed C++ commit on a pi SQLite store rolls back and pi still cont
     REQUIRE(final_value.has_value());
     REQUIRE(final_value->has_value());
     CHECK((*final_value)->value == chord::Json{chord::Json::Object{{"n", chord::Json{3}}}});
-    REQUIRE(storage->close().has_value());
+    CHECK(storage->close().has_value());
 }

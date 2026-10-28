@@ -31,16 +31,21 @@ const doc = defineDoc({ kind: DOC_KIND, version: 1, scope: "conversation",
     history: "rewindable", fork: "asOf", initial: () => ({ n: 0 }) });
 let reached: () => void = () => {};
 let rejectPhase: (error: unknown) => void = () => {};
-const advanced = new Promise<void>((resolve) => { reached = resolve; });
-const phaseFailure = new Promise<never>((_, reject) => { rejectPhase = reject; });
 let advanceTimeout: ReturnType<typeof setTimeout> | undefined;
-const advancedOrTimeout = Promise.race([
-    advanced,
-    phaseFailure,
-    new Promise<void>((_, reject) => {
-        advanceTimeout = setTimeout(() => reject(new Error("advance did not reach the running checkpoint")), 5000);
-    }),
-]);
+let advancedOrTimeout: Promise<void> | undefined;
+if (mode === "advance" || mode === "capture-cpp") {
+    const advanced = new Promise<void>((resolve) => { reached = resolve; });
+    const phaseFailure = new Promise<never>((_, reject) => { rejectPhase = reject; });
+    advancedOrTimeout = Promise.race([
+        advanced,
+        phaseFailure,
+        new Promise<void>((_, reject) => {
+            advanceTimeout = setTimeout(() => reject(new Error("advance did not reach the running checkpoint")), 5000);
+        }),
+    ]);
+    // Attach a handler immediately, including while initial capture reads are pending.
+    void advancedOrTimeout.catch(() => {});
+}
 const task = defineTask({ name: TASK_KIND, version: 1,
     initial: () => ({ phase: "start", n: 7 }),
     phases: { start: async (record: any, runtime: any, ctx: any) => {
@@ -138,7 +143,7 @@ if (mode === "capture-cpp") {
     const initialValue = await storage.document(initialDoc!.id, "current", context);
     const initialSubmission = await storage.submissionByRequest(conversationId, REQUEST_ID, context);
     harness.resume();
-    await advancedOrTimeout;
+    await advancedOrTimeout!;
     if (advanceTimeout !== undefined) clearTimeout(advanceTimeout);
     const advancedTask = await storage.task(taskId, context);
     const advancedDoc = await storage.findDocument({ kind: DOC_KIND, scope: { kind: "conversation", conversationId } }, "current", context);
@@ -165,6 +170,6 @@ if (mode === "finish") {
         throw new Error("unexpected terminal receipt");
     const current = await storage.document((await storage.findDocument({ kind: DOC_KIND, scope: { kind: "conversation", conversationId } }, "current", context))!.id, "current", context);
     if (current?.value?.n !== 3) throw new Error("unexpected final document");
-} else await advancedOrTimeout;
+} else await advancedOrTimeout!;
 if (advanceTimeout !== undefined) clearTimeout(advanceTimeout);
 await harness.close(context);
