@@ -1,0 +1,39 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/build
+    Start 278: a slow scan does not pair a pre-cleanup record with a post-cleanup identity view
+1/1 Test #278: a slow scan does not pair a pre-cleanup record with a post-cleanup identity view ...***Failed    0.03 sec
+Filters: "a slow scan does not pair a pre-cleanup record with a post-cleanup identity view"
+Randomness seeded to: 2559548121
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+a slow scan does not pair a pre-cleanup record with a post-cleanup identity
+view
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:928
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:1051: FAILED:
+  CHECK_FALSE( row_violation.load() )
+with expansion:
+  !true
+
+===============================================================================
+test cases:  1 |  0 passed | 1 failed
+assertions: 11 | 10 passed | 1 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable       =   0.03 sec*proc (1 test)
+issue1165     =   0.03 sec*proc (1 test)
+stale-scan    =   0.03 sec*proc (1 test)
+
+Total Test time (real) =   1.13 sec
+
+The following tests FAILED:
+	278 - a slow scan does not pair a pre-cleanup record with a post-cleanup identity view (Failed) durable issue1165 stale-scan

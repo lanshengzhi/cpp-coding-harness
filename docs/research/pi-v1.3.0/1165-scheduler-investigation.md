@@ -227,6 +227,40 @@ Full Validation: 3878/3878 passed, 1 pre-existing skip, exit 0 on
 `5057091d3` (pre-revision); the review revision rebuilds the durable shard
 only and needs a fresh Full Validation window before delivery.
 
+### Round 3: review slice pins and the deterministic stale-scan RED (WIP)
+
+Production is untouched since `15724cd09`; this round delivers
+discriminating tests only.
+
+- `HeldReservationStorage` gates the reservation's `pending -> running`
+  write inside `Storage::commit` itself: the gate firing is the admission
+  proof the reviewers required (a held earlier read never established that
+  the reservation was admitted). `[held-release]` pins the existing
+  held-turn behavior: while the commit turn is held the record stays
+  `pending`, and an inspect started during the hold blocks on
+  `Session::failed()`'s line lock until the turn settles, then observes the
+  settled running state -- the same public behavior a frozen `readOnLine`
+  read spends behind the held turn. The 2s no-return assertion proves
+  blocking only within that bounded window. `[close-race]` pins the discard
+  semantics (settled write remains, identity discarded, phase never starts,
+  close drains); its setup orders the release after the `closed` flag by a
+  bounded margin, not by proof.
+- `SlowScanStorage` models a slow-read backend (scan observes at T1, returns
+  at T2) with thread attribution. `[stale-scan]` is a KNOWN, REPRODUCIBLE
+  RED (3/3, `stale-scan-red.log`): the current inspection pairs a
+  pre-cleanup `waiting` record with a post-cleanup identity view and
+  reports a non-running state for a task that is already terminal. Frozen
+  `readOnLine` admits no such interleaving. The RED stays in the suite as
+  WIP pending the observation protocol design.
+- Measured architectural facts: `Session::failed()`/`closed()` take the
+  line mutex, so every public observation freezes during a held commit
+  turn; the current inspect is "FIFO's blocking without FIFO's ordering"
+  (the seal check orders against in-flight turns only, while the scan and
+  the identity snapshot can still interleave with later commits -- the RED
+  above). Holding the Harness mutex across the scan would not freeze record
+  state (line commits never take it), so that direction was rejected
+  without code.
+
 ### Residuals carried forward (unchanged, documented, not claimed fixed)
 
 - The Session-line reentry hazard (a stop callback that waits on a
