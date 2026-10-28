@@ -1,0 +1,38 @@
+Test project /home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/build
+    Start 337: scheduler reservation is invisible to a read admitted before its commit
+1/1 Test #337: scheduler reservation is invisible to a read admitted before its commit ...***Failed    4.00 sec
+Filters: "scheduler reservation is invisible to a read admitted before its commit"
+Randomness seeded to: 2921724529
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+cch_tests_durable is a Catch2 v3.15.3 host application.
+Run with -? for options
+
+-------------------------------------------------------------------------------
+scheduler reservation is invisible to a read admitted before its commit
+-------------------------------------------------------------------------------
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:91
+...............................................................................
+
+/home/lansy/Work/github/coding-agent/cpp-coding-harness/worktrees/cpp-coding-harness/1165/tests/durable/SchedulerVisibilityTest.cpp:155: FAILED:
+  CHECK_FALSE( inconsistent.load() )
+with expansion:
+  !true
+
+===============================================================================
+test cases: 1 | 1 failed
+assertions: 6 | 5 passed | 1 failed
+
+
+
+0% tests passed, 1 tests failed out of 1
+
+Label Time Summary:
+durable      =   4.00 sec*proc (1 test)
+issue1165    =   4.00 sec*proc (1 test)
+
+Total Test time (real) =   4.13 sec
+
+The following tests FAILED:
+	337 - scheduler reservation is invisible to a read admitted before its commit (Failed) durable issue1165
+Errors while running CTest

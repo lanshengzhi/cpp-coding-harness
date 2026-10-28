@@ -18,15 +18,19 @@ using namespace cch::durable;
 using namespace cch::tests::durable;
 
 namespace {
-class FailureStorage final : public Storage {
+/// Rejects the reservation write (`pending` -> `running`) of one task kind,
+/// leaving every other write (including the task's creation) untouched.
+class RejectReservationStorage final : public Storage {
 public:
-    explicit FailureStorage(Storage& inner) : inner_(inner) {}
+    explicit RejectReservationStorage(Storage& inner) : inner_(inner) {}
 
     [[nodiscard]] support::AsyncResult<Seq> commit(std::span<const StorageWrite> writes) override {
         for (const auto& write : writes) {
-            if (write.entry && write.entry->kind == "audit1165.fail")
-                return support::AsyncResult<Seq>{
-                        std::unexpected(support::make_error(support::ErrorCode::Process, "injected 1165 failure"))};
+            if (write.type == "task" && write.task.has_value() && write.task->kind == "audit1165.rejected" &&
+                    write.task->state.status == "running") {
+                return support::AsyncResult<Seq>{std::unexpected(
+                        support::make_error(support::ErrorCode::Process, "injected 1165 reservation failure"))};
+            }
         }
         return inner_.commit(writes);
     }
@@ -88,6 +92,13 @@ private:
 };
 } // namespace
 
+// The visibility defect (issue #1165): the scheduler used to register the
+// invocation before its reservation commit was admitted, so an inspect whose
+// scan predated the commit derived `running` from a record that was still
+// committed `pending`. The reservation now publishes its invocation in the
+// commit completion on the Session line, after Storage settlement; the gate
+// below additionally refuses to derive running from an identity that is newer
+// than the scanned record.
 TEST_CASE("scheduler reservation is invisible to a read admitted before its commit", "[durable][issue1165]") {
     MemoryStorage storage;
     auto builder = TaskDefinitionBuilder("audit1165.reservation", 1);
@@ -156,206 +167,36 @@ TEST_CASE("scheduler reservation is invisible to a read admitted before its comm
     REQUIRE(consume(harness->close()).has_value());
 }
 
-TEST_CASE("shutdown signals stop without holding the scheduler mutex", "[durable][issue1165-lock]") {
+// The frozen waiting contract (three independent frozen runs, issue #1165):
+// a phase that commits `waiting` and remains active is observed as
+// `record.status=waiting` with `state.kind=running`. Running must not be
+// derived from the committed status alone, and the parked record must return
+// to a non-running derived state once the invocation ends.
+TEST_CASE("a phase that commits waiting while remaining active is reported running", "[durable][issue1165][waiting]") {
     MemoryStorage storage;
-    std::atomic_bool phase_ready{false};
-    std::atomic_bool stop_entered{false};
-    std::atomic_bool holder_entered{false};
-    std::atomic_bool resume_done{false};
-    std::atomic_bool timed_out{false};
-    auto builder = TaskDefinitionBuilder("audit1165.lock", 1);
-    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
-    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        std::stop_callback callback(runtime.stop_token(), [&] {
-            stop_entered.store(true);
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-            while (!resume_done.load() && std::chrono::steady_clock::now() < deadline)
-                std::this_thread::yield();
-            timed_out.store(!resume_done.load());
-        });
-        phase_ready.store(true);
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-        while (!runtime.stop_token().stop_requested() && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::yield();
-        return support::AsyncResult<void>{support::ExpectedVoid{}};
-    });
-    auto definition = builder.build();
-    REQUIRE(definition.has_value());
-    std::vector<TaskDefinition> definitions;
-    definitions.push_back(std::move(*definition));
-    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
-    REQUIRE(opened.has_value());
-    auto harness = std::move(opened.value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto task = tx.create_task(*harness->task_definition("audit1165.lock"), chord::Json(nullptr));
-        if (!task) return std::unexpected(task.error());
-        return {};
-    })).has_value());
-    REQUIRE(harness->resume().has_value());
-    const auto phase_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!phase_ready.load() && std::chrono::steady_clock::now() < phase_deadline)
-        std::this_thread::yield();
-    REQUIRE(phase_ready.load());
-    REQUIRE(harness->session()
-                    .subscribe_commits([&](const CommitPublication&) {
-                        holder_entered.store(true);
-                        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-                        while (!stop_entered.load() && std::chrono::steady_clock::now() < deadline)
-                            std::this_thread::yield();
-                        static_cast<void>(harness->resume());
-                        resume_done.store(true);
-                    })
-                    .has_value());
-    std::jthread holder([&] {
-        static_cast<void>(consume(harness->commit([](Transaction& tx) -> support::ExpectedVoid {
-            auto conversation = tx.create_conversation();
-            if (!conversation) return std::unexpected(conversation.error());
-            return {};
-        })));
-    });
-    const auto entered_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!holder_entered.load() && std::chrono::steady_clock::now() < entered_deadline)
-        std::this_thread::yield();
-    const bool entered = holder_entered.load();
-    auto closed = consume(harness->close());
-    holder.join();
-    REQUIRE(entered);
-    CHECK(stop_entered.load());
-    CHECK_FALSE(timed_out.load());
-    CHECK(resume_done.load());
-    CHECK(closed.has_value());
-}
-
-TEST_CASE("stop callback waiting for a reentrant committed read blocks its publication line",
-        "[durable][issue1165-reentry]") {
-    MemoryStorage storage;
-    std::atomic_bool phase_ready{false};
-    std::atomic_bool callback_entered{false};
-    std::atomic_bool read_completed{false};
-    std::atomic_bool callback_timed_out{false};
-    auto builder = TaskDefinitionBuilder("audit1088.reentry", 1);
-    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
-    Harness* harness_ptr = nullptr;
-    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        std::stop_callback callback(runtime.stop_token(), [&] {
-            callback_entered.store(true);
-            std::move(harness_ptr->session().read_committed([](Storage&) -> support::Expected<chord::Json> {
-                return chord::Json(nullptr);
-            })).start([&](support::Expected<chord::Json>) noexcept { read_completed.store(true); });
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
-            while (!read_completed.load() && std::chrono::steady_clock::now() < deadline)
-                std::this_thread::yield();
-            callback_timed_out.store(!read_completed.load());
-        });
-        phase_ready.store(true);
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-        while (!runtime.stop_token().stop_requested() && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::yield();
-        return support::AsyncResult<void>{support::ExpectedVoid{}};
-    });
-    builder.abort([](const TaskRecord&, TaskRuntime& runtime) {
-        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
-            return NextTaskState::terminal(TaskOutcome{.status = "aborted"});
-        });
-    });
-    auto definition = builder.build();
-    REQUIRE(definition.has_value());
-    std::vector<TaskDefinition> definitions;
-    definitions.push_back(std::move(*definition));
-    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
-    REQUIRE(opened.has_value());
-    auto harness = std::move(opened.value());
-    harness_ptr = harness.get();
-    TaskId task_id{};
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto task = tx.create_task(*harness->task_definition("audit1088.reentry"), chord::Json(nullptr));
-        if (!task) return std::unexpected(task.error());
-        task_id = *task;
-        return {};
-    })).has_value());
-    REQUIRE(harness->resume().has_value());
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!phase_ready.load() && std::chrono::steady_clock::now() < deadline)
-        std::this_thread::yield();
-    REQUIRE(phase_ready.load());
-    const auto outcome = consume(harness->abort_task(task_id));
-    CHECK(outcome.has_value());
-    CHECK(callback_entered.load());
-    CHECK(callback_timed_out.load());
-    CHECK(read_completed.load());
-    REQUIRE(consume(harness->close()).has_value());
-}
-
-TEST_CASE("harness close waits for an active stop callback", "[durable][issue1165-close]") {
-    MemoryStorage storage;
-    std::atomic_bool phase_ready{false};
-    std::atomic_bool callback_entered{false};
-    std::atomic_bool release_callback{false};
-    std::atomic_bool close_done{false};
-    std::atomic_bool callback_finished{false};
-    auto builder = TaskDefinitionBuilder("audit1165.close", 1);
-    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
-    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        std::stop_callback callback(runtime.stop_token(), [&] {
-            callback_entered.store(true);
-            const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
-            while (!release_callback.load() && std::chrono::steady_clock::now() < deadline)
-                std::this_thread::yield();
-            callback_finished.store(true);
-        });
-        phase_ready.store(true);
-        const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(15);
-        while (!runtime.stop_token().stop_requested() && std::chrono::steady_clock::now() < deadline)
-            std::this_thread::yield();
-        return support::AsyncResult<void>{support::ExpectedVoid{}};
-    });
-    auto definition = builder.build();
-    REQUIRE(definition.has_value());
-    std::vector<TaskDefinition> definitions;
-    definitions.push_back(std::move(*definition));
-    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
-    REQUIRE(opened.has_value());
-    auto harness = std::move(opened.value());
-    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto task = tx.create_task(*harness->task_definition("audit1165.close"), chord::Json(nullptr));
-        if (!task) return std::unexpected(task.error());
-        return {};
-    })).has_value());
-    REQUIRE(harness->resume().has_value());
-    const auto phase_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!phase_ready.load() && std::chrono::steady_clock::now() < phase_deadline)
-        std::this_thread::yield();
-    REQUIRE(phase_ready.load());
-    std::atomic_bool close_success{false};
-    std::jthread closer([&] {
-        close_success.store(consume(harness->close()).has_value());
-        close_done.store(true);
-    });
-    const auto callback_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!callback_entered.load() && std::chrono::steady_clock::now() < callback_deadline)
-        std::this_thread::yield();
-    const bool entered = callback_entered.load();
-    const bool early_close = close_done.load();
-    release_callback.store(true);
-    closer.join();
-    REQUIRE(entered);
-    CHECK_FALSE(early_close);
-    CHECK(callback_finished.load());
-    CHECK(close_done.load());
-    CHECK(close_success.load());
-}
-
-TEST_CASE("storage failure signals an active invocation", "[durable][issue1165-failure]") {
-    MemoryStorage memory;
-    FailureStorage storage(memory);
-    std::atomic_bool phase_ready{false};
-    std::atomic_bool callback_entered{false};
+    std::atomic_bool waiting_committed{false};
     std::atomic_bool release_phase{false};
-    auto builder = TaskDefinitionBuilder("audit1165.failure", 1);
+    std::atomic_bool observed_running_while_waiting{false};
+    auto builder = TaskDefinitionBuilder("audit1165.waiting", 1);
     builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
     builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
-        std::stop_callback callback(runtime.stop_token(), [&] { callback_entered.store(true); });
-        phase_ready.store(true);
+        if (waiting_committed.load()) {
+            // The scheduler resumed the parked wait: finish so close can drain.
+            return runtime.commit(
+                    [](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                        return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+                    });
+        }
+        auto committed = consume(
+                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    return NextTaskState::waiting(
+                            chord::Json(chord::Json::Object{{"phase", "parked"}}), {}, JoinPolicy::AllSettled);
+                }));
+        if (!committed.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(committed.error())};
+        }
+        waiting_committed.store(true);
+        // The invocation stays active while the record is committed waiting.
         const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(10);
         while (!release_phase.load() && std::chrono::steady_clock::now() < deadline)
             std::this_thread::yield();
@@ -368,28 +209,184 @@ TEST_CASE("storage failure signals an active invocation", "[durable][issue1165-f
     auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
     REQUIRE(opened.has_value());
     auto harness = std::move(opened.value());
-    const auto root = consume(harness->root());
-    REQUIRE(root.has_value());
+    TaskId id{};
     REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto task = tx.create_task(*harness->task_definition("audit1165.failure"), chord::Json(nullptr));
+        auto task = tx.create_task(*harness->task_definition("audit1165.waiting"), chord::Json(nullptr));
         if (!task) return std::unexpected(task.error());
+        id = *task;
         return {};
     })).has_value());
     REQUIRE(harness->resume().has_value());
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (!phase_ready.load() && std::chrono::steady_clock::now() < deadline)
+
+    // Observe the frozen contract while the phase stays active (bounded).
+    const auto observe_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!observed_running_while_waiting.load() && std::chrono::steady_clock::now() < observe_deadline) {
+        if (!waiting_committed.load()) {
+            std::this_thread::yield();
+            continue;
+        }
+        auto inspection = consume(harness->inspect());
+        if (inspection.has_value()) {
+            for (const auto& row : inspection.value().tasks) {
+                if (row.record.id == id && row.record.state.status == "waiting" && row.state.kind == "running") {
+                    observed_running_while_waiting.store(true);
+                }
+            }
+        }
         std::this_thread::yield();
-    const bool ready = phase_ready.load();
-    auto outcome = consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
-        auto entry = tx.append_entry(root.value(), "audit1165.fail", chord::Json(nullptr));
-        if (!entry) return std::unexpected(entry.error());
-        return {};
-    }));
-    const bool signalled_before_failure_return = callback_entered.load();
+    }
     release_phase.store(true);
-    REQUIRE(ready);
-    REQUIRE_FALSE(outcome.has_value());
-    CHECK(outcome.error().message == "injected 1165 failure");
-    CHECK(signalled_before_failure_return);
-    static_cast<void>(consume(harness->close()));
+
+    // The parked wait drains once the invocation ends; the scheduler then
+    // resumes and the phase's second run settles the task terminal.
+    bool terminal = false;
+    const auto terminal_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!terminal && std::chrono::steady_clock::now() < terminal_deadline) {
+        auto record = storage.task(id);
+        if (record && record->has_value() && (*record)->state.status == "terminal") {
+            terminal = true;
+        }
+        std::this_thread::yield();
+    }
+    const auto close_outcome = consume(harness->close());
+
+    REQUIRE(observed_running_while_waiting.load());
+    REQUIRE(terminal);
+    REQUIRE(close_outcome.has_value());
+}
+
+// A reservation commit the Storage rejects must never publish a running
+// identity and never start its phase: the commit failure seals the Session
+// (issue #1166), and inspect rejects with the frozen failure message instead
+// of scanning a record the scheduler has not actually reserved.
+TEST_CASE("a rejected reservation never starts its phase or reports running", "[durable][issue1165][rejection]") {
+    MemoryStorage memory;
+    RejectReservationStorage storage(memory);
+    std::atomic_bool phase_ready{false};
+    auto builder = TaskDefinitionBuilder("audit1165.rejected", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        phase_ready.store(true);
+        return runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+            return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+        });
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.rejected"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+
+    // The reservation's storage rejection fails the Session; inspect must
+    // reject with the frozen seal rather than report a running identity, and
+    // the rejected phase must never start (bounded).
+    bool sealed = false;
+    std::atomic_bool reported_running{false};
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!sealed && std::chrono::steady_clock::now() < deadline) {
+        auto inspection = consume(harness->inspect());
+        if (!inspection.has_value()) {
+            if (inspection.error().message == "Session failed after a storage error; close and reopen it") {
+                sealed = true;
+            }
+        } else {
+            for (const auto& row : inspection.value().tasks) {
+                if (row.record.id == id && row.state.kind == "running") {
+                    reported_running.store(true);
+                }
+            }
+        }
+        std::this_thread::yield();
+    }
+    const auto close_outcome = consume(harness->close());
+
+    REQUIRE(sealed);
+    CHECK_FALSE(reported_running.load());
+    CHECK_FALSE(phase_ready.load());
+    REQUIRE(close_outcome.has_value());
+}
+
+// Terminal cleanup leaves no identity the inspection can mistake for running:
+// once the terminal record settles, the task is not offered as live work even
+// while its invocation's stop state is still registered, and no later inspect
+// revives it.
+TEST_CASE("a terminal task is never derived running from a live or stale identity", "[durable][issue1165][identity]") {
+    MemoryStorage storage;
+    std::atomic_bool terminal_committed{false};
+    std::atomic_bool identity_still_live{false};
+    std::atomic_bool violation{false};
+    auto builder = TaskDefinitionBuilder("audit1165.identity", 1);
+    builder.initial([](const chord::Json&) { return chord::Json(chord::Json::Object{{"phase", "run"}}); });
+    builder.phase("run", [&](const TaskRecord&, TaskRuntime& runtime) -> support::AsyncResult<void> {
+        auto committed = consume(
+                runtime.commit([](Transaction&, const TaskRecord&) -> support::Expected<std::optional<NextTaskState>> {
+                    return NextTaskState::terminal(TaskOutcome{.status = "completed"});
+                }));
+        if (!committed.has_value()) {
+            return support::AsyncResult<void>{std::unexpected(committed.error())};
+        }
+        terminal_committed.store(true);
+        // The invocation remains registered until the phase returns; hold that
+        // window open so the inspection below races a live identity against a
+        // terminal record.
+        identity_still_live.store(true);
+        const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+        while (std::chrono::steady_clock::now() < deadline)
+            std::this_thread::yield();
+        identity_still_live.store(false);
+        return support::AsyncResult<void>{support::ExpectedVoid{}};
+    });
+    auto definition = builder.build();
+    REQUIRE(definition.has_value());
+    std::vector<TaskDefinition> definitions;
+    definitions.push_back(std::move(*definition));
+    auto opened = consume(Harness::open(storage, HarnessOptions{.tasks = std::move(definitions)}));
+    REQUIRE(opened.has_value());
+    auto harness = std::move(opened.value());
+    TaskId id{};
+    REQUIRE(consume(harness->commit([&](Transaction& tx) -> support::ExpectedVoid {
+        auto task = tx.create_task(*harness->task_definition("audit1165.identity"), chord::Json(nullptr));
+        if (!task) return std::unexpected(task.error());
+        id = *task;
+        return {};
+    })).has_value());
+    REQUIRE(harness->resume().has_value());
+
+    const auto entered_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (!terminal_committed.load() && std::chrono::steady_clock::now() < entered_deadline)
+        std::this_thread::yield();
+    // Inspect while the identity is still live with a terminal record, then
+    // keep inspecting after cleanup, recording any live-work row.
+    const auto observe_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < observe_deadline) {
+        auto inspection = consume(harness->inspect());
+        if (inspection.has_value()) {
+            for (const auto& row : inspection.value().tasks) {
+                if (row.record.id == id) {
+                    violation.store(true);
+                }
+            }
+        }
+        if (!identity_still_live.load() && terminal_committed.load()) break;
+        std::this_thread::yield();
+    }
+    auto record = storage.task(id);
+    const auto close_outcome = consume(harness->close());
+
+    REQUIRE(terminal_committed.load());
+    REQUIRE(record.has_value());
+    REQUIRE(record->has_value());
+    CHECK((*record)->state.status == "terminal");
+    CHECK_FALSE(violation.load());
+    REQUIRE(close_outcome.has_value());
 }

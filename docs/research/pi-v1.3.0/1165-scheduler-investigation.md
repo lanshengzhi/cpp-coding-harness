@@ -110,3 +110,77 @@ regressions remain uncommitted and are not a delivery. The visibility issue
 still needs the ownership/lock prerequisite followed by the reservation and
 inspection change; a separately scoped lock/lifetime prerequisite is a possible
 split, but it must retain the still-open Session-line reentry problem.
+
+## Status update: implemented (pending Full Validation)
+
+The reservation visibility fix landed on `ticket/1165` on top of the merged
+#1166 failure-signaling work (merge `91e30d0cf`). The stop-source copy-out
+candidate recorded above was adopted and merged by #1166 (`f787d03f7`); the
+superseded lock/close/failure/reentry probes were removed from
+`SchedulerVisibilityTest.cpp` in favor of the reviewed
+`HarnessFailureLifecycleTest.cpp`. The candidate publication and snapshot
+design described above is what shipped:
+
+1. **Publication point.** `schedule_step()` no longer registers the
+   reservation before committing. The reservation commit's completion —
+   invoked on the Session line after Storage settlement, while the line is
+   still active and before any read admitted later starts — publishes the
+   invocation identity under the scheduler mutex, or discards it on
+   failure, no-op, or close. The worker's settle wait paces reservations as
+   before; the phase thread starts from the published identity's shared
+   stop state after the wait observes the publication. A close race erases
+   the identity so shutdown's empty-map wait finishes.
+2. **Derivation gate.** `inspect()` takes one snapshot of the published
+   identity ids under one lock acquisition and `inspect_task` derives: a
+   committed `running` record is running on its own; an invocation
+   upgrades `waiting`/`completing` records to running while the phase
+   remains active (frozen waiting contract); an identity is never used to
+   derive running for a scan that still sees `pending`, because the
+   identity reflects a commit newer than the record it would annotate.
+
+Lock order stays Session line -> Harness mutex (the completion runs on the
+line and takes the mutex; no path holds the mutex while entering Session or
+invoking stop/user callbacks). No new threads, no unbounded waits, gates
+released before joins.
+
+### Evidence (`docs/research/pi-v1.3.0/1165-evidence/`)
+
+- `reservation-red-merged-main.log` — the held-reservation probe fails on
+  merged main (pre-fix), discriminating RED.
+- `reservation-green3.log` — `[issue1165|issue1166]` 10/10, three runs.
+- `durable-shard.log` — full durable shard 175/175.
+- `mutation-gate-off.log` — publication moved but gate removed: the probe
+  passes; the settle->publish gap closes inside the settle callback, so
+  this probe can no longer bracket it. The gate's necessity is by
+  construction (scan and identity snapshot are two unsynchronized reads)
+  and by `mutation-gate-only.log`.
+- `mutation-gate-only.log` — old pre-commit registration with the new gate:
+  the probe passes; the gate alone suppresses the symptom. The publication
+  move is pinned by the frozen parity contract and the #1088 line-time
+  observation seam, not by this probe.
+
+New public tests in `tests/durable/SchedulerVisibilityTest.cpp`: the held
+reservation probe (kept), waiting-while-phase-active (frozen contract),
+rejected reservation (no phase start, sealed inspect), and terminal identity
+cleanup (no live-work row while the identity is still registered against a
+terminal record). All follow the release-then-assert discipline from the
+#1166 `-fno-exceptions` findings.
+
+### Residuals carried forward (unchanged, documented, not claimed fixed)
+
+- The Session-line reentry hazard (a stop callback that waits on a
+  Session-line read inside the failure window) is structural; demonstrated
+  by `[issue1166][reentry]`; not solved here and not claimed solved.
+- `wait_for_task` reads `Storage::task` under the scheduler mutex as one
+  atomic check+register (frozen pi `TaskScheduler.waitForTask` parity). A
+  Storage backend that synchronously re-entered Session from `task()` would
+  oppose the line->mutex order; no backend does, and frozen pi carries the
+  same exposure. `wait_for_idle` completes outside the mutex already.
+- Queued/asynchronous `inspect` was not implemented: the Harness lifetime
+  contract for a Session-line-pending inspect remains unproven
+  (`~Harness` does not drain pending line reads), and a blocking FIFO
+  inspect would deadlock in the demonstrated stop-callback reentry window.
+  The direct-scan inspect with the derivation gate is the smallest sound
+  change.
+- `Harness::inspect()` keeps its direct-scan semantics and 256-task cap;
+  complete-scan and FIFO inspection belong to #1088's observation scope.
