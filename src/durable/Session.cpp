@@ -3,6 +3,8 @@
 #include <cch/durable/Storage.hpp>
 #include <cch/durable/Task.hpp>
 
+#include "durable/SessionErrors.hpp"
+
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
@@ -77,11 +79,9 @@ using DocumentCheckpointFn = std::move_only_function<bool(const chord::Json&, co
     return support::make_error(support::ErrorCode::Session, "Session is closed");
 }
 
-/// The frozen message of a Session that failed (frozen pi `SessionFailed`).
-[[nodiscard]] support::Error session_failed_error() {
-    return support::make_error(
-            support::ErrorCode::Session, "Session failed after a storage error; close and reopen it");
-}
+/// The frozen message of a Session that failed (frozen pi `SessionFailed`)
+/// lives header-inline in durable/SessionErrors.hpp so every durable TU seals
+/// with the same error.
 
 [[nodiscard]] support::Error validation_error(std::string message) {
     return support::make_error(support::ErrorCode::Validation, std::move(message));
